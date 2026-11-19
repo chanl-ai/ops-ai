@@ -124,20 +124,21 @@ ENV PATH=/app/.venv/bin:$PATH PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 # when it starts.
 RUN [ -n "$OPS_RUNNER_WASM_URL" ] || unset OPS_RUNNER_WASM_URL; python -m ops_runner.fetch
 
-# The plugins every image ships with, each at the commit deploy/plugins.json pins; a mounted OPS_PLUGINS_DIR replaces
-# them. A pin that does not fetch or validate stops the build. The service and runtime stages copy this one folder, so
-# the two cannot ship different plugins.
+# Outside plugins an install adds, each at the commit deploy/plugins.json pins (the built-in ones are in
+# builtin-plugins/, copied below); a mounted OPS_PLUGINS_DIR replaces them. A pin that does not fetch or validate stops
+# the build. The service and runtime stages copy this one folder, so the two cannot ship different plugins.
 FROM python-base AS plugins
 COPY deploy/plugins.json deploy/plugins.json
 COPY deploy/images/bake_plugins.py deploy/images/bake_plugins.py
-RUN python deploy/images/bake_plugins.py --into /app/plugins
+RUN mkdir -p /app/plugins && python deploy/images/bake_plugins.py --into /app/plugins
 
 # What every service image adds: the deploy scripts, a non-root user owning /data (files and knowledge bytes), and the
 # listen address every container needs so the others reach it.
 FROM python-base AS service
 COPY deploy deploy
 COPY --from=plugins /app/plugins /app/plugins
-ENV OPS_PLUGINS_DIR=/app/plugins
+COPY builtin-plugins /app/builtin-plugins
+ENV OPS_PLUGINS_DIR=/app/plugins OPS_BUILTIN_PLUGINS_DIR=/app/builtin-plugins
 # The runner writes wasmtime's compiled-module cache beside its Python build, so the service user owns that folder.
 RUN useradd --system --uid 10001 --home-dir /app ops && mkdir -p /data && chown ops:ops /data \
  && chown -R ops:ops /app/.data/runner
@@ -271,6 +272,7 @@ COPY --from=console-fly /app/node_modules node_modules
 COPY --from=console-fly /app/apps/console apps/console
 COPY deploy deploy
 COPY --from=plugins /app/plugins /app/plugins
-ENV OPS_PLUGINS_DIR=/app/plugins NODE_ENV=production
+COPY builtin-plugins /app/builtin-plugins
+ENV OPS_PLUGINS_DIR=/app/plugins OPS_BUILTIN_PLUGINS_DIR=/app/builtin-plugins NODE_ENV=production
 EXPOSE 8080
 ENTRYPOINT ["/app/deploy/fly/entrypoint.sh"]

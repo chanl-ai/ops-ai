@@ -20,10 +20,13 @@ import type { operations as PlatformOps } from './generated/platform.js';
 import { platformOperations } from './generated/platform-operations.js';
 import type { operations as ToolsOps } from './generated/tools.js';
 import { toolsOperations } from './generated/tools-operations.js';
-import { type CallArgs, type Config, type Operation, pageItems, result, type Service, Transport } from './transport.js';
+import { type CallArgs, type Config, eachPage, type Operation, pageItems, result, type Service, Transport } from './transport.js';
 import { Agents } from './agents.js';
+import { Chat } from './chat.js';
+import { savedOptions } from './profile.js';
+import { Templates } from './templates.js';
 import { Workflows } from './workflows.js';
-import { Accounts, Apps, Credentials, Me, Resources, Tools, Usage } from './words.js';
+import { Accounts, Apps, Credentials, Egress, Me, Policies, Resources, Secrets, Tools, Usage } from './words.js';
 
 type PathOf<O> = O extends { parameters: { path: infer P } } ? P : never;
 type QueryOf<O> = O extends { parameters: { query?: infer Q } } ? Q : never;
@@ -81,11 +84,13 @@ interface Noun {
   list?: string;
   get?: string;
   create?: string;
+  /** False: the list is one array, whatever the query. */
+  paged?: false;
 }
 
 /** Which operation each verb of a resource calls; the Python SDK reads the same table (sdk/python/src/ops_ai/_client.py). */
 export const NOUNS = {
-  teams: { service: 'platform', list: 'teams_list_teams' },
+  teams: { service: 'platform', list: 'teams_list_teams', paged: false },
   agents: { service: 'agents', list: 'agents_list_agents', get: 'agents_get_agent', create: 'agents_create_agent' },
   workflows: { service: 'agents', list: 'workflows_list_workflows', get: 'workflows_get_workflow' },
   threads: { service: 'agents', list: 'threads_list_threads', get: 'threads_thread_state', create: 'threads_create_thread' },
@@ -98,6 +103,11 @@ export const NOUNS = {
   files: { service: 'files', list: 'files_list_files', get: 'files_get_file' },
   runs: { service: 'agents', list: 'workflows_list_engine_runs', get: 'workflows_get_engine_run' },
   tasks: { service: 'agents', list: 'reviews_list_reviews', get: 'reviews_get_review' },
+  skills: { service: 'agents', list: 'agents_list_skills', get: 'agents_get_skill' },
+  guardrails: { service: 'agents', list: 'agents_list_guardrails', get: 'agents_get_guardrail' },
+  widgets: { service: 'agents', list: 'agents_list_widgets', get: 'agents_get_widget' },
+  caseTypes: { service: 'agents', list: 'cases_list_case_types', get: 'cases_get_case_type' },
+  taskTypes: { service: 'agents', list: 'reviews_list_task_types', get: 'reviews_get_task_type' },
 } as const satisfies Record<string, Noun>;
 
 export class Resource {
@@ -113,13 +123,13 @@ export class Resource {
   }
 
   /** Every item, page after page, whichever paging the route uses. */
-  async *list(query: Record<string, unknown> = {}): AsyncGenerator<any> {
-    let next: Record<string, unknown> | null = {};
-    while (next) {
-      const [items, more] = pageItems(await this.call('list', { query: { ...query, ...next } }));
-      yield* items;
-      next = more;
-    }
+  list(query: Record<string, unknown> = {}): AsyncGenerator<any> {
+    if (this.noun.paged === false) return this.once(query);
+    return eachPage((page) => this.call('list', { query: page }), query);
+  }
+
+  private async *once(query: Record<string, unknown>): AsyncGenerator<any> {
+    yield* pageItems(await this.call('list', { query }))[0];
   }
 
   get(id: string): Promise<any> {
@@ -129,6 +139,17 @@ export class Resource {
 
   create(body: unknown): Promise<any> {
     return this.call('create', { body });
+  }
+}
+
+export class Threads extends Resource {
+  constructor(t: Transport, noun: Noun, private readonly raw: Raw) {
+    super(t, noun);
+  }
+
+  /** A thread's channel messages. A person who cannot read the thread gets NotFound, as for another team's. */
+  inbox(threadId: string): Promise<any> {
+    return this.raw.agents.threads_get_inbox({ path: { thread_id: threadId } });
   }
 }
 
@@ -195,6 +216,21 @@ export class Tasks extends Resource {
   decide(taskId: string, decision: string, fields: { reason?: string; [field: string]: unknown } = {}) {
     return this.raw.agents.reviews_decide({ path: { thread_id: taskId }, body: { decision, ...fields } as never });
   }
+
+  /**
+   * Approves a task, such as a write an agent's chat held (`decision` is the action the task offers; a task that
+   * declares none is approved with 'approved'). A write asks the approver to confirm it is them first;
+   * given the approver's `password`, the step-up is made and the approval retried.
+   */
+  async approve(taskId: string, { decision = 'approved', password, reason }: { decision?: string; password?: string; reason?: string } = {}) {
+    try {
+      return await this.decide(taskId, decision, { reason });
+    } catch (error) {
+      if ((error as { code?: string }).code !== 'step_up_required' || password === undefined) throw error;
+    }
+    const minted = (await this.raw.platform.auth_step_up({ body: { password } as never })) as { token?: string };
+    return this.decide(taskId, decision, { reason, stepUpToken: String(minted.token ?? '') });
+  }
 }
 
 export class Files extends Resource {
@@ -231,6 +267,26 @@ export class Knowledge extends Resource {
   search(body: ArgsOf<KbOps['knowledge_bases_search_knowledge']>['body']) {
     return this.raw.kb.knowledge_bases_search_knowledge({ body });
   }
+
+  /** A knowledge base, as Knowledge > New knowledge base makes one. */
+  addBase(name: string, fields: Omit<ArgsOf<KbOps['knowledge_bases_create_knowledge_base']>['body'], 'name'> = {}) {
+    return this.raw.kb.knowledge_bases_create_knowledge_base({ body: { ...fields, name } as never });
+  }
+
+  /** A source feeding the given knowledge bases. A `push` source (the default) takes items through `push`. */
+  addSource(name: string, kbIds: string[], fields: { type?: string } & Record<string, unknown> = {}) {
+    return this.raw.kb.sources_create_source({ body: { type: 'push', ...fields, name, kbIds } as never });
+  }
+
+  /** A written page; the same title saves a new version. */
+  addPage(kbId: string, title: string, text: string) {
+    return this.raw.kb.knowledge_bases_add_page({ path: { kb_id: kbId }, body: { title, text } as never });
+  }
+
+  /** Puts one item into a push source. The same name and text again answers `unchanged`. */
+  push(sourceId: string, name: string, item: { title: string; text: string } & Record<string, unknown>) {
+    return this.raw.kb.sources_put_item({ path: { source_id: sourceId }, body: { ...item, name } as never });
+  }
 }
 
 export class OpsAI {
@@ -238,10 +294,19 @@ export class OpsAI {
   readonly raw: Raw;
   readonly teams: Resource;
   readonly agents: Agents;
+  readonly chat: Chat;
   readonly workflows: Workflows;
-  readonly threads: Resource;
+  readonly threads: Threads;
   readonly cases: Resource;
+  readonly skills: Resource;
+  readonly guardrails: Resource;
+  readonly widgets: Resource;
+  readonly caseTypes: Resource;
+  readonly taskTypes: Resource;
   readonly tools: Tools;
+  readonly secrets: Secrets;
+  readonly egress: Egress;
+  readonly policies: Policies;
   readonly knowledge: Knowledge;
   readonly files: Files;
   readonly runs: Runs;
@@ -251,26 +316,50 @@ export class OpsAI {
   readonly credentials: Credentials;
   readonly accounts: Accounts;
   readonly resources: Resources;
+  readonly templates: Templates;
   readonly usage: Usage;
   readonly me: Me;
 
-  /** Options win over OPS_BASE_URL, OPS_API_KEY and OPS_TEAM. */
-  constructor(options: Partial<Config> = {}) {
+  /** Options win over OPS_BASE_URL, OPS_API_KEY and OPS_TEAM, which win over the saved sign-in `opsai login` keeps (`profile` names another). */
+  constructor(options: Partial<Config> & { profile?: string } = {}) {
     // Node's environment when there is one; a browser has none.
     const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};
-    const baseUrl = options.baseUrl ?? env.OPS_BASE_URL;
-    if (!baseUrl) throw new TypeError('No Ops AI address: pass baseUrl or set OPS_BASE_URL');
-    this.config = { ...options, baseUrl, apiKey: options.apiKey ?? env.OPS_API_KEY, team: options.team ?? env.OPS_TEAM };
+    const { profile, ...given } = options;
+    const saved = savedOptions(profile);
+    // A caller who names its own credential is not given the saved person's.
+    if (given.accessToken !== undefined || given.session) {
+      delete saved.accessToken;
+      delete saved.session;
+    }
+    const baseUrl = given.baseUrl ?? env.OPS_BASE_URL ?? saved.baseUrl;
+    if (!baseUrl) throw new TypeError('No Ops AI address: pass baseUrl, set OPS_BASE_URL or save a sign-in with opsai');
+    this.config = {
+      ...saved,
+      ...given,
+      baseUrl,
+      apiKey: given.apiKey ?? env.OPS_API_KEY ?? saved.apiKey,
+      team: given.team ?? env.OPS_TEAM ?? saved.team,
+      services: { ...saved.services, ...given.services },
+    };
     const t = new Transport(this.config);
     this.raw = new Raw(t);
     this.teams = new Resource(t, NOUNS.teams);
-    this.threads = new Resource(t, NOUNS.threads);
+    this.threads = new Threads(t, NOUNS.threads, this.raw);
     this.cases = new Resource(t, NOUNS.cases);
+    this.skills = new Resource(t, NOUNS.skills);
+    this.guardrails = new Resource(t, NOUNS.guardrails);
+    this.widgets = new Resource(t, NOUNS.widgets);
+    this.caseTypes = new Resource(t, NOUNS.caseTypes);
+    this.taskTypes = new Resource(t, NOUNS.taskTypes);
     this.apps = new Apps(this.raw);
     this.tools = new Tools(this.raw, this.apps, new Resource(t, NOUNS.tools));
+    this.secrets = new Secrets(this.raw);
+    this.egress = new Egress(this.raw);
+    this.policies = new Policies(this.raw);
     this.credentials = new Credentials(this.raw, this.apps);
     this.accounts = new Accounts(this.raw, this.apps);
     this.resources = new Resources(this.raw);
+    this.templates = new Templates(this.raw);
     this.usage = new Usage(this.raw);
     this.me = new Me(this.raw);
     this.knowledge = new Knowledge(t, this.raw);
@@ -278,6 +367,7 @@ export class OpsAI {
     this.runs = new Runs(t, this.raw);
     this.tasks = new Tasks(t, this.raw);
     this.agents = new Agents(this.raw);
+    this.chat = new Chat(t);
     this.workflows = new Workflows(this.raw, this.runs);
   }
 

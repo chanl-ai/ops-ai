@@ -5,12 +5,12 @@ settings.files_dir until a tenant's storage settings name another target (ops_fi
 
 from __future__ import annotations
 
+import asyncio
 import os
 from collections.abc import Callable, Coroutine
 from pathlib import Path
 from typing import Any
 
-import httpx
 import uvicorn
 
 from ops_files.app import create_files_app
@@ -20,13 +20,14 @@ from ops_files.scanning import EicarScanner
 from ops_files.secrets import CredentialCipher
 from ops_files.service import FilesConfig
 from ops_files.settings import StorageSettings, build_store
-from ops_files.store import FilesStore, SettingsStore, engine_for
-from ops_files.store.event_relay import keep_relaying
+from ops_files.store import FilesStore, ReadRequestsStore, SettingsStore, engine_for
+from ops_files.store.files import SYSTEM_ROLE, service_outbox
 from ops_files.tenant_files import TenantFiles
 from ops_identity import Auth, ServiceClient
 from ops_service_kit.logging import configure_logging
 from ops_service_kit.settings import Settings, require_keys
 from ops_storage.local import LocalObjectStore
+from ops_store.outbox import relay, run_relay
 from ops_store.schema_version import require_current_schema
 
 # The classes files.md 4.4 names for the purposes this slice serves; a retention settings page replaces this list.
@@ -44,10 +45,13 @@ RETENTION_CLASSES = (
 )
 
 # What each purpose accepts until a tenant saves its own limits in Storage settings. A chat attachment is read for the
-# agent through documents-service, so it takes only the formats documents-service parses (ops_ingest.parsers.parse).
+# agent through documents-service, so it takes only the formats documents-service reads (ops_ingest.reading: the
+# format parsers, plus OCR for pictures).
 PURPOSE_LIMITS = (
     PurposeLimit(
-        purpose="chat_attachment", allowed_types=["pdf", "docx", "xlsx", "csv", "html", "txt", "md"], max_size_mb=10
+        purpose="chat_attachment",
+        allowed_types=["pdf", "docx", "xlsx", "pptx", "csv", "html", "txt", "md", "png", "jpg", "jpeg"],
+        max_size_mb=10,
     ),
 )
 
@@ -90,17 +94,25 @@ def build(settings: Settings) -> TenantFiles:
 
 def main() -> None:
     settings = Settings()
+    # agents-service reads every file event (file.deleted starts the purge workflow), so files cannot run without it.
+    settings.require(*settings.identity_endpoints, "agents")
     require_keys(settings, "secrets_key")
     require_current_schema(settings.database_url, MIGRATIONS)
     configure_logging(service="files-service")
     files = build(settings)
     # Released knowledge snapshots are deleted once their days pass.
-    background: list[Callable[[], Coroutine[Any, Any, None]]] = [lambda: keep_purging(files)]
-    if settings.agents_url:
-        # A deleted file's file.deleted reaches agents-service, which runs the purge workflow.
-        http = httpx.AsyncClient(base_url=settings.agents_url, timeout=5)
-        agents = ServiceClient.for_settings(settings, http, service="files", audience="agents", scopes=["events:emit"])
-        background.append(lambda: keep_relaying(files.engine, agents))
+    # A deleted file's file.deleted reaches agents-service, which runs the purge workflow; a read request's event
+    # records the run it started on the request, which the console follows.
+    agents = ServiceClient.for_settings(settings, service="files", audience="agents", scopes=["events:emit"])
+    enrich = ReadRequestsStore(files.engine).record_run
+    targets = {"agents": agents}
+    events = relay(
+        files.engine, service_outbox, routes={"*": ("agents",)}, targets=targets, role=SYSTEM_ROLE, enrich=enrich
+    )
+    background: list[Callable[[], Coroutine[Any, Any, None]]] = [
+        lambda: keep_purging(files),
+        lambda: run_relay(events, key="files_relay", stop=asyncio.Event()),
+    ]
     app = create_files_app(
         files,
         engine=files.engine,

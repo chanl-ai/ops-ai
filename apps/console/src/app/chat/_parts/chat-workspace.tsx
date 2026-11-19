@@ -42,14 +42,12 @@ import {
   useStreamingThreadIds,
   useUpdateThread,
 } from '@/hooks/chat-queries';
-import { useKnowledgeBases } from '@/hooks/knowledge-queries';
+import { useKnowledgeBaseNames } from '@/hooks/knowledge-queries';
 import { useSticky } from '@/hooks/use-sticky';
 import { teamOfError } from '@/hooks/use-team';
 import { SOMEONE_ELSES } from '@/lib/api';
 import type { ChatAgent, ChatAttachment, ChatMessage, ChatThread, ChatThreadPatch, ChatThreadRow, MessageFeedback, SendInput, WidgetAction } from '@/lib/types/chat';
 import type { RetrievalTrace } from '@/lib/types/knowledge-retrieval';
-
-const ALL = { page: 1, pageSize: 100 };
 
 export function ChatWorkspace({ threadId }: { threadId?: string }) {
   const router = useRouter();
@@ -57,14 +55,12 @@ export function ChatWorkspace({ threadId }: { threadId?: string }) {
   const me = useCurrentPerson().name || undefined;
   const thread = useChatThread(threadId);
   const agents = useChatAgents();
-  const kbList = useKnowledgeBases(ALL);
-  const kbs: KbOption[] = React.useMemo(() => (kbList.data?.data ?? []).map((k) => ({ id: k.id, name: k.name, color: k.color })), [kbList.data]);
-  // An agent served by the chat service names the knowledge bases it may search; those win over the Knowledge area's
-  // list, which may come from another backend (e.g. the Runtime for chat, the mock for everything else).
-  const kbsFor = React.useCallback((agentId?: string): KbOption[] => {
-    const own = agents.data?.find((a) => a.id === agentId)?.kbs;
-    return own ? own.map((k) => ({ id: k.id, name: k.name, color: kbs.find((x) => x.id === k.id)?.color ?? 'teal' })) : kbs;
-  }, [agents.data, kbs]);
+  // Names and colours come by id: the open thread's knowledge bases and the agent's own list, never a page of everything.
+  const openAgent = agents.data?.find((a) => a.id === thread.data?.agentId);
+  const lookedUp = useKnowledgeBaseNames([...(thread.data?.kbIds ?? []), ...(openAgent?.kbs ?? []).map((k) => k.id)]);
+  const kbs: KbOption[] = lookedUp.data ?? [];
+  // An agent that names its knowledge bases is offered those and no others, an empty list offers none; the server does the narrowing.
+  const within = openAgent?.kbs?.map((k) => k.id);
   const live = useLiveTurn(threadId);
   const chat = useSendMessage();
   // Replies keep streaming while the person moves between conversations, and stop when they leave chat altogether.
@@ -112,7 +108,8 @@ export function ChatWorkspace({ threadId }: { threadId?: string }) {
           query={thread}
           live={live}
           me={me}
-          kbs={kbsFor(thread.data?.agentId)}
+          kbs={kbs}
+          within={within}
           agent={agents.data?.find((a) => a.id === thread.data?.agentId)}
           agents={agents.data ?? []}
           editingTitle={editingTitle}
@@ -138,12 +135,12 @@ export function ChatWorkspace({ threadId }: { threadId?: string }) {
           initialAgentId={searchParams.get('agent') ?? undefined}
           header={<span className="px-1 text-sm font-semibold">New chat</span>}
           creating={create.isPending}
-          onStart={async (agentId, kbIds, text, attachments, connectorsOff) => {
+          onStart={async (agentId, kbIds, text, attachments, connectorsOff, skill) => {
             try {
               const t = await create.mutateAsync({ agentId, kbIds });
               // The connectors chosen on the home go onto the chat before its first message, so that message uses them.
               if (connectorsOff.length) await applyConnectors.mutateAsync({ threadId: t.id, off: connectorsOff });
-              chat.send(t.id, { content: text, attachments });
+              chat.send(t.id, { content: text, attachments, skill });
               router.push(`/chat/${t.id}`);
             } catch (e) {
               toast.error('Couldn’t start the chat', { description: (e as Error).message });
@@ -187,6 +184,7 @@ function ThreadView({
   live,
   me,
   kbs,
+  within,
   agent,
   agents,
   editingTitle,
@@ -210,6 +208,7 @@ function ThreadView({
   live?: LiveTurn;
   me?: string;
   kbs: KbOption[];
+  within?: string[];
   agent?: ChatAgent;
   /** Agents the person can hand the chat to with @. */
   agents: ChatAgent[];
@@ -321,11 +320,11 @@ function ThreadView({
           )}
           {t && (
             <div className="mt-1 flex min-w-0 items-center gap-2 px-1">
-              <Link href={`/agents/${t.agentId}`} className="inline-flex max-w-[60%] shrink-0 items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:underline">
+              <Link href={`/build/agents/${t.agentId}`} className="inline-flex max-w-[60%] shrink-0 items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:underline">
                 <Bot className="size-3.5 shrink-0" /> <span className="truncate">{t.agentName} · v{t.agentVersion}</span>
               </Link>
               {agent && agent.version !== t.agentVersion && <span className="hidden shrink-0 text-[11px] text-muted-foreground sm:inline">(v{agent.version} is live; new chats use it)</span>}
-              <KbChips kbs={kbs} value={t.kbIds} onChange={(ids) => onPatch(t.id, { kbIds: ids }, 'Knowledge updated for the next answer')} disabled={readOnly} agentName={agent?.name} oneLine />
+              <KbChips kbs={kbs} within={within} value={t.kbIds} onChange={(ids) => onPatch(t.id, { kbIds: ids }, 'Knowledge updated for the next answer')} disabled={readOnly} agentName={agent?.name} oneLine />
             </div>
           )}
         </div>
@@ -419,12 +418,13 @@ function ThreadView({
           )}
           <Composer
             draftKey={t.id}
-            placeholder={`Message ${t.agentName}… Type @ to hand the chat to another agent.`}
+            placeholder={`Message ${t.agentName}… Type / for a skill or @ to hand the chat to another agent.`}
             mentions={agents.filter((a) => a.id !== t.agentId).map((a) => ({ id: a.id, name: a.name, role: a.role }))}
             onMention={(a) => handTo(a)}
             streaming={streaming}
             onStop={onStop}
-            onSend={(text, files) => onSend({ content: text, attachments: files.length ? files : undefined })}
+            onSend={(text, files, skill) => onSend({ content: text, attachments: files.length ? files : undefined, skill })}
+            skillsFor={{ id: t.agentId, name: t.agentName }}
             // The chat's connectors, narrowed for this chat only; offered to its owner while it takes messages.
             footer={owner && !t.archived ? <ConnectorsPicker threadId={t.id} disabled={streaming} /> : undefined}
             disabledReason={

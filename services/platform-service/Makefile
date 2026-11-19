@@ -14,7 +14,7 @@ install: ## uv sync for the workspace
 	uv sync --frozen
 
 run: ## Serve in the foreground on :8710 and :8711; in dev it seeds team_ops and signs with the dev key
-	uv run python -m ops_platform
+	$(call STACK_RUN,platform)
 
 migrate: ## Apply this service's own migrations (version table alembic_version_platform)
 	uv run alembic upgrade head
@@ -23,11 +23,11 @@ lint: ## ruff format check and lint
 	uv run ruff format --check $(PY_DIRS)
 	uv run ruff check $(PY_DIRS)
 
-typecheck: ## Strict pyright
-	uv run pyright $(PY_DIRS)
+typecheck: ## Strict pyright, test-file errors held to tests-typecheck-baseline.txt
+	uv run python $(ROOT)/scripts/check_tests_typecheck.py $(PY_DIRS)
 
-test: ## pytest on the test database (make db-up)
-	$(TEST_DB) uv run pytest
+test: ## pytest on the test database (make db-up); T= runs only those files
+	$(TEST_DB) uv run pytest $(PYTEST_PAR) $(T)
 
 openapi-check: ## openapi.json matches the apps and every operation is typed
 	uv run python scripts/check_openapi.py

@@ -34,6 +34,8 @@ from ops_store import isolation
 from ops_store.outbox import Relay, add
 from ops_tools.store.connections import ROLE as TOOLS_ROLE
 from ops_tools.store.connections import connection_tokens
+from ops_tools.store.modules import service_outbox as tools_outbox
+from ops_tools.store.tenancy import SYSTEM_ROLE as TOOLS_SYSTEM
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from postgres import Postgres
@@ -55,6 +57,11 @@ class Service:
     before: str
     # The revision that grants the membership.
     grants: str
+    # For a chain that grants its roles in more than one step: the revision before the last grant, which a DBA's
+    # offline upgrade starts from (an older range holds revisions that cannot render offline), and the roles that last
+    # step grants. Empty: `before` and every role.
+    last_step_from: str = ""
+    step_grants: tuple[str, ...] = ()
 
     @property
     def roles(self) -> set[str]:
@@ -87,11 +94,13 @@ SERVICES = [
     Service(
         "tools",
         TOOLS_ROLE,
-        None,
-        None,
+        TOOLS_SYSTEM,
+        tools_outbox,
         connection_tokens,
         "tools_0043_conn_details_health",
-        "tools_0044_sign_in_isolation",
+        "tools_0081_store_roles",
+        "tools_0080_police_tables",
+        (TOOLS_SYSTEM,),
     ),
 ]
 
@@ -223,7 +232,7 @@ def test_a_dba_upgrade_grants_the_membership_in_the_superuser_script(service: Se
     """The DBA runs upgrade.sql as the migrator, who may not grant a role: the step's grants go to upgrade-roles.sql."""
     env = {**os.environ, "OPS_DATABASE_URL": OFFLINE_URL}
     done = subprocess.run(
-        ["uv", "run", "alembic", "upgrade", f"{service.before}:{service.grants}", "--sql"],
+        ["uv", "run", "alembic", "upgrade", f"{service.last_step_from or service.before}:{service.grants}", "--sql"],
         check=False,
         cwd=ROOT / "services" / f"{service.chain}-service",
         env=env,
@@ -236,6 +245,6 @@ def test_a_dba_upgrade_grants_the_membership_in_the_superuser_script(service: Se
     # The step that also makes the role (tools) moves its CREATE ROLE there too; the memberships are what is checked.
     granted = (m.split(" THEN ")[1].split(";")[0] for m in moved)
     assert sorted(g for g in granted if g.startswith("GRANT ")) == sorted(
-        f"GRANT {role} TO {login}" for role in service.roles
+        f"GRANT {role} TO {login}" for role in (service.step_grants or service.roles)
     )
     assert f"TO {login}" not in body

@@ -8,22 +8,32 @@ import asyncio
 import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal
 
 import httpx
-from fastapi import APIRouter, Depends, FastAPI, Query, Request, Response
+from fastapi import APIRouter, Body, Depends, FastAPI, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
-from pydantic.alias_generators import to_camel
+from pydantic import Field
 
 from ops_access import can
 from ops_documents_client import DocumentsClient
-from ops_identity import Auth, CurrentCaller, CurrentService, CurrentTenantCaller, ServiceClient, install_auth
+from ops_identity import (
+    Auth,
+    CurrentCaller,
+    CurrentPrincipal,
+    CurrentService,
+    CurrentTenantCaller,
+    ServiceClient,
+    install_auth,
+)
+from ops_identity.fastapi import Tx
 from ops_service_kit.background import BackgroundHealthOut
 from ops_service_kit.errors import Forbidden
 from ops_service_kit.http import (
     Envelope,
+    In,
+    JsonValue,
     ListResult,
     OptionsPage,
     Out,
@@ -32,12 +42,14 @@ from ops_service_kit.http import (
     ok,
     operation_id,
 )
+from ops_service_kit.listing import ListParams, ListQuery
 from ops_service_kit.model_calls import ModelCalls
 from ops_service_kit.settings import Settings
 from ops_store import isolation
 from ops_store.audit import AUDIT_SCOPE
 from ops_store.background import LOCAL as LOCAL_BEATS
 from ops_store.background import report as background_report
+from ops_store.outbox import run_relay
 from ops_store.team_scope import acting_team_of, set_acting_team
 
 from .agents import AgentDirectory, AgentsUsage
@@ -96,7 +108,7 @@ from .schemas import (
 from .search import HybridRetriever
 from .service import KnowledgeService, Who
 from .store import AsyncEngine, KnowledgeStore, reachable
-from .store.event_relay import keep_relaying
+from .store.knowledge import outbox_relay
 from .store.vectors import PgVectorStore
 from .tool_sources import ToolReader
 
@@ -131,6 +143,14 @@ async def who(p: CurrentCaller, held: Annotated[dict[str, str] | None, Depends(p
 Caller = Annotated[Who, Depends(who)]
 
 
+async def person(_: CurrentPrincipal, caller: Caller) -> Who:
+    """`who` for a route only people and API keys use: a service token is refused (403 `scope_required`)."""
+    return caller
+
+
+Person = Annotated[Who, Depends(person)]
+
+
 async def knowledge_reader(p: CurrentTenantCaller) -> Who:
     """Knowledge-base refs and search: a person with knowledge.view in their team reads their team's
     bases and those no team owns; a service holding `knowledge:view` reads the tenant's, by the ids it already checked
@@ -148,69 +168,71 @@ Page = Annotated[int, Query(ge=1)]
 PageSize = Annotated[int, Query(alias="pageSize", ge=1, le=100)]
 
 
-def _agents_service(settings: Settings) -> AgentsUsage:
-    http = httpx.AsyncClient(base_url=settings.agents_url or f"http://127.0.0.1:{settings.port}", timeout=5)
-    return AgentsUsage(
-        ServiceClient.for_settings(settings, http, service="kb", audience="agents", scopes=["agents:view"], timeout=5)
-    )
+def agents_usage(settings: Settings) -> AgentsUsage:
+    """agents-service's "used by", asked once within `kb_used_by_timeout_s`: a list or page then answers without it."""
+    agents = settings.endpoint("agents").model_copy(update={"timeout_s": settings.kb_used_by_timeout_s, "retries": 0})
+    once = settings.model_copy(update={"agents": agents})
+    return AgentsUsage(ServiceClient.for_settings(once, service="kb", audience="agents", scopes=["agents:view"]))
 
 
 def _tools_service(settings: Settings) -> ToolReader | None:
     """tools-service's gateway, for "tool" sources: the declared sources and one call per list page or item."""
     # An install with no plugin (Settings.plugins) has no tool sources: kb-service then calls no tools route at all.
-    if not settings.plugins or not settings.tools_url:
+    if not settings.plugins or settings.tools is None:
         return None
-    http = httpx.AsyncClient(base_url=settings.tools_url, timeout=60)
-    client = ServiceClient.for_settings(
-        settings, http, service="kb", audience="tools", scopes=["tools:view", "tools:run", "knowledge:run"], timeout=60
-    )
-    return ToolReader(client)
+    scopes = ["tools:view", "tools:run", "knowledge:run"]
+    return ToolReader(ServiceClient.for_settings(settings, service="kb", audience="tools", scopes=scopes))
 
 
 def _platform_service(settings: Settings) -> ServiceClient | None:
     """platform-service's internal port, which keeps the account's audit log; None on a stack without it."""
-    if not settings.platform_url:
+    if settings.platform is None:
         return None
-    internal = settings.platform_internal_url or f"http://127.0.0.1:{settings.platform_internal_port}"
-    http = httpx.AsyncClient(base_url=internal, timeout=10)
-    return ServiceClient.for_settings(settings, http, service="kb", audience="platform", scopes=[AUDIT_SCOPE])
+    return ServiceClient.for_settings(
+        settings, service="kb", audience="platform", scopes=[AUDIT_SCOPE], endpoint="platform_internal"
+    )
+
+
+def _models_http(settings: Settings) -> tuple[httpx.AsyncClient, str] | None:
+    """models-service on its endpoint, with kb-service's own model key; None when this stack has no models-service or
+    no key for kb-service. Called with that key, not a service token, so it is not a ServiceClient."""
+    if settings.models is None or settings.models_key is None:
+        return None
+    http = httpx.AsyncClient(base_url=settings.models.base, timeout=settings.models.timeout_s)
+    return http, settings.models_key.get_secret_value()
 
 
 def _embedder(settings: Settings) -> Embedder | None:
-    """The environment's embedding model through models-service with kb-service's own key; None when this stack has
-    no models-service or no key for kb-service, and search then runs on keywords and says why."""
-    if not settings.models_url or settings.models_key is None:
+    """The environment's embedding model through models-service; None without it, and search then runs on keywords
+    and says why."""
+    if (models := _models_http(settings)) is None:
         return None
-    http = httpx.AsyncClient(base_url=settings.models_url, timeout=60)
-    calls = ModelCalls(http, settings.models_key.get_secret_value())
-    return ModelsEmbedder(calls, settings.embedding_alias, settings.embedding_width)
+    return ModelsEmbedder(ModelCalls(*models), settings.embedding_alias, settings.embedding_width)
 
 
 def _query_model(settings: Settings) -> QueryModel | None:
-    """Rerank and rewrite through models-service with kb-service's own key; None without either, and a base asking
-    for them is searched without them, saying why."""
-    if not settings.models_url or settings.models_key is None:
+    """Rerank and rewrite through models-service; None without it, and a base asking for them is searched without
+    them, saying why."""
+    if (models := _models_http(settings)) is None:
         return None
-    http = httpx.AsyncClient(base_url=settings.models_url, timeout=30)
-    return ModelsQuery(ModelCalls(http, settings.models_key.get_secret_value()))
+    return ModelsQuery(ModelCalls(*models))
 
 
 def _ai_clients(settings: Settings) -> AiClients | None:
     """The sources' AI steps through models-service with kb-service's own key; None without either."""
-    if not settings.models_url or settings.models_key is None:
+    if settings.models is None or settings.models_key is None:
         return None
-    return models_clients(settings.models_url, settings.models_key.get_secret_value())
+    return models_clients(settings.models, settings.models_key.get_secret_value())
 
 
 def _events_service(settings: Settings) -> ServiceClient:
     """agents-service, which runs the workflows that listen to kb-service's events (a source that keeps failing)."""
-    http = httpx.AsyncClient(base_url=settings.agents_url or f"http://127.0.0.1:{settings.port}", timeout=10)
-    return ServiceClient.for_settings(settings, http, service="kb", audience="agents", scopes=["events:emit"])
+    return ServiceClient.for_settings(settings, service="kb", audience="agents", scopes=["events:emit"])
 
 
 def _documents_service(settings: Settings) -> Readings | None:
     """documents-service, which reads every file a source holds; unset, file sources cannot be indexed."""
-    if not settings.documents_url:
+    if settings.documents is None:
         return None
     return DocumentsReadings(
         DocumentsClient.from_settings(settings, service="kb", scopes=["documents:view", "documents:run"])
@@ -221,14 +243,14 @@ def _documents_service(settings: Settings) -> Readings | None:
 READING_EVENTS = ("reading.finished", "reading.failed")
 
 
-class EventIn(BaseModel):
+class EventIn(In):
     """A service event, as documents-service's relay sends it: the tenant and team come from the token."""
 
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
     name: str = Field(min_length=1, max_length=120)
     key: str = Field(min_length=1, max_length=200)
     team_id: str = Field(min_length=1, max_length=64)
-    payload: dict[str, Any] = Field(default_factory=dict[str, Any])
+    # Each event name carries its own fields (a reading's `fileId`), so any JSON object.
+    payload: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
     actor: str | None = None
 
 
@@ -257,10 +279,10 @@ def create_kb_app(
 ) -> FastAPI:
     """`auth` resolves callers through ops_identity's shared dependency; by default built from Settings for audience
     "kb". An admin administers the knowledge bases and sources of the teams it is admin of, and no others (there is
-    no tenant-wide role yet). `files` stores uploads; by default files-service when Settings().files_url names it,
+    no tenant-wide role yet). `files` stores uploads; by default files-service when Settings().files is set,
     else under kb_files_dir. `agents` says which agents cite each base; by default agents-service at
-    Settings().agents_url. `platform` receives the audit entries of settings changes; by default platform-service's
-    internal port when Settings().platform_url names it, else the entries wait in the outbox."""
+    Settings().agents. `platform` receives the audit entries of settings changes; by default platform-service's
+    internal port when Settings().platform is set, else the entries wait in the outbox."""
     reader = tools or _tools_service(Settings())
     readings = readings or _documents_service(Settings())
     audit_log = platform or _platform_service(Settings())
@@ -278,7 +300,8 @@ def create_kb_app(
         stop = asyncio.Event()
         runs = (reader is not None or readings is not None) and schedule
         beat = asyncio.create_task(keep_syncing(service, stop)) if runs else None
-        hand_off = asyncio.create_task(keep_relaying(engine, audit_log, events, stop))
+        targets = {k: v for k, v in (("platform", audit_log), ("agents", events)) if v is not None}
+        hand_off = asyncio.create_task(run_relay(outbox_relay(engine, targets), key="kb_relay", stop=stop))
         embeds = (
             asyncio.create_task(keep_embedding(service.store, vectors, embedder, backlog, stop))
             if embedder is not None and schedule
@@ -292,7 +315,8 @@ def create_kb_app(
                 rebuild.cancel()
             tasks = {t for t in (beat, hand_off, embeds, *service.rebuilds) if t is not None}
             if tasks:
-                await asyncio.wait(tasks, timeout=5)
+                # A loop still in its pass may finish it, within the time the platform gives a stopping process.
+                await asyncio.wait(tasks, timeout=Settings().stop_wait_s)
 
     app = FastAPI(title="kb-service", version="0.1.0", generate_unique_id_function=operation_id, lifespan=lifespan)
     install_error_handlers(app)
@@ -312,7 +336,7 @@ def create_kb_app(
         KnowledgeStore(engine),
         files or file_intake(Settings()),
         HybridRetriever(engine, embedder),
-        agents or _agents_service(Settings()),
+        agents or agents_usage(Settings()),
         reader,
         readings=readings,
         ocr=Settings().kb_ocr,
@@ -321,6 +345,7 @@ def create_kb_app(
         ai_clients=ai_clients,
         query_model=query_model,
         query_alias=Settings().kb_query_alias,
+        search_wait_s=Settings().kb_search_wait_s,
     )
     errors = error_responses()
 
@@ -350,33 +375,32 @@ def create_kb_app(
         response_model_exclude_none=True,
         responses={503: {"model": Health}},
     )
-    async def health() -> dict[str, Any] | JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def health(response: Response) -> Health:  # pyright: ignore[reportUnusedFunction]
         if not await reachable(engine):
-            return JSONResponse({"status": "degraded", "reason": "database"}, status_code=503)
-        if backlog.pending is not None:
-            return {"status": "ok", "unitsNotEmbedded": backlog.pending}
-        return {"status": "ok"}
+            response.status_code = 503
+            return Health(status="degraded", reason="database")
+        return Health(status="ok", units_not_embedded=backlog.pending)
 
     @app.get("/health/background", tags=["health"], response_model=BackgroundHealthOut)
-    async def health_background() -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
+    async def health_background() -> BackgroundHealthOut:  # pyright: ignore[reportUnusedFunction]
         """This service's background processes and their state; counts and error types only, no record's data."""
-        return {"processes": background_report(await LOCAL_BEATS.read(), "kb", time.time())}
+        return BackgroundHealthOut.model_validate(
+            {"processes": background_report(await LOCAL_BEATS.read(), "kb", time.time())}
+        )
 
     kbs = APIRouter(prefix="/v1/knowledge-bases", tags=["knowledge-bases"], responses=errors)
 
     @kbs.get("", response_model=Envelope[ListResult[KnowledgeBaseRow]])
-    async def list_knowledge_bases(  # pyright: ignore[reportUnusedFunction]
-        who: Caller,
-        page: Page = 1,
-        page_size: PageSize = 25,
-        search: str | None = None,
-        template_id: Annotated[str | None, Query(alias="templateId")] = None,
-    ) -> JSONResponse:
-        return ok(await service.list_bases(who, page=page, page_size=page_size, search=search, template_id=template_id))
+    async def list_knowledge_bases(who: Caller, q: ListQuery) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """The team's knowledge bases, newest first; `search` in the name, description or owner, `ids` for exact rows
+        (pickers), `templateId` to filter; a facet by health. No `Tx`: "used by" is asked of agents-service after the
+        page's transaction ends."""
+        return ok(await service.list_bases(who, q))
 
     @kbs.get("/options", response_model=Envelope[OptionsPage])
     async def knowledge_base_options(  # pyright: ignore[reportUnusedFunction]
-        who: Caller,
+        who: Person,
+        _: Tx,
         search: str = "",
         cursor: str | None = None,
         limit: Annotated[int, Query(ge=1, le=100)] = 25,
@@ -387,16 +411,18 @@ def create_kb_app(
         return ok(await service.base_options(who, search=search, cursor=cursor, limit=limit, ids=ids))
 
     @kbs.get("/refs", response_model=Envelope[list[NamedRef]])
-    async def knowledge_base_refs(caller: KnowledgeReader) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def knowledge_base_refs(caller: KnowledgeReader, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Knowledge bases by id and name, for agents-service's grant check and thread names, and for a person's picker
         or script: the tenant's for a service, the team's and unowned ones for a person."""
-        return ok([{"id": b["id"], "name": b["name"]} for b in await service.readable_bases(caller)])
+        return ok([{"id": b.id, "name": b.name} for b in await service.readable_bases(caller)])
 
     @kbs.post("/search", response_model=Envelope[SearchOut])
     async def search_knowledge(body: SearchIn, caller: KnowledgeReader) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Passages for an agent's turn (agents-service sends only the bases the agent is granted) or for a person, who
         searches only bases they may read."""
-        return ok(await service.search(caller, body.kb_ids, body.question, limit=body.limit))
+        return ok(
+            await service.search(caller, body.kb_ids, body.question, limit=body.limit, collection=body.collection)
+        )
 
     @kbs.get("/{kb_id}", response_model=Envelope[KnowledgeBaseDetail])
     async def get_knowledge_base(kb_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
@@ -416,9 +442,35 @@ def create_kb_app(
 
     @kbs.get("/{kb_id}/documents", response_model=Envelope[ListResult[DocumentRow]])
     async def list_documents(  # pyright: ignore[reportUnusedFunction]
-        kb_id: str, who: Caller, page: Page = 1, page_size: PageSize = 25, search: str | None = None
+        kb_id: str,
+        who: Person,
+        _: Tx,
+        *,
+        page: Page = 1,
+        page_size: PageSize = 25,
+        search: str | None = None,
+        source_id: Annotated[list[str] | None, Query(alias="sourceId")] = None,
+        status: Annotated[list[str] | None, Query()] = None,
+        collection: Annotated[list[str] | None, Query()] = None,
+        doc_type: Annotated[list[str] | None, Query(alias="docType")] = None,
+        freshness: Annotated[list[str] | None, Query()] = None,
+        sensitivity: Annotated[list[str] | None, Query()] = None,
+        tags: Annotated[list[str] | None, Query()] = None,
     ) -> JSONResponse:
-        return ok(await service.documents(who, kb_id, page=page, page_size=page_size, search=search))
+        """A base's documents. Each filter keeps rows matching any of its values; each facet counts its values over
+        the rows the other filters keep, so a chip's counts say what choosing it would show."""
+        filters = {
+            "sourceId": source_id,
+            "status": status,
+            "collection": collection,
+            "docType": doc_type,
+            "freshness": freshness,
+            "sensitivity": sensitivity,
+            "tags": tags,
+        }
+        chosen = {k: v for k, v in filters.items() if v}
+        q = ListParams(page=page, page_size=page_size, search=search or None, filters=chosen)
+        return ok(await service.documents(who, kb_id, q))
 
     @kbs.post("/{kb_id}/pages", status_code=201, response_model=Envelope[Item])
     async def add_page(kb_id: str, body: PageIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
@@ -431,7 +483,7 @@ def create_kb_app(
 
     @kbs.post("/{kb_id}/query", response_model=Envelope[PlaygroundAnswer])
     async def query_knowledge_base(kb_id: str, body: QueryIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        return ok(await service.query(who, kb_id, body.question))
+        return ok(await service.query(who, kb_id, body.question, collection=body.collection))
 
     @kbs.delete("/{kb_id}/sources/{source_id}", response_model=Envelope[KnowledgeBase])
     async def detach_source(kb_id: str, source_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
@@ -453,21 +505,20 @@ def create_kb_app(
     sources = APIRouter(prefix="/v1/sources", tags=["sources"], responses=errors)
 
     @sources.get("", response_model=Envelope[ListResult[SourceRow]])
-    async def list_sources(  # pyright: ignore[reportUnusedFunction]
-        who: Caller, page: Page = 1, page_size: PageSize = 25, search: str | None = None
-    ) -> JSONResponse:
-        return ok(await service.list_sources(who, page=page, page_size=page_size, search=search))
+    async def list_sources(who: Person, _: Tx, q: ListQuery) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """The team's sources, newest first; `search` in the name, owner or collection; facets by type and status."""
+        return ok(await service.list_sources(who, q))
 
     @sources.get("/from-plugin", response_model=Envelope[list[PluginSource]])
     async def list_plugin_sources(  # pyright: ignore[reportUnusedFunction]
-        who: Caller, plugin: Annotated[str, Query(min_length=1, max_length=200)]
+        who: Caller, _: Tx, plugin: Annotated[str, Query(min_length=1, max_length=200)]
     ) -> JSONResponse:
         """The sources the team made from a plugin's knowledge sources, for the app's resource list in tools-service:
         each with the plugin's source name and the bases it feeds."""
         return ok(await service.plugin_sources(who, plugin))
 
     @sources.get("/{source_id}", response_model=Envelope[SourceDetail])
-    async def get_source(source_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def get_source(source_id: str, who: Person, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok(await service.get_source(who, source_id))
 
     @sources.post("", status_code=201, response_model=Envelope[Source])
@@ -478,22 +529,22 @@ def create_kb_app(
     async def preview_source(body: PreviewIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """What a plugin source with these settings would take in (a site's pages, each with its outcome), asked of
         the plugin's preview tool. Nothing is stored."""
-        return ok(await service.preview_source(who, body.model_dump(by_alias=True)))
+        return ok((await service.preview_source(who, body)).model_dump(by_alias=True))
 
     @sources.post("/scopes", response_model=Envelope[ScopesPage])
     async def source_scopes(body: ScopesIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """What a plugin source can be pointed at, for Add source's pickers: its plugin's scopes tool searched by name
         (sites, spaces), or what one picked site holds (`parent`). Nothing is stored."""
-        return ok(await service.source_scopes(who, body.model_dump()))
+        return ok((await service.source_scopes(who, body)).model_dump(by_alias=True, exclude_none=True))
 
     @sources.get("/{source_id}/tombstones", response_model=Envelope[list[Tombstone]])
-    async def list_tombstones(source_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def list_tombstones(source_id: str, who: Person, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Addresses removed after answering gone twice at their source; a sync leaves them out until lifted."""
-        return ok(await service.tombstones(who, source_id))
+        return ok([t.model_dump(by_alias=True) for t in await service.tombstones(who, source_id)])
 
     @sources.post("/{source_id}/tombstones/lift", response_model=Envelope[list[Tombstone]])
     async def lift_tombstones(source_id: str, body: TombstonesIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        return ok(await service.lift_tombstones(who, source_id, body.ids))
+        return ok([t.model_dump(by_alias=True) for t in await service.lift_tombstones(who, source_id, body.ids)])
 
     @sources.post("/{source_id}/ai-approval", response_model=Envelope[Source])
     async def decide_ai_steps(source_id: str, body: AiApprovalIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
@@ -514,15 +565,15 @@ def create_kb_app(
         return ok(await service.add_files(who, source_id, body.file_ids))
 
     @sources.post("/{source_id}/sync", response_model=Envelope[SyncRun])
-    async def sync_source(source_id: str, who: Caller, body: SyncIn | None = None) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        opts = body or SyncIn()
-        return ok(await service.sync(who, source_id, full=opts.full, retry=opts.retry))
+    async def sync_source(
+        source_id: str, who: Caller, body: Annotated[SyncIn, Body(default_factory=SyncIn)]
+    ) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        return ok(await service.sync(who, source_id, full=body.full, retry=body.retry))
 
     @sources.get("/{source_id}/runs", response_model=Envelope[ListResult[SyncRun]])
-    async def list_runs(  # pyright: ignore[reportUnusedFunction]
-        source_id: str, who: Caller, page: Page = 1, page_size: PageSize = 25
-    ) -> JSONResponse:
-        return ok(await service.source_runs(who, source_id, page=page, page_size=page_size))
+    async def list_runs(source_id: str, who: Person, _: Tx, q: ListQuery) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """A source's sync runs, newest first, with a facet by status."""
+        return ok(await service.source_runs(who, source_id, q))
 
     @sources.patch("/{source_id}", response_model=Envelope[Source])
     async def update_source(source_id: str, body: SourcePatch, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
@@ -543,10 +594,9 @@ def create_kb_app(
         return ok(await service.put_item(who, source_id, body.model_dump(exclude_none=True)))
 
     @sources.get("/{source_id}/items", response_model=Envelope[ListResult[Item]])
-    async def list_items(  # pyright: ignore[reportUnusedFunction]
-        source_id: str, who: Caller, page: Page = 1, page_size: PageSize = 25, search: str | None = None
-    ) -> JSONResponse:
-        return ok(await service.source_items(who, source_id, page=page, page_size=page_size, search=search))
+    async def list_items(source_id: str, who: Person, _: Tx, q: ListQuery) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """A source's documents, oldest first; `search` in the title or path; a facet by status."""
+        return ok(await service.source_items(who, source_id, q))
 
     @sources.delete("/{source_id}", status_code=204, response_class=Response)
     async def remove_source(source_id: str, who: Caller) -> Response:  # pyright: ignore[reportUnusedFunction]
@@ -571,7 +621,8 @@ def create_kb_app(
 
     @changes.get("", response_model=Envelope[ChangeList])
     async def list_changes(  # pyright: ignore[reportUnusedFunction]
-        who: Caller,
+        who: Person,
+        _: Tx,
         *,
         page: Page = 1,
         page_size: PageSize = 25,
@@ -590,7 +641,7 @@ def create_kb_app(
     @changes.post("/decide", response_model=Envelope[list[KnowledgeChange]])
     async def decide_changes(body: DecideIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Approves or rejects FAQ drafts, one or many; an approved pair is searchable at once and cites its passage."""
-        return ok(await service.decide_drafts(who, body.ids, decision=body.decision))
+        return ok(await service.decide_drafts(who, body.ids, decision=body.decision, reason=body.reason))
 
     @changes.patch("/{change_id}", response_model=Envelope[KnowledgeChange])
     async def edit_change(change_id: str, body: DraftEdit, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
@@ -599,13 +650,13 @@ def create_kb_app(
         return ok(edited)
 
     @changes.get("/{change_id}", response_model=Envelope[KnowledgeChange])
-    async def get_change(change_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def get_change(change_id: str, who: Person, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok(await service.get_change(who, change_id))
 
     runs = APIRouter(prefix="/v1/sync-runs", tags=["sources"], responses=errors)
 
     @runs.get("/{run_id}", response_model=Envelope[SyncRun])
-    async def get_run(run_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def get_run(run_id: str, who: Person, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok(await service.get_run(who, run_id))
 
     @runs.post("/{run_id}/cancel", response_model=Envelope[SyncRun])
@@ -622,7 +673,7 @@ def create_kb_app(
         return ok(await service.source_kinds(who))
 
     @app.get("/v1/knowledge/lookups", tags=["knowledge-bases"], response_model=Envelope[Lookups], responses=errors)
-    async def lookups(who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def lookups(who: Person, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok(await service.lookups(who))
 
     app.include_router(runs)

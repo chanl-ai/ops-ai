@@ -9,9 +9,8 @@ from typing import Annotated, Literal, TypeAlias
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
-from ops_contracts.chat import WireModel
 from ops_service_kit.errors import Conflict
-from ops_service_kit.http import Envelope
+from ops_service_kit.http import Envelope, In
 
 from ..auth import Principal, principal, require_builder
 from ..deps import Runtime, runtime
@@ -25,14 +24,16 @@ Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI re
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
 
 
-class ThreadEvent(WireModel):
+class ThreadEvent(In):
     type: Literal["customer_reply"]
 
 
 @router.post("/{thread_id}/events", response_model=Envelope[ThreadEventResult])
 async def thread_event(rt: Rt, me: Me, thread_id: str, body: ThreadEvent) -> JSONResponse:
     """A channel event, as the mailbox adapter delivers it: a builder or admin of the thread's team, the role the
-    inbox route takes, since restarting an SLA clock changes when the case escalates."""
+    inbox route takes, since restarting an SLA clock changes when the case escalates. No request transaction: the
+    re-armed timers are rows the poller claims, and folding their commit into the request's would change when they
+    fire."""
     row, _ = await resolve(rt, thread_id)
     require_builder(
         me,

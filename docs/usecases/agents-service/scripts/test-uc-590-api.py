@@ -37,6 +37,7 @@ from usecase_harness import (
     bearer,
     check,
     data,
+    every_page,
     finish,
     kb,
     platform,
@@ -79,6 +80,11 @@ def listed(c: httpx.Client, who: dict[str, str], kind: str | None = None) -> lis
     return list(data(r) or []) if r.status_code == 200 else [{"error": said(r)}]
 
 
+def agent_total(c: httpx.Client) -> int:
+    """How many agents the team has, from the list's total rather than one page of rows."""
+    return int(((data(c.get("/v1/agents", params={"pageSize": 1}, headers=OPS)) or {}).get("pagination") or {})["total"])
+
+
 def plugins(*folders: Path) -> dict[str, str]:
     return {"OPS_PLUGINS": "true", "OPS_PLUGIN_PATHS": json.dumps([str(f) for f in folders])}
 
@@ -97,29 +103,37 @@ def main() -> None:
         # tools-service; kb() passes on what the environment holds when it starts.
         os.environ.update({**plugins(desk), "OPS_TOOLS_URL": tools_url})
         # documents-service reads the team's document type templates from this tools-service.
-        knowledge = stack.enter_context(kb(tmp / "kb", documents_env={**AUTH, "OPS_TOOLS_URL": tools_url}))
+        knowledge = stack.enter_context(kb(tmp / "kb", documents_env={**AUTH, "OPS_TOOLS_URL": tools_url}, env=AUTH))
         docs = stack.enter_context(httpx.Client(base_url=knowledge.documents_url, timeout=30))
         api = stack.enter_context(agents(gateway_url=tools_url, kb_url=str(knowledge.base_url).rstrip("/"), env=AUTH))
         OPS.update(bearer(signed_in(accounts, "p.shah@harborpine.example"), "team_ops"))
         OTHER.update(bearer(signed_in(accounts, "w.kamau@harborpine.example"), "team_platform"))
         # 1. Priya turns the plugin on for team_ops; team_platform leaves it off.
         on = gw.put(f"/v1/apps/plugin:{PLUGIN}/team", json={"enabled": True}, headers=OPS)
+        # A new app hands agents its read tools only; the team admin adds the write the agent template grants.
+        gw.post(f"/v1/apps/plugin:{PLUGIN}/tools", json={"tools": ["templates_close_case"]}, headers=OPS)
         check("1 the plugin is on for team_ops", on.status_code == 200, {"team": said(on)})
 
-        # 2. team_ops sees the four templates, none installed; team_platform sees none.
-        mine = listed(api, OPS) + listed(docs, OPS)
-        theirs = listed(api, OTHER) + listed(docs, OTHER)
+        # 2. Every installed pack's templates list for every team; the team switch decides what runs. team_ops sees
+        # the desk's four, none installed and none off; team_platform sees the same four, each needing a tool marked off.
+        def desk_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+            return [t for t in rows if t.get("source") == SOURCE or "error" in t]
+
+        mine = desk_rows(listed(api, OPS) + listed(docs, OPS))
+        theirs = desk_rows(listed(api, OTHER) + listed(docs, OTHER))
+        kinds = sorted((str(t.get("kind")), str(t.get("id"))) for t in mine)
         check(
-            "2 team_ops sees the agent, skill, workflow and document type, none installed, and team_platform none",
-            sorted((str(t.get("kind")), str(t.get("id"))) for t in mine)
+            "2 both teams see the desk's agent, skill, workflow and document type; none installed, off for team_platform",
+            kinds
             == [
                 ("agent", "case-helper"),
                 ("document_type", "case-letter"),
                 ("skill", "close-politely"),
                 ("workflow", "case-review"),
             ]
-            and all((t.get("installed") or {}).get("copies") == 0 for t in mine)
-            and theirs == [],
+            and all((t.get("installed") or {}).get("copies") == 0 and not t.get("off") for t in mine)
+            and sorted((str(t.get("kind")), str(t.get("id"))) for t in theirs) == kinds
+            and all(t.get("off") for t in theirs if (t.get("requires") or {}).get("tools")),
             {"mine": mine, "theirs": theirs},
         )
 
@@ -200,11 +214,11 @@ def main() -> None:
             {"made": [fresh_id, sid, wid, tid], "seen": seen},
         )
 
-        # 9. A team with the plugin off cannot install its templates.
+        # 9. A team with the plugin off cannot copy a template that grants the app's tools.
         off = install(api, "case-helper", OTHER)
         check(
-            "9 a team with the plugin off is told the template is not found",
-            off.status_code == 404 and code(off) == "template_not_found",
+            "9 a team with the plugin off is told the app is off for it",
+            off.status_code == 422 and code(off) == "app_off",
             said(off),
         )
 
@@ -218,9 +232,9 @@ def main() -> None:
 
         # 11. A model alias nobody serves is refused as on create, and no agent is made.
         api.delete(f"/v1/agents/{fresh_id}", headers=OPS)
-        before = len((data(api.get("/v1/agents", params={"pageSize": 100}, headers=OPS)) or {}).get("data") or [])
+        before = agent_total(api)
         bad = install(api, "case-helper", modelAlias="nobody-serves-this")
-        after = len((data(api.get("/v1/agents", params={"pageSize": 100}, headers=OPS)) or {}).get("data") or [])
+        after = agent_total(api)
         check(
             "11 a model alias nobody serves is refused as on create, and nothing is made",
             bad.status_code == 422 and code(bad) == "unknown_model_alias" and after == before,
@@ -230,7 +244,7 @@ def main() -> None:
         # 30-31 (group E): an app's resources, and Add to team.
         offered = gw.get("/v1/plugin-templates", headers=OPS)
         ids = (
-            sorted(f"{r.get('source')}:{r.get('id')}" for r in data(offered) or [])
+            sorted(f"{r.get('source')}:{r.get('id')}" for r in data(offered) or [] if r.get("source") == SOURCE)
             if offered.status_code == 200
             else []
         )
@@ -323,12 +337,14 @@ def resource_stories(
     close-ticket skill, triage workflow whose agent step runs the ticket helper, ticket form, and help articles."""
     builder = bearer(signed_in(accounts, "j.richardson@harborpine.example"), "team_ops")
     viewer = bearer(signed_in(accounts, "r.menon@harborpine.example"), "team_ops")
-    # kb-service runs with dev sign-in: the team a call acts in is its X-Team-Id.
-    kb_ops, kb_other = {"X-Team-Id": "team_ops"}, {"X-Team-Id": "team_platform"}
+    # kb-service signs people in through platform-service, as tools-service asks it to for a source's host.
+    kb_ops, kb_other = OPS, OTHER
     made: list[tuple[httpx.Client, str]] = []
 
     # 40. Priya turns the desk on for team_ops; a viewer and a builder each see its four resources, none added.
     on = gw.put(f"/v1/apps/{DESK}/team", json={"enabled": True}, headers=OPS)
+    # The ticket helper is granted a write; the team admin adds it, as from the app's Tools tab.
+    gw.post(f"/v1/apps/{DESK}/tools", json={"tools": ["resources_close_ticket"]}, headers=OPS)
     seen = {who: rows(api, h) + rows(docs, h) for who, h in (("viewer", viewer), ("builder", builder))}
     check(
         "40 a viewer and a builder of the team each see the app's agent, skill, workflow and document type, none added",
@@ -344,10 +360,9 @@ def resource_stories(
     # 41. Each resource says its state in one word and whether the caller may add it: the viewer may not add the
     # agent, skill or workflow, and may add the document type, since every member keeps the team's document types.
     check(
-        "41 each resource reads available, and says the viewer may add only the document type while the builder may "
-        "add each",
+        "41 each resource reads available, and says the viewer may add none while the builder may add each",
         all(t.get("state") == "available" for s in seen.values() for t in s)
-        and all(t.get("canAdd") is (t.get("kind") == "document_type") for t in seen["viewer"])
+        and all(t.get("canAdd") is False for t in seen["viewer"])
         and all(t.get("canAdd") is True for t in seen["builder"]),
         {k: [{x: t.get(x) for x in ("id", "state", "canAdd")} for t in v] for k, v in seen.items()},
     )
@@ -566,8 +581,8 @@ def resource_stories(
     )
     sid = str((data(source) or {}).get("id")) if source.status_code == 201 else None
     synced = knowledge.post(f"/v1/sources/{sid}/sync", headers=kb_ops) if sid else None
-    items = data(knowledge.get(f"/v1/sources/{sid}/items", headers=kb_ops)) or {} if sid else {}
-    titles = sorted(str(i.get("title")) for i in (items.get("data") if isinstance(items, dict) else items) or [])
+    items = every_page(knowledge, f"/v1/sources/{sid}/items", headers=kb_ops) if sid else []
+    titles = sorted(str(i.get("title")) for i in items)
     check(
         "57 the app's knowledge source is added to the team's knowledge base and its sync reads both articles",
         source.status_code == 201

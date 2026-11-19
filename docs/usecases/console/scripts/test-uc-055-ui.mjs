@@ -2,8 +2,9 @@
 // Signed in through platform-service as the seeded people; tools-service reads the fake bank over https, and the agents
 // service (scripted model, no provider) takes its tools from tools-service. Each step is checked on its own, so one
 // failing step still lets the later ones report.
-import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, approveToolReview, check, chromium, finish, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
-import { grantTools, openHeldChatWrite, writeApprovalsOn } from '../../lib/workflow_ui.mjs';
+import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, approveToolReview, check, chromium, finish, required, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
+import { PEOPLE, allowBank, authHeaders, securityAdminOn, setTestRunsDoNotAsk, setWriteApprovals, setup, signInAs } from '@ops-ai/usecase-runner/steps';
+import { grantTools, openHeldChatWrite } from '../../lib/workflow_ui.mjs';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
@@ -15,8 +16,7 @@ const MAYA = 'm.okafor@harborpine.example';
 const SAM = 's.adeyemi@harborpine.example';
 // A wait armed before a click must not reject unhandled if the script fails first; that crash skips harness cleanup.
 const armed = (p) => (p.catch(() => undefined), p);
-const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'northfield-demo' }) })).json()).data.token;
-const headers = async (email, team = 'team_ops') => ({ Authorization: `Bearer ${await tokenFor(email)}`, 'X-Team-Id': team, 'Content-Type': 'application/json' });
+const headers = (email, team = 'team_ops') => authHeaders(email, { team });
 
 /** Runs one step; a throw fails that step's check with the error and leaves the next steps to run. */
 async function step(name, body) {
@@ -57,15 +57,18 @@ async function chat(page, consoleUrl, text) {
 await withUiStack(
   async (consoleUrl, stack) => {
     const browser = await chromium.launch();
+    // Team-wide policies are changed by a Security admin who acts in the team (Priya invites Sam to team_ops).
+    const samInOps = await securityAdminOn(await signInAs(PEOPLE.priya));
     const errors = [];
     let moduleId;
     try {
       // 1. The Security admin allows the bank's host and the private range it serves on.
       await step('1 Sam allows the bank host and range', async () => {
-        const P = await headers(SAM, 'team_security');
-        const host = await fetch(`${tools}/v1/egress/hosts`, { method: 'POST', headers: P, body: JSON.stringify({ value: stack.bank.host, note: 'uc-055' }) });
-        const range = await fetch(`${tools}/v1/egress/ranges`, { method: 'POST', headers: P, body: JSON.stringify({ value: stack.bank.range, note: 'uc-055' }) });
-        check('1 Sam allows the bank host and range', host.status === 201 && range.status === 201, { host: host.status, range: range.status });
+        const security = await signInAs(SAM, { team: 'team_security' });
+        await allowBank(security, stack.bank, 'uc-055');
+        // A test run of a live write asks the person unless the team turns testRunsAsk off (the approvals page); step 5 is the owner's own run of the write, so they are off until step 6.
+        await setTestRunsDoNotAsk(samInOps);
+        check('1 Sam allows the bank host and range', true);
       });
 
       const james = await signIn(browser, consoleUrl, JAMES, errors);
@@ -104,12 +107,12 @@ await withUiStack(
       await step('4 Nadia approves the module in Human Tasks and it publishes', async () => {
         const nadia = await signIn(browser, consoleUrl, NADIA, errors);
         const J = await headers(JAMES);
-        const waiting = (await (await fetch(`${tools}/v1/tool-modules/${moduleId}`, { headers: J })).json()).data.versions.find((v) => v.status === 'in_review');
+        const waiting = (await setup(await fetch(`${tools}/v1/tool-modules/${moduleId}`, { headers: J }))).versions.find((v) => v.status === 'in_review');
         await nadia.goto(`${consoleUrl}/reviews?review=${waiting.reviewId}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         const decided = armed(nadia.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/reviews/${waiting.reviewId}/decision`), { timeout: 60_000 }));
         await nadia.getByRole('button', { name: 'Approve and publish' }).click({ timeout: 120_000 });
         const res = await decided;
-        const after = (await (await fetch(`${tools}/v1/tool-modules/${moduleId}`, { headers: J })).json()).data;
+        const after = (await setup(await fetch(`${tools}/v1/tool-modules/${moduleId}`, { headers: J })));
         check('4 Nadia approves the module in Human Tasks and it publishes', res?.status() === 200 && after?.status === 'published', { status: res?.status(), state: after?.status });
       });
 
@@ -128,7 +131,8 @@ await withUiStack(
           const ran = armed(james.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/v1/tool-modules/${moduleId}/test`), { timeout: 60_000 }));
           await panel.getByRole('button', { name: 'Run' }).click();
           const res = await ran;
-          results[op] = { status: res?.status(), sent: JSON.parse(res?.request().postData() ?? '{}'), ...(res ? (await res.json().catch(() => ({}))).data ?? {} : {}) };
+          const text = res ? await res.text() : '';
+          results[op] = { status: res?.status(), sent: JSON.parse(res?.request().postData() ?? '{}'), ...required({ status: res?.status() ?? 0, data: text ? JSON.parse(text).data : undefined, text }, `test run of ${op}`) };
         }
         const read = results.get_account;
         const write = results.place_hold;
@@ -143,7 +147,7 @@ await withUiStack(
       await step('6 James grants both operations to Branch Concierge and publishes it', async () => {
         // Approvals are off by default (2026-11-01): steps 8 and 9 prove a held chat write, so the team turns tool
         // write approvals on here, after step 5's owner run of the write.
-        await writeApprovalsOn();
+        await setWriteApprovals(samInOps, true);
         await james.goto(`${consoleUrl}/agents/${AGENT}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         // The agent page saves each edit into its draft by itself; the save after the last grant holds every tool.
         const patched = armed(james.waitForResponse((r) => r.request().method() === 'PATCH' && r.url() === `${agents}/v1/agents/${AGENT}` && ['get_account', 'place_hold'].every((op) => (r.request().postData() ?? '').includes(`"${op}"`)), { timeout: 60_000 }));
@@ -172,7 +176,7 @@ await withUiStack(
       // and 9 count the writes sent after it.
       let heldThread;
       let before = 0;
-      const sentWrites = async () => ((await (await fetch(`${tools}/v1/tool-modules/${moduleId}/activity`, { headers: await headers(JAMES) })).json()).data?.recent ?? []).filter((c) => c.target === 'place_hold' && c.status === 'ok').length;
+      const sentWrites = async () => ((await setup(await fetch(`${tools}/v1/tool-modules/${moduleId}/activity`, { headers: await headers(JAMES) })))?.recent ?? []).filter((c) => c.target === 'place_hold' && c.status === 'ok').length;
       await step('8 a chat write holds for approval', async () => {
         before = await sentWrites();
         await chat(james, consoleUrl, 'call place_hold {"accountId": "CHQ-2219"}');
@@ -206,14 +210,14 @@ await withUiStack(
         await james.getByRole('tab', { name: /^Activity/ }).click({ timeout: 60_000 });
         const res = await loaded;
         const body = res ? (await res.json()).data : undefined;
-        const shown = await james.getByText('get_account').first().waitFor({ timeout: 30_000 }).then(() => true, () => false);
+        const shown = await james.getByText(/get[_ ]account/i).first().waitFor({ timeout: 30_000 }).then(() => true, () => false);
         check("10 the module's Activity tab lists the get_account call", res?.status() === 200 && shown && (body?.recent ?? []).some((c) => c.target === 'get_account' && c.status === 'ok'), { status: res?.status(), shown });
       });
 
       // 11. An operation that stops being offered shows on the agent as no longer offered, with Remove.
       await step('11 a hidden operation shows as no longer offered on the agent, with Remove', async () => {
         const J = await headers(JAMES);
-        const detail = (await (await fetch(`${tools}/v1/tool-modules/${moduleId}`, { headers: J })).json()).data;
+        const detail = (await setup(await fetch(`${tools}/v1/tool-modules/${moduleId}`, { headers: J })));
         const op = detail.operations.find((o) => o.name === 'get_account');
         const hid = await fetch(`${tools}/v1/tool-modules/${moduleId}/operations/${op.id}`, { method: 'PATCH', headers: J, body: JSON.stringify({ enabled: false }) });
         const pub = await fetch(`${tools}/v1/tool-modules/${moduleId}/versions`, { method: 'POST', headers: J, body: JSON.stringify({ note: 'get_account hidden' }) });
@@ -221,7 +225,7 @@ await withUiStack(
         // operation until Nadia approves (tools-service served_operations). The module is read as its owner, since
         // Security's own team does not see Operations' modules.
         const N = await headers(NADIA, 'team_security');
-        const waitingAgain = ((await (await fetch(`${tools}/v1/tool-modules/${moduleId}`, { headers: J })).json()).data?.versions ?? []).find((v) => v.status === 'in_review');
+        const waitingAgain = ((await setup(await fetch(`${tools}/v1/tool-modules/${moduleId}`, { headers: J })))?.versions ?? []).find((v) => v.status === 'in_review');
         const approved = waitingAgain ? ((await approveToolReview(moduleId, N, J)).status === 'published' ? 200 : 'not published') : 'no review';
         // agents-service keeps each tenant's tool directory for 30 s (activities/tool_directory.py, ttl_s), so the hidden
         // operation is offered until that answer expires; the page is reopened until it is not, for at most 45 s.
@@ -235,9 +239,9 @@ await withUiStack(
         }
         const remove = stale && (await grant.getByRole('button', { name: /Remove/ }).count()) > 0;
         // What agents-service holds, so a failure says which side kept offering the operation.
-        const viewAgent = (await (await fetch(`${agents}/v1/agents/${AGENT}`, { headers: J })).json()).data;
-        const offered = ((await (await fetch(`${agents}/v1/tools?pageSize=200`, { headers: J })).json()).data?.data ?? []).filter((t) => t.id === 'get_account').map((t) => t.moduleId);
-        const opsNow = (await (await fetch(`${tools}/v1/tool-modules/${moduleId}`, { headers: J })).json()).data;
+        const viewAgent = (await setup(await fetch(`${agents}/v1/agents/${AGENT}`, { headers: J })));
+        const offered = ((await setup(await fetch(`${agents}/v1/tools?pageSize=200`, { headers: J })))?.data ?? []).filter((t) => t.id === 'get_account').map((t) => t.moduleId);
+        const opsNow = (await setup(await fetch(`${tools}/v1/tool-modules/${moduleId}`, { headers: J })));
         check('11 a hidden operation shows as no longer offered on the agent, with Remove', hid.status === 200 && pub.status === 200 && approved === 200 && stale && remove, { hide: hid.status, publish: pub.status, approved, stale, remove, toolIds: viewAgent?.toolIds, staleToolIds: viewAgent?.staleToolIds, offeredBy: offered, status: opsNow?.status, enabled: opsNow?.operations?.find((o) => o.name === 'get_account')?.enabled, pending: opsNow?.pendingChanges?.length });
       });
 

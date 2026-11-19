@@ -45,21 +45,21 @@ await withUiStack(
       const blocked = (await option.getAttribute('aria-disabled')) === 'true' && (await option.innerText()).includes('Needs lookup_account');
       check('Hold review cannot be chosen while the agent lacks the tool its button needs', blocked);
       await page.keyboard.press('Escape');
+      // Off the page first: it saves its draft on its own, and a save landing after this grant would undo it.
+      await page.goto('about:blank');
       const granted = await fetch(`${agentsUrl}/v1/agents/${agent.id}`, { method: 'PATCH', headers: J, body: JSON.stringify({ toolIds: ['lookup_account'] }) });
       if (!granted.ok) throw new Error(`setup: granting lookup_account answered ${granted.status}: ${await granted.text()}`);
-      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.goto(`${consoleUrl}/agents/${agent.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await page.getByTestId('agent-widget-pins').getByRole('button', { name: 'Choose widgets' }).click({ timeout: 120_000 });
       await page.getByPlaceholder('Search widgets…').fill('Hold review');
       await page.getByRole('option', { name: /Hold review/ }).click({ timeout: 30_000 });
       await page.keyboard.press('Escape');
       await page.getByTestId('agent-widget-pins').getByText('Hold review').waitFor({ timeout: 15_000 }).catch(() => undefined);
+      // The agent page saves on its own: the save that carries composing on is the one this step makes.
+      const saved = armed(page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().includes(`/v1/agents/${agent.id}`) && /"compose":\s*true/.test(r.request().postData() ?? ''), { timeout: 60_000 }));
       await page.getByRole('switch', { name: 'Lay out its own widgets' }).click();
       const pinned = (await page.getByTestId('agent-widget-pins').innerText()).includes('Hold review');
       check('the agent page pins Hold review and switches composing on', pinned, { pinned });
-      const saved = armed(page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().includes(`/v1/agents/${agent.id}`), { timeout: 60_000 }));
-      await page.getByRole('button', { name: /^Save/ }).first().click();
-      const dialog = page.getByRole('dialog');
-      if (await dialog.isVisible().catch(() => false)) await dialog.getByRole('button', { name: /^Save/ }).last().click();
       const res = await saved;
       const body = res ? await res.json() : {};
       check('the saved version holds the widget pin and composing', body.data?.widgetPins?.[0]?.widgetId === 'hold-review' && body.data?.widgets?.compose === true, { pins: body.data?.widgetPins, widgets: body.data?.widgets });

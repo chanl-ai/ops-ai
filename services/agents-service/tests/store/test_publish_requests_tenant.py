@@ -5,15 +5,13 @@ another's requests; a statement with no tenant reads any."""
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator, AsyncIterator
-from contextlib import asynccontextmanager
-from typing import Any
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from uuid import uuid4
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
 
-from ops_agents.store import agent_registry
-from ops_agents.store.agent_registry import AgentRegistry
+from ops_agents.store.agent_registry import AgentRegistry, PublishRequestRow
 from ops_agents.store.tenancy import NoTenantError, current_tenant, tenant_scope
 from ops_service_kit.errors import NotFound
 
@@ -33,29 +31,33 @@ async def _no_rls(engine: AsyncEngine) -> AsyncGenerator[AsyncConnection]:
         yield c
 
 
+def _store_without_rls(self: AgentRegistry) -> AbstractAsyncContextManager[AsyncConnection]:
+    return _no_rls(self.engine)
+
+
 @pytest.mark.parametrize("rls", [True, False], ids=["rls", "query filter alone"])
 async def test_each_tenant_has_its_own_requests(
     engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch, rls: bool
 ) -> None:
     if not rls:
-        monkeypatch.setattr(agent_registry, "tenant_tx", _no_rls)
+        monkeypatch.setattr(AgentRegistry, "tx", _store_without_rls)
     reg = AgentRegistry(engine)
     a, b = f"t-{uuid4().hex[:8]}", f"t-{uuid4().hex[:8]}"
     subject = f"wf_{uuid4().hex[:6]}"
-    opened: dict[str, dict[str, Any]] = {}
+    opened: dict[str, PublishRequestRow] = {}
     for tenant in (a, b):
         with tenant_scope(tenant):
             opened[tenant] = await reg.open_request("workflow", subject, 2, note="", by="p@x", body={}, approved=False)
     with tenant_scope(a):
-        mine = [r["id"] for r in await reg.all_requests()]
-        assert mine == [opened[a]["id"]], mine
-        assert [r["subject_id"] for r in await reg.requests("workflow", subject)] == [subject]
+        mine = [r.id for r in await reg.all_requests()]
+        assert mine == [opened[a].id], mine
+        assert [r.subject_id for r in await reg.requests("workflow", subject)] == [subject]
     with tenant_scope(b):
         # The same id in another tenant is another request: deciding b's leaves a's pending.
-        assert await reg.decide_request(opened[b]["id"], "approved", "r@x", None)
+        assert await reg.decide_request(opened[b].id, "approved", "r@x", None)
     with tenant_scope(a):
-        assert (await reg.request(opened[a]["id"]))["status"] == "pending"
+        assert (await reg.request(opened[a].id)).status == "pending"
     with tenant_scope(f"t-{uuid4().hex[:8]}"), pytest.raises(NotFound):
-        await reg.request(opened[a]["id"])
+        await reg.request(opened[a].id)
     with pytest.raises(NoTenantError):
         await reg.all_requests()

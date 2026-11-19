@@ -4,20 +4,21 @@ heartbeat, the journal and the event shape `{event, runId, seq, node?, data?}`."
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncGenerator, AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator, Sequence
 from contextlib import AbstractContextManager, aclosing, suppress
 from typing import Any, cast
 
 from ops_agents.graphs.definition import ROUTE_NODE, WorkflowDefinition
 from ops_checkpointer import LeaseSupersededError
 from ops_service_kit.errors import ApiError, Conflict, NotFound
+from ops_service_kit.http import Json
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
 from ops_store import isolation
 from ops_store.isolation import Isolation
 
 from ..store.events import EventLog
-from ..store.graphs import GraphStore
+from ..store.graphs import GraphStore, ThreadRow
 from ..store.leases import Heartbeat, Leases
 from .deps import Runtime
 from .event_log import designed_type
@@ -55,10 +56,10 @@ def require_graphs(rt: Runtime) -> Leases:
     return rt.leases
 
 
-def config(thread_id: str, generation: int | None = None, run_id: str | None = None) -> dict[str, Any]:
+def config(thread_id: str, generation: int | None = None, run_id: str | None = None) -> Json:
     """`generation` is the run's lease generation; every checkpoint and gateway write of the run carries it (E2b).
     `run_id` lets each usage row name the run that spent it (E12)."""
-    configurable: dict[str, Any] = {"thread_id": thread_id}
+    configurable: Json = {"thread_id": thread_id}
     if generation is not None:
         configurable["lease_generation"] = generation
     if run_id is not None:
@@ -70,7 +71,9 @@ def config(thread_id: str, generation: int | None = None, run_id: str | None = N
     }
 
 
-def pending(snapshot: Any) -> list[dict[str, Any]]:
+def pending(snapshot: Any) -> list[Json]:
+    """Each interrupt the thread waits on as `{id, payload}`. The payload is the checkpointed value as stored, which
+    need not be an object (or JSON); a reader narrows it."""
     return [{"id": i.id, "payload": i.value} for i in getattr(snapshot, "interrupts", ())]
 
 
@@ -78,29 +81,69 @@ async def definition(rt: Runtime, name: str, version: int) -> WorkflowDefinition
     stored = await graph_store(rt).version(name, version)
     if stored is None:
         raise NotFound(f"{name} version {version}")
-    return WorkflowDefinition.model_validate(stored["definition"])
+    return WorkflowDefinition.model_validate(stored.definition)
 
 
 async def resolve(rt: Runtime, thread_id: str) -> tuple[dict[str, Any], Any]:
     """The thread and the graph it runs on: a code graph by name, or its pinned workflow version compiled from JSON."""
-    row = await graph_store(rt).thread(thread_id)
+    row = await graph_store(rt).thread_row(thread_id)
     if row is None:
         # Another tenant's or team's thread is not found either: the store and the database never return it.
         raise NotFound("Thread")
-    require_graphs(rt)
-    if row["graph"] in rt.graphs:
-        return row, rt.graphs[row["graph"]]
-    d = await definition(rt, row["graph"], row["version"])
-    if d.digest() != row["digest"]:
-        raise Conflict(
-            f"Stored {row['graph']} version {row['version']} no longer matches the thread's digest.",
-            code="digest_mismatch",
-        )
-    assert rt.workflows is not None
-    return row, rt.workflows.get(d)
+    stored = row.model_dump()
+    # Strict: a thread whose meta is not an object, or whose overrides are neither an object nor null, does not resolve.
+    found = (await resolve_rows(rt, [ThreadRow.model_validate(stored)])).graphs[thread_id]
+    if isinstance(found, ApiError):
+        raise found
+    return stored, found
 
 
-def as_thread_team(row: dict[str, Any]) -> AbstractContextManager[Isolation]:
+# A thread's graph, compiled from code or from its pinned workflow version; LangGraph ships no type stubs, so the
+# runtime holds compiled graphs untyped (Runtime.graphs).
+Graph = Any
+
+
+class Resolved:
+    """Threads' graphs by thread id, each a graph or the error `resolve` raises for it, and the workflow versions read
+    on the way, by (name, version)."""
+
+    def __init__(
+        self, graphs: dict[str, Graph | ApiError], versions: dict[tuple[str, int], WorkflowDefinition]
+    ) -> None:
+        self.graphs = graphs
+        self.versions = versions
+
+
+async def resolve_rows(rt: Runtime, rows: Sequence[ThreadRow]) -> Resolved:
+    """`resolve` for threads already read, with every pinned workflow version they name read in one statement, so a
+    list resolves its rows in a fixed number of reads."""
+    try:
+        require_graphs(rt)
+    except GraphsUnavailable as e:
+        return Resolved({r.id: e for r in rows}, {})
+    pinned = {(r.graph, r.version) for r in rows if r.graph not in rt.graphs and r.version}
+    stored = await graph_store(rt).versions_at(pinned)
+    versions = {k: WorkflowDefinition.model_validate(v.definition) for k, v in stored.items()}
+    graphs: dict[str, Graph | ApiError] = {}
+    for r in rows:
+        tid, name = r.id, r.graph
+        if name in rt.graphs:
+            graphs[tid] = rt.graphs[name]
+            continue
+        d = versions.get((name, r.version)) if r.version else None
+        if d is None:
+            graphs[tid] = NotFound(f"{name} version {r.version}")
+        elif d.digest() != r.digest:
+            graphs[tid] = Conflict(
+                f"Stored {name} version {r.version} no longer matches the thread's digest.", code="digest_mismatch"
+            )
+        else:
+            assert rt.workflows is not None
+            graphs[tid] = rt.workflows.get(d)
+    return Resolved(graphs, versions)
+
+
+def as_thread_team(row: Json) -> AbstractContextManager[Isolation]:
     """The thread's team, for a write to its state outside a run (a parent's state after its child ends). Every
     checkpoint is in exactly one team, its thread's, whoever the caller is."""
     return isolation.scope(isolation.tenant(), str(row["team_id"]))
@@ -114,9 +157,7 @@ class _Failed:
 _DONE = object()
 
 
-async def _in_thread_team(
-    row: dict[str, Any], events: AsyncGenerator[dict[str, Any]]
-) -> AsyncGenerator[dict[str, Any]]:
+async def _in_thread_team(row: Json, events: AsyncGenerator[Json]) -> AsyncGenerator[Json]:
     """`events`, produced in a task that acts as the thread's team, so the run's checkpoints are in that team whether
     a person of the team, the dev caller (every team of the tenant) or a resume started it. A scope held across this
     generator's yields would be reset in whatever context closes it; the task keeps it to the run (as
@@ -151,8 +192,8 @@ async def _in_thread_team(
 
 
 async def execute(
-    rt: Runtime, row: dict[str, Any], graph: Any, *, graph_input: Any, run_id: str, kind: str
-) -> AsyncGenerator[dict[str, Any]]:
+    rt: Runtime, row: Json, graph: Any, *, graph_input: Any, run_id: str, kind: str
+) -> AsyncGenerator[Json]:
     """`_execute`, with each event written to the thread event log before it is yielded, so a client re-attaching
     mid-run, and a crash, see every event the stream has sent.
 
@@ -160,19 +201,19 @@ async def execute(
     connection, and a write from this consumer would interleave with a node's own writes running in LangGraph's tasks
     and lose one of them."""
     engine = graph_store(rt).engine
-    deferred: list[dict[str, Any]] | None = [] if engine.dialect.name == "sqlite" else None
+    deferred: list[Json] | None = [] if engine.dialect.name == "sqlite" else None
 
-    async def write(e: dict[str, Any]) -> None:
+    async def write(e: Json) -> None:
         type_ = designed_type(e)
         if type_ is None:
             return
         try:
             await EventLog(engine).append(
-                thread_id=row["id"],
-                team_id=row["team_id"],
+                thread_id=cast(str, row["id"]),
+                team_id=cast(str, row["team_id"]),
                 run_id=run_id,
                 type_=type_,
-                node=e.get("node"),
+                node=cast(str | None, e.get("node")),
                 data=e.get("data"),
             )
         except Exception as exc:  # A lost log write must not stop the run; the journal still records the event.
@@ -189,33 +230,33 @@ async def execute(
                 else:
                     deferred.append(e)
                 if e["event"] == "end":
-                    finished = cast(dict[str, Any], e.get("data") or {}).get("status") == "done"
+                    finished = cast(Json, e.get("data") or {}).get("status") == "done"
                 yield e
     finally:
         for e in deferred or []:
             await write(e)
-    if finished and cast(dict[str, Any], row.get("meta") or {}).get("startedBy") in ("agent", "workflow"):
+    if finished and cast(Json, row.get("meta") or {}).get("startedBy") in ("agent", "workflow"):
         from .child_runs import tell_parent  # noqa: PLC0415 - child_runs imports this module
 
         await tell_parent(rt, row)
 
 
 async def _execute(
-    rt: Runtime, row: dict[str, Any], graph: Any, *, graph_input: Any, run_id: str, kind: str
-) -> AsyncGenerator[dict[str, Any]]:
+    rt: Runtime, row: Json, graph: Any, *, graph_input: Any, run_id: str, kind: str
+) -> AsyncGenerator[Json]:
     """Runs the graph on the thread while holding its lease (already taken by the caller), and releases it at the end.
     If another owner takes the lease over mid-run, the run stops and the lease is left to its new owner."""
     store, leases = graph_store(rt), rt.leases
     assert leases is not None
-    thread_id = row["id"]
-    events: list[dict[str, Any]] = []
+    thread_id = cast(str, row["id"])
+    events: list[Json] = []
     status = "error"
     heartbeat = Heartbeat(leases, thread_id, run_id)
     heartbeat.start()
     generation = await leases.generation_of(thread_id, run_id)
 
-    def event(name: str, node: str | None = None, data: Any = None) -> dict[str, Any]:
-        e: dict[str, Any] = {"event": name, "runId": run_id, "seq": len(events)}
+    def event(name: str, node: str | None = None, data: Any = None) -> Json:
+        e: Json = {"event": name, "runId": run_id, "seq": len(events)}
         if node is not None:
             e["node"] = node
         if data is not None:
@@ -236,7 +277,7 @@ async def _execute(
         plan = await plan_kinds(rt, row)
         route = await requested_route(rt, thread_id) if plan is not None else None
 
-        async def stream(graph_input: Any, *, stop_for_route: bool) -> AsyncIterator[dict[str, Any]]:
+        async def stream(graph_input: Any, *, stop_for_route: bool) -> AsyncIterator[Json]:
             nonlocal route
             in_flight: set[str] = set()
             steps = graph.astream(

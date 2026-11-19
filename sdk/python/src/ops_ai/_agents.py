@@ -5,11 +5,12 @@ from __future__ import annotations
 import asyncio
 import threading
 import uuid
+from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 from typing import Any
 
 from ._io import Definition, load_definition
-from ._transport import page_items
+from ._transport import iter_pages, iter_pages_async, iter_rows, iter_rows_async
 from .errors import NotFound, OpsError
 
 _BACKGROUND: set[asyncio.Task[None]] = set()
@@ -50,14 +51,8 @@ class Agents:
     def __init__(self, raw: Any) -> None:
         self._raw = raw
 
-    def list(self, **query: Any) -> Any:
-        nxt: dict[str, Any] = {}
-        while True:
-            items, nxt_more = page_items(self._raw.agents.agents_list_agents(**{**query, **nxt}))
-            yield from items
-            if nxt_more is None:
-                return
-            nxt = nxt_more
+    def list(self, **query: Any) -> Iterator[Any]:
+        return iter_pages(self._raw.agents.agents_list_agents, **query)
 
     def get(self, id: str) -> Any:
         return self._raw.agents.agents_get_agent(id)
@@ -113,6 +108,17 @@ class Agents:
         agent = self.get(id)
         pin = version if version is not None else agent.get("version")
         return self._raw.agents.agents_request_publish(id, {"note": note, "version": pin})
+
+    def tool_options(self, search: str | None = None) -> list[dict[str, Any]]:
+        """The operations an agent may be granted: published ones, as the agent page's picker lists them."""
+        return list(iter_rows(self._raw.agents.agents_tool_options, search=search, limit=50))
+
+    def grant_tools(self, id: str, tools: list[str]) -> Any:
+        """Adds tools (their ids from `tool_options`) to the agent's draft, keeping the ones it holds. Publish it
+        for the grant to take effect."""
+        held = list(self.get(id).get("toolIds") or [])
+        wanted = held + [t for t in tools if t not in held]
+        return self._raw.agents.agents_update_agent(id, {"toolIds": wanted})
 
     def pause(self, id: str) -> Any:
         return self._raw.agents.agents_set_paused(id, {"paused": True})
@@ -186,15 +192,8 @@ class AsyncAgents:
     def __init__(self, raw: Any) -> None:
         self._raw = raw
 
-    async def list(self, **query: Any) -> Any:
-        nxt: dict[str, Any] = {}
-        while True:
-            items, nxt_more = page_items(await self._raw.agents.agents_list_agents(**{**query, **nxt}))
-            for item in items:
-                yield item
-            if nxt_more is None:
-                return
-            nxt = nxt_more
+    def list(self, **query: Any) -> AsyncIterator[Any]:
+        return iter_pages_async(self._raw.agents.agents_list_agents, **query)
 
     async def get(self, id: str) -> Any:
         return await self._raw.agents.agents_get_agent(id)
@@ -249,6 +248,17 @@ class AsyncAgents:
         agent = await self.get(id)
         pin = version if version is not None else agent.get("version")
         return await self._raw.agents.agents_request_publish(id, {"note": note, "version": pin})
+
+    async def tool_options(self, search: str | None = None) -> list[dict[str, Any]]:
+        """The operations an agent may be granted: published ones, as the agent page's picker lists them."""
+        return [row async for row in iter_rows_async(self._raw.agents.agents_tool_options, search=search, limit=50)]
+
+    async def grant_tools(self, id: str, tools: list[str]) -> Any:
+        """Adds tools (their ids from `tool_options`) to the agent's draft, keeping the ones it holds. Publish it
+        for the grant to take effect."""
+        held = list((await self.get(id)).get("toolIds") or [])
+        wanted = held + [t for t in tools if t not in held]
+        return await self._raw.agents.agents_update_agent(id, {"toolIds": wanted})
 
     async def pause(self, id: str) -> Any:
         return await self._raw.agents.agents_set_paused(id, {"paused": True})
@@ -372,12 +382,13 @@ def _collect_chat(events: Any, thread_id: str) -> dict[str, Any]:
             and (kind in {"tool_call", "tool_start", "tool_end"} or call.get("name") or call.get("tool"))
         ):
             seen.add(name)
-            tool_calls.append(call)
+            tool_calls.append({**call, "name": name})
     if isinstance(events, dict) and not reply and not parts:
         reply = _reply_text(events)
     return {
         "threadId": thread_id,
         "reply": "".join(parts) or reply,
+        "text": "".join(parts) or reply,
         "events": items,
         "citations": citations,
         "toolCalls": tool_calls,

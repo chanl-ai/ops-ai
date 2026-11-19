@@ -126,7 +126,7 @@ export function FileSheet({
       tags={
         f && (
           <>
-            <ScanText status={f.scan.status} detail={f.scan.detail} />
+            <ScanText status={f.scan.status} detail={f.scan.detail ?? undefined} />
             <SensitivityBadge value={f.sensitivity} suggested={f.sensitivitySuggested} />
             {f.legalHold && (
               <Badge variant="outline" className="border-warning/30 bg-warning/10 font-normal text-warning-text">
@@ -210,7 +210,7 @@ export function FileSheet({
                 {f.references.map((r) => (
                   <Row
                     key={`${r.type}-${r.id}`}
-                    href={r.href}
+                    href={r.href ?? undefined}
                     leading={<Badge variant="outline" className="font-normal">{REF_LABEL[r.type]}</Badge>}
                     title={r.name}
                     description={r.blocked ? <span className="text-destructive-text">Blocked · {r.blocked}</span> : `Since ${relativeTime(r.addedAt)}`}

@@ -5,7 +5,10 @@ import Link from "next/link"
 import {
   IconShieldLock,
   IconDotsVertical,
+  IconDeviceDesktop,
   IconLogout,
+  IconMoon,
+  IconSun,
   IconNotification,
   IconPlug,
   IconUserCircle,
@@ -22,7 +25,12 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
@@ -32,6 +40,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import { useRouter } from "next/navigation"
+import { useTheme } from "next-themes"
 import { useSession, useSignOut } from "@/hooks/auth-queries"
 import { clearChatDrafts } from "@/components/chat/composer"
 import { noteChosenSignOut } from "@/components/shell/session-end"
@@ -52,6 +61,7 @@ export function NavUser({
   const { session } = useSession()
   const user = session ? { ...fallback, name: session.user.name, email: session.user.email } : fallback
   const router = useRouter()
+  const { theme, setTheme } = useTheme()
   // Signing out drops every cached query, then the guard would send this page to /login anyway; going there directly avoids a flash.
   const signOut = useSignOut()
 
@@ -113,7 +123,7 @@ export function NavUser({
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Link href="/integrations/my-accounts" data-testid="nav-connections">
+                <Link href="/settings/account/connectors" data-testid="nav-connections">
                   <IconPlug />
                   {MY_CONNECTORS}
                 </Link>
@@ -124,6 +134,20 @@ export function NavUser({
                   Notifications
                 </Link>
               </DropdownMenuItem>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger data-testid="nav-theme" className="gap-2 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground">
+                  <IconSun />
+                  Theme
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  {/* theme is undefined until the client reads the saved choice; System is the default meanwhile. */}
+                  <DropdownMenuRadioGroup value={theme ?? "system"} onValueChange={setTheme}>
+                    <DropdownMenuRadioItem value="light" className="[&>svg:not([class*='text-'])]:text-muted-foreground"><IconSun />Light</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="dark" className="[&>svg:not([class*='text-'])]:text-muted-foreground"><IconMoon />Dark</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="system" className="[&>svg:not([class*='text-'])]:text-muted-foreground"><IconDeviceDesktop />System</DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem

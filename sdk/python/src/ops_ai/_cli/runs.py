@@ -4,11 +4,11 @@ cancel, retry), and Human Tasks as the Human Tasks queue shows them (list, open 
 from __future__ import annotations
 
 import argparse
+import getpass
 import sys
 from typing import Any
 
-from ops_ai import OpsAI
-from ops_ai._transport import page_items
+from ops_ai import OpsAI, OpsError
 
 from .common import client, emit, parser, payload, refuse, short, table, verb_options
 
@@ -41,8 +41,8 @@ def runs_main(argv: list[str]) -> int:
 
 def _runs(ns: argparse.Namespace, ops: OpsAI) -> int:
     if ns.verb == "list":
-        found = ops.raw.agents.workflows_list_engine_runs(workflow_id=ns.workflow, status=ns.status, page_size=50)
-        return table(ns, page_items(found)[0], "id", "workflowId", "mode", "status", "outcome", "createdAt")
+        found = ops.runs.list(workflow_id=ns.workflow, status=ns.status)
+        return table(ns, found, "id", "workflowId", "mode", "status", "outcome", "createdAt")
     if ns.verb == "start":
         started = ops.runs.start(ns.workflow, input=payload(ns.input), mode="live" if ns.live else "test")
         if ns.wait:
@@ -88,12 +88,22 @@ def tasks_main(argv: list[str]) -> int:
     listing = sub.add_parser("list", parents=common, help="the Human Tasks queue")
     listing.add_argument("--view", help="the queue's tab, e.g. mine, open, done")
     listing.add_argument("--search")
+    types = sub.add_parser("types", parents=common, help="the task types a team defines")
+    types.add_argument("--search")
     sub.add_parser("show", parents=common, help="one task").add_argument("task")
     decide = sub.add_parser("decide", parents=common, help="send one of the actions the task offers")
     decide.add_argument("task")
     decide.add_argument("decision", help="the action, e.g. approve or reject")
     decide.add_argument("--reason")
     decide.add_argument("--fields", help="the task's form fields: k=v,k=v, JSON, a file, or -")
+    approve = sub.add_parser("approve", parents=common, help="approve a task, such as a write a chat held")
+    approve.add_argument("task")
+    approve.add_argument("--reason")
+    approve.add_argument(
+        "--password-stdin",
+        action="store_true",
+        help="read the approver's password once from standard input, instead of asking when the write asks for it",
+    )
     ns = ap.parse_args(argv)
     try:
         return _tasks(ns, client(ns))
@@ -103,12 +113,27 @@ def tasks_main(argv: list[str]) -> int:
 
 def _tasks(ns: argparse.Namespace, ops: OpsAI) -> int:
     if ns.verb == "list":
-        found = ops.raw.agents.reviews_list_reviews(view=ns.view, search=ns.search, page_size=50)
-        return table(ns, page_items(found)[0], "id", "kind", "title", "risk", "status")
+        found = ops.tasks.list(view=ns.view, search=ns.search)
+        return table(ns, found, "id", "kind", "title", "risk", "status")
+    if ns.verb == "types":
+        return table(ns, ops.task_types.list(search=ns.search), "id", "name", "description")
     if ns.verb == "show":
         return emit(ns, ops.tasks.get(ns.task))
     if ns.verb == "decide":
         fields = payload(ns.fields) if ns.fields else {}
         inputs = {"inputs": fields} if fields else {}
         return emit(ns, ops.tasks.decide(ns.task, ns.decision, reason=ns.reason, **inputs))
+    if ns.verb == "approve":
+        # A password on the command line or in the environment would sit in shell history and process lists, and a
+        # standing one would confirm every step-up without the approver being asked: it is read from standard input
+        # on request, and otherwise asked for, without echo, each time the write asks to confirm it is them.
+        if ns.password_stdin:
+            return emit(ns, ops.tasks.approve(ns.task, password=sys.stdin.readline().rstrip("\n"), reason=ns.reason))
+        try:
+            return emit(ns, ops.tasks.approve(ns.task, reason=ns.reason))
+        except OpsError as exc:
+            if exc.code != "step_up_required":
+                raise
+        password = getpass.getpass("Confirm it is you. Password: ")
+        return emit(ns, ops.tasks.approve(ns.task, password=password, reason=ns.reason))
     return 2

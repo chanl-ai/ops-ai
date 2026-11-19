@@ -1,0 +1,3 @@
+# 2 literal timeouts and HTTP clients built in services/platform-service (scripts/check_config_literals.py). A row may only fall.
+1 client services/platform-service/src/ops_platform/__main__.py
+1 client services/platform-service/src/ops_platform/api/app.py

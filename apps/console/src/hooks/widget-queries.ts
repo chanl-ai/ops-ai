@@ -8,10 +8,9 @@ import type { ListParams } from '@/lib/types/query';
 import type { WidgetTemplate, WidgetTemplateInput } from '@/lib/types/widgets';
 import { useTeamQuery } from './team-query';
 
-// The agent page's widget picker and the /widgets page read the same list, so every write refreshes both.
+// Every widget read sits under this key, so a write refreshes the grid and the one-widget read.
 const KEY = ['widget-templates'] as const;
 
-export const useWidgetTemplates = () => useTeamQuery({ queryKey: KEY, queryFn: () => api.widgets.list(), staleTime: 60_000 });
 export const useWidgetTemplate = (widgetId: string) => useTeamQuery({ queryKey: [...KEY, 'one', widgetId], queryFn: () => api.widgets.get(widgetId) });
 export const useWidgetTemplatesPage = (p: ListParams) => usePagedQuery({ queryKey: [...KEY, 'page', p], queryFn: () => api.widgets.page(p) });
 

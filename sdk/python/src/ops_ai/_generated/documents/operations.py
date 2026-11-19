@@ -88,7 +88,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/document-types",
         "pathParams": [],
-        "query": [],
+        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "document_types_remove_example": {
@@ -196,7 +196,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/documents/extractions",
         "pathParams": [],
-        "query": ["fileId", "page", "pageSize"],
+        "query": ["fileId", "page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "documents_get_extraction": {
@@ -271,6 +271,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "resources_detach_copy": {
+        "body": None,
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/resources/{resource}/copies/{copy}/detach",
+        "pathParams": ["resource", "copy"],
+        "query": [],
+        "stream": False,
+    },
     "resources_review_update": {
         "body": None,
         "headers": [],
@@ -315,9 +324,32 @@ class Operations:
         "Health Background"
         return self._t.call(SERVICE, OPERATIONS["health_health_background"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
-    def document_types_list_types(self) -> DocumentTypeList:
+    def document_types_list_types(
+        self,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> DocumentTypeList:
         "List Types"
-        return self._t.call(SERVICE, OPERATIONS["document_types_list_types"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["document_types_list_types"],
+            {},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     def document_types_create_type(self, body: DocumentTypeIn) -> DocumentType:
         "Create Type"
@@ -402,14 +434,30 @@ class Operations:
         return self._t.call(SERVICE, OPERATIONS["documents_classify_file"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
     def documents_file_extractions(
-        self, *, file_id: str | None = None, page: int | None = None, page_size: int | None = None
+        self,
+        *,
+        file_id: str | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> ListResultExtraction:
         "File Extractions"
         return self._t.call(
             SERVICE,
             OPERATIONS["documents_file_extractions"],
             {},
-            {"fileId": file_id, "page": page, "pageSize": page_size},
+            {
+                "fileId": file_id,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -478,6 +526,12 @@ class Operations:
         "Copy Resource"
         return self._t.call(SERVICE, OPERATIONS["resources_copy_resource"], {"resource": resource}, {}, {}, body)  # type: ignore[no-any-return]
 
+    def resources_detach_copy(self, resource: str, copy: str) -> CopyRef:
+        "Detach Copy"
+        return self._t.call(
+            SERVICE, OPERATIONS["resources_detach_copy"], {"resource": resource, "copy": copy}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
     def resources_review_update(self, resource: str, copy: str) -> UpdateReview:
         "Review Update"
         return self._t.call(
@@ -509,9 +563,32 @@ class AsyncOperations:
         "Health Background"
         return await self._t.call(SERVICE, OPERATIONS["health_health_background"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
-    async def document_types_list_types(self) -> DocumentTypeList:
+    async def document_types_list_types(
+        self,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> DocumentTypeList:
         "List Types"
-        return await self._t.call(SERVICE, OPERATIONS["document_types_list_types"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["document_types_list_types"],
+            {},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     async def document_types_create_type(self, body: DocumentTypeIn) -> DocumentType:
         "Create Type"
@@ -602,14 +679,30 @@ class AsyncOperations:
         return await self._t.call(SERVICE, OPERATIONS["documents_classify_file"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def documents_file_extractions(
-        self, *, file_id: str | None = None, page: int | None = None, page_size: int | None = None
+        self,
+        *,
+        file_id: str | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> ListResultExtraction:
         "File Extractions"
         return await self._t.call(
             SERVICE,
             OPERATIONS["documents_file_extractions"],
             {},
-            {"fileId": file_id, "page": page, "pageSize": page_size},
+            {
+                "fileId": file_id,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -677,6 +770,12 @@ class AsyncOperations:
     async def resources_copy_resource(self, resource: str, body: InstallInput) -> Installation:
         "Copy Resource"
         return await self._t.call(SERVICE, OPERATIONS["resources_copy_resource"], {"resource": resource}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def resources_detach_copy(self, resource: str, copy: str) -> CopyRef:
+        "Detach Copy"
+        return await self._t.call(
+            SERVICE, OPERATIONS["resources_detach_copy"], {"resource": resource, "copy": copy}, {}, {}, None
+        )  # type: ignore[no-any-return]
 
     async def resources_review_update(self, resource: str, copy: str) -> UpdateReview:
         "Review Update"

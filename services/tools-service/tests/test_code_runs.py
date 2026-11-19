@@ -9,7 +9,7 @@ import pytest
 
 from ops_policy import HmacSigner, mint
 from ops_service_kit.errors import Unauthorized, Unprocessable
-from ops_tools.code_runs import CodeExecutor, code_signer, resolve_handles, run_claims
+from ops_tools.code_runs import CodeExecutor, RunClaims, code_signer, resolve_handles, run_claims
 from ops_tools.registry import Resolved
 from ops_tools.tools import ToolCaller
 
@@ -23,7 +23,7 @@ CODE: dict[str, Any] = {
 }
 
 
-def claims() -> dict[str, Any]:
+def claims() -> RunClaims:
     token = CodeExecutor(None, SIGNER).token(
         {"name": "check_limit", "access": "read"}, CODE, CALLER, "k1", "test", module_team="team_a"
     )

@@ -11,7 +11,7 @@ import { HEALTH_DOT, HEALTH_WORD, KINDS } from './kinds';
 export function ChannelTabs({ kinds }: { kinds: ChannelKindSummary[] | undefined }) {
   const shown = useFlagged(KINDS);
   const tabs = [
-    { href: '/channels', label: 'Overview' },
+    { href: '/build/channels', label: 'Overview' },
     ...shown.map((k) => {
       const summary = kinds?.find((s) => s.type === k.type);
       const built = summary?.built ?? ['email', 'chat', 'api'].includes(k.type);

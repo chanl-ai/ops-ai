@@ -10,7 +10,10 @@ Tested against the local fake identity provider only; no real identity provider 
 | `OidcClient.complete` | `oidc.py` | Exchanges the code with the verifier; the id_token must be signed by a key from the issuer's key set with an asymmetric algorithm, name the configured issuer and client, carry the flow's nonce, be unexpired, carry an email not marked unverified, and for a forced sign-in an `auth_time` no older than the flow |
 | `SamlServiceProvider.begin` | `saml.py` | An AuthnRequest on the redirect binding naming the consumer URL; `force` sets `ForceAuthn` |
 | `SamlServiceProvider.complete` | `saml.py` | One assertion, none encrypted, status success; the signature verified against the configured certificate; issuer, audience, bearer confirmation (recipient, request id, expiry) and the time window read from the signed element only |
-| Fake identity provider | `fake_idp/app.py` | Named providers at `/oidc/<name>` and `/saml/<name>`, each with its own key; the person is named by `user=` on the authorize or SSO URL |
+| `SamlServiceProvider.check_unsolicited` | `saml.py` | A response nobody asked for (an app-portal tile) checked as `complete` does, with no InResponseTo and a Destination naming the consumer URL; returns nothing, so the caller never signs anyone in from it |
+| Certificates | `saml.py` | `SamlConfig.idp_certificates` is a list; each within its dates is tried. A signature only an ended certificate verifies raises `CertificateExpired` (a `SignInRefused`), which a caller may name to the person |
+| `read_metadata` | `saml_metadata.py` | An identity provider's metadata: entity id, redirect sign-in URL, every signing certificate with SHA-256 fingerprint and dates; same hardened parser and 256 KB cap as responses; `MetadataRefused.code` names why |
+| Fake identity provider | `fake_idp/app.py` | Named providers at `/oidc/<name>` and `/saml/<name>`, each with its own key; the person is named by `user=` on the authorize or SSO URL; `/saml/<name>/metadata`, `.../rollover` (a new key, old certificate still listed), `.../expire`, `.../metadata-entity` and `.../unsolicited` (a tile's post) for the certificate and tile tests |
 
 ## Gotchas
 

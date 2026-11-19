@@ -8,7 +8,7 @@ A table is team-owned when its `info` carries `ops_store.schema.TEAM_OWNED` (or 
 rows belong to a team-owned parent carries `team_owned_via(parent, column)` and is read through the parent's team.
 With no acting team (the dev header caller, a service acting for the whole tenant, a loop between requests) the
 clause is true: those callers read every team, and their routes say so. Another team's record is then absent from
-every read, so its route answers 404.
+every read, so its route answers 404. Inside `isolation.install_wide`, which has no team and no tenant, it raises.
 
 `any_team` is the one way to read every team's rows while a team is set; its reason is required and the guard test
 lists where it is used.
@@ -25,7 +25,15 @@ import sqlalchemy as sa
 
 from .schema import TEAM_KEY, TEAM_VIA_KEY
 
+
+class InstallScopeError(RuntimeError):
+    """A statement or filter inside an install-wide block (`isolation.install_wide`) that could reach a tenant's
+    rows: a table not marked `system(...)`, raw SQL, or a team filter, which has no team to name there."""
+
+
 _acting: ContextVar[str | None] = ContextVar("ops_acting_team", default=None)
+# Set for an install-wide block: no team, which is not every team, so `team_visible` refuses there.
+_install: ContextVar[bool] = ContextVar("ops_install_scope", default=False)
 
 
 class Caller(Protocol):
@@ -55,17 +63,23 @@ def acting_team() -> str | None:
 
 
 @contextmanager
-def acting_as(team_id: str | None) -> Generator[None]:
-    """For a task that works one team's item (a run's pass) and for tests."""
+def acting_as(team_id: str | None, *, install: bool = False) -> Generator[None]:
+    """For a task that works one team's item (a run's pass) and for tests; `install` only for `install_wide`."""
     token = _acting.set(team_id or None)
+    wide = _install.set(install)
     try:
         yield
     finally:
+        _install.reset(wide)
         _acting.reset(token)
 
 
 def team_visible(table: sa.Table) -> sa.ColumnElement[bool]:
-    """The acting team's rows of `table` and its workspace-level rows (null team); every row with no acting team."""
+    """The acting team's rows of `table` and its workspace-level rows (null team); every row with no acting team. An
+    install-wide block has no team and no tenant, so it raises there rather than read every tenant's rows of a table
+    with no row policy."""
+    if _install.get():
+        raise InstallScopeError(f"refused: {table.name} is filtered by team inside an install-wide block")
     team = acting_team()
     if team is None:
         return sa.true()
@@ -74,6 +88,13 @@ def team_visible(table: sa.Table) -> sa.ColumnElement[bool]:
         parent_name, column = via
         parent = table.metadata.tables[str(parent_name)]
         child: sa.ColumnElement[str] = table.c[str(column)]
+        key = list(parent.primary_key.columns)
+        if key and key[0].name == "tenant_id" and "tenant_id" in table.c:
+            # Two tenants may hold one parent id, so the id alone could match a visible parent of another tenant.
+            # A correlated EXISTS, since SQL Server has no tuple IN.
+            return sa.exists().where(
+                parent.c.tenant_id == table.c.tenant_id, parent.c.id == child, team_visible(parent)
+            )
         return child.in_(sa.select(parent.c.id).where(team_visible(parent)))
     column_name = table.info.get(TEAM_KEY)
     if column_name is None:

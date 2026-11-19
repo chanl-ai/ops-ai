@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Final, cast
 
+from ops_service_kit.http import Json
+
 CHECK_CALLS_TOOL: Final = "calls_tool"
 CHECK_REPLY_CONTAINS: Final = "reply_contains"
 CHECK_REFUSES: Final = "refuses"
@@ -16,6 +18,38 @@ EVAL_STATUS_COMPLETE: Final = "complete"
 EVAL_RUN_PREFIX: Final = "evr"
 CHECK_UNKNOWN_CODE: Final = "unknown_check_type"
 CASES_EMPTY_CODE: Final = "empty_cases"
+
+# What a saved case set or a run belongs to. Workflows keep no cases: their runs are the structural test runs.
+ASSET_AGENT: Final = "agent"
+ASSET_SKILL: Final = "skill"
+ASSET_WORKFLOW: Final = "workflow"
+CASE_ASSET_KINDS: Final[frozenset[str]] = frozenset({ASSET_AGENT, ASSET_SKILL})
+CASE_ACTIVE: Final = "active"
+CASE_DRAFT: Final = "draft"
+TRIGGER_MANUAL: Final = "manual"
+TRIGGER_PUBLISH_REQUEST: Final = "publish_request"
+# Until the model inventory holds a record, every asset is in this tier.
+DEFAULT_TIER: Final = "medium"
+
+STEP_PASS: Final = "pass"
+STEP_FAIL: Final = "fail"
+STEP_PENDING: Final = "pending"
+MODE_BLOCKING: Final = "blocking"
+MODE_ADVISORY: Final = "advisory"
+# Which publish-check steps stop a publish at each risk tier; the rest need the approver's reason.
+BLOCKING_STEPS: Final[dict[str, frozenset[str]]] = {
+    "low": frozenset(),
+    "medium": frozenset({"structural", "pass_rate"}),
+    "high": frozenset({"structural", "pass_rate", "regressions"}),
+}
+
+
+def pass_rate(passed: int, total: int) -> float | None:
+    return round(passed / total, 4) if total else None
+
+
+def step_mode(tier: str, step: str) -> str:
+    return MODE_BLOCKING if step in BLOCKING_STEPS.get(tier, BLOCKING_STEPS[DEFAULT_TIER]) else MODE_ADVISORY
 
 
 @dataclass(frozen=True)
@@ -99,7 +133,7 @@ def unknown_check_types(cases: list[EvalCase]) -> list[str]:
     return found
 
 
-def _list_field(data: dict[str, Any], *keys: str) -> list[Any]:
+def _list_field(data: Json, *keys: str) -> list[Any]:
     for key in keys:
         value = data.get(key)
         if isinstance(value, list):
@@ -107,20 +141,20 @@ def _list_field(data: dict[str, Any], *keys: str) -> list[Any]:
     return []
 
 
-def _map_field(data: dict[str, Any], *keys: str) -> dict[str, Any]:
+def _map_field(data: Json, *keys: str) -> Json:
     for key in keys:
         value = data.get(key)
         if isinstance(value, dict):
-            return cast(dict[str, Any], value)
+            return cast(Json, value)
     return {}
 
 
-def turn_from_test(data: dict[str, Any]) -> TurnView:
+def turn_from_test(data: Json) -> TurnView:
     """A test-turn dict as the scorer sees it: reply, tool names, blocked topic, latency."""
     names: list[str] = []
     for call in _list_field(data, "toolCalls", "tool_calls"):
         if isinstance(call, dict):
-            row = cast(dict[str, Any], call)
+            row = cast(Json, call)
             name = str(row.get("name") or row.get("tool") or "")
             if name:
                 names.append(name)
@@ -131,7 +165,7 @@ def turn_from_test(data: dict[str, Any]) -> TurnView:
         reply=str(data.get("reply") or ""),
         tool_names=tuple(names),
         blocked_topic=topic or None,
-        latency_ms=int(raw_latency or 0),
+        latency_ms=int(cast(int | float | str, raw_latency or 0)),
     )
 
 

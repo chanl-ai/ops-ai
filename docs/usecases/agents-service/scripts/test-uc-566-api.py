@@ -159,7 +159,7 @@ def main(head: Path | None) -> None:
     if head is None:
         walk(pg_url(DB), {}, RLS_ROLE)
         return
-    from mssql_live import drop, engine, install, password, url  # noqa: PLC0415  # needs the test image's sqlcmd
+    from mssql_live import drop, engine, install, password, url  # needs the test image's sqlcmd
 
     def waits() -> str:
         """Who waits on whom in the install's database, and the sessions holding a transaction open."""

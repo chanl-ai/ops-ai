@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 
 from ops_agent_kernel import kinds, layout, present
+from ops_service_kit.http import Json
 
 ROOT = Path(__file__).resolve().parents[4]
 SAMPLES: dict[str, list[dict[str, Any]]] = json.loads(
@@ -91,12 +92,12 @@ def test_the_consoles_copy_of_the_kind_schemas_is_the_kernels() -> None:
 
 
 def test_a_template_binds_a_kind_like_any_node() -> None:
-    tree = {
+    tree: Json = {
         "type": "card",
         "title": {"$bind": "/title"},
         "children": [{"type": "tracker", "steps": {"$bind": "/steps"}}],
     }
-    schema = {"type": "object", "properties": {"title": {"type": "string"}, "steps": {"type": "array"}}}
+    schema: Json = {"type": "object", "properties": {"title": {"type": "string"}, "steps": {"type": "array"}}}
     filled = layout.fill(tree, schema, {"title": "Order 1182", "steps": [{"label": "Packed", "state": "done"}]})
     assert filled["children"] == [{"type": "tracker", "steps": [{"label": "Packed", "state": "done"}]}]
 

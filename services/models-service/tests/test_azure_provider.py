@@ -128,8 +128,8 @@ class Azure:
         )
 
     async def connection(self, provider_id: str) -> dict[str, Any]:
-        rows = (await self.client.get("/v1/models/providers", headers=SERVICE)).json()["data"]
-        return next(r for r in rows if r["id"] == provider_id)
+        listed = await self.client.get("/v1/models/providers", params={"ids": provider_id}, headers=SERVICE)
+        return next(r for r in listed.json()["data"]["data"] if r["id"] == provider_id)
 
 
 async def _azure(models: Models, region: str = "Sweden Central", role: str = "admin") -> AsyncIterator[Azure]:
@@ -213,7 +213,7 @@ async def test_key_never_echoed(models: Models, caplog: pytest.LogCaptureFixture
         pid = await azure.connect()
         alias = await azure.alias(pid)
         plain, streamed = await azure.call(alias), await azure.call(alias, stream=True)
-        listed = await client.get("/v1/models/providers", headers=SERVICE)
+        listed = await client.get("/v1/models/providers", params={"ids": pid}, headers=SERVICE)
         calls = await client.get("/v1/models/calls", params={"alias": alias}, headers=SERVICE)
     assert plain.status_code == 502 and streamed.status_code == 502
     for text in (plain.text, streamed.text, listed.text, calls.text, caplog.text):
@@ -231,7 +231,7 @@ async def test_stream_usage_read_and_annotation_frames_dropped(azure: Azure) -> 
     assert all(c.get("delta") is not None for e in events for c in e["choices"]), "a choice with no delta was passed on"
     usage = events[-1]["usage"]
     rows = (await azure.client.get("/v1/models/calls", params={"alias": alias}, headers=SERVICE)).json()["data"]
-    row = rows["items"][0]
+    row = rows["data"][0]
     assert row["outcome"] == "ok" and row["inputTokens"] > 0 and row["outputTokens"] > 0, row
     assert (row["inputTokens"], row["outputTokens"]) == (usage["prompt_tokens"], usage["completion_tokens"])
 
@@ -266,7 +266,7 @@ async def test_region_mismatch_is_recorded_and_the_call_goes_through(models: Mod
         )
         rows = (await azure.client.get("/v1/models/calls", params={"alias": alias}, headers=SERVICE)).json()["data"]
         expected = "answered from East US, expected swedencentral"
-        assert [(r["outcome"], r["reason"]) for r in rows["items"]] == [("ok", expected)] * 2, rows
+        assert [(r["outcome"], r["reason"]) for r in rows["data"]] == [("ok", expected)] * 2, rows
     # Azure's display name and the region's id are the same region.
     async for azure in _azure(models, region="Sweden Central"):
         pid = await azure.connect(region="swedencentral")
@@ -274,14 +274,14 @@ async def test_region_mismatch_is_recorded_and_the_call_goes_through(models: Mod
         assert (await azure.call(alias)).status_code == 200
         assert (await azure.connection(pid))["observedRegion"] == "Sweden Central"
         rows = (await azure.client.get("/v1/models/calls", params={"alias": alias}, headers=SERVICE)).json()["data"]
-        assert [r["reason"] for r in rows["items"]] == [None]
+        assert [r["reason"] for r in rows["data"]] == [None]
 
 
 async def test_a_connection_without_a_region_answers_and_flags_nothing(azure: Azure) -> None:
     alias = await azure.alias(await azure.connect(region=None))
     assert (await azure.call(alias)).status_code == 200
     rows = (await azure.client.get("/v1/models/calls", params={"alias": alias}, headers=SERVICE)).json()["data"]
-    assert [r["reason"] for r in rows["items"]] == [None]
+    assert [r["reason"] for r in rows["data"]] == [None]
 
 
 async def test_account_admin_manages_connections_and_others_are_refused(models: Models) -> None:
@@ -290,8 +290,8 @@ async def test_account_admin_manages_connections_and_others_are_refused(models: 
     async for admin in _azure(models, role="admin"):
         made = await admin.client.post("/v1/models/providers", json=body | {"name": f"a-{uuid4().hex[:6]}"})
         assert made.status_code == 201, made.text
-        listed = await admin.client.get("/v1/models/providers")
-        assert any(r["region"] == "westeurope" and r["apiVersion"] == "v1" for r in listed.json()["data"])
+        listed = await admin.client.get("/v1/models/providers", params={"ids": made.json()["data"]["id"]})
+        assert any(r["region"] == "westeurope" and r["apiVersion"] == "v1" for r in listed.json()["data"]["data"])
     async for builder in _azure(models, role="builder"):
         refused = await builder.client.post("/v1/models/providers", json=body | {"name": f"b-{uuid4().hex[:6]}"})
         assert refused.status_code == 403, refused.text

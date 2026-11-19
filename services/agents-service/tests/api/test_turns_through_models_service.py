@@ -28,6 +28,7 @@ from ops_agents.api.model_ledger import LedgerSource
 from ops_agents.store.base import metadata
 from ops_agents.store.model_calls import ModelCallLedger
 from ops_agents.store.usage import UsageLedger
+from ops_engine.store import metadata as engine_metadata
 from ops_identity.fastapi import DEV_TENANT
 from ops_metering import PriceTable
 from ops_service_kit.settings import Settings
@@ -93,6 +94,7 @@ async def stack(tmp_path: Path) -> AsyncIterator[tuple[AsyncClient, Runtime, Fak
     engine = create_async_engine(url)
     async with engine.begin() as c:
         await c.run_sync(metadata.create_all)
+        await c.run_sync(engine_metadata.create_all)
     models = FakeModelsService()
     settings = Settings(
         database_url=url,
@@ -142,16 +144,16 @@ async def test_a_graph_runs_record_and_models_service_name_the_same_alias_and_re
     thread = await new_thread(client)
     await send(client, thread["id"], {"content": "What is the daily wire limit for a personal account?"})
     assert rt.graph_store is not None
-    rows = [r for r in await ModelCallLedger(rt.graph_store.engine).calls(thread["id"]) if r["kind"] == "model"]
+    rows = [r for r in await ModelCallLedger(rt.graph_store.engine).calls(thread["id"]) if r.kind == "model"]
     # The fake's answer cites none of the thread's passages, so the end check adds one correction call on the same
     # alias and in the same run.
-    assert len(rows) == 2 and {r["model_alias"] for r in rows} == {"bank-standard"}, rows
+    assert len(rows) == 2 and {r.model_alias for r in rows} == {"bank-standard"}, rows
     # The graph turn's requests; the memory extraction after the turn runs outside the graph, with no thread.
     sent = [r for r in models.requests if "x-thread-id" in r.headers]
     assert {json.loads(r.content)["model"] for r in sent} == {"bank-standard"}
     assert {r.headers["x-thread-id"] for r in sent} == {thread["id"]}
-    assert {r.headers["x-request-hash"] for r in sent} == {r["request_hash"] for r in rows}
-    assert {r.headers["x-run-id"] for r in sent} == {rows[0]["run_id"]}
+    assert {r.headers["x-request-hash"] for r in sent} == {r.request_hash for r in rows}
+    assert {r.headers["x-run-id"] for r in sent} == {rows[0].run_id}
     assert {r.headers["x-tenant-id"] for r in sent} == {DEV_TENANT}
 
 
@@ -233,10 +235,12 @@ class _Out(TypedDict, total=False):
     replies: list[str]
 
 
+@pytest.mark.usefixtures("local_tenant")  # a run records its calls under its tenant, as a request or loop sets
 async def test_a_rerun_of_the_same_task_is_answered_from_the_record_not_models_service(tmp_path: Path) -> None:
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'db.sqlite'}")
     async with engine.begin() as c:
         await c.run_sync(metadata.create_all)
+        await c.run_sync(engine_metadata.create_all)
     models = FakeModelsService()
     source = LedgerSource(
         ModelsServiceModels("http://models", KEY, http_client=models.client()),
@@ -262,6 +266,7 @@ async def test_without_a_models_key_turns_stay_on_the_direct_model(tmp_path: Pat
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'db.sqlite'}")
     async with engine.begin() as c:
         await c.run_sync(metadata.create_all)
+        await c.run_sync(engine_metadata.create_all)
     models = FakeModelsService()
     # models_url alone serves the alias list (publish-time checks); turns need the key too.
     app = create_app(

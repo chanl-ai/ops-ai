@@ -10,7 +10,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
-from collections.abc import AsyncIterator, Iterable
+from collections.abc import AsyncIterator, Awaitable, Iterable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
@@ -25,7 +25,7 @@ from ops_tools.auth import Authenticator, AuthFailed
 from ops_tools.auth.tokens import Tokens
 from ops_tools.connections.connect_links import ConnectLinks
 from ops_tools.modules.seed import load
-from ops_tools.store.connections import SHARED, ConnectionStore
+from ops_tools.store.connections import SHARED, ConnectionStore, LinkRow, NewAccount
 from ops_tools.store.modules import ModuleStore
 
 from .conftest import CONSOLE_URL, build_app, credentials, response_checker
@@ -60,7 +60,7 @@ def refusing() -> httpx.AsyncClient:
 
 async def connection(store: ConnectionStore, tenant: str, sign_in: str, *, backup: bool = False) -> str:
     now = datetime.now(UTC)
-    row = {
+    row: NewAccount = {
         "tenant_id": tenant,
         "id": f"con_{sign_in}",
         "app_id": f"con_{sign_in}",
@@ -77,7 +77,7 @@ async def connection(store: ConnectionStore, tenant: str, sign_in: str, *, backu
         "updated_at": now,
     }
     assert await store.create(row, actor="t", at=now)
-    await store.change(tenant, f"con_{sign_in}", 1, {"settings": SETTINGS, "secrets": {}}, actor="t", at=now)
+    await store.change(tenant, f"con_{sign_in}", 1, {"settings": {**SETTINGS}, "secrets": {}}, actor="t", at=now)
     return f"con_{sign_in}"
 
 
@@ -127,7 +127,7 @@ async def test_a_person_with_no_sign_in_gets_a_link_made_for_them_not_the_teams_
     link = parse_qs(urlsplit(url).query)["link"][0]
     assert url.startswith(f"{CONSOLE_URL}/connections/connect?")
     row = await store.link(tenant, hashlib.sha256(link.encode()).hexdigest())
-    assert row is not None and (row["person_id"], row["team_id"], row["connection_id"]) == (JAMES.sub, TEAM, conn)
+    assert row is not None and (row.person_id, row.team_id, row.connection_id) == (JAMES.sub, TEAM, conn)
 
 
 async def test_a_call_with_nobody_behind_it_uses_the_team_account_only_where_the_backup_is_on(
@@ -155,10 +155,10 @@ async def test_one_persons_refused_refresh_leaves_the_connection_and_everyone_el
     with pytest.raises(AuthFailed):
         await bearer(auth, tenant, conn, JAMES)
     found = await store.get(tenant, conn)
-    assert found is not None and found["status"] == "healthy"
+    assert found is not None and found.status == "healthy"
     # Kept and marked refused, so Your connections says it expired; James's next call asks him to connect.
     held = await store.token(tenant, conn, JAMES.sub)
-    assert held is not None and held["refused_at"] is not None
+    assert held is not None and held.refused_at is not None
     with pytest.raises(AuthFailed) as again:
         await bearer(auth, tenant, conn, JAMES)
     assert again.value.code == "CONNECTION_NOT_LINKED" and again.value.details["reason"] == "refused"
@@ -283,7 +283,7 @@ async def test_a_viewer_starts_their_own_sign_in_but_not_the_teams(client: httpx
     assert team.status_code == 403, team.text
 
 
-def link_scopes(store: ConnectionStore, tenant: str, e: AuthFailed) -> Any:
+def link_scopes(store: ConnectionStore, tenant: str, e: AuthFailed) -> Awaitable[LinkRow | None]:
     link = parse_qs(urlsplit(str(e.details["connectUrl"])).query)["link"][0]
     return store.link(tenant, hashlib.sha256(link.encode()).hexdigest())
 
@@ -297,14 +297,14 @@ async def test_an_operations_scopes_are_asked_for_up_front_and_a_token_lacking_o
         await bearer(auth, tenant, conn, MAYA, ("cases.write",))
     assert first.value.details["reason"] == "not_connected"
     asked = await link_scopes(store, tenant, first.value)
-    assert asked is not None and asked["scopes"] == "openid api cases.write", asked
+    assert asked is not None and asked.scopes == "openid api cases.write", asked
     granted = {"access_token": "at-james", "expires_in": 3600, "scope": "openid api refresh_token"}
     await tokens.store_answer(tenant, conn, granted, JAMES.sub)
     with pytest.raises(AuthFailed) as short:
         await bearer(auth, tenant, conn, JAMES, ("cases.write",))
     assert short.value.code == "CONNECTION_NOT_LINKED" and short.value.details["reason"] == "insufficient_scope"
     again = await link_scopes(store, tenant, short.value)
-    assert again is not None and again["scopes"] == "openid api refresh_token cases.write", again
+    assert again is not None and again.scopes == "openid api refresh_token cases.write", again
     assert await bearer(auth, tenant, conn, JAMES) == "Bearer at-james"
     wide = {**granted, "scope": "openid api cases.write"}
     await tokens.store_answer(tenant, conn, wide, JAMES.sub)
@@ -327,14 +327,14 @@ async def test_granted_scopes_fall_back_to_the_tokens_claim_then_the_request_and
     claimed = {"access_token": jwt({"scp": ["api", "cases.write"]}), "expires_in": 3600}
     await tokens.store_answer(tenant, conn, claimed, JAMES.sub, requested=["openid"])
     found = await store.token(tenant, conn, JAMES.sub)
-    assert found is not None and found["scopes"] == ["api", "cases.write"], found
+    assert found is not None and found.scopes == ["api", "cases.write"], found
     spent = {"access_token": "at-old", "refresh_token": "rt-old", "expires_in": 1}
     await tokens.store_answer(tenant, conn, spent, MAYA.sub, requested=["openid", "api"])
     found = await store.token(tenant, conn, MAYA.sub)
-    assert found is not None and found["scopes"] == ["openid", "api"], found
+    assert found is not None and found.scopes == ["openid", "api"], found
     await tokens.access(tenant, conn, SETTINGS, None, grant="none", person=MAYA.sub)
     found = await store.token(tenant, conn, MAYA.sub)
-    assert found is not None and found["rotations"] == 2 and found["scopes"] == ["openid", "api"], found
+    assert found is not None and found.rotations == 2 and found.scopes == ["openid", "api"], found
 
 
 async def sign_in(
@@ -358,7 +358,7 @@ async def test_a_sign_in_whose_answer_names_no_scopes_is_granted_what_it_asked_f
     conn = await personal_connection(client, tenant)
     await sign_in(client, tenant, conn, JAMES_P, "james")
     rows = await ConnectionStore(engine).people(tenant, conn)
-    assert [r["scopes"] for r in rows] == [["openid", "api"]], rows
+    assert [r.scopes for r in rows] == [["openid", "api"]], rows
 
 
 async def test_a_person_lists_only_their_own_sign_ins(client: httpx.AsyncClient, tenant: str) -> None:

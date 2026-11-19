@@ -16,7 +16,9 @@ import { KINDS } from './kinds';
  * deployments.create: without it a built kind's card offers no Connect or Manage, and the tabs above open each kind.
  */
 export function ChannelGallery({ kinds, canSetUp }: { kinds: ChannelKindSummary[]; canSetUp: boolean }) {
-  const shown = useFlagged(KINDS);
+  // MCP links are tools-service's, not channel rows, so a count read from the channel list would say Not set up; the
+  // MCP tab lists the links themselves.
+  const shown = useFlagged(KINDS).filter((k) => k.type !== 'mcp');
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" data-testid="channel-gallery">
       {shown.map((k) => {

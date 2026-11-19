@@ -10,11 +10,12 @@ import { SignInHeaderNotice } from '@/components/shared/sign-in-header-notice';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { Row, Rows, Section } from '@/components/shared/surface';
-import { ConnectionSelect, type ConnectionOption } from '@/components/tools/connection-select';
+import { ConnectionSelect } from '@/components/tools/connection-select';
 import { BodyEditor, hasBody, HeadersEditor, RequestLine } from '@/components/tools/http-operation-builder';
 import { InputSchemaEditor, schemaOf } from '@/components/tools/input-schema-editor';
 import { MockAnswers } from '@/components/tools/mock-answers';
-import { ResultBody, RunInputFields, useRunValues, type ResultTab } from '@/components/tools/test-console';
+import { unusedInputs } from '@/components/tools/operation-sheet';
+import { AskBeforeRun, ResultBody, RunInputFields, useRunValues, type ResultTab } from '@/components/tools/test-console';
 import { ToolAppLink, urlProblem, type WorkbenchDraft } from '@/components/tools/tool-workbench';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -30,6 +31,7 @@ import type { ModuleOperation, ModuleTestInput, ToolRunProps } from '@/lib/types
 
 type Mode = ModuleTestInput['target'];
 
+const NOT_OWNER = 'Only the team that owns these tools can run them here.';
 const NO_RUN = 'Your role can’t run tools; a builder or an admin can.';
 
 const MODE_BADGE: Record<Mode, React.ReactNode> = {
@@ -71,10 +73,10 @@ export interface RestToolProps extends ToolRunProps {
   /** Every problem the last save was refused for, listed together. */
   saveProblems?: string[];
   connection: ConnectionRef | null;
-  connections?: ConnectionOption[];
-  connectionsLoading: boolean;
   onConnectionChange: (connectionId: string) => void;
   settingConnection: boolean;
+  /** What the module's own flag says the caller may do; false on a module the team only holds a workflow grant on. */
+  canEdit?: boolean;
   extraActions?: React.ReactNode;
   stagedCall?: boolean;
   inputErrors?: Record<string, string>;
@@ -98,6 +100,8 @@ export function RestTool(p: RestToolProps) {
   const [extra, setExtra] = React.useState<'transform' | 'mocks' | null>(null);
   const run = useRunValues(op);
   const urlError = urlProblem(d, p.base);
+  // An input the address, headers and body never name is sent by agents and dropped by the call.
+  const unused = unusedInputs({ ...op, input: schemaOf(d.input).filter((f) => f.name) }, d.http);
   // A system with no sign-in runs for real with no connection, as the server allows.
   const realBlocked = !p.published ? 'Real runs once the tool is published. Until then, Run uses Mock.' : undefined;
   // A value typed for one run leaves the page when the run ends: a kept state would keep a secret in the page's HTML.
@@ -113,9 +117,12 @@ export function RestTool(p: RestToolProps) {
     if (p.result?.decision === 'invalid' && p.result.invalid) run.setErrors(Object.fromEntries(p.result.invalid.map((x) => [x.field, x.message])));
   }, [p.result]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const go = () => {
-    const input = run.collect();
+  // What the last run sent: the person's yes on the approval card covers that request, not the fields as edited since.
+  const sent = React.useRef<Record<string, unknown>>({});
+  const go = (confirmed = false) => {
+    const input = confirmed ? sent.current : run.collect();
     if (!input) return;
+    sent.current = input;
     setRanIn(mode);
     const typed = Object.fromEntries(Object.entries(secretValues).filter(([, v]) => v !== ''));
     p.onRun({
@@ -125,13 +132,17 @@ export function RestTool(p: RestToolProps) {
       input,
       draft: { responseTransform: d.transform.trim() || null },
       secretValues: Object.keys(typed).length ? typed : undefined,
+      confirmed: confirmed || undefined,
     });
   };
   const host = p.base.replace(/^https?:\/\//, '').split('/')[0];
   // Only a known viewer gets Run below the fields; while the role loads it stays with the address, so nothing moves.
   const viewer = useCan('agents', 'edit') === false;
   // Running a tool is its own permission (tools.run); a role without it sees Run off with the reason, not the refusal.
-  const cannotRun = useCan('tools', 'run') === false;
+  // canEdit is also false for a role that may not edit, so the role's own reason is named first.
+  const roleCannotRun = useCan('tools', 'run') === false;
+  const cannotRun = roleCannotRun || p.canEdit === false;
+  const noRunWhy = roleCannotRun ? NO_RUN : NOT_OWNER;
   const runControls = (
     <>
       <ToggleGroup type="single" variant="outline" value={mode} onValueChange={(v) => v && setMode(v as Mode)} aria-label="Run in" data-testid="run-mode">
@@ -142,7 +153,7 @@ export function RestTool(p: RestToolProps) {
           Real
         </ToggleGroupItem>
       </ToggleGroup>
-      <LoadingButton isLoading={p.running} loadingText="Running…" onClick={go} disabled={cannotRun} title={cannotRun ? NO_RUN : undefined} data-testid="run">
+      <LoadingButton isLoading={p.running} loadingText="Running…" onClick={() => go()} disabled={cannotRun} title={cannotRun ? noRunWhy : undefined} data-testid="run">
         <Play className="size-4" /> Run
       </LoadingButton>
     </>
@@ -171,7 +182,7 @@ export function RestTool(p: RestToolProps) {
           {p.stagedCall && <span className="text-xs text-warning-text">Saved; Real runs the published call until you publish.</span>}
         </span>
       }
-      backHref={`/tools/${p.moduleId}`}
+      backHref={`/data/tools/${p.moduleId}`}
       tabs={p.tabs}
       badge={<AccessBadge access={op.access} />}
       actions={
@@ -203,14 +214,14 @@ export function RestTool(p: RestToolProps) {
       )}
       <div className="flex flex-col gap-4" data-testid="module-test-panel">
         <Section title="Request" description="Pick the app, write the call, then Run it in Mock or Real.">
-          <BuilderFieldset>
+          <BuilderFieldset canEdit={p.canEdit}>
             <div className="flex flex-col gap-4" data-testid="op-http">
               <FormField
                 id="rest-conn"
                 label="App"
                 hint={p.connection ? `Signs every Real request in to ${host}. The key stays on the app and never shows here.` : 'An app holds the address and the sign-in once, for every tool that calls it. Mock works without one.'}
               >
-                <ConnectionSelect value={p.connection} options={p.connections} loading={p.connectionsLoading} disabled={p.settingConnection} onChange={p.onConnectionChange} className="w-full sm:w-80" />
+                <ConnectionSelect value={p.connection} disabled={p.settingConnection} onChange={p.onConnectionChange} className="w-full sm:w-80" />
               </FormField>
               <RequestLine
                 value={d.http}
@@ -219,8 +230,16 @@ export function RestTool(p: RestToolProps) {
                 bare
                 trailing={viewer ? undefined : runControls}
               />
+              {unused.length > 0 && (
+                <p className="flex items-start gap-1.5 text-xs text-warning-text" data-testid="op-unused-inputs">
+                  <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
+                  <span>
+                    {unused.join(', ')} {unused.length === 1 ? 'is an input' : 'are inputs'} of this operation, but the URL, headers and body never use {unused.length === 1 ? 'it' : 'them'}. Agents may send {unused.length === 1 ? 'it' : 'them'} and the call drops {unused.length === 1 ? 'it' : 'them'}.
+                  </span>
+                </p>
+              )}
               <p className="-mt-2 text-xs text-muted-foreground" data-testid="run-help">
-                {cannotRun ? `${NO_RUN} ` : ''}{help} {realBlocked && mode === 'stub' ? realBlocked : ''} Use {'{name}'} in the address for a value the agent supplies.
+                {cannotRun ? `${noRunWhy} ` : ''}{help} {realBlocked && mode === 'stub' ? realBlocked : ''} Use {'{name}'} in the address for a value the agent supplies.
               </p>
               <Tabs value={tab} onValueChange={setTab} className="gap-3">
                 <TabsList>
@@ -293,6 +312,10 @@ export function RestTool(p: RestToolProps) {
               Run to see the answer and the request that was sent.
             </p>
           ) : (
+            // A Real run of a write on a live account is held for the person who pressed Run: the card answers it.
+            ranIn === 'sandbox' && p.result.denyReason === 'approval_token_missing' ? (
+              <AskBeforeRun key={p.result.callId} op={op} input={sent.current} running={p.running} onYes={() => go(true)} />
+            ) : (
             <ResultBody
               result={p.result}
               op={op}
@@ -304,6 +327,7 @@ export function RestTool(p: RestToolProps) {
               tab={answerTab}
               onTab={setAnswerTab}
             />
+            )
           )}
         </Section>
         {(extra === 'transform' || p.result?.transformError) && (

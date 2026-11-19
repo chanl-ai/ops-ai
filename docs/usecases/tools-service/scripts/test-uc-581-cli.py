@@ -10,10 +10,11 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from usecase_harness import PLUGINS_REPO
 from usecase_harness import check, finish
 
 ROOT = Path(__file__).resolve().parents[4]
-PLUGIN = ROOT.parent / "ops-ai-plugins" / "plugins" / "salesforce" / "src" / "ops_plugin_salesforce"
+PLUGIN = PLUGINS_REPO / "plugins" / "salesforce" / "src" / "ops_plugin_salesforce"
 # find_cases' status input, as the manifest writes it, and the same input with its list taken away.
 FIND = "    description: Cases in a status changed after a time, oldest change first, a page at a time\n"
 FIND += "    access: read\n    input:\n"

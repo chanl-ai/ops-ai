@@ -24,6 +24,9 @@ PUBLIC = {
     ("GET", "/v1/auth/oidc/callback"),
     ("GET", "/v1/auth/saml/metadata"),
     ("POST", "/v1/auth/saml/acs"),
+    # Each provider's own metadata and consumer URL, which its identity provider reads and posts to.
+    ("GET", "/v1/auth/saml/metadata/{sp_id}"),
+    ("POST", "/v1/auth/saml/acs/{sp_id}"),
     ("POST", "/v1/auth/password/forgot"),
     ("POST", "/v1/auth/password/reset"),
     ("GET", "/v1/invites/{token}"),

@@ -18,7 +18,8 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, cast
+
+from pydantic import JsonValue, TypeAdapter
 
 from ops_service_kit.logging import configure_logging, get_logger
 from ops_service_kit.settings import Settings
@@ -27,8 +28,10 @@ from ops_store.database import open_database
 
 from .connections.records import module_auth
 from .modules.service import CREDENTIAL_HEADER
-from .store.connections import ConnectionStore
-from .store.modules import ModuleStore
+from .store.connections import Account, ConnectionStore
+from .store.modules import Header, Module, ModuleStore, Operation, StoredOperation
+
+HEADER = TypeAdapter(Header)
 
 log = get_logger("ops_tools.header_keys")
 
@@ -44,11 +47,11 @@ class Move:
     secret: str  # the team secret's name; its value is never read here
 
 
-def _headers(op: dict[str, Any]) -> list[dict[str, str]]:
-    return cast(list[dict[str, str]], op.get("headers") or [])
+def _headers(op: Operation | StoredOperation) -> list[Header]:
+    return op.get("headers") or []
 
 
-def sign_in_headers(op: dict[str, Any]) -> list[dict[str, str]]:
+def sign_in_headers(op: Operation | StoredOperation) -> list[Header]:
     return [
         h
         for h in _headers(op)
@@ -56,14 +59,14 @@ def sign_in_headers(op: dict[str, Any]) -> list[dict[str, str]]:
     ]
 
 
-def plan(module: dict[str, Any], conn: dict[str, Any] | None) -> Move | str | None:
+def plan(module: Module, conn: Account | None) -> Move | str | None:
     """What moves for one module: a Move, the reason it is left alone, or None when its tools send no sign-in header."""
     pairs = {(h["key"].strip(), h["value"].strip()) for o in module["operations"] for h in sign_in_headers(o)}
     if not pairs:
         return None
-    if conn is None or conn["auth_kind"] != "none":
+    if conn is None or conn.auth_kind != "none":
         return "its connection already signs in another way"
-    if [u for u in cast(list[dict[str, Any]], conn.get("used_by") or []) if u["id"] != module["id"]]:
+    if [u for u in conn.used_by or [] if u.id != module["id"]]:
         return "its connection is shared with another module"
     if len({(k.lower(), v) for k, v in pairs}) > 1:
         return "its tools send different sign-in headers"
@@ -77,31 +80,43 @@ def plan(module: dict[str, Any], conn: dict[str, Any] | None) -> Move | str | No
     return "the header holds a typed value, not a {{NAME}} reference"
 
 
-def _without_sign_in(ops: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _without_sign_in(ops: list[Operation]) -> list[Operation]:
     return [{**o, "headers": [h for h in _headers(o) if h not in sign_in_headers(o)]} for o in ops]
 
 
-async def _apply(
-    modules: ModuleStore, connections: ConnectionStore, module: dict[str, Any], conn: dict[str, Any], move: Move
-) -> None:
+def _stored_without_sign_in(ops: list[dict[str, JsonValue]]) -> list[dict[str, JsonValue]]:
+    """The baseline's copies with their sign-in headers dropped, every other key as stored."""
+    out: list[dict[str, JsonValue]] = []
+    for o in ops:
+        raw = o.get("headers")
+        kept: list[JsonValue] = []
+        for h in raw if isinstance(raw, list) else []:
+            held: StoredOperation = {"headers": [HEADER.validate_python(h)]}
+            if not sign_in_headers(held):
+                kept.append(h)
+        out.append({**o, "headers": kept})
+    return out
+
+
+async def _apply(modules: ModuleStore, connections: ConnectionStore, module: Module, conn: Account, move: Move) -> None:
     at = datetime.now(UTC)
     secrets = {"key": move.secret} if move.kind == "api_key" else {"token": move.secret}
-    settings = dict(conn.get("settings") or {})
+    settings = dict(conn.settings)
     if move.kind == "api_key":
         settings["name"] = move.header
     await connections.change(
-        str(module["tenant_id"]), str(conn["id"]), int(conn["revision"]),
+        str(module["tenant_id"]), conn.id, conn.revision,
         {"auth_kind": move.kind, "settings": settings, "secrets": secrets}, actor=MOVED_BY, at=at,
         detail={"header": move.header},
     )  # fmt: skip
-    moved = await connections.get(str(module["tenant_id"]), str(conn["id"])) or conn
+    moved = await connections.get(str(module["tenant_id"]), conn.id) or conn
     baseline = module.get("baseline")
     await modules.put(
         {
             **module,
             "auth": module_auth(moved),
             "operations": _without_sign_in(module["operations"]),
-            "baseline": None if baseline is None else _without_sign_in(baseline),
+            "baseline": None if baseline is None else _stored_without_sign_in(baseline),
         },
         expected_revision=module["revision"],
     )

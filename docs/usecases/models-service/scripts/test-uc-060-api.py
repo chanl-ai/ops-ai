@@ -12,7 +12,18 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from usecase_harness import TEAM, agents, check, data, fake_openai, finish, free_port, models, service_headers
+from usecase_harness import (
+    TEAM,
+    agents,
+    check,
+    data,
+    every_page,
+    fake_openai,
+    finish,
+    free_port,
+    models,
+    service_headers,
+)
 
 SERVICE = service_headers("models")
 RUNTIME_KEY = "mk_dev_agents"  # models-service's dev seed: agents-service's own key
@@ -23,7 +34,8 @@ HOLD_ARGS = {"wireId": "W-1001", "action": "hold", "hours": 24}
 
 def ask(api: httpx.Client, text: str, **extra: Any) -> httpx.Response:
     body = {"model": "default", "messages": [{"role": "system", "content": SYSTEM}, {"role": "user", "content": text}]}
-    auth = {"Authorization": f"Bearer {RUNTIME_KEY}"}
+    # As agents-service calls it, naming its tenant: the call log is that tenant's, listed by its service token.
+    auth = {"Authorization": f"Bearer {RUNTIME_KEY}", "X-Tenant-Id": "local"}
     return api.post("/v1/models/chat/completions", json={**body, **extra}, headers=auth)
 
 
@@ -50,9 +62,8 @@ with (
     models({"OPS_MODELS_FAKE_OPENAI_URL": fake_url}) as models_url,
     httpx.Client(base_url=models_url, timeout=30) as api,
 ):
-    providers = data(api.get("/v1/models/providers", headers=SERVICE))
-    local = [p for p in providers if p["id"] == "openai-local"]
-    aliases = {a["name"]: a for a in data(api.get("/v1/models/aliases", headers=SERVICE))}
+    local = data(api.get("/v1/models/providers", params={"ids": "openai-local"}, headers=SERVICE))["data"]
+    aliases = {a["name"]: a for a in data(api.get("/v1/models/aliases", params={"ids": "default"}, headers=SERVICE))["data"]}
     check(
         "the dev seed made connection openai-local at the fake's URL and bound default to it",
         [(p["type"], p["baseUrl"]) for p in local] == [("openai-compatible", fake_url)]
@@ -136,7 +147,7 @@ with (
         )
         agents_api.delete(f"/v1/agents/{aid}", headers=TEAM)
 
-    logged = data(api.get("/v1/models/calls", params={"alias": "default"}, headers=SERVICE))["items"]
+    logged = every_page(api, "/v1/models/calls", headers=SERVICE, alias="default")
     check(
         "models-service logged the default calls with provider model default, the failed one as an error",
         {c["providerModel"] for c in logged} == {"default"}

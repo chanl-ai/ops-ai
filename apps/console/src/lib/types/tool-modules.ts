@@ -23,6 +23,8 @@ export interface ModuleRef {
 
 export interface ToolModule {
   id: string;
+  /** Whether the caller may change this module: false for another team's module read through a grant. Absent before the API sends it. */
+  canEdit?: boolean;
   /** Stable kebab-case name workflows pin; never a row id. */
   name: string;
   displayName: string;
@@ -137,7 +139,16 @@ export interface ModuleOperation {
   binding: SubjectBinding | null;
   rateLimitPerMin: number;
   /** Each call waits for an approval token bound to the exact input. */
-  requiresApproval: boolean;
+  /** null: not set, so the team default decides (a write waits unless the team lets its app change without asking). */
+  requiresApproval: boolean | null;
+  /** The tool's own answer, set by a reviewed change (none, person or reviewer); null follows its app, then the team. */
+  approvalMode?: 'none' | 'person' | 'reviewer' | null;
+  /** What a call of this write does in a chat for the team in view, from the service's one resolver (never worked out here). */
+  answer?: 'none' | 'person' | 'reviewer' | null;
+  /** The level the answer came from: tool, app, team, mcp or test-account. */
+  answerSource?: string | null;
+  answerRole?: string | null;
+  waits?: boolean | null;
   /** A write's approval policy: how many distinct people of the run's team approve each call. */
   approvers: 1 | 2;
   /** Approving asks the approver to step up (implied by two approvers). */
@@ -238,7 +249,7 @@ export interface ModuleVersion {
 /** A connection's auth kind (tools-service auth/kinds.py); a client certificate is not a kind but rides on any. */
 export type CredentialKind = 'oauth2_client_credentials' | 'oauth2_auth_code' | 'api_key' | 'basic' | 'bearer';
 
-/** A sample run context the test console can act as: the workflow whose approval applies and the case's bound fields. */
+/** A context the test console can run as: today only the module owner, which needs no workflow approval. */
 export interface RunContextOption {
   id: string;
   label: string;
@@ -250,7 +261,6 @@ export interface RunContextOption {
 
 export interface ToolModuleDetail extends ToolModule {
   /** What the caller may do with it, by the routes' own checks; absent before the API sends them. */
-  canEdit?: boolean;
   canDelete?: boolean;
   canPublish?: boolean;
   ownerContacts: string[];
@@ -281,6 +291,8 @@ export interface ModuleTestInput {
   input: Record<string, unknown>;
   /** Test only: the gateway issues a test approval token for this exact input instead of waiting for a person. */
   simulateApproval?: boolean;
+  /** The person's yes to a Real test run that asks them first (the approval card). */
+  confirmed?: boolean;
   /** The workbench's unsaved definition, tried without staging it; agents never see it. */
   /** `responseTransform: null` runs with no transform; left out, the operation's own. */
   draft?: { responseTransform?: string | null };
@@ -324,7 +336,7 @@ export interface ModuleTestResult {
   /** Test environment: the host a read reached. */
   reachedHost?: string;
   /** Inputs the gateway filled or checked from the run context. */
-  bound: { arg: string; value: string; source: BindingSource }[];
+  bound: { arg: string; value: string; source: BindingSource | 'sample' }[];
   /** A write would pause here for an approval token. */
   wouldPause: boolean;
   output: unknown;

@@ -16,10 +16,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { ms } from '@/lib/format';
+import { ChatWidgetView } from '@/components/chat/widgets';
+import type { ApprovalWidget, WidgetAction } from '@/lib/types/chat';
 import type { ModuleOperation, ModuleTestInput, ModuleTestResult, RunContextOption, SchemaField } from '@/lib/types/tool-modules';
 
 import { BINDING_LABEL } from './module-meta';
 import { useCan } from '@/hooks/me-queries';
+import { BY_REVIEWER } from '@/hooks/policy-queries';
 
 const NO_CONTEXT = 'owner';
 
@@ -155,6 +158,7 @@ export function TestConsole({
   error,
   stacked,
   fixedOperation,
+  canEdit,
 }: {
   operations: ModuleOperation[];
   contexts: RunContextOption[];
@@ -166,6 +170,8 @@ export function TestConsole({
   running: boolean;
   result?: ModuleTestResult;
   error?: string;
+  /** False for a team that only holds a workflow grant on the module: its owner's team alone runs it from here. */
+  canEdit?: boolean;
   /** Request above response, for the side panel beside the module's tabs. */
   stacked?: boolean;
   /** The workbench runs one operation (`initialOperation`), so it shows no operation picker. */
@@ -174,7 +180,9 @@ export function TestConsole({
   const [opName, setOpName] = React.useState(initialOperation ?? operations[0]?.name ?? '');
   const [contextId, setContextId] = React.useState(contexts[0]?.id ?? NO_CONTEXT);
   const [target, setTarget] = React.useState<ModuleTestInput['target']>('stub');
-  const cannotRun = useCan('tools', 'run') === false;
+  // canEdit is also false for a role that may not edit, so the role's own reason is named first.
+  const roleCannotRun = useCan('tools', 'run') === false;
+  const cannotRun = roleCannotRun || canEdit === false;
   React.useEffect(() => {
     if (initialOperation) setOpName(initialOperation);
   }, [initialOperation]);
@@ -200,11 +208,19 @@ export function TestConsole({
     if (result?.decision === 'invalid' && result.invalid) setErrors(Object.fromEntries(result.invalid.map((x) => [x.field, x.message])));
   }, [result]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function run(simulateApproval = false) {
+  // What the last run sent, so the card shows the request it asks about even after the fields are edited.
+  const sent = React.useRef<Record<string, unknown>>({});
+  function run(simulateApproval = false, confirmed = false) {
     const input = collect();
     if (!op || !input) return;
-    onRun({ operation: op.name, contextId: ctx ? ctx.id : NO_CONTEXT, target, input, simulateApproval: simulateApproval || undefined });
+    sent.current = input;
+    onRun({ operation: op.name, contextId: ctx ? ctx.id : NO_CONTEXT, target, input, simulateApproval: simulateApproval || undefined, confirmed: confirmed || undefined });
   }
+  // A Real run as the owner (no workflow's approval involved) that the gateway holds for the person's yes.
+  // A tool the team gave to a reviewer is held for one: the person's yes would only be refused again.
+  const heldForReviewer = result?.denyReason === 'approval_token_missing' && op?.answer === BY_REVIEWER;
+  const asksPerson = target === 'sandbox' && (ctx ? ctx.id : NO_CONTEXT) === NO_CONTEXT && result?.denyReason === 'approval_token_missing' && !heldForReviewer;
+
 
   return (
     <div className={stacked ? 'grid gap-4' : 'grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]'}>
@@ -227,7 +243,7 @@ export function TestConsole({
             </Select>
           </FormField>
           )}
-          <FormField id="t-ctx" label="Run as" hint={published ? 'A sample case from a workflow that requested these tools. Its bound fields fill record inputs.' : 'Not published yet: only the mock runs, as the owner.'}>
+          <FormField id="t-ctx" label="Run as" hint={published ? 'The module’s owner, which needs no workflow approval. Type the record a bound input reads.' : 'Not published yet: only the mock runs, as the owner.'}>
             <Select value={contextId} onValueChange={setContextId} disabled={!published || !contexts.length}>
               <SelectTrigger id="t-ctx" className="w-full">
                 <SelectValue />
@@ -236,7 +252,7 @@ export function TestConsole({
                 {!published || !contexts.length ? <SelectItem value={NO_CONTEXT}>Owner, no case</SelectItem> : null}
                 {contexts.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
-                    {c.workflowName ? `${c.workflowName} · ${c.label}` : c.label}
+                    {c.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -265,7 +281,7 @@ export function TestConsole({
               <LoadingButton isLoading={running} loadingText="Calling…" onClick={() => run()} disabled={cannotRun} className="self-start" data-testid="workbench-run">
                 <Play className="size-4" /> Run
               </LoadingButton>
-              {cannotRun && <p className="text-xs text-muted-foreground" data-testid="workbench-run-why">Your role can’t run tools; a builder or an admin can.</p>}
+              {cannotRun && <p className="text-xs text-muted-foreground" data-testid="workbench-run-why">{!roleCannotRun ? 'Only the team that owns these tools can run them here.' : 'Your role can’t run tools; a builder or an admin can.'}</p>}
             </div>
           )}
         </div>
@@ -277,11 +293,58 @@ export function TestConsole({
         ) : !result ? (
           <p className="py-10 text-center text-sm text-muted-foreground">Run the operation to see the response.</p>
         ) : (
-          <ResultBody result={result} op={op} running={running} onSimulate={() => run(true)} />
+          <>
+            {asksPerson && op && (
+              <AskBeforeRun key={result.callId} op={op} input={sent.current} running={running} onYes={() => onRun({ operation: op.name, contextId: NO_CONTEXT, target, input: sent.current, confirmed: true })} />
+            )}
+            {heldForReviewer && (
+              <Alert>
+                <UserCheck className="size-4" />
+                <AlertTitle>A reviewer answers this tool</AlertTitle>
+                <AlertDescription>Your team asks a reviewer before this tool changes anything, so the run is held. Nothing was sent.</AlertDescription>
+              </Alert>
+            )}
+            {!asksPerson && <ResultBody result={result} op={op} running={running} onSimulate={() => run(true)} />}
+          </>
         )}
       </Section>
     </div>
   );
+}
+
+/**
+ * The card a Real test run of a write on a live account shows while it waits for the person who pressed Run: the
+ * chat's own ask-first card, without "Allow for this chat". Allow runs the same request again with the person's yes;
+ * Deny leaves it unsent. Give it a `key` that changes with each result, so a new run starts with an open card.
+ */
+export function AskBeforeRun({ op, input, running, onYes }: { op: ModuleOperation; input: Record<string, unknown>; running: boolean; onYes: () => void }) {
+  const [denied, setDenied] = React.useState(false);
+  const answer = async (a: WidgetAction) => {
+    if (a.type === 'approve') onYes();
+    else setDenied(true);
+  };
+  return <ChatWidgetView widget={askCard(op, input, denied ? 'rejected' : 'pending')} onAction={running ? undefined : answer} />;
+}
+
+function askCard(op: ModuleOperation, input: Record<string, unknown>, state: ApprovalWidget['state']): ApprovalWidget {
+  return {
+    id: `test-${op.name}`,
+    kind: 'approval',
+    title: 'This test run asks first',
+    app: 'Test run',
+    tool: op.name,
+    toolLabel: op.name,
+    asOf: new Date().toISOString(),
+    reviewId: '',
+    action: op.description || op.name,
+    summary: 'Send this to the app’s live account?',
+    consequence: 'Nothing is sent until you allow it. The app’s live account is changed.',
+    fields: Object.entries(input).map(([label, value]) => ({ label, value: typeof value === 'string' ? value : JSON.stringify(value) })),
+    risk: 'medium',
+    state,
+    askFirst: true,
+    allowForChat: false,
+  };
 }
 
 /** A run's answer: the gateway's decision, status and time, what to do about a refusal, and the result tabs. `badge`
@@ -348,7 +411,7 @@ export function ResultBody({ result, op, running, onSimulate, badge, labels, bri
             Bound:{' '}
             {result.bound.map((b) => (
               <span key={b.arg} className="mr-2">
-                <code className="font-mono text-foreground">{b.arg}</code> = <code className="font-mono text-foreground">{b.value}</code> from the {BINDING_LABEL[b.source].toLowerCase()}
+                <code className="font-mono text-foreground">{b.arg}</code> = <code className="font-mono text-foreground">{b.value}</code> {b.source === 'sample' ? 'as typed' : `from the ${BINDING_LABEL[b.source].toLowerCase()}`}
               </span>
             ))}
           </p>

@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from ops_models.store import metadata as models_metadata
 from ops_service_kit.settings import Settings
+from ops_store.schema import offline_dialect_opts
 
 # One entry per module that owns tables.
 METADATA: list[sa.MetaData] = [models_metadata]
@@ -32,7 +33,7 @@ def _configure(**kwargs: object) -> None:
 
 
 def run_offline() -> None:
-    _configure(url=URL, literal_binds=True)
+    _configure(url=URL, literal_binds=True, dialect_opts=offline_dialect_opts(URL))
     with context.begin_transaction():
         context.run_migrations()
 

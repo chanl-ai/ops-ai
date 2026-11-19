@@ -32,6 +32,7 @@ import { createSearchMock } from './search';
 import { createGovernanceMock } from './governance';
 import { createSignInPolicyMock } from './sign-in-policy';
 import { createInvitesMock } from './invites';
+import { createOAuthMock } from './oauth';
 import { currentMockUser, registerMockUser, setMockPassword, verifyMockStepUp } from './auth';
 import { createAccountMock } from './sessions';
 import { createMockWorkspacePolicies } from './workspace-policies';
@@ -43,7 +44,6 @@ import { createToolModulesMock } from './tool-modules';
 import { createEgressMock } from './egress';
 import { createChannelsMock } from './channels';
 import { createEngineMock } from './engine';
-import { createSecretsMock } from './secrets';
 import { createConnectionsMock } from './connections';
 import { createWidgetsMock } from './widgets';
 import { createIntegrationsMock } from './integrations';
@@ -56,7 +56,7 @@ import { createTemplatesMock, templateDeps } from './templates';
 import { createPromptsMock } from './prompts';
 import { createAssuranceMock } from './assurance';
 import { createAgentPublishMock, createAgentVersionStore } from './agent-publish';
-import { createConnectMock } from './connect';
+import { createMcpLinksMock } from './mcp-links';
 import { createAgentWrappers } from './agent-wrappers';
 import { createWikiMock } from './wiki';
 import { auditSink } from './governance';
@@ -583,7 +583,6 @@ export function createMockApi(): OpsApi {
     seedTier: modelRisk.seedTier,
     toolAccess: (aid) => tools.filter((t) => t.grantedAgentIds.includes(aid)).map((t) => t.access).sort((x, y) => accessRank.indexOf(y) - accessRank.indexOf(x))[0],
   });
-  const connect = createConnectMock({ workflows: () => workflows.map(workflowRow), deployments, tierOf: (wid) => modelRisk.tierOf(wid, 'workflow'), tools, teams: F.OWNERS, me });
   const assurance = createAssuranceMock({
     agents: () => agents.map(agentRow),
     workflows: () => workflows.map(workflowRow),
@@ -763,7 +762,6 @@ export function createMockApi(): OpsApi {
     },
 
     agents: {
-      list: (p) => respond((m) => list(teamAgents().map(agentRow), p, { text: (a) => `${a.name} ${a.role} ${a.slug}`, value: field, facetKeys: ['availability', 'teamId'] }, m)),
       get: (aid) => respond((m) => (m === 'empty' ? notFound('Agent') : (guardTeam(agentOr404(aid).owner, 'agent'), agentById(aid)))),
       create: (input) =>
         respond(() => {
@@ -837,7 +835,6 @@ export function createMockApi(): OpsApi {
       toolOptions: (p) => respond(() => ({ ...pageOptions(tools.filter((t) => t.enabled && !t.workflow).map((t) => ({ id: t.id, label: t.name, hint: t.module ?? t.system })), p), notAdded: [] })),
       modelAliases: () => respond(() => F.MODEL_ALIASES.map((a) => ({ ...a }))),
       test: (aid, message) => respond(() => ({ reply: `${agents.find((a) => a.id === aid)?.name ?? 'The agent'} would answer “${message}” here.`, tookMs: 0, citations: [], toolCalls: [] })),
-      knowledgeUsage: () => respond(() => []),
       bulkUpdate: (ids, patch) =>
         respond(() =>
           bulk(ids, (aid) => {
@@ -862,10 +859,6 @@ export function createMockApi(): OpsApi {
     },
 
     workflows: {
-      list: (p) =>
-        respond((m) =>
-          list(teamWorkflows().map(workflowRow), p, { text: (w) => `${w.name} ${w.trigger}`, value: (w, k) => (k === 'startable' ? String(!!w.start?.byHand) : k === 'takesFiles' ? String(!!w.start?.takesFiles) : field(w, k)), facetKeys: ['status'] }, m),
-        ),
       get: (wid) =>
         respond((m): WorkflowDetail => {
           const w = m === 'empty' ? undefined : workflows.find((x) => x.id === wid);
@@ -968,11 +961,6 @@ export function createMockApi(): OpsApi {
           if (i < 0) notFound('Workflow');
           if (reviews.some((r) => r.workflowId === wid && isOpen(r))) throw new ApiError('This workflow has open reviews. Decide them or pause the workflow first.', 409);
           workflows.splice(i, 1);
-        }),
-      runs: (wid, p) =>
-        respond((m) => {
-          if (!workflows.some((x) => x.id === wid)) notFound('Workflow');
-          return list(runsOf(wid), p, { text: (r) => `${r.id} ${r.subject}`, value: field, facetKeys: ['status'] }, m);
         }),
       versions: (wid) =>
         respond(() => {
@@ -1141,14 +1129,14 @@ export function createMockApi(): OpsApi {
       ...knowledge.api,
       sources: {
         ...knowledge.api.sources,
-        // The mock source keeps each file's id and name, as kb-service's source does once Files confirms the file.
+        // The mock source keeps each file's id on its config, as kb-service's file source does once Files confirms the file.
         addFiles: async (sourceId, fileIds) => {
           const added = await Promise.all(fileIds.map(async (id) => ({ fileId: id, name: (await files.api.get(id)).name })));
           const s = await knowledge.api.sources.get(sourceId);
-          const had = (k: string) => (Array.isArray(s.config[k]) ? (s.config[k] as string[]) : []);
-          const fresh = added.filter((f) => !had('fileIds').includes(f.fileId));
+          const had = 'fileIds' in s.config ? s.config.fileIds : [];
+          const fresh = added.filter((f) => !had.includes(f.fileId));
           // The mock keeps the files on the source's config, which no save offers; the patch says so by its cast.
-          const keep = { config: { ...s.config, fileIds: [...had('fileIds'), ...fresh.map((f) => f.fileId)], fileNames: [...had('fileNames'), ...fresh.map((f) => f.name)] } };
+          const keep = { config: { fileIds: [...had, ...fresh.map((f) => f.fileId)] } };
           await knowledge.api.sources.update(sourceId, keep as SourcePatch);
           return added;
         },
@@ -1162,12 +1150,13 @@ export function createMockApi(): OpsApi {
     evals: evals.api,
     modelRisk: modelRisk.api,
     assurance: assurance.api,
-    connect: connect.api,
+    mcpLinks: createMcpLinksMock(),
     wiki: createWikiMock({ me, kbNames: () => knowledge.kbNames() }).api,
     ...createGovernanceMock(),
     signInPolicy: signIn.api,
     invites: invites.api,
     account: account.api,
+    oauth: createOAuthMock().api,
     workspacePolicies: createMockWorkspacePolicies(),
     workspaceTeams: createMockWorkspaceTeams(),
     signInProviders: createMockSignInProviders(),
@@ -1175,7 +1164,6 @@ export function createMockApi(): OpsApi {
     providerConnections: createMockProviderConnections(),
     toolModules: toolModules.api,
     egress: createEgressMock({ me: F.CURRENT_USER.name, inUse: toolModules.hostsInUse }),
-    secrets: createSecretsMock({ me: F.CURRENT_USER.name, users: toolModules.secretUsers }),
     connections: createConnectionsMock({ me: F.CURRENT_USER.name }),
     engine: createEngineMock(),
     channels: createChannelsMock(),
@@ -1185,7 +1173,6 @@ export function createMockApi(): OpsApi {
     widgets: createWidgetsMock({ me: F.CURRENT_USER.name }),
     // Cases live in agents-service; the mock lists none and refuses writes.
     caseRecords: {
-      list: ({ page, pageSize }) => respond(() => ({ data: [], pagination: { page, pageSize, total: 0, totalPages: 1, hasNext: false, hasPrev: false }, facets: {} })),
       get: (cid) => respond(() => notFound(`Case ${cid}`)),
       change: () => Promise.reject(new ApiError('Cases need the agents service.', 501)),
       addNote: () => Promise.reject(new ApiError('Cases need the agents service.', 501)),
@@ -1206,16 +1193,6 @@ export function createMockApi(): OpsApi {
       previewSession: () => Promise.reject(new ApiError('Preview needs the agents service.', 501)),
       scriptUrl: () => 'http://localhost:8600/embed/v1.js',
     },
-    // Hosted forms are agents-service's; the mock lists none and refuses writes.
-    forms: {
-      list: () => respond(() => []),
-      create: () => Promise.reject(new ApiError('Hosted forms need the agents service.', 501)),
-      rotate: () => Promise.reject(new ApiError('Hosted forms need the agents service.', 501)),
-      update: () => Promise.reject(new ApiError('Hosted forms need the agents service.', 501)),
-      memberForm: () => Promise.reject(new ApiError('Hosted forms need the agents service.', 501)),
-      submitMember: () => Promise.reject(new ApiError('Hosted forms need the agents service.', 501)),
-      pageUrl: (form) => form.url,
-    },
     // Batches are agents-service's; the mock refuses them rather than pretend to start runs.
     batches: {
       dryRun: () => Promise.reject(new ApiError('Starting from a file needs the agents service.', 501)),
@@ -1223,18 +1200,6 @@ export function createMockApi(): OpsApi {
       get: () => Promise.reject(new ApiError('Batches need the agents service.', 501)),
       retryFailed: () => Promise.reject(new ApiError('Batches need the agents service.', 501)),
       resultsCsv: () => Promise.reject(new ApiError('Batches need the agents service.', 501)),
-    },
-    // Guardrails live in agents-service only; the mock lists none and refuses writes rather than pretend to keep them.
-    guardrails: {
-      list: () => respond(() => []),
-      page: (p) => respond((m) => list([], p, { text: () => '', value: () => '', facetKeys: [] }, m)),
-      options: () => respond(() => ({ data: [], nextCursor: null })),
-      get: () => Promise.reject(new ApiError('Guardrails need the agents service.', 501)),
-      create: () => Promise.reject(new ApiError('Guardrails need the agents service.', 501)),
-      update: () => Promise.reject(new ApiError('Guardrails need the agents service.', 501)),
-      requestPublish: () => Promise.reject(new ApiError('Guardrails need the agents service.', 501)),
-      setStatus: () => Promise.reject(new ApiError('Guardrails need the agents service.', 501)),
-      remove: () => Promise.reject(new ApiError('Guardrails need the agents service.', 501)),
     },
     templates: templates.api,
     prompts: prompts.api,

@@ -129,7 +129,7 @@ class ParsingSettings(_Model):
 IngestStrategy = Literal[
     "structure", "fixed", "topic", "faq", "faq_pairs", "context_headers", "parent_child", "table_rows", "clean"
 ]
-IngestPresetId = Literal["policy_manual", "help_centre", "rate_table", "email_templates", "custom"]
+IngestPresetId = Literal["documents", "policy_manual", "help_centre", "rate_table", "email_templates", "custom"]
 ColumnRole = Literal["searchable", "metadata", "ignored"]
 
 SPLITTERS: tuple[IngestStrategy, ...] = ("structure", "fixed", "topic")

@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 
 from ops_agents.api import engine_reviews
+from ops_agents.store.cases import CaseRecord
 
 FIELD = {"value": None, "extractedValue": None, "confidence": 1.0, "needsReview": False, "citation": None}
 READ: dict[str, Any] = {
@@ -220,8 +221,8 @@ class Cases:
         on = {"wfrun_a": "case_7", "wfrun_other": "case_9"}
         return {r: on[r] for r in run_ids if r in on}
 
-    async def get(self, case_id: str, _teams: list[str]) -> dict[str, Any]:
-        return {"id": case_id, "subject": "Levy notice: Ana Example (NS-2026-GN-09999)"}
+    async def get(self, case_id: str, _teams: list[str]) -> CaseRecord:
+        return CaseRecord.model_construct(id=case_id, subject="Levy notice: Ana Example (NS-2026-GN-09999)")
 
 
 async def test_an_acknowledgement_shows_the_reply_and_the_case_each_started_run_is_on(

@@ -13,9 +13,14 @@ cd "$tmp/repo"
 git checkout -q --detach "$(git -C "$root" rev-parse HEAD)"
 cp "$hook" .githooks/pre-commit
 cp "$root/scripts/verify-staged.sh" scripts/verify-staged.sh
+# The one list of checks the hook runs (make checks STAGED=1).
+cp "$root/Makefile" Makefile
+cp "$root/make/checks.mk" make/checks.mk
+git add make/checks.mk
 git -c user.name=t -c user.email=t@local commit -q --no-verify -am "hook under test" >/dev/null 2>&1 || true
 # apps/embed/node_modules: the hook's console verify type-checks the embed app too (verify-staged.sh links it the same way).
-for dep in node_modules apps/console/node_modules apps/embed/node_modules packages/usecase-runner/node_modules .venv; do
+# sdk/typescript/node_modules: the sdk gate runs openapi-typescript from there (verify-staged.sh links it the same way).
+for dep in node_modules apps/console/node_modules apps/embed/node_modules packages/usecase-runner/node_modules sdk/typescript/node_modules .venv; do
   [ -e "$root/$dep" ] && ln -s "$root/$dep" "$dep"
 done
 git config core.hooksPath .githooks
@@ -30,7 +35,8 @@ git add apps/console/src/components/zz-unfinished.tsx
 if commit bad apps/console/src/components/zz-unfinished.tsx; then echo "FAIL the bad file was committed"; pass=1; else
   grep -q "imports the API client" "$tmp/bad.log" && echo "PASS committing the bad file fails on check-standards" || { echo "FAIL the bad commit failed for another reason:"; tail -5 "$tmp/bad.log"; pass=1; }
 fi
-# A route change committed without its openapi.json, then with it regenerated (the openapi gate, 10-18).
+# A route change committed with its openapi.json regenerated, and the SDK drift check run on it. Whether a document matches
+# its app is a CI and `make verify` check (`make openapi`), not a commit's: the commit check skips service builds.
 app=services/models-service/src/ops_models/app.py
 python3 - "$app" <<'PY'
 import pathlib, sys
@@ -38,12 +44,18 @@ p = pathlib.Path(sys.argv[1])
 s = p.read_text()
 old = '    @app.get("/health", tags=["health"], response_model=Health)'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '    @app.get("/health/probe", tags=["health"], response_model=Health)\n    async def probe() -> Health:  # pyright: ignore[reportUnusedFunction]\n        return Health(status="ok")\n\n' + old, 1))
+# A route a service may add without a new finding: authenticated, with a typed reply, so only the openapi gate fails.
+route = (
+    '    @app.get("/v1/models/probe", tags=["health"], response_model=Envelope[ProbeOut])\n'
+    "    async def probe(p: CurrentTenantCaller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]\n"
+    '        return ok(ProbeOut(status="ok"))\n\n'
+)
+model = "class _Wire(In):"
+assert s.count(model) == 1
+s = s.replace(model, "class ProbeOut(Out):\n    status: str\n\n\n" + model, 1)
+p.write_text(s.replace(old, route + old, 1))
 PY
 git add "$app"
-if commit route "$app"; then echo "FAIL a route change without its openapi.json was committed"; pass=1; else
-  grep -q "models-service/openapi.json does not match" "$tmp/route.log" && echo "PASS a route change without its openapi.json is refused" || { echo "FAIL the route commit failed for another reason:"; tail -5 "$tmp/route.log"; pass=1; }
-fi
 pp=$(ls -d "$PWD"/packages/*/src "$PWD"/services/*/src | tr '\n' ':')
 (cd services/models-service && "$root/.venv/bin/python" -I -c "import runpy, sys; sys.path[:0] = '$pp'.split(':'); sys.argv = ['check_openapi.py', '--write']; runpy.run_path('scripts/check_openapi.py', run_name='__main__')" >/dev/null)
 git add services/models-service/openapi.json
@@ -60,23 +72,40 @@ git checkout -q HEAD -- "$leak"
 printf '\n# probe\n' >> scripts/sbom.py
 git add scripts/sbom.py
 if commit script scripts/sbom.py; then echo "PASS a commit of a script alone goes through"; else echo "FAIL a script-only commit was refused:"; tail -5 "$tmp/script.log"; pass=1; fi
-# The gate rows (verify-staged.sh `gate`): a staged path a row names runs its check, and a failure refuses the commit
-# under the row's name. Proved once on the cross-service row with a test importing another service (c4957ea5's fault),
-# then with that row taken out of this clone's hook: the same commit goes through, so the refusal came from the gate and
-# not from another check. Each row's check has tests of its own (test_mssql_ddl.py, test_sbom.py,
-# test_no_cross_service_imports.py).
+# The list of checks (make/checks.mk): a staged path a check names runs it, and a failure refuses the commit under the
+# check's command. A loopback fallback in a service is one the config-literals check lists.
+printf '\nPROBE = None or "http://127.0.0.1:9"\n' >> services/files-service/src/ops_files/__init__.py
+git add services/files-service/src/ops_files/__init__.py
+if commit listed services/files-service/src/ops_files/__init__.py; then echo "FAIL a loopback fallback in a service was committed"; pass=1; else
+  grep -q "check_config_literals.py --strict (exit 1)" "$tmp/listed.log" && echo "PASS a check on the list refuses a commit it fails, naming it" || { echo "FAIL the listed-check commit failed for another reason:"; tail -5 "$tmp/listed.log"; pass=1; }
+fi
+git checkout -q HEAD -- services/files-service/src/ops_files/__init__.py
+# Strict types reach tests: a test file with an untyped helper reached CI once because no commit check type-checked tests.
+typed=packages/ops_service_kit/tests/test_zz_untyped_probe.py
+printf 'def helper(x):\n    return [x]\n\n\ndef test_probe() -> None:\n    assert helper(1)\n' > "$typed"
+git add "$typed"
+if commit typed "$typed"; then echo "FAIL an untyped test file was committed"; pass=1; else
+  grep -q "typecheck-packages" "$tmp/typed.log" && echo "PASS an untyped test file is refused by the typecheck on the list" || { echo "FAIL the untyped commit failed for another reason:"; tail -5 "$tmp/typed.log"; pass=1; }
+fi
+git rm -q --cached -f "$typed"; rm -f "$typed"
+# The checks that sat beside the list in verify-staged.sh are on it: a staged path a check names runs it, and a failure
+# refuses the commit under the check's command. Proved once on cross-service with a test importing another service
+# (c4957ea5's fault), then with that check taken off the list in this clone: the same commit goes through, so the
+# refusal came from the list and not from another check. Each check has tests of its own (test_no_cross_service_imports.py).
 probe=services/tools-service/tests/test_zz_gate_probe.py
 printf 'from ops_agents.activities.catalog import Catalog\n\n\ndef test_probe() -> None:\n    assert Catalog\n' > "$probe"
 git add "$probe"
 if commit gate "$probe"; then echo "FAIL a service test importing another service was committed"; pass=1; else
-  grep -q "verify-staged: cross-service:" "$tmp/gate.log" && echo "PASS a gate row refuses a commit its check fails, by name" || { echo "FAIL the gate commit failed for another reason:"; tail -5 "$tmp/gate.log"; pass=1; }
+  grep -q "test_no_cross_service_imports.py (exit 1)" "$tmp/gate.log" && echo "PASS a check on the list refuses a commit it fails, by name" || { echo "FAIL the gate commit failed for another reason:"; tail -5 "$tmp/gate.log"; pass=1; }
 fi
-python3 - scripts/verify-staged.sh <<'PY'
-import pathlib, re, sys
+python3 - make/checks.mk <<'PY'
+import pathlib, sys
 p = pathlib.Path(sys.argv[1])
-s, n = re.subn(r"gate cross-service .*?test_no_cross_service_imports\.py\n", "", p.read_text(), flags=re.S)
-assert n == 1, "no cross-service row to take out"
-p.write_text(s)
+s = p.read_text()
+assert " cross-service " in s, "no cross-service check to take out"
+p.write_text(s.replace(" cross-service ", " ", 1))
 PY
-if commit gate_off "$probe"; then echo "PASS with the row taken out the same commit goes through"; else echo "FAIL the commit was refused with the row taken out:"; tail -5 "$tmp/gate_off.log"; pass=1; fi
+git add make/checks.mk
+git -c user.name=t -c user.email=t@local commit -q --no-verify -m "take cross-service off the list" -- make/checks.mk >/dev/null 2>&1
+if commit gate_off "$probe"; then echo "PASS with the check off the list the same commit goes through"; else echo "FAIL the commit was refused with the check off the list:"; tail -5 "$tmp/gate_off.log"; pass=1; fi
 exit $pass

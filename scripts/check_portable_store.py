@@ -2,24 +2,28 @@
 (docs/architecture/decisions/database-support.md):
 
   sql   database-specific code outside ops_store, in source and migrations: RETURNING, ON CONFLICT, SKIP LOCKED,
-        advisory locks, JSONB operators and the JSONB type in SQL text; in source, also `= ANY(` (an array
+        advisory locks, JSONB operators and the JSONB type in SQL text; a boolean tested with IS (`.is_(True)`,
+        `.isnot(False)`, `IS TRUE` in SQL text), which SQL Server refuses; in source, also `= ANY(` (an array
         parameter), an aggregate's FILTER (WHERE ...) and `::` casts, which a migration may hold in its PostgreSQL
         branch (deploy/database/mssql.py refuses them in the SQL a revision renders for SQL Server); the same built
         with SQLAlchemy Core
-        (on_conflict_*, a dialect's own insert); a row lock (with_for_update, which renders nothing on SQL Server);
-        the host-dependent clock functions (func.now, make_interval, date_trunc); and postgresql_* index options,
-        except a postgresql_where given with its mssql_where twin.
+        (on_conflict_*, a dialect's own insert, an aggregate's `.filter(...)`); a row lock (with_for_update, which
+        renders nothing on SQL Server); the host-dependent clock functions (func.now, make_interval, date_trunc); and
+        postgresql_* index options, except a postgresql_where given with its mssql_where twin.
   meta  table metadata SQL Server refuses: a key column (primary key, unique, indexed or a foreign key) of unbounded
         text, and a table, column, index or constraint name over 60 characters.
+  slice a list cut to its page in Python (`rows[start : start + size]`) in a service's code outside its store: every
+        row was loaded to show a few, so the cost grows with the table. `ops_store.listing.list_page` counts, sorts
+        and cuts in SQL. Today's sites are in list-slice-baseline.txt, which the same rule holds: a row may only fall.
 
 What is there today is listed in portable-baseline.txt, so only new code is a finding. The gate (verify-staged and
-make python-verify) runs `--strict`, and `--commits`: a commit that raises a baseline row carries a
-`Standards-exception:` trailer a maintainer approved. ops_store.dialect holds each database's form.
+make python-verify) runs `--strict`, and `--commits`: a commit that raises a row of either baseline carries a
+maintainer's review on the pull request. ops_store.dialect holds each database's form.
 
   uv run python scripts/check_portable_store.py            # findings, exit 0
   uv run python scripts/check_portable_store.py --strict   # exit 1 when there is a finding
-  uv run python scripts/check_portable_store.py --commits  # exit 1 when a commit raised the baseline without a trailer
-  uv run python scripts/check_portable_store.py --update   # rewrite the baseline to today's findings
+  uv run python scripts/check_portable_store.py --commits  # exit 1 when a commit raised a baseline without a trailer
+  uv run python scripts/check_portable_store.py --update   # lower the baselines to today's findings; never raises one
 """
 
 from __future__ import annotations
@@ -30,13 +34,17 @@ import re
 import subprocess
 import sys
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 
 import sqlalchemy as sa
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import baseline_history
+
 ROOT = Path(__file__).resolve().parents[1]
 BASELINE = ROOT / "portable-baseline.txt"
+SLICE_BASELINE = ROOT / "list-slice-baseline.txt"
 SRC_ROOTS = sorted([*ROOT.glob("packages/*/src"), *ROOT.glob("services/*-service/src")])
 # The store seam is where database-specific SQL belongs: each dialect's version of a query lives there.
 SEAM = ROOT / "packages" / "ops_store"
@@ -49,6 +57,7 @@ TEXT = [
     ("SKIP LOCKED", re.compile(r"\bSKIP\s+LOCKED\b", re.IGNORECASE)),
     ("advisory lock", re.compile(r"\bpg_(try_)?advisory_", re.IGNORECASE)),
     ("JSONB operator", re.compile(r"->>|#>>|@>|<@|\?\||\?&|\bjsonb_\w+\s*\(", re.IGNORECASE)),
+    ("boolean IS", re.compile(r"\bIS\s+(NOT\s+)?(TRUE|FALSE)\b", re.IGNORECASE)),
 ]
 # In source code only: a migration writes each database's SQL in its own branch, and its SQL Server rendering is
 # checked whole (deploy/database/mssql.py POSTGRES_ONLY). An expanding bind parameter (IN :ids), CAST(x AS t) and a
@@ -72,6 +81,7 @@ CALLS = {
     "with_for_update": "row lock",
 }
 # func.<name> that reads the host's clock or exists on PostgreSQL alone; ops_store.dialect has db_now and db_after.
+IS_METHODS = {"is_", "isnot", "is_not"}
 CLOCK = {"now", "make_interval", "date_trunc", "clock_timestamp", "julianday"}
 DIALECT_INSERT = {"postgresql", "sqlite"}
 
@@ -101,8 +111,22 @@ def sql_findings(source: str, *, migration: bool = False) -> list[tuple[int, str
             and SQL_SHAPE.search(node.value)
         ):
             out += [(node.lineno, name) for name, pattern in text if pattern.search(node.value)]
+        # `col.is_(True)` renders `IS 1` on SQL Server, which refuses it; `.is_(None)` is portable.
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in IS_METHODS
+            and len(node.args) == 1
+            and isinstance(node.args[0], ast.Constant)
+            and isinstance(node.args[0].value, bool)
+        ):
+            out.append((node.lineno, "boolean IS"))
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr in CALLS:
             out.append((node.lineno, CALLS[node.func.attr]))
+        # An aggregate built with SQLAlchemy's filter (`func.count().filter(...)`, `funcfilter`) renders
+        # FILTER (WHERE ...), which SQL Server refuses; `func.count(case((cond, 1)))` counts the same on both.
+        if not migration and isinstance(node, ast.Call) and _aggregate_filter(node):
+            out.append((node.lineno, "aggregate FILTER"))
         # The same constructs built from names: `sa.func.pg_try_advisory_xact_lock(...)` and the `JSONB` column type.
         if isinstance(node, (ast.Attribute, ast.Name)):
             name = node.attr if isinstance(node, ast.Attribute) else node.id
@@ -135,6 +159,169 @@ def sql_findings(source: str, *, migration: bool = False) -> list[tuple[int, str
         ):
             out.append((node.lineno, "SKIP LOCKED"))
     return sorted(set(out))
+
+
+def _aggregate_filter(node: ast.Call) -> bool:
+    f = node.func
+    if _named(f) == "funcfilter":
+        return True
+    return (
+        isinstance(f, ast.Attribute)
+        and f.attr == "filter"
+        and isinstance(f.value, ast.Call)
+        and isinstance(f.value.func, ast.Attribute)
+        and _named(f.value.func.value) == "func"
+    )
+
+
+def _factors(node: ast.expr) -> set[str]:
+    """The non-constant operands of a product: `(page - 1) * size` holds `(page - 1)` and `size`."""
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mult):
+        return _factors(node.left) | _factors(node.right)
+    return set() if isinstance(node, ast.Constant) else {ast.dump(node)}
+
+
+def _is_page(node: ast.Subscript, defs: dict[str, ast.expr] | None = None) -> bool:
+    """One cut whose end is counted from its start: `a : a + n`, or the same in multiples: `(p - 1) * n : p * n`."""
+    assert isinstance(node.slice, ast.Slice)
+    return _bounds(node.slice.lower, node.slice.upper, defs or {})
+
+
+def _bounds(low: ast.expr | None, high: ast.expr | None, defs: dict[str, ast.expr]) -> bool:
+    """Whether a window's end is counted from its start. A bound that is a name stands for the expression the scope
+    assigned it once (`end = o + n`); the name and the expression are both tried, because `start = (p - 1) * n`
+    followed by `rows[start : start + n]` counts the end from the name, not from its definition."""
+    if low is None or high is None:
+        return False
+    lows = [low, defs[low.id]] if isinstance(low, ast.Name) and low.id in defs else [low]
+    highs = [high, defs[high.id]] if isinstance(high, ast.Name) and high.id in defs else [high]
+    return any(_counted(lo, hi) for lo in lows for hi in highs)
+
+
+def _counted(low: ast.expr, high: ast.expr) -> bool:
+    if isinstance(high, ast.BinOp) and isinstance(high.op, ast.Add):
+        # The window starts where its end is counted from: `start + size`, also `offset + limit + 1`.
+        terms, left = [high.right], high.left
+        while isinstance(left, ast.BinOp) and isinstance(left.op, ast.Add):
+            terms, left = [*terms, left.right], left.left
+        if ast.dump(low) in {ast.dump(t) for t in (*terms, left)}:
+            return True
+    # Both bounds are multiples of a shared size: `rows[(page - 1) * size : page * size]`.
+    products = all(isinstance(b, ast.BinOp) and isinstance(b.op, ast.Mult) for b in (low, high))
+    return products and bool(_factors(low) & _factors(high))
+
+
+def _is_chained(node: ast.Subscript) -> bool:
+    """`rows[offset:][:limit]`: the page cut out of a tail cut, so every row was still loaded."""
+    inner = node.value
+    if not (
+        isinstance(inner, ast.Subscript) and isinstance(inner.slice, ast.Slice) and isinstance(node.slice, ast.Slice)
+    ):
+        return False
+    start, end = inner.slice.lower, node.slice.upper
+    return (
+        start is not None
+        and inner.slice.upper is None
+        and end is not None
+        and not (isinstance(start, ast.Constant) and isinstance(end, ast.Constant))
+    )
+
+
+def _own(scope: ast.AST) -> Iterator[ast.AST]:
+    """The nodes of one scope, not those of a function or class defined in it."""
+    todo = list(ast.iter_child_nodes(scope))
+    while todo:
+        node = todo.pop()
+        yield node
+        if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Lambda):
+            todo.extend(ast.iter_child_nodes(node))
+
+
+def _tail(node: ast.expr) -> bool:
+    """`rows[offset:]`: a cut from a start with no end."""
+    return (
+        isinstance(node, ast.Subscript)
+        and isinstance(node.slice, ast.Slice)
+        and node.slice.lower is not None
+        and node.slice.upper is None
+        and not isinstance(node.slice.lower, ast.Constant)
+    )
+
+
+def slice_findings(source: str) -> list[int]:
+    """The line of each page cut in Python: `x[a : a + n]`, `x[(p - 1) * n : p * n]`, `x[a:][:n]`, and the same read
+    through a name (`end = a + n; x[a:end]`, `tail = x[a:]; tail[:n]`) or `itertools.islice(x, a, a + n)`."""
+    out: set[int] = set()
+    tree = ast.parse(source)
+    islices = {"islice"} | {
+        a.asname or a.name
+        for n in ast.walk(tree)
+        if isinstance(n, ast.ImportFrom) and n.module == "itertools"
+        for a in n.names
+        if a.name == "islice"
+    }
+    modules = {"itertools"} | {
+        a.asname
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Import)
+        for a in n.names
+        if a.name == "itertools" and a.asname
+    }
+    scopes = [tree, *(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef))]
+    for scope in scopes:
+        nodes = list(_own(scope))
+        defs: dict[str, ast.expr] = {}
+        tails: set[str] = set()
+        for n in nodes:
+            if isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name):
+                name = n.targets[0].id
+                defs[name] = n.value
+                if _tail(n.value):
+                    tails.add(name)
+        for n in nodes:
+            if isinstance(n, ast.Subscript) and isinstance(n.slice, ast.Slice):
+                if (
+                    _is_page(n, defs)
+                    or _is_chained(n)
+                    or (
+                        isinstance(n.value, ast.Name)
+                        and n.value.id in tails
+                        and n.slice.lower is None
+                        and n.slice.upper is not None
+                        and not isinstance(n.slice.upper, ast.Constant)
+                    )
+                ):
+                    out.add(n.lineno)
+            elif isinstance(n, ast.Call) and len(n.args) >= 3:
+                f = n.func
+                named = isinstance(f, ast.Name) and f.id in islices
+                dotted = (
+                    isinstance(f, ast.Attribute)
+                    and f.attr == "islice"
+                    and isinstance(f.value, ast.Name)
+                    and f.value.id in modules
+                )
+                if (named or dotted) and _bounds(n.args[1], n.args[2], defs):
+                    out.add(n.lineno)
+    return sorted(out)
+
+
+def slice_sources() -> list[Path]:
+    """A service's routes, facades and app layer: everything in its source but the store, which pages in SQL."""
+    services = sorted(ROOT.glob("services/*-service/src"))
+    return sorted(p for src in services for p in src.rglob("*.py") if not is_store(p.relative_to(src)))
+
+
+def current_slices() -> tuple[Counter[str], dict[str, list[str]]]:
+    counts: Counter[str] = Counter()
+    where: dict[str, list[str]] = {}
+    for path in slice_sources():
+        rel = path.relative_to(ROOT).as_posix()
+        for line in slice_findings(path.read_text()):
+            key = f"slice {rel} list slice"
+            counts[key] += 1
+            where.setdefault(key, []).append(f"{rel}:{line}")
+    return counts, where
 
 
 def _named(node: ast.expr) -> str | None:
@@ -241,8 +428,13 @@ def warnings(now: Counter[str], base: Counter[str], where: dict[str, list[str]])
             fix = (
                 "bound the column (sa.String(n)) or shorten the name"
                 if kind == "meta"
+                else "page in the store with ops_store.listing.list_page: count, ORDER BY, LIMIT and OFFSET in SQL"
+                if kind == "slice"
                 else "give every supported database its own form of the index, or do without it"
                 if construct.endswith(" option")
+                else "compare with sa.true() / sa.false() (col == sa.true()); IS NOT TRUE also matches NULL,"
+                " so a nullable column needs sa.or_(col == sa.false(), col.is_(None))"
+                if construct == "boolean IS"
                 else "write the portable form: IN :ids (expanding bindparam), CAST(x AS t), CASE in the aggregate"
                 if construct in {name for name, _ in SOURCE_TEXT}
                 else "use ops_store.dialect (locked, claim, upsert, insert_ignore, lock_key, db_now, db_after)"
@@ -254,12 +446,25 @@ def warnings(now: Counter[str], base: Counter[str], where: dict[str, list[str]])
 def render(counts: Counter[str]) -> str:
     head = [
         f"# {sum(counts.values())} findings: code and metadata outside ops_store that would not run on SQL Server"
-        " (scripts/check_portable_store.py). A row may only fall; raising one needs a Standards-exception: trailer.",
+        " (scripts/check_portable_store.py). A row may only fall; raising one needs a maintainer's review on the pull"
+        " request.",
     ]
     head.append(
         "# Burned down by ops_store.dialect: row lock and SKIP LOCKED -> locked/claim, database clock -> db_now and"
         " db_after, dialect insert and ON CONFLICT -> upsert/insert_ignore, advisory lock -> lock_key."
     )
+    return _render(head, counts)
+
+
+def render_slices(counts: Counter[str]) -> str:
+    head = [
+        f"# {sum(counts.values())} findings: lists cut to their page in Python outside a store"
+        " (scripts/check_portable_store.py). A row may only fall; ops_store.listing.list_page pages in SQL."
+    ]
+    return _render(head, counts)
+
+
+def _render(head: list[str], counts: Counter[str]) -> str:
     lines: list[str] = []
     for owner in sorted({_owner(k) for k in counts}):
         rows = sorted((k, n) for k, n in counts.items() if _owner(k) == owner)
@@ -277,7 +482,8 @@ def _owner(key: str) -> str:
 
 # The commit before the first one this check reads: from here on, a commit that raises a baseline row needs a trailer.
 BASELINE_BEGAN = "ff31407eb261038374fc5c7fda556b40a519fcef"
-TRAILER = "Standards-exception:"
+# The commit that created list-slice-baseline.txt; the rows it held are the start.
+SLICE_BASELINE_BEGAN = "583fbae33c53c028d7a20873eeb72db811888084"
 
 
 def _git(*args: str) -> str:
@@ -290,41 +496,56 @@ def raised(before: str, after: str) -> list[str]:
     return sorted(f"{key} ({old.get(key, 0)} -> {n})" for key, n in new.items() if n > old.get(key, 0))
 
 
-def commit_problems() -> list[str]:
-    """Commits after BASELINE_BEGAN that raise a row of portable-baseline.txt without a Standards-exception: trailer.
-    An export without history (verify-head's one-commit copy) has nothing to check; verify-staged runs it on the
-    repository."""
-    probe = ["git", "cat-file", "-e", f"{BASELINE_BEGAN}^{{commit}}"]
-    if subprocess.run(probe, cwd=ROOT, capture_output=True, check=False).returncode:
-        return []
+def _file_rises(name: str, began: str) -> list[str]:
     out: list[str] = []
-    for sha in _git("log", "--format=%H", f"{BASELINE_BEGAN}..HEAD", "--", BASELINE.name).split():
+    for sha in _git("log", "--format=%H", f"{baseline_history.history_start(began)}..HEAD", "--", name).split():
         before = subprocess.run(
-            ["git", "show", f"{sha}^:{BASELINE.name}"], cwd=ROOT, capture_output=True, text=True, check=False
+            ["git", "show", f"{sha}^:{name}"], cwd=ROOT, capture_output=True, text=True, check=False
         ).stdout
-        rows = raised(before, _git("show", f"{sha}:{BASELINE.name}"))
-        message = _git("log", "-1", "--format=%B", sha)
-        if rows and not any(line.startswith(TRAILER) for line in message.splitlines()):
-            out += [f"trailer {sha[:8]} raises `{row}` with no {TRAILER} trailer" for row in rows]
+        out += [f"{sha[:8]} raises `{row}` in {name}" for row in raised(before, _git("show", f"{sha}:{name}"))]
     return out
+
+
+def commit_problems() -> list[str]:
+    """Commits that raise a row of portable-baseline.txt or list-slice-baseline.txt: rises that wait for a
+    maintainer's review on the pull request (scripts/baseline_history.py). An export without history (verify-head's
+    one-commit copy) has nothing to check; verify-staged runs it on the repository."""
+    out: list[str] = []
+    for path, began in ((BASELINE, BASELINE_BEGAN), (SLICE_BASELINE, SLICE_BASELINE_BEGAN)):
+        probe = ["git", "cat-file", "-e", f"{baseline_history.history_start(began)}^{{commit}}"]
+        if subprocess.run(probe, cwd=ROOT, capture_output=True, check=False).returncode == 0:
+            out += _file_rises(path.name, began)
+    return baseline_history.awaiting_review(out)
+
+
+def lowered(now: Counter[str], base: Counter[str]) -> Counter[str]:
+    """Today's counts, no higher than the baseline's: `--update` drops fixed rows and lowers others, and a new or
+    raised one is written by hand and waits for a maintainer's review on the pull request."""
+    return Counter({key: min(n, base[key]) for key, n in now.items() if base.get(key)})
 
 
 def main() -> int:
     if "--commits" in sys.argv:
         missing = commit_problems()
         sys.stdout.write(
-            "\n".join(missing) + "\n"
-            if missing
-            else f"Every baseline rise since {BASELINE_BEGAN[:8]} carries {TRAILER}\n"
+            "\n".join(missing) + "\n" if missing else baseline_history.outcome("check_portable_store") + "\n"
         )
         return 1 if missing else 0
     now, where = current()
+    slices, slices_where = current_slices()
     if "--update" in sys.argv:
+        base = read_baseline(BASELINE.read_text()) if BASELINE.exists() else now
+        slice_base = read_baseline(SLICE_BASELINE.read_text()) if SLICE_BASELINE.exists() else slices
+        now, slices = lowered(now, base), lowered(slices, slice_base)
         BASELINE.write_text(render(now))
+        SLICE_BASELINE.write_text(render_slices(slices))
         sys.stdout.write(f"check_portable_store: baseline has {sum(now.values())} findings\n")
+        sys.stdout.write(f"check_portable_store: list-slice baseline has {sum(slices.values())} findings\n")
         return 0
     base = read_baseline(BASELINE.read_text()) if BASELINE.exists() else Counter[str]()
-    found = warnings(now, base, where)
+    slice_base = read_baseline(SLICE_BASELINE.read_text()) if SLICE_BASELINE.exists() else Counter[str]()
+    found = [*warnings(now, base, where), *warnings(slices, slice_base, slices_where)]
+    now, base = now + slices, base + slice_base
     for line in found:
         sys.stderr.write(line + "\n")
     fell = sum(base.values()) - sum(min(n, base[k]) for k, n in now.items())

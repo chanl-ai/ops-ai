@@ -7,11 +7,14 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import quote
 
+import pytest
 from sqlalchemy import event
 
+from ops_agents.api import tool_access
 from ops_agents.api.auth import step_up_signer
 from ops_agents.api.file_names import FilesServiceNames
 from ops_agents.api.people_names import PlatformPeopleNames
+from ops_agents.api.tool_access import WritePolicy
 from ops_agents.store.cases import CaseStore
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.tenancy import tenant_scope
@@ -19,6 +22,7 @@ from ops_engine.store import RunStore
 from ops_engine.store.tables import engine_runs, engine_steps
 from ops_files_client.testing import FakeFilesService
 from ops_policy import mint_step_up
+from ops_service_kit.http import Json
 from tests.api.test_action_roles import REVIEWER
 from tests.api.test_activity import FRAUD_BUILDER
 from tests.api.test_case_routes import started_run
@@ -37,7 +41,7 @@ async def typed_case(s: Stack, *, customer: str = "C-1001", team: str = "team_op
     type does not declare."""
     c, rt = s
     await c.get("/v1/case-types", headers=BUILDER)  # seeds the tenant's case types
-    values = {"amount": "1250", "note": "called twice", "complaint": "Charged twice", "category": "fees"}
+    values: Json = {"amount": "1250", "note": "called twice", "complaint": "Charged twice", "category": "fees"}
     with tenant_scope(TENANT):
         opened = await CaseStore(rt.db).open(
             team_id=team,
@@ -51,7 +55,7 @@ async def typed_case(s: Stack, *, customer: str = "C-1001", team: str = "team_op
             type_id="complaint",
             type_version=1,
         )
-    return str(opened.case["id"])
+    return str(opened.case.id)
 
 
 async def test_fields_come_in_the_case_types_order_formatted_then_what_it_does_not_declare(stack: Stack) -> None:  # noqa: F811
@@ -219,6 +223,47 @@ async def _waiting_on(s: Stack, case_id: str, workflows: int) -> None:
         }
         with tenant_scope(TENANT):
             await RunStore(EngineTransactions(rt.db)).update(run, status="waiting", waiting=waiting)
+
+
+async def test_the_case_page_holds_no_connection_while_tools_service_answers(
+    stack: Stack,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A waiting Human Task is worded from the policy of the write it holds, which tools-service answers: the page asks
+    it before the transaction that builds the task views opens, and holds at most two transactions."""
+    c, rt = stack
+    case_id = await typed_case(stack, customer="C-hold")
+    run = await started_run(c, BUILDER, f"wf_hold_{case_id[-6:]}")
+    await c.post(f"/v1/cases/{case_id}/events", json={"kind": "run", "ref": run}, headers=BUILDER)
+    call: dict[str, Any] = {"tool": "lookup_account", "input": {}}
+    payload: dict[str, Any] = {"node": "review", "iteration": 1, "call": call}
+    waiting: dict[str, Any] = {"node": "review", "iteration": 1, "interruptId": "i", "payload": payload}
+    with tenant_scope(TENANT):
+        await RunStore(EngineTransactions(rt.db)).update(run, status="waiting", waiting=waiting)
+    held: list[int] = []
+    begun: list[int] = []
+    ended: list[int] = []
+
+    async def watched(_rt: Any, _tool: str) -> WritePolicy:
+        held.append(len(begun) - len(ended))
+        return WritePolicy("write", 1)
+
+    monkeypatch.setattr(tool_access, "_policy_of", watched)
+    sync = rt.db.sync_engine
+
+    def began(_conn: object) -> None:
+        begun.append(1)
+
+    def finished(_conn: object) -> None:
+        ended.append(1)
+
+    event.listen(sync, "begin", began)
+    event.listen(sync, "commit", finished)
+    event.listen(sync, "rollback", finished)
+    page = data(await c.get(f"/v1/cases/{case_id}", headers=BUILDER))
+    assert len(page["waiting"]) == 1, page["waiting"]
+    assert held and set(held) == {0}, held
+    assert len(begun) == 2, begun
 
 
 def _reads(statements: list[str]) -> tuple[int, int]:
@@ -401,7 +446,7 @@ async def _deadline_case(s: Stack, respond_by: Any) -> str:
             team_id="team_ops", subject="Court notice", priority="high", by="james@harborpine.example",
             fields={"respondBy": respond_by}, type_id="court_notice", type_version=1,
         )  # fmt: skip
-    return str(opened.case["id"])
+    return str(opened.case.id)
 
 
 async def test_a_deadline_must_name_a_date_field(stack: Stack) -> None:  # noqa: F811

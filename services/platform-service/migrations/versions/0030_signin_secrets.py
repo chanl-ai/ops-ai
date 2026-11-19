@@ -13,6 +13,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
+from ops_store.schema import TENANT_SCOPED, isolation_drop_ddl
+
 revision = "0030_signin_secrets"
 down_revision = "0029_tenant_security_team"
 branch_labels = None
@@ -45,4 +47,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    if op.get_bind().dialect.name == "mssql":
+        # 0042 makes the table's SQL Server security policy, which is schema-bound to it: DROP TABLE is refused while
+        # it stands.
+        table = sa.Table("signin_secrets", sa.MetaData(), sa.Column("tenant_id", sa.String(64)), info=TENANT_SCOPED)
+        for statement in isolation_drop_ddl(table, "mssql"):
+            op.execute(statement)
     op.drop_table("signin_secrets")

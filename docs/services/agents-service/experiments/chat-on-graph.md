@@ -19,7 +19,7 @@ is decided in Reviews, and what a reload shows is rebuilt from the run inputs an
 | Feedback or a regenerate lost on reload | Both are thread events; feedback set and cleared survives a reload; superseded turns drop out |
 | An approval decided outside Reviews | The widget action calls decide: a `review_decisions` row, a `decided` event, the resumed run's reply as the continuation |
 | A chat money action on a dev token | With the gateway on it runs only after two different approvers; the widget shows `awaiting_second` after the first |
-| The asker approving when policy forbids it | The approval carries `requested_by`; `allow_self_approval_in_chat` off refuses with 403 (uc-009) |
+| The asker approving when policy forbids it | The approval carries `requested_by`; `requesterMayDecide` off (the default) refuses with 403 (uc-009) |
 
 ## Decisions
 

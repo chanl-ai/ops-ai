@@ -3,9 +3,14 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal, NotRequired
+from typing import Any, Literal, NotRequired, TypeAlias
 
 from typing_extensions import TypedDict
+
+
+class AccessMembers(TypedDict, closed=True):
+    mode: str
+    principals: list[str]
 
 
 class AddedFile(TypedDict, closed=True):
@@ -13,11 +18,17 @@ class AddedFile(TypedDict, closed=True):
     name: str
 
 
-class AiApprovalIn(TypedDict):
+class AiApprovalIn(TypedDict, closed=True):
     decision: Literal["approve", "revoke"]
 
 
-class AttachIn(TypedDict):
+class AnswerSettings(TypedDict, closed=True):
+    noAnswerMessage: str
+    shape: Literal["answer_with_citations", "chunks"]
+    withholdUncited: bool
+
+
+class AttachIn(TypedDict, closed=True):
     sourceIds: list[str]
 
 
@@ -37,6 +48,13 @@ class BackgroundProcessOut(TypedDict, closed=True):
     waiting: int | None
 
 
+class ChangeCitation(TypedDict, closed=True):
+    citations30D: int
+    tests: int
+    workflowId: str
+    workflowName: str
+
+
 class ChangeViewCounts(TypedDict, closed=True):
     conflicts: int
     mine: int
@@ -44,51 +62,20 @@ class ChangeViewCounts(TypedDict, closed=True):
     resolved: int
 
 
-class DecideIn(TypedDict):
+class DecideIn(TypedDict, closed=True):
     decision: Literal["approve", "reject"]
     ids: list[str]
+    reason: NotRequired[str | None]
 
 
-class DocumentRow(TypedDict, closed=True):
-    acl: list[str]
-    chunkCount: int
-    collection: str
-    digest: str
-    duplicateOf: NotRequired[str | None]
-    effectiveDate: str
-    error: NotRequired[str | None]
-    errorClass: NotRequired[str | None]
-    externalId: str
-    family: str
-    fileId: NotRequired[str | None]
-    folder: NotRequired[str | None]
-    freshness: str
-    id: str
-    metadata: dict[str, str]
-    mimeType: str
-    modifiedAt: str
-    owner: str
-    pageCount: NotRequired[int | None]
-    path: str
-    processedAt: NotRequired[str | None]
-    queries30d: int
-    reviewBy: str
-    sensitivity: str
-    sizeBytes: int
-    sourceId: str
-    sourceName: str
-    status: str
-    tags: list[str]
-    title: str
-    verified: bool
-    version: str
-    versionStatus: str
-    warning: NotRequired[str | None]
-
-
-class DraftEdit(TypedDict):
+class DraftEdit(TypedDict, closed=True):
     answer: str
     question: str
+
+
+class DuplicateCopy(TypedDict, closed=True):
+    sourceName: str
+    title: str
 
 
 class EmbeddingCoverage(TypedDict, closed=True):
@@ -116,12 +103,9 @@ class ErrorEnvelope(TypedDict, closed=True):
     success: Literal[False]
 
 
-class EventIn(TypedDict):
-    actor: NotRequired[str | None]
-    key: str
-    name: str
-    payload: NotRequired[dict[str, Any]]
-    teamId: str
+class ErrorGroup(TypedDict, closed=True):
+    count: int
+    message: str
 
 
 class EventOut(TypedDict, closed=True):
@@ -139,8 +123,31 @@ class FaqDraft(TypedDict, closed=True):
     sectionPath: list[str]
 
 
-class FileIdsIn(TypedDict):
+class FileIdsIn(TypedDict, closed=True):
     fileIds: list[str]
+
+
+class FileSourceConfig(TypedDict, closed=True):
+    fileIds: list[str]
+
+
+class FilterCondition(TypedDict, closed=True):
+    id: NotRequired[str]
+    key: str
+    op: Literal["is", "is_not", "one_of", "before", "after", "exists"]
+    value: NotRequired[str]
+
+
+class FilterGroup(TypedDict, closed=True):
+    conditions: NotRequired[list[FilterCondition]]
+    match: NotRequired[Literal["all", "any"]]
+
+
+class Governance(TypedDict, closed=True):
+    duplicates: int
+    excluded: int
+    held: int
+    superseded: int
 
 
 class Health(TypedDict, closed=True):
@@ -149,11 +156,42 @@ class Health(TypedDict, closed=True):
     unitsNotEmbedded: NotRequired[int | None]
 
 
+class IndexJob(TypedDict, closed=True):
+    durationSec: float
+    failed: int
+    id: str
+    processed: int
+    startedAt: str
+    status: str
+    trigger: str
+
+
+class IndexingProgress(TypedDict, closed=True):
+    done: int
+    taskId: str
+    total: int
+
+
+class IngestApproval(TypedDict, closed=True):
+    approvedSteps: list[str]
+    decidedAt: str | None
+    decidedBy: str | None
+    requestedBy: str | None
+    status: Literal["not_needed", "pending", "approved"]
+
+
+class IngestColumn(TypedDict, closed=True):
+    key: bool
+    name: str
+    role: Literal["searchable", "metadata", "ignored"]
+
+
 class Item(TypedDict, closed=True):
     acl: list[str]
     chunkCount: int
     collection: str
     digest: str
+    duplicateCopy: NotRequired[DuplicateCopy | None]
     duplicateOf: NotRequired[str | None]
     effectiveDate: str
     error: NotRequired[str | None]
@@ -162,6 +200,7 @@ class Item(TypedDict, closed=True):
     family: str
     fileId: NotRequired[str | None]
     folder: NotRequired[str | None]
+    freshness: str
     id: str
     metadata: dict[str, str]
     mimeType: str
@@ -178,85 +217,50 @@ class Item(TypedDict, closed=True):
     status: str
     tags: list[str]
     title: str
+    url: NotRequired[str | None]
     verified: bool
     version: str
     versionStatus: str
     warning: NotRequired[str | None]
 
 
-class ItemWithDetail(TypedDict, closed=True):
-    acl: list[str]
-    chunkCount: int
-    collection: str
-    detail: dict[str, Any]
-    digest: str
-    duplicateOf: NotRequired[str | None]
-    effectiveDate: str
-    error: NotRequired[str | None]
-    errorClass: NotRequired[str | None]
-    externalId: str
-    family: str
-    fileId: NotRequired[str | None]
-    folder: NotRequired[str | None]
-    id: str
-    metadata: dict[str, str]
-    mimeType: str
-    modifiedAt: str
-    owner: str
-    pageCount: NotRequired[int | None]
-    path: str
-    processedAt: NotRequired[str | None]
-    queries30d: int
-    reading: NotRequired[dict[str, Any] | None]
-    reviewBy: str
-    sensitivity: str
-    settingsUsed: NotRequired[dict[str, Any] | None]
-    sizeBytes: int
-    sourceId: str
-    sourceName: str
-    sourceType: str
-    status: str
-    tags: list[str]
-    title: str
-    verified: bool
-    version: str
-    versionStatus: str
-    warning: NotRequired[str | None]
+class ItemRevision(TypedDict, closed=True):
+    author: str
+    date: str
+    n: int
+    note: NotRequired[str | None]
+    sizeDelta: int
 
 
-class KbSourceLink(TypedDict, closed=True):
-    itemsContributed: int
-    rules: list[dict[str, Any]]
-    sourceId: str
+class ItemSettingsUsed(TypedDict, closed=True):
+    current: bool
+    indexedWith: str | None
+    preset: str
+    strategies: list[str]
 
 
-class KnowledgeBase(TypedDict, closed=True):
-    access: dict[str, Any]
-    automation: str
-    collections: list[str]
-    color: str
-    createdAt: str
-    description: str
-    health: str
-    healthReasons: list[str]
-    id: str
-    indexing: NotRequired[dict[str, Any] | None]
-    jobs: list[dict[str, Any]]
-    lastRefreshedAt: NotRequired[str | None]
-    lastSyncAt: NotRequired[str | None]
-    metadataProfile: dict[str, Any]
-    name: str
-    owner: str
-    precedence: list[dict[str, Any]]
-    protection: NotRequired[Literal["system", "managed"] | None]
-    retrieval: dict[str, Any]
-    slug: str
-    sources: list[KbSourceLink]
-    stats: dict[str, Any]
-    templateId: NotRequired[str | None]
+class ItemUnit(TypedDict, closed=True):
+    kind: str
+    text: str
 
 
-class KnowledgeBaseIn(TypedDict):
+JsonValue: TypeAlias = Any
+
+
+class KbStats(TypedDict, closed=True):
+    chunks: int
+    documents: int
+    failures: int
+    medianLatencyMs: int
+    noAnswerRate: int
+    queries7d: int
+    queriesChange7d: int
+    stale: int
+
+
+class KnowledgeBaseIn(TypedDict, closed=True):
+    access: NotRequired[dict[str, JsonValue] | None]
+    answer: NotRequired[dict[str, JsonValue] | None]
     collections: NotRequired[list[str]]
     color: NotRequired[str]
     description: NotRequired[str]
@@ -265,48 +269,27 @@ class KnowledgeBaseIn(TypedDict):
     owner: NotRequired[str | None]
     preset: NotRequired[Literal["balanced", "precise", "raw"]]
     protection: NotRequired[Literal["system", "managed"] | None]
+    retrieval: NotRequired[dict[str, JsonValue] | None]
+    sourceDefaults: NotRequired[dict[str, JsonValue] | None]
     sourceIds: NotRequired[list[str]]
+    sync: NotRequired[dict[str, JsonValue] | None]
     templateId: NotRequired[str | None]
 
 
-class KnowledgeBasePatch(TypedDict):
+class KnowledgeBasePatch(TypedDict, closed=True):
+    access: NotRequired[dict[str, JsonValue] | None]
+    answer: NotRequired[dict[str, JsonValue] | None]
     collections: NotRequired[list[str] | None]
     color: NotRequired[str | None]
     description: NotRequired[str | None]
+    metadataProfile: NotRequired[dict[str, JsonValue] | None]
     name: NotRequired[str | None]
     owner: NotRequired[str | None]
+    precedence: NotRequired[list[dict[str, JsonValue]] | None]
     protection: NotRequired[Literal["system", "managed"] | None]
-    retrieval: NotRequired[dict[str, Any] | None]
-    templateId: NotRequired[str | None]
-
-
-class KnowledgeBaseRow(TypedDict, closed=True):
-    access: dict[str, Any]
-    agentNames: list[str]
-    agentsElsewhere: NotRequired[int]
-    agentsKnown: NotRequired[bool]
-    automation: str
-    collections: list[str]
-    color: str
-    createdAt: str
-    description: str
-    health: str
-    healthReasons: list[str]
-    id: str
-    indexing: NotRequired[dict[str, Any] | None]
-    jobs: list[dict[str, Any]]
-    lastRefreshedAt: NotRequired[str | None]
-    lastSyncAt: NotRequired[str | None]
-    metadataProfile: dict[str, Any]
-    name: str
-    owner: str
-    precedence: list[dict[str, Any]]
-    protection: NotRequired[Literal["system", "managed"] | None]
-    retrieval: dict[str, Any]
-    slug: str
-    sourceNames: list[str]
-    sources: list[KbSourceLink]
-    stats: dict[str, Any]
+    retrieval: NotRequired[dict[str, JsonValue] | None]
+    sourceDefaults: NotRequired[dict[str, JsonValue] | None]
+    sync: NotRequired[dict[str, JsonValue] | None]
     templateId: NotRequired[str | None]
 
 
@@ -314,6 +297,15 @@ class Lookups(TypedDict, closed=True):
     collections: list[str]
     owners: list[str]
     tags: list[str]
+
+
+class McpAccess(TypedDict, closed=True):
+    enabled: bool
+    toolName: str
+
+
+class MetadataProfile(TypedDict, closed=True):
+    required: list[str]
 
 
 class NamedRef(TypedDict, closed=True):
@@ -333,11 +325,11 @@ class OptionsPage(TypedDict, closed=True):
     nextCursor: NotRequired[str | None]
 
 
-class OwnerIn(TypedDict):
+class OwnerIn(TypedDict, closed=True):
     owner: str
 
 
-class PageIn(TypedDict):
+class PageIn(TypedDict, closed=True):
     text: str
     title: str
 
@@ -369,6 +361,29 @@ class PassageOut(TypedDict, closed=True):
     version: str
 
 
+class PlaygroundChunk(TypedDict, closed=True):
+    chunkId: str
+    documentId: str
+    documentTitle: str
+    lanes: dict[str, float]
+    location: str
+    rejected: bool
+    score: float
+    sourceName: str
+    text: str
+    version: str
+
+
+class PlaygroundCitation(TypedDict, closed=True):
+    documentId: str
+    n: int
+    page: NotRequired[int | None]
+    section: str
+    snippet: str
+    title: str
+    version: str
+
+
 class PluginSource(TypedDict, closed=True):
     id: str
     kbIds: list[str]
@@ -376,8 +391,16 @@ class PluginSource(TypedDict, closed=True):
     source: str
 
 
-class PreviewIn(TypedDict):
-    config: dict[str, Any]
+class PrecedenceRule(TypedDict, closed=True):
+    id: str
+    kind: str
+    label: str
+    loser: str
+    winner: str
+
+
+class PreviewIn(TypedDict, closed=True):
+    config: dict[str, JsonValue]
 
 
 class PreviewPage(TypedDict, closed=True):
@@ -386,8 +409,22 @@ class PreviewPage(TypedDict, closed=True):
     willFetch: bool
 
 
-class QueryIn(TypedDict):
+class PublicLink(TypedDict, closed=True):
+    answerStyle: str
+    enabled: bool
+    rateLimit: int
+    showSourceLinks: bool
+    slug: str
+
+
+class QueryIn(TypedDict, closed=True):
+    alsoKbIds: NotRequired[list[str] | None]
+    collection: NotRequired[str | None]
+    overrides: NotRequired[dict[str, JsonValue] | None]
     question: str
+    runAsId: NotRequired[str | None]
+    runtime: NotRequired[dict[str, JsonValue] | None]
+    settings: NotRequired[dict[str, JsonValue] | None]
 
 
 class Reader(TypedDict, closed=True):
@@ -398,6 +435,14 @@ class Reader(TypedDict, closed=True):
     slug: str
 
 
+class ReadingPage(TypedDict, closed=True):
+    blocks: dict[str, int]
+    number: int | None
+    ocrConfidence: NotRequired[float | None]
+    readBy: str | None
+    removedChars: int
+
+
 class RerankOut(TypedDict, closed=True):
     model: str
     ms: NotRequired[int]
@@ -406,11 +451,65 @@ class RerankOut(TypedDict, closed=True):
     skipped: NotRequired[str | None]
 
 
+class RetrievalSettings(TypedDict, closed=True):
+    chunkLimit: int
+    filters: FilterGroup
+    hybridWeight: float
+    includeUntagged: bool
+    meaningThreshold: float
+    queryModel: str
+    rerank: bool
+    rewrite: str
+    rewriteInstructions: str
+    scopeCollections: list[str]
+    scopeSourceIds: list[str]
+    searchMode: Literal["keyword", "meaning", "hybrid"]
+    tagsExclude: list[str]
+    tagsInclude: list[str]
+    threshold: float
+
+
 class RewriteOut(TypedDict, closed=True):
     asked: str
     ms: NotRequired[int]
     rewritten: NotRequired[str | None]
     skipped: NotRequired[str | None]
+
+
+class RunError(TypedDict, closed=True):
+    errorClass: str
+    itemId: NotRequired[str | None]
+    itemTitle: NotRequired[str | None]
+    message: str
+    phase: str
+
+
+class RunPhase(TypedDict, closed=True):
+    durationMs: int
+    name: str
+    status: Literal["done", "running", "skipped", "failed"]
+
+
+class ScheduleDaily(TypedDict, closed=True):
+    kind: Literal["daily"]
+    time: str
+    tz: str
+
+
+class ScheduleHourly(TypedDict, closed=True):
+    every: int
+    kind: Literal["hourly"]
+
+
+class ScheduleManual(TypedDict, closed=True):
+    kind: Literal["manual"]
+
+
+class ScheduleWeekly(TypedDict, closed=True):
+    day: str
+    kind: Literal["weekly"]
+    time: str
+    tz: str
 
 
 class Scope(TypedDict, closed=True):
@@ -421,7 +520,7 @@ class Scope(TypedDict, closed=True):
     title: str
 
 
-class ScopesIn(TypedDict):
+class ScopesIn(TypedDict, closed=True):
     cursor: NotRequired[str | None]
     parent: NotRequired[str | None]
     plugin: str
@@ -438,10 +537,15 @@ class SearchCost(TypedDict, closed=True):
     embeddingTokens: int
 
 
-class SearchIn(TypedDict):
+class SearchIn(TypedDict, closed=True):
+    collection: NotRequired[str | None]
     kbIds: list[str]
     limit: NotRequired[int | None]
+    overrides: NotRequired[dict[str, JsonValue] | None]
     question: str
+    runAsId: NotRequired[str | None]
+    runtime: NotRequired[dict[str, JsonValue] | None]
+    settings: NotRequired[dict[str, JsonValue] | None]
 
 
 class SkippedLane(TypedDict, closed=True):
@@ -449,20 +553,52 @@ class SkippedLane(TypedDict, closed=True):
     reason: str
 
 
-class SourceIn(TypedDict):
+class SourceCleaning(TypedDict, closed=True):
+    duplicates: Literal["flag", "skip"]
+    furniture: bool
+    mainContent: bool
+    siteRepeats: bool
+
+
+class SourceDefaults(TypedDict, closed=True):
+    childSize: int
+    overlap: int
+    size: int
+    strategies: list[
+        Literal[
+            "structure",
+            "fixed",
+            "context_headers",
+            "parent_child",
+            "table_rows",
+            "clean",
+        ]
+    ]
+
+
+class SourceHealth(TypedDict, closed=True):
+    daysFailing: int
+    failedRuns: int
+    failingSince: NotRequired[str | None]
+    lastGoodSyncAt: NotRequired[str | None]
+    state: Literal["needs_reconnect", "failing", "healthy", "never"]
+    tombstoned: int
+
+
+class SourceIn(TypedDict, closed=True):
     aiCeiling: NotRequired[float | None]
-    cleaning: NotRequired[dict[str, Any] | None]
+    cleaning: NotRequired[dict[str, JsonValue] | None]
     collection: NotRequired[str]
-    config: NotRequired[dict[str, Any] | None]
+    config: NotRequired[dict[str, JsonValue] | None]
     fileIds: NotRequired[list[str]]
-    ingest: NotRequired[dict[str, Any] | None]
+    ingest: NotRequired[dict[str, JsonValue] | None]
     kbIds: NotRequired[list[str]]
-    metadataMapping: NotRequired[list[dict[str, Any]] | None]
+    metadataMapping: NotRequired[list[dict[str, JsonValue]] | None]
     name: str
     owner: NotRequired[str | None]
-    parsing: NotRequired[dict[str, Any] | None]
-    rules: NotRequired[list[dict[str, Any]] | None]
-    schedule: NotRequired[dict[str, Any] | None]
+    parsing: NotRequired[dict[str, JsonValue] | None]
+    rules: NotRequired[list[dict[str, JsonValue]] | None]
+    schedule: NotRequired[dict[str, JsonValue] | None]
     sensitivity: NotRequired[str]
     status: NotRequired[str | None]
     sync: NotRequired[bool]
@@ -470,36 +606,52 @@ class SourceIn(TypedDict):
     type: str
 
 
-class SourceKind(TypedDict, closed=True):
-    connected: NotRequired[bool]
-    defaults: dict[str, Any]
-    group: Literal["built_in", "apps"]
-    inputs: NotRequired[dict[str, Any]]
-    kind: str
-    needsConnection: NotRequired[bool]
-    pickers: NotRequired[bool]
-    plugin: NotRequired[str | None]
-    previews: NotRequired[bool]
-    site: NotRequired[bool]
-    source: NotRequired[str | None]
-    title: str
-    type: str
+class SourceIngest(TypedDict, closed=True):
+    approval: IngestApproval
+    childSize: int
+    columns: list[IngestColumn]
+    model: str
+    overlap: int
+    preset: str
+    questionsPerSection: int
+    size: int
+    strategies: list[str]
 
 
-class SourcePatch(TypedDict):
+SourceMetadataMapping = TypedDict(
+    "SourceMetadataMapping",
+    {
+        "from": str,
+        "key": str,
+    },
+    closed=True,
+)
+
+
+class SourceParsing(TypedDict, closed=True):
+    ocr: Literal["off", "auto", "always"]
+    tables: bool
+    vision: bool
+
+
+class SourcePatch(TypedDict, closed=True):
     aiCeiling: NotRequired[float | None]
-    cleaning: NotRequired[dict[str, Any] | None]
+    cleaning: NotRequired[dict[str, JsonValue] | None]
     collection: NotRequired[str | None]
-    ingest: NotRequired[dict[str, Any] | None]
-    metadataMapping: NotRequired[list[dict[str, Any]] | None]
+    ingest: NotRequired[dict[str, JsonValue] | None]
+    metadataMapping: NotRequired[list[dict[str, JsonValue]] | None]
     name: NotRequired[str | None]
     owner: NotRequired[str | None]
-    parsing: NotRequired[dict[str, Any] | None]
-    rules: NotRequired[list[dict[str, Any]] | None]
-    schedule: NotRequired[dict[str, Any] | None]
+    parsing: NotRequired[dict[str, JsonValue] | None]
+    rules: NotRequired[list[dict[str, JsonValue]] | None]
+    schedule: NotRequired[dict[str, JsonValue] | None]
     sensitivity: NotRequired[str | None]
     tags: NotRequired[list[str] | None]
-    values: NotRequired[dict[str, Any] | None]
+    values: NotRequired[dict[str, JsonValue] | None]
+
+
+class SourcePermissions(TypedDict, closed=True):
+    mode: str
 
 
 class SourcePreview(TypedDict, closed=True):
@@ -507,6 +659,13 @@ class SourcePreview(TypedDict, closed=True):
     found: int
     pages: list[PreviewPage]
     willFetch: int
+
+
+class SourceRule(TypedDict, closed=True):
+    field: Literal["path", "title", "mime", "modified_after", "size_under"]
+    id: str
+    kind: Literal["include", "exclude"]
+    value: str
 
 
 class SyncIn(TypedDict, closed=True):
@@ -518,15 +677,22 @@ class SyncRun(TypedDict, closed=True):
     cancelledBy: NotRequired[str | None]
     counts: dict[str, int]
     durationSec: float
-    errors: list[dict[str, Any]]
+    errors: list[RunError]
     finishedAt: NotRequired[str | None]
     id: str
     log: list[str]
-    phases: list[dict[str, Any]]
+    phases: list[RunPhase]
     sourceId: str
     startedAt: str
     status: str
     trigger: str
+
+
+class SyncSettings(TypedDict, closed=True):
+    changes: Literal["apply", "review"]
+    notifyOnFailure: bool
+    removedAtSource: Literal["remove", "keep"]
+    staleAfterDays: int
 
 
 class TokenRange(TypedDict, closed=True):
@@ -540,8 +706,20 @@ class Tombstone(TypedDict, closed=True):
     reason: NotRequired[str | None]
 
 
-class TombstonesIn(TypedDict):
+class TombstonesIn(TypedDict, closed=True):
     ids: list[str]
+
+
+class ToolSourceConfig(TypedDict, closed=True):
+    connectionId: str | None
+    getTool: str | None
+    listTool: str | None
+    paused: bool | str | None
+    plugin: str | None
+    site: bool | None
+    source: str | None
+    title: str | None
+    values: dict[str, JsonValue] | None
 
 
 class ValidationError(TypedDict):
@@ -552,8 +730,13 @@ class ValidationError(TypedDict):
     type: str
 
 
-class VerifyIn(TypedDict):
+class VerifyIn(TypedDict, closed=True):
     verified: bool
+
+
+class WaitingHost(TypedDict, closed=True):
+    host: str
+    runKey: str | None
 
 
 class WrittenItem(TypedDict, closed=True):
@@ -561,12 +744,13 @@ class WrittenItem(TypedDict, closed=True):
     outcome: Literal["created", "updated", "unchanged"]
 
 
-class WrittenItemIn(TypedDict):
+class WrittenItemIn(TypedDict, closed=True):
     content: NotRequired[str | None]
     mime: NotRequired[str | None]
     name: str
     text: NotRequired[str | None]
     title: NotRequired[str | None]
+    url: NotRequired[str | None]
 
 
 class AddedDocuments(TypedDict, closed=True):
@@ -590,6 +774,46 @@ class BackgroundHealthOut(TypedDict, closed=True):
     processes: list[BackgroundProcessOut]
 
 
+class DocumentRow(TypedDict, closed=True):
+    acl: list[str]
+    chunkCount: int
+    collection: str
+    digest: str
+    docType: Literal["pdf", "word", "spreadsheet", "slides", "web", "text", "typed", "app", "other"]
+    duplicateCopy: NotRequired[DuplicateCopy | None]
+    duplicateOf: NotRequired[str | None]
+    effectiveDate: str
+    error: NotRequired[str | None]
+    errorClass: NotRequired[str | None]
+    externalId: str
+    family: str
+    fileId: NotRequired[str | None]
+    folder: NotRequired[str | None]
+    freshness: str
+    id: str
+    metadata: dict[str, str]
+    mimeType: str
+    modifiedAt: str
+    owner: str
+    pageCount: NotRequired[int | None]
+    path: str
+    processedAt: NotRequired[str | None]
+    queries30d: int
+    reviewBy: str
+    sensitivity: str
+    sizeBytes: int
+    sourceId: str
+    sourceName: str
+    status: str
+    tags: list[str]
+    title: str
+    url: NotRequired[str | None]
+    verified: bool
+    version: str
+    versionStatus: str
+    warning: NotRequired[str | None]
+
+
 class EnvelopeAddedDocuments(TypedDict, closed=True):
     data: AddedDocuments
     success: Literal[True]
@@ -605,18 +829,8 @@ class EnvelopeEventOut(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeItemWithDetail(TypedDict, closed=True):
-    data: ItemWithDetail
-    success: Literal[True]
-
-
 class EnvelopeItem(TypedDict, closed=True):
     data: Item
-    success: Literal[True]
-
-
-class EnvelopeKnowledgeBase(TypedDict, closed=True):
-    data: KnowledgeBase
     success: Literal[True]
 
 
@@ -660,28 +874,136 @@ class EnvelopeListPluginSource(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeListSourceKind(TypedDict, closed=True):
-    data: list[SourceKind]
-    success: Literal[True]
-
-
 class EnvelopeListTombstone(TypedDict, closed=True):
     data: list[Tombstone]
     success: Literal[True]
+
+
+class EventIn(TypedDict, closed=True):
+    actor: NotRequired[str | None]
+    key: str
+    name: str
+    payload: NotRequired[dict[str, JsonValue]]
+    teamId: str
 
 
 class HTTPValidationError(TypedDict):
     detail: NotRequired[list[ValidationError]]
 
 
+class ItemChunk(TypedDict, closed=True):
+    index: int
+    kind: str
+    location: str
+    metadata: dict[str, JsonValue]
+    page: NotRequired[int | None]
+    text: str
+    tokens: int
+    units: list[ItemUnit]
+
+
+class ItemReading(TypedDict, closed=True):
+    ocr: str
+    pages: list[ReadingPage]
+    readerVersion: str | None
+
+
+class ItemVersion(TypedDict, closed=True):
+    allowed: NotRequired[list[JsonValue] | None]
+    digest: str
+    effectiveDate: str
+    itemId: str
+    sourceName: str
+    status: str
+    title: str
+    version: str
+
+
+class KbAccess(TypedDict, closed=True):
+    anyApiKey: bool
+    documentPermissions: str
+    mcp: McpAccess
+    members: AccessMembers
+    publicLink: PublicLink
+
+
+class KbSourceLink(TypedDict, closed=True):
+    itemsContributed: int
+    rules: list[SourceRule]
+    sourceId: str
+
+
+class KnowledgeBase(TypedDict, closed=True):
+    access: KbAccess
+    answer: AnswerSettings
+    automation: str
+    collections: list[str]
+    color: str
+    createdAt: str
+    description: str
+    health: str
+    healthReasons: list[str]
+    id: str
+    indexing: NotRequired[IndexingProgress | None]
+    jobs: list[IndexJob]
+    lastRefreshedAt: NotRequired[str | None]
+    lastSyncAt: NotRequired[str | None]
+    metadataProfile: MetadataProfile
+    name: str
+    owner: str
+    precedence: list[PrecedenceRule]
+    protection: NotRequired[Literal["system", "managed"] | None]
+    retrieval: RetrievalSettings
+    slug: str
+    sourceDefaults: SourceDefaults
+    sources: list[KbSourceLink]
+    stats: KbStats
+    sync: SyncSettings
+    templateId: NotRequired[str | None]
+
+
+class KnowledgeBaseRow(TypedDict, closed=True):
+    access: KbAccess
+    agentNames: list[str]
+    agentsElsewhere: NotRequired[int]
+    agentsKnown: NotRequired[bool]
+    answer: AnswerSettings
+    automation: str
+    collections: list[str]
+    color: str
+    createdAt: str
+    description: str
+    health: str
+    healthReasons: list[str]
+    id: str
+    indexing: NotRequired[IndexingProgress | None]
+    jobs: list[IndexJob]
+    lastRefreshedAt: NotRequired[str | None]
+    lastSyncAt: NotRequired[str | None]
+    metadataProfile: MetadataProfile
+    name: str
+    owner: str
+    precedence: list[PrecedenceRule]
+    protection: NotRequired[Literal["system", "managed"] | None]
+    retrieval: RetrievalSettings
+    slug: str
+    sourceDefaults: SourceDefaults
+    sourceNames: list[str]
+    sources: list[KbSourceLink]
+    stats: KbStats
+    sync: SyncSettings
+    templateId: NotRequired[str | None]
+
+
 class KnowledgeChange(TypedDict, closed=True):
     after: str
     before: str
     canDecide: bool
-    citedBy: list[dict[str, Any]]
+    citedBy: list[ChangeCitation]
     createdAt: str
     decidedAt: NotRequired[str | None]
     decidedBy: NotRequired[str | None]
+    decisionReason: NotRequired[str | None]
     documentId: str
     documentTitle: str
     faq: NotRequired[FaqDraft | None]
@@ -735,8 +1057,8 @@ class ListResultSyncRun(TypedDict, closed=True):
 
 class PlaygroundAnswer(TypedDict, closed=True):
     answer: str
-    chunks: list[dict[str, Any]]
-    citations: list[dict[str, Any]]
+    chunks: list[PlaygroundChunk]
+    citations: list[PlaygroundCitation]
     cost: SearchCost
     id: str
     lanes: Lanes
@@ -752,6 +1074,7 @@ class PlaygroundAnswer(TypedDict, closed=True):
 
 
 class SearchOut(TypedDict, closed=True):
+    answers: NotRequired[dict[str, AnswerSettings]]
     cost: SearchCost
     lanes: Lanes
     passages: list[PassageOut]
@@ -762,14 +1085,14 @@ class SearchOut(TypedDict, closed=True):
 class Source(TypedDict, closed=True):
     aiCeiling: NotRequired[float]
     aiStepsWaiting: list[str]
-    cleaning: dict[str, Any]
+    cleaning: SourceCleaning
     collection: str
-    config: dict[str, Any]
+    config: ToolSourceConfig | FileSourceConfig
     createdAt: str
     deletedAtSource: str
-    health: NotRequired[dict[str, Any]]
+    health: SourceHealth
     id: str
-    ingest: dict[str, Any]
+    ingest: SourceIngest
     itemsFailed: int
     itemsIndexed: int
     itemsPending: int
@@ -777,16 +1100,16 @@ class Source(TypedDict, closed=True):
     kindLabel: str
     lastRunStatus: NotRequired[str | None]
     lastSyncAt: NotRequired[str | None]
-    metadataMapping: list[dict[str, Any]]
+    metadataMapping: list[SourceMetadataMapping]
     name: str
     nextSyncAt: NotRequired[str | None]
     notifyOnFailure: bool
     owner: str
-    parsing: dict[str, Any]
-    permissions: dict[str, Any]
+    parsing: SourceParsing
+    permissions: SourcePermissions
     rebuild: NotRequired[SyncRun | None]
-    rules: list[dict[str, Any]]
-    schedule: dict[str, Any]
+    rules: list[SourceRule]
+    schedule: ScheduleManual | ScheduleHourly | ScheduleDaily | ScheduleWeekly
     scopeSummary: str
     sensitivity: str
     staleAfterDays: int
@@ -795,7 +1118,7 @@ class Source(TypedDict, closed=True):
     titleFrom: str
     type: str
     usedByKbIds: list[str]
-    waitingHosts: list[dict[str, Any]]
+    waitingHosts: list[WaitingHost]
 
 
 class SourceDetail(TypedDict, closed=True):
@@ -804,16 +1127,16 @@ class SourceDetail(TypedDict, closed=True):
     canDelete: NotRequired[bool | None]
     canEdit: NotRequired[bool | None]
     canPublish: NotRequired[bool | None]
-    cleaning: dict[str, Any]
+    cleaning: SourceCleaning
     collection: str
-    config: dict[str, Any]
+    config: ToolSourceConfig | FileSourceConfig
     createdAt: str
     deletedAtSource: str
-    errorGroups: list[dict[str, Any]]
-    governance: dict[str, Any]
-    health: NotRequired[dict[str, Any]]
+    errorGroups: list[ErrorGroup]
+    governance: Governance
+    health: SourceHealth
     id: str
-    ingest: dict[str, Any]
+    ingest: SourceIngest
     itemCount: int
     itemsFailed: int
     itemsIndexed: int
@@ -823,21 +1146,21 @@ class SourceDetail(TypedDict, closed=True):
     lastRunDurationSec: NotRequired[float | None]
     lastRunStatus: NotRequired[str | None]
     lastSyncAt: NotRequired[str | None]
-    metadataMapping: list[dict[str, Any]]
+    metadataMapping: list[SourceMetadataMapping]
     name: str
     nextSyncAt: NotRequired[str | None]
     notifyOnFailure: bool
     owner: str
-    parsing: dict[str, Any]
-    permissions: dict[str, Any]
+    parsing: SourceParsing
+    permissions: SourcePermissions
     readers: list[Reader]
     rebuild: NotRequired[SyncRun | None]
-    recentRuns: list[dict[str, Any]]
+    recentRuns: list[SyncRun]
     reindexNeeded: bool
     requiredMetadata: list[str]
-    rules: list[dict[str, Any]]
-    running: NotRequired[dict[str, Any] | None]
-    schedule: dict[str, Any]
+    rules: list[SourceRule]
+    running: NotRequired[SyncRun | None]
+    schedule: ScheduleManual | ScheduleHourly | ScheduleDaily | ScheduleWeekly
     scopeSummary: str
     sensitivity: str
     staleAfterDays: int
@@ -846,20 +1169,30 @@ class SourceDetail(TypedDict, closed=True):
     titleFrom: str
     type: str
     usedByKbIds: list[str]
-    waitingHosts: list[dict[str, Any]]
+    waitingHosts: list[WaitingHost]
+
+
+class SourceKindDefaults(TypedDict, closed=True):
+    aiCeiling: float
+    cleaning: SourceCleaning
+    ingest: SourceIngest
+    metadataMapping: list[SourceMetadataMapping]
+    parsing: SourceParsing
+    rules: list[SourceRule]
+    schedule: ScheduleManual | ScheduleHourly | ScheduleDaily | ScheduleWeekly
 
 
 class SourceRow(TypedDict, closed=True):
     aiCeiling: NotRequired[float]
     aiStepsWaiting: list[str]
-    cleaning: dict[str, Any]
+    cleaning: SourceCleaning
     collection: str
-    config: dict[str, Any]
+    config: ToolSourceConfig | FileSourceConfig
     createdAt: str
     deletedAtSource: str
-    health: NotRequired[dict[str, Any]]
+    health: SourceHealth
     id: str
-    ingest: dict[str, Any]
+    ingest: SourceIngest
     itemsFailed: int
     itemsIndexed: int
     itemsPending: int
@@ -867,17 +1200,17 @@ class SourceRow(TypedDict, closed=True):
     kindLabel: str
     lastRunStatus: NotRequired[str | None]
     lastSyncAt: NotRequired[str | None]
-    metadataMapping: list[dict[str, Any]]
+    metadataMapping: list[SourceMetadataMapping]
     name: str
     nextSyncAt: NotRequired[str | None]
     notifyOnFailure: bool
     owner: str
-    parsing: dict[str, Any]
-    permissions: dict[str, Any]
+    parsing: SourceParsing
+    permissions: SourcePermissions
     rebuild: NotRequired[SyncRun | None]
-    rules: list[dict[str, Any]]
+    rules: list[SourceRule]
     running: bool
-    schedule: dict[str, Any]
+    schedule: ScheduleManual | ScheduleHourly | ScheduleDaily | ScheduleWeekly
     scopeSummary: str
     sensitivity: str
     staleAfterDays: int
@@ -887,7 +1220,7 @@ class SourceRow(TypedDict, closed=True):
     type: str
     usedBy: list[NamedRef]
     usedByKbIds: list[str]
-    waitingHosts: list[dict[str, Any]]
+    waitingHosts: list[WaitingHost]
 
 
 class ChangeList(TypedDict, closed=True):
@@ -899,6 +1232,11 @@ class ChangeList(TypedDict, closed=True):
 
 class EnvelopeChangeList(TypedDict, closed=True):
     data: ChangeList
+    success: Literal[True]
+
+
+class EnvelopeKnowledgeBase(TypedDict, closed=True):
+    data: KnowledgeBase
     success: Literal[True]
 
 
@@ -952,19 +1290,70 @@ class EnvelopeListKnowledgeChange(TypedDict, closed=True):
     success: Literal[True]
 
 
+class ItemDetail(TypedDict, closed=True):
+    chunks: list[ItemChunk]
+    content: str
+    revisions: list[ItemRevision]
+    versions: list[ItemVersion]
+
+
+class ItemWithDetail(TypedDict, closed=True):
+    acl: list[str]
+    chunkCount: int
+    collection: str
+    detail: ItemDetail
+    digest: str
+    duplicateCopy: NotRequired[DuplicateCopy | None]
+    duplicateOf: NotRequired[str | None]
+    effectiveDate: str
+    error: NotRequired[str | None]
+    errorClass: NotRequired[str | None]
+    externalId: str
+    family: str
+    fileId: NotRequired[str | None]
+    folder: NotRequired[str | None]
+    freshness: str
+    id: str
+    metadata: dict[str, str]
+    mimeType: str
+    modifiedAt: str
+    owner: str
+    pageCount: NotRequired[int | None]
+    path: str
+    processedAt: NotRequired[str | None]
+    queries30d: int
+    reading: NotRequired[ItemReading | None]
+    reviewBy: str
+    sensitivity: str
+    settingsUsed: NotRequired[ItemSettingsUsed | None]
+    sizeBytes: int
+    sourceId: str
+    sourceName: str
+    sourceType: str
+    status: str
+    tags: list[str]
+    title: str
+    url: NotRequired[str | None]
+    verified: bool
+    version: str
+    versionStatus: str
+    warning: NotRequired[str | None]
+
+
 class KbSourceView(TypedDict, closed=True):
     itemsContributed: int
-    rules: list[dict[str, Any]]
+    rules: list[SourceRule]
     running: NotRequired[bool]
     source: Source
     sourceId: str
 
 
 class KnowledgeBaseDetail(TypedDict, closed=True):
-    access: dict[str, Any]
+    access: KbAccess
     agentNames: list[str]
     agentsElsewhere: NotRequired[int]
     agentsKnown: NotRequired[bool]
+    answer: AnswerSettings
     attached: list[KbSourceView]
     automation: str
     canDelete: NotRequired[bool | None]
@@ -979,22 +1368,24 @@ class KnowledgeBaseDetail(TypedDict, closed=True):
     healthReasons: list[str]
     heldCount: int
     id: str
-    indexing: NotRequired[dict[str, Any] | None]
-    jobs: list[dict[str, Any]]
+    indexing: NotRequired[IndexingProgress | None]
+    jobs: list[IndexJob]
     lastRefreshedAt: NotRequired[str | None]
     lastSyncAt: NotRequired[str | None]
     metadataKeys: list[str]
-    metadataProfile: dict[str, Any]
+    metadataProfile: MetadataProfile
     name: str
     owner: str
-    precedence: list[dict[str, Any]]
+    precedence: list[PrecedenceRule]
     protection: NotRequired[Literal["system", "managed"] | None]
-    retrieval: dict[str, Any]
+    retrieval: RetrievalSettings
     slug: str
+    sourceDefaults: SourceDefaults
     sourceNames: list[str]
     sources: list[KbSourceLink]
-    stats: dict[str, Any]
+    stats: KbStats
     suggestedQuestions: list[str]
+    sync: SyncSettings
     templateId: NotRequired[str | None]
 
 
@@ -1004,6 +1395,30 @@ class ListResultSourceRow(TypedDict, closed=True):
     pagination: Pagination
 
 
+class SourceKind(TypedDict, closed=True):
+    canCreate: NotRequired[bool]
+    cannotCreateBecause: NotRequired[str | None]
+    cannotCreateCode: NotRequired[str | None]
+    connected: NotRequired[bool]
+    defaults: SourceKindDefaults
+    group: Literal["built_in", "apps"]
+    inputs: NotRequired[dict[str, JsonValue]]
+    kind: str
+    needsConnection: NotRequired[bool]
+    pickers: NotRequired[bool]
+    plugin: NotRequired[str | None]
+    previews: NotRequired[bool]
+    site: NotRequired[bool]
+    source: NotRequired[str | None]
+    title: str
+    type: str
+
+
+class EnvelopeItemWithDetail(TypedDict, closed=True):
+    data: ItemWithDetail
+    success: Literal[True]
+
+
 class EnvelopeKnowledgeBaseDetail(TypedDict, closed=True):
     data: KnowledgeBaseDetail
     success: Literal[True]
@@ -1011,4 +1426,9 @@ class EnvelopeKnowledgeBaseDetail(TypedDict, closed=True):
 
 class EnvelopeListResultSourceRow(TypedDict, closed=True):
     data: ListResultSourceRow
+    success: Literal[True]
+
+
+class EnvelopeListSourceKind(TypedDict, closed=True):
+    data: list[SourceKind]
     success: Literal[True]

@@ -11,24 +11,20 @@ import json
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from fastapi import FastAPI
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 from langgraph.checkpoint.memory import InMemorySaver
-from sqlalchemy.ext.asyncio import create_async_engine
-from sqlalchemy.pool import StaticPool
 
-from ops_agents.api.app import create_app
 from ops_agents.api.deps import Runtime
 from ops_agents.api.runs import config
 from ops_agents.api.sweeper import sweep_once
-from ops_agents.store.base import metadata
 from ops_agents.store.leases import thread_leases
 from ops_service_kit.ids import now_iso
 from ops_service_kit.settings import Settings
-from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model, sse_events
+from tests.conftest import SEED, FakeGraphModels, empty_engine, sse_events, started
 
 EMAIL: dict[str, Any] = json.loads(
     (Path(__file__).parents[1] / "fixtures" / "seed" / "dispute_emails.json").read_text()
@@ -47,35 +43,23 @@ class Proc:
 
 
 @pytest.fixture
-async def procs(tmp_path: Path) -> AsyncIterator[tuple[Proc, Proc]]:
-    # A file, not memory: a cancel that lands inside a write drops the pooled connection, and a new connection to an
-    # in-memory database opens an empty one, so the sweeper then finds no tables.
-    url = f"sqlite+aiosqlite:///{tmp_path / 'leases.db'}"
-    engine = create_async_engine(url, poolclass=StaticPool, connect_args={"check_same_thread": False})
-    async with engine.begin() as c:
-        await c.run_sync(metadata.create_all)
+async def procs(database_url: str) -> AsyncIterator[tuple[Proc, Proc]]:
     saver = InMemorySaver()
     # A short TTL so expiry happens inside a test; the background sweeper is idle and sweeps run by hand.
-    settings = Settings(database_url=url, seed_dir=SEED, lease_ttl_seconds=0.6, sweep_interval_seconds=3600)
+    settings = Settings(database_url=database_url, seed_dir=SEED, lease_ttl_seconds=0.6, sweep_interval_seconds=3600)
     out: list[Proc] = []
     async with contextlib.AsyncExitStack() as stack:
+        engine = await stack.enter_async_context(empty_engine(database_url))
         for _ in range(2):
             models = FakeGraphModels()
-            app = create_app(
-                settings,
-                model=scripted_model(),
-                engine=engine,
-                checkpointer=saver,
-                graph_models=models,
-                knowledge=fixture_knowledge(),
+            app, client = await stack.enter_async_context(
+                started(engine, settings, models, checkpointer=saver, base_url="http://p")
             )
-            await stack.enter_async_context(app.router.lifespan_context(app))
-            client = await stack.enter_async_context(AsyncClient(transport=ASGITransport(app=app), base_url="http://p"))
             out.append(Proc(app, client, models))
         yield out[0], out[1]
 
 
-async def until(condition: Callable[[], Awaitable[bool]], timeout: float = 10.0) -> None:
+async def until(condition: Callable[[], Awaitable[bool]], timeout: float = 10.0) -> None:  # noqa: ASYNC109
     """Waits for `condition` instead of a fixed sleep, so a slow machine waits longer rather than failing."""
     deadline = time.monotonic() + timeout
     while not await condition():
@@ -175,11 +159,14 @@ async def test_sweeper_continues_a_thread_whose_process_died_mid_node(procs: tup
     assert len(recovered) == 1
     snap = await b.rt.graphs["complex_workflow"].aget_state(config(tid))
     assert snap.next == ("human",)
-    assert (await store.run("run_killed") or {})["status"] == "crashed"
-    assert (await store.run(recovered[0]) or {})["status"] == "interrupted"
+    killed, recovery = await store.run("run_killed"), await store.run(recovered[0])
+    assert killed is not None and killed.status == "crashed"
+    assert recovery is not None and recovery.status == "interrupted"
     assert b.models.extracted and await b.rt.leases.held(tid) is None  # pyright: ignore[reportOptionalMemberAccess]
     # The recovery took a new generation, and the crashed run's journal names its owner and the nodes it was running.
     assert await b.rt.leases.generation_of(tid, recovered[0]) == 2  # pyright: ignore[reportOptionalMemberAccess]
-    crashed = next(e["data"] for e in (await store.run("run_killed") or {})["events"] if e["event"] == "crashed")
+    killed = await store.run("run_killed")
+    assert killed is not None
+    crashed = cast(dict[str, Any], next(e["data"] for e in killed.events if e["event"] == "crashed"))
     assert crashed["owner"] == a.rt.leases.owner and crashed["generation"] == 1  # pyright: ignore[reportOptionalMemberAccess]
     assert crashed["running"] and set(crashed["running"]) <= {"extract"}

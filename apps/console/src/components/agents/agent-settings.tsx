@@ -25,12 +25,12 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { guardrailOptions, knowledgeBaseOptions, toolOptions, widgetOptionsFor } from '@/hooks/options-queries';
-import { useGuardrails } from '@/hooks/queries';
+import { useGuardrailsByIds, type Guardrail } from '@/hooks/guardrail-queries';
 import type { Lookups } from '@/lib/api';
 import { plural, relativeTime } from '@/lib/format';
 import type { ToolOptionsPage } from '@/lib/types/query';
 import type { WidgetPin, WidgetSettings } from '@/lib/types/widgets';
-import type { Agent, AgentControls, AgentGuardrails, AgentLimits, AgentPublicKeyOverride, AgentRun, AgentVersion, Channel, GrantableTool, Guardrail, MemorySettings, ModelAlias } from '@/lib/types/domain';
+import type { Agent, AgentControls, AgentGuardrails, AgentLimits, AgentPublicKeyOverride, AgentRun, AgentVersion, Channel, GrantableTool, MemorySettings, ModelAlias, SkillMenu } from '@/lib/types/domain';
 
 import { modelHint, ModelSelect } from './model-select';
 import { teamLabel } from '@/components/shared/team-name';
@@ -55,6 +55,7 @@ export interface AgentDraft {
   widgetPins: WidgetPin[];
   widgets: WidgetSettings;
   memory: MemorySettings;
+  skillMenu: SkillMenu;
 }
 
 export const draftOf = (a: Agent): AgentDraft => ({
@@ -72,6 +73,7 @@ export const draftOf = (a: Agent): AgentDraft => ({
   widgetPins: a.widgetPins ?? [],
   widgets: a.widgets ?? { compose: false, perTurn: null },
   memory: a.memory ?? { enabled: true, kinds: ['fact', 'preference', 'episode'] },
+  skillMenu: a.skillMenu ?? 'team',
 });
 
 /**
@@ -106,11 +108,19 @@ const SECTION: Record<keyof AgentDraft, string> = {
   widgetPins: 'Widgets',
   widgets: 'Widgets',
   memory: 'Memory',
+  skillMenu: 'Skills',
 };
 
 /** Section names whose values differ between the saved agent and the draft. */
+/** Key order aside: the API answers an object's keys in its own order, so a key-order difference is no edit. */
+const canonical = (v: unknown): string =>
+  JSON.stringify(v, (_k, x: unknown) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b))) : x));
+
+/** Whether two values of a draft field are the same value. */
+export const sameValue = (a: unknown, b: unknown): boolean => canonical(a) === canonical(b);
+
 export function changedSections(saved: AgentDraft, draft: AgentDraft) {
-  const keys = (Object.keys(draft) as (keyof AgentDraft)[]).filter((k) => JSON.stringify(saved[k]) !== JSON.stringify(draft[k]));
+  const keys = (Object.keys(draft) as (keyof AgentDraft)[]).filter((k) => !sameValue(saved[k], draft[k]));
   return [...new Set(keys.map((k) => SECTION[k]))];
 }
 
@@ -310,7 +320,6 @@ function CapField({ id, label, value, onChange, hint, placeholder, decimal }: { 
 /** `shown` are the settings a turn acts on (`Agent.controls.guardrails`); the page offers no other. */
 export function GuardrailsSection({ draft, set, shown }: { draft: AgentDraft; set: Set; shown: AgentControls['guardrails'] }) {
   const g = draft.guardrails;
-  const library = useGuardrails();
   const put = (patch: Partial<AgentGuardrails>) => set('guardrails', { ...g, ...patch });
   const pinned = new Map(draft.guardrailPins.map((p) => [p.guardrailId, p.version]));
   const off = new Set(draft.guardrailPins.filter((p) => !p.enabled).map((p) => p.guardrailId));
@@ -319,7 +328,8 @@ export function GuardrailsSection({ draft, set, shown }: { draft: AgentDraft; se
   // A pin keeps its version; a new pin takes the published one. Deprecated guardrails take no new pins.
   // The picker adds and removes pins (searched on the server); the rows below are the pinned ones, with their
   // version and on/off. A new pin takes the published version on save (version 0 is sent as none).
-  const choices = (library.data ?? []).filter((x) => pinned.has(x.id));
+  const library = useGuardrailsByIds(draft.guardrailPins.map((p) => p.guardrailId));
+  const choices = library.data ?? [];
   const choose = (ids: string[]) =>
     set('guardrailPins', ids.map((id) => draft.guardrailPins.find((p) => p.guardrailId === id) ?? { guardrailId: id, version: 0, enabled: true }));
   // Any published version may be pinned; the guardrail's own page lists them all.
@@ -339,7 +349,7 @@ export function GuardrailsSection({ draft, set, shown }: { draft: AgentDraft; se
                   <div key={x.id} className="flex items-start gap-3 rounded-lg border bg-card p-3" data-testid="guardrail-pin">
                     <div className="flex min-w-0 flex-1 flex-col gap-1">
                       <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
-                        <Link href={`/guardrails/${x.id}`} className="underline-offset-2 hover:underline" data-testid="guardrail-pin-link">
+                        <Link href={`/build/guardrails/${x.id}`} className="underline-offset-2 hover:underline" data-testid="guardrail-pin-link">
                           {x.name}
                         </Link>
                         {version !== undefined && published(x).length > 1 ? (
@@ -575,7 +585,7 @@ export function UsedInCard({ agent }: { agent: Agent }) {
           <ul className="flex flex-col gap-2">
             {agent.usedIn.map((u) => (
               <li key={u.workflowId}>
-                <Link href={`/workflows/${u.workflowId}`} className="group flex items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-sm hover:bg-muted/40">
+                <Link href={`/build/workflows/${u.workflowId}`} className="group flex items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-sm hover:bg-muted/40">
                   <span className="min-w-0">
                     <span className="block truncate font-medium">{u.workflowName}</span>
                     <span className="flex items-center gap-2 text-xs text-muted-foreground">

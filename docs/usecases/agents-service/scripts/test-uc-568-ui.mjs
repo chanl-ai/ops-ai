@@ -42,7 +42,7 @@ import { AGENTS_PORT, DOCUMENTS_PORT, FILES_PORT, PLATFORM_PORT, ROOT, check, ch
 // The console's own pinned qrcode, to draw the QR code a shared link should show.
 const QRCode = createRequire(new URL('../../../../apps/console/package.json', import.meta.url))('qrcode');
 
-const SHOTS = evidenceDir('535', 'uc');
+const SHOTS = evidenceDir('568', 'uc');
 mkdirSync(SHOTS, { recursive: true });
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const files = `http://127.0.0.1:${FILES_PORT}`;
@@ -247,7 +247,7 @@ try {
           check('33a after a proposed read the header names it and the banner gives a reason for any wait', /Fields proposed/.test(header) && !/waiting for a person to check fields in Human Tasks\.?$/.test(banner.trim()) && (!/waiting for a person/.test(banner) || /: .+ (was|broke|matched)/.test(banner)), { header, banner });
           await page.getByTestId('save-document-type').click();
           const saved = await until(async () => {
-            const items = (await body(await fetch(`${documents}/v1/document-types`, { headers: J }))).data?.items ?? [];
+            const items = (await body(await fetch(`${documents}/v1/document-types`, { headers: J }))).data?.data ?? [];
             for (const t of items) {
               const detail = (await body(await fetch(`${documents}/v1/document-types/${t.id}`, { headers: J }))).data;
               // The demo team already has a type with a debtor_name field: the saved one is the type whose first

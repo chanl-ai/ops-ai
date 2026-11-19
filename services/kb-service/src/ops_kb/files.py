@@ -16,9 +16,10 @@ import hashlib
 import json
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Protocol
 
 import httpx
+from pydantic import BaseModel, ValidationError
 
 from ops_files_client import FileNotFound, FileNotReady, FilesClient, FilesRefused, Purpose
 from ops_service_kit.errors import ServiceUnavailable
@@ -148,6 +149,25 @@ class FilesServiceIntake:
             await self._client.detach(tenant, team, file_id, type="source", ref_id=source_id)
 
 
+class _Storage(BaseModel):
+    key: str
+
+
+class _Stored(BaseModel):
+    """A file's record as the local folder keeps it: files-service's own row (with its storage key) or the older
+    blob record (keyed by its digest)."""
+
+    id: str | None = None
+    file_id: str | None = None
+    status: str | None = None
+    storage: _Storage | None = None
+    name: str
+    mime: str
+    size: int
+    digest: str
+    team: str
+
+
 @dataclass(frozen=True)
 class _Record:
     stored: Stored
@@ -171,21 +191,20 @@ class KnowledgeFiles:
         self._records.mkdir(parents=True, exist_ok=True)
 
     def _load(self, path: Path) -> _Record | None:
-        body = json.loads(path.read_text())
-        if not isinstance(body, dict):
+        try:
+            rec = _Stored.model_validate_json(path.read_text())
+        except ValidationError:
             return None
-        rec: dict[str, Any] = body  # pyright: ignore[reportUnknownVariableType]
-        storage: dict[str, Any] | None = rec.get("storage")
-        if storage is not None and "id" in rec:
-            if rec.get("status") != "available":
+        if rec.storage is not None and rec.id is not None:
+            if rec.status != "available":
                 return None
-            at = self._root / "objects" / "data" / str(storage["key"])
-            file_id = str(rec["id"])
+            at = self._root / "objects" / "data" / rec.storage.key
+            file_id = rec.id
         else:
-            at = self._blobs / str(rec["digest"])
-            file_id = str(rec["file_id"])
-        stored = Stored(file_id, str(rec["name"]), str(rec["mime"]), int(rec["size"]), str(rec["digest"]), False)
-        return _Record(stored, str(rec["team"]), at)
+            at = self._blobs / rec.digest
+            file_id = str(rec.file_id)
+        stored = Stored(file_id, rec.name, rec.mime, rec.size, rec.digest, False)
+        return _Record(stored, rec.team, at)
 
     async def put(
         self,
@@ -261,7 +280,7 @@ async def move_files(
 
 
 def file_intake(settings: Settings) -> FileIntake:
-    """files-service when `files_url` names it; otherwise the in-process store under `kb_files_dir`."""
-    if settings.files_url:
+    """files-service when its endpoint is set; otherwise the in-process store under `kb_files_dir`."""
+    if settings.files is not None:
         return FilesServiceIntake(FilesClient.from_settings(settings, service="kb"))
     return KnowledgeFiles(settings.kb_files_dir)

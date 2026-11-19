@@ -66,8 +66,8 @@ async def test_the_acknowledgement_runs_at_once_and_the_reply_still_waits(
     ack = await registry.resolve("send_acknowledgement", tenant_id=tenant)
     assert ack is not None and ack.module is not None and ack.operation is not None, ack
     assert (ack.module["id"], ack.executor, ack.access) == (PLATFORM_MODULE, "local", "write")
-    assert await registry.requires_approval("send_acknowledgement", tenant) is False
-    assert await registry.requires_approval("send_reply", tenant) is True
+    assert await registry.approval_setting("send_acknowledgement", tenant) == ("none", None)
+    assert await registry.approval_setting("send_reply", tenant) == ("reviewer", None)
 
 
 async def test_a_team_without_the_mail_module_still_replies_after_another_team_looked_first(
@@ -91,3 +91,12 @@ async def test_a_team_without_the_mail_module_still_replies_after_another_team_l
     assert theirs is not None and theirs.module is not None and theirs.module["id"] == "mod_team_mail", theirs
     ours = await registry.resolve("send_reply", tenant_id=tenant, team_id="team_ops")
     assert ours is not None and ours.module is not None and ours.module["id"] != "mod_team_mail", ours
+
+
+async def test_a_tool_declared_to_run_at_once_has_no_answer_of_its_own_wherever_it_is_found(
+    local_catalog: Any, store: ModuleStore, tenant: str
+) -> None:
+    """open_case declares it runs at once; that is not an admin's "none", so the app and team decide it, in the module
+    and in the declaration read with no module store alike."""
+    assert await ToolRegistry(local_catalog).approval_setting("open_case", tenant) == (None, None)
+    assert await ToolRegistry(local_catalog, store).approval_setting("open_case", tenant) == (None, None)

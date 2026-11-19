@@ -90,3 +90,11 @@ def test_a_team_account_whose_sign_in_ended_reads_as_the_sign_in_card_and_any_ot
     assert "EU org" in said and "card above" in said and "AUTH_FAILED" not in said, said
     other = {"error": {"code": "AUTH_FAILED", "message": "The signing certificate expired."}}
     assert carded(other) is None
+
+
+def test_a_tool_the_team_turned_off_is_told_as_a_card_naming_the_tool() -> None:
+    # Without the card the model read a bare refusal and the person never saw Turn on <tool> or Ask an admin.
+    details = {"app": "Desk", "appId": "plugin:test.desk", "tool": "desk_close", "toolTitle": "Close a ticket"}
+    refused = {"error": {"code": "TOOL_NOT_ADDED", "message": "Desk's Close a ticket is not added", "details": details}}
+    said = str(carded(refused))
+    assert "Desk's Close a ticket is turned off" in said and "card above" in said, said

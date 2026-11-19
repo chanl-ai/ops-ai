@@ -6,7 +6,8 @@ from __future__ import annotations
 import faulthandler
 import json
 import os
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncGenerator, AsyncIterator, Iterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -16,7 +17,7 @@ from uuid import uuid4
 import httpx
 import pytest
 from fastapi import FastAPI
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
 
 from ops_agents.activities.catalog import Catalog, load_catalog
 from ops_email import MemorySender
@@ -29,21 +30,26 @@ from ops_service_kit.flags import Flags
 from ops_service_kit.logging import quiet_request_logs
 from ops_service_kit.settings import Settings
 from ops_service_kit.testapps import released_apps
-from ops_service_kit.testdb import isolate_from_stack, refusal
-from ops_store import isolation
+from ops_service_kit.testdb import isolate_from_stack, refusal, use_worker_database
+from ops_store import background, isolation
+from ops_store.database import open_database
+from ops_store.testing import DATABASES, NO_SQL_SERVER, postgresql_only, sql_server_schema
 from ops_tools.app import create_gateway_app
 from ops_tools.apps import Apps, apps_router
 from ops_tools.auth import Authenticator, Tokens
 from ops_tools.auth.discovery import Discovery
+from ops_tools.catalog_routes import catalog_router
 from ops_tools.connections.connect_links import ConnectLinks
 from ops_tools.connections.routes import accounts_router
 from ops_tools.connections.service import ConnectionService
 from ops_tools.egress import EgressPolicy
 from ops_tools.egress_routes import egress_router
+from ops_tools.mcp_links import mcp_links_router
 from ops_tools.mock_routes import mocks_router
 from ops_tools.modules.directory import Directory
+from ops_tools.modules.policy import WriteApprovals
 from ops_tools.modules.routes import executions_router, modules_router
-from ops_tools.modules.seed import load
+from ops_tools.modules.seed import catalog_titles, load
 from ops_tools.modules.service import ModuleService
 from ops_tools.modules.workflows import StaticWorkflows, WorkflowDirectory
 from ops_tools.opa import OpaClient
@@ -54,16 +60,20 @@ from ops_tools.secrets import SecretResolver
 from ops_tools.secrets.routes import secrets_router
 from ops_tools.send_policy_routes import send_policy_router
 from ops_tools.store import CallLog
+from ops_tools.store.catalog import ToolCatalog
 from ops_tools.store.connections import ConnectionStore
 from ops_tools.store.egress import EgressStore
+from ops_tools.store.mcp_links import McpLinks
 from ops_tools.store.mocks import MockStore
 from ops_tools.store.modules import ModuleStore
 from ops_tools.store.secrets import SecretStore
 from ops_tools.store.send_policies import SendPolicies
+from ops_tools.store.tenancy import ROLE
 from ops_tools.tools import LocalToolRunner
 
 from .fake_mcp import tools as fake_tools
 from .fake_upstream import fake_bank
+from .service_clients import fake_service
 
 # agents-service's fixture catalogue, which these tests run the gateway on; the services read their own seed/.
 AGENTS_FIXTURES = Path(__file__).resolve().parents[2] / "agents-service" / "tests" / "fixtures" / "seed"
@@ -95,11 +105,24 @@ quiet_request_logs()
 
 
 def pytest_configure(config: pytest.Config) -> None:
+    use_worker_database()
     _hang_out.append(os.fdopen(os.dup(2), "w"))
     isolate_from_stack()
     # Before any fixture or migration: the test database only, never the live one (ops_service_kit.testdb).
     if (why := refusal(Settings().database_url, os.environ.get("OPS_TEST_DATABASE_URL"))) is not None:
         pytest.exit(why, returncode=4)
+    config.addinivalue_line("markers", "postgresql_only(why): runs on PostgreSQL only, for the reason given")
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    keep, dropped = postgresql_only(items)
+    if dropped:
+        config.hook.pytest_deselected(items=[i for i in items if i not in keep])
+        items[:] = keep
+        terminal = config.pluginmanager.get_plugin("terminalreporter")
+        for nodeid, why in dropped:
+            if terminal is not None:
+                terminal.write_line(f"postgresql only: {nodeid}: {why}")
 
 
 # A test that waits forever on a child process or a socket held QA's whole run for over an hour on 409d50d9 (a
@@ -116,6 +139,14 @@ def _fail_fast_when_hung() -> Iterator[None]:
     faulthandler.dump_traceback_later(HANG_SECONDS, exit=True, file=_hang_out[0])
     yield
     faulthandler.cancel_dump_traceback_later()
+
+
+@pytest.fixture(autouse=True)
+async def _background_supervisor() -> AsyncIterator[None]:
+    """The lifespan's supervisor, which an ASGI test client never enters: a sign-in starts its account's test on it
+    (background.start), and leaving it cancels what still runs."""
+    async with background.supervisor():
+        yield
 
 
 @pytest.fixture(autouse=True)
@@ -137,8 +168,9 @@ def _acting_for_the_tests_tenant(request: pytest.FixtureRequest) -> Iterator[Non
         yield
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def seed() -> dict[str, Any]:
+    # A fresh copy per test: a test that edits the seed (a module, an approval) never changes the next test's.
     return json.loads((FIXTURES / "tool_modules.json").read_text())
 
 
@@ -147,6 +179,42 @@ async def engine() -> AsyncIterator[AsyncEngine]:
     e = create_async_engine(Settings().database_url)
     yield e
     await e.dispose()
+
+
+@pytest.fixture(scope="session", params=DATABASES)
+def database_url(request: pytest.FixtureRequest) -> Iterator[str]:
+    """The test database on PostgreSQL, and a scratch SQL Server database holding the tools chain's golden DDL when
+    OPS_MSSQL_SERVER and MSSQL_SA_PASSWORD are set (ops_store.testing). Only the store and isolation files ask for it,
+    through `both_engine`; the route tests stay on PostgreSQL."""
+    if request.param == "postgresql":
+        yield Settings().database_url
+        return
+    with sql_server_schema("tools", os.environ.get("OPS_MSSQL_SERVER"), os.environ.get("MSSQL_SA_PASSWORD")) as url:
+        if url is None:
+            pytest.skip(NO_SQL_SERVER)
+        yield url
+
+
+@pytest.fixture
+async def both_engine(database_url: str) -> AsyncIterator[AsyncEngine]:
+    """An engine on each database in turn; a file overrides `engine` with it to run its tests on both."""
+    e = open_database(database_url)
+    yield e
+    await e.dispose()
+
+
+@asynccontextmanager
+async def setup_tx(engine: AsyncEngine, tenant: str, team: str) -> AsyncGenerator[AsyncConnection]:
+    """A transaction that writes a test's own rows past the row policies. PostgreSQL's database owner bypasses row
+    security; SQL Server applies its security policies to every user, so there the rows are written in the tenant
+    and team they carry."""
+    if engine.dialect.name != "mssql":
+        async with engine.begin() as c:
+            yield c
+        return
+    with isolation.scope(tenant, team):
+        async with isolation.isolated_tx(engine, role=ROLE) as c:
+            yield c
 
 
 @pytest.fixture
@@ -229,7 +297,10 @@ def test_auth(settings: Settings, tenant: str, user: str, *, dev: bool) -> Auth:
     """The shared auth on this test's tenant: dev's fixed user, or production, where dev headers are refused and only
     a service token is accepted."""
     if dev:
-        return Auth.for_dev(settings, audience="tools", name=user, email=user, tenant_id=tenant)
+        # The dev caller carries OPS_DEV_POLICIES as the served app's dev identity does.
+        return Auth.for_dev(
+            settings, audience="tools", name=user, email=user, tenant_id=tenant, policies=settings.dev_policies
+        )
     dev_only = Auth.for_dev(settings, audience="tools", name=user, email=user, tenant_id=tenant)
     return Auth(Identity(audience="tools", jwks=no_keys, introspect=no_api_keys), dev_only.services)
 
@@ -279,6 +350,17 @@ async def grant(engine: AsyncEngine, tenant: str, module_id: str, approval_id: s
     await store.put(m, expected_revision=m["revision"])
 
 
+def nothing_saved() -> WriteApprovals:
+    """The approval settings of a team that saved none, as platform-service answers them: every write without its own
+    answer runs. Without a reader the rules cannot be read and the gateway refuses every write."""
+
+    def empty(request: httpx.Request) -> httpx.Response:
+        key = request.url.path.rsplit("/", 1)[-1]
+        return httpx.Response(200, json={"success": True, "data": {"key": key, "value": {}}})
+
+    return WriteApprovals(fake_service(empty, "platform", ["settings:view"]))
+
+
 def build_app(
     engine: AsyncEngine,
     seed: dict[str, Any],
@@ -300,6 +382,7 @@ def build_app(
     install_clients: Any = None,
     plugins: PluginHost | None = None,
     users: Any = None,
+    requester_policy: Any = None,
 ) -> FastAPI:
     """The gateway app as __main__ builds it, on the tenant's registry. `opa` defaults to an address nothing answers,
     for tests that never reach a decision; `upstream` is what http operations call. `mcp` serves /mcp: its SDK manager
@@ -351,15 +434,22 @@ def build_app(
     accounts.sign_in_scopes = plugins.sign_in_scopes if plugins else None
     # As the service wires them (__main__): a plugin tool's title, its team's account and whether its address waits.
     service.titles = plugins.title_of if plugins else None
+    store.titles = catalog_titles(plugins.title_of if plugins else None)
+    tool_catalog = ToolCatalog(engine)
+    tool_catalog.titles = store.titles
     service.team_connections = plugins.team_connection if plugins else None
+    service.installed_plugins = (lambda: sorted(plugins.plugins)) if plugins else None
     service.awaits_sign_in = plugins.awaits_sign_in if plugins else None
     apps = Apps(accounts, store, plugins, service, users)
     plugin_routes = (
         [plugins_router(apps.plugin_accounts, directory, users=users, hosts=service)] if apps.plugin_accounts else []
     )
+    registry = ToolRegistry(catalog, store, plugins, connections)
+    links = McpLinks(engine)
     return create_gateway_app(
         opa=OpaClient(opa or httpx.AsyncClient(base_url="http://opa.invalid")),
-        registry=ToolRegistry(catalog, store, plugins, connections),
+        registry=registry,
+        links=links,
         plugins=plugins,
         log=calls,
         runner=LocalToolRunner(catalog, MemorySender(), cases=cases, decisions=service),
@@ -369,8 +459,10 @@ def build_app(
             modules_router(service, directory),
             executions_router(service, directory),
             egress_router(EgressStore(engine)),
+            catalog_router(tool_catalog),
             secrets_router(resolver, modules=ModuleStore(engine), credentials=connections),
             send_policy_router(SendPolicies(engine), directory),
+            mcp_links_router(links, registry, directory, settings.tools_public_url),
             mocks_router(MockStore(engine), ModuleStore(engine), directory),
             accounts_router(accounts, directory),
             apps_router(apps, directory),
@@ -379,12 +471,13 @@ def build_app(
         http_client=upstream,
         egress=policy,
         secret_resolver=resolver,
-        write_approvals=write_approvals,
+        write_approvals=write_approvals or nothing_saved(),
         send_check=send_check,
         authenticator=authenticator,
         directory=directory if mcp else None,
         flags=flags if flags is not None else Flags(frozenset({"mcp_gateway"}) if mcp else frozenset()),
         modules=service,
+        requester_policy=requester_policy,
     )
 
 

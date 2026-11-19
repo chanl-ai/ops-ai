@@ -30,6 +30,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import { Check, Pencil, type LucideIcon } from 'lucide-react';
 import { WholeTokens } from '@/components/shared/whole-tokens';
+import { safeHref } from '@/lib/safe-href';
 import { cn } from '@/lib/utils';
 
 /** Uppercase section divider label (e.g. "Main details", "Custom attributes"). */
@@ -116,13 +117,14 @@ export function FieldRow({
   const plain = typeof value === 'string' || typeof value === 'number' ? String(value) : undefined;
 
   let rendered: React.ReactNode;
-  if (href && !empty) {
+  const link = safeHref(href);
+  if (link && !empty) {
     rendered = external ? (
-      <a href={href} target="_blank" rel="noreferrer" className={cn(valueClass, 'hover:underline')} title={plain}>
+      <a href={link} target="_blank" rel="noreferrer" className={cn(valueClass, 'hover:underline')} title={plain}>
         {valueNode}
       </a>
     ) : (
-      <Link href={href} className={cn(valueClass, 'hover:underline')} title={plain}>
+      <Link href={link} className={cn(valueClass, 'hover:underline')} title={plain}>
         {valueNode}
       </Link>
     );

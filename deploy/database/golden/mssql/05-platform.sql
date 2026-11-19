@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- platform-service, stamped at 0032_webhooks_usage_cells
+-- platform-service, stamped at 0045_api_key_revision
 CREATE TABLE tenants (
 	id VARCHAR(64) NOT NULL, 
 	name VARCHAR(200) NOT NULL, 
@@ -21,6 +21,24 @@ CREATE TABLE signin_email_failures (
 	first_failed_at VARCHAR(40) NOT NULL, 
 	locked_until VARCHAR(40) NULL, 
 	CONSTRAINT signin_email_failures_pkey PRIMARY KEY (email_hash)
+);
+GO
+CREATE TABLE oauth_clients (
+	id VARCHAR(64) NOT NULL, 
+	name VARCHAR(100) NOT NULL, 
+	redirect_uris NVARCHAR(max) NOT NULL, 
+	created_at VARCHAR(40) NOT NULL, 
+	consented_at VARCHAR(40) NULL, 
+	tenant_id VARCHAR(64) NULL, 
+	CONSTRAINT oauth_clients_pkey PRIMARY KEY (id)
+);
+GO
+CREATE TABLE oauth_address_counts (
+	kind VARCHAR(16) NOT NULL, 
+	address VARCHAR(64) NOT NULL, 
+	hits INTEGER NOT NULL, 
+	window_start VARCHAR(40) NOT NULL, 
+	CONSTRAINT oauth_address_counts_pkey PRIMARY KEY (kind, address)
 );
 GO
 CREATE TABLE platform_outbox (
@@ -87,6 +105,8 @@ CREATE TABLE roles (
 	CONSTRAINT roles_tenant_id_fkey FOREIGN KEY(tenant_id) REFERENCES tenants (id)
 );
 GO
+CREATE INDEX ix_roles_builtin ON roles (tenant_id, builtin);
+GO
 CREATE TABLE signin_secrets (
 	tenant_id VARCHAR(64) NOT NULL, 
 	name VARCHAR(100) NOT NULL, 
@@ -130,6 +150,10 @@ CREATE TABLE members (
 GO
 CREATE INDEX ix_members_team_id ON members (team_id);
 GO
+CREATE INDEX ix_members_team_role ON members (team_id, role);
+GO
+CREATE INDEX ix_members_team_status ON members (team_id, status);
+GO
 CREATE INDEX ix_members_tenant_id ON members (tenant_id);
 GO
 CREATE UNIQUE INDEX members_invite_token_hash_key ON members (invite_token_hash) WHERE invite_token_hash IS NOT NULL;
@@ -151,6 +175,7 @@ CREATE TABLE api_keys (
 	target_kind VARCHAR(16) NULL, 
 	target_id VARCHAR(64) NULL, 
 	target_version INTEGER NULL, 
+	revision INTEGER NOT NULL DEFAULT 1, 
 	CONSTRAINT api_keys_pkey PRIMARY KEY (id), 
 	CONSTRAINT fk_api_keys_team FOREIGN KEY(tenant_id, team_id) REFERENCES teams (tenant_id, id), 
 	CONSTRAINT fk_api_keys_creator FOREIGN KEY(tenant_id, created_by) REFERENCES users (tenant_id, id), 
@@ -159,6 +184,10 @@ CREATE TABLE api_keys (
 );
 GO
 CREATE INDEX ix_api_keys_team_id ON api_keys (team_id);
+GO
+CREATE INDEX ix_api_keys_team_target_id ON api_keys (team_id, target_id);
+GO
+CREATE INDEX ix_api_keys_team_target_kind ON api_keys (team_id, target_kind);
 GO
 CREATE INDEX ix_api_keys_tenant_id ON api_keys (tenant_id);
 GO
@@ -173,6 +202,15 @@ CREATE TABLE sessions (
 	revoked_at VARCHAR(40) NULL, 
 	last_seen_at VARCHAR(40) NOT NULL, 
 	created_at VARCHAR(40) NOT NULL, 
+	kind VARCHAR(8) NOT NULL DEFAULT 'console', 
+	client_id VARCHAR(64) NULL, 
+	team_id VARCHAR(64) NULL, 
+	resource VARCHAR(500) NULL, 
+	code_hash VARCHAR(64) NULL, 
+	code_challenge VARCHAR(64) NULL, 
+	redirect_uri VARCHAR(500) NULL, 
+	code_expires_at VARCHAR(40) NULL, 
+	code_used_at VARCHAR(40) NULL, 
 	CONSTRAINT sessions_pkey PRIMARY KEY (id), 
 	CONSTRAINT fk_sessions_user FOREIGN KEY(tenant_id, user_id) REFERENCES users (tenant_id, id), 
 	CONSTRAINT sessions_tenant_id_fkey FOREIGN KEY(tenant_id) REFERENCES tenants (id), 
@@ -231,6 +269,8 @@ CREATE TABLE role_assignments (
 	CONSTRAINT role_assignments_tenant_id_fkey FOREIGN KEY(tenant_id) REFERENCES tenants (id)
 );
 GO
+CREATE INDEX ix_role_assignments_role ON role_assignments (tenant_id, role_id);
+GO
 CREATE INDEX ix_role_assignments_subject ON role_assignments (tenant_id, subject_id);
 GO
 CREATE UNIQUE INDEX ux_role_assignments_owner ON role_assignments (tenant_id) WHERE role_id = 'owner';
@@ -246,9 +286,22 @@ CREATE TABLE signin_providers (
 	jit_role VARCHAR(16) NULL, 
 	created_at VARCHAR(40) NOT NULL, 
 	updated_at VARCHAR(40) NOT NULL, 
+	sp_id VARCHAR(40) NULL, 
 	CONSTRAINT signin_providers_pkey PRIMARY KEY (id, tenant_id), 
 	CONSTRAINT fk_signin_jit_team FOREIGN KEY(tenant_id, jit_team_id) REFERENCES teams (tenant_id, id), 
 	CONSTRAINT signin_providers_tenant_id_fkey FOREIGN KEY(tenant_id) REFERENCES tenants (id)
+);
+GO
+CREATE UNIQUE INDEX ux_signin_providers_sp_id ON signin_providers (sp_id) WHERE sp_id IS NOT NULL;
+GO
+CREATE TABLE signin_break_glass (
+	tenant_id VARCHAR(64) NOT NULL, 
+	user_id VARCHAR(64) NOT NULL, 
+	added_by VARCHAR(64) NOT NULL, 
+	added_at VARCHAR(40) NOT NULL, 
+	last_used_at VARCHAR(40) NULL, 
+	CONSTRAINT signin_break_glass_pkey PRIMARY KEY (tenant_id, user_id), 
+	CONSTRAINT fk_signin_break_glass_user FOREIGN KEY(tenant_id, user_id) REFERENCES users (tenant_id, id) ON DELETE CASCADE
 );
 GO
 CREATE TABLE password_credentials (
@@ -306,6 +359,41 @@ CREATE INDEX ix_signin_domains_tenant_id ON signin_domains (tenant_id);
 GO
 CREATE UNIQUE INDEX ux_signin_domains_verified ON signin_domains (domain) WHERE verified_at IS NOT NULL;
 GO
+CREATE TABLE signin_certificates (
+	tenant_id VARCHAR(64) NOT NULL, 
+	provider_id VARCHAR(64) NOT NULL, 
+	fingerprint VARCHAR(64) NOT NULL, 
+	pem VARCHAR(max) NOT NULL, 
+	not_before VARCHAR(40) NOT NULL, 
+	not_after VARCHAR(40) NOT NULL, 
+	source VARCHAR(16) NOT NULL, 
+	added_at VARCHAR(40) NOT NULL, 
+	added_by VARCHAR(64) NOT NULL, 
+	removed_at VARCHAR(40) NULL, 
+	warned VARCHAR(16) NULL, 
+	CONSTRAINT signin_certificates_pkey PRIMARY KEY (tenant_id, provider_id, fingerprint), 
+	CONSTRAINT fk_signin_certificates_provider FOREIGN KEY(provider_id, tenant_id) REFERENCES signin_providers (id, tenant_id) ON DELETE CASCADE
+);
+GO
+CREATE INDEX ix_signin_certificates_not_after ON signin_certificates (not_after);
+GO
+CREATE TABLE signin_group_rules (
+	id VARCHAR(64) NOT NULL, 
+	tenant_id VARCHAR(64) NOT NULL, 
+	provider_id VARCHAR(64) NOT NULL, 
+	group_value VARCHAR(255) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	role VARCHAR(16) NOT NULL, 
+	created_at VARCHAR(40) NOT NULL, 
+	created_by VARCHAR(64) NOT NULL, 
+	CONSTRAINT signin_group_rules_pkey PRIMARY KEY (id), 
+	CONSTRAINT uq_signin_group_rules UNIQUE (provider_id, group_value, team_id), 
+	CONSTRAINT fk_signin_group_rules_provider FOREIGN KEY(provider_id, tenant_id) REFERENCES signin_providers (id, tenant_id) ON DELETE CASCADE, 
+	CONSTRAINT fk_signin_group_rules_team FOREIGN KEY(tenant_id, team_id) REFERENCES teams (tenant_id, id)
+);
+GO
+CREATE INDEX ix_signin_group_rules_tenant_id ON signin_group_rules (tenant_id);
+GO
 CREATE TABLE signin_identities (
 	id VARCHAR(64) NOT NULL, 
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -341,6 +429,7 @@ CREATE TABLE signin_flows (
 	expires_at VARCHAR(40) NOT NULL, 
 	answered_at VARCHAR(40) NULL, 
 	used_at VARCHAR(40) NULL, 
+	test_result NVARCHAR(max) NULL, 
 	CONSTRAINT signin_flows_pkey PRIMARY KEY (id), 
 	CONSTRAINT fk_signin_flows_provider FOREIGN KEY(provider_id, tenant_id) REFERENCES signin_providers (id, tenant_id) ON DELETE CASCADE, 
 	CONSTRAINT signin_flows_tenant_id_fkey FOREIGN KEY(tenant_id) REFERENCES tenants (id), 
@@ -351,15 +440,35 @@ CREATE INDEX ix_signin_flows_tenant_id ON signin_flows (tenant_id);
 GO
 CREATE UNIQUE INDEX signin_flows_handoff_hash_key ON signin_flows (handoff_hash) WHERE handoff_hash IS NOT NULL;
 GO
+CREATE TABLE signin_grants (
+	id VARCHAR(64) NOT NULL, 
+	tenant_id VARCHAR(64) NOT NULL, 
+	member_id VARCHAR(64) NOT NULL, 
+	provider_id VARCHAR(64) NOT NULL, 
+	rule_id VARCHAR(64) NULL, 
+	why VARCHAR(8) NOT NULL, 
+	granted_at VARCHAR(40) NOT NULL, 
+	CONSTRAINT signin_grants_pkey PRIMARY KEY (id), 
+	CONSTRAINT fk_signin_grants_provider FOREIGN KEY(provider_id, tenant_id) REFERENCES signin_providers (id, tenant_id) ON DELETE CASCADE, 
+	CONSTRAINT signin_grants_member_id_fkey FOREIGN KEY(member_id) REFERENCES members (id) ON DELETE CASCADE, 
+	CONSTRAINT signin_grants_rule_id_fkey FOREIGN KEY(rule_id) REFERENCES signin_group_rules (id) ON DELETE NO ACTION
+);
+GO
+CREATE INDEX ix_signin_grants_member_id ON signin_grants (member_id);
+GO
+CREATE INDEX ix_signin_grants_tenant_id ON signin_grants (tenant_id);
+GO
+IF USER_ID(N'ops_platform_system') IS NULL CREATE USER ops_platform_system WITHOUT LOGIN;
+GO
 IF SCHEMA_ID(N'ops_security') IS NULL EXEC (N'CREATE SCHEMA ops_security AUTHORIZATION dbo');
 GO
 CREATE FUNCTION ops_security.platform_tenant_read (@tenant_id VARCHAR(64))
 RETURNS TABLE WITH SCHEMABINDING AS RETURN
-SELECT 1 AS visible WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64));
+SELECT 1 AS visible WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64)) OR USER_NAME() = N'ops_platform_system';
 GO
 CREATE FUNCTION ops_security.platform_tenant_write (@tenant_id VARCHAR(64))
 RETURNS TABLE WITH SCHEMABINDING AS RETURN
-SELECT 1 AS allowed WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64));
+SELECT 1 AS allowed WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64)) OR USER_NAME() = N'ops_platform_system';
 GO
 CREATE SECURITY POLICY ops_security.tenants_tenant
     ADD FILTER PREDICATE ops_security.platform_tenant_read(id) ON dbo.tenants,
@@ -439,6 +548,12 @@ CREATE SECURITY POLICY ops_security.signin_providers_tenant
     ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.signin_providers AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.signin_break_glass_tenant
+    ADD FILTER PREDICATE ops_security.platform_tenant_read(tenant_id) ON dbo.signin_break_glass,
+    ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.signin_break_glass AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.signin_break_glass AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE SECURITY POLICY ops_security.password_credentials_tenant
     ADD FILTER PREDICATE ops_security.platform_tenant_read(tenant_id) ON dbo.password_credentials,
     ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.password_credentials AFTER INSERT,
@@ -463,6 +578,18 @@ CREATE SECURITY POLICY ops_security.signin_domains_tenant
     ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.signin_domains AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.signin_certificates_tenant
+    ADD FILTER PREDICATE ops_security.platform_tenant_read(tenant_id) ON dbo.signin_certificates,
+    ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.signin_certificates AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.signin_certificates AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.signin_group_rules_tenant
+    ADD FILTER PREDICATE ops_security.platform_tenant_read(tenant_id) ON dbo.signin_group_rules,
+    ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.signin_group_rules AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.signin_group_rules AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE SECURITY POLICY ops_security.signin_identities_tenant
     ADD FILTER PREDICATE ops_security.platform_tenant_read(tenant_id) ON dbo.signin_identities,
     ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.signin_identities AFTER INSERT,
@@ -475,10 +602,112 @@ CREATE SECURITY POLICY ops_security.signin_flows_tenant
     ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.signin_flows AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.signin_grants_tenant
+    ADD FILTER PREDICATE ops_security.platform_tenant_read(tenant_id) ON dbo.signin_grants,
+    ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.signin_grants AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.signin_grants AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE FUNCTION dbo.platform_users_by_email (@email VARCHAR(8000))
+RETURNS @found TABLE (tenant_id VARCHAR(400), id VARCHAR(400), email VARCHAR(400), name VARCHAR(400))
+WITH EXECUTE AS 'ops_platform_system'
+AS BEGIN
+    INSERT INTO @found SELECT u.tenant_id, u.id, u.email, u.name FROM dbo.users u WHERE LOWER(u.email) = LOWER(@email) AND u.status = 'active';
+    RETURN;
+END;
+GO
+CREATE FUNCTION dbo.platform_session (@session_id VARCHAR(8000))
+RETURNS @found TABLE (tenant_id VARCHAR(400), user_id VARCHAR(400), id VARCHAR(400))
+WITH EXECUTE AS 'ops_platform_system'
+AS BEGIN
+    INSERT INTO @found SELECT s.tenant_id, s.user_id, s.id FROM dbo.sessions s WHERE s.id = @session_id;
+    RETURN;
+END;
+GO
+CREATE FUNCTION dbo.platform_key (@prefix VARCHAR(8000), @now VARCHAR(8000))
+RETURNS @found TABLE (id VARCHAR(400), tenant_id VARCHAR(400), team_id VARCHAR(400), secret_hash VARCHAR(400), scopes NVARCHAR(max), created_by VARCHAR(400), usable BIT)
+WITH EXECUTE AS 'ops_platform_system'
+AS BEGIN
+    INSERT INTO @found SELECT k.id, k.tenant_id, k.team_id, k.secret_hash, k.scopes, k.created_by, CAST(CASE WHEN k.revoked_at IS NULL AND k.disabled_at IS NULL AND (k.expires_at IS NULL OR k.expires_at > @now) THEN 1 ELSE 0 END AS BIT) FROM dbo.api_keys k WHERE k.prefix = @prefix;
+    RETURN;
+END;
+GO
+CREATE FUNCTION dbo.platform_team (@team_id VARCHAR(8000))
+RETURNS @found TABLE (tenant_id VARCHAR(400), id VARCHAR(400), status VARCHAR(400))
+WITH EXECUTE AS 'ops_platform_system'
+AS BEGIN
+    INSERT INTO @found SELECT t.tenant_id, t.id, t.status FROM dbo.teams t WHERE t.id = @team_id;
+    RETURN;
+END;
+GO
+CREATE FUNCTION dbo.platform_signin_flow (@state_hash VARCHAR(8000))
+RETURNS @found TABLE (id VARCHAR(400), tenant_id VARCHAR(400))
+WITH EXECUTE AS 'ops_platform_system'
+AS BEGIN
+    INSERT INTO @found SELECT f.id, f.tenant_id FROM dbo.signin_flows f WHERE f.state_hash = @state_hash;
+    RETURN;
+END;
+GO
+CREATE FUNCTION dbo.platform_signin_handoff (@handoff_hash VARCHAR(8000))
+RETURNS @found TABLE (id VARCHAR(400), tenant_id VARCHAR(400))
+WITH EXECUTE AS 'ops_platform_system'
+AS BEGIN
+    INSERT INTO @found SELECT f.id, f.tenant_id FROM dbo.signin_flows f WHERE f.handoff_hash = @handoff_hash;
+    RETURN;
+END;
+GO
+CREATE FUNCTION dbo.platform_signin_domain (@domain VARCHAR(8000))
+RETURNS @found TABLE (tenant_id VARCHAR(400), provider_id VARCHAR(400), kind VARCHAR(400), label VARCHAR(400), enabled BIT, password_enabled BIT)
+WITH EXECUTE AS 'ops_platform_system'
+AS BEGIN
+    INSERT INTO @found SELECT d.tenant_id, d.provider_id, p.kind, p.label, p.enabled, CAST(CASE WHEN EXISTS (SELECT 1 FROM dbo.signin_providers q WHERE q.tenant_id = d.tenant_id AND q.kind = 'password' AND q.enabled = 1) THEN 1 ELSE 0 END AS BIT) FROM dbo.signin_domains d JOIN dbo.signin_providers p ON p.id = d.provider_id AND p.tenant_id = d.tenant_id WHERE d.domain = LOWER(@domain) AND d.verified_at IS NOT NULL;
+    RETURN;
+END;
+GO
+CREATE FUNCTION dbo.platform_signin_sp (@sp_id VARCHAR(8000))
+RETURNS @found TABLE (tenant_id VARCHAR(400), provider_id VARCHAR(400), kind VARCHAR(400), enabled BIT, tiles BIT)
+WITH EXECUTE AS 'ops_platform_system'
+AS BEGIN
+    INSERT INTO @found SELECT p.tenant_id, p.id, p.kind, p.enabled, CAST(CASE WHEN COALESCE(JSON_VALUE(p.config, '$.tiles'), 'true') <> 'false' THEN 1 ELSE 0 END AS BIT) FROM dbo.signin_providers p WHERE p.sp_id = @sp_id;
+    RETURN;
+END;
+GO
+CREATE FUNCTION dbo.platform_signin_watch ()
+RETURNS @found TABLE (tenant_id VARCHAR(400), provider_id VARCHAR(400))
+WITH EXECUTE AS 'ops_platform_system'
+AS BEGIN
+    INSERT INTO @found SELECT p.tenant_id, p.id FROM dbo.signin_providers p JOIN dbo.tenants t ON t.id = p.tenant_id WHERE p.kind = 'saml' AND t.status = 'active';
+    RETURN;
+END;
+GO
+CREATE FUNCTION dbo.platform_password_reset (@token_hash VARCHAR(8000))
+RETURNS @found TABLE (id VARCHAR(400), tenant_id VARCHAR(400))
+WITH EXECUTE AS 'ops_platform_system'
+AS BEGIN
+    INSERT INTO @found SELECT r.id, r.tenant_id FROM dbo.password_resets r WHERE r.token_hash = @token_hash;
+    RETURN;
+END;
+GO
+CREATE FUNCTION dbo.platform_invite (@token_hash VARCHAR(8000))
+RETURNS @found TABLE (member_id VARCHAR(400), tenant_id VARCHAR(400), team_id VARCHAR(400), team VARCHAR(400), email VARCHAR(400), role VARCHAR(400), status VARCHAR(400), invited_at VARCHAR(400), expires_at VARCHAR(400), allowed_domains NVARCHAR(max))
+WITH EXECUTE AS 'ops_platform_system'
+AS BEGIN
+    INSERT INTO @found SELECT m.id, m.tenant_id, m.team_id, t.name, m.email, m.role, m.status, m.created_at, m.invite_expires_at, n.allowed_domains FROM dbo.members m JOIN dbo.teams t ON t.id = m.team_id JOIN dbo.tenants n ON n.id = m.tenant_id WHERE m.invite_token_hash = @token_hash;
+    RETURN;
+END;
+GO
+CREATE FUNCTION dbo.platform_purge_due (@cutoff VARCHAR(8000))
+RETURNS @found TABLE (tenant_id VARCHAR(400))
+WITH EXECUTE AS 'ops_platform_system'
+AS BEGIN
+    INSERT INTO @found SELECT t.id FROM dbo.tenants t WHERE t.status = 'closed' AND t.closed_at <= @cutoff;
+    RETURN;
+END;
+GO
 CREATE TABLE alembic_version_platform (
     version_num VARCHAR(32) NOT NULL, 
     CONSTRAINT alembic_version_platform_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_platform (version_num) VALUES ('0032_webhooks_usage_cells');
+INSERT INTO alembic_version_platform (version_num) VALUES ('0045_api_key_revision');
 GO

@@ -21,20 +21,23 @@ from __future__ import annotations
 import hashlib
 import time
 from collections.abc import Awaitable, Callable, Iterable, Mapping
-from typing import Annotated, Any, cast
+from dataclasses import replace
+from typing import Annotated, Any
 
 from fastapi import Header, Request
 
 from ops_policy import Ed25519Signer, Ed25519Verifier, TokenError, header_of, mint, verify
 from ops_service_kit.errors import Forbidden, Unauthorized, ValidationFailed
+from ops_service_kit.http import Json
 from ops_service_kit.logging import get_logger
+from ops_service_kit.narrow import a_list, an_object
 
 from .acting_for import ActingForPerson, person_of
 from .acting_for import refused as acting_for_refused
 from .jwks import JwksCache, JwksFetch
 from .principal import Principal
 
-Introspect = Callable[[str], Awaitable[dict[str, Any] | None]]
+Introspect = Callable[[str], Awaitable[Json | None]]
 # The tenant's permission version now, from platform-service; it rises with every role, grid, assignment, membership
 # or policy change.
 CurrentVersion = Callable[[str], Awaitable[int | None]]
@@ -112,11 +115,15 @@ class Identity:
             return self._dev(x_dev_user, x_team_id)
         raise _refused()
 
-    async def bearer(self, authorization: str | None, team: str | None = None) -> Principal:
+    async def bearer(
+        self, authorization: str | None, team: str | None = None, *, resource: str | None = None
+    ) -> Principal:
         """The caller behind `Authorization: Bearer` on a route FastAPI does not resolve (tools-service's MCP adapter):
         an API key or a person's token, acting in `team` (403 `team_forbidden` when the key or token is not in
         it). No HTTP-method read gate: every MCP request is a POST, and that route keeps a key to what it may run. A
-        service token, the dev caller and a missing credential are refused."""
+        service token, the dev caller and a missing credential are refused. With `resource`, a person's token must name
+        that address as its audience (an assistant's token); a console token, whose audience is the services, is
+        refused."""
         scheme, _, given = (authorization or "").partition(" ")
         token = given if scheme.lower() == "bearer" and given else None
         if token is None:
@@ -125,7 +132,7 @@ class Identity:
             return await self._from_key(token, team)
         if self.services is not None and self.services.signs(token):
             raise _refused()
-        return await self._from_token(token, team)
+        return await self._from_token(token, team, resource=resource)
 
     async def acting_for(self, token: str, caller: Principal) -> ActingForPerson:
         """The person `caller` (a service) says its call acts for, from the acting-for token platform-service signed:
@@ -158,12 +165,15 @@ class Identity:
             raise Forbidden("The service token is bound to another team.", code="team_forbidden")
         return p
 
-    async def _from_token(self, token: str, team: str | None) -> Principal:
+    async def _from_token(self, token: str, team: str | None, *, resource: str | None = None) -> Principal:
         try:
             kid = str(header_of(token).get("kid", ""))
             verifier = await self.keys.verifier(kid)
             if verifier is None:
                 raise _refused()
+            if resource is not None:
+                # The same key, bound to the address in place of this service's name.
+                verifier = replace(verifier, audience=resource)
             claims = verify(token, verifier)
         except TokenError as e:
             raise _refused() from e
@@ -171,11 +181,12 @@ class Identity:
             raise _refused()
         named: list[Any] = claims.get("team_ids") or []
         team_ids = [str(t) for t in named]
-        roles_claim: dict[str, Any] = claims.get("roles") or {}
-        access_claim: dict[str, Any] = claims.get("access") or {}
+        # A claim left out (or empty) is none; one of another shape fails the request, as `.items()` on it did.
+        roles_claim = an_object(claims["roles"], "the token's roles") if claims.get("roles") else {}
+        access_claim = an_object(claims["access"], "the token's access") if claims.get("access") else {}
         version = claims.get("perm_version")
-        policies: dict[str, Any] = claims.get("policies") or {}
-        grids_claim: dict[str, Any] = claims.get("grids") or {}
+        policies = an_object(claims["policies"], "the token's policies") if claims.get("policies") else {}
+        grids_claim = an_object(claims["grids"], "the token's grids") if claims.get("grids") else {}
         await self._require_current(str(claims["tenant_id"]), version if isinstance(version, int) else None)
         return Principal(
             kind="person",
@@ -188,11 +199,16 @@ class Identity:
             roles={str(k): str(v) for k, v in roles_claim.items()},
             scopes=[],
             auth_method="session" if claims.get("auth_method") != "dev" else "dev",
-            access={str(k): [str(r) for r in v] for k, v in access_claim.items()},
-            grids={str(r): {str(a): str(x) for a, x in dict(g).items()} for r, g in grids_claim.items()},
+            access={str(k): [str(r) for r in a_list(v, "a team's roles")] for k, v in access_claim.items()},
+            grids={
+                str(r): {str(a): str(x) for a, x in an_object(g, "a role's grid").items()}
+                for r, g in grids_claim.items()
+            },
             permission_version=int(version) if isinstance(version, int) else None,
             policies={str(k): v for k, v in policies.items()},
             security_team=str(claims["security_team"]) if claims.get("security_team") else None,
+            client_id=str(claims["client_id"]) if claims.get("client_id") else None,
+            client_name=str(claims["client_name"])[:120] if claims.get("client_name") else None,
         )
 
     async def _require_current(self, tenant_id: str, version: int | None) -> None:
@@ -228,7 +244,8 @@ class Identity:
             if found is None:
                 self._key_cache.pop(digest, None)
                 raise _refused()
-            key = cast(dict[str, Any], found.get("apiKey") or {})
+            key = an_object(found["apiKey"], "the key's apiKey") if found.get("apiKey") else {}
+            target = key.get("target")
             p = Principal(
                 kind="api_key",
                 sub=str(found["sub"]),
@@ -238,11 +255,11 @@ class Identity:
                 team_id=str(found["teamId"]),
                 team_ids=[str(found["teamId"])],
                 roles={},
-                scopes=[str(s) for s in found.get("scopes", [])],
+                scopes=[str(s) for s in a_list(found.get("scopes", []), "the key's scopes")],
                 auth_method="api_key",
-                policies=dict(found.get("policies") or {}),
+                policies=dict(an_object(found["policies"], "the key's policies")) if found.get("policies") else {},
                 key_id=str(key.get("id") or "") or None,
-                key_target=cast(dict[str, Any] | None, key.get("target")) or None,
+                key_target=an_object(target, "the key's target") if target else None,
             )
             if self.key_cache_s > 0:
                 self._key_cache[digest] = (now + self.key_cache_s, p)
@@ -354,7 +371,7 @@ def mint_service_token(
     """A short token one service presents to another, naming the tenant it acts for as a claim; None only for
     introspection, which comes before a tenant is known. `scopes` (`area:action`, checked by ops_access) and `team_id`
     say what it may do and in which team; both are signed, so no query or body can widen them."""
-    claims: dict[str, Any] = {"sub": f"service:{service}", "kind": "service", "aud": audience}
+    claims: dict[str, str | list[str]] = {"sub": f"service:{service}", "kind": "service", "aud": audience}
     if tenant_id is not None:
         claims["tenant_id"] = tenant_id
     if scopes:

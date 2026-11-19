@@ -10,6 +10,7 @@ from typing import Any, ClassVar, Literal
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ops_service_kit.http import Json
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
@@ -109,9 +110,7 @@ class TriggerEvents:
         async with tenant_tx(self.engine) as c:
             return int((await c.execute(q)).scalar_one())
 
-    async def page(
-        self, workflow_id: str, *, team_id: str, page: int, page_size: int
-    ) -> tuple[list[dict[str, Any]], int]:
+    async def page(self, workflow_id: str, *, team_id: str, page: int, page_size: int) -> tuple[list[Json], int]:
         """The workflow's events in `team_id`, newest first, with the total."""
         t = trigger_events
         where = (
@@ -130,7 +129,8 @@ class TriggerEvents:
         """The reads on which starting this message's run failed, and whether it was set aside."""
         t = trigger_events
         q = sa.select(
-            sa.func.count().filter(t.c.outcome == "start_failed"), sa.func.count().filter(t.c.outcome == "set_aside")
+            sa.func.count(sa.case((t.c.outcome == "start_failed", 1))),
+            sa.func.count(sa.case((t.c.outcome == "set_aside", 1))),
         ).where(
             t.c.tenant_id == current_tenant(),
             t.c.workflow_id == workflow_id,
@@ -142,7 +142,7 @@ class TriggerEvents:
             failed, aside = (await c.execute(q)).one()
         return int(failed), int(aside) > 0
 
-    async def set_aside(self, event_id: str) -> dict[str, Any] | None:
+    async def set_aside(self, event_id: str) -> Json | None:
         """A set-aside event the caller's team may see, with its kept message; None when there is none, or its message
         was already run or forgotten."""
         t = trigger_events

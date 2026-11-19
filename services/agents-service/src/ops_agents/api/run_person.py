@@ -12,7 +12,9 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import cast
+
+from ops_service_kit.http import Json
 
 # The agent graph a chat thread runs (chat_threads.CHAT_GRAPH).
 CHAT_GRAPH = "agent_wrapper"
@@ -30,18 +32,18 @@ class RunPerson:
 RUN_PERSON: ContextVar[RunPerson | None] = ContextVar("ops_run_person", default=None)
 
 
-def person_of_thread(row: dict[str, Any]) -> RunPerson | None:
+def person_of_thread(row: Json) -> RunPerson | None:
     """The person a run of this thread acts for, or None for a thread that is not a chat (a workflow's runs act for
     their starter, read from the run itself)."""
     if row.get("graph") != CHAT_GRAPH:
         return None
-    meta = cast(dict[str, Any], row.get("meta") or {})
+    meta = cast(Json, row.get("meta") or {})
     email = str(meta.get("ownerEmail") or meta.get("startedFor") or "")
     return RunPerson(email if "@" in email else None, str(row.get("id") or "") or None)
 
 
 @contextmanager
-def running_for(row: dict[str, Any]) -> Generator[None]:
+def running_for(row: Json) -> Generator[None]:
     token = RUN_PERSON.set(person_of_thread(row))
     try:
         yield

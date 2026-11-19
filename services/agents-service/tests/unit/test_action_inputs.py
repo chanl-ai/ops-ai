@@ -1,0 +1,28 @@
+"""A person-format action input is checked as an email address before the action runs."""
+
+from __future__ import annotations
+
+import time
+
+import pytest
+
+from ops_agents.api.engine_reviews import _action_inputs  # pyright: ignore[reportPrivateUsage]
+from ops_service_kit.errors import ValidationFailed
+from ops_service_kit.http import Json
+
+ACTION: Json = {"inputs": [{"name": "assignee", "format": "person"}]}
+
+
+def test_person_input_accepts_an_email_and_refuses_a_non_email() -> None:
+    assert _action_inputs(ACTION, {"assignee": "case.lead@harborpine.example"}) == {
+        "assignee": "case.lead@harborpine.example"
+    }
+    with pytest.raises(ValidationFailed):
+        _action_inputs(ACTION, {"assignee": "not an email"})
+
+
+def test_person_input_refuses_a_long_hostile_string_quickly() -> None:
+    started = time.perf_counter()
+    with pytest.raises(ValidationFailed):
+        _action_inputs(ACTION, {"assignee": "!" * 10_000})
+    assert time.perf_counter() - started < 0.1

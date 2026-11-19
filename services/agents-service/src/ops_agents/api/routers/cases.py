@@ -1,4 +1,8 @@
-"""Cases: workflow runs across every thread, on the console's `/runs` routes (see hitl_facade)."""
+"""Cases: workflow runs across every thread, on the console's `/runs` routes (see hitl_facade).
+
+Neither route takes the request transaction (`Tx`): each row names the team that decides its step through
+platform-service (`deciding_team`) and a held tool call's write policy through tools-service, and no connection is held
+while they answer. The list pages rows computed from several stores in memory rather than in SQL."""
 
 from __future__ import annotations
 
@@ -9,6 +13,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from ops_service_kit.http import Envelope
+from ops_store import isolation
 
 from .. import hitl_facade
 from ..auth import principal
@@ -35,12 +40,15 @@ class RunsQuery(BaseModel):
 @router.get("", response_model=Envelope[CaseRunList])
 async def list_runs(rt: Rt, q: Annotated[RunsQuery, Query()]) -> JSONResponse:
     filters = {"workflowId": q.workflowId, "state": q.state, "queue": q.queue, "parentThreadId": q.parent}
-    rows = await hitl_facade.list_runs(
-        rt, view=q.view, filters=filters, search=q.search, page_no=q.page, size=q.pageSize
-    )
+    # Local reads only (no other service is asked), so one transaction holds them all.
+    async with isolation.request_transaction():
+        rows = await hitl_facade.list_runs(
+            rt, view=q.view, filters=filters, search=q.search, page_no=q.page, size=q.pageSize
+        )
     return ok(rows)
 
 
 @router.get("/{thread_id}", response_model=Envelope[CaseRun])
 async def get_run(rt: Rt, thread_id: str) -> JSONResponse:
-    return ok(await hitl_facade.get_run(rt, thread_id))
+    async with isolation.request_transaction():
+        return ok(await hitl_facade.get_run(rt, thread_id))

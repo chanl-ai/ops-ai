@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+from ops_service_kit.http import Json
+
 REVIEW_KINDS = ("review", "approval")
 _RENAMED = {
     "run_start": "started",
@@ -21,10 +23,10 @@ _RENAMED = {
 
 
 def _field(d: Any, key: str) -> Any:
-    return cast(dict[str, Any], d).get(key) if isinstance(d, dict) else None
+    return cast(Json, d).get(key) if isinstance(d, dict) else None
 
 
-def designed_type(legacy: dict[str, Any]) -> str | None:
+def designed_type(legacy: Json) -> str | None:
     """The designed type for a run-stream event, or None when it adds nothing (an interrupted `end` follows its
     `waiting`)."""
     name = str(legacy["event"])

@@ -26,6 +26,7 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix="uc093-") as tmp, platform() as (public, _), files(Path(tmp)) as f:
         james = person(public, "j.richardson@harborpine.example", "team_ops")
         priya = person(public, "p.shah@harborpine.example", "team_ops")
+        ravi = person(public, "r.menon@harborpine.example", "team_ops")
         scanner = service_headers("files", service="scanner", scopes=["files:decide"])
         kb = service_headers("files", service="kb")
 
@@ -75,8 +76,8 @@ def main() -> None:
         check("list by owner finds it among the uploader's files", file_id in [r["id"] for r in mine["data"]], mine)
 
         hold = {"ids": [file_id], "hold": True, "reason": "Litigation hold, matter 2026-114"}
-        refused = f.post("/v1/files/legal-hold", json=hold, headers=james)
-        check("a builder cannot place a legal hold (403)", refused.status_code == 403, refused.text)
+        refused = f.post("/v1/files/legal-hold", json=hold, headers=ravi)
+        check("a viewer cannot place a legal hold (403)", refused.status_code == 403, refused.text)
         placed = data(f.post("/v1/files/legal-hold", json=hold, headers=priya))
         check("the team admin places it", placed["updated"] == [file_id], placed)
         held = f.delete(f"/v1/files/{file_id}", headers=james)

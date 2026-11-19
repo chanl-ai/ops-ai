@@ -41,6 +41,6 @@ def test_hand_copies_are_moved_aside_not_deleted(tmp_path: Path) -> None:
 
 
 def test_every_pin_is_a_full_commit() -> None:
+    # The plugins Ops AI ships are built in (builtin-plugins/); the pins name only outside plugins an install adds.
     pins = json.loads((ROOT / "deploy" / "plugins.json").read_text())["plugins"]
-    assert {p["path"] for p in pins} >= {"plugins/github", "plugins/salesforce"}
     assert all(re.fullmatch(r"[0-9a-f]{40}", p["ref"]) for p in pins)

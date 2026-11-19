@@ -6,7 +6,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
-from typing import Any
+
+from ops_service_kit.http import JsonValue
+
+from .store.modules import Operation
 
 
 @dataclass(frozen=True)
@@ -16,7 +19,7 @@ class Refusal:
     message: str
 
 
-def amount_refusal(operation: dict[str, Any], args: dict[str, Any]) -> Refusal | None:
+def amount_refusal(operation: Operation, args: dict[str, JsonValue]) -> Refusal | None:
     """Why `args` break the operation's amount limit, or None. The limit applies to the operation's `amount` input:
     when the operation declares one, a call that leaves it out, sends a non-number or sends a negative amount is
     refused too, since a limit that a missing field or a sign flip skips is no limit. An operation that declares no

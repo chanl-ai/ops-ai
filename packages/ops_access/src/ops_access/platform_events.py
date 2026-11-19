@@ -18,7 +18,7 @@ from pydantic.alias_generators import to_camel
 
 from ops_identity import CurrentService
 from ops_service_kit.errors import ValidationFailed
-from ops_service_kit.http import Envelope, Out, error_responses, ok
+from ops_service_kit.http import Envelope, Json, Out, error_responses, ok
 
 from .check import can
 
@@ -26,6 +26,9 @@ from .check import can
 TEAM_CREATED = "team.created"
 # A member removed from a team (platform-service store/members.py): their own accounts on its apps go.
 MEMBER_REMOVED = "member.removed"
+# A team's approval answers changed (appChanges, appChangesByApp): agents-service drops the tool list it kept for the
+# team, since the list carries each write's answer.
+POLICY_CHANGED = "policy.changed"
 
 
 @dataclass(frozen=True)
@@ -34,7 +37,7 @@ class Handler:
     area: str
     action: str
     # (tenant, team, payload): acts on the event; returns how many records it changed.
-    act: Callable[[str, str, dict[str, Any]], Awaitable[int]]
+    act: Callable[[str, str, Json], Awaitable[int]]
 
 
 class PlatformEventIn(BaseModel):

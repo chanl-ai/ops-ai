@@ -6,14 +6,15 @@ from __future__ import annotations
 
 import hmac
 import logging
+from typing import Any
 
 import pytest
 import sqlalchemy as sa
 
 from ops_platform.store.tables import api_keys, audit_entries
 
-from .conftest import SERVICE, Platform
-from .test_members import as_admin, join
+from .conftest import SERVICE, Platform, seed_tx
+from .test_members import as_admin, bearer, join, team_of
 
 
 async def create(platform: Platform, h: dict[str, str], **body: object) -> dict[str, object]:
@@ -34,7 +35,7 @@ async def test_an_admin_creates_a_key_whose_secret_shows_once(platform: Platform
     assert secret.startswith("ok_") and await introspect(platform, secret) == 200
     r = await platform.public.get("/v1/api-keys", headers=h)
     assert r.status_code == 200, r.text
-    [listed] = r.json()["data"]
+    [listed] = r.json()["data"]["data"]
     assert listed["id"] == made["key"]["id"] and listed["scopes"] == ["read", "write"]  # type: ignore[index]
     assert secret.split(".", 1)[1] not in r.text and "secret" not in listed
 
@@ -61,10 +62,10 @@ async def test_a_revoked_key_stops_at_once(platform: Platform) -> None:
 
 
 async def test_an_expired_key_is_refused(platform: Platform) -> None:
-    _, h = await as_admin(platform)
+    p, h = await as_admin(platform)
     made = await create(platform, h, expiresInDays=30)
     assert made["key"]["expiresAt"]  # type: ignore[index]
-    async with platform.engine.begin() as c:
+    async with seed_tx(platform.engine, p.tenant_id) as c:
         await c.execute(
             api_keys.update().where(api_keys.c.id == made["key"]["id"]).values(expires_at="2020-01-01T00:00:00.000Z")  # type: ignore[index]
         )
@@ -76,7 +77,7 @@ async def test_use_moves_last_used_at(platform: Platform) -> None:
     made = await create(platform, h)
     assert made["key"].get("lastUsedAt") is None  # type: ignore[union-attr]
     await introspect(platform, str(made["secret"]))
-    [listed] = (await platform.public.get("/v1/api-keys", headers=h)).json()["data"]
+    [listed] = (await platform.public.get("/v1/api-keys", headers=h)).json()["data"]["data"]
     assert listed["lastUsedAt"]
 
 
@@ -136,11 +137,11 @@ async def test_a_body_with_unknown_fields_or_scopes_is_refused(platform: Platfor
 
 
 async def test_creating_and_revoking_are_audited(platform: Platform) -> None:
-    _, h = await as_admin(platform)
+    p, h = await as_admin(platform)
     made = await create(platform, h)
     key_id = str(made["key"]["id"])  # type: ignore[index]
     await platform.public.post(f"/v1/api-keys/{key_id}/revoke", headers=h)
-    async with platform.engine.connect() as c:
+    async with seed_tx(platform.engine, p.tenant_id) as c:
         actions = (
             (
                 await c.execute(
@@ -153,3 +154,43 @@ async def test_creating_and_revoking_are_audited(platform: Platform) -> None:
             .all()
         )
     assert list(actions) == ["key.create", "key.revoke"]
+
+
+async def test_the_keys_list_never_shows_another_teams_or_tenants_keys(platform: Platform) -> None:
+    # A search, a filter or `ids` naming them each still answers the acting team's key, and only it: every key is
+    # the same name and target, so only the team and tenant predicates tell them apart.
+    target = {"kind": "workflow", "id": "levy_intake", "version": 3}
+    admin, h = await as_admin(platform)
+    mine = await create(platform, h, target=target, scopes=["write"])
+    team_admin = await platform.person(roles=("admin",), tenant_id=admin.tenant_id)
+    th = {**(await bearer(platform, team_admin)), "X-Team-Id": team_of(team_admin)}
+    other_team = await create(platform, th, target=target, scopes=["write"])
+    _, outsider = await as_admin(platform)
+    other_tenant = await create(platform, outsider, target=target, scopes=["write"])
+    theirs = {other_team["key"]["id"], other_tenant["key"]["id"]}  # type: ignore[index]
+    ids = [mine["key"]["id"], *theirs]  # type: ignore[index]
+    asks: list[dict[str, Any]] = [{}, {"search": "ci"}, {"ids": ids}, {"targetKind": "workflow", "pageSize": 50}]
+    for params in asks:
+        r = await platform.public.get("/v1/api-keys", headers=h, params=params)
+        assert r.status_code == 200, r.text
+        listed = [k["id"] for k in r.json()["data"]["data"]]
+        assert listed == [mine["key"]["id"]], (params, listed)  # type: ignore[index]
+        assert r.json()["data"]["pagination"]["total"] == 1, r.text
+
+
+async def test_the_keys_list_pages_without_repeating_or_skipping_a_key(platform: Platform) -> None:
+    # Three keys made in one millisecond share their sort value; the id orders them, so two pages hold all three.
+    _, h = await as_admin(platform)
+    made = {(await create(platform, h))["key"]["id"] for _ in range(3)}  # type: ignore[index]
+    seen: list[str] = []
+    for page, has_next in ((1, True), (2, False), (9, False)):
+        r = await platform.public.get("/v1/api-keys", headers=h, params={"pageSize": 2, "page": page})
+        assert r.status_code == 200, r.text
+        body = r.json()["data"]
+        assert (body["pagination"]["total"], body["pagination"]["hasNext"]) == (3, has_next), body["pagination"]
+        if page < 9:
+            seen += [k["id"] for k in body["data"]]
+        else:
+            # A page past the last answers the last page.
+            assert [k["id"] for k in body["data"]] == seen[2:], body
+    assert len(seen) == 3 and set(seen) == made, seen

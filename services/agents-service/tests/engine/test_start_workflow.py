@@ -19,7 +19,7 @@ from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.tenancy import tenant_scope
 from ops_engine.definition import parse
 from ops_engine.ports import RunRefusedError, ToolResult
-from ops_engine.store import DefinitionStore, RunStore, WorkQueue
+from ops_engine.store import DefinitionRow, DefinitionStore, RunStore, WorkQueue
 from tests.engine.test_worker import (  # noqa: F401
     CountingTools,  # pyright: ignore[reportUnusedImport]
     drain,  # pyright: ignore[reportUnusedImport]
@@ -73,12 +73,14 @@ class Tenant:
         self.runs, self.definitions = RunStore(self.tx), DefinitionStore(self.tx)
         self.starts = WorkflowStarts(self.runs, self.definitions)
 
-    async def publish(self, d: Any, *, team: str | None = TEAM, stage: str = "live") -> dict[str, Any]:
+    async def publish(self, d: Any, *, team: str | None = TEAM, stage: str = "live") -> DefinitionRow:
         with tenant_scope(self.id):
             version, _ = await self.definitions.publish(
                 d.id, name=d.name, definition=d.wire(), digest=d.digest(), now="now", by="b@x", team=team, stage=stage
             )
-            return await self.definitions.get(d.id, version) or {}
+            stored = await self.definitions.row(d.id, version)
+            assert stored is not None
+            return stored
 
     async def parent(self, *, mode: str = "live", team: str = TEAM, created_by: str = "b@x") -> str:
         stored = await self.publish(intake(PER_PERSON), team=team or TEAM)
@@ -92,7 +94,7 @@ class Tenant:
                 run_key=None,
                 created_by=created_by,
             )
-            return str(run["id"])
+            return run.id
 
     async def start(self, parent: str, key: str = "k:open:1:0") -> Any:
         with tenant_scope(self.id):
@@ -100,7 +102,7 @@ class Tenant:
 
     async def children(self) -> list[dict[str, Any]]:
         with tenant_scope(self.id):
-            return await self.runs.list(workflow_id="case")
+            return [r.model_dump() for r in await self.runs.list(workflow_id="case")]
 
 
 @pytest.fixture
@@ -117,7 +119,7 @@ async def tenants(engine: AsyncEngine) -> AsyncIterator[Callable[[], Tenant]]:  
     for t in made:
         with tenant_scope(t.id):
             for r in await t.runs.list():
-                await t.runs.cancel(str(r["id"]), reason="test_ended")
+                await t.runs.cancel(r.id, reason="test_ended")
 
 
 async def refused(t: Tenant, parent: str) -> str:
@@ -244,11 +246,11 @@ async def test_a_parent_waits_while_a_run_it_started_waits_on_a_person_and_succe
     with tenant_scope(t.id):
         assert len(await t.runs.steps(parent)) == steps
         for child in children[:-1]:
-            cancelled, _ = await t.runs.cancel(str(child["id"]))
-            await t.runs.settle_parents(cancelled or {})
+            await t.runs.cancel(str(child["id"]))
+            await t.runs.settle_parents(str(child["id"]), str(child["created_by"]))
         assert (await t.runs.get(parent) or {})["status"] == "waiting"
-        last, _ = await t.runs.cancel(str(children[-1]["id"]))
-        await t.runs.settle_parents(last or {})
+        await t.runs.cancel(str(children[-1]["id"]))
+        await t.runs.settle_parents(str(children[-1]["id"]), str(children[-1]["created_by"]))
         run = await t.runs.get(parent) or {}
     assert run["status"] == "succeeded" and run["finished_at"] is not None
 
@@ -281,7 +283,7 @@ async def test_an_end_marked_failed_fails_the_run_and_names_where_it_ended(
         run, _ = await start_run(t.runs, stored, team_id=TEAM, mode="live", input={}, run_key=None, created_by="b@x")
     await drain(worker(engine, CountingTools(), InMemorySaver()))
     with tenant_scope(t.id):
-        ended = await t.runs.get(str(run["id"])) or {}
+        ended = await t.runs.get(run.id) or {}
     assert (ended["status"], ended["outcome"]) == ("failed", "tool_failed")
     assert ended["error"] == "Ended at Lookup failed, an end marked as a failure" and ended["finished_at"] is not None
 
@@ -362,7 +364,7 @@ async def test_a_failure_end_after_a_failed_step_says_which_step_failed_and_why(
         run, _ = await start_run(t.runs, stored, team_id=TEAM, mode="live", input={}, run_key=None, created_by="b@x")
     await drain(worker(engine, MissingCustomer(reason), InMemorySaver()))
     with tenant_scope(t.id):
-        ended = await t.runs.get(str(run["id"])) or {}
+        ended = await t.runs.get(run.id) or {}
     assert ended["status"] == "failed", ended
     why = f"Look up the customer failed: {said}. The run ended at Not saved."
     assert ended["error"] == why, ended["error"]

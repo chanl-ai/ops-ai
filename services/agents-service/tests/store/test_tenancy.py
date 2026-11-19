@@ -126,7 +126,10 @@ def test_only_the_two_loops_reach_past_rls() -> None:
         for node in ast.walk(ast.parse(path.read_text())):
             if isinstance(node, ast.Attribute) and node.attr == "owner_of":
                 callers.add(path.relative_to(SRC).as_posix())
-            if isinstance(node, ast.Name) and node.id == "system_tx":
+            # The module function (`system_tx(engine, ...)`) or a store's own (`self.system_tx(...)`).
+            if (isinstance(node, ast.Name) and node.id == "system_tx") or (
+                isinstance(node, ast.Attribute) and node.attr == "system_tx"
+            ):
                 system_users.add(path.relative_to(SRC).as_posix())
     assert callers == {"api/tenant_tasks.py"}
     # store/background.py: the Background page, a central background process's view, reads every team's jobs.
@@ -134,13 +137,21 @@ def test_only_the_two_loops_reach_past_rls() -> None:
     # inside its own tenant and team (api/batches.py), as the engine's claim loop does with runs.
     # store/team_defaults.py: the start-up catch-up finds every team whose default is its Ops Assistant and brings
     # each to the declared one inside its own tenant (api/ops_tools.py).
+    # store/tenancy.py: `system_tx(engine, reason)` for code holding an engine; ops_engine's port (store/engine.py)
+    # inherits the base's, which ops_engine calls from its own package.
     assert system_users == {
+        "store/tenancy.py",
         "store/graphs.py",
-        "store/engine.py",
         "store/memories.py",
         "store/background.py",
         "store/batches.py",
         "store/team_defaults.py",
+        # store/registry_tenants.py: the pre-migration check reads every registry row's team to find the tenant each
+        # belongs to, before any tenant is known.
+        "store/registry_tenants.py",
+        # store/agent_registry.py: the start-up serving reload reads every tenant's published agent pointers, then
+        # each tenant's specs under its own (api/agent_registry.py serve_published).
+        "store/agent_registry.py",
     }
     # Memories.tenants() lists tenants past RLS for the retention loop alone, which then works each under its own.
     tenants_users = {p.relative_to(SRC).as_posix() for p in SRC.rglob("*.py") if ".tenants()" in p.read_text()}

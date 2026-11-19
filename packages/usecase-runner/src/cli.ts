@@ -1,16 +1,21 @@
-// Entry for scripts/usecase.mjs: list | show <id> | test [--uc <id>] [--layer <layer>] | report [--uc <id>] |
+// Entry for scripts/usecase.mjs: list [area] | index | extract <id> | add <area> "<title>" | update <id> | run <id> [layer] | show <id> | test [--uc <id>] [--layer <layer>] | report [--uc <id>] |
 // coverage <service> | new <service> "<title>". Exit codes are in report.ts (EXIT).
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join, relative } from 'node:path';
 import { coverage, formatCoverage } from './coverage.ts';
+import { deployedRefusal } from './deployed.ts';
 import { isLayer, LAYERS, type Layer } from './layers.ts';
 import { findUseCase, parseRegistry, RegistryError, type UseCase } from './registry.ts';
 import { EXIT, exitFor, parseChecks, summary, verdict, type Outcome } from './report.ts';
-import { DB_VAR, dropDatabase, isolate, rebuildIfStale, runDatabaseName, sweepFinished } from './isolation.ts';
+import { BASE_URL_VAR, DB_VAR, dropDatabase, isolate, rebuildIfStale, runDatabaseName, sweepFinished } from './isolation.ts';
 import { resolveScript, USECASE_DIR } from './resolve.ts';
-import { childEnv, commandFor, runScript } from './run.ts';
+import { childEnv, commandFor, pluginsRepoRefusal, runScript } from './run.ts';
 import { scaffold } from './scaffold.ts';
-import { formatStories, loadRun, saveRun, storiesOf, StoryError, type SavedRun } from './stories.ts';
+import { extract, runPage } from './page.ts';
+import { execFileSync } from 'node:child_process';
+import { buildIndex, formatList, inArea, writeIndex } from './usecase-index.ts';
+import { updateReport } from './update.ts';
+import { findDoc, formatSteps, formatStories, loadRun, logPath, parseSteps, saveGreen, saveLog, saveRun, storiesOf, StoryError, type SavedRun } from './stories.ts';
 
 function flag(args: string[], name: string): string | undefined {
   const i = args.indexOf(`--${name}`);
@@ -31,6 +36,10 @@ export interface TestDeps {
   rebuild?: (root: string, env: NodeJS.ProcessEnv, name: string) => Promise<boolean>;
 }
 
+function parentDeployed(env: NodeJS.ProcessEnv): boolean {
+  return Boolean(env[BASE_URL_VAR]);
+}
+
 export async function test(
   root: string,
   registry: UseCase[],
@@ -42,12 +51,23 @@ export async function test(
     console.error(`unknown layer ${layerArg}; one of ${LAYERS.join(', ')}`);
     return EXIT.usage;
   }
-  const targets = ucId ? [findUseCase(registry, ucId)] : registry;
+  const named = ucId ? [findUseCase(registry, ucId)] : registry;
+  // A whole-registry run on a deployed host takes only the use cases marked safe; a named one is refused unless marked.
+  const targets = !ucId && parentDeployed(deps.parent) ? registry.filter((uc) => uc.deployed) : named;
   const { env: base, realCalls } = childEnv(deps.parent, root);
   console.log(realCalls ? `real model calls approved: ${realCalls}` : 'scripted model only (model keys removed; APPROVED_REAL_CALLS=<n> to allow real calls)');
-  if (deps.sweep && !(await deps.sweep(root, base))) console.error('could not sweep finished runs\' databases; make db-sweep retries');
+  // A deployed host (OPS_USECASE_BASE_URL) has its own database, which no run here makes, sweeps or drops.
+  const deployed = Boolean(base[BASE_URL_VAR]);
+  // Refused before anything runs: a host other than the staging host, any layer but api, and a use case nobody marked safe.
+  const refusal = deployed ? deployedRefusal(String(base[BASE_URL_VAR]).replace(/\/+$/, ''), base, targets, layerArg) : undefined;
+  if (refusal) {
+    console.error(`refused by the deployed-host guard: ${refusal}`);
+    return EXIT.usage;
+  }
+  if (deployed) console.log(`api scripts run against ${base[BASE_URL_VAR]}; no stack or database is started`);
+  if (!deployed && deps.sweep && !(await deps.sweep(root, base))) console.error('could not sweep finished runs\' databases; make db-sweep retries');
   const { env, ownedDb } = await isolate(base);
-  if (!ownedDb && deps.rebuild && !(await deps.rebuild(root, env, String(env[DB_VAR])))) {
+  if (!deployed && !ownedDb && deps.rebuild && !(await deps.rebuild(root, env, String(env[DB_VAR])))) {
     console.error(`could not check ${env[DB_VAR]}'s migrations; a chain behind may stop the scripts at start`);
   }
   // Each script gets its own database when the run owns the name: a stack's files folder is new per script, so rows an
@@ -70,7 +90,7 @@ export async function test(
   };
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
-  console.log(`database ${ownedDb ? 'one per use case, each dropped after it' : env.OPS_USECASE_DB}; ports agents ${env.OPS_USECASE_AGENTS_PORT}, tools ${env.OPS_USECASE_TOOLS_PORT}, models ${env.OPS_USECASE_MODELS_PORT}, kb ${env.OPS_USECASE_KB_PORT}, files ${env.OPS_USECASE_FILES_PORT}, fake openai ${env.OPS_USECASE_FAKE_OPENAI_PORT}, platform ${env.OPS_USECASE_PLATFORM_PORT}, console ${env.OPS_USECASE_CONSOLE_PORT}`);
+  if (!deployed) console.log(`database ${ownedDb ? 'one per use case, each dropped after it' : env.OPS_USECASE_DB}; ports agents ${env.OPS_USECASE_AGENTS_PORT}, tools ${env.OPS_USECASE_TOOLS_PORT}, models ${env.OPS_USECASE_MODELS_PORT}, kb ${env.OPS_USECASE_KB_PORT}, files ${env.OPS_USECASE_FILES_PORT}, fake openai ${env.OPS_USECASE_FAKE_OPENAI_PORT}, platform ${env.OPS_USECASE_PLATFORM_PORT}, console ${env.OPS_USECASE_CONSOLE_PORT}`);
   return await runAll(root, targets, layerArg, databaseFor);
 }
 
@@ -96,10 +116,21 @@ async function runAll(
       console.log(`\n== ${uc.id} ${layer}: ${uc.title} (${r.path})`);
       outcomes.push(
         await databaseFor(async (env) => {
-          const { code, output } = await runScript(commandFor(root, r.path, r.runtime), env, root);
+          const noPlugins = r.kind === 'page' ? undefined : pluginsRepoRefusal(env, join(root, r.path));
+          if (noPlugins) {
+            console.log(noPlugins);
+            return { id: uc.id, layer, status: 'FAIL', detail: noPlugins };
+          }
+          const { code, output } = r.kind === 'page' ? await runPage(root, r.path, layer, env) : await runScript(commandFor(root, r.path, r.runtime), env, root);
           const checks = parseChecks(output);
-          saveRun(root, { id: uc.id, layer, at: new Date().toISOString(), exit: code, checks });
           const v = verdict(code, checks);
+          const saved: SavedRun = { id: uc.id, layer, at: new Date().toISOString(), exit: code, checks, commit: headCommit(root) };
+          saveRun(root, saved);
+          if (v.pass) saveGreen(root, saved);
+          saveLog(root, uc.id, layer, output);
+          const doc = r.kind === 'page' ? undefined : findDoc(root, uc);
+          const steps = doc ? parseSteps(readFileSync(join(root, doc), 'utf8')) : [];
+          console.log(`\n${uc.id} ${layer}, step by step${r.kind === 'page' ? ': the PASS and FAIL lines above, one per step' : steps.length ? `\n${formatSteps(steps, checks)}` : ': this doc has no steps table'}\n  ${v.pass ? 'all checks passed' : `failed; full output in ${relative(root, logPath(root, uc.id, layer))}`}`);
           return {
             id: uc.id,
             layer,
@@ -131,9 +162,35 @@ export function report(root: string, targets: UseCase[], layer?: Layer): string 
     .join('\n\n');
 }
 
+function headCommit(root: string): string | undefined {
+  try {
+    return execFileSync('git', ['-C', root, 'rev-parse', 'HEAD'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch {
+    return undefined;
+  }
+}
+
+/** An area is a service folder; "agents" means agents-service. */
+function resolveArea(root: string, area: string): string {
+  for (const name of [area, `${area}-service`]) if (existsSync(join(root, 'services', name))) return name;
+  throw new Error(`no area ${area}; areas are ${readdirSync(join(root, 'services'), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).join(', ')}`);
+}
+
 export async function main(argv: string[], root: string): Promise<number> {
   const [cmd = 'list', ...rest] = argv;
   try {
+    if (cmd === 'add') {
+      const [area, title] = rest;
+      if (!area || !title) {
+        console.error('usage: add <area> "<short title>" [--layers api,sdk,cli]');
+        return EXIT.usage;
+      }
+      const registry = loadRegistry(root);
+      const made = scaffold(root, registry, resolveArea(root, area), title, (flag(rest, 'layers') ?? 'api').split(','));
+      const path = writeIndex(root, buildIndex(root, loadRegistry(root)));
+      console.log(`created ${made.id}, registered it and rebuilt ${path}:\n  ${made.files.join('\n  ')}\nnext: write the steps in the doc, then make usecase-run UC=${made.id}`);
+      return EXIT.ok;
+    }
     if (cmd === 'new') {
       const [service, title] = rest;
       if (!service || !title) {
@@ -146,14 +203,29 @@ export async function main(argv: string[], root: string): Promise<number> {
     }
     const registry = loadRegistry(root);
     if (cmd === 'list') {
-      console.log(registry.map((u) => `${u.id}  ${u.service.padEnd(16)} ${u.layers.join(',').padEnd(8)} ${u.status.padEnd(8)} ${u.title}`).join('\n'));
+      console.log(formatList(root, buildIndex(root, registry).filter((r) => inArea(r, rest[0]))));
       return EXIT.ok;
+    }
+    if (cmd === 'index') {
+      console.log(`wrote ${writeIndex(root, buildIndex(root, registry))}`);
+      return EXIT.ok;
+    }
+    if (cmd === 'update') {
+      console.log(updateReport(root, findUseCase(registry, rest[0] ?? '')));
+      return EXIT.ok;
+    }
+    if (cmd === 'run') {
+      if (!rest[0]) {
+        console.error('usage: run <id> [layer]');
+        return EXIT.usage;
+      }
+      return await test(root, registry, rest[0], rest[1]);
     }
     if (cmd === 'show') {
       const uc = findUseCase(registry, rest[0] ?? '');
       const lines = LAYERS.map((l) => {
         const r = resolveScript(root, uc, l);
-        return `  ${l.padEnd(4)} ${r.kind === 'script' ? r.path : r.reason}${uc.layers.includes(l) ? '' : ' (not required)'}`;
+        return `  ${l.padEnd(4)} ${r.kind === 'script' || r.kind === 'page' ? r.path : r.reason}${uc.layers.includes(l) ? '' : ' (not required)'}`;
       });
       console.log(`${uc.id} ${uc.title}\n  service ${uc.service} · status ${uc.status}\n${lines.join('\n')}`);
       return EXIT.ok;
@@ -164,6 +236,14 @@ export async function main(argv: string[], root: string): Promise<number> {
       console.log(services.map((s) => formatCoverage(s, coverage(root, registry, s))).join('\n\n'));
       return EXIT.ok;
     }
+    if (cmd === 'extract') {
+      if (!rest[0]) {
+        console.error('usage: extract <id>');
+        return EXIT.usage;
+      }
+      console.log(`wrote the page's code, one file per tab:\n  ${extract(root, rest[0]).join('\n  ')}`);
+      return EXIT.ok;
+    }
     if (cmd === 'test') return await test(root, registry, flag(rest, 'uc'), flag(rest, 'layer'));
     if (cmd === 'report') {
       const ucId = flag(rest, 'uc');
@@ -171,7 +251,7 @@ export async function main(argv: string[], root: string): Promise<number> {
       console.log(targets.length ? report(root, targets) : 'no use case has a Stories table yet');
       return EXIT.ok;
     }
-    console.error(`unknown command ${cmd}; one of list, show, test, report, coverage, new`);
+    console.error(`unknown command ${cmd}; one of list, index, extract, add, update, run, show, test, report, coverage, new`);
     return EXIT.usage;
   } catch (e) {
     if (e instanceof RegistryError || e instanceof StoryError) {

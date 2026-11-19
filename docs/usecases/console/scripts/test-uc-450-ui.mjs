@@ -2,12 +2,15 @@
 // STG_EMAIL, STG_PASSWORD from the environment) in the demo team (STG_TEAM) and checks, as a person sees them, that the
 // Open cases view and the run picker show each record once and that Dispute Desk finds a seeded dispute's charge at the
 // bank. Step c is one chat turn on the team's live model; UC450_ONLY=a,b leaves it out.
-import { check, chromium, finish } from '@ops-ai/usecase-runner/harness';
+import { mkdirSync } from 'node:fs';
 
-const ORIGIN = process.env.STG_ORIGIN;
+import { check, chromium, evidenceDir, finish, requireStagingOrigin } from '@ops-ai/usecase-runner/harness';
+
+const ORIGIN = requireStagingOrigin(process.env.STG_ORIGIN);
 const TEAM = process.env.STG_TEAM;
 const ONLY = process.env.UC450_ONLY?.split(',');
-const SHOTS = process.env.UC450_SHOTS;
+const SHOTS = evidenceDir('450', 'screens');
+mkdirSync(SHOTS, { recursive: true });
 // A turn on a real model makes several model calls of a few seconds each.
 const TURN = 180_000;
 
@@ -24,7 +27,7 @@ async function step(name, body) {
   } catch (e) {
     check(name, false, String(e).slice(0, 400));
   }
-  if (SHOTS) await page.screenshot({ path: `${SHOTS}/uc450-${name[0]}.png`, fullPage: true }).catch(() => {});
+  await page.screenshot({ path: `${SHOTS}/uc450-${name[0]}.png`, fullPage: true }).catch(() => {});
 }
 
 /** How many times each text in `texts` appears among `labels`, and the texts that appear more than once. */

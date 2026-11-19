@@ -17,3 +17,9 @@ project (`ops-mirror-test`) and never touches the dev stack. Deploy-wide rules: 
 The lane is slow (a full install from an empty cache). The settings a real mirror needs are in
 [docs/deploy/install.md](../../docs/deploy/install.md), "Behind a company mirror"; the related `make deps-doctor`,
 `deps-relock MIRROR=1` and `install-mirror` targets are in `make/deps.mk`.
+
+## Engineering standards
+
+The rules the code in this folder is held to, each with a real example from this repository and the check that
+enforces it: [delivery, deploy and upgrade](../../docs/architecture/standards/delivery.md) (`DL1` to `DL9`). The index of every rule is
+[engineering standards](../../docs/architecture/engineering-standards.md); a review cites the rule id.

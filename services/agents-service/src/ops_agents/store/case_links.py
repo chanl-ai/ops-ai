@@ -4,17 +4,19 @@ query whatever the case holds, and capped, so a case with many runs reads as fas
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from typing import ClassVar
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_engine.store.tables import engine_definitions, engine_runs
+from ops_service_kit.http import Json, Out
 from ops_store import Guarantee
+from ops_store.rows import rows
 from ops_store.team_scope import team_visible
 
 from .actor_names import UNNAMED_WORKFLOW
-from .cases import case_events, cases
+from .cases import CaseRecord, case_events, cases
 from .tenancy import current_tenant, tenant_tx
 from .trigger_events import trigger_events
 
@@ -23,13 +25,32 @@ RELATED_CAP = 5
 EMAILS_CAP = 10
 
 
+class CaseEmail(Out):
+    """An email that started one of the case's runs."""
+
+    id: str
+    subject: str
+    sender: str
+    recorded_at: str
+    run_id: str | None
+
+
+class RelatedCase(Out):
+    """A case linked to this one (`linked`) or open for the same customer (`same_customer`)."""
+
+    id: str
+    subject: str
+    status: str
+    relation: str
+
+
 class CaseLinks:
     requires: ClassVar[frozenset[Guarantee]] = frozenset()
 
     def __init__(self, engine: AsyncEngine) -> None:
         self.engine = engine
 
-    async def runs(self, case_id: str, team_id: str) -> list[dict[str, Any]]:
+    async def runs(self, case_id: str, team_id: str) -> list[Json]:
         """The runs on the case's timeline, newest first, in the case's team, each with `workflow_name`."""
         e, r, d = case_events, engine_runs, engine_definitions
         named = r.outerjoin(
@@ -49,7 +70,7 @@ class CaseLinks:
         async with tenant_tx(self.engine) as c:
             return [dict(row) for row in (await c.execute(q)).mappings()]
 
-    async def emails(self, run_ids: list[str]) -> list[dict[str, Any]]:
+    async def emails(self, run_ids: list[str]) -> list[CaseEmail]:
         """The emails that started the runs, newest first."""
         if not run_ids:
             return []
@@ -61,26 +82,24 @@ class CaseLinks:
             .limit(EMAILS_CAP)
         )
         async with tenant_tx(self.engine) as c:
-            return [dict(row) for row in (await c.execute(q)).mappings()]
+            return await rows(c, q, CaseEmail)
 
-    async def related(self, case: dict[str, Any]) -> list[dict[str, Any]]:
+    async def related(self, case: CaseRecord) -> list[RelatedCase]:
         """Cases linked to this one, then other cases of the team for the same customer, each with `relation`."""
         k, e = cases, case_events
-        linked = sa.select(e.c.ref).where(
-            e.c.tenant_id == current_tenant(), e.c.case_id == case["id"], e.c.kind == "link"
-        )
-        same = k.c.customer_id == case["customer_id"] if case.get("customer_id") else sa.false()
+        linked = sa.select(e.c.ref).where(e.c.tenant_id == current_tenant(), e.c.case_id == case.id, e.c.kind == "link")
+        same = k.c.customer_id == case.customer_id if case.customer_id else sa.false()
         relation = sa.case((k.c.id.in_(linked), "linked"), else_="same_customer")
         q = (
             sa.select(k.c.id, k.c.subject, k.c.status, relation.label("relation"))
             .where(
                 k.c.tenant_id == current_tenant(),
-                k.c.team_id == case["team_id"],
-                k.c.id != case["id"],
+                k.c.team_id == case.team_id,
+                k.c.id != case.id,
                 sa.or_(k.c.id.in_(linked), same),
             )
             .order_by(relation, k.c.created_at.desc(), k.c.id)
             .limit(RELATED_CAP)
         )
         async with tenant_tx(self.engine) as c:
-            return [dict(row) for row in (await c.execute(q)).mappings()]
+            return await rows(c, q, RelatedCase)

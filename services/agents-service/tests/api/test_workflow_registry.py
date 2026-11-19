@@ -6,10 +6,11 @@ version; a paused or deleted workflow still starts threads; the test run stops a
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from httpx import AsyncClient
 
+from ops_agents.api.deps import Runtime
 from ops_agents.graphs.definition import WorkflowDefinition
 
 from ..conftest import sse_events
@@ -107,7 +108,9 @@ async def test_the_test_run_goes_through_its_review_to_the_end(client: AsyncClie
     assert out["status"] == "completed" and out["pausesApproved"] == 1, out
     assert out["visited"] == ["t", "agent", "review", "review__decide", "done"], out
     assert out["output"], "the agent step's reply is the output"
-    assert all(t["graph"] != wf["id"] for t in _ok(await client.get("/v1/threads"))), "a test run keeps no thread"
+    assert all(t["graph"] != wf["id"] for t in _ok(await client.get("/v1/threads"))["data"]), (
+        "a test run keeps no thread"
+    )
 
 
 async def test_publish_starts_on_the_pointer_and_pause_and_delete_refuse_new_threads(client: AsyncClient) -> None:
@@ -158,9 +161,11 @@ async def test_compiled_agent_step_pins_the_published_version(client: AsyncClien
 
 
 async def _definition(client: AsyncClient, name: str, version: int) -> dict[str, Any]:
-    rt = client._transport.app.state.runtime  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownVariableType]
-    row = await rt.graph_store.version(name, version)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
-    return row["definition"]  # pyright: ignore[reportUnknownVariableType]
+    rt = cast(Runtime, client._transport.app.state.runtime)  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
+    assert rt.graph_store is not None
+    row = await rt.graph_store.version(name, version)
+    assert row is not None
+    return row.definition
 
 
 async def test_a_restart_keeps_published_and_deleted_workflows_as_they_were(tmp_path: Path) -> None:

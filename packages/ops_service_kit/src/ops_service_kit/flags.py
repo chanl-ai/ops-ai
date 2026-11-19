@@ -9,11 +9,11 @@ flag server. Services read a flag through `Settings.feature_flags`, and the cons
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, TypedDict
 
 # The names, as a type, so the platform answer's schema and the console's generated types carry them; a test keeps
 # this and FLAGS equal.
-FlagName = Literal["mcp_gateway", "tool_search", "plugin_updates"]
+FlagName = Literal["mcp_gateway", "tool_search", "plugin_updates", "area_tabs"]
 
 
 @dataclass(frozen=True)
@@ -40,6 +40,11 @@ FLAGS: tuple[Flag, ...] = (
         description="Each team keeps the plugin version it took and reviews an upgrade before its tools change.",
         remove_when="Plugin updates are released to every install.",
     ),
+    Flag(
+        name="area_tabs",
+        description="The console shows one area at a time, picked from the top bar; off, the sidebar lists every area.",
+        remove_when="The owner picks one console layout and the other is deleted.",
+    ),
 )
 
 NAMES: frozenset[str] = frozenset(f.name for f in FLAGS)
@@ -50,6 +55,14 @@ def check(names: list[str]) -> None:
     unknown = sorted(set(names) - NAMES)
     if unknown:
         raise ValueError(f"unknown flag {', '.join(unknown)} in OPS_FLAGS; known flags: {', '.join(sorted(NAMES))}")
+
+
+class FlagState(TypedDict):
+    """One flag as platform-service answers it."""
+
+    name: str
+    description: str
+    on: bool
 
 
 @dataclass(frozen=True)
@@ -64,6 +77,6 @@ class Flags:
             raise KeyError(f"no flag named {name!r}")
         return name in self.turned_on
 
-    def resolved(self) -> list[dict[str, object]]:
+    def resolved(self) -> list[FlagState]:
         """Every flag in registry order with whether it is on, for platform-service's answer."""
-        return [{"name": f.name, "description": f.description, "on": f.name in self.turned_on} for f in FLAGS]
+        return [FlagState(name=f.name, description=f.description, on=f.name in self.turned_on) for f in FLAGS]

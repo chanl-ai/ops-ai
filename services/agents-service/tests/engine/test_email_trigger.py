@@ -146,7 +146,7 @@ class Env:
 
     async def runs(self, workflow: str = "levy_intake") -> list[dict[str, Any]]:
         with tenant_scope(TENANT):
-            return await RunStore(EngineTransactions(self.db)).list(workflow_id=workflow)
+            return [r.model_dump() for r in await RunStore(EngineTransactions(self.db)).list(workflow_id=workflow)]
 
     async def publish(
         self, wid: str = "levy_intake", *, tenant: str = TENANT, team: str | None = TEAM, **params: Any
@@ -467,8 +467,8 @@ async def test_a_message_that_fails_three_polls_is_set_aside_and_run_again_start
     with tenant_scope(TENANT):
         started = await run_again(env.db, env.files_client(), aside["id"], by="nadia@bank.example")
     assert started.run is not None and started.created
-    assert started.run["input"]["messageId"] == "notice-1@court.example"
-    assert started.run["run_key"] == aside["event_key"], "under the message's own run key"
+    assert cast(dict[str, Any], started.run.input)["messageId"] == "notice-1@court.example"
+    assert started.run.run_key == aside["event_key"], "under the message's own run key"
     assert await env.kept(aside["id"]) is None, "raw mail is not held once its run started"
     assert len(await env.runs()) == 2
 

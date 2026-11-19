@@ -9,7 +9,7 @@ from typing import Any
 import httpx
 
 from ops_tools.mocks import MAX_WAIT_MS, MockAnswers, chosen
-from ops_tools.store.mocks import MockStore
+from ops_tools.store.mocks import MockRow, MockStore
 
 from .conftest import service_headers
 from .test_calls import MODULE, Gateway, gateway  # noqa: F401  # pyright: ignore[reportUnusedImport]
@@ -19,8 +19,8 @@ from .test_review_decisions import person
 OP = f"{MODULE}_op1"
 
 
-def _row(**kw: Any) -> dict[str, Any]:
-    return {"match": {}, "is_default": False, **kw}
+def _row(**kw: Any) -> MockRow:
+    return {"match": {}, "is_default": False, **kw}  # pyright: ignore[reportReturnType]
 
 
 def test_the_first_match_in_order_answers_else_the_default() -> None:

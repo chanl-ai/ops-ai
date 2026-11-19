@@ -45,6 +45,7 @@ def dev_provider_keys(settings: Settings) -> dict[str, str]:
 
 def main() -> None:
     settings = Settings()
+    settings.require(*settings.identity_endpoints)
     # The install's model connection: a value that cannot work stops models-service here, naming the variable.
     connection = ModelConnectionSettings()
     # Provider keys are sealed with it: the public dev default would let anyone with the database read them.

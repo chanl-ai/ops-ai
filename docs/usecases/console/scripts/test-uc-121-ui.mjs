@@ -62,6 +62,12 @@ await withUiStack(
       await page.getByRole('button', { name: /^Sign in/ }).first().click();
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
       const sidebar = () => page.locator('[data-slot="sidebar"]').first().getAttribute('data-state');
+      // The sidebar starts folded (Chat, where the console opens, wants the room); James opens it himself first, so the
+      // editor's own fold, and putting it back on leaving, can be seen.
+      if ((await sidebar()) === 'collapsed') {
+        await page.locator('[data-sidebar="trigger"]').first().click();
+        await page.waitForTimeout(300);
+      }
       const sidebarBefore = await sidebar();
       const canvas = page.getByTestId('definition-canvas');
       const open = async () => {

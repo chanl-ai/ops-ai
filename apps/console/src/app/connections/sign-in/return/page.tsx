@@ -63,7 +63,7 @@ function SignInReturnPage() {
     </Button>
   ) : (
     <Button asChild variant="outline">
-      <Link href="/integrations">Back to Connectors</Link>
+      <Link href="/data/connectors">Back to Connectors</Link>
     </Button>
   );
   const refused = finish.error as (ApiError & { details?: { who?: string; app?: string } }) | null;

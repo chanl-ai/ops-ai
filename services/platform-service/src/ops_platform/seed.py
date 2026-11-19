@@ -23,7 +23,7 @@ async def seed(
     only_tenant: str | None = None,
 ) -> None:
     """`only_tenant` is a single-tenant install's tenant (`tenants.install_tenant`); a seed of any other is refused."""
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text())  # noqa: ASYNC240
     require_tenant_allowed(only_tenant, str(data["tenant"]["id"]))
     db = TenantDb.open(database_url)
     try:

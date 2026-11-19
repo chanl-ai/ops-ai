@@ -1,7 +1,11 @@
 // uc-152 the live settings follow the approved tree, ui layer: docs/usecases/console/settings-tree-live.md.
 // Signed in through platform-service as Sam (Security admin). Settings has its own sidebar; a moved page answers at its
 // new route and its old route redirects to it.
-import { PLATFORM_PORT, TOOLS_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { PLATFORM_PORT, TOOLS_PORT, check, chromium, expectSampleData, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+
+// Pages this walk opens that are still on sample data and say so (uc-125 checks their notice); only the routing is checked here.
+// API keys is live; its scope list is read from the mock, which stays a failure here.
+expectSampleData('/settings/account/security', '/settings/team/notifications', '/settings/team/webhooks', '/settings/policies/gates', '/settings/workspace/usage');
 
 // Old route -> new route, one entry per page moved so far.
 const MOVED = [
@@ -11,7 +15,7 @@ const MOVED = [
   ['/account/security', '/settings/account/security'],
   ['/account', '/settings/account'],
   ['/settings/usage', '/settings/workspace/usage'],
-  ['/settings/secrets', '/integrations/credentials'],
+  ['/settings/secrets', '/data/secrets'],
   ['/settings/egress', '/settings/security/egress'],
   ['/settings/sign-in', '/settings/security/sign-in'],
   ['/settings/notifications', '/settings/team/notifications'],
@@ -61,14 +65,14 @@ await withUiStack(
       await sam.waitForURL(/\/settings\/(workspace\/)?storage/, { timeout: 30_000 });
       check('F focuses Find and a search opens the page', found);
 
-      // Secrets live on Apps › Credentials: the old address opens its Secrets tab, with Add secret there once.
+      // Secrets live on Data › Secrets: the old address opens its Secrets tab, with Add secret there once.
       await sam.goto(`${consoleUrl}/settings/secrets`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await sam.getByTestId('secrets-add').waitFor({ timeout: 120_000 });
       const header = {
         title: await sam.getByTestId('page-title').first().innerText(),
         add: await sam.getByRole('button', { name: 'Add secret' }).count(),
       };
-      check('Secrets opens on Credentials, which names itself in the page header, with its Add secret button there once', header.title === 'Credentials' && header.add === 1, header);
+      check('Secrets opens on Data › Secrets, which names itself in the page header, with its Add secret button there once', header.title === 'Secrets' && header.add === 1, header);
 
       // The secret picker: a builder picks an existing secret as a header value and has no Add option; a Security admin has it.
       const tools = `http://127.0.0.1:${TOOLS_PORT}`;

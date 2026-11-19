@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Any, Protocol, cast
 
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
+from ops_service_kit.http import Json
 
 
 class PolicyUnread(Exception):
@@ -31,4 +32,4 @@ class PlatformPolicies:
             data = await self.platform.get(f"/v1/policies/{key}")
         except (ServiceCallError, ServiceUnreachable) as e:
             raise PolicyUnread(f"{key}: {e}") from e
-        return cast(dict[str, Any], data or {}).get("value")
+        return cast(Json, data or {}).get("value")

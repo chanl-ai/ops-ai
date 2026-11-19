@@ -157,7 +157,8 @@ STEPS: list[Step] = [
     (
         "POST",
         "ask to publish a guardrail",
-        lambda k: (f"/v1/guardrails/{k['guardrail']}/publish-requests", {"version": 2}),
+        # The edit above rewrites the one draft, so it is still v1.
+        lambda k: (f"/v1/guardrails/{k['guardrail']}/publish-requests", {"version": 1}),
         201,
         N,
     ),

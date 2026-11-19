@@ -1,11 +1,12 @@
 """The banker demo's two knowledge bases, seeded when a dev kb-service starts.
 
-Retail products (owned by James, the builder) holds the retail product sheet; Branch operations (owned by Nadia,
-Security's approver) holds the branch manual and the fee schedule. Each base has a stable id, which agents-service's
-seed names in Advisor's Helper and Branch Policy (`seed/chat_agents.json`), so a rebuilt database has both FAQ agents
-answering from their bases with no hand-run script. A base that exists is left as it is: people may have changed it.
-Its demo files are uploaded again when the store cannot read them, as after kb-service moved from its own store to
-files-service.
+Retail products (owned by James, the builder) holds the retail product sheet; Branch operations (owned by Priya,
+the operations team's admin) holds the branch manual and the fee schedule. Both are the operations team's, as are the
+agents that answer from them, since a turn searches only its own team's bases. Each base has a stable id, which
+agents-service's seed names in Advisor's Helper and Branch Policy (`seed/chat_agents.json`), so a rebuilt database has
+both FAQ agents answering from their bases with no hand-run script. A base that exists is left as it is: people may
+have changed it. Its demo files are uploaded again when the store cannot read them, as after kb-service moved from its
+own store to files-service.
 `scripts/seed_demo_knowledge.py` finds these bases by name and reuses them.
 """
 
@@ -23,7 +24,7 @@ from .service import KnowledgeService, Who
 log = get_logger(__name__)
 PDFS = Path(__file__).resolve().parents[2] / "seed" / "pdfs"
 TENANT = "local"
-JAMES, NADIA = "j.richardson@harborpine.example", "n.petrov@harborpine.example"
+JAMES, PRIYA = "j.richardson@harborpine.example", "p.shah@harborpine.example"
 
 
 @dataclass(frozen=True)
@@ -51,8 +52,8 @@ DEMO = (
     DemoBase(
         "kb_branch_operations",
         "Branch operations",
-        NADIA,
-        "team_security",
+        PRIYA,
+        "team_ops",
         "Operations",
         "The branch manual and the fee schedule tellers answer from.",
         {
@@ -76,11 +77,11 @@ async def seed_demo(service: KnowledgeService, tenant: str = TENANT) -> list[str
             continue
         # A base of this name under another id was made by hand or by the script before the ids were stable; it is
         # left alone, and the agents naming the stable id find nothing until the database is rebuilt.
-        if any(b["name"].lower() == d.name.lower() for b in await service.store.bases(tenant)):
+        if any(b.name.lower() == d.name.lower() for b in await service.store.bases(tenant)):
             log.warning("demo_kb_name_taken_not_seeded", name=d.name, id=d.id)
             continue
         # A source of a demo source's name belongs to someone; the seed never uploads into it.
-        taken = {s["name"].lower() for s in await service.store.sources(tenant)} & {n.lower() for n in d.files}
+        taken = {s.name.lower() for s in await service.store.sources(tenant)} & {n.lower() for n in d.files}
         if taken:
             log.warning("demo_kb_source_name_taken_not_seeded", name=d.name, id=d.id, sources=sorted(taken))
             continue
@@ -108,25 +109,25 @@ async def _restore_files(service: KnowledgeService, tenant: str, d: DemoBase) ->
     """Uploads a demo source's file again when the store cannot read the files the source holds, dropping the
     unreadable ids, then syncs; True when any source was restored. A source a person renamed is not found and left."""
     who = Who(tenant_id=tenant, email=d.owner, team_id=d.team)
-    sources = {s["name"]: s for s in await service.store.sources(tenant)}
+    sources = {s.name: s for s in await service.store.sources(tenant)}
     restored = False
     for source_name, (file_name, pdf) in d.files.items():
         source = sources.get(source_name)
-        if source is None or source["owner"] != d.owner:
+        if source is None or source.owner != d.owner:
             continue
         missing: set[str] = set()
-        for file_id in source["file_ids"]:
+        for file_id in source.file_ids:
             try:
                 await service.files.read(tenant, source_team(source), file_id)
             except FileMissing:
                 missing.add(file_id)
             except FileNotScanned:
                 continue
-        if not missing and source["file_ids"]:
+        if not missing and source.file_ids:
             continue
         log.info("demo_kb_files_restored", base=d.id, source=source_name, unreadable=len(missing))
-        await service.store.drop_files(tenant, str(source["id"]), missing)
-        await service.upload(who, str(source["id"]), (PDFS / pdf).read_bytes(), name=file_name, mime="application/pdf")
-        await service.sync(who, str(source["id"]))
+        await service.store.drop_files(tenant, str(source.id), missing)
+        await service.upload(who, str(source.id), (PDFS / pdf).read_bytes(), name=file_name, mime="application/pdf")
+        await service.sync(who, str(source.id))
         restored = True
     return restored

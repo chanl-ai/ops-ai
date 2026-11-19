@@ -15,6 +15,8 @@ from datetime import date, datetime
 from typing import Any, cast
 from urllib.parse import urlsplit
 
+from pydantic import JsonValue
+
 from .formats import check, render
 from .manifest import Paging, Tool
 
@@ -46,7 +48,7 @@ def at(data: Any, path: str) -> Any:
                 return None
             node = cast(list[Any], node)[step]
         elif isinstance(node, dict) and step is not None:
-            node = cast(dict[str, Any], node).get(step)
+            node = cast(dict[str, JsonValue], node).get(step)
         else:
             return None
     return node
@@ -57,7 +59,7 @@ def without(data: Any, path: str) -> Any:
     head, _, rest = path.partition(".")
     if not isinstance(data, dict):
         return data
-    answer = dict(cast(dict[str, Any], data))
+    answer = dict(cast(dict[str, JsonValue], data))
     if head not in answer:
         return answer
     if rest:
@@ -92,7 +94,7 @@ def headers(plugin_headers: Mapping[str, str], tool: Tool, settings: Mapping[str
     return out
 
 
-def arguments(tool: Tool, given: Mapping[str, Any], state: Mapping[str, Any] | None) -> dict[str, Any]:
+def arguments(tool: Tool, given: Mapping[str, Any], state: Mapping[str, JsonValue] | None) -> dict[str, Any]:
     """What a call sends besides its path: the checked inputs no query template takes, each query parameter rendered,
     and the page's token or offset; an input left out takes its default. InputRefused for a value its input does not
     allow."""
@@ -114,10 +116,10 @@ def arguments(tool: Tool, given: Mapping[str, Any], state: Mapping[str, Any] | N
     if paging is not None and paging.rule == "token" and state is not None:
         sent[str(paging.param)] = state.get("token")
     elif paging is not None and paging.rule == "offset":
-        sent[paging.offset_param] = int((state or {}).get("offset") or 0)
+        sent[paging.offset_param] = int(cast(str | int | float, (state or {}).get("offset") or 0))
         sent[paging.limit_param] = paging.limit
     elif paging is not None and paging.rule == "page":
-        sent[paging.param or "page"] = int((state or {}).get("page") or paging.start)
+        sent[paging.param or "page"] = int(cast(str | int | float, (state or {}).get("page") or paging.start))
         sent[paging.limit_param] = paging.limit
     return sent
 
@@ -138,7 +140,7 @@ def link_next(header: str) -> str | None:
 
 def next_page(
     paging: Paging | None, answer: Any, sent: Mapping[str, Any], headers: Mapping[str, str] | None = None
-) -> tuple[Any, dict[str, Any]]:
+) -> tuple[Any, dict[str, JsonValue]]:
     """The answer without the system's own page address, and the next page's state: {} on the last page. `sent` is
     what the page was asked with; `headers` the answer's, for a Link header."""
     if paging is None:
@@ -149,7 +151,9 @@ def next_page(
         return answer, {"link": link} if link else {}
     if paging.rule in ("link", "token") and paging.next:
         value = at(answer, paging.next)
-        found_state = {("link" if paging.rule == "link" else "token"): str(value)} if value else {}
+        found_state: dict[str, JsonValue] = (
+            {("link" if paging.rule == "link" else "token"): str(value)} if value else {}
+        )
         return without(answer, paging.next), found_state
     rows = at(answer, paging.items) if paging.items else answer
     full = isinstance(rows, list) and bool(paging.limit) and len(cast(list[Any], rows)) >= (paging.limit or 0)
@@ -160,9 +164,9 @@ def next_page(
     return answer, {"offset": int(sent.get(paging.offset_param, 0)) + paging.limit}
 
 
-def with_next(output: Any, cursor: str) -> dict[str, Any]:
+def with_next(output: Any, cursor: str) -> dict[str, JsonValue]:
     """The tool's answer with `next_cursor`; a list answer is kept under `records`."""
-    page = dict(cast(dict[str, Any], output)) if isinstance(output, dict) else {"records": output}
+    page = dict(cast(dict[str, JsonValue], output)) if isinstance(output, dict) else {"records": output}
     return {**page, "next_cursor": cursor}
 
 

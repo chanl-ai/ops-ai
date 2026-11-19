@@ -6,7 +6,7 @@ import { join } from 'node:path';
 
 import { ROOT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
-const SHOTS = evidenceDir('198');
+const SHOTS = evidenceDir('164');
 
 async function signIn(page, consoleUrl, email) {
   await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
@@ -30,7 +30,7 @@ await withUiStack(
       const linked = await link.waitFor({ timeout: 60_000 }).then(() => true, () => false);
       check('Access offers Teams to a workspace admin', linked);
       await link.click();
-      await sam.waitForURL((u) => u.pathname === '/access/teams', { timeout: 60_000 });
+      await sam.waitForURL((u) => u.pathname === '/govern/access/teams', { timeout: 60_000 });
       await sam.getByTestId('teams-create').waitFor({ timeout: 60_000 });
 
       await sam.getByTestId('teams-create').click();

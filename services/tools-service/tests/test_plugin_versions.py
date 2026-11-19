@@ -46,7 +46,7 @@ async def test_a_save_keeps_the_version_a_team_took_and_a_take_needs_a_binding(
     assert await b.take(tenant, "team_ops", ID, version="0.1.0", digest="d1", declarations=DECL)
     await b.put(tenant, "team_ops", ID, enabled=True, connection_id="con_a", settings={"x": 1}, by="t")
     row = await b.get(tenant, "team_ops", ID)
-    assert row is not None and (row["version"], row["digest"], row["declarations"]) == ("0.1.0", "d1", DECL)
+    assert row is not None and (row.version, row.digest, row.declarations) == ("0.1.0", "d1", DECL)
 
 
 async def test_every_teams_binding_of_a_plugin_is_found_for_the_stamp(engine: AsyncEngine, tenant: str) -> None:
@@ -54,7 +54,7 @@ async def test_every_teams_binding_of_a_plugin_is_found_for_the_stamp(engine: As
     for team in ("team_ops", "team_platform"):
         await b.put(tenant, team, ID, enabled=True, connection_id=None, settings={}, by="t")
     await b.put(tenant, "team_ops", "test.other", enabled=True, connection_id=None, settings={}, by="t")
-    assert sorted(r["team_id"] for r in await b.of_plugin(tenant, ID)) == ["team_ops", "team_platform"]
+    assert sorted(r.team_id for r in await b.of_plugin(tenant, ID)) == ["team_ops", "team_platform"]
 
 
 # Calls and lists run each team's version across an upgrade.
@@ -113,7 +113,9 @@ class Upgrade:
 
     async def listed(self, team: str) -> set[str]:
         with acting_as(team):
-            rows = await ToolRegistry(self.catalog, self.store, self.host).grantable(self.tenant, sees=lambda _m: True)
+            rows = await ToolRegistry(self.catalog, self.store, self.host).grantable(
+                self.tenant, sees=lambda m, operation=None: True
+            )
         return {r["name"] for r in rows if r["name"].startswith("fields_")}
 
 
@@ -139,7 +141,7 @@ def path(u: Upgrade) -> str:
 
 async def test_a_binding_with_no_version_is_stamped_with_the_installed_one(up: Upgrade) -> None:
     row = await up.bindings.get(up.tenant, "team_ops", ID)
-    assert row is not None and row["version"] == "0.1.0" and row["digest"], row
+    assert row is not None and row.version == "0.1.0" and row.digest, row
 
 
 async def test_after_an_upgrade_a_team_keeps_calling_its_version(up: Upgrade) -> None:
@@ -161,6 +163,14 @@ async def test_after_an_upgrade_a_team_keeps_calling_its_version(up: Upgrade) ->
     after = {o["name"]: o for o in await ops_of(up)}
     assert all(after[n]["id"] == i for n, i in before.items()), "ids are kept by name"
     assert after["fields_transfer"]["enabled"] is False and after["fields_close_case"]["enabled"] is True
+
+
+async def test_a_tool_only_the_new_version_has_names_the_update_even_when_the_team_added_a_list(up: Upgrade) -> None:
+    # A team that picked its tools has a list; a tool its version lacks is not in it, and "add it" would be a dead end.
+    await up.bindings.set_tools(up.tenant, "team_ops", ID, ["find", "post_message"])
+    up.upgrade()
+    new = await up.call("team_ops", "close_case", {"id": "case-1"})
+    assert not new.ok and "takes the update" in new.output["error"]["message"], new
 
 
 async def test_a_team_that_takes_the_update_runs_it_and_the_other_team_does_not(up: Upgrade) -> None:
@@ -266,7 +276,7 @@ async def test_a_team_reviews_an_upgrade_and_takes_it_and_another_team_keeps_its
     assert found["fields_close_case"]["change"] == "new" and found["fields_close_case"]["inputs"]["added"] == ["id"]
     listed = next(
         a["plugin"]
-        for a in (await c.get("/v1/apps", headers=admin(tenant))).json()["data"]
+        for a in (await c.get("/v1/apps", params={"ids": f"plugin:{ID}"}, headers=admin(tenant))).json()["data"]["data"]
         if a["id"] == f"plugin:{ID}"
     )
     assert listed["updateAvailable"] and listed["teamVersion"] == "0.1.0" and "fields_transfer" in listed["tools"]

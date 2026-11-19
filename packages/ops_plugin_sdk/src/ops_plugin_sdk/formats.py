@@ -13,6 +13,8 @@ import re
 from datetime import UTC, date, datetime
 from typing import Any
 
+from pydantic import JsonValue
+
 from .manifest import InputField
 
 # SOQL's escape sequences (Salesforce SOQL and SOSL reference, "Quoted String Escape Sequences").
@@ -56,7 +58,7 @@ def check(field: InputField, value: Any, name: str) -> Any:
     if field.type == "object" and field.properties is not None:
         if not isinstance(value, dict):
             raise InputRefused(f"{name} must be an object")
-        given: dict[str, Any] = dict(value)  # pyright: ignore[reportUnknownArgumentType]
+        given: dict[str, JsonValue] = dict(value)  # pyright: ignore[reportUnknownArgumentType]
         unknown = sorted(set(given) - set(field.properties))
         if unknown:
             raise InputRefused(f"{name} has no field {unknown[0]}")

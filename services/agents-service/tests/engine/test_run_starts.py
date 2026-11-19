@@ -29,10 +29,11 @@ from ops_agents.store.tenancy import tenant_scope
 from ops_email.testing import FileMailSource, fake_folder
 from ops_engine.definition import WorkflowDefinition, parse
 from ops_engine.shapes import EMAIL
-from ops_engine.store import DefinitionStore, RunStore
+from ops_engine.store import DefinitionRow, DefinitionStore, RunStore
 from ops_files_client import FilesClient
 from ops_identity import ServiceClient, dev_service_signer
 from ops_service_kit.errors import Unprocessable
+from ops_service_kit.http import Json
 from tests.engine.test_email_trigger import MAILBOX, NOTICE, PDF, TEAM, FakeFiles, connect, mail
 from tests.engine.test_worker import CountingTools, drain, worker
 
@@ -103,7 +104,7 @@ def files_client(files: Files) -> FilesClient:
     return FilesClient(ServiceClient(http, dev_service_signer(), "agents", "files"))
 
 
-async def live_intake(engine: AsyncEngine, tenant: str, mailbox: str = MAILBOX) -> dict[str, Any]:
+async def live_intake(engine: AsyncEngine, tenant: str, mailbox: str = MAILBOX) -> DefinitionRow:
     d = intake(mailbox)
     store = DefinitionStore(EngineTransactions(engine))
     with tenant_scope(tenant):
@@ -112,12 +113,12 @@ async def live_intake(engine: AsyncEngine, tenant: str, mailbox: str = MAILBOX) 
             team=TEAM,
         )  # fmt: skip
         await store.go_live(d.id, version)
-        row = await store.get(d.id, version, team=TEAM)
+        row = await store.row(d.id, version, team=TEAM)
     assert row is not None
     return row
 
 
-async def by_mailbox(engine: AsyncEngine, tenant: str, row: dict[str, Any], files: Files, inbox: Path) -> str:
+async def by_mailbox(engine: AsyncEngine, tenant: str, row: DefinitionRow, files: Files, inbox: Path) -> str:
     """The listener's run for the fixture notice: a first pass takes the cursor, the notice arrives, a second starts."""
     with tenant_scope(tenant):
         mailbox = await connect(engine, tenant, inbox.name)
@@ -127,20 +128,20 @@ async def by_mailbox(engine: AsyncEngine, tenant: str, row: dict[str, Any], file
         files_client(files),
         Leases(engine, owner=f"poll-{uuid4().hex[:6]}", ttl=30),
     )
-    binding = binding_of(row["definition"])
+    binding = binding_of(row.definition)
     assert binding is not None
     bound = Bound(row, binding, mailbox)
     with tenant_scope(tenant):
         assert (await listener.poll(bound)).first_sync
-        inbox.mkdir(parents=True, exist_ok=True)
+        inbox.mkdir(parents=True, exist_ok=True)  # noqa: ASYNC240
         (inbox / "msg-1.json").write_text(json.dumps(mail(1)))
         [run_id] = (await listener.poll(bound)).started
     return run_id
 
 
-async def by_test_email(engine: AsyncEngine, tenant: str, row: dict[str, Any], files: Files, ids: list[str]) -> str:
+async def by_test_email(engine: AsyncEngine, tenant: str, row: DefinitionRow, files: Files, ids: list[str]) -> str:
     rt: Any = SimpleNamespace(db=engine, start_files=files_client(files))
-    values = {
+    values: Json = {
         "from": NOTICE["from"]["emailAddress"]["address"],
         "subject": NOTICE["subject"],
         "body": NOTICE["body"]["content"],
@@ -148,7 +149,7 @@ async def by_test_email(engine: AsyncEngine, tenant: str, row: dict[str, Any], f
     }
     with tenant_scope(tenant):
         run = await run_starts.start(rt, CLERK, row, values, "live")
-    return str(run["id"])
+    return run.id
 
 
 async def uploaded(files: Files, tenant: str) -> str:
@@ -182,7 +183,8 @@ async def test_a_test_email_runs_with_the_input_and_steps_a_mailbox_email_gets(
     with tenant_scope(tenant):
         a, b = await runs.get(mailed), await runs.get(sent)
     assert a is not None and b is not None
-    assert set(a["input"]) == set(b["input"]) == set(EMAIL["required"]), (a["input"], b["input"])
+    required: list[str] = cast(list[str], EMAIL["required"])
+    assert set(a["input"]) == set(b["input"]) == set(required), (a["input"], b["input"])
     assert shape(a["input"]) == shape(b["input"]), (shape(a["input"]), shape(b["input"]))
     [attachment] = b["input"]["attachments"]
     assert attachment["size"] == len(PDF) and attachment["mime"] == "application/pdf"
@@ -209,7 +211,7 @@ async def test_an_attachment_the_teams_files_do_not_hold_is_refused(engine: Asyn
         await by_test_email(engine, tenant, row, files, ["fil_someone_elses"])
     assert refused.value.code == "attachment_not_found"
     with tenant_scope(tenant):
-        assert await RunStore(EngineTransactions(engine)).list(workflow_id=row["workflow_id"]) == []
+        assert await RunStore(EngineTransactions(engine)).list(workflow_id=row.workflow_id) == []
 
 
 async def test_an_attachment_not_scanned_clean_is_refused(engine: AsyncEngine) -> None:
@@ -221,7 +223,7 @@ async def test_an_attachment_not_scanned_clean_is_refused(engine: AsyncEngine) -
         await by_test_email(engine, tenant, row, files, [notice])
     assert refused.value.code == "attachment_not_clean"
     with tenant_scope(tenant):
-        assert await RunStore(EngineTransactions(engine)).list(workflow_id=row["workflow_id"]) == []
+        assert await RunStore(EngineTransactions(engine)).list(workflow_id=row.workflow_id) == []
 
 
 async def test_a_test_email_the_trigger_filters_would_skip_starts_nothing(engine: AsyncEngine) -> None:

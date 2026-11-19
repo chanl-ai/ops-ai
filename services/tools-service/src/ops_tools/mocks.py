@@ -11,10 +11,12 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from typing import Any, cast
+from typing import TypedDict
+
+from ops_service_kit.http import JsonValue
 
 from .environments import TEST
-from .store.mocks import MockStore
+from .store.mocks import MockRow, MockStore
 
 # The longest a mock waits, whatever its delay or the operation's limit says.
 MAX_WAIT_MS = 30_000
@@ -22,12 +24,19 @@ MAX_WAIT_MS = 30_000
 Sleep = Callable[[float], Awaitable[None]]
 
 
-def chosen(mocks: list[dict[str, Any]], args: dict[str, Any]) -> dict[str, Any] | None:
+def chosen(mocks: list[MockRow], args: dict[str, JsonValue]) -> MockRow | None:
     for m in mocks:
-        match = cast(dict[str, Any], m.get("match") or {})
+        match = m.get("match") or {}
         if match and all(args.get(k) == v for k, v in match.items()):
             return m
     return next((m for m in mocks if m["is_default"]), None)
+
+
+class MockWait(TypedDict):
+    """What a wait reads of a mock."""
+
+    timeout: bool
+    delay_ms: int
 
 
 class MockAnswers:
@@ -36,13 +45,13 @@ class MockAnswers:
         self.sleep = sleep
 
     async def for_call(
-        self, tenant_id: str, module_id: str, operation: str, args: dict[str, Any], environment: str | None
-    ) -> dict[str, Any] | None:
+        self, tenant_id: str, module_id: str, operation: str, args: dict[str, JsonValue], environment: str | None
+    ) -> MockRow | None:
         if environment != TEST:
             return None
         return chosen(await self.store.listed(tenant_id, module_id, operation, TEST), args)
 
-    async def wait(self, mock: dict[str, Any], limit_ms: int) -> None:
+    async def wait(self, mock: MockWait, limit_ms: int) -> None:
         """A timeout waits the operation's limit; a delay its own time, never past the limit; both capped."""
         wait_ms = limit_ms if mock["timeout"] else min(int(mock["delay_ms"] or 0), limit_ms)
         if wait_ms:

@@ -44,7 +44,9 @@ PNG scan and a two-page TIFF scan, all of a made-up enrolment form.
 | R9 | A PNG or TIFF scan is refused, or a TIFF's later frames are lost | `test_reading.py::test_image_files_are_read_one_page_per_frame` |
 | R10 | A file over 2,000 pages is read part way instead of failing with `too_many_pages` | `test_reading.py::test_file_over_the_page_limit_is_refused` |
 | R11 | OCR needed but not installed reads the page as empty | `test_reading.py::test_ocr_needed_but_missing_fails_loudly` |
-| R12 | A format with no reader, or a broken file, fails without a reason code | `test_reading.py::test_file_without_a_reader_fails_with_a_reason` |
+| R12 | A format with no reader, a broken file, or an old format (.ppt, .xls, Keynote) fails without a reason code, or without saying which format to re-save as | `test_reading.py::test_file_without_a_reader_fails_with_a_reason` |
+| R22 | A deck's slide text, notes, table or chart is lost or lands on another slide's page | `test_pptx.py::test_slides_read_in_order_with_notes_tables_and_charts` |
+| R23 | A slide with only a picture fails the deck or vanishes, so later slide numbers shift | `test_pptx.py::test_a_picture_only_slide_is_an_empty_page_in_its_place` |
 | R13 | Splitting a DOCX, XLSX or HTML reading loses section paths, paragraph breaks or tables, or invents page numbers | `test_reading.py::test_reading_splits_the_same_as_the_parser` |
 | R15 | A PDF splits into other section paths, paragraph breaks, tables or pages than the parser gave before PDFs moved onto the reader | `test_reading.py::test_pdf_splits_into_the_sections_the_parser_gave` |
 | R16 | A huge image, a decompression bomb or a poster-sized page exhausts memory | `test_reading.py::test_decompression_bomb_image_is_refused_before_decoding`, `test_reading.py::test_huge_pdf_page_is_drawn_at_a_bounded_size` |

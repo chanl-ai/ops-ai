@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from ops_store.database import open_database
 
 from .leases import check_fence
-from .tenancy import current_tenant, system_tx, tenant_tx
+from .tenancy import RuntimeStore, current_tenant
 
 __all__ = ["AsyncEngine", "DatabaseError", "DatabaseUnreachable", "EngineTransactions", "connect"]
 
@@ -27,20 +27,16 @@ def connect(database_url: str) -> AsyncEngine:
     return open_database(database_url)
 
 
-class EngineTransactions:
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
+class EngineTransactions(RuntimeStore):
+    """ops_engine's port: `tenant_tx()` is the base's `tx()`, and the base's `system_tx(reason)` serves the worker's
+    claim of engine_work and the listener's live workflows, before the row's tenant is known; the migrations grant
+    nothing else. The reason is ops_engine's."""
 
     def tenant(self) -> str:
         return current_tenant()
 
     def tenant_tx(self) -> AbstractAsyncContextManager[AsyncConnection]:
-        return tenant_tx(self.engine)
+        return self.tx()
 
     async def check_fence(self, conn: AsyncConnection, thread_id: str, generation: int | None) -> None:
         await check_fence(conn, thread_id, generation)
-
-    def system_tx(self, reason: str) -> AbstractAsyncContextManager[AsyncConnection]:
-        # The worker's claim of engine_work and the listener's live workflows, before the row's tenant is known; the
-        # migrations grant nothing else. The reason is ops_engine's.
-        return system_tx(self.engine, reason)

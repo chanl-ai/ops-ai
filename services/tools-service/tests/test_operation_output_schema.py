@@ -41,8 +41,8 @@ SPEC: dict[str, Any] = {
 
 def test_an_import_keeps_the_success_response_schema_with_its_references_resolved() -> None:
     ops = {o["name"]: o for o in discover(SPEC, "https://core.example/openapi.json")["operations"]}
-    assert ops["get_customer"]["response_schema"] == CUSTOMER
-    assert "response_schema" not in ops["place_hold"] and ops["place_hold"]["stub"] == {
+    assert ops["get_customer"].get("response_schema") == CUSTOMER
+    assert "response_schema" not in ops["place_hold"] and ops["place_hold"].get("stub") == {
         "holdId": "H-1",
         "status": "placed",
     }

@@ -12,6 +12,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
+from ops_store.schema import mssql_drop_default_ddl
+
 revision = "0081_background_jobs_at_text"
 down_revision = "0080_drop_runs_single_col_idx"
 branch_labels = None
@@ -21,6 +23,9 @@ depends_on = None
 def upgrade() -> None:
     op.execute(sa.text("DELETE FROM background_jobs"))
     op.drop_index("ix_background_jobs_at", table_name="background_jobs")
+    # SQL Server refuses to drop a column that holds a default; the helper drops one only if it is there.
+    if op.get_context().dialect.name == "mssql":
+        op.execute(mssql_drop_default_ddl("background_jobs", "at"))
     op.drop_column("background_jobs", "at")
     op.add_column("background_jobs", sa.Column("at", sa.String(32), nullable=False, server_default=""))
     op.create_index("ix_background_jobs_at", "background_jobs", ["tenant_id", "at"])
@@ -28,6 +33,9 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_index("ix_background_jobs_at", table_name="background_jobs")
+    # SQL Server refuses to drop a column that holds a default; the helper drops one only if it is there.
+    if op.get_context().dialect.name == "mssql":
+        op.execute(mssql_drop_default_ddl("background_jobs", "at"))
     op.drop_column("background_jobs", "at")
     op.add_column("background_jobs", sa.Column("at", sa.Float(), nullable=False, server_default="0"))
     op.create_index("ix_background_jobs_at", "background_jobs", ["tenant_id", "at"])

@@ -54,7 +54,9 @@ through another package (`scripts/dependants.py` reads each member's `pyproject.
 
 Gap: `ops_extract` and `ops_plugin_sdk` have test suites that no pool job runs, so a full `make verify` skips them.
 They run when they change (`make test` with no `PKG`, and CI's per-package job). Packages with no tests of their own
-are covered by the services that use them; each package's `CLAUDE.md` names where.
+are covered by the services that use them; each package's `CLAUDE.md` names where. Packages have no use cases of
+their own: the use cases of the service that runs a package cover it end to end (`make usecase-coverage
+SERVICE=<service>`, [registry](../docs/usecases/README.md)).
 
 ## Packages
 
@@ -83,3 +85,9 @@ are covered by the services that use them; each package's `CLAUDE.md` names wher
 
 Design docs for packages live in `docs/packages/<folder>/` where they exist, and in
 [docs/architecture/service-map.md](../docs/architecture/service-map.md) for how packages and services fit together.
+
+## Engineering standards
+
+The rules the code in this folder is held to, each with a real example from this repository and the check that
+enforces it: [layers and ownership](../docs/architecture/standards/layers.md) (`LY1` to `LY9`), [configuration](../docs/architecture/standards/configuration.md) (`CF1` to `CF6`), [data access](../docs/architecture/standards/data-access.md) (`DA1` to `DA13`). The index of every rule is
+[engineering standards](../docs/architecture/engineering-standards.md); a review cites the rule id.

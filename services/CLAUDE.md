@@ -13,38 +13,36 @@ gates) are in the root guide and are not repeated here:
 
 ## Services
 
-| Folder | Module | Port | Owns | Guide |
-|---|---|---|---|---|
-| `agents-service/` | `ops_agents` | 8700 (and the worker) | Agents, workflows, versions, chat, runs, cases, Reviews, channels | [CLAUDE.md](agents-service/CLAUDE.md) |
-| `tools-service/` | `ops_tools` | 8720 | Tool egress: modules, apps and accounts, secrets, OPA decisions, the call log, plugins | [CLAUDE.md](tools-service/CLAUDE.md) |
-| `platform-service/` | `ops_platform` | 8710, internal 8711 | Tenants, teams, members, sessions, API keys, audit; the only token issuer | [CLAUDE.md](platform-service/CLAUDE.md) |
-| `models-service/` | `ops_models` | 8730 | Model egress: provider connections, aliases, model keys and budgets, call log | [CLAUDE.md](models-service/CLAUDE.md) |
-| `kb-service/` | `ops_kb` | 8740 | Knowledge bases, sources, sync and cited retrieval | [CLAUDE.md](kb-service/CLAUDE.md) |
-| `files-service/` | `ops_files` | 8750 | File bytes, versions, references, legal holds, storage settings | [CLAUDE.md](files-service/CLAUDE.md) |
-| `documents-service/` | `ops_documents` | 8760 | Extractions, document types, layouts, templates; never bytes | [CLAUDE.md](documents-service/CLAUDE.md) |
-| `runner-service/` | `ops_runner` | 8770 | Code tools' Python on WASM; no database | [CLAUDE.md](runner-service/CLAUDE.md) |
-| `hitl-service/` | none | none | Stub folder; Reviews live in agents-service | [CLAUDE.md](hitl-service/CLAUDE.md) |
+| Folder | Module | Port | Console section | Owns | Guide |
+|---|---|---|---|---|---|
+| `agents-service/` | `ops_agents` | 8700 (and the worker) | Agents, Workflows, Deployments, Skills, Chat, Assurance, Cases, Reviews | Definitions, versions, publish gate, chat, runs, cases, Reviews, channels (mailbox, widget, MCP, API are inbound triggers) | [CLAUDE.md](agents-service/CLAUDE.md) |
+| `tools-service/` | `ops_tools` | 8720 | Data Hub: Tools, Connections | Tool egress: modules, apps and accounts, secrets, OPA decisions, the call log, plugins | [CLAUDE.md](tools-service/CLAUDE.md) |
+| `platform-service/` | `ops_platform` | 8710, internal 8711 | Govern: Access, Audit log, Settings | Tenants, teams, members, sessions, API keys, audit; the only token issuer | [CLAUDE.md](platform-service/CLAUDE.md) |
+| `models-service/` | `ops_models` | 8730 | AI gateway | Model egress: provider connections, aliases, model keys and budgets, call log | [CLAUDE.md](models-service/CLAUDE.md) |
+| `kb-service/` | `ops_kb` | 8740 | Data Hub: Knowledge bases, Wiki | Knowledge bases, sources, sync and cited retrieval, on `packages/ops_ingest` | [CLAUDE.md](kb-service/CLAUDE.md) |
+| `files-service/` | `ops_files` | 8750 | Data Hub: uploads | File bytes, versions, references, legal holds, storage settings | [CLAUDE.md](files-service/CLAUDE.md) |
+| `documents-service/` | `ops_documents` | 8760 | Data Hub: Documents | Extractions, document types, layouts, templates; reads bytes through files-service, never holds them | [CLAUDE.md](documents-service/CLAUDE.md) |
+| `runner-service/` | `ops_runner` | 8770 | Code tools | Code tools' Python on WASM; no network, no secrets, no database | [CLAUDE.md](runner-service/CLAUDE.md) |
+| `hitl-service/` | none | none | none | Stub folder; Reviews live in agents-service ([human in the loop](../docs/architecture/human-in-the-loop.md)) | [CLAUDE.md](hitl-service/CLAUDE.md) |
 
 `make up` runs all of them except hitl-service; `make health` lists each with its port and pid.
 
 ## The verb set
 
 Every service Makefile answers the verbs in `make/services.mk` (`install run stop test lint typecheck verify migrate
-logs health clean`), so these work from a service folder or from the root as `<verb>-<svc>` (`make test-kb`):
+logs health clean`). Run them as `make -C services/<x> <verb>`, from the service folder as `make <verb>`, or from the
+root as `<verb>-<svc>` (`make test-kb`, `make lint-tools`):
 
 | Verb | What it runs |
 |---|---|
-| `make run` | The service in the foreground on its port. Stop the `make up` copy first (`make stop`) or the port is taken |
-| `make test` | pytest on a throwaway database made by `scripts/test_db.py` (`OPS_TEST_DATABASE_URL`, never the stack's) |
-| `make lint` | `ruff format --check` and `ruff check` over the service's Python folders |
-| `make typecheck` | strict pyright |
-| `make verify` | lint, typecheck, test and the OpenAPI gate (agents-service also runs its standards check) |
-| `make migrate` | `alembic upgrade head` on the service's own chain |
-| `make openapi` / `make openapi-check` | `scripts/check_openapi.py --write` / the check |
+| `run` | The service in the foreground on its port. Stop the `make up` copy first (`make stop-<svc>`) or the port is taken |
+| `test` | pytest on a throwaway database made by `scripts/test_db.py` (`OPS_TEST_DATABASE_URL`, never the stack's); `T=tests/<file>.py` runs only those files in every service |
+| `lint`, `typecheck` | `ruff format --check` and `ruff check`; strict pyright |
+| `verify` | lint, typecheck, test and the OpenAPI gate (agents-service also runs its standards check) |
+| `migrate` | `alembic upgrade head` on the service's own chain |
+| `openapi`, `openapi-check` | The service's `scripts/check_openapi.py --write`, or the check alone (not in runner-service, which has no routes document) |
 
-Run one file from the root with `make test PKG=services/<x> T=tests/<file>.py`. Only agents-service and
-tools-service pass `T=` to pytest today; the other Makefiles ignore it and run the whole suite. For those, name the
-files in `PYTEST_ADDOPTS` instead: `PYTEST_ADDOPTS=tests/test_health.py make test PKG=services/kb-service`.
+From the root: `make test PKG=services/<x> T=tests/<file>.py` runs the same thing.
 
 On the live stack, exercise a service through the root's make targets (`api`, `chat`, `kb-*`, `apps-*`, `tools-*`,
 `runs-*`, `tasks-*`, `memories-*`), with `AS=` to act as a person, instead of ad-hoc scripts or SQL; read the database
@@ -66,7 +64,7 @@ answer "not started" even though `make up` runs them; use the root `make logs SV
 | Tenant and team | The tenant comes from the verified token and the team from `X-Team-Id`, never from a body or path. Every isolated read and write runs in `isolation.isolated_tx(engine, role=<service>_tenant)`, which sets `app.tenant_id` and `app.team_id` for the row-level security policies in the service's migrations; team-owned tables are filtered with `team_visible(table)`. Another team's record answers 404 | `packages/ops_store/src/ops_store/isolation.py`, `team_scope.py:67` |
 | Database code | Only in the service's `store/` package and in `packages/ops_store`; `.importlinter` refuses SQLAlchemy and drivers anywhere else | `.importlinter` at the root |
 | Migrations | One Alembic chain per service, with its own version table (`alembic_version_<svc>`; agents-service uses the default `alembic_version`). Row security, roles and grants live in the chain | `services/<x>/migrations/versions/` |
-| OpenAPI | `openapi.json` is committed and must match the app; every route named, tagged and typed, except those on `openapi-untyped.txt`, which may only shrink. Tests attach `ops_service_kit.contract.response_checker(app)` so each response is checked against the document | `scripts/check_openapi.py` in each service |
+| OpenAPI | `openapi.json` is committed and must match the app; every route named, tagged and typed, except those on `openapi-untyped.txt`, which may only shrink. Tests attach `ops_service_kit.contract.response_checker(app)` so each response is checked against the document | `services/<x>/scripts/check_openapi.py` |
 | Fixtures | Only under `tests/fixtures/`; source code never names a `tests/` path | `services/agents-service/scripts/check_standards.py` |
 | Seeds | Dev records are files under `seed/`, loaded at start in dev; never definitions in code | `services/<x>/seed/` |
 | Model calls in tests | Scripted model or the fake OpenAI only; `make verify` unsets the model keys | `make/python.mk` |
@@ -79,12 +77,23 @@ revision -m "<what it changes>"`; the root `make migration NAME=...` makes an ag
 
 - A service never imports another service's code and never reads another service's tables; it calls the other
   service over HTTP with a service token (`ops_identity.ServiceClient`) or through a client package
-  (`ops_files_client`, `ops_documents_client`).
-- Tool calls leave only through tools-service and model calls only through models-service.
-- Known departure: tools-service imports `ops_agents.activities` (`ops_tools/registry.py:14`, `tools.py:11`,
-  `__main__.py:16`), and its gateway tests still live in `agents-service/tests/gateway`
-  ([service map, steps left](../docs/architecture/service-map.md)).
+  (`ops_files_client`, `ops_documents_client`). Subsystems never call each other to act; workflows compose them.
+- Tool calls leave only through tools-service and model calls only through models-service; production runs both on
+  their own, apart from agent workers.
+- Every service can run embedded in one host process or alone, chosen by `OPS_ENABLED_SERVICES`
+  (`deploy/host/ops_host.py:106`).
+- Every release must run on one virtual machine with no container runtime and no infrastructure beyond PostgreSQL;
+  Compose and Kubernetes are optional ([deployment targets](../docs/architecture/service-map.md#deployment-targets)).
+- Known departures: tools-service imports `ops_agents.activities` (`tools-service/src/ops_tools/registry.py:15`,
+  `tools.py:11`, `__main__.py:16`) and its gateway tests live in `agents-service/tests/gateway`; the settings default
+  `seed_dir` points into agents-service's seed folder (`packages/ops_service_kit/src/ops_service_kit/settings.py:26`).
 
 Design for every service: [docs/architecture/service-map.md](../docs/architecture/service-map.md),
 [identity and tenancy](../docs/architecture/identity-and-tenancy.md), [API conventions](../docs/architecture/api.md).
 Use cases per service: [docs/usecases/](../docs/usecases/README.md).
+
+## Engineering standards
+
+The rules the code in this folder is held to, each with a real example from this repository and the check that
+enforces it: [layers and ownership](../docs/architecture/standards/layers.md) (`LY1` to `LY9`), [API contracts and models](../docs/architecture/standards/api-and-models.md) (`AP1` to `AP7`, `MD1` to `MD4`), [data access](../docs/architecture/standards/data-access.md) (`DA1` to `DA13`), [tenant isolation and access](../docs/architecture/standards/tenancy-and-access.md) (`TN1` to `TN5`, `AC1` to `AC5`), [errors, logging and observability](../docs/architecture/standards/observability.md) (`OB1` to `OB6`). The index of every rule is
+[engineering standards](../docs/architecture/engineering-standards.md); a review cites the rule id.

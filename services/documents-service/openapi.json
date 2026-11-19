@@ -159,180 +159,6 @@
         "title": "BackgroundProcessOut",
         "type": "object"
       },
-      "Block": {
-        "additionalProperties": false,
-        "description": "One run of content in reading order. A paragraph keeps its lines (and their boxes) so the page's text can put\neach on its own line; a table keeps its cells.",
-        "properties": {
-          "box": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "number"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Box"
-          },
-          "caption": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Caption"
-          },
-          "cells": {
-            "items": {
-              "$ref": "#/components/schemas/Cell"
-            },
-            "title": "Cells",
-            "type": "array"
-          },
-          "furniture": {
-            "default": false,
-            "title": "Furniture",
-            "type": "boolean"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "kind": {
-            "enum": [
-              "title",
-              "heading",
-              "paragraph",
-              "table"
-            ],
-            "title": "Kind",
-            "type": "string"
-          },
-          "level": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Level"
-          },
-          "lines": {
-            "items": {
-              "$ref": "#/components/schemas/Line"
-            },
-            "title": "Lines",
-            "type": "array"
-          },
-          "main": {
-            "default": false,
-            "title": "Main",
-            "type": "boolean"
-          },
-          "order": {
-            "default": 0,
-            "title": "Order",
-            "type": "integer"
-          },
-          "readBy": {
-            "default": "text",
-            "enum": [
-              "text",
-              "ocr"
-            ],
-            "title": "Readby",
-            "type": "string"
-          },
-          "sheet": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Sheet"
-          },
-          "text": {
-            "title": "Text",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "kind",
-          "text"
-        ],
-        "title": "Block",
-        "type": "object"
-      },
-      "Cell": {
-        "additionalProperties": false,
-        "properties": {
-          "box": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "number"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Box"
-          },
-          "col": {
-            "title": "Col",
-            "type": "integer"
-          },
-          "colSpan": {
-            "default": 1,
-            "title": "Colspan",
-            "type": "integer"
-          },
-          "header": {
-            "default": false,
-            "title": "Header",
-            "type": "boolean"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "row": {
-            "title": "Row",
-            "type": "integer"
-          },
-          "rowSpan": {
-            "default": 1,
-            "title": "Rowspan",
-            "type": "integer"
-          },
-          "text": {
-            "title": "Text",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "row",
-          "col",
-          "text"
-        ],
-        "title": "Cell",
-        "type": "object"
-      },
       "Classification": {
         "additionalProperties": false,
         "description": "Which of the team's document types a file is: the model's choice and how sure it is, or none.\n`needsReview` when none fits or the confidence is under the floor.",
@@ -418,6 +244,17 @@
       "CopyRef": {
         "additionalProperties": false,
         "properties": {
+          "detachedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detachedat"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -450,7 +287,8 @@
           "recordId",
           "source",
           "templateId",
-          "version"
+          "version",
+          "detachedAt"
         ],
         "title": "CopyRef",
         "type": "object"
@@ -601,7 +439,7 @@
             "title": "Record"
           },
           "value": {
-            "title": "Value"
+            "$ref": "#/components/schemas/JsonValue"
           }
         },
         "required": [
@@ -766,21 +604,37 @@
       },
       "DocumentTypeList": {
         "additionalProperties": false,
+        "description": "A page of the team's types on the shared list contract.",
         "properties": {
           "canCreate": {
             "title": "Cancreate",
             "type": "boolean"
           },
-          "items": {
+          "data": {
             "items": {
               "$ref": "#/components/schemas/DocumentTypeRow"
             },
-            "title": "Items",
+            "title": "Data",
             "type": "array"
+          },
+          "facets": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Facets",
+            "type": "object"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
           }
         },
         "required": [
-          "items",
+          "data",
+          "pagination",
+          "facets",
           "canCreate"
         ],
         "title": "DocumentTypeList",
@@ -854,10 +708,13 @@
       },
       "DocumentTypeVersion": {
         "additionalProperties": false,
+        "description": "A saved version. Its field definitions, layout templates and checks are the documents the builder wrote, held\nas JSON: the engine (`ops_extract`) reads them and DocumentTypeVersionIn bounds what is saved.",
         "properties": {
           "checks": {
             "items": {
-              "additionalProperties": true,
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
               "type": "object"
             },
             "title": "Checks",
@@ -882,7 +739,9 @@
           },
           "fields": {
             "items": {
-              "additionalProperties": true,
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
               "type": "object"
             },
             "title": "Fields",
@@ -925,7 +784,9 @@
           },
           "templates": {
             "items": {
-              "additionalProperties": true,
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
               "type": "object"
             },
             "title": "Templates",
@@ -1084,6 +945,25 @@
           "data"
         ],
         "title": "Envelope[Classification]",
+        "type": "object"
+      },
+      "Envelope_CopyRef_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CopyRef"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[CopyRef]",
         "type": "object"
       },
       "Envelope_DocumentTypeList_": {
@@ -1516,8 +1396,7 @@
             "anyOf": [
               {
                 "items": {
-                  "additionalProperties": true,
-                  "type": "object"
+                  "$ref": "#/components/schemas/ExtractionCorrection"
                 },
                 "type": "array"
               },
@@ -1561,7 +1440,9 @@
           "fields": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -1593,8 +1474,7 @@
             "anyOf": [
               {
                 "items": {
-                  "additionalProperties": true,
-                  "type": "object"
+                  "$ref": "#/components/schemas/ImageCall"
                 },
                 "type": "array"
               },
@@ -1618,7 +1498,16 @@
           "needsReview": {
             "anyOf": [
               {
-                "items": {},
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "integer"
+                    }
+                  ]
+                },
                 "type": "array"
               },
               {
@@ -1651,7 +1540,9 @@
               },
               {
                 "items": {
-                  "additionalProperties": true,
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/JsonValue"
+                  },
                   "type": "object"
                 },
                 "type": "array"
@@ -1691,7 +1582,9 @@
           "proposal": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -1715,7 +1608,9 @@
             "anyOf": [
               {
                 "items": {
-                  "additionalProperties": true,
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/JsonValue"
+                  },
                   "type": "object"
                 },
                 "type": "array"
@@ -1744,7 +1639,9 @@
             "anyOf": [
               {
                 "items": {
-                  "additionalProperties": true,
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/JsonValue"
+                  },
                   "type": "object"
                 },
                 "type": "array"
@@ -1805,6 +1702,57 @@
           "status"
         ],
         "title": "Extraction",
+        "type": "object"
+      },
+      "ExtractionCorrection": {
+        "additionalProperties": false,
+        "description": "A person's value for a field, with the value and confidence it replaced (`record` for a read of several).",
+        "properties": {
+          "corrected": {
+            "$ref": "#/components/schemas/JsonValue"
+          },
+          "correctedAt": {
+            "format": "date-time",
+            "title": "Correctedat",
+            "type": "string"
+          },
+          "correctedBy": {
+            "title": "Correctedby",
+            "type": "string"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "original": {
+            "$ref": "#/components/schemas/JsonValue"
+          },
+          "originalConfidence": {
+            "title": "Originalconfidence",
+            "type": "number"
+          },
+          "record": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Record"
+          }
+        },
+        "required": [
+          "field",
+          "record",
+          "original",
+          "originalConfidence",
+          "corrected",
+          "correctedBy",
+          "correctedAt"
+        ],
+        "title": "ExtractionCorrection",
         "type": "object"
       },
       "ExtractionError": {
@@ -1995,9 +1943,77 @@
         "title": "ExtractionRequest",
         "type": "object"
       },
+      "FieldReview": {
+        "additionalProperties": false,
+        "properties": {
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "kept",
+              "taken",
+              "conflict"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "template": {
+            "$ref": "#/components/schemas/JsonValue"
+          },
+          "yours": {
+            "$ref": "#/components/schemas/JsonValue"
+          }
+        },
+        "required": [
+          "field",
+          "label",
+          "outcome",
+          "yours",
+          "template"
+        ],
+        "title": "FieldReview",
+        "type": "object"
+      },
+      "FieldScore": {
+        "additionalProperties": false,
+        "description": "How a version read one field across the samples.",
+        "properties": {
+          "accuracy": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accuracy"
+          },
+          "matches": {
+            "title": "Matches",
+            "type": "integer"
+          },
+          "misses": {
+            "title": "Misses",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "matches",
+          "misses",
+          "accuracy"
+        ],
+        "title": "FieldScore",
+        "type": "object"
+      },
       "FileFacts": {
         "additionalProperties": false,
-        "description": "What is known about a file before its pages are read.",
         "properties": {
           "author": {
             "anyOf": [
@@ -2133,7 +2149,7 @@
             "anyOf": [
               {
                 "items": {
-                  "$ref": "#/components/schemas/Page"
+                  "$ref": "#/components/schemas/ReadingPage"
                 },
                 "type": "array"
               },
@@ -2189,61 +2205,17 @@
         "title": "FileReading",
         "type": "object"
       },
-      "FormField": {
-        "additionalProperties": false,
-        "description": "A field of a fillable PDF form, read from the form dictionary: values typed into a form are not in the text\nlayer.",
-        "properties": {
-          "box": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "number"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Box"
-          },
-          "kind": {
-            "enum": [
-              "text",
-              "checkbox",
-              "choice",
-              "signature"
-            ],
-            "title": "Kind",
-            "type": "string"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "page": {
-            "title": "Page",
-            "type": "integer"
-          },
-          "value": {
-            "title": "Value",
-            "type": "string"
-          }
-        },
-        "required": [
-          "name",
-          "value",
-          "kind",
-          "page"
-        ],
-        "title": "FormField",
-        "type": "object"
-      },
       "Health": {
+        "additionalProperties": false,
+        "description": "200 ok, or degraded with the reason: 503 when the database is out of reach, 200 when only OCR is missing.",
         "properties": {
           "reason": {
             "anyOf": [
               {
+                "enum": [
+                  "database",
+                  "ocr"
+                ],
                 "type": "string"
               },
               {
@@ -2253,6 +2225,10 @@
             "title": "Reason"
           },
           "status": {
+            "enum": [
+              "ok",
+              "degraded"
+            ],
             "title": "Status",
             "type": "string"
           }
@@ -2261,6 +2237,39 @@
           "status"
         ],
         "title": "Health",
+        "type": "object"
+      },
+      "ImageCall": {
+        "additionalProperties": false,
+        "description": "A model call that carried page images: its step, the pages shown, how many images and the alias.",
+        "properties": {
+          "alias": {
+            "title": "Alias",
+            "type": "string"
+          },
+          "images": {
+            "title": "Images",
+            "type": "integer"
+          },
+          "pages": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Pages",
+            "type": "array"
+          },
+          "step": {
+            "title": "Step",
+            "type": "string"
+          }
+        },
+        "required": [
+          "step",
+          "pages",
+          "images",
+          "alias"
+        ],
+        "title": "ImageCall",
         "type": "object"
       },
       "InstallInput": {
@@ -2355,11 +2364,13 @@
         "required": [
           "copies",
           "version",
-          "newerAvailable"
+          "newerAvailable",
+          "changed"
         ],
         "title": "Installed",
         "type": "object"
       },
+      "JsonValue": {},
       "Layout": {
         "additionalProperties": false,
         "description": "A file's layout: pages, blocks in reading order with their table cells, and words.",
@@ -2625,34 +2636,6 @@
         "title": "LayoutWord",
         "type": "object"
       },
-      "Line": {
-        "additionalProperties": false,
-        "properties": {
-          "box": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "number"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Box"
-          },
-          "text": {
-            "title": "Text",
-            "type": "string"
-          }
-        },
-        "required": [
-          "text"
-        ],
-        "title": "Line",
-        "type": "object"
-      },
       "ListResult_Extraction_": {
         "additionalProperties": false,
         "properties": {
@@ -2683,141 +2666,6 @@
           "facets"
         ],
         "title": "ListResult[Extraction]",
-        "type": "object"
-      },
-      "OcrQuality": {
-        "additionalProperties": false,
-        "properties": {
-          "lowShare": {
-            "title": "Lowshare",
-            "type": "number"
-          },
-          "mean": {
-            "title": "Mean",
-            "type": "number"
-          },
-          "words": {
-            "title": "Words",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "mean",
-          "lowShare",
-          "words"
-        ],
-        "title": "OcrQuality",
-        "type": "object"
-      },
-      "Page": {
-        "additionalProperties": false,
-        "properties": {
-          "blocks": {
-            "items": {
-              "$ref": "#/components/schemas/Block"
-            },
-            "title": "Blocks",
-            "type": "array"
-          },
-          "durationMs": {
-            "default": 0,
-            "title": "Durationms",
-            "type": "integer"
-          },
-          "formFields": {
-            "items": {
-              "$ref": "#/components/schemas/FormField"
-            },
-            "title": "Formfields",
-            "type": "array"
-          },
-          "height": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Height"
-          },
-          "imageShare": {
-            "default": 0.0,
-            "title": "Imageshare",
-            "type": "number"
-          },
-          "number": {
-            "title": "Number",
-            "type": "integer"
-          },
-          "ocr": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/OcrQuality"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "source": {
-            "enum": [
-              "text",
-              "ocr",
-              "mixed",
-              "none"
-            ],
-            "title": "Source",
-            "type": "string"
-          },
-          "text": {
-            "default": "",
-            "title": "Text",
-            "type": "string"
-          },
-          "unreadReason": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Unreadreason"
-          },
-          "warnings": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Warnings",
-            "type": "array"
-          },
-          "width": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Width"
-          },
-          "words": {
-            "items": {
-              "$ref": "#/components/schemas/Word"
-            },
-            "title": "Words",
-            "type": "array"
-          }
-        },
-        "required": [
-          "number",
-          "source"
-        ],
-        "title": "Page",
         "type": "object"
       },
       "Pagination": {
@@ -2900,6 +2748,179 @@
         "title": "Purged",
         "type": "object"
       },
+      "ReadingBlock": {
+        "additionalProperties": false,
+        "properties": {
+          "box": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Box"
+          },
+          "caption": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caption"
+          },
+          "cells": {
+            "items": {
+              "$ref": "#/components/schemas/ReadingCell"
+            },
+            "title": "Cells",
+            "type": "array"
+          },
+          "furniture": {
+            "default": false,
+            "title": "Furniture",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "title",
+              "heading",
+              "paragraph",
+              "table"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "level": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/ReadingLine"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "main": {
+            "default": false,
+            "title": "Main",
+            "type": "boolean"
+          },
+          "order": {
+            "default": 0,
+            "title": "Order",
+            "type": "integer"
+          },
+          "readBy": {
+            "default": "text",
+            "enum": [
+              "text",
+              "ocr"
+            ],
+            "title": "Readby",
+            "type": "string"
+          },
+          "sheet": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sheet"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "text"
+        ],
+        "title": "ReadingBlock",
+        "type": "object"
+      },
+      "ReadingCell": {
+        "additionalProperties": false,
+        "properties": {
+          "box": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Box"
+          },
+          "col": {
+            "title": "Col",
+            "type": "integer"
+          },
+          "colSpan": {
+            "default": 1,
+            "title": "Colspan",
+            "type": "integer"
+          },
+          "header": {
+            "default": false,
+            "title": "Header",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "row": {
+            "title": "Row",
+            "type": "integer"
+          },
+          "rowSpan": {
+            "default": 1,
+            "title": "Rowspan",
+            "type": "integer"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "row",
+          "col",
+          "text"
+        ],
+        "title": "ReadingCell",
+        "type": "object"
+      },
       "ReadingError": {
         "additionalProperties": false,
         "properties": {
@@ -2917,6 +2938,55 @@
           "message"
         ],
         "title": "ReadingError",
+        "type": "object"
+      },
+      "ReadingFormField": {
+        "additionalProperties": false,
+        "properties": {
+          "box": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Box"
+          },
+          "kind": {
+            "enum": [
+              "text",
+              "checkbox",
+              "choice",
+              "signature"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "value",
+          "kind",
+          "page"
+        ],
+        "title": "ReadingFormField",
         "type": "object"
       },
       "ReadingIn": {
@@ -2953,6 +3023,169 @@
         "title": "ReadingIn",
         "type": "object"
       },
+      "ReadingLine": {
+        "additionalProperties": false,
+        "properties": {
+          "box": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Box"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "ReadingLine",
+        "type": "object"
+      },
+      "ReadingOcrQuality": {
+        "additionalProperties": false,
+        "properties": {
+          "lowShare": {
+            "title": "Lowshare",
+            "type": "number"
+          },
+          "mean": {
+            "title": "Mean",
+            "type": "number"
+          },
+          "words": {
+            "title": "Words",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "mean",
+          "lowShare",
+          "words"
+        ],
+        "title": "ReadingOcrQuality",
+        "type": "object"
+      },
+      "ReadingPage": {
+        "additionalProperties": false,
+        "properties": {
+          "blocks": {
+            "items": {
+              "$ref": "#/components/schemas/ReadingBlock"
+            },
+            "title": "Blocks",
+            "type": "array"
+          },
+          "durationMs": {
+            "default": 0,
+            "title": "Durationms",
+            "type": "integer"
+          },
+          "formFields": {
+            "items": {
+              "$ref": "#/components/schemas/ReadingFormField"
+            },
+            "title": "Formfields",
+            "type": "array"
+          },
+          "height": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Height"
+          },
+          "imageShare": {
+            "default": 0.0,
+            "title": "Imageshare",
+            "type": "number"
+          },
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "ocr": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReadingOcrQuality"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "enum": [
+              "text",
+              "ocr",
+              "mixed",
+              "none"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "text": {
+            "default": "",
+            "title": "Text",
+            "type": "string"
+          },
+          "unreadReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unreadreason"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Width"
+          },
+          "words": {
+            "items": {
+              "$ref": "#/components/schemas/ReadingWord"
+            },
+            "title": "Words",
+            "type": "array"
+          }
+        },
+        "required": [
+          "number",
+          "source"
+        ],
+        "title": "ReadingPage",
+        "type": "object"
+      },
       "ReadingSettingsOut": {
         "additionalProperties": false,
         "properties": {
@@ -2977,6 +3210,66 @@
         "title": "ReadingSettingsOut",
         "type": "object"
       },
+      "ReadingWord": {
+        "additionalProperties": false,
+        "properties": {
+          "box": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Box",
+            "type": "array"
+          },
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "box",
+          "confidence"
+        ],
+        "title": "ReadingWord",
+        "type": "object"
+      },
+      "ReviewedDigests": {
+        "additionalProperties": false,
+        "properties": {
+          "digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Digest"
+          },
+          "recordDigest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorddigest"
+          }
+        },
+        "required": [
+          "digest",
+          "recordDigest"
+        ],
+        "title": "ReviewedDigests",
+        "type": "object"
+      },
       "Sample": {
         "additionalProperties": false,
         "properties": {
@@ -2990,7 +3283,7 @@
             "type": "string"
           },
           "expected": {
-            "title": "Expected"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "fileId": {
             "title": "Fileid",
@@ -3016,6 +3309,28 @@
         "title": "Sample",
         "type": "object"
       },
+      "SampleComparison": {
+        "additionalProperties": false,
+        "properties": {
+          "expected": {
+            "$ref": "#/components/schemas/JsonValue"
+          },
+          "got": {
+            "$ref": "#/components/schemas/JsonValue"
+          },
+          "match": {
+            "title": "Match",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "expected",
+          "got",
+          "match"
+        ],
+        "title": "SampleComparison",
+        "type": "object"
+      },
       "SampleIn": {
         "additionalProperties": false,
         "properties": {
@@ -3032,6 +3347,87 @@
           "expected"
         ],
         "title": "SampleIn",
+        "type": "object"
+      },
+      "SampleResult": {
+        "additionalProperties": false,
+        "description": "One sample's read in a test: its extraction, how it was read and each field against what it should be.",
+        "properties": {
+          "extractionId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extractionid"
+          },
+          "fields": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/SampleComparison"
+              },
+              "type": "array"
+            },
+            "title": "Fields",
+            "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "enum": [
+                  "template",
+                  "model"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "sampleId": {
+            "title": "Sampleid",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "templateId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Templateid"
+          }
+        },
+        "required": [
+          "sampleId",
+          "name",
+          "extractionId",
+          "status",
+          "fields"
+        ],
+        "title": "SampleResult",
         "type": "object"
       },
       "TemplateMiss": {
@@ -3143,7 +3539,8 @@
         },
         "required": [
           "tools",
-          "bind"
+          "bind",
+          "resources"
         ],
         "title": "TemplateRequires",
         "type": "object"
@@ -3174,14 +3571,18 @@
         "properties": {
           "checks": {
             "items": {
-              "additionalProperties": true,
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
               "type": "object"
             },
             "title": "Checks",
             "type": "array"
           },
           "template": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Template",
             "type": "object"
           }
@@ -3275,7 +3676,9 @@
           "installed",
           "state",
           "canAdd",
-          "addCell"
+          "addCell",
+          "removeCell",
+          "copy"
         ],
         "title": "TemplateView",
         "type": "object"
@@ -3348,6 +3751,43 @@
         "title": "TestEstimate",
         "type": "object"
       },
+      "TestResult": {
+        "additionalProperties": false,
+        "properties": {
+          "accuracy": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accuracy"
+          },
+          "fields": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FieldScore"
+            },
+            "title": "Fields",
+            "type": "object"
+          },
+          "samples": {
+            "items": {
+              "$ref": "#/components/schemas/SampleResult"
+            },
+            "title": "Samples",
+            "type": "array"
+          }
+        },
+        "required": [
+          "accuracy",
+          "fields",
+          "samples"
+        ],
+        "title": "TestResult",
+        "type": "object"
+      },
       "TestRun": {
         "additionalProperties": false,
         "properties": {
@@ -3378,14 +3818,12 @@
           "result": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/TestResult"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Result"
+            ]
           },
           "samples": {
             "title": "Samples",
@@ -3422,13 +3860,78 @@
         "title": "TestRun",
         "type": "object"
       },
+      "UpdateExpect": {
+        "additionalProperties": false,
+        "properties": {
+          "digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Digest"
+          },
+          "recordDigest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorddigest"
+          }
+        },
+        "title": "UpdateExpect",
+        "type": "object"
+      },
       "UpdateInput": {
         "additionalProperties": false,
         "properties": {
+          "choices": {
+            "additionalProperties": {
+              "enum": [
+                "yours",
+                "template"
+              ],
+              "type": "string"
+            },
+            "title": "Choices",
+            "type": "object"
+          },
           "confirm": {
             "default": false,
             "title": "Confirm",
             "type": "boolean"
+          },
+          "expect": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UpdateExpect"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "merge",
+                  "reset"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode"
           }
         },
         "title": "UpdateInput",
@@ -3437,6 +3940,11 @@
       "UpdateReview": {
         "additionalProperties": false,
         "properties": {
+          "appliesNow": {
+            "default": true,
+            "title": "Appliesnow",
+            "type": "boolean"
+          },
           "changes": {
             "items": {
               "type": "string"
@@ -3447,11 +3955,26 @@
           "copy": {
             "$ref": "#/components/schemas/CopyRef"
           },
+          "draftOpen": {
+            "default": false,
+            "title": "Draftopen",
+            "type": "boolean"
+          },
           "edits": {
             "items": {
               "type": "string"
             },
             "title": "Edits",
+            "type": "array"
+          },
+          "expect": {
+            "$ref": "#/components/schemas/ReviewedDigests"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/FieldReview"
+            },
+            "title": "Fields",
             "type": "array"
           },
           "fromVersion": {
@@ -3466,43 +3989,33 @@
           "toVersion": {
             "title": "Toversion",
             "type": "integer"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
           }
         },
         "required": [
           "copy",
           "fromVersion",
           "toVersion",
+          "fields",
+          "draftOpen",
+          "appliesNow",
+          "expect",
           "changes",
-          "edits"
+          "edits",
+          "taken",
+          "version"
         ],
         "title": "UpdateReview",
-        "type": "object"
-      },
-      "Word": {
-        "additionalProperties": false,
-        "properties": {
-          "box": {
-            "items": {
-              "type": "number"
-            },
-            "title": "Box",
-            "type": "array"
-          },
-          "confidence": {
-            "title": "Confidence",
-            "type": "number"
-          },
-          "text": {
-            "title": "Text",
-            "type": "string"
-          }
-        },
-        "required": [
-          "text",
-          "box",
-          "confidence"
-        ],
-        "title": "Word",
         "type": "object"
       }
     }
@@ -3570,9 +4083,103 @@
     },
     "/v1/document-types": {
       "get": {
-        "description": "The team's types, and whether the caller may add one (the console's New type).",
+        "description": "The team's types on the shared list contract, by name and searched on it, and whether the caller may add\none (the console's New type). sortBy name or latestVersion with sortOrder sets the order; equal versions\nkeep name order.",
         "operationId": "document_types_list_types",
         "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",
@@ -6626,7 +7233,7 @@
     },
     "/v1/documents/extractions": {
       "get": {
-        "description": "A file's extractions by the caller's team, newest first; a file the team cannot see is 404.",
+        "description": "A file's extractions by the caller's team on the shared list contract, newest first; a file the team\ncannot see is 404.",
         "operationId": "documents_file_extractions",
         "parameters": [
           {
@@ -6656,11 +7263,82 @@
             "name": "pageSize",
             "required": false,
             "schema": {
-              "default": 20,
-              "maximum": 100,
-              "minimum": 1,
-              "title": "Pagesize",
-              "type": "integer"
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {
@@ -8891,9 +9569,206 @@
         "x-ops-public": "sdk"
       }
     },
+    "/v1/resources/{resource}/copies/{copy}/detach": {
+      "post": {
+        "description": "Detach: the team's type becomes its own, offered no update again, and the template is offered for a fresh\ncopy. Its versions are unchanged. A second call answers the same copy. 404 when `copy` is not the team's copy\nof `resource`.",
+        "operationId": "resources_detach_copy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "resource",
+            "required": true,
+            "schema": {
+              "title": "Resource",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "copy",
+            "required": true,
+            "schema": {
+              "title": "Copy",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_CopyRef_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not ready or already in another state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Detach Copy",
+        "tags": [
+          "resources"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
     "/v1/resources/{resource}/copies/{copy}/update": {
       "get": {
-        "description": "Review update: what a new version from the app's current template changes in the team's type (`copy` is the\ntype's id), and the versions the team saved since adding it, which the new version does not carry.",
+        "description": "Review update: field by field, what taking the app's current template does to the team's type (`copy` is the\ntype's id): the team's edits kept, the template's changes taken, and the fields both changed, which keep the\nteam's value unless the person chooses. Each extracted field is compared by its key. 409 `detached` for a copy\nthe team made its own.",
         "operationId": "resources_review_update",
         "parameters": [
           {
@@ -9088,7 +9963,7 @@
         "x-ops-public": "sdk"
       },
       "post": {
-        "description": "Take update: the type's next version made from the app's current template, as a person's new version is\nmade; earlier versions stay. A type the team gave a version of its own since adding it is refused with 409\n`copy_edited` until `confirm` says the person saw the new version does not carry it; nothing is merged.",
+        "description": "Take update. `merge` (the default) makes the type's next version keeping every field the team edited,\ntaking every field only the template changed, and writing the template's value on a conflict only where\n`choices` says so; `reset` makes it from the template as it is, after `confirm` (409 `copy_edited` listing the\nedits it drops). A document type has no draft, so the version applies at once; earlier versions, and every pin\non them, stay. 409 `update_stale` when the template or the type moved since the review `expect` names, and\nnothing is saved; 409 `detached` for a copy the team made its own.",
         "operationId": "resources_take_update",
         "parameters": [
           {

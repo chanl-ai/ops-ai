@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
+from ops_access import tool_waits
 from ops_agent_kernel.types import (
     TOOL_SEARCH_ABOVE,
     Access,
@@ -72,6 +73,53 @@ class SkillPinRule(_Model):
     refusal: str = ""
     # The tools the skill names, so a turn can say which app it needs and that app's state.
     tool_ids: list[str] = Field(default_factory=list[str], alias="toolIds")
+    # The skill's named parts ({slug, name, useWhen, instructions, budget?}); each is offered as its own entry.
+    parts: list[dict[str, Any]] = []
+
+
+def kernel_skills(skill_id: str, version: int, slug: str, content: dict[str, Any], tokens: int = 0) -> list[Skill]:
+    """A skill version as the kernel reads it: the whole skill, or one entry per part (`<skill>/<part>`) whose body is
+    the shared instructions and then the part's. The one place a skill's parts become what a turn can load."""
+    guardrails = tuple(str(g) for g in cast(list[Any], content.get("guardrails") or []))
+    refusal = str(content.get("refusal") or "")
+    loading = content.get("loading") or "on_match"
+    shared = str(content.get("instructions") or "")
+    parts: list[dict[str, Any]] = list(content.get("parts") or [])
+    if not parts:
+        return [
+            Skill(
+                skill_id,
+                version,
+                str(content["name"]),
+                slug,
+                str(content.get("useWhen") or ""),
+                loading,
+                shared,
+                guardrails,
+                tokens or max(1, len(shared) // 4),
+                refusal,
+            )
+        ]
+    out: list[Skill] = []
+    for p in parts:
+        body = f"{shared}\n\n{p['instructions']}"
+        out.append(
+            Skill(
+                skill_id,
+                version,
+                str(content["name"]),
+                f"{slug}/{p['slug']}",
+                str(p.get("useWhen") or ""),
+                "on_match",
+                body,
+                guardrails,
+                max(1, (len(body) + 3) // 4),
+                refusal,
+                str(p["slug"]),
+                int(p.get("budget") or 0),
+            )
+        )
+    return out
 
 
 class WidgetPinRule(_Model):
@@ -130,6 +178,9 @@ class AgentDefinition(_Model):
     # What it remembers about each person: on by default, with these kinds.
     memory_enabled: bool = True
     memory_kinds: tuple[str, ...] = ("fact", "preference", "episode")
+    # Which skills a person may pick for one reply in a chat with this agent: any published team skill whose tools it
+    # holds, only its attached skills, or none.
+    skill_menu: Literal["team", "attached", "off"] = "team"
 
 
 class ApprovalTemplate(_Model):
@@ -162,12 +213,16 @@ class ToolDefinition(_Model):
     approvers: int = 1
     # Approving asks for a step-up even with one approver (the registry's `stepUp`).
     step_up: bool = False
-    # Whether a write waits for a person's approval; every write declares it (tests/unit/test_write_declarations.py),
-    # and one that does not waits.
+    # The tool's "ask first" flag (tests/unit/test_write_declarations.py). True is the tool's own default answer, a
+    # reviewer's approval, which beats its app and team like any tool-level setting; left out, they decide.
     requires_approval: bool | None = None
 
+    @property
+    def approval_mode(self) -> str | None:
+        return "reviewer" if self.access == "write" and self.requires_approval is True else None
+
     def grant(self) -> ToolGrant:
-        waits = self.access == "write" and self.requires_approval is not False
+        waits = tool_waits(self.access, self.approval_mode)
         return ToolGrant(self.name, self.server, self.description, self.access, self.input_schema, waits)
 
 
@@ -280,19 +335,23 @@ class Catalog(_Model):
                 if not g.enabled
             ],
             skills=[
-                Skill(
+                s
+                for k in agent.skills
+                for s in kernel_skills(
                     k.skill_id,
                     k.version,
-                    k.name,
                     k.slug,
-                    k.use_when,
-                    k.loading,
-                    k.instructions,
-                    tuple(k.guardrails),
+                    {
+                        "name": k.name,
+                        "useWhen": k.use_when,
+                        "loading": k.loading,
+                        "instructions": k.instructions,
+                        "guardrails": k.guardrails,
+                        "refusal": k.refusal,
+                        "parts": k.parts,
+                    },
                     k.tokens,
-                    k.refusal,
                 )
-                for k in agent.skills
             ],
             # Callers narrow widgets only: pinned ones switched off, composing off, a lower cap (resolver-checked).
             widgets=[w.template() for w in agent.widgets if not effective or w.widget_id not in effective.widgets_off],

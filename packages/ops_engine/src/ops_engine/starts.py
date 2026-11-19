@@ -17,6 +17,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
+from ops_service_kit.http import Json, JsonValue
+
 FileShape = Literal["id", "one", "many"]
 # The Request trigger parameter that keeps a workflow out of every start picker: other workflows start it.
 ONLY_FROM_WORKFLOWS = "onlyFromWorkflows"
@@ -32,19 +34,19 @@ class StartSpec:
     title: str
     action: str
     via: str
-    form: Mapping[str, Any] | None = None
+    form: Mapping[str, JsonValue] | None = None
     form_parameter: str | None = None
     # A Service event trigger: Start run exists only when `form_parameter` names a schema with properties. With none,
     # the event is still the only way in.
     when_schema: bool = False
 
-    def schema(self, parameters: Mapping[str, Any]) -> dict[str, Any]:
+    def schema(self, parameters: Mapping[str, JsonValue]) -> Json:
         if self.form is not None:
             return dict(self.form)
         raw = parameters.get(self.form_parameter or "")
-        return dict(cast(Mapping[str, Any], raw)) if isinstance(raw, Mapping) and raw else {"type": "object"}
+        return dict(cast(Json, raw)) if isinstance(raw, Mapping) and raw else {"type": "object"}
 
-    def view(self, parameters: Mapping[str, Any]) -> dict[str, Any]:
+    def view(self, parameters: Mapping[str, JsonValue]) -> Json:
         schema = self.schema(parameters)
         return {
             "kind": self.kind,
@@ -56,14 +58,14 @@ class StartSpec:
         }
 
 
-def file_shape(field: Mapping[str, Any]) -> FileShape | None:
+def file_shape(field: Mapping[str, JsonValue]) -> FileShape | None:
     """A JSON Schema property as a file field: a string with `format: "file"` holds one file's id; an object with
     `format: "file"` or a `fileId` property holds one file as `{fileId, name}`; an array of those holds several."""
 
     def one(x: Any) -> bool:
         if not isinstance(x, Mapping):
             return False
-        s = cast(Mapping[str, Any], x)
+        s = cast(Json, x)
         props = s.get("properties")
         return s.get("format") == "file" or (
             s.get("type") == "object" and isinstance(props, Mapping) and "fileId" in props
@@ -78,48 +80,48 @@ def file_shape(field: Mapping[str, Any]) -> FileShape | None:
     return None
 
 
-def file_fields(schema: Mapping[str, Any]) -> dict[str, FileShape]:
+def file_fields(schema: Mapping[str, JsonValue]) -> dict[str, FileShape]:
     """The schema's top-level file fields by name."""
-    props = cast(Mapping[str, Any], schema.get("properties") or {})
+    props = cast(Json, schema.get("properties") or {})
     out: dict[str, FileShape] = {}
     for name, field in props.items():
-        if isinstance(field, Mapping) and (shape := file_shape(cast(Mapping[str, Any], field))):
+        if isinstance(field, Mapping) and (shape := file_shape(cast(Json, field))):
             out[str(name)] = shape
     return out
 
 
-def takes_files(schema: Mapping[str, Any]) -> bool:
+def takes_files(schema: Mapping[str, JsonValue]) -> bool:
     return bool(file_fields(schema))
 
 
-def trigger_node(definition: Mapping[str, Any] | None) -> dict[str, Any] | None:
+def trigger_node(definition: Mapping[str, JsonValue] | None) -> Json | None:
     """The definition's trigger node (a workflow has exactly one), or None for one still being drawn."""
-    for node in cast(list[dict[str, Any]], (definition or {}).get("nodes") or []):
+    for node in cast(list[Json], (definition or {}).get("nodes") or []):
         if str(node.get("type") or "").startswith(TRIGGER_GROUP_PREFIX):
             return node
     return None
 
 
-def only_from_workflows(definition: Mapping[str, Any] | None) -> bool:
+def only_from_workflows(definition: Mapping[str, JsonValue] | None) -> bool:
     node = trigger_node(definition)
-    return bool(node and cast(dict[str, Any], node.get("parameters") or {}).get(ONLY_FROM_WORKFLOWS))
+    return bool(node and cast(Json, node.get("parameters") or {}).get(ONLY_FROM_WORKFLOWS))
 
 
 def _empty(value: Any) -> bool:
     return value is None or (isinstance(value, str) and not value.strip()) or value in ([], {})
 
 
-def form_values(schema: Mapping[str, Any], values: Mapping[str, Any]) -> tuple[dict[str, Any], list[str]]:
+def form_values(schema: Mapping[str, JsonValue], values: Mapping[str, JsonValue]) -> tuple[Json, list[str]]:
     """A filled start form as a run takes it: each empty field the schema gives a `default` takes it, and the
     required fields still empty, by their labels. The console's start dialog and every API start of a form read the
     same rule, so a start the console refuses is refused by the API too."""
-    props = cast(Mapping[str, Any], schema.get("properties") or {})
+    props = cast(Json, schema.get("properties") or {})
     out = dict(values)
     for name, field in props.items():
         if isinstance(field, Mapping) and "default" in field and _empty(out.get(name)):
-            out[str(name)] = cast(Mapping[str, Any], field)["default"]
+            out[str(name)] = cast(Json, field)["default"]
     missing = [
-        str(cast(Mapping[str, Any], props.get(k) or {}).get("title") or k)
+        str(cast(Json, props.get(k) or {}).get("title") or k)
         for k in cast(list[str], schema.get("required") or [])
         if _empty(out.get(k))
     ]

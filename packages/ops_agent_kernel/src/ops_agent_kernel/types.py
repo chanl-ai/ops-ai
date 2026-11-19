@@ -7,10 +7,57 @@ replay, trace context) are left out rather than stubbed; each lands with its ser
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Literal, NotRequired, TypedDict
+
+from ops_service_kit.http import Json
 
 # `workflow`: the tool starts a published workflow, whose own review steps are the gate (workflows-as-tools.md).
 Access = Literal["read", "write", "workflow"]
+
+
+class PlanStep(TypedDict):
+    """One step of the built-in plan (plan.py). `status` is one of plan.STATUSES, kept a plain string: a plan is stored
+    with a paused turn and on a reply, and read back as it was written."""
+
+    title: str
+    status: str
+    note: NotRequired[str]
+
+
+class Plan(TypedDict):
+    """The plan tool's checklist, stored on an interrupt and on a reply so a later turn goes on at the same step."""
+
+    title: str
+    steps: list[PlanStep]
+
+
+class LoadedSkill(TypedDict):
+    """A skill a turn loaded, as it is journalled and carried to the next turn (skills.loaded_entry)."""
+
+    skillId: str
+    name: str
+    version: int
+    matched: str
+    part: NotRequired[str]
+    inputs: NotRequired[dict[str, str]]
+    # How a carried entry entered its turn ("picked" by the person, or loaded); journalled, kept out of the result.
+    how: NotRequired[str]
+
+
+class GuardrailRef(TypedDict):
+    """A guardrail a turn checked, or found switched off."""
+
+    guardrailId: str
+    version: int
+    name: str
+
+
+class GuardrailFired(GuardrailRef):
+    """The guardrail that refused, replaced or corrected an answer, the topic it found, and when: before, after or
+    corrected."""
+
+    topic: str
+    when: str
 
 
 @dataclass(frozen=True)
@@ -54,6 +101,10 @@ class Skill:
     # What the agent says when one of this skill's guardrails refuses (a next step, not just a no); empty uses the
     # platform's sentence.
     refusal: str = ""
+    # One named part of a skill with parts, by its slug; `slug` is then `<skill>/<part>`. Empty for a whole skill.
+    part: str = ""
+    # The most tokens this skill or part may hold when loaded; 0 is the reply's whole skill budget.
+    budget: int = 0
 
 
 @dataclass(frozen=True)
@@ -65,8 +116,8 @@ class WidgetTemplate:
     version: int
     name: str
     use_when: str
-    tree: dict[str, Any]
-    schema: dict[str, Any]
+    tree: Json
+    schema: Json
 
 
 # Above this many granted tools an agent finds its tools by searching: no schema is sent until a search
@@ -119,7 +170,7 @@ class ToolGrant:
     server: str
     description: str
     access: Access
-    input_schema: dict[str, Any]
+    input_schema: Json
     # Whether a write waits for a person's approval: the gateway registry's flag for the operation, raised by the team's
     # toolWritesNeedApproval policy. Required unless the registry says otherwise, so a grant built without it pauses.
     requires_approval: bool = True
@@ -142,6 +193,39 @@ class Passage:
 
 
 @dataclass(frozen=True)
+class BaseAnswer:
+    """A knowledge base's answer settings (kb-service's answer section). `withhold_uncited`: an answer that uses the
+    base and cites none of its passages is replaced by `no_answer_message`, which is also said when nothing is found.
+    A base giving back pieces only (`shape` "chunks") leaves the answer to the agent and is never withheld."""
+
+    shape: str
+    withhold_uncited: bool
+    no_answer_message: str
+
+    @property
+    def withholds(self) -> bool:
+        return self.withhold_uncited and self.shape != "chunks"
+
+    @classmethod
+    def of(cls, a: Json) -> BaseAnswer:
+        """A base's answer settings as kb-service serves them (camelCase)."""
+        return cls(
+            shape=str(a.get("shape") or "answer_with_citations"),
+            withhold_uncited=bool(a.get("withholdUncited")),
+            no_answer_message=str(a.get("noAnswerMessage") or ""),
+        )
+
+
+class KnowledgeFound(list[Passage]):
+    """A knowledge search's passages, best first, with each searched base's answer settings by id in search order. A
+    plain list of passages is a search whose bases set no answer rule."""
+
+    def __init__(self, passages: list[Passage], answers: dict[str, BaseAnswer] | None = None) -> None:
+        super().__init__(passages)
+        self.answers: dict[str, BaseAnswer] = dict(answers or {})
+
+
+@dataclass(frozen=True)
 class TranscriptMessage:
     role: Literal["user", "assistant"]
     content: str
@@ -155,7 +239,7 @@ class PendingCall:
     tool: str
     server: str
     access: Access
-    input: dict[str, Any]
+    input: Json
     input_hash: str
 
 
@@ -169,9 +253,9 @@ class Interrupt:
     history: bytes
     # On-match skills loaded before the pause ({skillId, version, name, matched}): the resumed turn keeps them loaded,
     # so their guardrails still check the answer and the per-turn caps go on from where they were.
-    loaded_skills: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
+    loaded_skills: list[LoadedSkill] = field(default_factory=list[LoadedSkill])
     # The plan as it stood at the pause (plan.py), so the resumed turn goes on at the same step.
-    plan: dict[str, Any] | None = None
+    plan: Plan | None = None
 
 
 @dataclass(frozen=True)
@@ -226,15 +310,15 @@ class TurnRequest:
     resume: Resume | None = None
     # On-match skills an earlier turn of the conversation loaded ({skillId, version, name, matched}): this turn keeps
     # them loaded with their bodies in the system prompt, so a follow-up does not load them again.
-    carried_skills: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
+    carried_skills: list[Json] = field(default_factory=list[Json])
     # What earlier turns of the conversation read, one line each, so a follow-up answers from them, not a new read.
     earlier_reads: list[str] = field(default_factory=list[str])
     # A plan an earlier turn left unfinished (a Connect card paused it): this turn goes on from its first open step.
-    carried_plan: dict[str, Any] | None = None
+    carried_plan: Json | None = None
     deadline_seconds: float = 120.0
     # A JSON Schema the turn's answer must match (a workflow's agent step): the model returns structured output
     # through the call, validated against it, on `TurnResult.output`; a mismatch finishes with `schema_error`.
-    output_schema: dict[str, Any] | None = None
+    output_schema: Json | None = None
 
 
 @dataclass
@@ -244,12 +328,12 @@ class ToolCallRecord:
     tool: str
     server: str
     access: Access
-    input: dict[str, Any]
+    input: Json
     input_hash: str
     status: Literal["running", "ok", "error", "gated"]
     output: Any = None
     duration_ms: int = 0
-    view: dict[str, Any] | None = None
+    view: Json | None = None
     # Answered from what this conversation already read (tool_cache.py); the system was not called.
     cached: bool = False
 
@@ -305,7 +389,7 @@ class TurnResult:
     output: Any = None
     # The guardrail that refused, replaced or corrected the answer: {guardrailId, version, name, topic, when}, when one
     # of before (refused unanswered), after (replaced by its message) or corrected (rewritten once without the topic).
-    guardrail: dict[str, Any] | None = None
+    guardrail: GuardrailFired | None = None
     # Text a guardrail kept from the person (a withdrawn or rewritten answer, or the unchecked part of a guarded
     # turn that ended early). For the run's audit record only; never shown in the conversation.
     withheld: str | None = None
@@ -313,7 +397,7 @@ class TurnResult:
     # part of a turn that ended early). Distinct from `withheld`, which was never shown. Audit record only.
     retracted: str | None = None
     # Skills this turn loaded, always-on ones first: {skillId, name, version, matched}.
-    skills: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
+    skills: list[LoadedSkill] = field(default_factory=list[LoadedSkill])
     # The guardrails this turn checked and the pinned ones switched off: {guardrailId, version, name} each.
-    guardrails_checked: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
-    guardrails_off: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
+    guardrails_checked: list[GuardrailRef] = field(default_factory=list[GuardrailRef])
+    guardrails_off: list[GuardrailRef] = field(default_factory=list[GuardrailRef])

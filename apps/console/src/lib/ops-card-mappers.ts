@@ -26,7 +26,7 @@ export function caseCard(c: CaseRecordDetail): OpsCardSpec {
   const late = (c.timer?.leftS ?? c.resolutionLeftS ?? 1) < 0;
   return {
     id: `case-${c.id}`,
-    record: { type: 'case', label: c.caseType ? `Case · ${c.caseType.name}` : 'Case', href: `/cases/${encodeURIComponent(c.id)}`, open: 'Open case' },
+    record: { type: 'case', label: c.caseType ? `Case · ${c.caseType.name}` : 'Case', href: `/work/cases/${encodeURIComponent(c.id)}`, open: 'Open case' },
     title: c.subject,
     subtitle: c.customerName ?? undefined,
     status: CASE_STATUS[c.status] ?? { text: words(c.status), tone: 'neutral' },
@@ -69,7 +69,7 @@ export function taskCard(r: Review): OpsCardSpec {
       : { text: `Waiting for ${r.policy?.reviewers ?? 'a reviewer'}`, tone: 'neutral' };
   return {
     id: `task-${r.id}`,
-    record: { type: 'task', label: r.workflowName ? `Human Task · ${r.workflowName}` : 'Human Task', href: `/reviews?review=${encodeURIComponent(r.id)}`, open: 'Open in Human Tasks' },
+    record: { type: 'task', label: r.workflowName ? `Human Task · ${r.workflowName}` : 'Human Task', href: `/work/tasks?review=${encodeURIComponent(r.id)}`, open: 'Open in Human Tasks' },
     title: r.title,
     subtitle: r.customer || undefined,
     status,
@@ -104,7 +104,7 @@ export function runCard(run: EngineRunDetail): OpsCardSpec {
   const status = RUN_STATUS[run.status] ?? { text: words(run.status), tone: 'neutral' };
   return {
     id: `run-${run.id}`,
-    record: { type: 'run', label: 'Workflow run', href: `/workflows/runs/${encodeURIComponent(run.id)}`, open: 'Open run' },
+    record: { type: 'run', label: 'Workflow run', href: `/build/runs/${encodeURIComponent(run.id)}`, open: 'Open run' },
     title: run.workflowName ?? words(run.workflowId),
     subtitle: run.outcomeText ?? undefined,
     status: run.status === 'succeeded' && run.outcomeText ? { text: run.outcomeText, tone: 'success' } : status,
@@ -115,7 +115,7 @@ export function runCard(run: EngineRunDetail): OpsCardSpec {
 export function startCard(d: DefinitionView): OpsCardSpec {
   return {
     id: `start-${d.workflowId}`,
-    record: { type: 'start', label: 'Start a workflow', href: `/workflows/definitions/${encodeURIComponent(d.workflowId)}`, open: 'Open workflow' },
+    record: { type: 'start', label: 'Start a workflow', href: `/build/workflows/definitions/${encodeURIComponent(d.workflowId)}`, open: 'Open workflow' },
     title: d.startForm?.title ?? d.name ?? words(d.workflowId),
     subtitle: d.name && d.startForm?.title !== d.name ? d.name : undefined,
     body: { kind: 'none' },
@@ -128,7 +128,7 @@ const NOUN: Record<OpsCardRef['type'], string> = { case: 'case', task: 'Human Ta
 export function missingCard(ref: OpsCardRef): OpsCardSpec {
   return {
     id: `missing-${ref.type}-${ref.id}`,
-    record: { type: ref.type, label: words(NOUN[ref.type]), href: ref.type === 'task' ? '/reviews' : ref.type === 'case' ? '/cases' : '/workflows', open: 'Go to the list' },
+    record: { type: ref.type, label: words(NOUN[ref.type]), href: ref.type === 'task' ? '/work/tasks' : ref.type === 'case' ? '/work/cases' : '/build/workflows', open: 'Go to the list' },
     title: `This ${NOUN[ref.type]} isn’t available to you`,
     subtitle: 'It may have been removed, or it belongs to a team you aren’t in.',
     body: { kind: 'none' },

@@ -22,7 +22,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any, Literal, cast
+from typing import Literal, cast
 
 import httpx
 
@@ -36,9 +36,10 @@ from ops_email import (
     MailSource,
     drain,
 )
-from ops_engine.store import DefinitionStore, RunStore
+from ops_engine.store import DefinitionRow, DefinitionStore, RunRow, RunStore
 from ops_files_client import FilesClient, FilesRefused
 from ops_service_kit.errors import Conflict, NotFound, Unprocessable
+from ops_service_kit.http import Json
 from ops_service_kit.logging import get_logger
 from ops_store import background, isolation
 
@@ -85,12 +86,12 @@ class EmailBinding:
     daily_cap: int | None = None
 
 
-def binding_of(definition: dict[str, Any] | None) -> EmailBinding | None:
+def binding_of(definition: Json | None) -> EmailBinding | None:
     """The definition's email trigger, or None when it starts some other way."""
-    nodes = cast(list[dict[str, Any]], (definition or {}).get("nodes") or [])
+    nodes = cast(list[Json], (definition or {}).get("nodes") or [])
     for node in nodes:
         if node.get("type") == EMAIL_TRIGGER:
-            p = cast(dict[str, Any], node.get("parameters") or {})
+            p = cast(Json, node.get("parameters") or {})
             return EmailBinding(
                 mailbox=str(p.get("mailbox") or ""),
                 folder=str(p.get("folder") or "inbox"),
@@ -99,19 +100,19 @@ def binding_of(definition: dict[str, Any] | None) -> EmailBinding | None:
                     subject_contains=str(p.get("subjectContains") or ""),
                     has_attachment=bool(p.get("hasAttachment")),
                 ),
-                daily_cap=int(p["dailyCap"]) if p.get("dailyCap") else None,
+                daily_cap=int(cast(str | int | float, p["dailyCap"])) if p.get("dailyCap") else None,
             )
     return None
 
 
-async def bindable(mailboxes: MailboxStore, row: dict[str, Any], address: str) -> tuple[MailboxRow | None, str | None]:
+async def bindable(mailboxes: MailboxStore, row: DefinitionRow, address: str) -> tuple[MailboxRow | None, str | None]:
     """The mailbox a stored version may watch, or None with the reason: the workflow must belong to a team, in the
     mailbox's tenant, and that team must own the mailbox. A workflow no team owns is seen by every team, so it would
     hand one team's mail to all of them."""
-    team = row.get("team_id")
+    team = row.team_id
     if not team:
         return None, "An Email received trigger reads a team's mailbox, so the workflow must belong to a team."
-    mailbox = await mailboxes.by_address(str(row["tenant_id"]), address)
+    mailbox = await mailboxes.by_address(row.tenant_id, address)
     if mailbox is None:
         return None, f"{address or 'No mailbox'} is not a mailbox connected on Channels > Email."
     if mailbox.team_id != team:
@@ -119,15 +120,15 @@ async def bindable(mailboxes: MailboxStore, row: dict[str, Any], address: str) -
     return mailbox, None
 
 
-async def require_binding(mailboxes: MailboxStore, me: Principal, row: dict[str, Any]) -> None:
+async def require_binding(mailboxes: MailboxStore, me: Principal, row: DefinitionRow) -> None:
     """Refuses to take a version live whose email trigger the publisher may not bind. A no-op for other triggers."""
-    binding = binding_of(row.get("definition"))
+    binding = binding_of(row.definition)
     if binding is None or not binding.mailbox:
         # No mailbox named: the trigger reads no mail, so there is nothing to authorise until one is set.
         return
     mailbox, why = await bindable(mailboxes, row, binding.mailbox)
     if mailbox is None:
-        code = "email_trigger_needs_team" if not row.get("team_id") else "mailbox_not_offered"
+        code = "email_trigger_needs_team" if not row.team_id else "mailbox_not_offered"
         raise Unprocessable(str(why), code=code, details={"field": "mailbox"})
     can(caller_of(me), "deployments", "create", team=mailbox.team_id, what=f"a watch on {mailbox.address}")
 
@@ -197,6 +198,8 @@ class PollResult:
     skipped: int = 0
     first_sync: bool = False
     busy: bool = False
+    # The mailbox was paused, removed or changed after the binding was read; nothing was read.
+    stale: bool = False
 
 
 @dataclass(frozen=True)
@@ -204,34 +207,34 @@ class Target:
     """The workflow version an email starts and the team its run, files and trigger events belong to: the mailbox's
     team for mail read from a mailbox, the person's team for a test email."""
 
-    row: dict[str, Any]
+    row: DefinitionRow
     binding: EmailBinding
     team: str
 
     @property
     def tenant(self) -> str:
-        return str(self.row["tenant_id"])
+        return self.row.tenant_id
 
     @property
     def workflow(self) -> str:
-        return str(self.row["workflow_id"])
+        return self.row.workflow_id
 
 
 @dataclass(frozen=True)
 class Bound:
     """A live version's email trigger with the mailbox record it may read."""
 
-    row: dict[str, Any]
+    row: DefinitionRow
     binding: EmailBinding
     mailbox: MailboxRow
 
     @property
     def tenant(self) -> str:
-        return str(self.row["tenant_id"])
+        return self.row.tenant_id
 
     @property
     def workflow(self) -> str:
-        return str(self.row["workflow_id"])
+        return self.row.workflow_id
 
     @property
     def target(self) -> Target:
@@ -243,7 +246,7 @@ class Started:
     """What `EmailStarts.start` did: the run (None when the daily cap held the message back) and whether this call
     created it."""
 
-    run: dict[str, Any] | None
+    run: RunRow | None
     created: bool
 
 
@@ -279,7 +282,7 @@ class EmailStarts:
         runs = RunStore(EngineTransactions(self.db))
         if (existing := await runs.by_key(b.workflow, key)) is not None:
             # A redelivery: its run exists, and its attachments are already in Files.
-            await self.record(b, msg, "duplicate", run_id=str(existing["id"]))
+            await self.record(b, msg, "duplicate", run_id=existing.id)
             return Started(existing, False)
         cap = b.binding.daily_cap
         # One poller per binding holds its lease, so counting then starting cannot let two runs past the cap.
@@ -289,9 +292,9 @@ class EmailStarts:
             return Started(None, False)
         team = b.team
         sender = by or f"trigger:email:{b.binding.mailbox}"
-        attachments: list[dict[str, Any]] = []
+        attachments: list[Json] = []
         # Attachments not stored, with why: the run says what it did not get instead of the pass failing on them.
-        skipped: list[dict[str, Any]] = []
+        skipped: list[Json] = []
         for i, a in enumerate(msg.attachments):
             try:
                 data = a.data()
@@ -323,7 +326,7 @@ class EmailStarts:
             )
         # The text as a file too, so a workflow reads a body-only email through Extract from file like an attachment,
         # with places and corrections; the plain body stays on the input for workflows that use it.
-        body_file: dict[str, Any] | None = None
+        body_file: Json | None = None
         body_name = body_file_name(msg.subject, msg.sender)
         if msg.body and msg.body.strip():
             try:
@@ -364,12 +367,12 @@ class EmailStarts:
             runs, b.row, team_id=team, mode=mode, input=envelope, run_key=key, created_by=sender, started_via=via
         )
         if created:
-            log.info("email_run_started", workflow=b.workflow, run=run["id"], message=msg.key, via=via)
+            log.info("email_run_started", workflow=b.workflow, run=run.id, message=msg.key, via=via)
             if self.jobs is not None:
-                name = str(b.row.get("name") or "a workflow")
+                name = b.row.name or "a workflow"
                 summary = f"Started {name} from a new email"
                 await self.jobs.record("mail_listener", summary, "done", team_id=team)
-        await self.record(b, msg, "started" if created else "duplicate", run_id=str(run["id"]))
+        await self.record(b, msg, "started" if created else "duplicate", run_id=run.id)
         return Started(run, created)
 
     async def record(
@@ -379,7 +382,7 @@ class EmailStarts:
         outcome: Outcome,
         *,
         run_id: str | None = None,
-        detail: dict[str, Any] | None = None,
+        detail: Json | None = None,
         item: str | None = None,
     ) -> None:
         await self.events.add(
@@ -443,12 +446,12 @@ class EmailTriggers:
         out: nothing reads it until it resumes."""
         out: list[Bound] = []
         for row in await DefinitionStore(EngineTransactions(self.db)).live_everywhere():
-            binding = binding_of(row["definition"])
+            binding = binding_of(row.definition)
             if binding is None or not binding.mailbox:
                 continue
             mailbox, why = await bindable(self.mailboxes, row, binding.mailbox)
             if mailbox is None:
-                log.warning("email_binding_refused", workflow=row["workflow_id"], mailbox=binding.mailbox, reason=why)
+                log.warning("email_binding_refused", workflow=row.workflow_id, mailbox=binding.mailbox, reason=why)
                 continue
             bound = Bound(row, binding, mailbox)
             if mailbox.paused or self._refused.get((bound.tenant, mailbox.id)) == mailbox.updated_at:
@@ -488,7 +491,7 @@ class EmailTriggers:
                     for b in await self.bindings():
                         if not is_idle(self.source(b)):
                             continue
-                        key = f"{b.tenant}:{b.workflow}:{b.row['version']}:{b.mailbox.id}:{b.mailbox.updated_at}"
+                        key = f"{b.tenant}:{b.workflow}:{b.row.version}:{b.mailbox.id}:{b.mailbox.updated_at}"
                         live.add(key)
                         if key not in idlers or idlers[key].done():
                             idlers[key] = asyncio.create_task(self.idle_forever(b, stop, every))
@@ -518,7 +521,12 @@ class EmailTriggers:
                     continue
                 try:
                     changed = await source.wait(at.cursor, self.idle_seconds)
-                    if changed and (await self.poll(b)).busy:
+                    if not changed:
+                        continue
+                    polled = await self.poll(b)
+                    if polled.stale:
+                        return  # the next binding pass starts a task for the mailbox as it is now, if it runs
+                    if polled.busy:
                         await _pause(stop, 1.0)
                 except asyncio.CancelledError:
                     raise
@@ -531,7 +539,9 @@ class EmailTriggers:
                     await _pause(stop, every)
 
     async def poll(self, b: Bound) -> PollResult:
-        """One pass over one binding, under the binding's lease so two workers never read it at once."""
+        """One pass over one binding, under the binding's lease so two workers never read it at once. The mailbox is
+        read again first: an IDLE task holds the binding it started with, and mail landing just after a pause would
+        otherwise start a run before the next binding pass drops that task."""
         result = PollResult(b.workflow)
         lease = POLL_LEASE_PREFIX + hashlib.sha256(f"{b.tenant}:{b.workflow}".encode()).hexdigest()[:32]
         try:
@@ -540,6 +550,10 @@ class EmailTriggers:
             result.busy = True
             return result
         try:
+            now = await self.mailboxes.get(b.mailbox.id)
+            if now is None or now.paused or now.updated_at != b.mailbox.updated_at:
+                result.stale = True
+                return result
             await self._poll(b, result)
         finally:
             await self.leases.release(lease, self.LEASE_RUN)
@@ -561,7 +575,7 @@ class EmailTriggers:
             result.first_sync = True
         else:
 
-            async def handle(item: dict[str, Any]) -> None:
+            async def handle(item: Json) -> None:
                 msg = source.parse(item)
                 if msg.removed:
                     result.skipped += 1
@@ -603,7 +617,7 @@ class EmailTriggers:
         if n < SET_ASIDE_AFTER:
             await self._record(b, msg, "start_failed", detail={"reason": reason, "attempt": n})
             return False
-        detail = {
+        detail: Json = {
             "reason": reason,
             "message": f"This email was set aside after {n} failed reads, so the mail after it is read. Run it again "
             "once the cause is fixed.",
@@ -614,7 +628,7 @@ class EmailTriggers:
     async def _start(self, b: Bound, msg: InboundMessage) -> str | None:
         """Starts the run for one new message. Returns the run id when this call created it."""
         started = await self.starts.start(b.target, msg)
-        return str(started.run["id"]) if started.run is not None and started.created else None
+        return started.run.id if started.run is not None and started.created else None
 
     async def _record(
         self,
@@ -623,7 +637,7 @@ class EmailTriggers:
         outcome: Outcome,
         *,
         run_id: str | None = None,
-        detail: dict[str, Any] | None = None,
+        detail: Json | None = None,
     ) -> None:
         await self.starts.record(b.target, msg, outcome, run_id=run_id, detail=detail)
 
@@ -658,7 +672,7 @@ async def run_again(db: AsyncEngine, files: FilesClient, event_id: str, *, by: s
     if row is None:
         raise NotFound(f"Set-aside email {event_id}")
     stored = await DefinitionStore(EngineTransactions(db)).live(str(row["workflow_id"]))
-    binding = binding_of(stored["definition"]) if stored is not None else None
+    binding = binding_of(stored.definition) if stored is not None else None
     if stored is None or binding is None:
         raise Conflict(
             "This workflow no longer starts from email, so the email cannot run.", code="not_email_triggered"

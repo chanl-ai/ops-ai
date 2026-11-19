@@ -147,7 +147,7 @@ export function DeploymentSetup({ d, onReconnect, reconnecting }: { d: Deploymen
         <p className="text-sm text-muted-foreground">Assistants connected to the workspace MCP URL see this workflow as a tool. It follows the release pointer, so it always runs the newest published version.</p>
         <CodeBlock label="Tool name" code={d.mcp.toolId} />
         <div className="text-sm">
-          <Link href="/channels/mcp" className="underline underline-offset-2">
+          <Link href="/build/channels/mcp" className="underline underline-offset-2">
             Manage on the MCP tab
           </Link>
         </div>

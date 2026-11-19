@@ -116,6 +116,7 @@ def test_each_request_writes_one_http_request_line_with_its_id_and_route_templat
         assert timing is not None
         timing.add_query(4.0)  # as ops_store's engine listeners do for each query
         timing.add_query(6.0)
+        timing.add_query(2.0, isolation=True)  # a transaction's context statement: timed, counted apart
         await asyncio.sleep(0.02)
         return {"id": item_id}
 
@@ -133,7 +134,8 @@ def test_each_request_writes_one_http_request_line_with_its_id_and_route_templat
         "/v1/items/{item_id}",
         201,
     )
-    assert (line["db.query_count"], line["db.duration_ms"]) == (2, 10.0) and 20 <= line["duration_ms"] < 5000
+    counts = (line["db.query_count"], line["db.isolation_query_count"], line["db.duration_ms"])
+    assert counts == (2, 1, 12.0) and 20 <= line["duration_ms"] < 5000
     # The header's team is the caller's claim; team_id is the verified one.
     assert "team" not in line
     assert "sk-in-query" not in out.getvalue() and "itm_1" not in out.getvalue()

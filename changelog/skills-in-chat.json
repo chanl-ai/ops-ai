@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-12",
+  "title": "Skills with parts, and only published skills in assistants",
+  "description": "One skill can hold several named parts, such as preparing a client meeting and updating an opportunity, each with its own inputs. Claude and other assistants now get only a skill's published version, and a required input left empty is refused instead of sent half filled.",
+  "tag": "new"
+}

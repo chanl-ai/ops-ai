@@ -14,22 +14,34 @@ from __future__ import annotations
 from typing import Any
 
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.exc import DBAPIError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_access import ANY_TEAM
 from ops_access.platform_events import TEAM_CREATED
 from ops_service_kit.ids import now_iso
+from ops_store.dialect import insert_ignore, upsert
 from ops_store.outbox import add as add_event
+from ops_store.store import Store
 
+from .policies import write_new_workspace_policies
 from .roles import bump_version, ensure_builtin_roles, ensure_owner, mirror_membership
 from .tables import members, platform_outbox, role_assignments, teams, tenants, users
-from .tenancy import TenantDb
+from .tenancy import SEED_ID_CHECK, TenantDb
+
+# One assignment per subject, role and team (uq_role_assignments): a seed run again adds none.
+GRANT_KEY = ["tenant_id", "subject_kind", "subject_id", "role_id", "team_id"]
 
 
 class SeedConflictError(RuntimeError):
     """A seeded id belongs to another tenant."""
+
+    def __init__(self, tenant_id: str, held: list[tuple[str, str]]) -> None:
+        names = ", ".join(f"{t} {i}" for t, i in held)
+        super().__init__(
+            f"seed: {names} already exist under another tenant than {tenant_id}; rebuild the dev database "
+            "(make up without KEEP_DATA=1, or make db-reset) and start again"
+        )
 
 
 async def _visible(c: AsyncConnection, table: sa.Table, ids: list[str]) -> set[str]:
@@ -45,18 +57,17 @@ async def write_seed(
     tenant_id = str(tenant["id"])
     now = now_iso()
     async with db.tenant_tx(tenant_id) as c:
-        await c.execute(
-            insert(tenants)
-            .values(
-                id=tenant_id,
-                name=tenant["name"],
-                status="active",
-                allowed_domains=tenant["allowedDomains"],
-                created_at=now,
-            )
-            .on_conflict_do_nothing(index_elements=[tenants.c.id])
-        )
+        first = {
+            "id": tenant_id,
+            "name": tenant["name"],
+            "status": "active",
+            "allowed_domains": tenant["allowedDomains"],
+            "created_at": now,
+        }
+        made_tenant = await c.execute(insert_ignore(c, tenants, first, keys=["id"]))
         seeded: list[dict[str, Any]] = data.get("teams") or []
+        if made_tenant.rowcount == 1:
+            await write_new_workspace_policies(c, tenant_id, at=now)
         if security_team in {str(t["id"]) for t in seeded}:
             # The workspace's record names its Security team; a workspace that already names one keeps it.
             await c.execute(
@@ -65,22 +76,19 @@ async def write_seed(
                 .values(security_team_id=security_team)
             )
         # Before any upsert: an id another tenant holds conflicts invisibly, and the error would not say which.
+        team_ids, user_ids = [str(t["id"]) for t in data["teams"]], [str(p["id"]) for p in data["people"]]
+        hidden = {
+            teams.name: set(team_ids) - await _visible(c, teams, team_ids),
+            users.name: set(user_ids) - await _visible(c, users, user_ids),
+        }
         held = [
             (table.name, i)
-            for table, ids in (
-                (teams, [str(t["id"]) for t in data["teams"]]),
-                (users, [str(p["id"]) for p in data["people"]]),
-            )
-            if (missing := set(ids) - await _visible(c, table, ids))
-            for i in sorted(missing)
+            for table in (teams, users)
+            for i in sorted(hidden[table.name])
             if await _taken(db, table, i)
         ]
         if held:
-            names = ", ".join(f"{t} {i}" for t, i in held)
-            raise SeedConflictError(
-                f"seed: {names} already exist under another tenant than {tenant_id}; rebuild the dev database "
-                "(make up without KEEP_DATA=1, or make db-reset) and start again"
-            )
+            raise SeedConflictError(tenant_id, held)
         await ensure_builtin_roles(c, tenant_id, at=now)
         for team in data["teams"]:
             fields = {
@@ -89,10 +97,14 @@ async def write_seed(
                 "owner_groups": team["ownerGroups"],
                 "scope": team["scope"],
             }
-            made = await c.execute(
-                insert(teams)
-                .values(id=team["id"], tenant_id=tenant_id, created_at=now, **fields)
-                .on_conflict_do_nothing(index_elements=[teams.c.id])
+            row = {"id": team["id"], "tenant_id": tenant_id, "created_at": now, **fields}
+            made = await _insert_new(
+                c,
+                insert_ignore(c, teams, row, keys=["id"]),
+                teams,
+                str(team["id"]),
+                tenant_id,
+                hidden=hidden[teams.name],
             )
             if made.rowcount:
                 # A seeded team, the install's first team included, gets each service's defaults like any new team;
@@ -105,30 +117,25 @@ async def write_seed(
             fields = {"email": person["email"], "name": person["name"], "status": "active"}
             # A seeded person's address and name belong to the seed file (no route changes them), so a database seeded
             # before the file changed them signs in with the new ones; their roles and status stay as people set them.
-            await c.execute(
-                insert(users)
-                .values(id=person["id"], tenant_id=tenant_id, created_at=now, **fields)
-                .on_conflict_do_update(
-                    index_elements=[users.c.id], set_={"email": person["email"], "name": person["name"]}
-                )
-            )
+            row = {"id": person["id"], "tenant_id": tenant_id, "created_at": now, **fields}
+            if str(person["id"]) in hidden[users.name]:
+                new_user = insert_ignore(c, users, row, keys=["id"])
+                await _insert_new(c, new_user, users, str(person["id"]), tenant_id, hidden=hidden[users.name])
+            else:
+                await c.execute(upsert(c, users, row, keys=["id"], update=["email", "name"]))
             await c.execute(sa.update(members).where(members.c.user_id == person["id"]).values(email=person["email"]))
             for team_id, role in person["teams"].items():
                 fields = {"email": person["email"], "role": role, "status": "active", "updated_at": now}
-                created = await c.execute(
-                    insert(members)
-                    .values(
-                        id=f"mem_{person['id']}_{team_id}",
-                        tenant_id=tenant_id,
-                        team_id=team_id,
-                        user_id=person["id"],
-                        created_at=now,
-                        **fields,
-                    )
-                    .on_conflict_do_nothing(index_elements=[members.c.id])
-                    .returning(members.c.id)
-                )
-                if created.first() is None:
+                row = {
+                    "id": f"mem_{person['id']}_{team_id}",
+                    "tenant_id": tenant_id,
+                    "team_id": team_id,
+                    "user_id": person["id"],
+                    "created_at": now,
+                    **fields,
+                }
+                created = await c.execute(insert_ignore(c, members, row, keys=["id"]))
+                if created.rowcount != 1:
                     continue
                 await mirror_membership(
                     c,
@@ -147,40 +154,47 @@ async def write_seed(
             for role_id in every:
                 # A workspace role: the built-in role in every team (`*`); Admin there makes a workspace admin,
                 # Security admin there holds the Security team's actions wherever that team is.
-                await c.execute(
-                    insert(role_assignments)
-                    .values(
-                        id=f"ras_{person['id']}_every_{role_id}",
-                        tenant_id=tenant_id,
-                        subject_kind="person",
-                        subject_id=person["id"],
-                        role_id=role_id,
-                        team_id=ANY_TEAM,
-                        granted_by="seed",
-                        reason="Seeded workspace role",
-                        source="grant",
-                        created_at=now,
-                    )
-                    .on_conflict_do_nothing(
-                        index_elements=[
-                            role_assignments.c.tenant_id,
-                            role_assignments.c.subject_kind,
-                            role_assignments.c.subject_id,
-                            role_assignments.c.role_id,
-                            role_assignments.c.team_id,
-                        ]
-                    )
-                )
+                grant = {
+                    "id": f"ras_{person['id']}_every_{role_id}",
+                    "tenant_id": tenant_id,
+                    "subject_kind": "person",
+                    "subject_id": person["id"],
+                    "role_id": role_id,
+                    "team_id": ANY_TEAM,
+                    "granted_by": "seed",
+                    "reason": "Seeded workspace role",
+                    "source": "grant",
+                    "created_at": now,
+                }
+                await c.execute(insert_ignore(c, role_assignments, grant, keys=GRANT_KEY))
             if every:
                 await bump_version(c, tenant_id)
         await ensure_owner(c, tenant_id, at=now)
 
 
-async def _taken(db: TenantDb, table: sa.Table, row_id: str) -> bool:
-    """Whether any tenant holds `row_id`: the primary key is global, so an insert of it under no tenant's eyes fails."""
+async def _insert_new(
+    c: AsyncConnection, insert: sa.Executable, table: sa.Table, row_id: str, tenant_id: str, *, hidden: set[str]
+) -> sa.CursorResult[Any]:
+    """Inserts a seeded row unless it is there. An id this tenant cannot see that is there after all belongs to another
+    tenant, which `_taken` misses for a login row security applies to: PostgreSQL skips the insert and SQL Server
+    refuses it on the primary key. Either way the seed stops with the conflict, as it does for an id `_taken` saw."""
     try:
-        async with db.engine.begin() as c:
-            # The dev seed connects as the compose superuser, which row-level security does not filter.
+        made = await c.execute(insert)
+    except IntegrityError as e:
+        if row_id not in hidden:
+            raise
+        raise SeedConflictError(tenant_id, [(table.name, row_id)]) from e
+    if made.rowcount == 0 and row_id in hidden:
+        raise SeedConflictError(tenant_id, [(table.name, row_id)])
+    return made
+
+
+async def _taken(db: TenantDb, table: sa.Table, row_id: str) -> bool:
+    """Whether any tenant holds `row_id`: the primary key is global, so an insert of it under no tenant's eyes fails.
+    Read as the login with no role set (a base `Store`'s system role is none): the dev seed connects as the compose
+    superuser, which row-level security does not filter. A login that cannot read the table answers not taken."""
+    try:
+        async with Store(db.engine).system_tx(SEED_ID_CHECK) as c, db.attempt(c):
             found = await c.execute(sa.select(sa.func.count()).select_from(table).where(table.c.id == row_id))
             return found.scalar_one() > 0
     except DBAPIError:

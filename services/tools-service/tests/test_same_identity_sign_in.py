@@ -121,3 +121,32 @@ async def test_another_account_as_the_same_login_updates_the_first(client: httpx
     assert done["accountId"] == first and done["alreadyConnectedAs"] == "harbor-ops", done
     rows = await _james_rows(client, tenant)
     assert rows[0]["accountCount"] == 1 and len(rows[0]["accounts"]) == 1, rows
+
+
+async def _another_named(client: httpx.AsyncClient, tenant: str, account: str, name: str) -> httpx.Response:
+    james = person(tenant, JAMES, {TEAM: "builder"})
+    return await client.post(f"/v1/me/accounts/{account}/another", json={"name": name}, headers=james)
+
+
+async def test_a_person_may_name_their_own_account_as_the_team_names_one_but_not_twice(
+    client: httpx.AsyncClient, tenant: str
+) -> None:
+    credential = await team_credential(client, admin(tenant), APP, "signin-own", "s3cret-value")
+    first = await _account(client, tenant, credentialId=credential, signIn="person")
+    team_eu = await client.post(
+        f"/v1/apps/{APP}/accounts",
+        json={"name": "EU desk", "credentialId": credential, "signIn": "person"},
+        headers=admin(tenant),
+    )
+    assert team_eu.status_code == 201, team_eu.text
+
+    mine = await _another_named(client, tenant, first, "EU desk")
+    assert mine.status_code == 200, mine.text
+    from urllib.parse import parse_qs, urlsplit  # noqa: PLC0415
+
+    state = parse_qs(urlsplit(str(mine.json()["data"]["authorizeUrl"])).query)["state"][0]
+    LOGINS[:] = ["harbor-eu"]
+    james = person(tenant, JAMES, {TEAM: "builder"})
+    assert (await _complete(client, james, first, state=state, code="the-code")).status_code == 200
+    again = await _another_named(client, tenant, first, "eu DESK")
+    assert again.status_code == 409 and again.json()["error"]["code"] == "account_name_taken", again.text

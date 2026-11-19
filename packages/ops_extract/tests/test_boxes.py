@@ -5,6 +5,7 @@ gap; a value in a table cell, quoted from a row the page text joins with " | ", 
 from __future__ import annotations
 
 import io
+from typing import Any
 
 from reportlab.lib.pagesizes import LETTER
 from reportlab.pdfgen.canvas import Canvas
@@ -67,9 +68,9 @@ def test_a_value_in_a_table_row_names_its_cell() -> None:
 
 def test_with_boxes_places_each_found_field_and_leaves_the_rest() -> None:
     layout = build_layout(notice(), filename="n.pdf")
-    case = {"extractedValue": "SYN-TL-2026-0101", "citation": {"page": 1, "quote": "SYN-TL-2026-0101"}}
-    empty = {"extractedValue": None, "citation": None}
-    out = with_boxes({"fields": {"case_no": case, "ein": empty}}, layout)
+    case: dict[str, Any] = {"extractedValue": "SYN-TL-2026-0101", "citation": {"page": 1, "quote": "SYN-TL-2026-0101"}}
+    empty: dict[str, Any] = {"extractedValue": None, "citation": None}
+    out: dict[str, Any] = with_boxes({"fields": {"case_no": case, "ein": empty}}, layout)
     assert out["fields"]["case_no"]["boxes"] and "boxes" not in out["fields"]["ein"], out
 
 
@@ -82,11 +83,11 @@ def test_a_date_is_boxed_from_its_printed_text_not_its_normalised_value() -> Non
     c.drawString(440, HEIGHT - 100, "10/02/2026")
     c.save()
     layout = build_layout(buf.getvalue(), filename="d.pdf")
-    field = {
+    field: dict[str, Any] = {
         "value": "2026-10-02",
         "extractedValue": "10/02/2026",
         "citation": {"page": 1, "quote": "Invoice date\n10/02/2026"},
     }
-    out = with_boxes({"fields": {"invoice_date": field}}, layout)
+    out: dict[str, Any] = with_boxes({"fields": {"invoice_date": field}}, layout)
     [box] = out["fields"]["invoice_date"]["boxes"]
     assert abs(box["x"] - 440 / WIDTH) < 0.01, box

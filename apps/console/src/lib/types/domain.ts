@@ -16,6 +16,10 @@ export type ToolType = 'http' | 'code' | 'mcp' | 'workflow';
 /** How a workflow behaves when it is called as a tool, from its approval rules. */
 export type WorkflowToolApproval = 'pauses_on_writes' | 'pauses_always' | 'runs_without_pause';
 
+/** Which skills the chat's / menu offers with an agent: every published team skill it has the tools for, its attached
+ *  skills only, or none. */
+export type SkillMenu = 'team' | 'attached' | 'off';
+
 export interface Agent {
   /** What the caller may do with this record, from the same check its write routes run; on the detail response only. */
   canEdit?: boolean;
@@ -67,6 +71,8 @@ export interface Agent {
   /** Whether the model may compose layouts, and how many widgets one answer may show. */
   widgets?: WidgetSettings;
   memory?: MemorySettings;
+  /** Which skills a person may pick with / in a chat with it (`team` when absent). */
+  skillMenu?: SkillMenu;
   controls: AgentControls;
 }
 
@@ -77,36 +83,6 @@ export interface GuardrailPin {
   topics: string[];
   /** False when the builder switched it off on this version: it is not checked. Absent in the mock: on. */
   enabled?: boolean;
-}
-
-/** A guardrail an agent pins by version (agents-service `/v1/guardrails`); kind `blocked_topics` today. */
-export interface Guardrail {
-  id: string;
-  name: string;
-  kind: 'blocked_topics';
-  owner: string;
-  status: 'live' | 'deprecated';
-  version: number;
-  publishedVersion: number | null;
-  /** `scopes`: topic to what it covers and what it does not, listed beside the topic for the classifier. */
-  config: { topics: string[]; message: string; scopes?: Record<string, string>; holdUntilChecked?: boolean };
-  usedBy: string[];
-  /** The open publish request, decided in Reviews. */
-  pendingRequestId: string | null;
-  /** Every saved version, newest first; agents pin any published one. Absent from the mock, which keeps no guardrails. */
-  versions?: GuardrailVersion[];
-  updatedAt: string;
-}
-
-export interface GuardrailVersion {
-  version: number;
-  config: Guardrail['config'];
-  state: 'draft' | 'published';
-  note: string;
-  savedBy: string;
-  savedAt: string;
-  publishedAt: string | null;
-  publishedBy: string | null;
 }
 
 /**
@@ -180,6 +156,8 @@ export type AgentPatch = Partial<AgentInput> & {
   widgetPins?: { widgetId: string; version?: number }[];
   widgets?: WidgetSettings;
   memory?: MemorySettings;
+  /** Which skills a person may pick with / in a chat with it (`team` when absent). */
+  skillMenu?: SkillMenu;
   note?: string;
 };
 

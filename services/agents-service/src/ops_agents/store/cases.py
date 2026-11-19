@@ -10,14 +10,20 @@ import json
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any, ClassVar, Literal, cast
+from typing import Annotated, ClassVar, Literal
 
 import sqlalchemy as sa
+from pydantic import BeforeValidator
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
+from ops_service_kit.http import Json, JsonValue, Out
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.listing import ListParams
 from ops_store import Guarantee
+from ops_store.isolation import attempt
+from ops_store.listing import LISTED, ListPage, list_page
+from ops_store.rows import one, rows
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.team_scope import team_visible
 
@@ -48,11 +54,11 @@ cases = sa.Table(
     # The producer's own key (a run's or chat's), unique in the team: opening the case again finds it.
     sa.Column("producer_key", sa.String(200)),
     sa.Column("subject", sa.String(300), nullable=False),
-    sa.Column("customer_id", sa.String(200)),
+    sa.Column("customer_id", sa.String(200), info=LISTED),
     sa.Column("customer_name", sa.String(300)),
-    sa.Column("status", sa.String(32), nullable=False),
-    sa.Column("assignee", sa.String(320)),
-    sa.Column("priority", sa.String(16), nullable=False),
+    sa.Column("status", sa.String(32), nullable=False, info=LISTED),
+    sa.Column("assignee", sa.String(320), info=LISTED),
+    sa.Column("priority", sa.String(16), nullable=False, info=LISTED),
     sa.Column("response_due_at", sa.String(32), nullable=False),
     sa.Column("resolution_due_at", sa.String(32), nullable=False),
     sa.Column("responded_at", sa.String(32)),
@@ -68,6 +74,11 @@ cases = sa.Table(
     sa.Column("updated_at", sa.String(32), nullable=False),
     sa.UniqueConstraint("tenant_id", "team_id", "producer_key", name="uq_cases_producer_key"),
     sa.Index("ix_cases_team_due", "tenant_id", "team_id", "resolution_due_at"),
+    # The cases list's filters, each within one team (agents 0111).
+    sa.Index("ix_cases_team_status", "tenant_id", "team_id", "status"),
+    sa.Index("ix_cases_team_priority", "tenant_id", "team_id", "priority"),
+    sa.Index("ix_cases_team_assignee", "tenant_id", "team_id", "assignee"),
+    sa.Index("ix_cases_team_customer", "tenant_id", "team_id", "customer_id"),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
@@ -91,9 +102,65 @@ class CaseNotFound(LookupError):
     """No case with that id in the teams the reader names."""
 
 
+class CaseRecord(Out):
+    """A case row as stored, every column in table order. Status and priority stay plain text: a row read here is
+    shown as stored, and `CaseView` is where a value outside the lists is refused."""
+
+    id: str
+    tenant_id: str
+    team_id: str
+    producer_key: str | None
+    subject: str
+    customer_id: str | None
+    customer_name: str | None
+    status: str
+    assignee: str | None
+    priority: str
+    response_due_at: str
+    resolution_due_at: str
+    responded_at: str | None
+    paused_since: str | None
+    # The producer's own fields, by name: whatever its step read or worked out.
+    fields: Json | None
+    type_id: str | None
+    type_version: int | None
+    created_by: str
+    created_at: str
+    updated_at: str
+
+
+def _loads(v: object) -> object:
+    return json.loads(v) if isinstance(v, str) else v
+
+
+class CaseEventRecord(Out):
+    """A timeline event; `detail` is stored as JSON text and read back as the object written."""
+
+    id: str
+    tenant_id: str
+    case_id: str
+    kind: str
+    ref: str | None
+    detail: Annotated[Json, BeforeValidator(_loads)]
+    by: str
+    at: str
+
+
+class CaseSummary(Out):
+    """What a run's page names a case by."""
+
+    subject: str
+    customer: str | None
+    fields: Json
+
+
+# A field a change may set: each settable case column holds text or nothing.
+Change = str | None
+
+
 @dataclass(frozen=True)
 class Opened:
-    case: dict[str, Any]
+    case: CaseRecord
     # False when the producer key found the case a retry had already opened.
     created: bool
 
@@ -104,10 +171,6 @@ def _iso(t: datetime) -> str:
 
 def _parse(s: str) -> datetime:
     return datetime.fromisoformat(s.replace("Z", "+00:00"))
-
-
-def _row(r: Any) -> dict[str, Any]:
-    return dict(r._mapping)  # pyright: ignore[reportPrivateUsage]
 
 
 class CaseStore:
@@ -130,15 +193,16 @@ class CaseStore:
         assignee: str | None = None,
         response_due_at: str | None = None,
         resolution_due_at: str | None = None,
-        fields: dict[str, Any] | None = None,
+        fields: Json | None = None,
         type_id: str | None = None,
         type_version: int | None = None,
         now: datetime | None = None,
     ) -> Opened:
         at = now or datetime.now(UTC)
         response, resolution = DEFAULT_DEADLINES[priority]
-        values = {
-            "id": new_id("case"),
+        case_id = new_id("case")
+        values: dict[str, JsonValue] = {
+            "id": case_id,
             "team_id": team_id,
             "producer_key": producer_key,
             "subject": subject,
@@ -157,9 +221,10 @@ class CaseStore:
             "type_version": type_version,
         }
         try:
-            async with tenant_tx(self.engine) as c:
+            # A savepoint, so a retry's duplicate producer key leaves a request transaction usable for the read below.
+            async with tenant_tx(self.engine) as c, attempt(c):
                 await c.execute(cases.insert().values(**values))
-                await _event(c, str(values["id"]), "opened", ref=None, detail={"subject": subject}, by=by, at=_iso(at))
+                await _event(c, case_id, "opened", ref=None, detail={"subject": subject}, by=by, at=_iso(at))
         except IntegrityError:
             if producer_key is None:
                 raise
@@ -167,17 +232,20 @@ class CaseStore:
                 q = sa.select(cases).where(
                     cases.c.team_id == team_id, cases.c.producer_key == producer_key, team_visible(cases)
                 )
-                return Opened(_row((await c.execute(q)).one()), created=False)
-        return Opened(await self.get(str(values["id"]), [team_id]), created=True)
+                found = await one(c, q, CaseRecord)
+            if found is None:
+                raise
+            return Opened(found, created=False)
+        return Opened(await self.get(case_id, [team_id]), created=True)
 
-    async def get(self, case_id: str, teams: list[str]) -> dict[str, Any]:
+    async def get(self, case_id: str, teams: list[str]) -> CaseRecord:
         """The case if it is in `teams`."""
         async with tenant_tx(self.engine) as c:
             q = sa.select(cases).where(cases.c.id == case_id, cases.c.team_id.in_(teams), team_visible(cases))
-            row = (await c.execute(q)).first()
+            row = await one(c, q, CaseRecord)
         if row is None:
             raise CaseNotFound(case_id)
-        return _row(row)
+        return row
 
     async def list(
         self,
@@ -193,12 +261,13 @@ class CaseStore:
         now: datetime | None = None,
         page: int = 1,
         size: int = 25,
-    ) -> tuple[list[dict[str, Any]], int]:
-        """One page of the teams' cases, the soonest resolution deadline first, and the count that matched. `search`
-        keeps the cases holding every one of its words, in any order and ignoring case, each word in the subject, the
-        customer's name or the customer's id."""
-        at = _iso(now or datetime.now(UTC))
-        where: list[Any] = [cases.c.team_id.in_(teams), team_visible(cases)]
+    ) -> tuple[list[CaseRecord], int]:
+        """One page of the teams' cases, the soonest resolution deadline first, and the count that matched; for the
+        overview and the Ops assistant's case search. `search` as in `_chosen`."""
+        where = [
+            *self._chosen(teams, overdue=overdue, due_before=due_before, search=search, now=now),
+            team_visible(cases),
+        ]
         if status:
             where.append(cases.c.status.in_(status))
         if assignee:
@@ -207,6 +276,59 @@ class CaseStore:
             where.append(cases.c.priority.in_(priority))
         if customer_id:
             where.append(cases.c.customer_id == customer_id)
+        async with tenant_tx(self.engine) as c:
+            total = int((await c.execute(sa.select(sa.func.count()).select_from(cases).where(*where))).scalar_one())
+            q = (
+                sa.select(cases)
+                .where(*where)
+                .order_by(cases.c.resolution_due_at, cases.c.id)
+                .limit(size)
+                .offset((page - 1) * size)
+            )
+            return await rows(c, q, CaseRecord), total
+
+    async def page(
+        self, teams: list[str], params: ListParams, *, overdue: bool = False
+    ) -> tuple[ListPage, list[CaseRecord]]:
+        """The cases list on the shared contract: the teams' cases, the soonest resolution deadline first, then by id;
+        `status`, `priority`, `assignee` and `customerId` filter (each value given once per key), `search` as in
+        `_chosen` unless `ids` names the cases, and `overdue` keeps the open ones past their deadline. The page, and
+        its rows as cases."""
+        search = None if params.ids is not None else params.search
+        q = sa.select(cases).where(*self._chosen(teams, overdue=overdue, search=search), team_visible(cases))
+        c_ = cases.c
+        async with tenant_tx(self.engine) as c:
+            page = await list_page(
+                c,
+                q,
+                params,
+                default_sort=c_.resolution_due_at.asc(),
+                filters={
+                    "status": c_.status,
+                    "priority": c_.priority,
+                    "assignee": c_.assignee,
+                    "customerId": c_.customer_id,
+                },
+            )
+        return page, [CaseRecord.model_validate(r) for r in page["data"]]
+
+    @staticmethod
+    def _chosen(
+        teams: list[str],
+        *,
+        overdue: bool = False,
+        due_before: str | None = None,
+        search: str | None = None,
+        now: datetime | None = None,
+    ) -> list[sa.ColumnElement[bool]]:
+        """The tenant's cases in `teams`; each caller adds `team_visible`, the acting team's only. `search` keeps the
+        cases holding every one of its words, in any order and ignoring case, each word in the subject, the customer's
+        name or the customer's id."""
+        at = _iso(now or datetime.now(UTC))
+        where: list[sa.ColumnElement[bool]] = [
+            cases.c.tenant_id == current_tenant(),
+            cases.c.team_id.in_(teams),
+        ]
         # Word by word: "application documents" finds "Loan application: ..., waiting on documents: ...", which the
         # phrase does not.
         for word in (search or "").split():
@@ -232,80 +354,64 @@ class CaseStore:
                     cases.c.resolution_due_at < due_before,
                 )
             )
-        async with tenant_tx(self.engine) as c:
-            total = int((await c.execute(sa.select(sa.func.count()).select_from(cases).where(*where))).scalar_one())
-            q = (
-                sa.select(cases)
-                .where(*where)
-                .order_by(cases.c.resolution_due_at, cases.c.id)
-                .limit(size)
-                .offset((page - 1) * size)
-            )
-            rows = [_row(r) for r in (await c.execute(q)).all()]
-        return rows, total
+        return where
 
-    async def events(self, case_id: str) -> list[dict[str, Any]]:
+    async def events(self, case_id: str) -> list[CaseEventRecord]:
         async with tenant_tx(self.engine) as c:
             q = (
                 sa.select(case_events)
                 .where(case_events.c.case_id == case_id)
                 .order_by(case_events.c.at, case_events.c.id)
             )
-            rows = (await c.execute(q)).all()
-        return [{**_row(r), "detail": json.loads(r.detail)} for r in rows]
+            return await rows(c, q, CaseEventRecord)
 
-    async def events_by_id(self, ids: list[str]) -> dict[str, dict[str, Any]]:
+    async def events_by_id(self, ids: list[str]) -> dict[str, CaseEventRecord]:
         """These timeline events by id in one query, each with its detail (the Activity page words its case rows)."""
         if not ids:
             return {}
         async with tenant_tx(self.engine) as c:
-            rows = (await c.execute(sa.select(case_events).where(case_events.c.id.in_(ids)))).all()
-        return {str(r.id): {**_row(r), "detail": json.loads(r.detail)} for r in rows}
+            found = await rows(c, sa.select(case_events).where(case_events.c.id.in_(ids)), CaseEventRecord)
+        return {e.id: e for e in found}
 
-    async def merge_fields(self, case_id: str, fields: dict[str, Any]) -> None:
+    async def merge_fields(self, case_id: str, fields: Json) -> None:
         """Adds `fields` to the case's own, a name given again taking the new value."""
         async with tenant_tx(self.engine) as c:
             q = sa.select(cases.c.fields).where(cases.c.id == case_id, team_visible(cases)).with_for_update()
-            held = cast(dict[str, Any] | None, (await c.execute(q)).scalar()) or {}
+            held: Json = (await c.execute(q)).scalar() or {}
             await c.execute(
                 cases.update()
                 .where(cases.c.id == case_id)
                 .values(fields=held | fields, updated_at=_iso(datetime.now(UTC)))
             )
 
-    async def add_event(
-        self, case_id: str, kind: EventKind, *, ref: str | None, detail: dict[str, Any], by: str
-    ) -> None:
+    async def add_event(self, case_id: str, kind: EventKind, *, ref: str | None, detail: Json, by: str) -> None:
         async with tenant_tx(self.engine) as c:
             await _event(c, case_id, kind, ref=ref, detail=detail, by=by, at=now_iso())
             await c.execute(cases.update().where(cases.c.id == case_id).values(updated_at=now_iso()))
 
     async def change(
-        self, case_id: str, changes: dict[str, Any], *, by: str, now: datetime | None = None
-    ) -> dict[str, Any]:
+        self, case_id: str, changes: dict[str, Change], *, by: str, now: datetime | None = None
+    ) -> CaseRecord:
         """Applies field changes, one `field` event each, in one transaction. Entering `waiting_on_customer` pauses both
         deadlines; leaving it moves both on by the pause. Returns the case as it is now."""
         at = now or datetime.now(UTC)
         async with tenant_tx(self.engine) as c:
-            row = (
-                await c.execute(sa.select(cases).where(cases.c.id == case_id, team_visible(cases)).with_for_update())
-            ).first()
-            if row is None:
+            locked = sa.select(cases).where(cases.c.id == case_id, team_visible(cases)).with_for_update()
+            before = await one(c, locked, CaseRecord)
+            if before is None:
                 raise CaseNotFound(case_id)
-            before = _row(row)
-            values: dict[str, Any] = {}
-            for field, value in changes.items():
-                if before.get(field) != value:
-                    values[field] = value
+            held: dict[str, Change] = {f: getattr(before, f, None) for f in changes}
+            values: dict[str, Change] = {f: v for f, v in changes.items() if held[f] != v}
             status = values.get("status")
-            if status == PAUSED and before["paused_since"] is None:
+            if status == PAUSED and before.paused_since is None:
                 values["paused_since"] = _iso(at)
-            elif status is not None and status != PAUSED and before["paused_since"] is not None:
-                paused = at - _parse(str(before["paused_since"]))
+            elif status is not None and status != PAUSED and before.paused_since is not None:
+                paused = at - _parse(before.paused_since)
                 values["paused_since"] = None
-                for due in ("response_due_at", "resolution_due_at"):
-                    if due not in values:
-                        values[due] = _iso(_parse(str(before[due])) + paused)
+                if "response_due_at" not in values:
+                    values["response_due_at"] = _iso(_parse(before.response_due_at) + paused)
+                if "resolution_due_at" not in values:
+                    values["resolution_due_at"] = _iso(_parse(before.resolution_due_at) + paused)
             if not values:
                 return before
             values["updated_at"] = _iso(at)
@@ -313,9 +419,11 @@ class CaseStore:
             # An explicit responded_at in the same change lands first, so the field events below keep it.
             for field in sorted(changes, key=lambda f: f != "responded_at"):
                 if field in values:
-                    detail = {"field": field, "before": before.get(field), "after": values[field]}
+                    detail: Json = {"field": field, "before": held[field], "after": values[field]}
                     await _event(c, case_id, "field", ref=None, detail=detail, by=by, at=_iso(at))
-            after = _row((await c.execute(sa.select(cases).where(cases.c.id == case_id, team_visible(cases)))).one())
+            after = await one(c, sa.select(cases).where(cases.c.id == case_id, team_visible(cases)), CaseRecord)
+        if after is None:
+            raise CaseNotFound(case_id)
         return after
 
     async def counts(self, teams: list[str], *, now: datetime | None = None) -> dict[str, int]:
@@ -330,7 +438,8 @@ class CaseStore:
         )
         q = (
             sa.select(
-                sa.func.count().filter(needs).label("needs"), sa.func.count().filter(breaching).label("breaching")
+                sa.func.count(sa.case((needs, 1))).label("needs"),
+                sa.func.count(sa.case((breaching, 1))).label("breaching"),
             )
             .select_from(cases)
             .where(cases.c.team_id.in_(teams), team_visible(cases))
@@ -360,10 +469,10 @@ class CaseStore:
             q = sa.select(cases.c.id, cases.c.subject).where(
                 team_visible(cases), cases.c.tenant_id == current_tenant(), cases.c.id.in_(case_ids)
             )
-            rows = (await c.execute(q)).all()
-        return {str(r.id): str(r.subject) for r in rows}
+            found = (await c.execute(q)).all()
+        return {str(r.id): str(r.subject) for r in found}
 
-    async def summaries(self, case_ids: list[str], teams: list[str]) -> dict[str, dict[str, Any]]:
+    async def summaries(self, case_ids: list[str], teams: list[str]) -> dict[str, CaseSummary]:
         """Each case's subject, customer name and fields by id, for the cases of `teams` only, in one query: a run's
         page names the cases its child runs opened that its reader may open. A case of another team, or not
         found, is left out."""
@@ -376,10 +485,10 @@ class CaseStore:
                 cases.c.id.in_(case_ids),
                 cases.c.team_id.in_(teams),
             )
-            rows = (await c.execute(q)).all()
+            found = (await c.execute(q)).all()
         return {
-            str(r.id): {"subject": str(r.subject), "customer": r.customer_name, "fields": dict(r.fields or {})}
-            for r in rows
+            str(r.id): CaseSummary(subject=str(r.subject), customer=r.customer_name, fields=dict(r.fields or {}))
+            for r in found
         }
 
     async def link(self, case_id: str, other_id: str, *, by: str) -> None:
@@ -400,14 +509,14 @@ _RESPONSE_FIELDS = frozenset({"status", "assignee", "priority"})
 _AUTOMATED = ("run:", "agent:", "key:", "event:", "trigger:")
 
 
-def _starts_response(kind: str, by: str, detail: dict[str, Any]) -> bool:
+def _starts_response(kind: str, by: str, detail: Json) -> bool:
     if not by or by.startswith(_AUTOMATED):
         return False
     return kind in ("note", "decision") or (kind == "field" and detail.get("field") in _RESPONSE_FIELDS)
 
 
 async def _event(
-    c: AsyncConnection, case_id: str, kind: str, *, ref: str | None, detail: dict[str, Any], by: str, at: str
+    c: AsyncConnection, case_id: str, kind: str, *, ref: str | None, detail: Json, by: str, at: str
 ) -> None:
     if _starts_response(kind, by, detail):
         # Set once: the first person's work on the case is its first response; a responded_at already set (an import's

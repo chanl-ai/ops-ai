@@ -15,15 +15,19 @@ from alembic.config import Config
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ops_agents.activities.catalog import load_catalog
+from ops_agents.api.app import PUBLIC_SCOPES
+from ops_agents.store.tenancy import tenant_scope
 from ops_email import MemorySender
-from ops_identity import dev_service_signer, mint_service_token
+from ops_identity import ServiceClient, dev_service_signer, mint_service_token
 from ops_service_kit import opa_server
 from ops_service_kit.ids import input_hash, new_id
 from ops_service_kit.settings import Settings
 from ops_tools.app import create_gateway_app
+from ops_tools.modules.policy import WriteApprovals
 from ops_tools.opa import OpaClient
 from ops_tools.registry import ToolRegistry
 from ops_tools.store import CallLog
+from ops_tools.store.calls import GatewayCall
 from ops_tools.tokens import Binding, mint
 from ops_tools.tools import LocalToolRunner
 
@@ -38,13 +42,29 @@ SUB = "service:agents"
 
 
 def service_token(service: str = "agents") -> str:
-    return mint_service_token(dev_service_signer(), service=service, audience="tools", tenant_id="local")
+    # agents-service claims the scopes its own client does on tools-service (ops_agents.api.app.PUBLIC_SCOPES);
+    # another name claims none, so the gateway judges the identity alone.
+    scopes = PUBLIC_SCOPES["tools"] if service == "agents" else []
+    return mint_service_token(dev_service_signer(), service=service, audience="tools", tenant_id="local", scopes=scopes)
 
 
 class ServiceAuthHeader(httpx.Auth):
     def auth_flow(self, request: httpx.Request) -> Generator[httpx.Request, httpx.Response]:
         request.headers.setdefault("Authorization", f"Bearer {service_token()}")
         yield request
+
+
+def no_saved_rules(request: httpx.Request) -> httpx.Response:
+    """platform-service's answer for a team that saved no approval settings (appChanges, appChangesByApp): every write
+    without its own answer runs. Without a reader the gateway refuses every write (approval_rules_unavailable)."""
+    key = request.url.path.rsplit("/", 1)[-1]
+    return httpx.Response(200, json={"success": True, "data": {"key": key, "value": {}}})
+
+
+def write_approvals() -> WriteApprovals:
+    """The gateway's approval-rules reader, with platform-service faked at its HTTP boundary."""
+    http = httpx.AsyncClient(transport=httpx.MockTransport(no_saved_rules), base_url="http://platform")
+    return WriteApprovals(ServiceClient(http, dev_service_signer(), "tools", "platform", ["settings:view"]))
 
 
 @pytest.fixture(scope="session")
@@ -80,6 +100,15 @@ class Decisions:
     async def apply_access_decision(self, tenant_id: str, module_id: str, **kw: Any) -> dict[str, Any]:
         self.applied.append({"tenant_id": tenant_id, "module_id": module_id, **kw})
         return {"id": kw["approval_id"], "status": "approved" if kw["decision"] == "approved" else "rejected"}
+
+
+class TenantReadLog(CallLog):
+    """tools-service's call log as these tests read it: a store call needs the tenant a request would set, so the
+    read sets the one it names, as tools-service's own tests do."""
+
+    async def for_thread(self, thread_id: str, *, tenant_id: str) -> list[GatewayCall]:
+        with tenant_scope(tenant_id):
+            return await super().for_thread(thread_id, tenant_id=tenant_id)
 
 
 @dataclass
@@ -134,7 +163,7 @@ class Gateway:
 @pytest.fixture
 async def gateway(engine: AsyncEngine) -> AsyncIterator[Gateway]:
     async with httpx.AsyncClient(base_url=OPA_URL) as opa_http:
-        log = CallLog(engine)
+        log = TenantReadLog(engine)
         clock = Clock()
         mail = MemorySender()
         decisions = Decisions()
@@ -145,6 +174,7 @@ async def gateway(engine: AsyncEngine) -> AsyncIterator[Gateway]:
             log=log,
             runner=LocalToolRunner(load_catalog(SEED), mail, decisions=decisions),
             review_key=REVIEW_KEY,
+            write_approvals=write_approvals(),
         )
         async with (
             app.router.lifespan_context(app),

@@ -17,58 +17,7 @@ from models import chain_metadata, chains
 from ops_store.schema import isolation_ddl, isolation_kind
 
 # Area -> tables the database does not isolate yet.
-WAITING: dict[str, set[str]] = {
-    "platform sign-in": {"signin_email_failures"},
-    "agents runtime": {
-        "channel_cursors",
-        "channel_files",
-        "channel_messages",
-        "deployments",
-        "graph_versions",
-        "model_call_records",
-        "thread_budgets",
-        "thread_inbox",
-        "thread_leases",
-        "timers",
-    },
-    "agents registry": {
-        "registry_agent_versions",
-        "registry_agents",
-        "registry_guardrail_versions",
-        "registry_guardrails",
-        "registry_skill_versions",
-        "registry_skills",
-        "registry_validations",
-        "registry_widget_versions",
-        "registry_widgets",
-        "registry_workflow_versions",
-        "registry_workflows",
-    },
-    "tools": {
-        # connect_links, connection_environments, connection_tokens and oauth_states are isolated.
-        "egress_audit",
-        "egress_hosts",
-        "egress_ranges",
-        "gateway_calls",
-        "gateway_fences",
-        "module_approvals",
-        "module_egress_hosts",
-        "module_operations",
-        "module_versions",
-        "operation_mocks",
-        "operation_rate_windows",
-        "plugin_bindings",
-        "send_checks",
-        "send_policies",
-        # Each team's defaults version, team-owned like tool_modules beside it; isolated with them.
-        "team_defaults",
-        "tool_modules",
-    },
-    "models": {
-        "model_aliases",
-        "model_call_log",
-    },
-}
+WAITING: dict[str, set[str]] = {}
 
 
 def _tables() -> dict[str, sa.Table]:
@@ -107,3 +56,22 @@ def test_every_table_holding_sign_in_material_is_isolated_by_the_database() -> N
     open_ = {name for name in holding if isolation_kind(_tables()[name]) not in ("team", "tenant")}
     assert sorted(open_ - SIGN_IN_MATERIAL_WAITING) == [], "isolate these by tenant and team in the database"
     assert sorted(SIGN_IN_MATERIAL_WAITING - open_) == [], "now isolated or gone: take these off the waiting list"
+
+
+# A system(...) table names no tenant to the database, so a row in it that carries a tenant or a team is that tenant's
+# data with no policy over it. The few that must stay install-wide are listed with the reason.
+TENANT_COLUMNS_IN_SYSTEM_TABLES: dict[str, str] = {
+    "service_outbox": "tools-service's outbox: the relay reads every tenant's events to deliver them",
+    "platform_outbox": "platform-service's outbox: the relay delivers events across tenants",
+    "oauth_clients": "a registered OAuth client has no tenant until a person allows it",
+}
+
+
+def test_a_system_table_with_a_tenant_or_team_column_is_listed_with_its_reason() -> None:
+    carrying = {
+        name
+        for name, t in _tables().items()
+        if isolation_kind(t) == "system" and {"tenant_id", "tenant", "team_id", "team"} & set(t.columns.keys())
+    }
+    assert sorted(carrying - TENANT_COLUMNS_IN_SYSTEM_TABLES.keys()) == [], "police these by tenant or list them"
+    assert sorted(TENANT_COLUMNS_IN_SYSTEM_TABLES.keys() - carrying) == [], "no longer carry a tenant: unlist them"

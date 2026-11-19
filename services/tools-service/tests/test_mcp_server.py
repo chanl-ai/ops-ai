@@ -4,7 +4,7 @@ run what its key should not, run a write without a person, or go unseen in the c
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -22,6 +22,7 @@ from ops_service_kit.settings import Settings
 from ops_tools.app import MCP_OFF
 from ops_tools.modules.seed import load
 from ops_tools.store.calls import gateway_calls
+from ops_tools.store.mcp_links import LinkedTool, McpLinks
 from ops_tools.store.modules import ModuleStore
 
 from .conftest import Api, build_app, no_keys, opa_client
@@ -30,7 +31,9 @@ from .fake_upstream import ENDPOINT, HOST, fake_bank
 
 MCP_SOURCE = {"kind": "mcp", "url": f"{ENDPOINT}/mcp"}
 # Keys platform-service would introspect: one of the module's owning team, one of another team.
-KEYS = {"ok_lending": "team_lending", "ok_cards": "team_cards"}
+KEYS = {"ok_lending": "team_lending", "ok_cards": "team_cards", "ok_linked": "team_lending"}
+# The MCP link `ok_linked` was made for (platform-service's key target), set by the test that makes the link.
+LINK_TARGET: dict[str, str] = {}
 
 
 def _introspect(tenant: str) -> Any:
@@ -45,7 +48,7 @@ def _introspect(tenant: str) -> Any:
             "tenantId": tenant,
             "teamId": team,
             "scopes": ["read", "write"],
-            "apiKey": {"id": key},
+            "apiKey": {"id": key, "target": {"kind": "mcp_link", **LINK_TARGET} if key == "ok_linked" else None},
         }
 
     return introspect
@@ -171,6 +174,62 @@ async def test_a_tool_of_a_module_outside_the_team_is_refused_and_logged(stack: 
     assert (row["channel"], row["outcome"]) == ("mcp", "refused")
 
 
+async def _grant_cards_lookup(stack: Stack, ends: datetime) -> None:
+    """Card Services' workflow granted lookup_case alone of Lending Ops' module, ending at `ends`."""
+    store = ModuleStore(stack.engine)
+    m = await store.get(stack.api.tenant, "mod_document_service")
+    assert m is not None
+    now = datetime.now(UTC)
+    m["approvals"] = [a for a in m["approvals"] if a["id"] != "apr_cards_lookup"] + [
+        {
+            "id": "apr_cards_lookup",
+            "workflow_id": "wf_card_inbox",
+            "workflow_name": "Card inbox",
+            "workflow_team_id": "team_cards",
+            "environment": "production",
+            "major": 1,
+            "operations": ["lookup_case"],
+            "constraints": None,
+            "requested_by": "Maya Okafor",
+            "requested_by_email": None,
+            "justification": "test",
+            "requested_at": now,
+            "decided_by": "Maya Okafor",
+            "decided_at": now,
+            "status": "approved",
+            "expires_at": ends,
+            "reason": None,
+            "decider_team": None,
+            "review_id": None,
+        }
+    ]
+    await store.put(m, expected_revision=m["revision"])
+
+
+async def test_an_ended_grant_lists_and_calls_nothing_over_mcp(stack: Stack) -> None:
+    seen: dict[str, Any] = {}
+    for when, ends in (("live", timedelta(days=1)), ("ended", timedelta(days=-1))):
+        await _grant_cards_lookup(stack, datetime.now(UTC) + ends)
+        async with stack.running(), stack.http("ok_cards") as http, stack.client(http, "/mcp/team_cards") as c:
+            listed = "lookup_case" in {t.name for t in (await c.list_tools()).tools}
+            result = await c.call_tool("lookup_case", {"caseId": "CASE-4112"})
+        out: dict[str, Any] = dict(result.structured_content or {})
+        error: dict[str, Any] = out.get("error") or {}
+        seen[when] = (listed, out.get("code") or error.get("code"))
+    # Live, the call passes the team check and stops at Card Services' missing account; ended, it is refused there.
+    assert seen == {"live": (True, "CONNECTION_NOT_SET"), "ended": (False, "gateway_refused")}
+    # The live call's row ends as an error (no account); the ended grant's refusal is logged as one.
+    assert sorted(r["outcome"] for r in await stack.rows("lookup_case")) == ["error", "refused"]
+
+
+@pytest.fixture(autouse=True)
+def issuer_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests run on an install that names its public address, as an install with MCP on does; one that names none
+    answers 503 to a client with no key (test_mcp_company_sign_in)."""
+    monkeypatch.setenv("OPS_PLATFORM_PUBLIC_URL", "https://ops.bank.test/api/platform")
+    monkeypatch.setenv("OPS_TOOLS_PUBLIC_URL", "https://ops.bank.test/api/tools")
+
+
 @pytest.mark.parametrize(
     ("key", "path", "status", "code"),
     [
@@ -211,3 +270,22 @@ async def test_with_the_flag_off_the_mcp_address_says_it_is_off(
     assert r.status_code == 404, r.text
     error = r.json()["error"]
     assert (error["code"], error["message"]) == ("feature_off", MCP_OFF), error
+
+
+async def test_a_key_made_for_one_link_opens_that_link_alone(stack: Stack) -> None:
+    """A key a link's Keys tab made is bound to that link: refused (401) on the team's whole address and on another
+    link."""
+    links = McpLinks(stack.engine)
+    tools = [LinkedTool(name="lookup_case", title="Look up a case", kind="tool", access="read")]
+    own = await links.create(stack.api.tenant, "team_lending", slug="claims", name="Claims", tools=tools, by="Priya")
+    await links.create(stack.api.tenant, "team_lending", slug="other", name="Other", tools=tools, by="Priya")
+    LINK_TARGET.update(id=own.id)
+    body: dict[str, Any] = {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
+    accept = {"Accept": "application/json, text/event-stream"}
+    async with stack.running(), stack.http("ok_linked") as http:
+        mine = await http.post("/mcp/team_lending/claims", json=body, headers=accept)
+        team = await http.post("/mcp/team_lending", json=body, headers=accept)
+        other = await http.post("/mcp/team_lending/other", json=body, headers=accept)
+    assert mine.status_code == 200, mine.text
+    assert (team.status_code, other.status_code) == (401, 401), (team.text, other.text)
+    assert team.json()["error"]["code"] == "key_target"

@@ -15,7 +15,7 @@ Status: current. Id: `uc-674`. Service: `tools-service` with platform-service. L
 | S7 | Someone who cannot set an app up reads one line on Mine, not set up and ask an admin, and sees no Settings tab | ui | 9 | 9 |
 | S8 | Words follow the reader's role and say whose state they are: an admin's picker offers the team's step, a viewer's asks a named person of the team who manages its apps, a per-person app's header says You and its team row Team account, and a missing app's page asks for no resources and tells the admin how apps are installed | ui | 10 | 10 |
 | S9 | Every app name in the chat picker reads in full, for a member and an admin, at 1440 and 390 wide | ui | 11 | 11 |
-| S5 | A viewer sees no auth config on an app's page: no Auth configs tab, no Auth config column, no config name | ui | 7 | 7 |
+| S5 | A viewer sees no auth config on an app's page: no Auth configs tab, no Auth config column, no config name; an admin sees the column on the accounts a config's count opens | ui | 7 | 7 |
 
 ## Preconditions
 
@@ -41,7 +41,7 @@ Status: current. Id: `uc-674`. Service: `tools-service` with platform-service. L
 | 9 | Ravi (viewer) opens Mine and GitHub's page | His GitHub card reads Not set up for your team yet with Ask an admin and nothing else; the page has no Settings tab |
 | 10 | Priya and Ravi open the chat picker and Mine; Nadia opens GitHub; Priya and Ravi open the missing plugin's Resources | Priya's GitHub row offers Set up, Ravi's says ask an admin; Ravi's Mine names someone who manages Operations' apps in Operations (James Richardson or Priya Shah), never an admin of every team; Nadia's header reads You: and the account row Team account:; the Resources tab says it isn't installed with no failed call, and only Priya reads how apps are installed |
 | 11 | Ravi and Priya open the chat picker at 1440 and at 390 wide | Every row's app name is shown whole, none cut short; Ravi's rows at 1440 include one that says ask an admin, with that line under the name |
-| 7 | Ravi (viewer) and Priya (admin) open Salesforce's Accounts | Ravi: no Auth configs tab, no Auth config column, no config named; Priya: both |
+| 7 | Ravi (viewer) and Priya (admin) open Salesforce's Accounts; Priya then presses a config's account count on Auth configs | Ravi: no Auth configs tab, no Auth config column, no config named; Priya: the Auth configs tab, no Auth config column on the plain list, and the column on the list her count opens |
 
 ## Acceptance layers
 
@@ -57,3 +57,6 @@ answered 404.
 
 Step 11 fails while the picker keeps the ask-an-admin line beside the name above the phone breakpoint: the picker is
 the same fixed width at every screen width, so at 1440 a member's names were cut to a letter or two.
+
+Step 7 fails with the Auth config column shown on every admin's Accounts list (the column's `config` gate removed
+from `app-accounts-tab.tsx`): the plain list then counts one Auth config column where it should count none.

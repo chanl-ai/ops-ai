@@ -45,3 +45,9 @@ models-service, platform-service and tools-service.
 
 - [docs/architecture/human-in-the-loop.md](../../docs/architecture/human-in-the-loop.md): reviews, step-up and two-person decisions
 - [docs/architecture/decisions/identity-and-entitlement.md](../../docs/architecture/decisions/identity-and-entitlement.md) (ADR-0005)
+
+## Engineering standards
+
+The rules the code in this folder is held to, each with a real example from this repository and the check that
+enforces it: [tenant isolation and access](../../docs/architecture/standards/tenancy-and-access.md) (`TN1` to `TN5`, `AC1` to `AC5`), [security](../../docs/architecture/standards/security.md) (`SC1` to `SC6`). The index of every rule is
+[engineering standards](../../docs/architecture/engineering-standards.md); a review cites the rule id.

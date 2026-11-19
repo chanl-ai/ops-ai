@@ -5,6 +5,7 @@ No model call."""
 from __future__ import annotations
 
 from contextlib import ExitStack
+from typing import Any
 
 from connection_calls import allow_bank, at, call, clean, connection, module
 from usecase_harness import AGENTS_PORT, TOOLS_PORT, agents, check, core_bank, data, finish, tools
@@ -56,7 +57,13 @@ with ExitStack() as stack:
         after.get("ok") is False and after["output"]["error"].get("status") == 401,
         after,
     )
-    meta = data(gw.get("/v1/secrets"))
+    # Every page of the list, which answers 50 at most.
+    meta: list[dict[str, Any]] = []
+    for n in range(1, 100):
+        listed = data(gw.get(f"/v1/secrets?page={n}&pageSize=50")) or {}
+        meta += listed.get("data") or []
+        if not (listed.get("pagination") or {}).get("hasNext"):
+            break
     owned = [s for s in meta if s.get("connectionId") in (conn["id"], sandbox["id"])]
     check(
         "3 the Secrets list shows each account's token as its own, with no value",

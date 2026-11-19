@@ -16,6 +16,7 @@ from sqlalchemy.pool import StaticPool
 
 from ops_agents.api.app import create_app
 from ops_agents.store.base import metadata
+from ops_engine.store import metadata as engine_metadata
 from ops_identity import Auth, Identity, ServiceAuth, service_verifiers
 from ops_identity.testing import TEST_TOKEN_TTL_S
 from ops_policy import Ed25519Signer, mint
@@ -53,6 +54,7 @@ async def client() -> AsyncIterator[AsyncClient]:
     engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
     async with engine.begin() as c:
         await c.run_sync(metadata.create_all)
+        await c.run_sync(engine_metadata.create_all)
     settings = Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED)
     app = create_app(
         settings,
@@ -83,7 +85,7 @@ async def test_a_thread_belongs_to_the_tenant_and_team_in_the_token(client: Asyn
     acme = token("acme", ["team_a"])
     tid = await new_thread(client, acme)
     assert (await client.get(f"/v1/threads/{tid}/state", headers=acme)).status_code == 200
-    listed = (await client.get("/v1/threads", headers=acme)).json()["data"]
+    listed = (await client.get("/v1/threads", headers=acme)).json()["data"]["data"]
     assert tid in [t["threadId"] for t in listed]
 
 
@@ -92,14 +94,14 @@ async def test_another_tenants_thread_is_not_found_and_not_listed(client: AsyncC
     other = token("globex", ["team_a"])  # same team name, different tenant
     r = await client.get(f"/v1/threads/{tid}/state", headers=other)
     assert r.status_code == 404, r.text
-    assert tid not in [t["threadId"] for t in (await client.get("/v1/threads", headers=other)).json()["data"]]
+    assert tid not in [t["threadId"] for t in (await client.get("/v1/threads", headers=other)).json()["data"]["data"]]
 
 
 async def test_another_teams_thread_is_not_found_and_not_listed(client: AsyncClient) -> None:
     """Another team's thread answers 404, as another tenant's does, so its id reveals nothing."""
     tid = await new_thread(client, token("acme", ["team_a"]))
     team_b = token("acme", ["team_b"])
-    assert tid not in [t["threadId"] for t in (await client.get("/v1/threads", headers=team_b)).json()["data"]]
+    assert tid not in [t["threadId"] for t in (await client.get("/v1/threads", headers=team_b)).json()["data"]["data"]]
     r = await client.get(f"/v1/threads/{tid}/state", headers=team_b)
     assert r.status_code == 404, r.text
 

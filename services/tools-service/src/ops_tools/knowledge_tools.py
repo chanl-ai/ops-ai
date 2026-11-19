@@ -11,6 +11,7 @@ from typing import Any, cast
 
 from ops_agent_kernel.ports import ToolOutcome
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
+from ops_service_kit.http import Json
 
 # Every base of the team, asked for explicitly: an agent given the option (the kernel sets it) or a workflow step
 # that says so.
@@ -23,14 +24,14 @@ class KnowledgeSearch:
         """`kb` calls kb-service as tools-service with `knowledge:view`; each call names the run's tenant and team."""
         self.kb = kb
 
-    async def run(self, arguments: dict[str, Any], *, tenant: str, team: str | None) -> ToolOutcome:
+    async def run(self, arguments: Json, *, tenant: str, team: str | None) -> ToolOutcome:
         if not team:
             return ToolOutcome(False, {"error": "A knowledge base belongs to a team; this call acts in none."})
         query = str(arguments.get("query") or "").strip()
         if not query:
             return ToolOutcome(False, {"error": "Say what to search for."})
         try:
-            bases = cast(list[dict[str, Any]], await self.kb.get("/v1/knowledge-bases/refs", tenant=tenant, team=team))
+            bases = cast(list[Json], await self.kb.get("/v1/knowledge-bases/refs", tenant=tenant, team=team))
             named = [str(c).strip() for c in cast(list[Any], arguments.get("collections") or []) if str(c).strip()]
             if not named and arguments.get(ALL_TEAM) is not True:
                 # Every caller names its bases (an agent's own, a workflow's step), or asks for the whole team's
@@ -46,9 +47,7 @@ class KnowledgeSearch:
                 return ToolOutcome(True, {"passages": [], "note": "The team has no knowledge bases yet."})
             # No count: the bases' own retrieval settings decide how many passages return.
             body = {"kbIds": ids, "question": query}
-            found = cast(
-                dict[str, Any], await self.kb.post("/v1/knowledge-bases/search", body, tenant=tenant, team=team)
-            )
+            found = cast(Json, await self.kb.post("/v1/knowledge-bases/search", body, tenant=tenant, team=team))
         except (ServiceCallError, ServiceUnreachable) as e:
             # Said plainly, so the agent says knowledge is unavailable instead of answering as if nothing matched.
             return ToolOutcome(False, {"error": f"The knowledge bases cannot be reached: {type(e).__name__}."})
@@ -62,6 +61,6 @@ class KnowledgeSearch:
                 "knowledgeBase": names.get(str(p["kbId"]), str(p["kbId"])),
                 "itemId": p["itemId"],
             }
-            for p in cast(list[dict[str, Any]], found.get("passages") or [])
+            for p in cast(list[Json], found.get("passages") or [])
         ]
         return ToolOutcome(True, {"passages": passages})

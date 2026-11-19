@@ -26,6 +26,7 @@ from usecase_harness import (
     bearer,
     check,
     data,
+    every_page,
     fake_openai,
     finish,
     kb,
@@ -75,7 +76,7 @@ def read(documents: httpx.Client, fid: str, body: dict[str, Any]) -> dict[str, A
 def main() -> None:
     sys.path.insert(0, str(DOCS / "src"))
     # The service's own comparison, on fields carrying the version's date order as a read's fields do.
-    from ops_documents.document_types import dated, matches  # noqa: PLC0415
+    from ops_documents.document_types import dated, matches
 
     kinds = seeded()
     with (
@@ -273,7 +274,7 @@ def page_images(
     team("w.kamau@harborpine.example", False)
     reads["team off again"] = scan_read()
     shown = reads["all on"].get("imageCalls") or []
-    logged = data(model_admin.get("/v1/models/calls", params={"alias": "extract"}, headers=MODELS_ADMIN))["items"]
+    logged = every_page(model_admin, "/v1/models/calls", headers=MODELS_ADMIN, alias="extract")
     with_images = [c for c in logged if c["runId"] == reads["all on"].get("id") and c["images"]]
     gated = {k: bool(r.get("imageCalls")) for k, r in reads.items()}
     check(

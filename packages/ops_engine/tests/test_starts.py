@@ -47,7 +47,7 @@ def notice(field: dict[str, Any] | None, *, read: str = "$.input.notice") -> dic
 
 
 def codes(d: dict[str, Any]) -> set[str]:
-    return {c["code"] for c in validate(parse(d), default_registry())}
+    return {str(c["code"]) for c in validate(parse(d), default_registry())}
 
 
 @pytest.mark.parametrize(
@@ -66,7 +66,8 @@ def test_the_refusal_names_the_field_for_a_person() -> None:
     found = list(validate(parse(notice({"type": "string", "title": "Notice"})), default_registry()))
     check = next(c for c in found if c["code"] == "file_input_unmarked")
     assert check["node"] == "start" and check["field"] == "inputSchema"
-    assert "Notice" in check["message"]
+    message = str(check["message"])
+    assert "Notice" in message
 
 
 @pytest.mark.parametrize(
@@ -90,7 +91,7 @@ def test_the_rule_reads_the_step_types_not_names() -> None:
 
 def test_each_trigger_kind_declares_its_start_form() -> None:
     reg = default_registry()
-    request = start_form(notice({"type": "string", "format": "file", "title": "Notice"}), reg)
+    request: dict[str, Any] | None = start_form(notice({"type": "string", "format": "file", "title": "Notice"}), reg)
     assert request is not None and request["kind"] == "form" and request["via"] == "form"
     assert request["schema"]["properties"]["notice"]["format"] == "file" and request["takesFiles"] is True
     email = start_form(

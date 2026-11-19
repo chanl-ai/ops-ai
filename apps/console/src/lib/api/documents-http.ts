@@ -7,8 +7,8 @@ import { createTransport } from './http';
  * them as the person's team and owns the types, their versions, samples and test runs.
  */
 export function createDocumentsHttp(baseUrl: string): FilesApi['documentTypes'] {
-  const { get, send } = createTransport(`${baseUrl}/v1`);
-  return createDocumentTypesHttp(get, send);
+  const { get, send, qs } = createTransport(`${baseUrl}/v1`);
+  return createDocumentTypesHttp(get, send, qs);
 }
 
 /** Extractions on documents-service (`/v1/documents/extractions`): a read of one file with a document type. */

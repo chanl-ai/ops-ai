@@ -4,7 +4,7 @@ import * as React from 'react';
 
 import { AskAnAdmin } from '@/components/connections/ask-an-admin';
 import { useCan } from '@/hooks/me-queries';
-import { Bot, FileText, Library, Sparkles, Workflow } from 'lucide-react';
+import { Bot, FileText, Library, ListChecks, Scale, ShieldCheck, Sparkles, Workflow } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -35,26 +35,47 @@ import {
   useUpdateReview,
   usersOf,
 } from '@/hooks/app-resources-queries';
-import { useKnowledgeBases } from '@/hooks/knowledge-queries';
+import { knowledgeBaseOptions } from '@/hooks/options-queries';
+import { EntityPicker } from '@/components/shared/entity-picker';
 import { useModelAliases } from '@/hooks/queries';
 import { plural } from '@/lib/format';
 
 const COPY_HREF: Record<ResourceKind, string> = {
-  agent: '/agents',
-  skill: '/skills',
-  workflow: '/workflows',
-  document_type: '/document-types',
-  knowledge_source: '/knowledge/sources',
+  agent: '/build/agents',
+  skill: '/build/skills',
+  workflow: '/build/workflows',
+  document_type: '/data/document-types',
+  knowledge_source: '/data/knowledge',
+  guardrail: '/build/guardrails',
+  // Case and task types have no page of their own; the cases page is where a team meets them.
+  case_type: '/work/cases',
+  task_type: '/work/cases',
 };
-const ICON: Record<ResourceKind, typeof Bot> = { agent: Bot, skill: Sparkles, workflow: Workflow, document_type: FileText, knowledge_source: Library };
+const ICON: Record<ResourceKind, typeof Bot> = { agent: Bot, skill: Sparkles, workflow: Workflow, document_type: FileText, knowledge_source: Library, guardrail: ShieldCheck, case_type: Scale, task_type: ListChecks };
 const KIND: Record<ResourceKind, string> = {
   agent: 'agent',
   skill: 'skill',
   workflow: 'workflow',
   document_type: 'document type',
   knowledge_source: 'knowledge source',
+  guardrail: 'guardrail',
+  case_type: 'case type',
+  task_type: 'task type',
 };
-const USER_HREF: Record<string, string> = { workflow: '/workflows', agent: '/agents' };
+/** A tab's name for one kind of resource. */
+export const KIND_TAB: Record<ResourceKind, string> = {
+  agent: 'Agents',
+  skill: 'Skills',
+  workflow: 'Workflows',
+  document_type: 'Document types',
+  knowledge_source: 'Knowledge sources',
+  guardrail: 'Guardrails',
+  case_type: 'Case types',
+  task_type: 'Task types',
+};
+/** The kinds an app brings, in the order their tabs show. */
+export const KIND_ORDER = Object.keys(KIND_TAB) as ResourceKind[];
+const USER_HREF: Record<string, string> = { workflow: '/build/workflows', agent: '/build/agents' };
 
 const resourceOf = (r: { source: string; id: string }) => `${r.source}:${r.id}`;
 const hrefOf = (kind: ResourceKind, recordId: string) => `${COPY_HREF[kind]}/${recordId}`;
@@ -79,7 +100,10 @@ export function ResourcesTab({
   pluginId,
   installed = true,
   onConnect,
+  kind,
 }: {
+  /** Lists only this kind; the app page gives each kind it brings a tab of its own. */
+  kind?: ResourceKind;
   appName: string;
   pluginId?: string | null;
   /** False for an app the install does not hold: there is nothing to list, so nothing is asked for. */
@@ -97,13 +121,16 @@ export function ResourcesTab({
   const [preview, setPreview] = React.useState<ResourcePlan | null>(null);
   const [updating, setUpdating] = React.useState<AppResource | null>(null);
   const [removing, setRemoving] = React.useState<AppResource | null>(null);
-  const rows = React.useMemo(() => list.data ?? [], [list.data]);
+  const [viewing, setViewing] = React.useState<AppResource | null>(null);
+  const all = React.useMemo(() => list.data ?? [], [list.data]);
+  // Every kind still counts for what a ticked workflow brings; only the listed rows are filtered.
+  const rows = React.useMemo(() => (kind ? all.filter((r) => r.kind === kind) : all), [all, kind]);
   // A ticked workflow brings the resources it cannot run without: they are ticked too, and cannot be unticked.
   const brought = React.useMemo(() => {
     const out = new Set<string>();
-    for (const r of rows) if (ticked.includes(resourceOf(r))) for (const d of r.requires.resources ?? []) out.add(d);
+    for (const r of all) if (ticked.includes(resourceOf(r))) for (const d of r.requires.resources ?? []) out.add(d);
     return out;
-  }, [rows, ticked]);
+  }, [all, ticked]);
 
   if (!installed)
     return (
@@ -154,8 +181,8 @@ export function ResourcesTab({
 
   return (
     <Section
-      title="Resources"
-      description="Agents, skills, workflows, document types and knowledge sources the app brings. Added ones are your team’s own copies."
+      title={kind ? KIND_TAB[kind] : 'Resources'}
+      description={`${kind ? `The ${KIND[kind]}s` : 'Agents, skills, workflows, document types and knowledge sources'} ${appName} brings. Added ones are your team’s own copies.`}
       flush
       actions={
         mayAdd ? (
@@ -212,12 +239,20 @@ export function ResourcesTab({
                 }
                 title={
                   <span className="flex flex-wrap items-center gap-2" data-testid={`resource-${r.id}`}>
-                    {r.title}
-                    <Badge variant="secondary">{KIND[r.kind]}</Badge>
+                    <button type="button" className="text-left font-medium underline-offset-4 hover:underline" onClick={() => setViewing(r)} data-testid={`resource-info-${r.id}`}>
+                      {r.title}
+                    </button>
+                    {!kind && <Badge variant="secondary">{KIND[r.kind]}</Badge>}
                     <StateBadge r={r} app={appName} />
                   </span>
                 }
-                description={!r.canAdd && r.reason && (r.state === 'available' || r.state === 'needs_sign_in') ? r.reason : undefined}
+                description={
+                  !r.canAdd && r.reason && (r.state === 'available' || r.state === 'needs_sign_in') ? (
+                    r.reason
+                  ) : r.summary ? (
+                    <span className="line-clamp-1">{r.summary}</span>
+                  ) : undefined
+                }
                 trailing={
                   <span className="flex flex-wrap items-center gap-2">
                     {addable && (
@@ -269,6 +304,7 @@ export function ResourcesTab({
         />
       )}
       {updating && <UpdateDialog resource={updating} app={source} onOpenChange={(o) => !o && setUpdating(null)} />}
+      {viewing && <ResourceInfoDialog resource={viewing} appName={appName} onOpenChange={(o) => !o && setViewing(null)} />}
       {removing && <RemoveDialog resource={removing} app={source} onOpenChange={(o) => !o && setRemoving(null)} />}
     </Section>
   );
@@ -288,7 +324,6 @@ function AddPreviewDialog({
   onAdd: (bindings: AddBindings) => void;
 }) {
   const aliases = useModelAliases();
-  const bases = useKnowledgeBases({ page: 1, pageSize: 100 });
   const [knowledgeBase, setKnowledgeBase] = React.useState<string>('');
   const [modelAlias, setModelAlias] = React.useState<string>('');
   const [names, setNames] = React.useState<Record<string, string>>({});
@@ -380,18 +415,16 @@ function AddPreviewDialog({
           </ul>
           {(needsBase || needsBasePick) && (
             <FormField id="resources-kb" label="Knowledge base" optional={!needsBasePick} hint={needsBasePick ? undefined : 'Left empty, each copy asks for one before it is published.'}>
-              <Select value={knowledgeBase} onValueChange={setKnowledgeBase}>
-                <SelectTrigger id="resources-kb" data-testid="resources-kb">
-                  <SelectValue placeholder={bases.isPending ? 'Loading knowledge bases' : 'Choose a knowledge base'} />
-                </SelectTrigger>
-                <SelectContent>
-                  {(bases.data?.data ?? []).map((k) => (
-                    <SelectItem key={k.id} value={k.id}>
-                      {k.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <EntityPicker
+                source={knowledgeBaseOptions}
+                value={knowledgeBase ? [knowledgeBase] : []}
+                onChange={(ids) => setKnowledgeBase(ids[ids.length - 1] ?? '')}
+                multiple={false}
+                addLabel={knowledgeBase ? 'Change knowledge base' : 'Choose a knowledge base'}
+                searchPlaceholder="Search knowledge bases…"
+                emptyText="No knowledge base matches."
+                testId="resources-kb"
+              />
             </FormField>
           )}
           {needsAlias && (
@@ -532,5 +565,41 @@ function RemoveDialog({ resource, app, onOpenChange }: { resource: AppResource |
         </div>
       )}
     </DeleteDialog>
+  );
+}
+
+/** What one resource is, before anyone adds it: what it does, what it needs and what it brings with it. */
+function ResourceInfoDialog({ resource: r, appName, onOpenChange }: { resource: AppResource; appName: string; onOpenChange: (o: boolean) => void }) {
+  const Icon = ICON[r.kind];
+  const facts: [string, React.ReactNode][] = [
+    ['Kind', KIND[r.kind]],
+    ['From', `${appName} v${r.plugin.version}`],
+    ['Version', `v${r.version}`],
+    ...(r.requires.tools.length ? ([['Tools it uses', r.requires.tools.join(', ')]] as [string, string][]) : []),
+    ...(r.requires.resources?.length ? ([['Brings with it', r.requires.resources.map((x) => x.split(':').pop()).join(', ')]] as [string, string][]) : []),
+    ...(r.requires.bind?.length ? ([['You choose', r.requires.bind.map((b) => Object.keys(b).join(', ')).join(', ')]] as [string, string][]) : []),
+  ];
+  return (
+    <DialogShell
+      open
+      onOpenChange={onOpenChange}
+      size="sm"
+      title={
+        <span className="flex items-center gap-2">
+          <Icon className="size-4 text-muted-foreground" />
+          {r.title}
+        </span>
+      }
+      description={r.summary ?? `A ${KIND[r.kind]} that ${appName} brings.`}
+    >
+      <dl className="grid grid-cols-[minmax(0,8rem)_1fr] gap-x-4 gap-y-2 text-sm" data-testid="resource-info">
+        {facts.map(([k, v]) => (
+          <React.Fragment key={k}>
+            <dt className="text-muted-foreground">{k}</dt>
+            <dd className="min-w-0 break-words">{v}</dd>
+          </React.Fragment>
+        ))}
+      </dl>
+    </DialogShell>
   );
 }

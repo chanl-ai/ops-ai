@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lib"))
@@ -20,7 +21,8 @@ def _profile() -> dict[str, str]:
     from folder import ops_client
 
     ops = ops_client()
-    path = FOLDER / ".ops-profile.json"
+    # The profile holds a session token: a temp folder keeps it out of the example and the evidence.
+    path = Path(tempfile.mkdtemp(prefix="uc623-")) / ".ops-profile.json"
     path.write_text(
         json.dumps(
             {

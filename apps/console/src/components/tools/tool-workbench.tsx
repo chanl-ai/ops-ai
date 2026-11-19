@@ -120,6 +120,8 @@ export interface ToolWorkbenchProps extends ToolRunProps {
   address: React.ReactNode;
   /** A plugin's tool changes only with its plugin: its call shows as sent, with nothing to edit or stage. */
   readOnly?: boolean;
+  /** What the module's own flag says the caller may do; false on a module the team only holds a workflow grant on. */
+  canEdit?: boolean;
   /** The tool page's tabs (General, Logs), in the page header's tab slot. */
   tabs?: React.ReactNode;
   /** Shown below the tool's call: who uses the tool. */
@@ -136,7 +138,7 @@ export interface ToolWorkbenchProps extends ToolRunProps {
   staging: boolean;
   /** What staging would change; the Stage button is off when it is empty. */
   dirty: boolean;
-  /** Run contexts: the workflows approved for the module, each with a sample case. */
+  /** Run contexts the panel offers: the module owner only. */
   contexts: RunContextOption[];
   /** More header actions, before Stage changes (the operation's access and approval policy). */
   extraActions?: React.ReactNode;
@@ -188,13 +190,13 @@ export function ToolWorkbench(p: ToolWorkbenchProps) {
           {p.stagedCall && <span className="text-xs text-warning-text">Staged; calls run the published call until you publish.</span>}
         </span>
       }
-      backHref={`/tools/${p.moduleId}`}
+      backHref={`/data/tools/${p.moduleId}`}
       tabs={p.tabs}
       badge={<AccessBadge access={op.access} />}
       actions={
         <>
           {p.extraActions}
-          {!p.readOnly && (
+          {!p.readOnly && p.canEdit !== false && (
             <BuilderOnly>
               <LoadingButton isLoading={p.staging} loadingText="Staging…" onClick={p.onStage} disabled={!p.dirty || !!urlError} data-testid="workbench-stage">
                 Stage changes
@@ -216,7 +218,7 @@ export function ToolWorkbench(p: ToolWorkbenchProps) {
         </TabsTrigger>
       </TabsList>
       {/* The tabs sit outside the fieldset: a disabled fieldset disables every button in it, and a viewer must still reach Run. */}
-      <BuilderFieldset>
+      <BuilderFieldset canEdit={p.canEdit}>
       <div data-testid="tool-workbench"><SplitView id="tool-workbench" defaultLeft={60} leftMin="35" rightMin="25" bare left={
 <div id="wb-panel-definition" role="tabpanel" aria-labelledby="wb-tab-definition" className={cn('flex min-w-0 flex-col gap-4', view !== 'definition' && 'max-lg:hidden')}>
           <Section title="Request" description={p.readOnly ? 'What the gateway sends. The app’s plugin sets it; it changes when the plugin is updated.' : 'What the gateway sends. Path, query and headers may read {{SECRET}} and {{field}} values.'}>
@@ -249,7 +251,7 @@ export function ToolWorkbench(p: ToolWorkbenchProps) {
                     title={<span className="font-mono text-xs">{s.name}</span>}
                     description={
                       !s.set ? (
-                        <Link href="/integrations/credentials?tab=secrets" className="text-warning-text underline-offset-4 hover:underline" data-testid={`secret-unset-${s.name}`}>
+                        <Link href="/data/secrets?tab=secrets" className="text-warning-text underline-offset-4 hover:underline" data-testid={`secret-unset-${s.name}`}>
                           Not set in this module&apos;s team; set it in Settings
                         </Link>
                       ) : (
@@ -276,6 +278,7 @@ export function ToolWorkbench(p: ToolWorkbenchProps) {
             the test environment, with the draft above and any secret values typed here. */
 <div id="wb-panel-run" role="tabpanel" aria-labelledby="wb-tab-run" className={cn('min-w-0 lg:sticky lg:top-4 lg:self-start', view !== 'run' && 'max-lg:hidden')} data-testid="module-test-panel">
           <TestConsole
+            canEdit={p.canEdit}
             stacked
             fixedOperation
             operations={[p.op]}

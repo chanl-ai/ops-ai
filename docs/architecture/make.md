@@ -26,6 +26,10 @@ beside it.
 |---|---|
 | `make up` | Runs the stack from this checkout: migrates, then restarts each service whose process runs another checkout's code or another commit's (`.run/<svc>.rev` records both at start), and starts what is down |
 | `make review BRANCH=<name>` | Fetches the branch, checks it out detached in the review worktree beside the main checkout (`<main checkout>-review`, made on first use, its `.env` copied from the main checkout), installs, then runs `make up` there. Your own checkout and branch stay as they are; it refuses when the review worktree has uncommitted changes. `make up` in your checkout moves the stack back |
+| `make wt BRANCH=<name>` | A preview: a worktree under `../ops-ai-worktrees/<name>` and its own stack on port offset 51000, 52000 or 53000 (console :54016, :55016, :56016), installed from the user-wide pnpm and uv caches. At most three run; a fourth is refused naming them. `make down` in another checkout never touches it |
+| `make wt-list` | Each preview's branch, console URL and age; rewrites a page listing them, `.run/previews.html` by default (`PREVIEW_PAGE=` another path) |
+| `make wt-stop BRANCH=<name>` | Stops that preview by its pids and compose project; its data and worktree stay |
+| `make review-main` | Checks the review worktree out at the latest `origin/main` and restarts the :3016 stack from it (`AUTH=platform OPS_CONSOLE_PORT=3016 make restart`). Restart only: no reset, the database stays. Refuses when the review worktree has uncommitted changes |
 | `make test PKG=<folder>` | One member's tests (`T=` some files), on a throwaway database of its own on the stack's PostgreSQL; with no `PKG`, the suites of what changed since `origin/main` (`scripts/verify-changed.sh`) |
 
 A branch made before this change has the old make files, which refuse to run a stack from a worktree: merge `main`
@@ -39,15 +43,17 @@ into it before reviewing it.
 | `make/dev.mk` | `up`, `down`, `restart`, `health`, `logs`, `ports`, `api`, `sdk-call` | The local stack through `scripts/stack.sh`; one route or SDK call as a seeded person (`scripts/api_as.py`) |
 | `make/cli.mk` | `<area>-<verb>` (`chat`, `kb-*`, `apps-*`, `tools-*`, `runs-*`, `tasks-*`, `cases-*`, `files-*`, `documents-*`, `people-*`, `models-*`, `memories-*`), `test-data-clean` | The `opsai` command (`sdk/python`) as a seeded person (`AS=`); the list: `make/CLAUDE.md` |
 | `make/db.mk` | `db-up`, `db-down`, `db-shell`, `db-reset`, `migrate`, `migration` | Compose (PostgreSQL, OPA) and Alembic |
-| `make/db-scripts.mk` | `db-ddl`, `db-upgrade-sql`, `db-drift`, `db-release`, `db-scripts-proof` | The schema as scripts a DBA applies (`deploy/database/schema.py`, `docs/deploy/database.md`) |
+| `make/db-scripts.mk` | `db-ddl`, `db-upgrade-sql`, `db-drift`, `db-release`, `db-scripts-proof`; `mssql-remote-up`, `-proxy`, `-test`, `-status`, `-sweep`, `-down` | The schema as scripts a DBA applies (`deploy/database/schema.py`, `docs/deploy/database.md`); the shared SQL Server on Fly for both-database tests from a Mac (`deploy/database/mssql_remote.sh`) |
 | `make/services.mk` | `<verb>-<svc>`, generated | `SERVICES`, each service's folder, `SERVICE_VERBS`; one rule template expanded per pair |
 | `make/console.mk` | `console-install`, `dev`, `dev-runtime`, `console-verify` | The console in the foreground |
+| `make/checks.mk` | `checks`, `checks-list`, `ci-local` | The one list of standards checks (`CHECKS`): what `python-verify`, the CI `checks` job, `verify-changed.sh` and pre-commit (`STAGED=1`, with `STAGED_FILES=`) run; `PY`, `PYTEST` and `LINT_IMPORTS` name the tools |
 | `make/python.mk` | `python-install`, `python-verify`, `test` | The uv workspace: ruff and pyright on `packages/`, then each service's verify with model keys unset |
-| `make/docs.mk` | `docs-verify` | `scripts/check-docs.mjs` |
+| `make/docs.mk` | `docs-verify`, `docs-guides-check` | `scripts/check-docs.mjs`, `scripts/check-guides.mjs` |
 | `make/sdk.mk` | `sdk`, `sdk-verify`, `sdk-check` | The SDKs in `sdk/`: regenerate, the drift check and both test suites (in `verify`), and the install smoke plus the examples on `make up` |
 | `make/usecase.mk` | `usecase-test`, `usecase-list`, `usecase-show`, `usecase-coverage`, `usecase-new`, `usecase-runner-test` | Calls `scripts/usecase.mjs` (`packages/usecase-runner`); use-case ports and database `OPS_USECASE_*`. Registry and rules: `docs/usecases/README.md` |
 | `make/git.mk` | `commit`, `commit-hunks`, `review` | Committing named files through the hooks, and the review worktree |
 | `make/plugins.mk` | `plugins-sync`, `plugins-bump` | Putting the plugins `deploy/plugins.json` pins into `OPS_PLUGINS_DIR`, and moving the pins |
+| `make/agents.mk` | `agent-review-context`, `agent-test-audit`, `agent-ui-walk`, `agent-canary`, `agent-canary-score`, `agent-scripts-test` | The agent scripts in `scripts/agents/` (`CONTRIBUTING.md` "Agents and their scripts"); every path they use comes from `.claude/project-profile.md` |
 | `make/experiments.mk` | `experiment` | Runs `services/agents-service/experiments/e<n>_*.py` on the scripted model |
 | `make/service-common.mk` | `help`, `stop`, `logs`, `health` | Included by running services' Makefiles: the verbs that act on the `make up` process |
 | `make/service-stub.mk` | the whole verb set | Included by planned services' Makefiles: every verb answers "not started" unless the Makefile defines it (`OWN_VERBS`) |
@@ -94,6 +100,12 @@ Feedback button: run the ui-feedback collector (`node ~/.claude/skills/ui-feedba
 ## Environment
 
 Secrets come from the environment or from a gitignored `.env` at the root (copy `.env.example`); make loads it and exports every line to the services, the console and the use-case runner. A secrets-manager wrapper (`<wrapper> -- make up`) works the same way and wins over the file.
+
+| Optional: `OPS_SECRETS_CMD` | What it does |
+|---|---|
+| Set it to your secrets manager's export, one that prints `KEY=value` lines, for example `OPS_SECRETS_CMD="<your secrets manager> export --format dotenv"` | `make` runs it once per run and exports the keys. Order: your shell environment, then the command, then `.env`, then `.devcontainer/.env.local`. Unset: nothing changes. `OPS_NO_SECRETS_CMD=1` turns it off. A failing command prints one warning line and make goes on. `make print-env-check KEYS='A B'` shows which names are set, never values |
+
+`.env` still replaces a same-named key from your shell environment; keys from the command never do.
 Services read `OPS_*` (`packages/ops_service_kit/src/ops_service_kit/settings.py`); make sets the `OPS_*`
 values below. The prefix was `OPS_RUNTIME_` before the service rename: rename any `OPS_RUNTIME_*` variable in your
 shell or secrets manager to `OPS_*`.
@@ -243,3 +255,7 @@ only against a local stack. A chat that saves really writes to the org, so use a
 | Secrets through a named wrapper inside make | Dropped: make never calls the wrapper; you run make under it | Keeps the repo free of a vendor name and works with any secrets manager |
 | `dashboard`, deploy, promote and release targets | Dropped | Nothing deploys from this repo yet |
 | Hand-written per-service pass-throughs | Replaced by generated `<verb>-<svc>` | Adding a service is one line |
+
+## Running CI's steps locally
+
+`make ci-local` runs the local twin of each `run:` step in `.github/workflows/ci.yml`, in workflow order, one at a time, and lists every failure at the end (`JOB=<job>` for one job, `PLAN=1` to print the commands only). The twins live in `scripts/ci_steps.json` beside a `no_local_twin` reason for each step that cannot run on a laptop (SQL Server container, release proof, the maintainer's review, the job summary). `scripts/ci_steps.py --check`, in `make checks`, fails when ci.yml and the list disagree.

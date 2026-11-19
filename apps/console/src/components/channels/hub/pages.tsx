@@ -32,8 +32,8 @@ import { KINDS, kindInfo } from './kinds';
  * API key is an access record (Settings › API keys).
  */
 const CONNECT: Partial<Record<ChannelType, { label: string; href: string; note?: string; area: string; action: string }>> = {
-  email: { label: 'Connect a mailbox', href: '/channels/email/connect', area: 'deployments', action: 'create' },
-  chat: { label: 'Embed on a page', href: '/channels/chat?embed=1', note: 'An embed serves one published agent. Embed on a page picks the agent; each agent’s Channels tab also lists its embeds, with their snippets and mint keys.', area: 'deployments', action: 'create' },
+  email: { label: 'Connect a mailbox', href: '/build/channels/email/connect', area: 'deployments', action: 'create' },
+  chat: { label: 'Embed on a page', href: '/build/channels/chat?embed=1', note: 'An embed serves one published agent. Embed on a page picks the agent; each agent’s Channels tab also lists its embeds, with their snippets and mint keys.', area: 'deployments', action: 'create' },
   api: { label: 'Open API keys', href: '/settings/api-keys', note: 'A system calls the API with a key from Settings › API keys; each key acts for its team.', area: 'access', action: 'create' },
 };
 
@@ -170,7 +170,7 @@ function DeploymentsMovedNote({ agentId }: { agentId: string | null }) {
       {agentId ? (
         <AgentVersionsLink id={agentId} />
       ) : (
-        <Link href="/agents" className="underline underline-offset-4" data-testid="deployments-moved-link">
+        <Link href="/build/agents" className="underline underline-offset-4" data-testid="deployments-moved-link">
           See where each agent’s versions are live
         </Link>
       )}
@@ -181,7 +181,7 @@ function DeploymentsMovedNote({ agentId }: { agentId: string | null }) {
 function AgentVersionsLink({ id }: { id: string }) {
   const agent = useAgent(id);
   return (
-    <Link href={`/agents/${encodeURIComponent(id)}?tab=channels`} className="underline underline-offset-4" data-testid="deployments-moved-link">
+    <Link href={`/build/agents/${encodeURIComponent(id)}?tab=channels`} className="underline underline-offset-4" data-testid="deployments-moved-link">
       See where {agent.data?.name ?? 'this agent'}’s versions are live
     </Link>
   );

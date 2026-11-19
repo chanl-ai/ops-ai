@@ -14,6 +14,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
+from ops_store.schema import mssql_drop_default_ddl
+
 revision = "0087_run_reconciler"
 down_revision = "0086_memory_text_unindexed"
 branch_labels = None
@@ -33,4 +35,7 @@ def downgrade() -> None:
     if op.get_bind().dialect.name == "postgresql":
         op.execute(f"REVOKE SELECT ON engine_steps FROM {SYSTEM_ROLE}")
         op.execute(f"REVOKE SELECT ON engine_runs FROM {SYSTEM_ROLE}")
+    # SQL Server refuses to drop a column that holds a default; the helper drops one only if it is there.
+    if op.get_context().dialect.name == "mssql":
+        op.execute(mssql_drop_default_ddl("engine_work", "lapses"))
     op.drop_column("engine_work", "lapses")

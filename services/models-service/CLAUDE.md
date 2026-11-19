@@ -56,7 +56,8 @@ only, so `make api` as a person gets 401 there. Reference:
 
 | Rule | Detail |
 |---|---|
-| Every completion is logged | One `model_call_log` row per authenticated completion, a refusal included, with no text |
+| Every completion is logged | One row per authenticated completion, a refusal included, with no text: in the named tenant's `model_call_log` (held to it by the database), or `model_calls_untenanted` when the call names no tenant (kept for operators; no route lists it). A key's caps read `model_key_spend`, written in the same transaction; its day and run rows are swept 14 days after their last call (`models_spend_retention` on `/health/background`) |
+| A billed call is charged once | After the provider answers, the settle writes the call's row and every ledger (key spent, tenant share, period totals) in one transaction, then once more as an `error`/`settle_failed` row if that fails, both under one call id (the row's primary key). When both fail, or the server stops before a settle ends, the whole charge is logged at error level (`model_call_row_lost`, `model_call_settle_unfinished_at_stop`) and nothing durable holds it. Replay those log lines once the database is back: `uv run python -m ops_models.recovery < lines.jsonl` (`recovery.py`). A line for a call already charged writes nothing, so replaying a line twice, or one whose commit landed, is safe. Log lines mask emails and long digit runs, so a line whose values were masked (a `user:<email>` key, a model name with a date) is refused, not replayed: put the real values back in it, then replay. There is no settling sweep and no pending row before the provider call |
 | Order of checks | Key status, expiry and budget, rate limit, alias, cleared sensitivity, then image clearance, then the provider call |
 | Refusals | In the platform error envelope, which OpenAI clients read as `error.code` (`key_budget_exhausted`, `images_not_cleared`, `provider_key_missing`, ...). A provider's failure is classified once, in `providers.py` `PROVIDER_FAILURES` (`provider_unreachable`, `provider_timeout`, `provider_auth_failed`, `provider_rate_limited`, `provider_bad_request`, `provider_error`); its message never quotes the provider's body |
 | Versions are immutable | A change to an alias is a new version; the newest current one serves |
@@ -73,3 +74,9 @@ only, so `make api` as a person gets 401 there. Reference:
 
 Known differences: the overview's status line says `make up` does not start this service; `make up` starts it
 (`scripts/stack.sh:23`), and `make health` lists it.
+
+## Engineering standards
+
+The rules the code in this folder is held to, each with a real example from this repository and the check that
+enforces it: [layers and ownership](../../docs/architecture/standards/layers.md) (`LY1` to `LY9`), [API contracts and models](../../docs/architecture/standards/api-and-models.md) (`AP1` to `AP7`, `MD1` to `MD4`), [data access](../../docs/architecture/standards/data-access.md) (`DA1` to `DA13`), [tenant isolation and access](../../docs/architecture/standards/tenancy-and-access.md) (`TN1` to `TN5`, `AC1` to `AC5`), [errors, logging and observability](../../docs/architecture/standards/observability.md) (`OB1` to `OB6`). The index of every rule is
+[engineering standards](../../docs/architecture/engineering-standards.md); a review cites the rule id.

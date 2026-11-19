@@ -15,6 +15,9 @@ from typing import Any, cast
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError
 
+from ops_service_kit.http import Json, JsonList, JsonValue
+from ops_service_kit.narrow import json_object
+
 from . import kinds
 
 # Size limits on one tree (checks L3 and L6): a layout a person can read in a chat bubble, and a bound on what one tool
@@ -66,7 +69,7 @@ CATALOGUE: dict[str, tuple[dict[str, str], bool, tuple[str, ...]]] = {
     "image": ({"alt": "text", "src": "text"}, False, ("alt",)),
     # The kinds: each checked whole against its JSON Schema (`kinds.SCHEMAS`), which closes every object in it.
     **{
-        k: (dict.fromkeys(kinds.SCHEMAS[k]["properties"], "kind"), False, tuple(kinds.SCHEMAS[k]["required"]))
+        k: (dict.fromkeys(kinds.fields(k), "kind"), False, tuple(kinds.required(k)))
         for k in kinds.KINDS
         if k not in kinds.PRIMITIVES
     },
@@ -91,7 +94,7 @@ class _Walk:
         self.buttons = 0
         self.images = images
 
-    def text_of(self, v: Any, where: str) -> str:
+    def text_of(self, v: JsonValue, where: str) -> str:
         if not isinstance(v, str):
             raise LayoutError(f"{where}: must be text.")
         if len(v) > MAX_TEXT:
@@ -101,12 +104,12 @@ class _Walk:
             raise LayoutError(f"{where}: the layout holds more than {MAX_TOTAL_TEXT} characters of text.")
         return v
 
-    def cell(self, v: Any, where: str) -> Any:
+    def cell(self, v: JsonValue, where: str) -> JsonValue:
         if not _flat(v):
             raise LayoutError(f"{where}: must be text, a number, a boolean or null.")
         return self.text_of(v, where) if isinstance(v, str) else v
 
-    def field(self, kind: str, v: Any, where: str) -> Any:
+    def field(self, kind: str, v: JsonValue, where: str) -> JsonValue:
         if kind == "text":
             return self.text_of(v, where)
         if kind == "cell":
@@ -121,32 +124,29 @@ class _Walk:
                 raise LayoutError(f"{where}: must be one of {', '.join(choices)}.")
             return v
         if kind == "tones":
-            if not isinstance(v, dict) or len(cast(dict[str, Any], v)) > MAX_COLUMNS:
+            if not isinstance(v, dict) or len(json_object(v)) > MAX_COLUMNS:
                 raise LayoutError(f"{where}: must map at most {MAX_COLUMNS} values to tones.")
-            return {
-                self.text_of(k, where): self.field("tone", t, f"{where}/{k}")
-                for k, t in cast(dict[str, Any], v).items()
-            }
+            return {self.text_of(k, where): self.field("tone", t, f"{where}/{k}") for k, t in json_object(v).items()}
         if kind == "numbers":
-            if not isinstance(v, list) or not 2 <= len(cast(list[Any], v)) <= 60:
+            if not isinstance(v, list) or not 2 <= len(v) <= 60:
                 raise LayoutError(f"{where}: must list 2 to 60 numbers.")
-            return [self.field("number", x, f"{where}/{i}") for i, x in enumerate(cast(list[Any], v))]
+            return [self.field("number", x, f"{where}/{i}") for i, x in enumerate(v)]
         if kind == "keys":
-            if not isinstance(v, list) or not 0 < len(cast(list[Any], v)) <= MAX_COLUMNS:
+            if not isinstance(v, list) or not 0 < len(v) <= MAX_COLUMNS:
                 raise LayoutError(f"{where}: must list 1 to {MAX_COLUMNS} keys.")
-            return [self.text_of(k, f"{where}/{i}") for i, k in enumerate(cast(list[Any], v))]
+            return [self.text_of(k, f"{where}/{i}") for i, k in enumerate(v)]
         if kind == "items":
-            if not isinstance(v, list) or len(cast(list[Any], v)) > MAX_ROWS:
+            if not isinstance(v, list) or len(v) > MAX_ROWS:
                 raise LayoutError(f"{where}: must be a list of at most {MAX_ROWS} items.")
-            return [self.cell(x, f"{where}/{i}") for i, x in enumerate(cast(list[Any], v))]
+            return [self.cell(x, f"{where}/{i}") for i, x in enumerate(v)]
         if kind == "pairs":
-            if not isinstance(v, list) or len(cast(list[Any], v)) > MAX_ROWS:
+            if not isinstance(v, list) or len(v) > MAX_ROWS:
                 raise LayoutError(f"{where}: must be a list of at most {MAX_ROWS} label and value pairs.")
-            out: list[dict[str, Any]] = []
-            for i, p in enumerate(cast(list[Any], v)):
-                if not isinstance(p, dict) or set(cast(dict[str, Any], p)) - {"label", "value"}:
+            out: JsonList = []
+            for i, p in enumerate(v):
+                if not isinstance(p, dict) or set(json_object(p)) - {"label", "value"}:
                     raise LayoutError(f"{where}/{i}: must be an object with label and value only.")
-                pd = cast(dict[str, Any], p)
+                pd = json_object(p)
                 out.append(
                     {
                         "label": self.text_of(pd.get("label"), f"{where}/{i}/label"),
@@ -155,28 +155,28 @@ class _Walk:
                 )
             return out
         if kind == "rows":
-            if not isinstance(v, list) or len(cast(list[Any], v)) > MAX_ROWS:
+            if not isinstance(v, list) or len(v) > MAX_ROWS:
                 raise LayoutError(f"{where}: must be a list of at most {MAX_ROWS} rows.")
-            rows: list[dict[str, Any]] = []
-            for i, r in enumerate(cast(list[Any], v)):
-                if not isinstance(r, dict) or len(cast(dict[str, Any], r)) > MAX_COLUMNS:
+            rows: JsonList = []
+            for i, r in enumerate(v):
+                if not isinstance(r, dict) or len(json_object(r)) > MAX_COLUMNS:
                     raise LayoutError(f"{where}/{i}: must be a flat object with at most {MAX_COLUMNS} keys.")
                 rows.append(
                     {
                         self.text_of(k, f"{where}/{i}"): self.cell(c, f"{where}/{i}/{k}")
-                        for k, c in cast(dict[str, Any], r).items()
+                        for k, c in json_object(r).items()
                     }
                 )
             return rows
         if kind == "columns":
-            if not isinstance(v, list) or not 0 < len(cast(list[Any], v)) <= MAX_COLUMNS:
+            if not isinstance(v, list) or not 0 < len(v) <= MAX_COLUMNS:
                 raise LayoutError(f"{where}: must list 1 to {MAX_COLUMNS} columns.")
-            cols: list[dict[str, Any]] = []
-            for i, c in enumerate(cast(list[Any], v)):
-                cd = cast(dict[str, Any], c) if isinstance(c, dict) else {}
+            cols: JsonList = []
+            for i, c in enumerate(v):
+                cd = json_object(c)
                 if not cd or "key" not in cd or set(cd) - {"key", "label", "format"}:
                     raise LayoutError(f"{where}/{i}: must be an object with key, and optionally label and format.")
-                col: dict[str, Any] = {"key": self.text_of(cd["key"], f"{where}/{i}/key")}
+                col: Json = {"key": self.text_of(cd["key"], f"{where}/{i}/key")}
                 if cd.get("label") is not None:
                     col["label"] = self.text_of(cd["label"], f"{where}/{i}/label")
                 if cd.get("format") is not None:
@@ -186,22 +186,22 @@ class _Walk:
                 cols.append(col)
             return cols
         if kind == "reply":
-            rd = cast(dict[str, Any], v) if isinstance(v, dict) else {}
+            rd = json_object(v)
             if not rd or "text" not in rd or set(rd) - {"text", "values"}:
                 raise LayoutError(f"{where}: must be an object with text, and optionally values.")
-            reply: dict[str, Any] = {"text": self.text_of(rd["text"], f"{where}/text")}
+            reply: Json = {"text": self.text_of(rd["text"], f"{where}/text")}
             values = rd.get("values")
             if values is not None:
-                if not isinstance(values, dict) or len(cast(dict[str, Any], values)) > MAX_COLUMNS:
+                if not isinstance(values, dict) or len(json_object(values)) > MAX_COLUMNS:
                     raise LayoutError(f"{where}/values: must be a flat object with at most {MAX_COLUMNS} keys.")
                 reply["values"] = {
                     self.text_of(k, f"{where}/values"): self.cell(x, f"{where}/values/{k}")
-                    for k, x in cast(dict[str, Any], values).items()
+                    for k, x in json_object(values).items()
                 }
             return reply
         raise LayoutError(f"{where}: unknown field kind.")  # pragma: no cover
 
-    def kind(self, kind: str, value: dict[str, Any], where: str) -> dict[str, Any]:
+    def kind(self, kind: str, value: Json, where: str) -> Json:
         """A widget kind's node: its fields checked against the kind's schema (closed objects, list and text limits),
         and its text counted toward the layout's total like any other node's."""
         found: list[Any] = list(Draft202012Validator(kinds.SCHEMAS[kind]).iter_errors(value))  # pyright: ignore[reportUnknownMemberType]
@@ -213,7 +213,7 @@ class _Walk:
             self.text_of(t, f"{where}/text {i}")
         return {"type": kind, **value}
 
-    def node(self, n: Any, depth: int, where: str) -> dict[str, Any] | None:
+    def node(self, n: JsonValue, depth: int, where: str) -> Json | None:
         self.nodes += 1
         if self.nodes > MAX_NODES:
             raise LayoutError(f"{where}: a layout may hold at most {MAX_NODES} nodes.")
@@ -221,7 +221,7 @@ class _Walk:
             raise LayoutError(f"{where}: a layout may nest at most {MAX_DEPTH} levels.")
         if not isinstance(n, dict):
             raise LayoutError(f"{where}: must be an object with a type.")
-        nd = cast(dict[str, Any], n)
+        nd = json_object(n)
         kind = nd.get("type")
         if not isinstance(kind, str) or kind not in CATALOGUE:
             raise LayoutError(f"{where}: type {kind!r} is not in the catalogue ({', '.join(CATALOGUE)}).")
@@ -235,7 +235,7 @@ class _Walk:
             return None
         if missing:
             raise LayoutError(f"{where}: {kind} needs {', '.join(missing)}.")
-        out: dict[str, Any] = {"type": kind}
+        out: Json = {"type": kind}
         if kind in kinds.SCHEMAS and kind not in kinds.PRIMITIVES:
             return self.kind(kind, {k: v for k, v in nd.items() if k != "type" and v is not None}, where)
         for name, fk in fields.items():
@@ -251,27 +251,28 @@ class _Walk:
             if self.buttons > MAX_BUTTONS:
                 raise LayoutError(f"{where}: a layout may hold at most {MAX_BUTTONS} buttons.")
         if kind == "badge" and "tones" in out:
-            out["tone"] = cast(dict[str, str], out.pop("tones")).get(out["text"], out.get("tone", "neutral"))
+            out["tone"] = cast(dict[str, str], out.pop("tones")).get(str(out["text"]), out.get("tone", "neutral"))
         if holds:
             kids = nd.get("children", [])
-            if not isinstance(kids, list) or len(cast(list[Any], kids)) > MAX_CHILDREN:
+            if not isinstance(kids, list) or len(kids) > MAX_CHILDREN:
                 raise LayoutError(f"{where}/children: must be a list of at most {MAX_CHILDREN} nodes.")
-            built = [self.node(c, depth + 1, f"{where}/children/{i}") for i, c in enumerate(cast(list[Any], kids))]
-            out["children"] = [c for c in built if c is not None]
+            built = [self.node(c, depth + 1, f"{where}/children/{i}") for i, c in enumerate(kids)]
+            children: JsonList = [c for c in built if c is not None]
+            out["children"] = children
         return out
 
 
-def _texts(v: Any) -> list[str]:
+def _texts(v: JsonValue) -> list[str]:
     if isinstance(v, str):
         return [v]
     if isinstance(v, dict):
-        return [t for x in cast(dict[str, Any], v).values() for t in _texts(x)]
+        return [t for x in json_object(v).values() for t in _texts(x)]
     if isinstance(v, list):
-        return [t for x in cast(list[Any], v) for t in _texts(x)]
+        return [t for x in v for t in _texts(x)]
     return []
 
 
-def check(tree: Any, *, images: bool = False) -> dict[str, Any]:
+def check(tree: JsonValue, *, images: bool = False) -> Json:
     """The tree rebuilt from catalogue primitives and their closed fields, or a LayoutError naming the node's JSON
     Pointer and the rule it broke. A composed layout carries literal values only, so a `$bind` here is refused as an
     unknown value shape."""
@@ -280,7 +281,7 @@ def check(tree: Any, *, images: bool = False) -> dict[str, Any]:
     return out
 
 
-def _pointer(data: Any, pointer: str) -> Any:
+def _pointer(data: JsonValue, pointer: str) -> JsonValue:
     if pointer == "":
         return data
     if not pointer.startswith("/"):
@@ -289,32 +290,32 @@ def _pointer(data: Any, pointer: str) -> Any:
     for raw in pointer[1:].split("/"):
         token = raw.replace("~1", "/").replace("~0", "~")
         if isinstance(cur, dict) and token in cur:
-            cur = cast(dict[str, Any], cur)[token]
-        elif isinstance(cur, list) and token.isdigit() and int(token) < len(cast(list[Any], cur)):
-            cur = cast(list[Any], cur)[int(token)]
+            cur = json_object(cur)[token]
+        elif isinstance(cur, list) and token.isdigit() and int(token) < len(cur):
+            cur = cur[int(token)]
         else:
             return None
     return cur
 
 
-def bind(tree: Any, data: Any) -> Any:
+def bind(tree: JsonValue, data: JsonValue) -> JsonValue:
     """The template's tree with each `{"$bind": pointer}` replaced by the value at that pointer in `data` (null when
     the data leaves an optional field out)."""
     if isinstance(tree, dict):
-        td = cast(dict[str, Any], tree)
+        td = json_object(tree)
         if set(td) == {"$bind"}:
             return _pointer(data, str(td["$bind"]))
         return {k: bind(v, data) for k, v in td.items()}
     if isinstance(tree, list):
-        return [bind(v, data) for v in cast(list[Any], tree)]
+        return [bind(v, data) for v in tree]
     return tree
 
 
-def check_schema(schema: Any) -> dict[str, Any]:
+def check_schema(schema: JsonValue) -> Json:
     """A widget template's data schema: a valid JSON Schema whose root is an object."""
-    if not isinstance(schema, dict) or cast(dict[str, Any], schema).get("type") != "object":
+    if not isinstance(schema, dict) or json_object(schema).get("type") != "object":
         raise LayoutError("A widget's data schema must be a JSON Schema with type object.")
-    sd = cast(dict[str, Any], schema)
+    sd = json_object(schema)
     try:
         Draft202012Validator.check_schema(sd)
     except SchemaError as e:
@@ -322,7 +323,7 @@ def check_schema(schema: Any) -> dict[str, Any]:
     return sd
 
 
-def fill(tree: Any, schema: dict[str, Any], data: Any) -> dict[str, Any]:
+def fill(tree: JsonValue, schema: Json, data: JsonValue) -> Json:
     """A published template filled with `data`: the data checked against the template's schema, bound into its tree,
     and the result checked as any composed layout is (the same L3 to L6 limits). A node whose required field the data
     left out is skipped. Images in a template draw blocked."""
@@ -338,31 +339,31 @@ def fill(tree: Any, schema: dict[str, Any], data: Any) -> dict[str, Any]:
     return out
 
 
-def fields_of(schema: dict[str, Any]) -> str:
+def fields_of(schema: Json) -> str:
     """The template's top-level fields for an error the model can act on: `name (type, required)`, comma-separated."""
-    props = cast(dict[str, Any], schema.get("properties") or {})
+    props = json_object(schema.get("properties"))
     required = set(cast(list[str], schema.get("required") or []))
     out: list[str] = []
     for name, spec in props.items():
-        kind = cast(dict[str, Any], spec).get("type", "any") if isinstance(spec, dict) else "any"
+        kind = json_object(spec).get("type", "any") if isinstance(spec, dict) else "any"
         out.append(f"{name} ({kind}{', required' if name in required else ''})")
     return ", ".join(out)
 
 
-def required_tools(tree: Any) -> list[str]:
+def required_tools(tree: JsonValue) -> list[str]:
     """The tools a tree's buttons ask the agent to use (`requires`), in order, without repeats. Works on a template's
     tree (with bindings) and on a checked layout."""
     found: list[str] = []
 
-    def walk(n: Any) -> None:
+    def walk(n: JsonValue) -> None:
         if isinstance(n, dict):
-            nd = cast(dict[str, Any], n)
-            if nd.get("type") == "button" and isinstance(nd.get("requires"), str) and nd["requires"] not in found:
-                found.append(nd["requires"])
+            nd = json_object(n)
+            if nd.get("type") == "button" and isinstance(req := nd.get("requires"), str) and req not in found:
+                found.append(req)
             for v in nd.values():
                 walk(v)
         elif isinstance(n, list):
-            for v in cast(list[Any], n):
+            for v in n:
                 walk(v)
 
     walk(tree)

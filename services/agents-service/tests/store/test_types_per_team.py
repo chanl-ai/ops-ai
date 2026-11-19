@@ -46,7 +46,7 @@ CASE = (
 )
 
 
-def test_each_team_with_work_gets_every_version_and_no_type_is_left_without_a_team(database_url: str) -> None:
+def test_each_team_with_work_gets_every_version_and_no_type_is_left_without_a_team(emptied_database: str) -> None:
     cfg = Config(str(ROOT / "alembic.ini"))
     command.downgrade(cfg, BEFORE)
     t, at = new_id("ten"), now_iso()
@@ -54,7 +54,7 @@ def test_each_team_with_work_gets_every_version_and_no_type_is_left_without_a_te
     own_type = f"risk_only_{t[-6:]}"
     asyncio.run(
         _sql(
-            database_url,
+            emptied_database,
             (CASE, {"id": new_id("case"), "t": t, "team": "team_ops", "at": at}),
             (CASE, {"id": new_id("case"), "t": t, "team": "team_risk", "at": at}),
             (HEAD, {"t": t, "id": seed_type, "team": None, "origin": "seed", "at": at}),
@@ -67,7 +67,7 @@ def test_each_team_with_work_gets_every_version_and_no_type_is_left_without_a_te
     command.upgrade(cfg, "head")
     heads, versions = asyncio.run(
         _sql(
-            database_url,
+            emptied_database,
             ("SELECT team_id, id, origin FROM task_types WHERE tenant_id = :t ORDER BY team_id, id", {"t": t}),
             (
                 "SELECT team_id, type_id, version FROM task_type_versions WHERE tenant_id = :t "
@@ -90,13 +90,13 @@ def test_each_team_with_work_gets_every_version_and_no_type_is_left_without_a_te
     ], "every version is copied, so a task pinned to v1 still reads it"
     command.downgrade(cfg, BEFORE)
     (back,) = asyncio.run(
-        _sql(database_url, ("SELECT team_id, id FROM task_types WHERE tenant_id = :t ORDER BY id", {"t": t}))
+        _sql(emptied_database, ("SELECT team_id, id FROM task_types WHERE tenant_id = :t ORDER BY id", {"t": t}))
     )
     assert [tuple(r) for r in back] == [("team_risk", own_type), ("team_ops", seed_type)]
     command.upgrade(cfg, "head")
     asyncio.run(
         _sql(
-            database_url,
+            emptied_database,
             ("DELETE FROM task_type_versions WHERE tenant_id = :t", {"t": t}),
             ("DELETE FROM task_types WHERE tenant_id = :t", {"t": t}),
             ("DELETE FROM cases WHERE tenant_id = :t", {"t": t}),

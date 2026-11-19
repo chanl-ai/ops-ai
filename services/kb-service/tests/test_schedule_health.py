@@ -24,7 +24,7 @@ from ops_kb.schedule import run_due
 from ops_kb.search import HybridRetriever
 from ops_kb.service import KnowledgeService
 from ops_kb.store import KnowledgeStore
-from ops_kb.store.event_relay import relay
+from ops_kb.store.knowledge import outbox_relay
 from ops_kb.tool_sources import Answer
 from ops_service_kit.settings import Settings
 from ops_store import isolation
@@ -122,7 +122,7 @@ async def test_a_failing_source_shows_it_and_alerts_once_on_its_second_failure(
     assert (health["state"], health["failedRuns"], health["daysFailing"]) == ("failing", 3, 0), health
     assert health["lastGoodSyncAt"] and health["failingSince"]
     agents = Agents()
-    hand_off = relay(engine, None, agents.client())
+    hand_off = outbox_relay(engine, {"agents": agents.client()})
     # The outbox is every test's, oldest first in batches: deliver until it is empty.
     while await hand_off.once():
         pass

@@ -5,7 +5,7 @@ page offers that the runtime never reads."""
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from typing import Any, cast
+from typing import cast
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -17,6 +17,8 @@ from ops_agents.api.agent_registry import CONTROLS, GUARDRAILS, definition_of
 from ops_agents.api.app import create_app
 from ops_agents.api.deps import Runtime
 from ops_agents.store.base import metadata
+from ops_engine.store import metadata as engine_metadata
+from ops_service_kit.http import Json
 from ops_service_kit.settings import Settings
 from tests.api.test_chat import new_thread, send
 from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model
@@ -29,6 +31,7 @@ async def stack() -> AsyncIterator[tuple[AsyncClient, Runtime]]:
     engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
     async with engine.begin() as c:
         await c.run_sync(metadata.create_all)
+        await c.run_sync(engine_metadata.create_all)  # the runner's tables, as a migrated database has them
     app = create_app(
         Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED),
         model=scripted_model(),
@@ -71,9 +74,9 @@ async def test_recent_runs_are_the_agents_own_threads_newest_first(stack: tuple[
 
 
 def test_the_page_offers_exactly_the_guardrail_settings_a_turn_reads() -> None:
-    spec: dict[str, Any] = {"name": "A", "role": "B", "instructions": "C", "guardrails": dict(GUARDRAILS)}
+    spec: Json = {"name": "A", "role": "B", "instructions": "C", "guardrails": dict(GUARDRAILS)}
     base = definition_of("ag_x", 1, spec)
-    changed = {
+    changed: Json = {
         "redactPii": False,
         "maxToolCallsPerTurn": 2,
         "maxModelCallsPerTurn": 3,
@@ -82,9 +85,11 @@ def test_the_page_offers_exactly_the_guardrail_settings_a_turn_reads() -> None:
         "whenUnsure": "decline",
         "blockedTopics": ["crypto"],
     }
-    read = [
-        k for k, v in changed.items() if definition_of("ag_x", 1, spec | {"guardrails": {**GUARDRAILS, k: v}}) != base
-    ]
+    read: list[str] = []
+    for k, v in changed.items():
+        offered: Json = {**spec, "guardrails": {**GUARDRAILS, k: v}}
+        if definition_of("ag_x", 1, offered) != base:
+            read.append(k)
     assert read == CONTROLS["guardrails"], f"the page offers {CONTROLS['guardrails']}; a turn reads {read}"
 
 
@@ -124,12 +129,13 @@ async def test_caps_are_optional_numbers_with_no_ceiling(stack: tuple[AsyncClien
 
 
 def test_a_version_saved_before_the_model_call_cap_keeps_eight() -> None:
-    old = {"name": "x", "role": "y", "guardrails": {"maxToolCallsPerTurn": 6, "redactPii": True}}
+    old: Json = {"name": "x", "role": "y", "guardrails": {"maxToolCallsPerTurn": 6, "redactPii": True}}
     assert definition_of("ag_x", 1, old).max_model_calls == 8
 
 
 def test_no_saved_model_call_cap_reaches_the_kernel_as_unlimited() -> None:
     """None would become pydantic-ai's request_limit=None: a looping agent spending real calls until the deadline."""
-    for caps in ({"maxModelCallsPerTurn": None}, {}, {"maxModelCallsPerTurn": 400}):
+    shapes: list[Json] = [{"maxModelCallsPerTurn": None}, {}, {"maxModelCallsPerTurn": 400}]
+    for caps in shapes:
         defn = definition_of("ag_x", 1, {"name": "x", "role": "y", "guardrails": caps})
         assert isinstance(defn.max_model_calls, int) and defn.max_model_calls > 0, (caps, defn.max_model_calls)

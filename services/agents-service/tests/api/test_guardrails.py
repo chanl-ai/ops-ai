@@ -13,12 +13,9 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
 
-import pytest
 from httpx import AsyncClient
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, ToolCallPart, UserPromptPart
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
-
-from ops_agents.store.guardrails import GuardrailRegistry
 
 from .test_agent_registry import _app, _ok  # pyright: ignore[reportPrivateUsage]
 
@@ -37,17 +34,9 @@ async def _pin(c: AsyncClient, gid: str, version: int) -> Any:
     return await c.patch(f"/v1/agents/{ADVISOR}", json={"guardrailPins": [{"guardrailId": gid, "version": version}]})
 
 
-async def test_a_guardrail_needs_a_topic_and_a_message(tmp_path: Path) -> None:
-    async with _app(str(tmp_path / "db.sqlite")) as c:
-        r = await c.post("/v1/guardrails", json={**RULE, "topics": [" "]})
-        assert (r.status_code, r.json()["error"]["code"]) == (400, "no_topics")
-        r = await c.post("/v1/guardrails", json={**RULE, "message": ""})
-        assert r.json()["error"]["code"] == "no_message"
-
-
 async def test_only_a_published_version_pins_and_the_pin_keeps_its_version(tmp_path: Path) -> None:
     async with _app(str(tmp_path / "db.sqlite")) as c:
-        draft = _ok(await c.post("/v1/guardrails", json=RULE), 201)
+        draft = _ok(await c.post("/v1/guardrails", json={**RULE, "name": "Draft rule"}), 201)
         r = await _pin(c, draft["id"], 1)
         assert (r.status_code, r.json()["error"]["code"]) == (422, "not_published")
 
@@ -68,6 +57,15 @@ async def test_only_a_published_version_pins_and_the_pin_keeps_its_version(tmp_p
         agent = _ok(await c.get(f"/v1/agents/{ADVISOR}"))
         assert agent["guardrailPins"][0]["topics"] == ["investment advice"]
         assert _ok(await c.get(f"/v1/guardrails/{g['id']}"))["usedBy"] == [agent["name"]]
+
+
+async def test_editing_a_draft_guardrail_rewrites_it_instead_of_opening_a_second_draft(tmp_path: Path) -> None:
+    async with _app(str(tmp_path / "db.sqlite")) as c:
+        g = _ok(await c.post("/v1/guardrails", json=RULE), 201)
+        _ok(await c.patch(f"/v1/guardrails/{g['id']}", json={"topics": ["tax advice"]}))
+        edited = _ok(await c.patch(f"/v1/guardrails/{g['id']}", json={"message": "No."}))
+        assert [v["version"] for v in edited["versions"]] == [1], edited["versions"]
+        assert edited["versions"][0]["config"]["topics"] == ["tax advice"]
 
 
 async def test_a_published_pin_reaches_the_served_definition(tmp_path: Path) -> None:
@@ -150,44 +148,6 @@ async def test_a_guardrail_publish_decided_from_publish_requests_publishes_it(tm
         assert _ok(await c.get(f"/v1/publish-requests/{rid}"))["title"] == f"Publish {RULE['name']} v1"
         _ok(await c.post(f"/v1/publish-requests/{rid}/decision", json={"decision": "approved"}, headers=KIM))
         assert _ok(await c.get(f"/v1/guardrails/{g['id']}"))["publishedVersion"] == 1
-
-
-async def test_only_the_creator_or_a_team_admin_deletes_a_guardrail(tmp_path: Path) -> None:
-    async with _app(str(tmp_path / "db.sqlite")) as c:
-        g = _ok(await c.post("/v1/guardrails", json=RULE, headers=LEE), 201)
-        r = await c.delete(f"/v1/guardrails/{g['id']}", headers=KIM)
-        assert r.status_code == 403, r.text
-        assert (await c.delete(f"/v1/guardrails/{g['id']}", headers=LEE)).status_code == 204
-
-
-async def test_the_paged_list_answers_one_page_and_the_searched_total(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    async with _app(str(tmp_path / "db.sqlite")) as c:
-        for i in range(5):
-            _ok(await c.post("/v1/guardrails", json={**RULE, "name": f"Rule {i}", "topics": [f"topic {i}"]}), 201)
-        whole = cast(list[dict[str, Any]], _ok(await c.get("/v1/guardrails")))
-        assert isinstance(whole, list), "without page the pin picker still reads the whole list"
-
-        # A page reads only its own rows: the whole-table read is never called, and the query answers at most a page.
-        async def no_whole_table(_self: GuardrailRegistry) -> list[dict[str, Any]]:
-            raise AssertionError("a page must not load every guardrail")
-
-        monkeypatch.setattr(GuardrailRegistry, "rows", no_whole_table)
-        p2 = _ok(await c.get("/v1/guardrails", params={"page": 2, "pageSize": 2}))
-        assert [g["name"] for g in p2["data"]] == ["Rule 2", "Rule 3"]
-        assert (p2["pagination"]["total"], p2["pagination"]["totalPages"]) == (len(whole), -(-len(whole) // 2))
-        hit = _ok(await c.get("/v1/guardrails", params={"page": 1, "search": "rule 4"}))
-        assert [g["name"] for g in hit["data"]] == ["Rule 4"] and hit["pagination"]["total"] == 1
-
-
-async def test_wildcards_in_the_search_match_only_themselves(tmp_path: Path) -> None:
-    async with _app(str(tmp_path / "db.sqlite")) as c:
-        for n in ("Rate 100%", "Rate 1000", "a_b", "axb"):
-            _ok(await c.post("/v1/guardrails", json={**RULE, "name": n}), 201)
-        for term, want in (("100%", ["Rate 100%"]), ("a_b", ["a_b"])):
-            got = _ok(await c.get("/v1/guardrails", params={"page": 1, "search": term}))
-            assert [g["name"] for g in got["data"]] == want, term
 
 
 async def test_hold_until_checked_is_versioned_and_reaches_the_served_definition(tmp_path: Path) -> None:

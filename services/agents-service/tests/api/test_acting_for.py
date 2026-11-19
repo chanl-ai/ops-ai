@@ -5,7 +5,7 @@ platform-service outage fails every personal call at once, and an acting-for tok
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import pytest
@@ -17,9 +17,11 @@ from ops_agents.api.acting_for import CallPeople
 from ops_agents.api.auth import Principal
 from ops_agents.api.child_runs import _started_by, acting_for  # pyright: ignore[reportPrivateUsage]
 from ops_agents.api.run_person import running_for
+from ops_engine.store import RunRow
 from ops_identity import ACTING_FOR_HEADER, ActingForTokens, ServiceClient, dev_service_signer
 from ops_policy import mint, verify
 from ops_service_kit.errors import Forbidden, ServiceUnavailable
+from ops_service_kit.http import Json
 from ops_store import isolation
 from tests.api import test_platform_identity
 from tests.api.test_platform_identity import PLATFORM
@@ -33,8 +35,10 @@ RUNS = {
 
 
 class Runs:
-    async def get(self, run_id: str) -> dict[str, Any] | None:
-        return RUNS.get(run_id)
+    async def row(self, run_id: str) -> RunRow | None:
+        # Only the fields acting_for reads; the rest of a stored run does not matter here.
+        found = RUNS.get(run_id)
+        return RunRow.model_construct(**cast(dict[str, Any], found)) if found is not None else None
 
 
 class Minted:
@@ -198,7 +202,7 @@ async def test_a_recovered_chat_run_acts_for_the_threads_person_and_one_with_no_
 async def test_a_chat_run_resumed_by_someone_else_still_acts_for_the_person_who_asked() -> None:
     # An approver's decision resumed the chat's write as the approver.
     who = people(Minted())
-    chat = {
+    chat: Json = {
         "id": "th_1",
         "team_id": "team_a",
         "graph": "agent_wrapper",

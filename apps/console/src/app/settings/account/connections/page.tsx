@@ -10,7 +10,7 @@ import { RecordSkeleton } from '@/components/shared/record-skeleton';
 export default function OldMyConnectionsPage() {
   const router = useRouter();
   React.useEffect(() => {
-    router.replace('/integrations/my-accounts');
+    router.replace('/settings/account/connectors');
   }, [router]);
   return (
     <PageLayout title="Opening Connectors">

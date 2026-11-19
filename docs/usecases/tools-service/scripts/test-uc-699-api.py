@@ -1,7 +1,7 @@
 """uc-699, api layer: docs/usecases/tools-service/two-accounts-never-share-a-name.md.
 
 Two admins adding an account of one app with the same name at the same moment get one account and one 409
-account_name_taken; a person's own second account may not take a name the team's account holds; a lookup by the
+account_name_taken; names are unique per owner, so a person's own account may take a name the team's holds; a lookup by the
 name finds exactly one (lib/several_accounts.py). The database's filtered unique index is the guarantee: the route's
 own check passes for both of two adds that arrive together."""
 
@@ -53,15 +53,15 @@ with rig("uc-699") as r:
         shouted.status_code == 409 and code_of(shouted) == "account_name_taken",
         shouted.text[:200],
     )
-    # 3. Maya's own second account may not take the name either.
+    # 3. Names are unique per owner: Maya's own account may take the name a team account holds.
     mine = r.gw.post(
         f"/v1/me/accounts/{r.ids['retail']}/another",
         json={"name": "EU org 0", "settings": {"login_url": sf["eu_login_url"]}},
         headers=r.maya,
     )
     check(
-        "3 Maya's own second account named like a team account is refused 409 account_name_taken",
-        mine.status_code == 409 and code_of(mine) == "account_name_taken",
+        "3 Maya's own second account named like a team account starts its sign-in",
+        mine.is_success and "authorizeUrl" in (mine.json().get("data") or {}),
         mine.text[:200],
     )
     # 4. A rename onto another account's name is refused too.

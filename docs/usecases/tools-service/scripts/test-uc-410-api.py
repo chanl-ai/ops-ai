@@ -21,6 +21,7 @@ from usecase_harness import (
     PLATFORM_PORT,
     TOOLS_PORT,
     agents,
+    assistant_sign_in,
     bearer,
     check,
     core_bank,
@@ -82,11 +83,17 @@ def refused(credential: str | None, path: str) -> tuple[int, str]:
 
 
 with ExitStack() as stack:
-    api, _ = stack.enter_context(platform())
-    bank = stack.enter_context(core_bank())
     gw_url = f"http://127.0.0.1:{TOOLS_PORT}"
-    # The MCP address is behind the install flag mcp_gateway.
-    flags = {"OPS_FLAGS": "mcp_gateway"}
+    # platform-service names the MCP address an assistant signs in for (step 6).
+    api, _ = stack.enter_context(platform(env={"OPS_TOOLS_PUBLIC_URL": gw_url}))
+    bank = stack.enter_context(core_bank())
+    # The MCP address is behind the install flag mcp_gateway; an install that serves it names its public address and
+    # sign-in issuer, without which a caller with no API key is told assistants cannot sign in (503).
+    flags = {
+        "OPS_FLAGS": "mcp_gateway",
+        "OPS_TOOLS_PUBLIC_URL": gw_url,
+        "OPS_PLATFORM_PUBLIC_URL": f"http://127.0.0.1:{PLATFORM_PORT}",
+    }
     stack.enter_context(
         tools({**bank["settings"], **AUTH, **flags, "OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}"})
     )
@@ -104,7 +111,7 @@ with ExitStack() as stack:
     clean(ops, "uc410")
     allow_bank(security, bank)
     key = {"settings": {"name": "X-Api-Key"}, "secretValues": {"key": "dev-bank-key"}}
-    conn = connection(ops, "uc410 core banking", "api_key", {"test": key}, base_url=f"https://{bank['host']}")
+    conn = connection(ops, "uc410 core banking", "api_key", {"sandbox": key}, base_url=f"https://{bank['host']}")
     approver = bearer(nadia, "team_security")
     base = f"https://{bank['host']}/accounts/{{account_id}}"
     module(ops, "uc410-get-account", base, conn["id"], security=approver)
@@ -127,7 +134,7 @@ with ExitStack() as stack:
     OPS_KEY, OTHER_KEY = ops_key["secret"], other_key["secret"]
 
     # 1. A team_ops key lists the team's reads, with schemas and readOnlyHint, and no writes.
-    tools_seen = asyncio.run(listed(OPS_KEY, "/test/team_ops"))
+    tools_seen = asyncio.run(listed(OPS_KEY, "/team_ops"))
     read = tools_seen.get("uc410_get_account")
     check(
         "1 the key lists the team's read with its input schema and readOnlyHint",
@@ -139,7 +146,7 @@ with ExitStack() as stack:
     check("1 the write is not listed", "uc410_place_hold" not in tools_seen, sorted(tools_seen))
 
     # 2. A read runs through the gateway against the bank, and the log names mcp, the key and the client.
-    result = asyncio.run(called(OPS_KEY, "/test/team_ops", "uc410_get_account", {"account_id": "CHQ-2219"}))
+    result = asyncio.run(called(OPS_KEY, "/team_ops", "uc410_get_account", {"account_id": "CHQ-2219"}))
     out = result.structured_content or {}
     check(
         "2 the read answers with the bank's own account",
@@ -158,7 +165,7 @@ with ExitStack() as stack:
     )
 
     # 3. A write called by name is refused by the gateway, logged, and the bank keeps no hold.
-    held = asyncio.run(called(OPS_KEY, "/test/team_ops", "uc410_place_hold", {"account_id": "CHQ-2219"}))
+    held = asyncio.run(called(OPS_KEY, "/team_ops", "uc410_place_hold", {"account_id": "CHQ-2219"}))
     why = held.structured_content or {}
     check(
         "3 a write declared to run at once is refused over MCP until a person approves",
@@ -171,15 +178,15 @@ with ExitStack() as stack:
         bool(rows) and rows[0].get("channel") == "mcp" and rows[0]["decision"] == "deny",
         rows[:1],
     )
-    again = asyncio.run(called(OPS_KEY, "/test/team_ops", "uc410_get_account", {"account_id": "CHQ-2219"}))
+    again = asyncio.run(called(OPS_KEY, "/team_ops", "uc410_get_account", {"account_id": "CHQ-2219"}))
     check("3 the bank holds nothing on the account", (again.structured_content or {}).get("holds") == [], again)
 
     # 4. Another team: its own URL lists none of team_ops' module and cannot run it; team_ops' URL refuses its key.
-    other_seen = asyncio.run(listed(OTHER_KEY, "/test/team_platform"))
+    other_seen = asyncio.run(listed(OTHER_KEY, "/team_platform"))
     check(
         "4 a team_platform key does not see team_ops' module", "uc410_get_account" not in other_seen, sorted(other_seen)
     )
-    stolen = asyncio.run(called(OTHER_KEY, "/test/team_platform", "uc410_get_account", {"account_id": "CHQ-2219"}))
+    stolen = asyncio.run(called(OTHER_KEY, "/team_platform", "uc410_get_account", {"account_id": "CHQ-2219"}))
     check(
         # The team's registry does not resolve another team's operation, so the gateway refuses it as not registered;
         # team_forbidden is the answer when it resolves but belongs elsewhere. Either way nothing runs.
@@ -190,14 +197,39 @@ with ExitStack() as stack:
     )
     check(
         "4 a team_platform key at team_ops' URL is 403",
-        refused(OTHER_KEY, "/test/team_ops") == (403, "team_forbidden"),
+        refused(OTHER_KEY, "/team_ops") == (403, "team_forbidden"),
     )
 
-    # 5. Production is refused until a team allows it; no key is 401; a viewer, who cannot run tools, is 403.
-    check("5 the production URL is 403", refused(OPS_KEY, "/production/team_ops") == (403, "production_off"))
-    check("5 no credential is 401", refused(None, "/test/team_ops") == (401, "unauthorized"))
-    check(
-        "5 a viewer's token is refused (no tools.run)",
-        refused(ravi.get("token", ""), "/test/team_ops") == (403, "role_required"),
+    # 5. Production is refused until a team allows it; no key is 401; a person's console token is 401 too: the MCP
+    # address takes only a token issued for it (an assistant's sign-in), and a viewer's calls are refused per call.
+    nokey = refused(None, "/team_ops")
+    check("5 no credential is 401", nokey == (401, "unauthorized"), nokey)
+    console = refused(ravi.get("token", ""), "/team_ops")
+    check("5 a person's console token is not an MCP credential (401)", console == (401, "unauthorized"), console)
+
+    # 6. A link's calls are read with mcp.view: James (builder) calls through Priya's link with his own assistant
+    # sign-in; Priya (admin) reads every call on it, Ravi (viewer) reads only his own, which is none, and still not
+    # the team's whole tool-call log.
+    made = ops.post("/v1/mcp-links", json={"name": "uc410 lookups", "tools": [{"id": "uc410_get_account", "label": "x"}]})
+    link = data(made)
+    james_mcp = assistant_sign_in(api, "j.richardson@harborpine.example", f"{gw_url}/mcp/team_ops/uc410-lookups")
+    via_link = asyncio.run(
+        called(james_mcp["access_token"], "/team_ops/uc410-lookups", "uc410_get_account", {"account_id": "CHQ-2219"})
     )
+    check("6 James's call through the link runs", via_link.is_error is False, via_link)
+    viewer = httpx.Client(base_url=gw_url, headers=bearer(ravi, "team_ops"), timeout=30)
+    on_link = {"link": link.get("id", "")}
+    admin_rows = data(ops.get("/v1/executions", params=on_link))["data"]
+    ravi_read = viewer.get("/v1/executions", params=on_link)
+    check(
+        "6 Priya reads James's call on the link",
+        [r.get("subject", {}).get("name") for r in admin_rows] == ["James Richardson"],
+        admin_rows,
+    )
+    check(
+        "6 Ravi reads the link's calls (200) and sees only his own, so none",
+        ravi_read.status_code == 200 and ravi_read.json()["data"]["data"] == [],
+        ravi_read.text[:300],
+    )
+    check("6 Ravi still cannot read the team's tool-call log (403)", viewer.get("/v1/executions").status_code == 403)
 finish()

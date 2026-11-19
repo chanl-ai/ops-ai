@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal, NotRequired
+from typing import Any, Literal, NotRequired, TypeAlias
 
 from typing_extensions import TypedDict
 
@@ -29,17 +29,6 @@ class BackgroundProcessOut(TypedDict, closed=True):
     waiting: int | None
 
 
-class Cell(TypedDict, closed=True):
-    box: NotRequired[list[float] | None]
-    col: int
-    colSpan: NotRequired[int]
-    header: NotRequired[bool]
-    id: str
-    row: int
-    rowSpan: NotRequired[int]
-    text: str
-
-
 class Classification(TypedDict, closed=True):
     confidence: float | None
     floor: float
@@ -55,6 +44,7 @@ class ClassifyIn(TypedDict, closed=True):
 
 
 class CopyRef(TypedDict, closed=True):
+    detachedAt: str | None
     id: str
     kind: Literal["document_type"]
     recordId: str
@@ -65,17 +55,6 @@ class CopyRef(TypedDict, closed=True):
 
 class CorrectionIn(TypedDict, closed=True):
     record: NotRequired[int | None]
-    value: Any
-
-
-class DocumentTypeExample(TypedDict, closed=True):
-    correctedBy: str
-    createdAt: str
-    extractionId: str
-    field: str
-    id: str
-    line: str | None
-    record: int | None
     value: Any
 
 
@@ -108,21 +87,6 @@ class DocumentTypeRow(TypedDict, closed=True):
     name: str
 
 
-class DocumentTypeVersion(TypedDict, closed=True):
-    checks: list[dict[str, Any]]
-    createdAt: str
-    createdBy: str
-    dateOrder: Literal["MDY", "DMY"]
-    fields: list[dict[str, Any]]
-    many: bool
-    note: str | None
-    offerAt: int
-    pageImages: NotRequired[bool]
-    reviewBelow: float | None
-    templates: list[dict[str, Any]]
-    version: int
-
-
 class DocumentTypeVersionIn(TypedDict, closed=True):
     checks: NotRequired[list[dict[str, Any]] | None]
     dateOrder: NotRequired[Literal["MDY", "DMY"]]
@@ -140,13 +104,8 @@ class EnvelopeClassification(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeDocumentTypeVersion(TypedDict, closed=True):
-    data: DocumentTypeVersion
-    success: Literal[True]
-
-
-class EnvelopeListDocumentTypeExample(TypedDict, closed=True):
-    data: list[DocumentTypeExample]
+class EnvelopeCopyRef(TypedDict, closed=True):
+    data: CopyRef
     success: Literal[True]
 
 
@@ -185,6 +144,12 @@ class ExtractionRequest(TypedDict, closed=True):
     version: NotRequired[int | None]
 
 
+class FieldScore(TypedDict, closed=True):
+    accuracy: float | None
+    matches: int
+    misses: int
+
+
 class FileFacts(TypedDict, closed=True):
     author: NotRequired[str | None]
     created: NotRequired[str | None]
@@ -199,17 +164,16 @@ class FileFacts(TypedDict, closed=True):
     warnings: NotRequired[list[str]]
 
 
-class FormField(TypedDict, closed=True):
-    box: NotRequired[list[float] | None]
-    kind: Literal["text", "checkbox", "choice", "signature"]
-    name: str
-    page: int
-    value: str
+class Health(TypedDict, closed=True):
+    reason: NotRequired[Literal["database", "ocr"] | None]
+    status: Literal["ok", "degraded"]
 
 
-class Health(TypedDict):
-    reason: NotRequired[str | None]
-    status: str
+class ImageCall(TypedDict, closed=True):
+    alias: str
+    images: int
+    pages: list[int]
+    step: str
 
 
 class InstallInput(TypedDict, closed=True):
@@ -224,10 +188,13 @@ class Installation(TypedDict, closed=True):
 
 
 class Installed(TypedDict, closed=True):
-    changed: NotRequired[bool]
+    changed: bool
     copies: int
     newerAvailable: bool
     version: int | None
+
+
+JsonValue: TypeAlias = Any
 
 
 class LayoutCell(TypedDict, closed=True):
@@ -259,17 +226,6 @@ class LayoutWord(TypedDict, closed=True):
     text: str
 
 
-class Line(TypedDict, closed=True):
-    box: NotRequired[list[float] | None]
-    text: str
-
-
-class OcrQuality(TypedDict, closed=True):
-    lowShare: float
-    mean: float
-    words: int
-
-
 class Pagination(TypedDict, closed=True):
     hasNext: bool
     hasPrev: bool
@@ -289,9 +245,28 @@ class Purged(TypedDict, closed=True):
     samples: int
 
 
+class ReadingCell(TypedDict, closed=True):
+    box: NotRequired[list[float] | None]
+    col: int
+    colSpan: NotRequired[int]
+    header: NotRequired[bool]
+    id: str
+    row: int
+    rowSpan: NotRequired[int]
+    text: str
+
+
 class ReadingError(TypedDict, closed=True):
     code: str
     message: str
+
+
+class ReadingFormField(TypedDict, closed=True):
+    box: NotRequired[list[float] | None]
+    kind: Literal["text", "checkbox", "choice", "signature"]
+    name: str
+    page: int
+    value: str
 
 
 class ReadingIn(TypedDict, closed=True):
@@ -300,23 +275,61 @@ class ReadingIn(TypedDict, closed=True):
     ocr: NotRequired[Literal["off", "auto", "always"]]
 
 
+class ReadingLine(TypedDict, closed=True):
+    box: NotRequired[list[float] | None]
+    text: str
+
+
+class ReadingOcrQuality(TypedDict, closed=True):
+    lowShare: float
+    mean: float
+    words: int
+
+
 class ReadingSettingsOut(TypedDict, closed=True):
     language: str
     ocr: Literal["off", "auto", "always"]
 
 
+class ReadingWord(TypedDict, closed=True):
+    box: list[float]
+    confidence: float
+    text: str
+
+
+class ReviewedDigests(TypedDict, closed=True):
+    digest: str | None
+    recordDigest: str | None
+
+
 class Sample(TypedDict, closed=True):
     addedAt: str
     addedBy: str
-    expected: Any
+    expected: JsonValue
     fileId: str
     id: str
     name: str
 
 
+class SampleComparison(TypedDict, closed=True):
+    expected: JsonValue
+    got: JsonValue
+    match: bool
+
+
 class SampleIn(TypedDict, closed=True):
     expected: Any
     fileId: str
+
+
+class SampleResult(TypedDict, closed=True):
+    extractionId: str | None
+    fields: dict[str, list[SampleComparison]]
+    name: str
+    path: NotRequired[Literal["template", "model"] | None]
+    sampleId: str
+    status: str | None
+    templateId: NotRequired[str | None]
 
 
 class TemplateMiss(TypedDict, closed=True):
@@ -339,7 +352,7 @@ class TemplatePlugin(TypedDict, closed=True):
 
 class TemplateRequires(TypedDict, closed=True):
     bind: list[dict[str, str]]
-    resources: NotRequired[list[str]]
+    resources: list[str]
     tools: list[str]
 
 
@@ -348,19 +361,19 @@ class TemplateSuggestIn(TypedDict, closed=True):
 
 
 class TemplateSuggestion(TypedDict, closed=True):
-    checks: list[dict[str, Any]]
-    template: dict[str, Any]
+    checks: list[dict[str, JsonValue]]
+    template: dict[str, JsonValue]
 
 
 class TemplateView(TypedDict, closed=True):
     addCell: AddCell
     canAdd: bool
-    copy: NotRequired[CopyRef | None]
+    copy: CopyRef | None
     id: str
     installed: Installed
     kind: Literal["document_type"]
     plugin: TemplatePlugin
-    removeCell: NotRequired[AddCell | None]
+    removeCell: AddCell | None
     requires: TemplateRequires
     source: str
     state: Literal["available", "added", "update_available", "removed_upstream"]
@@ -379,73 +392,71 @@ class TestEstimate(TypedDict, closed=True):
     samples: int
 
 
+class TestResult(TypedDict, closed=True):
+    accuracy: float | None
+    fields: dict[str, FieldScore]
+    samples: list[SampleResult]
+
+
 class TestRun(TypedDict, closed=True):
     askedAt: str
     askedBy: str
     error: NotRequired[str | None]
     id: str
-    result: NotRequired[dict[str, Any] | None]
+    result: NotRequired[TestResult | None]
     samples: int
     status: Literal["queued", "running", "done", "failed"]
     typeId: str
     version: int
 
 
+class UpdateExpect(TypedDict, closed=True):
+    digest: NotRequired[str | None]
+    recordDigest: NotRequired[str | None]
+
+
 class UpdateInput(TypedDict, closed=True):
+    choices: NotRequired[dict[str, Literal["yours", "template"]]]
     confirm: NotRequired[bool]
-
-
-class UpdateReview(TypedDict, closed=True):
-    changes: list[str]
-    copy: CopyRef
-    edits: list[str]
-    fromVersion: int
-    taken: NotRequired[bool]
-    toVersion: int
-
-
-class Word(TypedDict, closed=True):
-    box: list[float]
-    confidence: float
-    text: str
+    expect: NotRequired[UpdateExpect | None]
+    mode: NotRequired[Literal["merge", "reset"] | None]
 
 
 class BackgroundHealthOut(TypedDict, closed=True):
     processes: list[BackgroundProcessOut]
 
 
-class Block(TypedDict, closed=True):
-    box: NotRequired[list[float] | None]
-    caption: NotRequired[str | None]
-    cells: NotRequired[list[Cell]]
-    furniture: NotRequired[bool]
-    id: str
-    kind: Literal["title", "heading", "paragraph", "table"]
-    level: NotRequired[int | None]
-    lines: NotRequired[list[Line]]
-    main: NotRequired[bool]
-    order: NotRequired[int]
-    readBy: NotRequired[Literal["text", "ocr"]]
-    sheet: NotRequired[str | None]
-    text: str
-
-
-class DocumentType(TypedDict, closed=True):
-    canEdit: bool
+class DocumentTypeExample(TypedDict, closed=True):
+    correctedBy: str
     createdAt: str
-    createdBy: str
-    description: str | None
+    extractionId: str
+    field: str
     id: str
-    latestVersion: int
-    name: str
-    samples: list[Sample]
-    team: str
-    versions: list[DocumentTypeVersion]
+    line: str | None
+    record: int | None
+    value: JsonValue
 
 
 class DocumentTypeList(TypedDict, closed=True):
     canCreate: bool
-    items: list[DocumentTypeRow]
+    data: list[DocumentTypeRow]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
+class DocumentTypeVersion(TypedDict, closed=True):
+    checks: list[dict[str, JsonValue]]
+    createdAt: str
+    createdBy: str
+    dateOrder: Literal["MDY", "DMY"]
+    fields: list[dict[str, JsonValue]]
+    many: bool
+    note: str | None
+    offerAt: int
+    pageImages: NotRequired[bool]
+    reviewBelow: float | None
+    templates: list[dict[str, JsonValue]]
+    version: int
 
 
 class EnvelopeDocumentTypeList(TypedDict, closed=True):
@@ -453,8 +464,8 @@ class EnvelopeDocumentTypeList(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeDocumentType(TypedDict, closed=True):
-    data: DocumentType
+class EnvelopeDocumentTypeVersion(TypedDict, closed=True):
+    data: DocumentTypeVersion
     success: Literal[True]
 
 
@@ -488,8 +499,8 @@ class EnvelopeTestRun(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeUpdateReview(TypedDict, closed=True):
-    data: UpdateReview
+class EnvelopeListDocumentTypeExample(TypedDict, closed=True):
+    data: list[DocumentTypeExample]
     success: Literal[True]
 
 
@@ -503,32 +514,22 @@ class EnvelopeListTemplateView(TypedDict, closed=True):
     success: Literal[True]
 
 
-class Extraction(TypedDict, closed=True):
-    classification: NotRequired[Classification | None]
-    corrections: NotRequired[list[dict[str, Any]] | None]
-    count: NotRequired[int | None]
-    documentType: NotRequired[DocumentTypeRef | None]
-    error: NotRequired[ExtractionError | None]
-    fields: NotRequired[dict[str, Any] | None]
-    fileId: str
-    floor: NotRequired[float | None]
-    id: str
-    imageCalls: NotRequired[list[dict[str, Any]] | None]
-    imageRefused: NotRequired[str | None]
-    needsReview: NotRequired[list[Any] | None]
-    outcome: NotRequired[Literal["ok", "review", "unreadable", "unknown"] | None]
-    pages: NotRequired[int | list[dict[str, Any]] | None]
-    partial: NotRequired[bool | None]
-    path: NotRequired[Literal["template", "model"] | None]
-    proposal: NotRequired[dict[str, Any] | None]
-    readPages: NotRequired[int | None]
-    records: NotRequired[list[dict[str, Any]] | None]
-    rereadTokens: NotRequired[dict[str, int] | None]
-    schema: NotRequired[list[dict[str, Any]] | None]
-    status: Literal["queued", "running", "done", "failed", "unreadable"]
-    templateId: NotRequired[str | None]
-    templateMiss: NotRequired[TemplateMiss | None]
-    text: NotRequired[str | None]
+class ExtractionCorrection(TypedDict, closed=True):
+    corrected: JsonValue
+    correctedAt: str
+    correctedBy: str
+    field: str
+    original: JsonValue
+    originalConfidence: float
+    record: int | None
+
+
+class FieldReview(TypedDict, closed=True):
+    field: str
+    label: str
+    outcome: Literal["kept", "taken", "conflict"]
+    template: JsonValue
+    yours: JsonValue
 
 
 class LayoutBlock(TypedDict, closed=True):
@@ -541,36 +542,101 @@ class LayoutBlock(TypedDict, closed=True):
     text: str
 
 
-class ListResultExtraction(TypedDict, closed=True):
-    data: list[Extraction]
-    facets: dict[str, dict[str, int]]
-    pagination: Pagination
+class ReadingBlock(TypedDict, closed=True):
+    box: NotRequired[list[float] | None]
+    caption: NotRequired[str | None]
+    cells: NotRequired[list[ReadingCell]]
+    furniture: NotRequired[bool]
+    id: str
+    kind: Literal["title", "heading", "paragraph", "table"]
+    level: NotRequired[int | None]
+    lines: NotRequired[list[ReadingLine]]
+    main: NotRequired[bool]
+    order: NotRequired[int]
+    readBy: NotRequired[Literal["text", "ocr"]]
+    sheet: NotRequired[str | None]
+    text: str
 
 
-class Page(TypedDict, closed=True):
-    blocks: NotRequired[list[Block]]
+class ReadingPage(TypedDict, closed=True):
+    blocks: NotRequired[list[ReadingBlock]]
     durationMs: NotRequired[int]
-    formFields: NotRequired[list[FormField]]
+    formFields: NotRequired[list[ReadingFormField]]
     height: NotRequired[float | None]
     imageShare: NotRequired[float]
     number: int
-    ocr: NotRequired[OcrQuality | None]
+    ocr: NotRequired[ReadingOcrQuality | None]
     source: Literal["text", "ocr", "mixed", "none"]
     text: NotRequired[str]
     unreadReason: NotRequired[str | None]
     warnings: NotRequired[list[str]]
     width: NotRequired[float | None]
-    words: NotRequired[list[Word]]
+    words: NotRequired[list[ReadingWord]]
 
 
-class EnvelopeExtraction(TypedDict, closed=True):
-    data: Extraction
+class UpdateReview(TypedDict, closed=True):
+    appliesNow: bool
+    changes: list[str]
+    copy: CopyRef
+    draftOpen: bool
+    edits: list[str]
+    expect: ReviewedDigests
+    fields: list[FieldReview]
+    fromVersion: int
+    taken: bool
+    toVersion: int
+    version: int | None
+
+
+class DocumentType(TypedDict, closed=True):
+    canEdit: bool
+    createdAt: str
+    createdBy: str
+    description: str | None
+    id: str
+    latestVersion: int
+    name: str
+    samples: list[Sample]
+    team: str
+    versions: list[DocumentTypeVersion]
+
+
+class EnvelopeDocumentType(TypedDict, closed=True):
+    data: DocumentType
     success: Literal[True]
 
 
-class EnvelopeListResultExtraction(TypedDict, closed=True):
-    data: ListResultExtraction
+class EnvelopeUpdateReview(TypedDict, closed=True):
+    data: UpdateReview
     success: Literal[True]
+
+
+class Extraction(TypedDict, closed=True):
+    classification: NotRequired[Classification | None]
+    corrections: NotRequired[list[ExtractionCorrection] | None]
+    count: NotRequired[int | None]
+    documentType: NotRequired[DocumentTypeRef | None]
+    error: NotRequired[ExtractionError | None]
+    fields: NotRequired[dict[str, JsonValue] | None]
+    fileId: str
+    floor: NotRequired[float | None]
+    id: str
+    imageCalls: NotRequired[list[ImageCall] | None]
+    imageRefused: NotRequired[str | None]
+    needsReview: NotRequired[list[str | int] | None]
+    outcome: NotRequired[Literal["ok", "review", "unreadable", "unknown"] | None]
+    pages: NotRequired[int | list[dict[str, JsonValue]] | None]
+    partial: NotRequired[bool | None]
+    path: NotRequired[Literal["template", "model"] | None]
+    proposal: NotRequired[dict[str, JsonValue] | None]
+    readPages: NotRequired[int | None]
+    records: NotRequired[list[dict[str, JsonValue]] | None]
+    rereadTokens: NotRequired[dict[str, int] | None]
+    schema: NotRequired[list[dict[str, JsonValue]] | None]
+    status: Literal["queued", "running", "done", "failed", "unreadable"]
+    templateId: NotRequired[str | None]
+    templateMiss: NotRequired[TemplateMiss | None]
+    text: NotRequired[str | None]
 
 
 class FileReading(TypedDict, closed=True):
@@ -579,7 +645,7 @@ class FileReading(TypedDict, closed=True):
     error: NotRequired[ReadingError | None]
     facts: NotRequired[FileFacts | None]
     fileId: str
-    pages: NotRequired[list[Page] | None]
+    pages: NotRequired[list[ReadingPage] | None]
     pagesDone: int
     pagesTotal: int | None
     readerVersion: str
@@ -594,6 +660,17 @@ class Layout(TypedDict, closed=True):
     words: list[LayoutWord]
 
 
+class ListResultExtraction(TypedDict, closed=True):
+    data: list[Extraction]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
+class EnvelopeExtraction(TypedDict, closed=True):
+    data: Extraction
+    success: Literal[True]
+
+
 class EnvelopeFileReading(TypedDict, closed=True):
     data: FileReading
     success: Literal[True]
@@ -601,6 +678,11 @@ class EnvelopeFileReading(TypedDict, closed=True):
 
 class EnvelopeLayout(TypedDict, closed=True):
     data: Layout
+    success: Literal[True]
+
+
+class EnvelopeListResultExtraction(TypedDict, closed=True):
+    data: ListResultExtraction
     success: Literal[True]
 
 

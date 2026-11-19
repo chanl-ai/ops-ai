@@ -79,7 +79,7 @@ bare = _rig({})
 async def _card(client: httpx.AsyncClient, tenant: str) -> dict[str, Any]:
     got = await client.get("/v1/apps", headers=team_admin(tenant))
     assert got.status_code == 200, got.text
-    return next(c for c in got.json()["data"] if c["kind"] == "plugin")
+    return next(c for c in got.json()["data"]["data"] if c["kind"] == "plugin")
 
 
 async def test_an_install_client_signs_a_team_in_with_no_fields_and_no_admin_step(installed: Rig, tenant: str) -> None:
@@ -90,8 +90,8 @@ async def test_an_install_client_signs_a_team_in_with_no_fields_and_no_admin_ste
     assert on.status_code == 200, on.text
     conn = await connections.store.get(tenant, on.json()["data"]["connectionId"])
     assert conn is not None
-    assert conn["settings"]["clientId"] == "install-client-id" and conn["platform_app"] == ID
-    assert not conn.get("secrets"), "the install's secret is never copied into a team"
+    assert conn.settings["clientId"] == "install-client-id" and conn.platform_app == ID
+    assert not conn.secrets, "the install's secret is never copied into a team"
     proof = await connections._client_proof(_caller(tenant), conn, "sign-in Desk")  # pyright: ignore[reportPrivateUsage]
     assert proof.secret == "install-secret-5d1e"
 

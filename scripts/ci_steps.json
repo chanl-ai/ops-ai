@@ -1,0 +1,47 @@
+{
+  "_note": "Per job in .github/workflows/ci.yml, each run: step (its name, else its first command line) and either the local command that is its twin or a no_local_twin reason. `make ci-local` runs the twins; `make checks` (scripts/ci_steps.py --check) fails when this file and ci.yml disagree.",
+  "jobs": {
+    "plan": [
+      {"step": "base=$(git merge-base \"$BASE_SHA\" HEAD)", "no_local_twin": "Picks which jobs a pull request runs; `bash scripts/ci-plan.sh <base>` prints that plan and a local run always takes every twin."}
+    ],
+    "checks": [
+      {"step": "Lint and format the changed Python", "twin": "base=$(git merge-base origin/main HEAD); files=$(git diff --name-only --diff-filter=ACMR \"$base\" HEAD -- '*.py'); [ -z \"$files\" ] || { uv run ruff format --check $files && uv run ruff check $files; }"},
+      {"step": "Types of the packages", "twin": "uv run python scripts/check_tests_typecheck.py packages"},
+      {"step": "make -s checks", "twin": "make -s checks"},
+      {"step": "Script tests", "twin": "uv run pytest -q scripts/tests"}
+    ],
+    "service": [
+      {"step": "case \"$PART\" in", "twin": "make python-verify"}
+    ],
+    "package": [
+      {"step": "uv run python scripts/test_db.py \"$OPS_TEST_DATABASE_URL\"", "twin": "make test"}
+    ],
+    "console": [
+      {"step": "pnpm verify", "twin": "pnpm verify"}
+    ],
+    "docs": [
+      {"step": "make -s docs-verify", "twin": "make -s docs-verify"}
+    ],
+    "repo": [
+      {"step": "make python-verify VERIFY_POOL=\"${{ needs.plan.outputs.repo_pool }}\"", "twin": "make python-verify"},
+      {"step": "make sdk-verify changelog-verify", "twin": "make sdk-verify changelog-verify"}
+    ],
+    "store-mssql": [
+      {"step": "SQL Server", "no_local_twin": "Starts a SQL Server container and the ODBC driver; nearest proof is `make mssql-remote-up` then `make mssql-remote-test`."},
+      {"step": "The both-database suites", "no_local_twin": "Needs the SQL Server container; nearest proof is `make mssql-remote-test PKG=packages/ops_store T=<files>`."},
+      {"step": "The services' store tests on both databases", "no_local_twin": "Needs the SQL Server container; nearest proof is `make mssql-remote-test PKG=services/<svc> T=<files>`."}
+    ],
+    "release-proof": [
+      {"step": "The version file matches the branch", "no_local_twin": "Reads the branch name GitHub gives the run; run `BRANCH=release/X.Y.Z python3 scripts/release.py check-version` by hand."},
+      {"step": "The upgrade from the last release", "no_local_twin": "Needs Docker and the release tags; run `make db-scripts-proof FROM=<last tag>` by hand."},
+      {"step": "A fresh install", "no_local_twin": "Builds the commit's images into a local registry and installs through ./install.sh; run `make install-proof BUILD=1` by hand."}
+    ],
+    "maintainer-review": [
+      {"step": "The base revision's copies of the gate", "no_local_twin": "Reads the pull request's base revision on GitHub."},
+      {"step": "A rise needs a maintainer's approval", "no_local_twin": "The approving review is the owner's, read from GitHub; `make checks-history` shows a rise locally."}
+    ],
+    "ci-ok": [
+      {"step": "if grep -qE '\"result\": \"(failure|cancelled)\"' <<<\"$NEEDS\"; then echo \"$NEEDS\"; exit 1; fi", "no_local_twin": "Reads the other jobs' results on GitHub."}
+    ]
+  }
+}

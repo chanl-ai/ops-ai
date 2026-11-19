@@ -149,8 +149,14 @@ export interface AssuranceJudge {
 export interface AssuranceStats {
   failingSuites: number;
   gatesBlocked: number;
-  liveUnsealed: number;
-  lowestJudge: { name: string; agreement: number } | null;
+  /** Live agents, skills and workflows whose latest run does not pass, or that never ran. */
+  liveUntested: number;
+  /** Suites with saved cases that have never run. */
+  notRun: number;
+  /** Present once sealing exists. */
+  liveUnsealed?: number;
+  /** Present once judges exist. */
+  lowestJudge?: { name: string; agreement: number } | null;
 }
 
 export type AssuranceTab = 'suites' | 'runs' | 'gates' | 'evidence' | 'judges';
@@ -167,5 +173,6 @@ export type AssuranceFilters = { kind?: string[]; tier?: string[]; trigger?: str
 
 export interface AssuranceResult<T extends AssuranceRow = AssuranceRow> extends ListResult<T> {
   stats: AssuranceStats;
-  tabCounts: Record<AssuranceTab, number>;
+  /** A tab with nothing behind it is absent: evidence and judges until sealing and judges exist. */
+  tabCounts: Partial<Record<AssuranceTab, number>>;
 }

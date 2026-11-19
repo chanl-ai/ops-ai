@@ -11,6 +11,7 @@ listed.
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, Literal, cast
 
@@ -19,11 +20,13 @@ from pydantic import Field
 from ops_service_kit.errors import ServiceUnavailable
 from ops_service_kit.http import Out
 
+from .app_rows import AppCard, CardToolRow
 from .app_states import AppGroup, AppState
-from .connections.records import PERSON_ORIGIN, connection_base
-from .connections.service import own_key
-from .modules.policy import app_ids
+from .connections.records import connection_base
+from .connections.service import MyAccountRow, own_key
 from .plugins.host import account_identity, own_and_registration
+from .store.connections import PERSON_ORIGIN, Account
+from .store.modules import IdentityRow
 
 if TYPE_CHECKING:
     from .apps import Apps
@@ -118,7 +121,13 @@ def listed(titles: list[str]) -> str:
     return f"{', '.join(titles[:NAMED])} and {len(titles) - NAMED} more"
 
 
-def can_do(tools: list[dict[str, Any]]) -> str:
+class ReviewedTool(CardToolRow):
+    """A card tool with whether a call to it waits for approval (its own flag, or the team's policy)."""
+
+    reviewed: bool
+
+
+def can_do(tools: list[ReviewedTool]) -> str:
     """The row's one line: its reads, then its writes with the ones that wait for approval said so."""
     reads = [str(t["title"]) for t in tools if t["access"] == "read"]
     writes = [t for t in tools if t["access"] != "read"]
@@ -134,32 +143,32 @@ def can_do(tools: list[dict[str, Any]]) -> str:
     return " · ".join(parts) or "No tools switched on yet"
 
 
-async def _policy(apps: Apps, who: Caller) -> tuple[bool, list[str] | None]:
-    """The team's write policies, read once per page: whether every write waits, and the apps whose writes do (None
-    when the list cannot be read, which counts as listed, as the gateway reads it)."""
-    policy = apps.write_approvals
-    if policy is None:
-        return False, []
-    every = await policy.all_writes(who.tenant_id, who.team.id)
-    return every, [] if every else await policy.apps(who.tenant_id, who.team.id)
-
-
-async def _reviewed(
-    apps: Apps, who: Caller, tools: list[dict[str, Any]], policy: tuple[bool, list[str] | None]
-) -> list[dict[str, Any]]:
-    """Each tool with whether its write waits: its own flag, or the team's policy (every write, or this app's)."""
-    every, listed_apps = policy
-    out: list[dict[str, Any]] = []
+async def _reviewed(apps: Apps, who: Caller, tools: Sequence[Mapping[str, object]]) -> list[ReviewedTool]:
+    """Each tool with whether its write waits, from the gateway's rule: its own setting, its app, the team."""
+    if apps.write_approvals is None:
+        return [cast(ReviewedTool, {**t, "reviewed": t["access"] != "read" and bool(t["waits"])}) for t in tools]
+    levels = await apps.write_approvals.levels(who.tenant_id, who.team.id)
+    out: list[ReviewedTool] = []
     for t in tools:
-        waits = bool(t["waits"]) or every
-        if not waits and t["access"] != "read" and apps.write_approvals is not None:
+        waits = False
+        if t["access"] != "read":
             module = await apps.modules.get(who.tenant_id, str(t["moduleId"]))
-            waits = listed_apps is None or (module is not None and bool(app_ids(module) & set(listed_apps)))
-        out.append({**t, "reviewed": t["access"] != "read" and waits})
+            answer = await apps.write_approvals.answer(
+                who.tenant_id,
+                who.team.id,
+                module,
+                access=str(t["access"]),
+                setting=cast(str | None, t.get("setting")),
+                reviewer_role=cast(str | None, t.get("settingRole")),
+                levels=levels,
+                tool=str(t["name"]),
+            )
+            waits = bool(answer["waits"])
+        out.append(cast(ReviewedTool, {**t, "reviewed": waits}))
     return out
 
 
-async def _used(apps: Apps, who: Caller, tools: list[dict[str, Any]], modules: list[str]) -> dict[str, int]:
+async def _used(apps: Apps, who: Caller, tools: list[ReviewedTool], modules: list[str]) -> dict[str, int]:
     agents: set[str] = set()
     flows: set[str] = set()
     if apps.users is not None and tools:
@@ -179,7 +188,7 @@ async def _used(apps: Apps, who: Caller, tools: list[dict[str, Any]], modules: l
     return {"agents": len(agents), "workflows": len(flows), "callsThisWeek": calls}
 
 
-def _primary(accounts: list[dict[str, Any]], team_default: str | None, saved: set[str]) -> dict[str, Any] | None:
+def _primary(accounts: list[MyAccountRow], team_default: str | None, saved: set[str]) -> MyAccountRow | None:
     """The account the row's actions act on: the person's saved default, else the team's default, else the first."""
     connected = [a for a in accounts if a["state"] == "connected"] or accounts
     return (
@@ -197,20 +206,19 @@ async def my_connectors(apps: Apps, who: Caller) -> list[dict[str, Any]]:
     signed = await apps.connections.store.own_sign_ins(
         who.tenant_id, own_key(who), [str(m["connectionId"]) for m in mine]
     )
-    by_app: dict[str, list[dict[str, Any]]] = {}
+    by_app: dict[str, list[MyAccountRow]] = {}
     for m in mine:
         by_app.setdefault(str(m["appId"]), []).append(m)
     conns = await apps.connections.store.by_ids(who.tenant_id, [str(m["connectionId"]) for m in mine])
     may = apps.connections.may_manage(who)
-    policy = await _policy(apps, who)
     rows: list[dict[str, Any]] = []
     for card in cards:
-        plugin = cast(dict[str, Any] | None, card.get("plugin"))
+        plugin = card.get("plugin")
         if card["kind"] == "plugin" and plugin is None:
             continue  # the install no longer loads it, so nothing of it can run
         own = by_app.get(str(card["id"]), [])
         off = plugin is not None and not plugin["teamOn"]
-        signs_in = set(cast(list[str], (plugin or {}).get("signIn") or []))
+        signs_in = set(plugin["signIn"]) if plugin else set[str]()
         if off and not signs_in & set(PERSON_SIGN_INS):
             continue
         if not off and not own:
@@ -218,9 +226,9 @@ async def my_connectors(apps: Apps, who: Caller) -> list[dict[str, Any]]:
         tools = await apps_tools(apps, who, card)
         # Nothing is switched on while the app is off: say what it reads once turned on.
         tools = [t for t in tools if t["access"] == "read"] if off else [t for t in tools if t["added"]]
-        tools = await _reviewed(apps, who, tools, policy)
+        tools = await _reviewed(apps, who, tools)
         accounts = [] if off else own
-        saved = {str(t["connection_id"]) for t in signed if t.get("pinned")}
+        saved = {t.connection_id for t in signed if t.pinned}
         live = [a for a in accounts if a["state"] == "connected"]
         # The default the gateway uses: the saved one, or the only one; two and none saved is no default (it asks).
         defaults = saved & {a["connectionId"] for a in live} or ({live[0]["connectionId"]} if len(live) == 1 else set())
@@ -251,7 +259,7 @@ async def my_connectors(apps: Apps, who: Caller) -> list[dict[str, Any]]:
                         identity=[
                             ConnectorIdentity(**e) for e in _identity(apps, card, conns.get(a["connectionId"]), a)
                         ],
-                        own=(conns.get(a["connectionId"]) or {}).get("origin") == PERSON_ORIGIN,
+                        own=(acct.origin if (acct := conns.get(a["connectionId"])) else None) == PERSON_ORIGIN,
                     )
                     for a in accounts
                 ],
@@ -269,9 +277,7 @@ async def my_connectors(apps: Apps, who: Caller) -> list[dict[str, Any]]:
     return sorted(rows, key=lambda r: (RANK.get(r["appGroup"], 3), str(r["name"]).lower()))
 
 
-def _identity(
-    apps: Apps, card: dict[str, Any], conn: dict[str, Any] | None, row: dict[str, Any]
-) -> list[dict[str, str]]:
+def _identity(apps: Apps, card: AppCard, conn: Account | None, row: MyAccountRow) -> list[IdentityRow]:
     """What tells one of the person's accounts apart, as every account row reads it."""
     if conn is None:
         return []
@@ -281,7 +287,7 @@ def _identity(
     return account_identity(plugin.manifest if plugin else None, own_and_registration(conn), signed, base)
 
 
-async def apps_tools(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[str, Any]]:
+async def apps_tools(apps: Apps, who: Caller, card: AppCard) -> list[CardToolRow]:
     from .apps import app_tools  # noqa: PLC0415 - apps imports this module's route
 
     return await app_tools(apps, who, card)

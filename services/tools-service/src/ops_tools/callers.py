@@ -26,8 +26,6 @@ def caller_in(directory: Directory) -> Callable[..., Awaitable[Caller]]:
             tenant_id=p.tenant_id,
             name=p.name,
             team=directory.team(p.team_id),
-            roles=dict(p.roles),
-            team_role=p.role,
             principal=p,
             # The dev-header principal is the only one with no roles and auth_method "dev"; a platform token keeps its
             # roles even when platform-service signed the person in through dev sign-in (auth_method "dev").

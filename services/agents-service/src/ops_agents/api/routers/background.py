@@ -21,7 +21,7 @@ from ops_service_kit.background import BackgroundHealthOut, BackgroundProcessOut
 from ops_service_kit.errors import Forbidden, NotFound
 from ops_service_kit.http import Envelope, Out
 from ops_service_kit.settings import Settings
-from ops_store import background
+from ops_store import background, isolation
 
 from ...store.background import BackgroundJobs, heartbeats
 from ...store.tenancy import current_tenant
@@ -59,6 +59,8 @@ class BackgroundOut(Out):
 
 @router.get("/health/background", response_model=BackgroundHealthOut)
 async def health_background(rt: Rt) -> dict[str, Any]:
+    """This service's processes and their state, for `make health`. No request transaction: it has no caller, so no
+    tenant to hold one in, and its one read is the heartbeat table."""
     beats = await heartbeats(rt.db).read()
     return {"processes": background.report(beats, "agents", time.time())}
 
@@ -119,19 +121,23 @@ def _not_reported(service: str) -> list[dict[str, Any]]:
 
 @router.get("/v1/background", response_model=Envelope[BackgroundOut])
 async def background_processes(rt: Rt, me: Me) -> JSONResponse:
+    """Every listed process of every service and the latest jobs, for an account admin. No request transaction: the
+    other services' /health/background are read between this service's reads, with none open."""
     _require_account_admin(me)
     now = time.time()
-    processes = background.report(await heartbeats(rt.db).read(), "agents", now, detail=True)
-    unreachable: list[str] = []
     async with httpx.AsyncClient() as client:
         answers = await asyncio.gather(*(_read(client, s, u) for s, u in _urls(Settings()).items()))
+    # One transaction for this service's two reads, after the other services answered.
+    async with isolation.request_transaction():
+        processes = background.report(await heartbeats(rt.db).read(), "agents", now, detail=True)
+        jobs = await BackgroundJobs(rt.db).latest_everywhere(current_tenant(), limit=LATEST_JOBS)
+    unreachable: list[str] = []
     for service, found in answers:
         if found is None:
             unreachable.append(service)
         processes += found if found is not None else _not_reported(service)
     order = {p.key: i for i, p in enumerate(background.PROCESSES)}
     processes.sort(key=lambda p: order.get(str(p["key"]), len(order)))
-    jobs = await BackgroundJobs(rt.db).latest_everywhere(current_tenant(), limit=LATEST_JOBS)
     names = rt.team_names
     team_names = {t: (await names.name(t) if names is not None else None) for t in {j.team_id for j in jobs}}
     return ok(

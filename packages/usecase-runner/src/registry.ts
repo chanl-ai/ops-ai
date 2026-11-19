@@ -8,12 +8,16 @@ export interface UseCase {
   title: string;
   layers: Layer[];
   status: string;
+  /** The Deployed column says `safe`: the api script may run against a deployed host. Unmarked is not safe. */
+  deployed: boolean;
 }
 
 export class RegistryError extends Error {}
 
 const HEADER = ['id', 'service', 'title', 'layers', 'status'];
-const ID = /^uc-\d{3}$/;
+const WITH_DEPLOYED = [...HEADER, 'deployed'];
+// uc-NNN for the original numbering, uc-<area>-<n> for the use cases the coverage plan adds (uc-platform-1).
+const ID = /^uc-(\d{3}|[a-z]+-\d+)$/;
 
 function cells(line: string): string[] {
   return line
@@ -27,21 +31,21 @@ function cells(line: string): string[] {
 /** Reads the first table whose header is Id | Service | Title | Layers | Status. Throws on a malformed row. */
 export function parseRegistry(markdown: string): UseCase[] {
   const lines = markdown.split('\n');
-  const start = lines.findIndex((l) => l.trim().startsWith('|') && cells(l).map((c) => c.toLowerCase()).join() === HEADER.join());
+  const start = lines.findIndex((l) => l.trim().startsWith('|') && [HEADER, WITH_DEPLOYED].some((h) => cells(l).map((c) => c.toLowerCase()).join() === h.join()));
   if (start < 0) throw new RegistryError(`no registry table with columns ${HEADER.join(' | ')}`);
   const out: UseCase[] = [];
   const seen = new Set<string>();
   for (const line of lines.slice(start + 2)) {
     if (!line.trim().startsWith('|')) break;
-    const [id, service, title, layerCell, status] = cells(line);
-    if (!id || !ID.test(id)) throw new RegistryError(`row "${line.trim()}": id must look like uc-001`);
+    const [id, service, title, layerCell, status, deployed] = cells(line);
+    if (!id || !ID.test(id)) throw new RegistryError(`row "${line.trim()}": id must look like uc-001 or uc-platform-1`);
     if (seen.has(id)) throw new RegistryError(`${id} is listed twice`);
     seen.add(id);
     const layers = (layerCell ?? '').split(',').map((l) => l.trim()).filter(Boolean);
     const unknown = layers.filter((l) => !(LAYERS as readonly string[]).includes(l));
     if (!layers.length || unknown.length) throw new RegistryError(`${id}: layers must be some of ${LAYERS.join(', ')}; got "${layerCell}"`);
     if (!service || !title) throw new RegistryError(`${id}: service and title are required`);
-    out.push({ id, service, title, layers: layers as Layer[], status: status ?? '' });
+    out.push({ id, service, title, layers: layers as Layer[], status: status ?? '', deployed: deployed?.toLowerCase() === 'safe' });
   }
   return out;
 }

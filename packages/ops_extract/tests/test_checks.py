@@ -8,16 +8,17 @@ from typing import Any
 
 from ops_contracts.field_values import normalise
 from ops_extract.checks import answer_schema, ground, score
+from ops_extract.shapes import FieldDefinition
 
 PAGES = {1: "Invoice INV-2219\nDate: 17 October 2026", 2: "Amount due: $1,234.50\nDue 30 Nov 2026"}
-INVOICE: dict[str, Any] = {"key": "invoice_no", "type": "text", "required": True}
-AMOUNT: dict[str, Any] = {"key": "amount", "type": "money", "required": True}
-DUE: dict[str, Any] = {"key": "due_date", "type": "date", "required": True}
+INVOICE: FieldDefinition = {"key": "invoice_no", "type": "text", "required": True}
+AMOUNT: FieldDefinition = {"key": "amount", "type": "money", "required": True}
+DUE: FieldDefinition = {"key": "due_date", "type": "date", "required": True}
 
 
 def scored(
-    field: dict[str, object],
-    answer: dict[str, object] | None,
+    field: FieldDefinition,
+    answer: dict[str, Any] | None,
     *,
     ocr: set[int] | None = None,
     below: float | None = None,
@@ -81,7 +82,7 @@ def test_review_uses_the_highest_threshold_so_a_step_cannot_go_below_the_floor()
 
 
 def test_the_answer_schema_asks_value_quote_and_page_per_field() -> None:
-    s = answer_schema([INVOICE, AMOUNT])
+    s: dict[str, Any] = answer_schema([INVOICE, AMOUNT])
     assert s["required"] == ["invoice_no", "amount"]
     assert s["properties"]["amount"]["required"] == ["value", "quote", "page"]
 
@@ -99,8 +100,12 @@ def test_a_numeric_date_reads_in_the_types_order() -> None:
     """03/04/2026 is March 4 on a US levy and 3 April on a day-first document (levy demo)."""
     pages = {1: "Due 03/04/2026"}
     answer: dict[str, Any] = {"value": "03/04/2026", "quote": "Due 03/04/2026", "page": 1}
-    us = score({**DUE, "dateOrder": "MDY"}, answer, pages, set(), file_id="fil_1", schema_below=None, floor=0.8)
-    day_first = score({**DUE, "dateOrder": "DMY"}, answer, pages, set(), file_id="fil_1", schema_below=None, floor=0.8)
+    us: dict[str, Any] = score(
+        {**DUE, "dateOrder": "MDY"}, answer, pages, set(), file_id="fil_1", schema_below=None, floor=0.8
+    )
+    day_first: dict[str, Any] = score(
+        {**DUE, "dateOrder": "DMY"}, answer, pages, set(), file_id="fil_1", schema_below=None, floor=0.8
+    )
     assert (us["value"], day_first["value"]) == ("2026-03-04", "2026-04-03"), (us, day_first)
     assert us["confidence"] > 0 and day_first["confidence"] > 0, "the quote backs the value in either order"
     # A field with no order (an Extract from file step with its own fields) reads as a document type with none does.
@@ -113,7 +118,7 @@ CLEAN_PAGES = {
 }
 
 
-def clean_score(field: dict[str, Any], value: str, quote: str) -> dict[str, Any]:
+def clean_score(field: FieldDefinition, value: str, quote: str) -> dict[str, Any]:
     return score(field, {"value": value, "quote": quote, "page": 1}, CLEAN_PAGES, set(), **CLEAN_FLOOR)
 
 

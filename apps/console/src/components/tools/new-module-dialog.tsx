@@ -10,9 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ConnectionSelect } from '@/components/tools/connection-select';
-import { useConnectionOptions } from '@/hooks/systems-queries';
 import { HostHeldError } from '@/lib/api/held-host';
-import type { IntegrationStatus } from '@/lib/types/integrations';
 import type { BlankModuleInput } from '@/lib/types/tool-modules';
 
 const kebab = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -26,8 +24,7 @@ export function NewModuleDialog({ open, onOpenChange, onCreate, creating }: { op
   const [displayName, setDisplayName] = React.useState('');
   const [name, setName] = React.useState('');
   const [nameEdited, setNameEdited] = React.useState(false);
-  const [connectionId, setConnectionId] = React.useState<string | null>(null);
-  const connections = useConnectionOptions(open);
+  const [connectionId, setConnectionId] = React.useState<{ id: string; name: string } | null>(null);
   const [description, setDescription] = React.useState('');
   const [err, setErr] = React.useState<{ display?: string; name?: string; form?: unknown }>({});
   React.useEffect(() => {
@@ -45,7 +42,7 @@ export function NewModuleDialog({ open, onOpenChange, onCreate, creating }: { op
     setErr(e);
     if (e.display || e.name) return;
     try {
-      await onCreate({ displayName: displayName.trim(), name: kebab(name), ...(connectionId ? { connectionId } : {}), description: description.trim() || undefined });
+      await onCreate({ displayName: displayName.trim(), name: kebab(name), ...(connectionId ? { connectionId: connectionId.id } : {}), description: description.trim() || undefined });
     } catch (x) {
       const message = (x as Error).message;
       setErr(x instanceof HostHeldError ? { form: x } : /already exists|name/i.test(message) ? { name: message } : { form: x });
@@ -103,10 +100,8 @@ export function NewModuleDialog({ open, onOpenChange, onCreate, creating }: { op
         </FormField>
         <FormField id="nm-app" label="App" hint="Its address and sign-in come from the app. Add a custom app for one not listed.">
           <ConnectionSelect
-            value={connectionId ? { id: connectionId, name: connections.data?.find((c) => c.id === connectionId)?.name ?? '' } : null}
-            options={connections.data?.map((c) => ({ id: c.id, name: c.name, status: c.status as IntegrationStatus }))}
-            loading={connections.isPending}
-            onChange={setConnectionId}
+            value={connectionId}
+            onChange={(id, name) => setConnectionId({ id, name: name ?? '' })}
           />
         </FormField>
         <FormField id="nm-desc" label="Description" optional>

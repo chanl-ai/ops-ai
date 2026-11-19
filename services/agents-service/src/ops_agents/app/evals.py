@@ -38,32 +38,43 @@ def parse_cases(raw: list[Any]) -> list[EvalCase]:
     return cases
 
 
-async def run_eval(agent_id: str, cases: list[EvalCase], turn: TurnFn) -> dict[str, Any]:
+def _outcome(outcome: Any) -> dict[str, Any]:
+    return {
+        "status": outcome.status,
+        "reply": outcome.reply,
+        "checks": [{"label": item.label, "status": item.status} for item in outcome.checks],
+        "latencyMs": outcome.latency_ms,
+    }
+
+
+async def run_eval(
+    agent_id: str, cases: list[EvalCase], turn: TurnFn, live_turn: TurnFn | None = None
+) -> dict[str, Any]:
+    """Scores each case on the version `turn` runs; with `live_turn`, on the live version too, and a case that passes
+    live but fails now is a regression."""
     results: list[dict[str, Any]] = []
-    passed = 0
+    passed = regressions = 0
     for case in cases:
-        view = turn_from_test(await turn(case.input, case.collections))
-        outcome = score_case(case, view)
-        if outcome.status == CHECK_STATUS_PASS:
-            passed += 1
+        outcome = score_case(case, turn_from_test(await turn(case.input, case.collections)))
+        live = None
+        if live_turn is not None:
+            live = score_case(case, turn_from_test(await live_turn(case.input, case.collections)))
+        regression = live is not None and live.status == CHECK_STATUS_PASS and outcome.status != CHECK_STATUS_PASS
+        passed += outcome.status == CHECK_STATUS_PASS
+        regressions += regression
         results.append(
             {
                 "caseName": case.name,
-                "draft": {
-                    "status": outcome.status,
-                    "reply": outcome.reply,
-                    "checks": [{"label": item.label, "status": item.status} for item in outcome.checks],
-                    "latencyMs": outcome.latency_ms,
-                },
-                "live": None,
-                "regression": False,
+                "draft": _outcome(outcome),
+                "live": _outcome(live) if live is not None else None,
+                "regression": regression,
             }
         )
     return {
         "id": new_id(EVAL_RUN_PREFIX),
         "agentId": agent_id,
         "status": EVAL_STATUS_COMPLETE,
-        "summary": {"passed": passed, "total": len(cases), "regressions": 0},
+        "summary": {"passed": passed, "total": len(cases), "regressions": regressions},
         "results": results,
     }
 

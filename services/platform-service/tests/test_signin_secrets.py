@@ -7,13 +7,13 @@ from __future__ import annotations
 import sqlalchemy as sa
 
 from ops_platform.store.signin_secrets import SignInSecretStore
-from ops_platform.store.tables import signin_secrets
+from ops_platform.store.tables import members, signin_secrets
 from ops_platform.store.tenancy import TenantDb
 from ops_service_kit.credentials import credential_store
 from ops_service_kit.ids import new_id
 from ops_service_kit.settings import Settings
 
-from .conftest import DEMO_PASSWORD, IDP, OIDC_SECRET, SignInRig
+from .conftest import DEMO_PASSWORD, IDP, OIDC_SECRET, SignInRig, seed_tx
 
 PATH = "/v1/settings/sign-in/secrets"
 
@@ -42,7 +42,7 @@ async def test_a_provider_names_only_a_secret_the_workspace_saved_and_its_value_
     assert name in names.json()["data"]
     listed = await signin.public.get(PATH, headers=signin.admin)
     assert "okta-rotated" not in listed.text and "okta-client-secret" not in listed.text
-    async with signin.engine.connect() as c:
+    async with seed_tx(signin.engine, signin.tenant) as c:
         stored = (await c.execute(sa.select(signin_secrets.c.ciphertext).where(signin_secrets.c.name == name))).all()
     assert len(stored) == 1 and "okta-rotated" not in str(stored[0][0])
 
@@ -56,8 +56,8 @@ async def test_another_workspaces_secret_of_the_same_name_opens_nothing_here(sig
 async def test_only_a_security_team_admin_saves_or_deletes_a_secret_and_one_in_use_stays(signin: SignInRig) -> None:
     email = f"team.admin.{new_id('u')[-6:]}@{signin.zone}"
     await signin.person(email, role="admin")
-    async with signin.engine.connect() as c:
-        team = (await c.execute(sa.text("select team_id from members where email = :e"), {"e": email})).scalar_one()
+    async with seed_tx(signin.engine, signin.tenant) as c:
+        team = (await c.execute(sa.select(members.c.team_id).where(members.c.email == email))).scalar_one()
     r = await signin.public.post("/v1/auth/sign-in", json={"email": email, "password": DEMO_PASSWORD})
     other = {"Authorization": f"Bearer {r.json()['data']['token']}", "X-Team-Id": team}
     assert (await signin.public.put(f"{PATH}/X", json={"value": "v"}, headers=other)).status_code == 403

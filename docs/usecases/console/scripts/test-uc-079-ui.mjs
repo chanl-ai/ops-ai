@@ -12,9 +12,8 @@ const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const kb = `http://127.0.0.1:${KB_PORT}`;
 const PASSWORD = 'northfield-demo';
 const MAYA = 'm.okafor@harborpine.example';
-const NADIA = 'n.petrov@harborpine.example';
+const PRIYA = 'p.shah@harborpine.example';
 // Security's admin: Nadia reviews in Security and may not edit its bases, so the fee schedule is replaced as Sam.
-const SAM = 's.adeyemi@harborpine.example';
 const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: PASSWORD }) })).json()).data.token;
 const as = (token, team) => ({ Authorization: `Bearer ${token}`, 'X-Team-Id': team });
 const json = async (r) => {
@@ -29,8 +28,8 @@ const files = `http://127.0.0.1:${FILES_PORT}`;
 await withUiStack(
   async (consoleUrl) => {
     const M = as(await tokenFor(MAYA), 'team_ops');
-    const N = as(await tokenFor(NADIA), 'team_security');
-    const S = as(await tokenFor(SAM), 'team_security');
+    // Priya owns Branch operations, in the operations team with Branch Policy.
+    const P = as(await tokenFor(PRIYA), 'team_ops');
     const thread = (await json(await fetch(`${agents}/chat/threads`, { method: 'POST', headers: { ...M, 'Content-Type': 'application/json' }, body: JSON.stringify({ agentId: 'ag_policy', kbIds: [] }) }))).id;
 
     const browser = await chromium.launch();
@@ -90,16 +89,16 @@ await withUiStack(
       const rates = await page.locator('[data-testid="widget"][data-shape="rows"]').count();
       check('the rate table shows as a rows widget', rates >= 1, { rates });
 
-      // US5: Security's admin replaces the fee schedule with version 2 and syncs; the next answer cites version 2.
-      const sources = (await json(await fetch(`${kb}/v1/sources?page=1&pageSize=50`, { headers: N }))).data;
+      // US5: Priya, who owns the base, replaces the fee schedule with version 2 and syncs; the next answer cites version 2.
+      const sources = (await json(await fetch(`${kb}/v1/sources?page=1&pageSize=50`, { headers: P }))).data;
       const fee = sources.find((s) => s.name === 'Fee schedule');
       const pdf = readFileSync(join(ROOT, 'services/kb-service/seed/pdfs/fee-schedule-v2.pdf'));
       // Into Files first, then added to the source by id, as the console does.
-      const ticket = await json(await fetch(`${files}/v1/files/uploads`, { method: 'POST', headers: { ...S, 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'fee-schedule.pdf', size: pdf.length, mime: 'application/pdf', purpose: 'knowledge_source', digest: createHash('sha256').update(pdf).digest('hex') }) }));
-      await fetch(new URL(ticket.uploadUrl, files), { method: 'PUT', headers: { ...S, ...ticket.headers }, body: pdf });
-      const stored = (await json(await fetch(`${files}/v1/files/uploads/${ticket.fileId}/complete`, { method: 'POST', headers: S }))).file;
-      await json(await fetch(`${kb}/v1/sources/${fee.id}/files`, { method: 'POST', headers: { ...S, 'Content-Type': 'application/json' }, body: JSON.stringify({ fileIds: [stored.id] }) }));
-      await json(await fetch(`${kb}/v1/sources/${fee.id}/sync`, { method: 'POST', headers: { ...S, 'Content-Type': 'application/json' }, body: '{}' }));
+      const ticket = await json(await fetch(`${files}/v1/files/uploads`, { method: 'POST', headers: { ...P, 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'fee-schedule.pdf', size: pdf.length, mime: 'application/pdf', purpose: 'knowledge_source', digest: createHash('sha256').update(pdf).digest('hex') }) }));
+      await fetch(new URL(ticket.uploadUrl, files), { method: 'PUT', headers: { ...P, ...ticket.headers }, body: pdf });
+      const stored = (await json(await fetch(`${files}/v1/files/uploads/${ticket.fileId}/complete`, { method: 'POST', headers: P }))).file;
+      await json(await fetch(`${kb}/v1/sources/${fee.id}/files`, { method: 'POST', headers: { ...P, 'Content-Type': 'application/json' }, body: JSON.stringify({ fileIds: [stored.id] }) }));
+      await json(await fetch(`${kb}/v1/sources/${fee.id}/sync`, { method: 'POST', headers: { ...P, 'Content-Type': 'application/json' }, body: '{}' }));
       await send('What is the fee for an outgoing wire transfer now?');
       await page.getByText(/costs 30\.00/).last().waitFor({ timeout: 60_000 }).catch(() => undefined);
       const feeV2 = await cited('Fee Schedule');

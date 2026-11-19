@@ -16,6 +16,8 @@ from ops_access import (
     ACTIONS,
     AREAS,
     BUILTIN_ROLES,
+    INVITE_ROLES,
+    MEMBER_ROLES_BY_RANK,
     Access,
     Grant,
     Grids,
@@ -105,9 +107,11 @@ async def test_the_requester_does_not_decide() -> None:
     refused("own_request", ACCESS.can, p, "reviews", "decide", team="team_a", not_by=[None, "a@bank.test"])
 
 
-async def test_the_requester_decides_unless_the_tenant_switched_requester_may_decide_off() -> None:
-    open_ = await person(access={"team_a": ["reviewer"]})
-    assert ACCESS.can(open_, "reviews", "decide", team="team_a", requested_by=["a@bank.test"]) == "all"
+async def test_the_requester_does_not_decide_unless_the_tenant_switched_requester_may_decide_on() -> None:
+    loosened = await person(access={"team_a": ["reviewer"]}, policies={"requesterMayDecide": True})
+    assert ACCESS.can(loosened, "reviews", "decide", team="team_a", requested_by=["a@bank.test"]) == "all"
+    default = await person(access={"team_a": ["reviewer"]})
+    refused("own_request", ACCESS.can, default, "reviews", "decide", team="team_a", requested_by=["a@bank.test"])
     strict = await person(access={"team_a": ["reviewer"]}, policies={"requesterMayDecide": False})
     assert ACCESS.can(strict, "reviews", "decide", team="team_a", requested_by=["b@bank.test"]) == "all"
     refused("own_request", ACCESS.can, strict, "reviews", "decide", team="team_a", requested_by=["a@bank.test"])
@@ -317,17 +321,20 @@ def test_a_publish_mode_is_read_per_team_and_defaults_to_major() -> None:
 
 
 async def test_a_builder_holds_every_cell_but_people_access_and_workspace_settings() -> None:
-    """Owner, 5 November: builders do everything in their team except people and access and the workspace's
-    settings, connections and secrets included."""
+    """D59: builders do everything in their team except people and access and the workspace's settings, connections and
+    secrets included, which they read and admins change."""
     builder = await person(access={"team_a": ["builder"]})
-    for area, action in (
-        ("connections", "manage"),
-        ("connections", "delete"),
-        ("secrets_egress", "edit"),
-        ("tools", "manage"),
-    ):
+    for area, action in (("tools", "manage"), ("connections", "view"), ("secrets_egress", "view")):
         assert ACCESS.can(builder, area, action, team="team_a") == "all", (area, action)
-    for area, action in (("access", "edit"), ("access", "manage"), ("settings", "edit"), ("workspace", "manage")):
+    for area, action in (
+        ("access", "edit"),
+        ("access", "manage"),
+        ("settings", "edit"),
+        ("workspace", "manage"),
+        ("connections", "manage"),
+        ("connections", "run"),
+        ("secrets_egress", "edit"),
+    ):
         refused("role_required", ACCESS.can, builder, area, action, team="team_a")
 
 
@@ -370,3 +377,9 @@ async def test_a_refusal_names_the_roles_the_workspaces_edited_grid_gives_the_ce
         ACCESS.can(viewer, "secrets_egress", "create", team="team_a")
     assert "Builder" not in refused.value.message, refused.value.message
     assert "builder" not in (refused.value.details or {})["grantedBy"]
+
+
+def test_membership_roles_rank_lowest_first() -> None:
+    # Sign-in gives the highest role any of a person's group rules names, so this order decides who gets what.
+    assert MEMBER_ROLES_BY_RANK == ("chat_user", "viewer", "builder", "approver", "admin")
+    assert sorted(MEMBER_ROLES_BY_RANK) == sorted(INVITE_ROLES)

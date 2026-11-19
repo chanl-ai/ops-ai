@@ -34,7 +34,7 @@ def names(p: dict[str, Any] | None) -> list[str]:
 with platform() as (api, _internal):
     priya = sign_in(api, "p.shah@harborpine.example")
     r = api.get("/v1/roles", headers=priya)
-    listed = [x["id"] for x in data(r)] if r.status_code == 200 else []
+    listed = [x["id"] for x in data(r)["data"]] if r.status_code == 200 else []
     check(
         # Owner, the workspace's own role (platform migration 0026), joins the six team roles.
         "seven built-in roles are listed",

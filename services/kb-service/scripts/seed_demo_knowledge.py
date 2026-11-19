@@ -12,9 +12,9 @@ through K12, printing each one's best score against the retrieval floor.
 
 A harness imports `seed_from(kb_url, files_url, token=...)` (or `dev=True`) and gets the bases and the K12 scores back.
 
-Retail products is owned by the builder (James), Branch operations by Security's approver (Nadia). Each base is
-written by a builder or admin of its owning team, which kb-service requires: James for Retail products, and for
-Branch operations Security's admin (Sam), since an approver may own a base but not change it. Rendering alone:
+Retail products is owned by the builder (James), Branch operations by the operations team's admin (Priya). Both are
+the operations team's, as are ag_advisor and ag_policy that answer from them: a turn searches only its own team's
+bases. Each base is written by its owner, a builder or admin of that team, which kb-service requires. Rendering alone:
 `--render-only`.
 """
 
@@ -38,9 +38,7 @@ from reportlab.platypus import Flowable, PageBreak, Paragraph, SimpleDocTemplate
 
 SEED = Path(__file__).resolve().parents[1] / "seed"
 PDFS = SEED / "pdfs"
-JAMES, NADIA = "j.richardson@harborpine.example", "n.petrov@harborpine.example"
-# Writes Nadia's base: an admin of team_security, the team that owns it.
-SAM = "s.adeyemi@harborpine.example"
+JAMES, PRIYA = "j.richardson@harborpine.example", "p.shah@harborpine.example"
 DOCUMENTS = {
     "retail-product-sheet": "Retail Product Sheet",
     "branch-operations-manual": "Branch Operations Manual",
@@ -193,7 +191,7 @@ async def seed_base(
 
 async def seed(kb_for: dict[str, httpx.AsyncClient], store: Store, pdfs: dict[str, Path]) -> Seeded:
     """`kb_for` maps each base owner's email to the kb-service client that writes that base: one signed in as a
-    builder or admin of the owning team (James for his own base, Sam for Nadia's)."""
+    builder or admin of the owning team (James and Priya, each for their own base)."""
     retail, retail_sources = await seed_base(
         kb_for[JAMES],
         store,
@@ -204,10 +202,10 @@ async def seed(kb_for: dict[str, httpx.AsyncClient], store: Store, pdfs: dict[st
         description="Product sheets for the retail accounts advisors sell.",
     )
     branch, branch_sources = await seed_base(
-        kb_for[NADIA],
+        kb_for[PRIYA],
         store,
         name="Branch operations",
-        owner=NADIA,
+        owner=PRIYA,
         collection="Operations",
         files={
             "Branch operations manual": {"branch-operations-manual.pdf": pdfs["branch-operations-manual"].read_bytes()},
@@ -231,7 +229,7 @@ async def ask(kb_for: dict[str, httpx.AsyncClient], seeded: Seeded) -> list[dict
     the floor)."""
     out: list[dict[str, Any]] = []
     for question, base, covered in QUESTIONS:
-        kb_id, owner = (seeded.retail_kb, JAMES) if base == "retail" else (seeded.branch_kb, NADIA)
+        kb_id, owner = (seeded.retail_kb, JAMES) if base == "retail" else (seeded.branch_kb, PRIYA)
         answer = data(await kb_for[owner].post(f"/v1/knowledge-bases/{kb_id}/query", json={"question": question}))
         chunks: list[dict[str, Any]] = list(answer.get("chunks") or [])
         # A lane's own score is what its threshold reads; the fused score only orders the pieces.
@@ -274,12 +272,12 @@ def owner_headers(*, token: str | None = None, dev: bool = False) -> dict[str, d
     """Headers per owner for a stack that is not signed in through platform-service: one bearer `token` for both
     (the bases then belong to that token's person), or dev's `X-Dev-User` naming each owner."""
     if token:
-        return {who: {"Authorization": f"Bearer {token}"} for who in (JAMES, NADIA)}
+        return {who: {"Authorization": f"Bearer {token}"} for who in (JAMES, PRIYA)}
     if dev:
         # Each base's team, as kb-service's dev-start seed makes it, so its files go into that team's Files.
         return {
             JAMES: {"X-Dev-User": JAMES, "X-Team-Id": "team_ops"},
-            NADIA: {"X-Dev-User": NADIA, "X-Team-Id": "team_security"},
+            PRIYA: {"X-Dev-User": PRIYA, "X-Team-Id": "team_ops"},
         }
     raise ValueError("owner_headers needs a token or dev=True")
 
@@ -293,15 +291,15 @@ async def seed_from(
     dev: bool = False,
 ) -> tuple[Seeded, list[dict[str, Any]]]:
     """For a harness: seeds the kb-service at `kb_url` and returns the bases with the K12 scores. `headers` is per
-    owner (JAMES, NADIA); else `token` or `dev` builds them (owner_headers)."""
+    owner (JAMES, PRIYA); else `token` or `dev` builds them (owner_headers)."""
     pdfs = render_all()
     by_owner = headers or owner_headers(token=token, dev=dev)
     async with (
         httpx.AsyncClient(base_url=kb_url, headers=by_owner[JAMES], timeout=120) as james,
-        httpx.AsyncClient(base_url=kb_url, headers=by_owner[NADIA], timeout=120) as nadia,
+        httpx.AsyncClient(base_url=kb_url, headers=by_owner[PRIYA], timeout=120) as priya,
     ):
-        seeded = await seed({JAMES: james, NADIA: nadia}, files_store(files_url), pdfs)
-        return seeded, await ask({JAMES: james, NADIA: nadia}, seeded)
+        seeded = await seed({JAMES: james, PRIYA: priya}, files_store(files_url), pdfs)
+        return seeded, await ask({JAMES: james, PRIYA: priya}, seeded)
 
 
 def sign_in(platform: str, email: str, password: str) -> dict[str, str]:
@@ -333,7 +331,7 @@ def main() -> None:
         headers = owner_headers(token=args.token, dev=args.dev)
     else:
         # Each base's team, as the dev path names it: a seeded person belongs to every team, so kb-service asks which.
-        writers = {JAMES: (JAMES, "team_ops"), NADIA: (SAM, "team_security")}
+        writers = {JAMES: (JAMES, "team_ops"), PRIYA: (PRIYA, "team_ops")}
         headers = {
             owner: sign_in(args.platform, who, args.password) | {"X-Team-Id": team}
             for owner, (who, team) in writers.items()
@@ -344,17 +342,17 @@ def main() -> None:
 async def run(args: argparse.Namespace, headers: dict[str, dict[str, str]], pdfs: dict[str, Path]) -> None:
     async with (
         httpx.AsyncClient(base_url=args.kb, headers=headers[JAMES], timeout=120) as james,
-        httpx.AsyncClient(base_url=args.kb, headers=headers[NADIA], timeout=120) as nadia,
+        httpx.AsyncClient(base_url=args.kb, headers=headers[PRIYA], timeout=120) as priya,
     ):
         store = files_store(args.files)
-        seeded = await seed({JAMES: james, NADIA: nadia}, store, pdfs)
+        seeded = await seed({JAMES: james, PRIYA: priya}, store, pdfs)
         print(
-            f"Retail products {seeded.retail_kb} (owner {JAMES}); Branch operations {seeded.branch_kb} (owner {NADIA})"
+            f"Retail products {seeded.retail_kb} (owner {JAMES}); Branch operations {seeded.branch_kb} (owner {PRIYA})"
         )
         if args.fees == "v2":
-            synced = await replace_fee_schedule(nadia, store, seeded, pdfs["fee-schedule-v2"].read_bytes())
+            synced = await replace_fee_schedule(priya, store, seeded, pdfs["fee-schedule-v2"].read_bytes())
             print(f"fee schedule v2: sync {synced['status']} {synced['counts']}")
-        for row in await ask({JAMES: james, NADIA: nadia}, seeded):
+        for row in await ask({JAMES: james, PRIYA: priya}, seeded):
             mark = "ok" if row["ok"] else "BELOW FLOOR" if row["covered"] else "UNEXPECTED PASSAGE"
             print(f"  {mark:>18}  score={row['score']}  cites={row['cites']}  {row['question']}")
         if args.agents:

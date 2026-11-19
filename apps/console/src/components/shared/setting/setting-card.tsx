@@ -7,6 +7,9 @@ import { LoadingButton } from '@/components/shared/loading-button';
 import { useIsSample } from '@/components/shared/sample-data';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 
+/** "an admin", "a builder": the article follows the first letter of the role as it is written. */
+export const withArticle = (role: string) => `${/^[aeiou]/i.test(role.trim()) ? 'an' : 'a'} ${role.trim()}`;
+
 /**
  * One setting, one card, one Save. The footer carries the constraint or a link on the left and the Save on the right;
  * when the person lacks the role, the Save is replaced by the lock and the role's name, and the controls are off.
@@ -79,7 +82,7 @@ export function SettingCard({
             {sample ? null : footerEnd ??
               (locked ? (
                 <span className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="setting-lock">
-                  <Lock className="size-3.5" /> Only {requiredRole ? `a ${requiredRole}` : 'an admin'} can change this
+                  <Lock className="size-3.5" /> Only {withArticle(requiredRole ?? 'admin')} can change this
                 </span>
               ) : onSave ? (
                 <LoadingButton type="submit" size="sm" isLoading={saving} disabled={!dirty}>

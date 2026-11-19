@@ -4,6 +4,6 @@
  * or leave the id unencoded.
  */
 export function appPageHref(id: string, tab?: string): string {
-  const path = `/integrations/apps/${encodeURIComponent(id)}`;
+  const path = `/data/connectors/${encodeURIComponent(id)}`;
   return tab ? `${path}?tab=${encodeURIComponent(tab)}` : path;
 }

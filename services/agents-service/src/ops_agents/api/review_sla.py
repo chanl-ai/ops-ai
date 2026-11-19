@@ -5,10 +5,13 @@ read, not one per row."""
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Generator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any, Protocol, cast
 
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
+from ops_service_kit.http import Json
 from ops_service_kit.logging import get_logger
 
 from ..store.tenancy import current_tenant
@@ -19,6 +22,21 @@ log = get_logger("ops_agents.review_sla")
 POLICY = "reviewSlaHours"
 DEFAULT_HOURS = 8.0
 CACHE_SECONDS = 60.0
+
+
+# The deadline this request already asked platform-service for, by tenant, a failed read (the default) included; None
+# outside `review_hours_asked_once`, where every call may ask. A down platform-service costs one wait per request, and
+# the warm made with no transaction open holds for the builders that run inside one.
+_ASKED: ContextVar[dict[str, float] | None] = ContextVar("review_hours_asked", default=None)
+
+
+@contextmanager
+def review_hours_asked_once() -> Generator[None]:
+    token = _ASKED.set({})
+    try:
+        yield
+    finally:
+        _ASKED.reset(token)
 
 
 class ReviewSla(Protocol):
@@ -43,7 +61,7 @@ class PlatformReviewSla:
         if self.platform is None:
             return DEFAULT_HOURS
         try:
-            value: Any = cast(dict[str, Any], await self.platform.get(f"/v1/policies/{POLICY}") or {}).get("value")
+            value: Any = cast(Json, await self.platform.get(f"/v1/policies/{POLICY}") or {}).get("value")
         except (ServiceCallError, ServiceUnreachable) as e:
             log.warning("review deadline policy unread; using the default", extra={"error": str(e)})
             return DEFAULT_HOURS
@@ -56,4 +74,12 @@ class PlatformReviewSla:
 async def sla_hours(rt: Runtime) -> float:
     """The deadline review views count down from; the default when no policy reader is wired (no platform URL)."""
     reader = getattr(rt, "review_sla", None)  # a runtime built without one (a worker-side or test runtime)
-    return await reader.hours() if reader is not None else DEFAULT_HOURS
+    if reader is None:
+        return DEFAULT_HOURS
+    asked, tenant = _ASKED.get(), current_tenant()
+    if asked is not None and tenant in asked:
+        return asked[tenant]
+    hours = await reader.hours()
+    if asked is not None:
+        asked[tenant] = hours
+    return hours

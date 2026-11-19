@@ -83,6 +83,21 @@ async def test_a_list_leaves_out_another_teams_records(
     for path, made_id in made.items():
         assert made_id in _ids(_data(await c.get(path, headers=BUILDER))), f"{path}: the owner does not see it"
         assert made_id not in _ids(_data(await c.get(path, headers=OUTSIDER))), f"{path}: another team sees it"
+    # Each filter set to the record's own value: the owner finds it, another team still neither lists nor counts it.
+    filtered = {
+        "/v1/agents": {"availability": "not_published", "teamId": "team_ops"},
+        "/v1/skills": {"status": "draft", "ownerTeam": "Retail", "origin": "blank", "loading": "on_match"},
+    }
+    for path, filters in filtered.items():
+        for key, value in filters.items():
+            mine = _data(await c.get(path, params={key: value}, headers=BUILDER))
+            theirs = _data(await c.get(path, params={key: value}, headers=OUTSIDER))
+            assert made[path] in _ids(mine), f"{path}?{key}={value}: the owner does not see it"
+            assert made[path] not in _ids(theirs), f"{path}?{key}={value}: another team sees it"
+            # The facet leaves its own filter out, so its count for the value is the filtered total: one more is the
+            # other team's record counted.
+            counted = theirs["facets"].get(key, {}).get(value, 0)
+            assert counted == theirs["pagination"]["total"], f"{path}?{key}={value}: another team's row is counted"
 
 
 @pytest.mark.parametrize("kind", ["agents", "skills", "guardrails", "widgets"])

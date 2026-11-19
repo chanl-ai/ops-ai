@@ -1,9 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, type ReactNode } from 'react';
-import { FlaskConical } from 'lucide-react';
-
-import { Alert, AlertTitle } from '@/components/ui/alert';
+import { SampleDataBanner } from '@/components/shared/sample-data-banner';
 
 const InSample = createContext(false);
 
@@ -29,12 +27,7 @@ export function SampleDataNote() {
     report?.(1);
     return () => report?.(-1);
   }, [report]);
-  return (
-    <Alert data-testid="sample-data-notice">
-      <FlaskConical />
-      <AlertTitle>Sample data: no service stores this yet, so it is shown read only.</AlertTitle>
-    </Alert>
-  );
+  return <SampleDataBanner scope="section" />;
 }
 
 /**

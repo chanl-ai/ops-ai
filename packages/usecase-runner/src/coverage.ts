@@ -3,7 +3,7 @@ import { LAYERS, type Layer } from './layers.ts';
 import type { UseCase } from './registry.ts';
 import { resolveScript } from './resolve.ts';
 
-export type Cell = 'script' | 'missing' | 'not required' | 'not available yet';
+export type Cell = 'script' | 'page' | 'missing' | 'not required' | 'not available yet';
 
 export interface CoverageRow {
   id: string;
@@ -20,6 +20,7 @@ export function coverage(root: string, registry: UseCase[], service: string): Co
         const r = resolveScript(root, uc, layer);
         if (r.kind === 'unavailable') cells[layer] = 'not available yet';
         else if (r.kind === 'script') cells[layer] = 'script';
+        else if (r.kind === 'page') cells[layer] = 'page';
         else cells[layer] = uc.layers.includes(layer) ? 'missing' : 'not required';
       }
       return { id: uc.id, title: uc.title, cells };

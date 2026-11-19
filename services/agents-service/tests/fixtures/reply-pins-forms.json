@@ -1,0 +1,399 @@
+{
+  "create": {
+    "body": {
+      "data": {
+        "afterText": "",
+        "canEdit": true,
+        "dailyCap": 200,
+        "description": "",
+        "expiresAt": "<time+00:00>",
+        "id": "<form>",
+        "mode": "members",
+        "paused": false,
+        "slug": "ask-for-a-payment-plan-<tail>",
+        "title": "Ask for a payment plan",
+        "url": "/f/ask-for-a-payment-plan-<tail>",
+        "workflowId": "payment_plan"
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "create.badCap": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "dailyCap"
+            ],
+            "msg": "Input should be greater than or equal to 1"
+          }
+        ],
+        "message": "dailyCap: Input should be greater than or equal to 1",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "create.stray": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "colour"
+            ],
+            "msg": "Extra inputs are not permitted"
+          }
+        ],
+        "message": "colour: Extra inputs are not permitted",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "files.noFiles": {
+    "body": {
+      "error": {
+        "code": "unavailable",
+        "message": "A form's files are stored in Files, and this service has no Files URL.",
+        "requestId": "<req>",
+        "status": 503
+      },
+      "success": false
+    },
+    "status": 503
+  },
+  "list": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "afterText": "",
+            "canEdit": true,
+            "dailyCap": 200,
+            "description": "",
+            "expiresAt": "<time+00:00>",
+            "id": "<form>",
+            "mode": "members",
+            "paused": false,
+            "slug": "ask-for-a-payment-plan-<tail>",
+            "title": "Ask for a payment plan",
+            "url": "/f/ask-for-a-payment-plan-<tail>",
+            "workflowId": "payment_plan"
+          },
+          {
+            "afterText": "Thank you.",
+            "canEdit": true,
+            "dailyCap": 100,
+            "description": "Tell us what has changed.",
+            "expiresAt": "<time+00:00>",
+            "id": "<form>",
+            "mode": "link",
+            "paused": false,
+            "slug": "ask-for-a-payment-plan-<tail>",
+            "title": "Ask for a payment plan",
+            "url": "/f/ask-for-a-payment-plan-<tail>",
+            "workflowId": "payment_plan"
+          }
+        ],
+        "facets": {},
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 20,
+          "total": 2,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "list.viewer": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "afterText": "",
+            "canEdit": false,
+            "dailyCap": 200,
+            "description": "",
+            "expiresAt": "<time+00:00>",
+            "id": "<form>",
+            "mode": "members",
+            "paused": false,
+            "slug": "ask-for-a-payment-plan-<tail>",
+            "title": "Ask for a payment plan",
+            "url": "/f/ask-for-a-payment-plan-<tail>",
+            "workflowId": "payment_plan"
+          },
+          {
+            "afterText": "Thank you.",
+            "canEdit": false,
+            "dailyCap": 100,
+            "description": "Tell us what has changed.",
+            "expiresAt": "<time+00:00>",
+            "id": "<form>",
+            "mode": "link",
+            "paused": false,
+            "slug": "ask-for-a-payment-plan-<tail>",
+            "title": "Ask for a payment plan",
+            "url": "/f/ask-for-a-payment-plan-<tail>",
+            "workflowId": "payment_plan"
+          }
+        ],
+        "facets": {},
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 20,
+          "total": 2,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "members": {
+    "body": {
+      "data": {
+        "afterText": "Thank you.",
+        "description": "",
+        "form": {
+          "schema": {
+            "properties": {
+              "account": {
+                "title": "Account number",
+                "type": "string"
+              },
+              "payslip": {
+                "format": "file",
+                "title": "Latest pay slip",
+                "type": "string"
+              },
+              "reason": {
+                "title": "Why do you need a plan?",
+                "type": "string",
+                "x-widget": "textarea"
+              }
+            },
+            "required": [
+              "account",
+              "reason"
+            ],
+            "type": "object"
+          },
+          "takesFiles": true
+        },
+        "title": "Members only"
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "members.outsider": {
+    "body": {
+      "error": {
+        "code": "form_members_only",
+        "message": "Only members of the team that shares this form can send it.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  },
+  "public": {
+    "body": {
+      "data": {
+        "afterText": "Thanks.",
+        "description": "Tell us what has changed.",
+        "form": {
+          "schema": {
+            "properties": {
+              "account": {
+                "title": "Account number",
+                "type": "string"
+              },
+              "payslip": {
+                "format": "file",
+                "title": "Latest pay slip",
+                "type": "string"
+              },
+              "reason": {
+                "title": "Why do you need a plan?",
+                "type": "string",
+                "x-widget": "textarea"
+              }
+            },
+            "required": [
+              "account",
+              "reason"
+            ],
+            "type": "object"
+          },
+          "takesFiles": true
+        },
+        "title": "Ask for a payment plan"
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "public.notOurs": {
+    "body": {
+      "error": {
+        "code": "form_link_expired",
+        "message": "This link has expired or was replaced. Ask whoever sent it to you for a new one.",
+        "requestId": "<req>",
+        "status": 401
+      },
+      "success": false
+    },
+    "status": 401
+  },
+  "public.otherSlug": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Form was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "public.otherTenant": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Form was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "public.rotated": {
+    "body": {
+      "error": {
+        "code": "form_link_expired",
+        "message": "This link has expired or was replaced. Ask whoever sent it to you for a new one.",
+        "requestId": "<req>",
+        "status": 401
+      },
+      "success": false
+    },
+    "status": 401
+  },
+  "rotate": {
+    "body": {
+      "data": {
+        "afterText": "Thanks.",
+        "canEdit": true,
+        "dailyCap": 100,
+        "description": "Tell us what has changed.",
+        "expiresAt": "<time+00:00>",
+        "id": "<form>",
+        "mode": "link",
+        "paused": false,
+        "slug": "ask-for-a-payment-plan-<tail>",
+        "title": "Ask for a payment plan",
+        "token": "<token>",
+        "url": "/f/ask-for-a-payment-plan-<tail>?t=<token>",
+        "workflowId": "payment_plan"
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "submit": {
+    "body": {
+      "data": {
+        "received": true
+      },
+      "success": true
+    },
+    "status": 202
+  },
+  "submit.stray": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "extra"
+            ],
+            "msg": "Extra inputs are not permitted"
+          }
+        ],
+        "message": "extra: Extra inputs are not permitted",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "update": {
+    "body": {
+      "data": {
+        "afterText": "Thanks.",
+        "canEdit": true,
+        "dailyCap": 100,
+        "description": "Tell us what has changed.",
+        "expiresAt": "<time+00:00>",
+        "id": "<form>",
+        "mode": "link",
+        "paused": false,
+        "slug": "ask-for-a-payment-plan-<tail>",
+        "title": "Ask for a payment plan",
+        "url": "/f/ask-for-a-payment-plan-<tail>",
+        "workflowId": "payment_plan"
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "update.missing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Form form_missing1 was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "update.outsider": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Form <form> was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  }
+}

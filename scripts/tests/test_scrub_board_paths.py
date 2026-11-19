@@ -7,6 +7,8 @@ import os
 import sys
 from pathlib import Path
 
+import pytest
+
 # A made-up login, set before the module reads it.
 os.environ["OPS_SCRUB_LOGIN"] = "probelogin"
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -17,22 +19,24 @@ WORKSPACE = REPO.parent
 HOME = Path("/tmp/home") / LOGIN
 
 
-def test_repo_path_becomes_relative() -> None:
-    assert rewrite(f"see {REPO}/docs/a.md", repo=REPO, workspace=WORKSPACE, home=HOME) == "see docs/a.md"
-
-
-def test_sibling_path_stays_a_valid_relative_link() -> None:
-    src = f"ln -s {WORKSPACE}/ops-ai-plugins plugins"
-    assert rewrite(src, repo=REPO, workspace=WORKSPACE, home=HOME) == "ln -s ../ops-ai-plugins plugins"
-
-
-def test_other_home_path_becomes_tilde() -> None:
-    assert rewrite(f"{HOME}/.cursor/plans", repo=REPO, workspace=WORKSPACE, home=HOME) == "~/.cursor/plans"
-
-
-def test_a_first_name_stays() -> None:
-    text = f"Alice said use {REPO}/docs/a.md and not {LOGIN}"
-    assert rewrite(text, repo=REPO, workspace=WORKSPACE, home=HOME) == f"Alice said use docs/a.md and not {LOGIN_TOKEN}"
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        (f"see {REPO}/docs/a.md", "see docs/a.md"),
+        # A sibling checkout stays a valid relative link.
+        (f"ln -s {WORKSPACE}/ops-ai-plugins plugins", "ln -s ../ops-ai-plugins plugins"),
+        (f"{HOME}/.cursor/plans", "~/.cursor/plans"),
+        # A first name stays; only the machine login is replaced.
+        (f"Alice said use {REPO}/docs/a.md and not {LOGIN}", f"Alice said use docs/a.md and not {LOGIN_TOKEN}"),
+        # A route folder called home is no home directory.
+        ("apps/console/src/app/home/page.tsx", "apps/console/src/app/home/page.tsx"),
+    ],
+    ids=["repo", "sibling", "home", "first-name", "home-route"],
+)
+def test_a_path_or_login_is_rewritten_and_nothing_else(text: str, expected: str) -> None:
+    out = rewrite(text, repo=REPO, workspace=WORKSPACE, home=HOME)
+    assert out == expected
+    assert leaks(out, home=HOME) == []
 
 
 def test_rewritten_json_stays_valid() -> None:
@@ -41,17 +45,8 @@ def test_rewritten_json_stays_valid() -> None:
     assert json.loads(out) == {"p": "a.json", "who": LOGIN_TOKEN}
 
 
-def test_home_page_path_is_not_a_leak() -> None:
-    text = "apps/console/src/app/home/page.tsx"
-    assert rewrite(text, repo=REPO, workspace=WORKSPACE, home=HOME) == text
-    assert leaks(text, home=HOME) == []
-
-
-def test_leftover_login_fails_the_check() -> None:
+def test_a_leftover_login_and_a_truncated_home_dump_fail_the_check() -> None:
     assert leaks(f"owned by {LOGIN}", home=HOME) == ["login"]
-
-
-def test_truncated_home_dump_is_rewritten() -> None:
     text = f'File "/Users/{LOGIN[:3]}.../tmp/x"'
     assert "/Users/" not in rewrite(text, repo=REPO, workspace=WORKSPACE, home=HOME)
     assert leaks(text, home=HOME) == ["login home"]

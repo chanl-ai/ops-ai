@@ -19,7 +19,7 @@ async def _recorded(tmp_path: Path, rows: dict[str, str]) -> str | None:
     async with engine.begin() as c:
         for table, rev in rows.items():
             await c.execute(sa.text(f"CREATE TABLE {table} (version_num VARCHAR(64) NOT NULL)"))
-            await c.execute(sa.text(f"INSERT INTO {table} VALUES ('{rev}')"))
+            await c.execute(sa.text(f"INSERT INTO {table} VALUES ('{rev}')"))  # noqa: S608
     try:
         return await check_schema(engine, CHAIN)
     finally:

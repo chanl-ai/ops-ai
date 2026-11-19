@@ -34,3 +34,7 @@ before the 64-character rule.
 | Layer | Script | State |
 |---|---|---|
 | ui | `console/scripts/test-uc-107-ui.mjs` | passing |
+
+## Setup state
+
+Passing on 2026-11-12. Storage credentials are drawn on Settings > Workspace > Storage (step 1b), and the Used-by links point at /data/tools.

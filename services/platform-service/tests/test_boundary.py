@@ -26,6 +26,8 @@ PUBLIC = {
     ("GET", "/v1/auth/oidc/callback"),
     ("POST", "/v1/auth/saml/acs"),
     ("GET", "/v1/auth/saml/metadata"),
+    ("POST", "/v1/auth/saml/acs/{sp_id}"),
+    ("GET", "/v1/auth/saml/metadata/{sp_id}"),
     ("POST", "/v1/auth/sso/complete"),
     ("POST", "/v1/auth/password/forgot"),
     ("POST", "/v1/auth/password/reset"),

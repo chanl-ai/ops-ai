@@ -8,9 +8,10 @@ from typing import Any
 
 from ops_agent_kernel import present
 from ops_agents.activities.shaper import shape_part
+from ops_service_kit.http import Json, JsonValue
 from tests.unit.test_kernel import SETTINGS
 
-RECORDS = [
+RECORDS: list[JsonValue] = [
     {"Id": "5003000000D8cuJAAR", "CaseNumber": "00044818", "Status": "New"},
     {"Id": "5003000000E1aaaAAA", "CaseNumber": "00044901", "Status": "Escalated"},
 ]
@@ -46,7 +47,7 @@ def test_a_tables_title_and_columns_name_the_rows_not_the_systems_metadata() -> 
 def test_present_takes_data_alone_as_a_table_and_plain_column_names() -> None:
     shown, said = present.run({"data": RECORDS}, SETTINGS)
     assert shown is not None and shown["shape"] == "rows", said
-    table = {"rows": RECORDS, "columns": ["CaseNumber", "Status"]}
+    table: Json = {"rows": RECORDS, "columns": ["CaseNumber", "Status"]}
     shown, said = present.run({"kind": "table", "data": table}, SETTINGS)
     assert shown is not None, said
     both, said = present.run({"shape": "rows", "kind": "table", "data": RECORDS}, SETTINGS)

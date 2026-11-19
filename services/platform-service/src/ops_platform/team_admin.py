@@ -9,16 +9,55 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import TypedDict
 
 from ops_access import ANY_TEAM
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
-from ops_service_kit.http import paged
+from ops_service_kit.listing import ListParams
+from ops_store.listing import ListPage
 
 from .store.members import Actor
-from .store.teams import ACTIVE, ARCHIVED, TeamAdminStore, TeamNameTakenError
+from .store.teams import ACTIVE, ARCHIVED, TeamAdminStore, TeamNameTakenError, TeamRow
 from .store.workspace import TeamNotUsableError, WorkspaceStore
 from .teams import Members
+
+
+class WorkspaceTeams(TypedDict):
+    securityTeam: str | None
+    defaultTeam: str | None
+
+
+class WorkspaceName(TypedDict):
+    id: str
+    name: str
+
+
+class TeamReply(TypedDict):
+    """A team as the routes send it: `TeamRow` by alias, in its field order."""
+
+    id: str
+    name: str
+    status: str
+    scope: str
+    createdAt: str
+    archivedAt: str | None
+    memberCount: int
+    adminCount: int
+    security: bool
+
+
+def team_reply(t: TeamRow) -> TeamReply:
+    return {
+        "id": t.id,
+        "name": t.name,
+        "status": t.status,
+        "scope": t.scope,
+        "createdAt": t.created_at,
+        "archivedAt": t.archived_at,
+        "memberCount": t.member_count,
+        "adminCount": t.admin_count,
+        "security": t.security,
+    }
 
 
 def _iso(t: datetime) -> str:
@@ -40,16 +79,16 @@ class TeamAdmin:
     members: Members
     workspace_store: WorkspaceStore
 
-    async def workspace_teams(self, actor: Actor) -> dict[str, Any]:
+    async def workspace_teams(self, actor: Actor) -> WorkspaceTeams:
         await self.members.require_admin(workspace(actor), "access", "view")
         return await self.workspace_teams_of(actor.tenant_id)
 
-    async def workspace_teams_of(self, tenant_id: str) -> dict[str, Any]:
+    async def workspace_teams_of(self, tenant_id: str) -> WorkspaceTeams:
         """No person to check: the caller is a service whose `settings:view` scope the route has checked."""
         found = await self.workspace_store.read(tenant_id)
         return {"securityTeam": found.security_team, "defaultTeam": found.default_team}
 
-    async def rename_workspace(self, actor: Actor, name: str) -> dict[str, Any]:
+    async def rename_workspace(self, actor: Actor, name: str) -> WorkspaceName:
         """Workspace admins only; every person's next `/v1/me` names the workspace with it."""
         await self.members.require_admin(workspace(actor), "access", "manage")
         named = await self.workspace_store.rename(
@@ -57,7 +96,7 @@ class TeamAdmin:
         )
         return {"id": actor.tenant_id, "name": named}
 
-    async def set_workspace_teams(self, actor: Actor, security_team: str, default_team: str | None) -> dict[str, Any]:
+    async def set_workspace_teams(self, actor: Actor, security_team: str, default_team: str | None) -> WorkspaceTeams:
         await self.members.require_admin(workspace(actor), "access", "manage")
         try:
             saved = await self.workspace_store.set(
@@ -68,16 +107,11 @@ class TeamAdmin:
             raise ValidationFailed("Pick active teams of this workspace.", code="team_not_usable") from e
         return {"securityTeam": saved.security_team, "defaultTeam": saved.default_team}
 
-    async def every(
-        self, actor: Actor, *, statuses: list[str], search: str, page: int, page_size: int
-    ) -> dict[str, Any]:
+    async def every(self, actor: Actor, params: ListParams, *, statuses: list[str]) -> ListPage:
         await self.members.require_admin(workspace(actor), "access", "view")
-        rows, total, answered = await self.store.every(
-            actor.tenant_id, statuses=statuses, search=search, page=page, page_size=page_size
-        )
-        return paged(rows, total, answered, page_size)
+        return await self.store.page(actor.tenant_id, params, statuses=statuses)
 
-    async def create(self, actor: Actor, name: str, admin_email: str) -> dict[str, Any]:
+    async def create(self, actor: Actor, name: str, admin_email: str) -> TeamReply:
         await self.members.require_admin(workspace(actor), "access", "manage")
         try:
             team_id = await self.store.create(
@@ -94,7 +128,7 @@ class TeamAdmin:
             raise NotFound("person")
         return await self._read(actor, team_id)
 
-    async def rename(self, actor: Actor, team_id: str, name: str) -> dict[str, Any]:
+    async def rename(self, actor: Actor, team_id: str, name: str) -> TeamReply:
         await self.members.require_admin(workspace(actor), "access", "manage")
         try:
             done = await self.store.rename(
@@ -107,7 +141,7 @@ class TeamAdmin:
             raise NotFound("team")
         return await self._read(actor, team_id)
 
-    async def set_status(self, actor: Actor, team_id: str, archived: bool) -> dict[str, Any]:
+    async def set_status(self, actor: Actor, team_id: str, archived: bool) -> TeamReply:
         await self.members.require_admin(workspace(actor), "access", "manage")
         if archived and team_id == await self.store.security_team_of(actor.tenant_id):
             raise Conflict("The Security team decides workspace settings and cannot be archived.", code="security_team")
@@ -119,8 +153,8 @@ class TeamAdmin:
             raise NotFound("team")
         return await self._read(actor, team_id)
 
-    async def _read(self, actor: Actor, team_id: str) -> dict[str, Any]:
+    async def _read(self, actor: Actor, team_id: str) -> TeamReply:
         found = await self.store.one(actor.tenant_id, team_id)
         if found is None:
             raise NotFound("team")
-        return found
+        return team_reply(found)

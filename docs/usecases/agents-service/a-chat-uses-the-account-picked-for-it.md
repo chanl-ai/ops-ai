@@ -34,7 +34,7 @@ cases already run. The person's own default is proved at the api layer by uc-702
 | 2 | She sends a first message, picks EU org under Change, and writes `call salesforce_query {...}` | The fake answers the query on `kestrel-eu.my.salesforce.test` only |
 | 3 | `GET /chat/threads/{id}/connectors` as Maya | Salesforce's row has `account` EU org |
 
-Steps 1 to 3 run at 1440 and 390 wide, with screenshots in the evidence folder (`OPS_USECASE_SHOTS`).
+Steps 1 to 3 run at 1440 and 390 wide, with screenshots in the evidence folder (`.logs/usecases/697/`).
 
 ## What would make a step pass with the code broken
 

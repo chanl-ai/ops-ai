@@ -39,6 +39,10 @@ def main(argv: list[str]) -> int:
     say.add_argument("--thread", help="continue this conversation")
     say.add_argument("-m", "--message", action="append", default=[])
     say.add_argument("--connected", metavar="APP", help="then send the Connect card's follow-up for APP")
+    say.add_argument(
+        "--skill", metavar="SKILL[/PART]", help="a published skill (id, slug or name) for the first message's reply"
+    )
+    say.add_argument("--input", action="append", metavar="NAME=VALUE", default=[], help="the skill's inputs")
     for name, text in (("show", "the conversation as the chat reads it"), ("calls", "its tool-call log")):
         sub.add_parser(name, parents=common, help=text).add_argument("thread")
     done = sub.add_parser("connected", parents=common, help="the Connect card's follow-up after signing in")
@@ -120,7 +124,7 @@ def _dispatch(ns: argparse.Namespace) -> int:
     if ns.verb == "transcript":
         return emit(ns, {"thread": ns.thread}, text=_transcript(ops, ns.thread, ns.all_turns))
     if ns.verb == "transcripts":
-        found = [t for test in (False, True) for t in ops.chat.threads(pageSize=100, test=test)]
+        found = [t for test in (False, True) for t in ops.chat.every_thread(test=test)]
         hits = [t for t in found if ns.search.lower() in str(t.get("title") or "").lower()]
         texts = [_transcript(ops, str(t["id"]), ns.all_turns) for t in hits]
         return emit(ns, [t["id"] for t in hits], text="\n\n---\n\n".join(texts) or "(no matching conversations)")
@@ -147,7 +151,7 @@ def agent_id(ops: OpsAI, name: str | None, *, test: bool) -> str | None:
     never published."""
     if not name:
         return None
-    agents = list(ops.agents.list(page_size=100)) if test else ops.chat.agents()
+    agents = list(ops.agents.list()) if test else ops.chat.agents()
     wanted = name.lower()
     hits = [
         a
@@ -194,9 +198,32 @@ def narrow(
     line(ns, "connectors " + ", ".join(f"{c['name']} {'on' if c['on'] else 'off'}" for c in rows))
 
 
+def skill_pick(ops: OpsAI, wanted: str | None, given: list[str]) -> dict[str, Any]:
+    """`--skill SKILL[/PART]` and `--input NAME=VALUE` as `say`'s skill, part and inputs; the skill by id, slug or name
+    among the team's published skills."""
+    if not wanted:
+        if given:
+            raise ValueError("--input needs --skill")
+        return {}
+    name, _, part = wanted.partition("/")
+    rows = list(ops.skills.list(view="published"))
+    hits = [
+        s
+        for s in rows
+        if name.lower() in (str(s.get("id")), str(s.get("slug", "")).lower(), str(s.get("name", "")).lower())
+    ]
+    if len(hits) != 1:
+        raise ValueError(f"--skill {name} matches {len(hits)} of the team's published skills")
+    inputs = dict(v.split("=", 1) for v in given if "=" in v)
+    if len(inputs) != len(given):
+        raise ValueError("--input takes NAME=VALUE")
+    return {"skill": str(hits[0]["id"]), "part": part or None, "inputs": inputs or None}
+
+
 def _say(ns: argparse.Namespace, ops: OpsAI, messages: list[str]) -> int:
+    pick = skill_pick(ops, getattr(ns, "skill", None), getattr(ns, "input", []))
     thread = start_thread(ns, ops, messages[0] if messages else None)
-    turns = [turn(ns, ops, thread, text) for text in messages]
+    turns = [turn(ns, ops, thread, text, **(pick if i == 0 else {})) for i, text in enumerate(messages)]
     if ns.as_json:
         return emit(ns, {"thread": thread, "turns": turns})
     if messages:
@@ -205,11 +232,12 @@ def _say(ns: argparse.Namespace, ops: OpsAI, messages: list[str]) -> int:
     return 1 if any(t["error"] for t in turns) else 0
 
 
-def turn(ns: argparse.Namespace, ops: OpsAI, thread: str, text: str) -> dict[str, Any]:
-    """One message and its streamed reply, printed as the chat shows it; answers what a script checks."""
+def turn(ns: argparse.Namespace, ops: OpsAI, thread: str, text: str, **pick: Any) -> dict[str, Any]:
+    """One message and its streamed reply, printed as the chat shows it; answers what a script checks. `pick` is
+    `say`'s skill, part and inputs."""
     line(ns, f"\nyou > {text}")
     seen: dict[str, Any] = {"tools": [], "cards": [], "widgets": [], "text": "", "error": None, "phases": []}
-    for e in ops.chat.say(thread, text):
+    for e in ops.chat.say(thread, text, **pick):
         kind = e.get("type")
         if kind == "status":
             seen["phases"].append(e.get("phase"))
@@ -249,7 +277,7 @@ def turn(ns: argparse.Namespace, ops: OpsAI, thread: str, text: str) -> dict[str
 
 def calls(ops: OpsAI, thread: str) -> list[dict[str, Any]]:
     """The call log rows of the thread, as the Logs tab reads them."""
-    return list(ops.usage.list(thread=thread, page=1, page_size=50))
+    return ops.usage.every(thread=thread)
 
 
 def _log_line(r: dict[str, Any]) -> str:

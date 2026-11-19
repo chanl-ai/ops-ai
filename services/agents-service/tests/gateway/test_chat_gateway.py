@@ -4,6 +4,7 @@ token, minted once two different people have approved it in the chat widget."""
 from __future__ import annotations
 
 import httpx
+import pytest
 
 from tests.api.test_chat import new_thread, send
 from tests.conftest import step_up
@@ -13,6 +14,7 @@ from tests.gateway.test_dispute_e2e import apps, runtime  # noqa: F401  # pyrigh
 LEE = "lee@harborpine.example"
 
 
+@pytest.mark.usefixtures("requester_may_decide")
 async def test_a_chat_two_approver_action_runs_on_two_approvals_through_the_gateway(
     runtime: httpx.AsyncClient,  # noqa: F811
     gateway: Gateway,
@@ -33,6 +35,6 @@ async def test_a_chat_two_approver_action_runs_on_two_approvals_through_the_gate
     assert second.status_code == 200, second.text
     assert second.json()["data"]["state"] == "approved"
     rows = await gateway.log.for_thread(thread["id"], tenant_id="local")
-    assert [(r["tool"], r["decision"], r["outcome"]) for r in rows] == [("place_wire_hold", "allow", "ok")]
+    assert [(r.tool, r.decision, r.outcome) for r in rows] == [("place_wire_hold", "allow", "ok")]
     reply = (await runtime.get(f"/chat/threads/{thread['id']}")).json()["data"]["messages"][-1]
     assert "hold is in place" in reply["content"]

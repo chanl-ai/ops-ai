@@ -37,7 +37,7 @@ wrong client secret with `invalid_client`, with agents-service and its workflow 
 | 4a | Sam approves the task (`POST /reviews/{runKey}/decision`, approved); James adds the tool again | The host is on the tenant's allow-list, added by Sam; the add answers 201 |
 | 4b | James adds a REST tool on `refused.multi.test`; Sam refuses it with a reason; James adds it again | The task keeps Sam's reason; the retry answers 422 `egress_host_refused` naming the reason and the run key |
 | 4c | Sam, who holds the Security role, adds a custom app and a tool on `listed.multi.test` | 201 at once; the host is listed in Sam's name; no task opens (roles decide) |
-| 6 | James saves a REST tool on `held.uc617.example` from Import operations | Before saving, the notice says saving asks a Security admin; after, the dialog reads "Waiting for Security to allow held.uc617.example", nothing is saved, and Sam has a pending task |
+| 6 | Sam turns new addresses to ask Security first (`PUT /v1/policies/egressNewHosts` `ask_security`; a new workspace takes any public host); James saves a REST tool on `held.uc617.example` from Import operations | Before saving, the notice says saving asks a Security admin; after, the dialog reads "Waiting for Security to allow held.uc617.example", nothing is saved, and Sam has a pending task |
 | 6a | Sam opens the task in Human Tasks and refuses it with a reason | The task shows the host, the app and who asked, with Approve and Refuse and no Return; the task keeps the reason |
 | 6b | James saves the same tool again | The dialog shows Security's refusal with Sam's reason |
 | 6c | James saves a tool on `allowed.uc617.example`; Sam approves its task; James saves again | The host is listed and the save opens the new tool's page |

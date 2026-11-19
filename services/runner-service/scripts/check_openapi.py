@@ -1,0 +1,47 @@
+"""runner-service's OpenAPI document is complete and committed; the gate itself is `ops_service_kit.openapi`.
+scripts/check_typed_boundaries.py also builds the app through `document()` to walk its routes.
+
+uv run python scripts/check_openapi.py          # check
+uv run python scripts/check_openapi.py --write  # regenerate openapi.json after a route change
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+from typing import Any, cast
+
+from ops_runner.app import create_runner_app
+from ops_runner.wasm import WasmPython
+from ops_service_kit import openapi
+from ops_service_kit.settings import Settings, isolate_from_stack
+
+ROOT = Path(__file__).resolve().parents[1]
+DOCUMENT = ROOT / "openapi.json"
+ALLOWLIST = ROOT / "openapi-untyped.txt"
+REPO_ALLOWLIST = "services/runner-service/openapi-untyped.txt"
+
+# The app is built to read its routes: the fixed dev user, and none of a running stack's addresses.
+isolate_from_stack()
+
+
+def document() -> dict[str, Any]:
+    """The app's document; building it starts no guest, so the runtime is not needed."""
+    runtime = cast(WasmPython, None)
+    return create_runner_app(runtime, settings=Settings(), tools=None).openapi()
+
+
+def main() -> int:
+    code, lines = openapi.report(
+        document(),
+        allowlist_path=ALLOWLIST,
+        document_path=DOCUMENT,
+        committed=openapi.committed_count(REPO_ALLOWLIST, ROOT),
+        write="--write" in sys.argv,
+    )
+    print("\n".join(lines))
+    return code
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

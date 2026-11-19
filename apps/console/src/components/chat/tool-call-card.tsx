@@ -42,7 +42,7 @@ export function ToolCallCard({ call }: { call: ToolCall }) {
       {runId && (
         <>
           {' · '}
-          <Link href={`/workflows/runs/${encodeURIComponent(runId)}`} className="underline-offset-4 hover:underline">
+          <Link href={`/build/runs/${encodeURIComponent(runId)}`} className="underline-offset-4 hover:underline">
             Open run
           </Link>
         </>

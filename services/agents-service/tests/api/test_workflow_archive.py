@@ -75,4 +75,4 @@ async def test_a_child_start_and_the_mailbox_listener_leave_an_archived_workflow
         with pytest.raises(NotLiveError) as refused:
             await RunStore(tx).create(child)
     assert refused.value.stage == "archived"
-    assert "child_check" not in {d["workflow_id"] for d in await DefinitionStore(tx).live_everywhere()}
+    assert "child_check" not in {d.workflow_id for d in await DefinitionStore(tx).live_everywhere()}

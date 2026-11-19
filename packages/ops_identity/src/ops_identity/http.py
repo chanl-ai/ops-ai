@@ -4,19 +4,21 @@ service's service token, API-key introspection and the tenant's permission versi
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, cast
 
 import httpx
+
+from ops_service_kit.http import Json
+from ops_service_kit.narrow import an_object
 
 from .jwks import JwksFetch
 from .resolve import CurrentVersion, Introspect
 
 
 def http_jwks(client: httpx.AsyncClient, url: str) -> JwksFetch:
-    async def fetch() -> dict[str, Any]:
+    async def fetch() -> Json:
         r = await client.get(url)
         r.raise_for_status()
-        return cast(dict[str, Any], r.json())
+        return an_object(r.json(), "the key set")
 
     return fetch
 
@@ -24,13 +26,15 @@ def http_jwks(client: httpx.AsyncClient, url: str) -> JwksFetch:
 def http_introspect(client: httpx.AsyncClient, url: str, token: str | Callable[[], str]) -> Introspect:
     """`token` is a service token, or a function minting a fresh one per call so none outlives its 60 seconds."""
 
-    async def introspect(api_key: str) -> dict[str, Any] | None:
+    async def introspect(api_key: str) -> Json | None:
         bearer = token() if callable(token) else token
         r = await client.post(url, json={"apiKey": api_key}, headers={"Authorization": f"Bearer {bearer}"})
         if r.status_code == 401:
             return None
         r.raise_for_status()
-        return cast(dict[str, Any], r.json()["data"])
+        data = r.json()["data"]
+        # `data: null` is no such key, as a 401 is.
+        return an_object(data, "the introspected key") if data is not None else None
 
     return introspect
 

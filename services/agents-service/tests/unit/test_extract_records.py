@@ -55,7 +55,9 @@ def notice_text() -> str:
 
 
 async def test_the_rule_yields_one_record_per_person_with_every_field() -> None:
-    records = await MeteredModels(models(RULES), None, "default").extract_records("persons", notice_text())
+    records: list[dict[str, Any]] = await MeteredModels(models(RULES), None, "default").extract_records(
+        "persons", notice_text()
+    )
     rules: list[dict[str, Any]] = json.loads((RULES / "script.json").read_text())["rules"]
     # The v1 rule, by its pattern: the v2 Extract from file rule for the same notice sits ahead of it.
     scripted = next(r for r in rules if r["when"] == V1_RULE)["arguments"]["records"]

@@ -31,7 +31,9 @@ CPython in WASI cannot call host functions without ctypes, so the guest's stdin 
 fifos in the run's directory. The prelude reads one request line, `ops.call` writes a call line and blocks on the
 answer, and the run ends with one result or error line. `print` goes to stderr, the run's log, so it cannot write on
 the channel. The runner answers each call by posting it to tools-service `POST /v1/code-runs/calls` with its own
-service token and the run's `callToken`; tools-service decides it as the original caller's call.
+service token and the run's `callToken`; tools-service decides it as the original caller's call. It reaches
+tools-service at `OPS_TOOLS_URL` (the `tools` endpoint), and exits at start naming it when unset; a call waits no
+longer than the run's own time limit.
 
 ## Gotchas
 

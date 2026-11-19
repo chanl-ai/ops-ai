@@ -53,6 +53,9 @@ async def test_the_run_list_pages_filters_by_status_and_counts_each_status(clien
     assert first["facets"]["status"] == {"queued": 3}
     names = {r["workflowName"] for r in first["data"]}
     assert names and None not in names and "refund_check" not in names, "each row names the workflow, not its id"
+    # The Runs page fills its workflow filter from these: the count and name of each workflow, in this reply.
+    assert first["facets"]["workflowId"] == {"refund_check": 3}
+    assert first["labels"]["workflowId"] == {"refund_check": names.pop()}
     none = (await client.get("/v1/runs?workflowId=refund_check&status=succeeded")).json()["data"]
     assert none["data"] == [] and none["pagination"]["total"] == 0 and none["facets"]["status"] == {"queued": 3}
 

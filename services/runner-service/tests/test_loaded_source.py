@@ -7,14 +7,15 @@ import inspect
 from pathlib import Path
 from typing import Any
 
-from ops_runner.domain import Limits
+from ops_runner.domain import CallReply, Limits
 from ops_runner.wasm import WasmPython
+from ops_service_kit.http import JsonValue
 
 ROOT = Path(__file__).resolve().parents[3]
 LEVY = ROOT / "scripts" / "sample-team" / "code" / "compute_levy_hold.py"
 SETTLE = Path(__file__).resolve().parent / "fixtures" / "notice_hold.py"
 
-RULES = {"protectedBalance": 2000, "currency": "CAD", "exemptAccountTypes": ["chequing"]}
+RULES: JsonValue = {"protectedBalance": 2000, "currency": "CAD", "exemptAccountTypes": ["chequing"]}
 
 
 def definition(path: Path, name: str) -> str:
@@ -31,7 +32,7 @@ def test_the_levy_file_holds_what_the_rules_leave_available(runtime: WasmPython)
     """scripts/sample-team/code/compute_levy_hold.py, the tool a builder saved, run as that file."""
     calls: list[dict[str, Any]] = []
 
-    def rules(tool: str, args: dict[str, Any]) -> dict[str, Any]:
+    def rules(tool: str, args: dict[str, JsonValue]) -> CallReply:
         calls.append({"tool": tool, "args": args})
         if tool != "get_levy_rules":
             return {"ok": False, "error": {"code": "binding_forbidden", "message": tool}}
@@ -81,13 +82,13 @@ def test_a_function_definition_settles_each_payment_on_its_own(runtime: WasmPyth
     source = definition(SETTLE, "settle")
     assert source.lstrip().startswith("from __future__ import annotations")
     assert "def settle(" in source and "def main(" not in source
-    accounts = {
+    accounts: dict[str, JsonValue] = {
         "a-open": {"balance": 40, "status": "open"},
         "a-closed": {"balance": 100, "status": "closed"},
     }
     seen: list[dict[str, Any]] = []
 
-    def bank(tool: str, args: dict[str, Any]) -> dict[str, Any]:
+    def bank(tool: str, args: dict[str, JsonValue]) -> CallReply:
         seen.append({"tool": tool, "args": args})
         account_id = str(args.get("accountId"))
         if account_id not in accounts:

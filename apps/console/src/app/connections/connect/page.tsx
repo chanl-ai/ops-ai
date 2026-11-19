@@ -34,7 +34,16 @@ function LinkConnect({ link }: { link: string }) {
   }, [link, open]);
 
   const code = open.error instanceof ApiError ? open.error.code : undefined;
-  const back = (
+  // A pop-up closes back to the chat that opened it; opened in a tab of its own (a phone), it goes to chat.
+  const [popup, setPopup] = React.useState(false);
+  React.useEffect(() => {
+    setPopup(Boolean(window.opener));
+  }, []);
+  const back = popup ? (
+    <Button variant="outline" onClick={() => window.close()} data-testid="connect-close">
+      Close
+    </Button>
+  ) : (
     <Button asChild variant="outline">
       <Link href="/chat">Back to chat</Link>
     </Button>

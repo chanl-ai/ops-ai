@@ -39,6 +39,8 @@ TENANT_HELD = {
     "api_keys": "an account key names the team it acts in; the key belongs to the account's admins",
     "role_assignments": "a person's role in one team or in every team ('*', the account admin): the account's access",
     "audit_entries": "sign-in and membership events have no team; team pages filter on the acting team",
+    "sessions": "a person's sign-in; only an assistant's grant at one team's MCP address names that team",
+    "signin_group_rules": "a sign-in provider's group mapping, set by the account's admins, names the team it grants",
     "service_outbox": "a relay read past the tenant by system_tx; each row carries its team, no read uses it",
     "files_outbox": "a relay read past the tenant by system_tx; each row carries its team, no read uses it",
     "documents_outbox": "a relay read past the tenant by system_tx; each row carries its team, no read uses it",
@@ -47,7 +49,6 @@ TENANT_HELD = {
 }
 # Until each team has its own tool modules (keys per team, its own policies): then this list is empty.
 TOOLS_UNTIL_C509 = {
-    "tool_modules": "tools per team",
     "send_policies": "tools per team",
     "send_checks": "tools per team",
     "gateway_calls": "the call log records the acting team for Usage; the database lock on it comes later",
@@ -59,7 +60,15 @@ BACKGROUND = {
     "service_events": "background process: the update notices of the account-level event workflows have no team and "
     "show to every team; every other event carries its team",
 }
-ALLOWED_TABLES = TENANT_HELD | TOOLS_UNTIL_C509 | BACKGROUND
+# Read by reviewers outside the owning team (the security team, for one), so the database holds it to its tenant and
+# the team is checked in code through can() (docs/architecture/migration/agents-registry-tenancy.md).
+REVIEWED_ACROSS_TEAMS = {
+    "registry_publish_requests": "a publish request is read by reviewers outside its subject's team; can() checks the "
+    "team, the tenant policy holds the tenant",
+    "tool_modules": "a module with no team is read by every team and one granted to another team's workflow by that "
+    "team; the store's team_modules and granted check the team, the tenant policy holds the tenant (tools_0086)",
+}
+ALLOWED_TABLES = TENANT_HELD | TOOLS_UNTIL_C509 | BACKGROUND | REVIEWED_ACROSS_TEAMS
 
 # Source lines allowed to mean "every team", each with its reason; the tools entries leave.
 ALLOWED_BRANCHES = {

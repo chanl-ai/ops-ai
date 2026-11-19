@@ -10,6 +10,7 @@ from typing import Any
 
 import httpx
 from fake_bank_https import HOST, fake_bank
+from steps import required
 from usecase_harness import (
     TEAM,
     TOOLS_PORT,
@@ -91,7 +92,7 @@ connections:
 
 def outcome(api: httpx.Client, key: str, amount: float) -> str | None:
     body = {"workflowId": "uc531_card_check", "input": {"accountId": "A1", "amount": amount}, "runKey": key}
-    run_id = str((data(api.post("/v1/runs", json=body, headers=TEAM)) or {}).get("runId"))
+    run_id = str((required(api.post("/v1/runs", json=body, headers=TEAM), "/v1/runs")).get("runId"))
 
     def ended() -> dict[str, Any] | None:
         run = data(api.get(f"/v1/runs/{run_id}", headers=TEAM)) or {}

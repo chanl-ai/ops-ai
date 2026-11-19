@@ -6,11 +6,16 @@ left out is kept, so the panel's four controls never wipe knowledge, budget or w
 merged result is checked by the resolver against the agent's limits, so a value outside them, or an unknown field, is
 a 422 naming the field and nothing is stored. Owner only, like every chat route. A message's attachments are files
 uploaded to files-service; the turn reads them (api/chat_attachments.py).
+
+No route here takes the request transaction (`Tx`): the settings reply names the knowledge bases from kb-service, and
+a budget answer runs the paused turn on the model, so each store call takes and returns its own connection and none
+is held while another party answers.
 """
 
 from __future__ import annotations
 
-from typing import Annotated, Any, TypeAlias
+from collections.abc import Mapping
+from typing import Annotated, Any, TypeAlias, cast
 
 from fastapi import APIRouter, Body, Depends
 from fastapi.responses import JSONResponse
@@ -20,7 +25,9 @@ from ops_agents.activities.catalog import AgentDefinition
 from ops_agents.activities.overrides import limits_for, parse, resolve
 from ops_contracts.chat import BudgetAnswer, ChatOverrides, NamedRef, ThreadLimits, ThreadSettings
 from ops_service_kit.errors import ApiError, NotFound, Unprocessable
+from ops_service_kit.http import Json
 from ops_service_kit.ids import now_iso
+from ops_store import isolation
 
 from ..auth import Principal, principal
 from ..chat_budget import answer as answer_budget
@@ -29,24 +36,25 @@ from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..memory import person_of
 from ..runs import graph_store
+from .chat import thread_agent
 
 router = APIRouter(prefix="/chat", dependencies=[Depends(principal)])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
 
 
-async def _thread(rt: Runtime, me: Principal, thread_id: str) -> tuple[dict[str, Any], AgentDefinition, AgentLimits]:
+async def _thread(rt: Runtime, me: Principal, thread_id: str) -> tuple[Json, AgentDefinition, AgentLimits]:
     row = await chat_row(rt, thread_id, me)
     if row is None:
         raise NotFound("Conversation")
-    meta: dict[str, Any] = row["meta"] or {}
-    agent = rt.catalog.agent(str(meta.get("agentId")))
+    meta = cast(Json, row["meta"] or {})
+    agent = await thread_agent(rt, me, meta)
     if agent is None:
         raise Unprocessable("This conversation's agent is no longer live.")
     return row, agent, limits_for(agent, rt.settings.model_alias)
 
 
-async def _view(rt: Runtime, row: dict[str, Any], agent: AgentDefinition, limits: AgentLimits) -> ThreadSettings:
+async def _view(rt: Runtime, row: Json, agent: AgentDefinition, limits: AgentLimits) -> ThreadSettings:
     try:
         kb_names = {k.id: k.name for k in await rt.kbs().bases()}
     except ApiError:
@@ -77,11 +85,14 @@ async def _view(rt: Runtime, row: dict[str, Any], agent: AgentDefinition, limits
 
 @router.get("/threads/{thread_id}/settings")
 async def get_settings(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
-    row, agent, limits = await _thread(rt, me, thread_id)
+    """One transaction reads the conversation and its agent; the reply then names the bases from kb-service with none
+    open."""
+    async with isolation.request_transaction():
+        row, agent, limits = await _thread(rt, me, thread_id)
     return ok((await _view(rt, row, agent, limits)).wire())
 
 
-def merge(stored: dict[str, Any] | None, patch: dict[str, Any]) -> dict[str, Any]:
+def merge(stored: Mapping[str, object] | None, patch: Mapping[str, object]) -> dict[str, Any]:
     """PATCH semantics on wire (camelCase) keys: sent replaces, null clears, absent keeps."""
     merged = {**(stored or {}), **patch}
     return {k: v for k, v in merged.items() if v is not None}
@@ -89,8 +100,10 @@ def merge(stored: dict[str, Any] | None, patch: dict[str, Any]) -> dict[str, Any
 
 @router.patch("/threads/{thread_id}/settings")
 async def patch_settings(rt: Rt, me: Me, thread_id: str, body: Annotated[dict[str, Any], Body()]) -> JSONResponse:
+    """Off the request transaction: the reply names the bases from kb-service. The body stays a JSON object, not a
+    model: a field sent as null clears it and one left out is kept, and the resolver names an unknown field (422)."""
     row, agent, limits = await _thread(rt, me, thread_id)
-    merged = parse(merge(row.get("overrides"), body), "thread")
+    merged = parse(merge(cast(Json | None, row.get("overrides")), body), "thread")
     resolve(
         limits, agent.default_kb_ids, thread=merged, widgets_per_turn=agent.widgets_per_turn
     )  # 422 naming the field, before anything is stored
@@ -102,7 +115,8 @@ async def patch_settings(rt: Rt, me: Me, thread_id: str, body: Annotated[dict[st
 @router.post("/threads/{thread_id}/budget")
 async def budget(rt: Rt, me: Me, thread_id: str, body: BudgetAnswer) -> JSONResponse:
     """Continue (the conversation's owner) or raise (an admin of its team) a spent conversation budget; the paused
-    turn then runs and the conversation comes back with its reply. 403 for anyone else, 409 when not paused."""
+    turn then runs and the conversation comes back with its reply. 403 for anyone else, 409 when not paused. Off the
+    request transaction: the turn runs the model."""
     await answer_budget(rt, me, thread_id, body)
     row = await chat_row(rt, thread_id, None)
     assert row is not None

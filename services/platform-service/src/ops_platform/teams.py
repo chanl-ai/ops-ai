@@ -11,12 +11,9 @@ import hashlib
 import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import TypedDict
 
-from ops_access import BUILTIN_ROLES, Access, Grids, active
-from ops_identity import Principal
 from ops_service_kit.errors import Conflict, Forbidden, NotFound, Unauthorized
-from ops_service_kit.ids import now_iso
 
 from .store.members import Actor, Bulk, Invite, NotTheInvitee, TeamArchivedError, TeamStore
 from .store.roles import RoleStore
@@ -32,7 +29,31 @@ def _hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def _bulk(b: Bulk) -> dict[str, Any]:
+class BulkView(TypedDict):
+    updated: list[str]
+    skipped: list[dict[str, str]]
+
+
+class InvitedView(BulkView):
+    """The invites made, each with its token, shown once."""
+
+    invites: list[dict[str, str]]
+
+
+class InvitePreviewView(TypedDict):
+    token: str
+    email: str
+    teamId: str
+    team: str
+    role: str
+    invitedBy: str | None
+    existingAccount: bool
+    invitedAt: str
+    expiresAt: str
+    state: str
+
+
+def _bulk(b: Bulk) -> BulkView:
     return {"updated": b.updated, "skipped": b.skipped}
 
 
@@ -42,36 +63,16 @@ class Members:
     # Where a caller's role assignments are read for `require_admin`; the tenant's RoleStore unless a test gives one.
     roles: RoleStore | None = None
 
-    async def require_admin(self, actor: Actor, area: str = "access", action: str = "manage") -> None:
+    async def require_admin(
+        self, actor: Actor, area: str = "access", action: str = "manage", *, in_team: bool = False
+    ) -> None:
         """`can(area, action)` in the actor's team, from the roles the database holds now rather than the token's, so a
         demoted admin loses the right at once. The refusal keeps its documented code, `admin_required`."""
-        roles = self.roles or RoleStore(self.store.db)
-        held = await roles.holdings(actor.tenant_id, actor.user_id)
-        live = active(held.assignments, now_iso())
-        version = await roles.version(actor.tenant_id)
-        p = Principal(
-            kind="person",
-            sub=actor.user_id,
-            email="",
-            name="",
-            roles={},
-            scopes=[],
-            tenant_id=actor.tenant_id,
-            team_id=actor.team_id,
-            team_ids=list(held.teams),
-            access={t: [a.role_id for a in live if a.team_id == t] for t in {a.team_id for a in live}},
-            permission_version=version,
-            auth_method="session",
-        )
-        access = Access(
-            security_team=await self.store.security_team_of(actor.tenant_id),
-            grids=Grids(fetch=lambda t, _v, ids: roles.grids(t, ids)),
-        )
-        # The built-in roles too, so a refusal names who holds the cell in this workspace.
-        await access.grids.load(actor.tenant_id, version, [*{a.role_id for a in live}, *(r.id for r in BUILTIN_ROLES)])
-        access.can(p, area, action, team=actor.team_id, what="this team", code="admin_required")
+        roles = self.roles or RoleStore(self.store)
+        p, access = await roles.live(actor.tenant_id, actor.user_id, team=actor.team_id)
+        access.can(p, area, action, team=actor.team_id, what="this team", code="admin_required", in_team=in_team)
 
-    async def invite(self, actor: Actor, emails: list[str], role: str) -> dict[str, Any]:
+    async def invite(self, actor: Actor, emails: list[str], role: str) -> InvitedView:
         await self.require_admin(actor, "access", "create")
         now = datetime.now(UTC)
         tokens = {e.strip().lower(): f"inv_{secrets.token_urlsafe(24)}" for e in emails}
@@ -86,13 +87,14 @@ class Members:
         except TeamArchivedError as e:
             raise Conflict("This team is archived and takes no new members.", code="team_archived") from e
         invites = [{**m, "token": tokens[m["email"]]} for m in made]
-        return {**_bulk(bulk), "invites": invites}
+        done = _bulk(bulk)
+        return {"updated": done["updated"], "skipped": done["skipped"], "invites": invites}
 
-    async def set_role(self, actor: Actor, ids: list[str], role: str) -> dict[str, Any]:
+    async def set_role(self, actor: Actor, ids: list[str], role: str) -> BulkView:
         await self.require_admin(actor, "access", "edit")
         return _bulk(await self.store.set_role(actor, ids, role, at=_iso(datetime.now(UTC))))
 
-    async def remove(self, actor: Actor, ids: list[str]) -> dict[str, Any]:
+    async def remove(self, actor: Actor, ids: list[str]) -> BulkView:
         await self.require_admin(actor, "access", "delete")
         return _bulk(await self.store.remove(actor, ids, at=_iso(datetime.now(UTC))))
 
@@ -102,7 +104,7 @@ class Members:
             raise NotFound("No invitation matches this link.")
         return invite
 
-    async def preview(self, token: str) -> dict[str, Any]:
+    async def preview(self, token: str) -> InvitePreviewView:
         invite = await self.find(token)
         return {
             "token": token,

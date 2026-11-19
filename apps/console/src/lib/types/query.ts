@@ -7,6 +7,8 @@ export interface ListParams<F extends Record<string, string[] | undefined> = Rec
   search?: string;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
+  /** Exactly these rows, whatever the search says (at most 1000, the API's limit). */
+  ids?: string[];
   filters?: F;
 }
 
@@ -30,8 +32,15 @@ export interface OptionsPage {
   nextCursor: string | null;
 }
 
+/** The app picker's page for a module's connection: each choice also says how healthy the connection is. */
+export interface ConnectionOptionsPage extends OptionsPage {
+  data: (OptionsPage['data'][number] & { status: string })[];
+}
+
 /** The tools picker's page: also the apps whose catalog holds tools the team has not added, and how many. */
 export interface ToolOptionsPage extends OptionsPage {
+  /** An MCP link's picker (`agents: false`) also gets what each tool takes and does. */
+  data: (OptionsPage['data'][number] & { inputSchema?: Record<string, unknown> | null; description?: string | null })[];
   notAdded?: { appId: string; name: string; count: number }[];
 }
 

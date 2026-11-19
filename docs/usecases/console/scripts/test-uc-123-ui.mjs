@@ -3,6 +3,7 @@
 // sees no run button on a workflow; James, a builder, does. On James's run, Ravi sees no Cancel and James does; on
 // James's publish request, Ravi sees who decides instead of Approve, and Maya, a reviewer, gets the decision form.
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { publishReviewOn } from '../../lib/workflow_ui.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const PASSWORD = 'northfield-demo';
@@ -32,6 +33,9 @@ async function signIn(browser, consoleUrl, email, errors) {
 
 await withUiStack(
   async (consoleUrl) => {
+    // A new workspace publishes at once; the publish request below has to wait for a reviewer, so review is on for
+    // agents first, before anyone signs in (a policy change refuses older tokens).
+    await publishReviewOn({ agents: 'always' });
     // James's team workflow, saved through the API.
     const J = { Authorization: `Bearer ${await tokenFor('j.richardson@harborpine.example')}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
     const saved = await fetch(`${agents}/v1/workflows/definitions`, { method: 'POST', headers: J, body: JSON.stringify({ yaml: WORKFLOW }) });
@@ -76,9 +80,11 @@ await withUiStack(
       const decideControls = async (email) => {
         const page = await signIn(browser, consoleUrl, email, errors);
         await page.goto(`${consoleUrl}/reviews?review=${request.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-        await page.getByRole('dialog').first().waitFor({ timeout: 120_000 });
+        // The task by its link opens inline in the Human Tasks queue, decided in its Decision panel.
+        const panel = page.getByTestId('decision-panel');
+        await panel.waitFor({ timeout: 120_000 });
         await page.waitForTimeout(1500);
-        return { approve: await page.getByRole('dialog').getByRole('button', { name: /^Approve/ }).count(), decidedBy: await page.getByTestId('review-decided-by').count() };
+        return { approve: await panel.getByRole('button', { name: /^Approve/ }).count(), decidedBy: await panel.getByTestId('review-decided-by').count() };
       };
       const raviDecide = await decideControls('r.menon@harborpine.example');
       const mayaDecide = await decideControls('m.okafor@harborpine.example');

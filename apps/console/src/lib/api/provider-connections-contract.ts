@@ -1,4 +1,5 @@
 import type { ProviderConnection, ProviderConnectionInput } from '@/lib/types/models';
+import type { ListParams, ListResult } from '@/lib/types/query';
 
 /**
  * The account's model provider connections on models-service (`/v1/models/providers`): account admins
@@ -6,7 +7,7 @@ import type { ProviderConnection, ProviderConnectionInput } from '@/lib/types/mo
  */
 export interface ProviderConnectionsApi {
   /** 403 `admin_only` for anyone else. */
-  list(): Promise<ProviderConnection[]>;
+  list(p: ListParams): Promise<ListResult<ProviderConnection>>;
   /** 400 naming the field the type refuses; 409 `provider_exists` for a name in use. */
   create(input: ProviderConnectionInput): Promise<{ id: string; name: string; type: string }>;
 }

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import time
 
-from ops_tools.tokens import Binding, mint
-from ops_service_kit.ids import input_hash
-
 from usecase_harness import check, finish, service_headers, tools
+
+from ops_service_kit.ids import input_hash
+from ops_tools.tokens import Binding, mint
 
 # A seeded write (Core banking, answering from its stub).
 TOOL = "update_address"
@@ -37,7 +37,7 @@ def call(c, step: str, token: str | None):  # type: ignore[no-untyped-def]
     )
 
 
-with tools() as gw:
+with tools(approval_rules=True) as gw:
     refused = call(gw, "s1", None)
     reasons = refused.json().get("error", {}).get("details", {}).get("reasons") if refused.status_code != 200 else None
     check("write without a token is refused (403)", refused.status_code == 403, refused.text[:200])

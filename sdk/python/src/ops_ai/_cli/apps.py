@@ -19,6 +19,7 @@ def main(argv: list[str]) -> int:
     common = [verb_options()]
     catalog = sub.add_parser("list", parents=common, help="the Apps page's cards")
     catalog.add_argument("--connected", action="store_true", help="only the connected ones")
+    catalog.add_argument("--search", help="only cards whose name or category has this text")
     sub.add_parser("show", parents=common, help="one app's page: card, accounts, tools, latest calls").add_argument(
         "app"
     )
@@ -78,7 +79,7 @@ def _make_default(ns: argparse.Namespace, ops: OpsAI) -> int:
 
 def _dispatch(ns: argparse.Namespace, ops: OpsAI) -> int:
     if ns.verb == "list":
-        cards = ops.apps.list(connected=True if ns.connected else None)
+        cards = ops.apps.list(connected=True if ns.connected else None, search=ns.search)
         return table(ns, cards, "id", "name", "kindLabel", "status", "toolsCount", "accountsCount")
     if ns.verb == "show":
         return emit(ns, ops.apps.get(ns.app))

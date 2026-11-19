@@ -11,6 +11,7 @@ import time
 from typing import Any
 
 from several_accounts import QUERY, SF, add_org, flow, retail_on, rig, save_and_publish
+from steps import required
 from usecase_harness import check, data, finish
 
 FLOW = "uc708_eu"
@@ -70,14 +71,14 @@ with rig("uc-708", with_agents=True) as r:
     add_org(r, "EU org", r.sf["eu_login_url"], "kestrel.eu")
     retail = r.sf["api_base"].removeprefix("https://")
     _, published = save_and_publish(r, flow(FLOW, {SF: "EU org"}))
-    agent = data(r.api.post("/v1/agents", json={"name": "EU desk", "role": "Finds cases"}, headers=r.priya)) or {}
+    agent = required(r.api.post("/v1/agents", json={"name": "EU desk", "role": "Finds cases"}, headers=r.priya), "/v1/agents")
     aid = str(agent.get("id") or "ag_missing")
     draft = r.api.patch(f"/v1/agents/{aid}", json={"toolIds": ["salesforce_query"], "accounts": {SF: "EU org"}},
                         headers=r.priya)  # fmt: skip
     r.api.post(
         f"/v1/agents/{aid}/publish-requests", json={"version": (data(draft) or {}).get("version")}, headers=r.priya
     )
-    thread = str((data(r.api.post("/chat/threads", json={"agentId": aid, "kbIds": []}, headers=r.priya)) or {})["id"])
+    thread = str((required(r.api.post("/chat/threads", json={"agentId": aid, "kbIds": []}, headers=r.priya), "/chat/threads"))["id"])
 
     # 1. EU org's sign-in expires: Salesforce answers 401 and refuses the refresh. A call naming it is refused, says
     # it needs a new sign-in, and nothing reaches Retail org.

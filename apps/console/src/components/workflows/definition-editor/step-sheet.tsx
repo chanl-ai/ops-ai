@@ -149,7 +149,7 @@ function EmailTriggerDetails({ parameters, readOnly, onConnected }: { parameters
           <span className="min-w-0 truncate font-medium">{picked.name || picked.address}</span>
           <MailboxStatusDot mailbox={picked} />
           <span className="text-muted-foreground">Reads {picked.folder}</span>
-          <Link href={`/channels/email/${picked.id}`} className="ml-auto underline underline-offset-2">
+          <Link href={`/build/channels/email/${picked.id}`} className="ml-auto underline underline-offset-2">
             Open
           </Link>
         </div>

@@ -1,6 +1,6 @@
 # Ops AI architecture
 
-Status: current, updated 2026-10-16. The decided design is [workflows and agents](../design/workflows/workflows-and-agents.md); decision records it does not settle remain options.
+Status: current, updated 2026-11-11. The design is [workflows and agents](../design/workflows/workflows-and-agents.md); the current choice per area is [platform choices](platform-choices.md).
 
 Ops AI is one operational AI platform for regulated enterprises, banks first. Agents and workflows are its two ways
 of running work; both use the same shared services and the data and AI gateways. Builders draw agents and workflows in
@@ -23,6 +23,7 @@ call. This folder describes the system as built and as designed, with the gotcha
 | Human in the loop | [human-in-the-loop.md](human-in-the-loop.md) | Interrupts, reviews, approval tokens, step-up, two approvers, SLA timers | Builder |
 | Agent guardrails and skills | [agent-guardrails.md](agent-guardrails.md) | Pinned guardrails and skills, the check before and after the answer, fail-closed exits, what is enforced | Builder |
 | Tool lifecycle | [tool-lifecycle.md](tool-lifecycle.md) | Connect, import, review, access, grant, call, approve and show a tool, with what is built and what is not | Builder |
+| MCP | [mcp.md](mcp.md) | Ops AI as an MCP server and client, agents and workflows on MCP tools, sign-in, audit, limits and masking, with what is built and what is not | Builder |
 | Channels | [channels-and-deployments.md](channels-and-deployments.md) | Deployments, the adapter contract, identity per channel, external keys, the mailbox adapter | Builder |
 | Identity | [identity-and-tenancy.md](identity-and-tenancy.md) | Sign-in, delegation, process principals, the tools gateway, tenancy, prototype shortcuts | Builder |
 | Versions | [definitions-and-versions.md](definitions-and-versions.md) | Draft to publish, pointers, the pin per thread, migrate | Builder |
@@ -32,7 +33,29 @@ call. This folder describes the system as built and as designed, with the gotcha
 | Make | [make.md](make.md) | Make layout, ports, environment names, daily commands | Operator |
 | Dependencies | [dependencies.md](dependencies.md) | Every Python package in the lock with licence and network behaviour | Operator, approver |
 | Delivery | [delivery.md](delivery.md) | What is proven, what is next, the open decisions | Approver |
-| Decisions | [decisions/](decisions/) | The decision records, each an option unless it was settled; several are superseded in part by the 2026-10-16 decisions | Approver |
+| Platform choices | [platform-choices.md](platform-choices.md) | The product or library each part is built on today, with code paths | Approver, builder |
+| Roles and permissions | [roles-and-permissions.md](roles-and-permissions.md) | Who may do what, approvals, the access rules and the exceptions register | Builder, approver |
+| Console areas | [console-areas.md](console-areas.md) | The four areas of the console and the cells that offer each page | Builder |
+| Logging and data writes | [logging-and-data-writes.md](logging-and-data-writes.md) | Log lines, ids and redaction; the store helper for a person's edit | Builder, operator |
+| Engineering standards | [engineering-standards.md](engineering-standards.md) | Index of the target-state rules: how to read a rule, one owner per job, every rule id with whether a check exists | Builder, reviewer |
+| Standards: layers | [standards/layers.md](standards/layers.md) | Layers and ownership (`LY1` to `LY9`): the onion, one owner per job, names, ports, each rule with a real example and its check | Builder, reviewer |
+| Standards: configuration | [standards/configuration.md](standards/configuration.md) | Configuration (`CF1` to `CF6`): one settings object, no literal hosts or timeouts, fail at start, secrets, safe defaults | Builder, reviewer |
+| Standards: tenancy and access | [standards/tenancy-and-access.md](standards/tenancy-and-access.md) | Tenant isolation and access (`TN1` to `TN5`, `AC1` to `AC5`): row-level security, `isolated_tx`, `can()`, the exceptions register | Builder, reviewer |
+| Standards: data access | [standards/data-access.md](standards/data-access.md) | Data access (`DA1` to `DA13`): one transaction per request, Core statements, paging in SQL, indexes, migrations, retention | Builder, reviewer |
+| Standards: api and models | [standards/api-and-models.md](standards/api-and-models.md) | API contracts and models (`AP1` to `AP7`, `MD1` to `MD4`): typed, authenticated, idempotent routes; `extra="forbid"`; one model per contract | Builder, reviewer |
+| Standards: events and workers | [standards/events-and-workers.md](standards/events-and-workers.md) | Events, the relay and workers (`EV1` to `EV6`): outbox in the same transaction, one relay, idempotent receivers, loop health | Builder, reviewer |
+| Standards: console and sdk | [standards/console-and-sdk.md](standards/console-and-sdk.md) | Console, SDKs and CLI (`UI1` to `UI7`): no browser-side joins, hooks only, server paging, generated SDKs | Builder, reviewer |
+| Standards: observability | [standards/observability.md](standards/observability.md) | Errors, logging and observability (`OB1` to `OB6`): kit logging, one request line with ids, typed errors, up and ready, timeouts | Builder, reviewer |
+| Standards: security | [standards/security.md](standards/security.md) | Security (`SC1` to `SC6`): two gateways, audit in the same transaction, write-only secrets, dependencies, nothing committed that identifies a customer | Builder, reviewer |
+| Standards: testing | [standards/testing.md](standards/testing.md) | Tests (`TS1` to `TS8`): failure modes first, a budget per change, seen failing once, public seams, use cases per layer | Builder, reviewer |
+| Standards: delivery | [standards/delivery.md](standards/delivery.md) | Delivery, deploy and upgrade (`DL1` to `DL9`): branch and pull request, one gate, a separate reviewer, staging on every merge, proven upgrades | Builder, reviewer |
+| Migration plan | [migration/README.md](migration/README.md) | How every service, the console and the SDKs move onto the standards: eight components, a pilot, four lanes and the console, with sizes, commands and acceptance per page | Builder, reviewer |
+| Templates | [templates.md](templates.md) | Templates a team installs, keeps, edits and updates: packs, copies, copy links, review and take; what is built and what is not | Builder |
+| Knowledge base | [knowledge-base.md](knowledge-base.md) | Knowledge bases: sources, ingest, chunking, embedding, search and citation; what is built and what is not | Builder |
+| Several accounts per app | [app-accounts.md](app-accounts.md) | Several named accounts of one app per team or person, the default, and how a call picks its account; sharing and role limits not built | Builder |
+| SAML sign-in | [saml-sign-in.md](saml-sign-in.md) | Company sign-in over SAML: the checks, domain proof, first sign-in and group rules (built); certificates, test sign-in and break-glass (not built) | Builder |
+| Integrations in layers | [integrations.md](integrations.md) | Integrations in layers: plugins, auth configs, accounts, the gateway, triggers, events and MCP, with what is built per layer | Builder |
+| Decision records | [decisions/](decisions/) | The options and scoring behind the platform choices | Approver |
 
 ## What is proven
 
@@ -52,8 +75,8 @@ of real calls.
 | A thread paused on version 1 finishes on version 1 after versions 2 and 3 are published | [pause-survives-graph-change](../services/agents-service/experiments/pause-survives-graph-change.md) | Holds |
 | Two processes cannot run one thread; a run killed mid-node is recovered by the sweeper in about 5.5 s | [leases-and-sweeper](../services/agents-service/experiments/leases-and-sweeper.md) | Holds |
 | A stale owner cannot write after a takeover: checkpoints, journal, status, timers, tool writes | [fencing](../services/agents-service/experiments/fencing.md), [fence-on-takeover](../services/agents-service/experiments/fence-on-takeover.md) | Holds, with the residuals listed in durability-failure-and-audit.md |
-| A write tool runs only with an approval token bound to its input hash; money needs two approvers | [gateway-approval-token](../services/agents-service/experiments/gateway-approval-token.md); uc-007 | Holds, with the [prototype shortcuts](identity-and-tenancy.md#prototype-shortcuts-still-in-the-code) |
-| Step-up is verified for signature, subject and age; a workflow review's requester cannot decide it; one person cannot be both money approvers | [approval-trust](../services/agents-service/experiments/approval-trust.md); uc-009 | Holds; `POST /v1/threads/{id}/approvals` has no requester check |
+| A write tool that asks runs only with an approval token bound to its input hash (writes run without asking by default, row E49); money needs two approvers | [gateway-approval-token](../services/agents-service/experiments/gateway-approval-token.md); uc-007 | Holds, with the [prototype shortcuts](identity-and-tenancy.md#prototype-shortcuts-still-in-the-code) |
+| Step-up is verified for signature, subject and age; a workflow review's requester cannot decide it; one person cannot be both money approvers | [approval-trust](../services/agents-service/experiments/approval-trust.md); uc-009 | Holds; `POST /v1/threads/{id}/approvals` runs the same decider check as decide (row E51) |
 | An approved write re-sent after a crash runs once at the gateway | [gateway-approval-token](../services/agents-service/experiments/gateway-approval-token.md) | Holds |
 | SLA timers warn, breach, escalate and time out into the outcome pinned in the definition | uc-006; [timers-and-sla](../services/agents-service/experiments/timers-and-sla.md) | Holds |
 | Checkpoint storage stays bounded with references in state and pruning after the journal | [checkpoint-growth](../services/agents-service/experiments/checkpoint-growth.md) | Holds |

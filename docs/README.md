@@ -70,7 +70,7 @@ names it or a folder it takes whole, and a page it does not place fails the site
 | Reader | Read in this order |
 |---|---|
 | Engineer | `background/problem-statement.md` → `architecture/overview.md` → `architecture/service-map.md` → the topic spec for the area you work on → `plan/implementation-plan.md` |
-| Architect | `background/problem-statement.md` → `architecture/overview.md` → `architecture/decisions/` (ADR-0001 to ADR-0016; every ADR is an option, not decided, until it is confirmed) → [tool system design](design/tools/tool-system.md) → `architecture/service-map.md` |
+| Architect | `background/problem-statement.md` → `architecture/overview.md` → `architecture/platform-choices.md` (the current choice per area; `architecture/decisions/` keeps the options behind each) → [tool system design](design/tools/tool-system.md) → `architecture/service-map.md` |
 | Risk reviewer | `background/problem-statement.md` → `architecture/overview.md` (traceability, failure modes) → [ADR-0012 Assurance: governance and testing as one system](architecture/decisions/assurance.md) → ADR-0005 |
 
 ## Requirements
@@ -106,11 +106,44 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `architecture/workflows-as-tools.md` | Workflows as agent tools: an agent starts a published workflow as a child thread and gets its result or a review handle |
 | `architecture/human-in-the-loop.md` | Interrupt kinds, review rules, approval tokens, step-up, two approvers, SLA timers, pauses per channel |
 | `architecture/tool-lifecycle.md` | A tool from connect to import, review, access, grant, call, write approval and display; built versus target; the per-operation approval policy |
+| `architecture/mcp.md` | MCP both ways: the server per team and person, the client for outside servers, built-in tools, sign-in, audit, rate limits and masking; one owner per job; built versus not built |
 | `architecture/workflow-runner.md` | Workflow runner: LangGraph with a step journal, Postgres queue and workers; the ops_engine split from agents through ports; resilience, scale, console, versioning, proof |
 | `architecture/channels-and-deployments.md` | Deployments, the adapter contract, identity and keys per channel, busy-thread input, the mailbox adapter |
 | `architecture/chat-widgets.md` | Widgets an agent shows in chat: templates it fills, layouts it composes from a catalogue, overrides, buttons that need a tool |
 | `architecture/identity-and-tenancy.md` | Sign-in seam, delegation, process principals, tools gateway, row-level security, prototype shortcuts |
-| `architecture/roles-and-permissions.md` | Who may do what: the roles grid, team policies, decided questions and the exceptions register |
+| `architecture/roles-and-permissions.md` | Who may do what: the roles grid, team policies, approvals, the access rules and the exceptions register |
+| `architecture/platform-choices.md` | The product or library each part is built on today, with code paths; the current outcome of every record in `architecture/decisions/` |
+| `architecture/templates.md` | Templates a team installs, keeps, edits and updates: packs, copies, copy links, review and take; what is built and what is not |
+| `architecture/knowledge-base.md` | Knowledge bases: sources, ingest, chunking, embedding, search and citation; what is built and what is not |
+| `architecture/app-accounts.md` | Several named accounts of one app per team or person, the default, and how a call picks its account; sharing and role limits not built |
+| `architecture/saml-sign-in.md` | Company sign-in over SAML: the checks, domain proof, first sign-in and group rules (built); certificates, test sign-in and break-glass (not built) |
+| `architecture/integrations.md` | Integrations in layers: plugins, auth configs, accounts, the gateway, triggers, events and MCP, with what is built per layer |
+| `architecture/console-areas.md` | The console's four areas (Work, Build, Data, Govern), the cells that offer each page, the area switcher and chat's links back (switcher designed, not built) |
+| `architecture/logging-and-data-writes.md` | One JSON log line per event with ids and redaction (built), and the store helper for a person's edit with revision check, audit and outbox (designed) |
+| `architecture/engineering-standards.md` | Index of the engineering standards: how to read a rule, the pages, one owner per job, every rule id with whether a check exists |
+| `architecture/standards/layers.md` | Standards: layers and ownership (`LY1` to `LY9`): the onion, one owner per job, names, ports, each rule with a real example and its check |
+| `architecture/standards/configuration.md` | Standards: configuration (`CF1` to `CF6`): one settings object, no literal hosts or timeouts, fail at start, secrets, safe defaults |
+| `architecture/standards/tenancy-and-access.md` | Standards: tenant isolation and access (`TN1` to `TN5`, `AC1` to `AC5`): row-level security, `isolated_tx`, `can()`, the exceptions register |
+| `architecture/standards/data-access.md` | Standards: data access (`DA1` to `DA13`): one transaction per request, Core statements, paging in SQL, indexes, migrations, retention |
+| `architecture/standards/api-and-models.md` | Standards: API contracts and models (`AP1` to `AP7`, `MD1` to `MD4`): typed, authenticated, idempotent routes; `extra="forbid"`; one model per contract |
+| `architecture/standards/events-and-workers.md` | Standards: events, the relay and workers (`EV1` to `EV6`): outbox in the same transaction, one relay, idempotent receivers, loop health |
+| `architecture/standards/console-and-sdk.md` | Standards: console, SDKs and CLI (`UI1` to `UI7`): no browser-side joins, hooks only, server paging, generated SDKs |
+| `architecture/standards/observability.md` | Standards: errors, logging and observability (`OB1` to `OB6`): kit logging, one request line with ids, typed errors, up and ready, timeouts |
+| `architecture/standards/security.md` | Standards: security (`SC1` to `SC6`): two gateways, audit in the same transaction, write-only secrets, dependencies, nothing committed that identifies a customer |
+| `architecture/standards/testing.md` | Standards: tests (`TS1` to `TS8`): failure modes first, a budget per change, seen failing once, public seams, use cases per layer |
+| `architecture/standards/delivery.md` | Standards: delivery, deploy and upgrade (`DL1` to `DL9`): branch and pull request, one gate, a separate reviewer, staging on every merge, proven upgrades |
+| `architecture/migration/README.md` | The migration to the standards: goal, phases, sizes and calendar, what is replaced and kept, the rules every lane follows, how to verify |
+| `architecture/migration/components.md` | Phase 0: the eight shared components, their files, target interfaces, three builder tracks, checks and branches |
+| `architecture/migration/pilot.md` | Phase 1: documents, files, models and runner on every component; the coverage gap measured and published |
+| `architecture/migration/api-changes.md` | Every API change the migration makes, per service, with what a caller must change; read by the console and SDK steps |
+| `architecture/migration/baseline-rises.md` | Every exception list (baseline) that holds more rows on the migration branch than on develop, with counts; the work list for bringing them down |
+| `architecture/migration/lane-platform.md` | Phase 2: platform-service's store and request layers replaced wholesale; the page shell as one call |
+| `architecture/migration/lane-kb.md` | Phase 2: kb-service's four lists in SQL, typed rows, the `kb.changed` event |
+| `architecture/migration/lane-tools.md` | Phase 2: tools-service's sixteen tables policed, hand filters onto `team_visible()`, the catalogue events |
+| `architecture/migration/lane-agents.md` | Phase 2: agents-service's 43 store files on the base, 21 tables policed, lists and labels in SQL from local copies |
+| `architecture/migration/agents-registry-tenancy.md` | The agents registry, graph version and channel tables: where each row's tenant comes from, key changes, the two migrations |
+| `architecture/migration/lane-console.md` | Phase 3: the console's data layer onto the list contract and the fields the lanes return |
+| `architecture/migration/test-pruning.md` | Where the service test suites spend time, parallel runs, and every test deleted as redundant with its surviving cover |
 | `architecture/definitions-and-versions.md` | Draft to publish, pointers, the pin per thread, what happens without it, migrate |
 | `architecture/durability-failure-and-audit.md` | Leases, sweeper, fencing, re-execution, idempotency, side-effect classes, journal, checkpoint growth and pruning |
 | `architecture/data.md` | Tables per service, the checkpointer package, designed stores, retention |
@@ -142,6 +175,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `architecture/decisions/execution-engine-seam.md` | Engine seam: Temporal preferred where allowed, LangGraph on PostgreSQL built first, one conformance suite |
 | `architecture/decisions/fencing-and-timers.md` | Fencing the thread by lease generation; timers as a port with a fire endpoint; Temporal tests before a Temporal adapter |
 | `architecture/decisions/database-support.md` | ADR-0017, decided: PostgreSQL and SQL Server 2025 (Azure SQL first in intent), MySQL dropped, and the rule every change follows |
+| `architecture/decisions/template-copy-updates.md` | ADR-0018, proposed: a team's copy of a template takes updates field by field against a stored base, never rewriting a published version |
 | `plan/implementation-plan.md` | Phases, teams, workstreams, stop condition |
 | `console/chat.md` | Chat: the AI Elements blocks behind chat-blocks.tsx, untrusted replies, widget shapes and the registry, x-ops-shape, adding data not components |
 | `console/agents-and-workflows.md` | User guide: what an agent is made of, chatting, agents as workflow steps, workflows as tools, when to use which |
@@ -154,6 +188,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `deploy/fly-staging.md` | Staging on one Fly machine: what runs, the facts that shape the image, the commands that create the app, first-run steps, deploy and roll back, and a local run |
 | `deploy/demo-mailbox.md` | A demo mailbox on Fly: the Stalwart mail server, its DNS records, secrets, sending a test, rotating the password and the cost |
 | `deploy/docs-site.md` | The docs site (`apps/docs`) on Vercel: project settings, the static build under `/docs`, and serving it at a path of another host |
+| `deploy/release.md` | Releasing with gitflow: `release/X.Y.Z` cut from develop, tested on staging, merged into main with a merge commit, tagged and merged back; hotfixes; what each push or tag starts; the checks after; the branch protection to set |
 | `deploy/release-package.md` | The release package a client team installs from: `make release-package`, what it holds, the proof from the tarball alone, the facts that shape it and what pushing the images would need |
 | `deploy/security-scanning.md` | Every security scan (CodeQL, Scorecard, the dependency check, the release image scan), the SBOM, signatures and build provenance on each release, the settings the owner switches on, and how to verify a release |
 | `deploy/install-guide.md` | Generated from `guide/install.md` and `guide/operate.md` and shipped in the release package as INSTALL.md: install with install.sh, then status, logs, upgrade, back up, restore and scaling |
@@ -211,7 +246,17 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `console/embedding-the-chat.md` | How a bank embeds the chat: widget deployment, the bank's session endpoint, the script tag, events, errors, security properties and a local test (built and planned parts marked) |
 | `console/mailbox-demo.md` | Runbook: `make up`, `make sample-team` then `make demo-walk`, and the console pages to show the emailed levy notice on |
 | `console/demo-script.md` | The demo, scenario by scenario: where to go, what to type and what the viewer sees, each proven by `make demo-walk` |
+| `usecases/use-case-areas.md` | Use cases tab landing (draft): how to read a use case page, how to run one, the areas |
+| `usecases/knowledge/written-and-pushed-knowledge.md` | uc-676 as a page (draft): written pages and pushed items become cited knowledge |
+| `usecases/agents/agents-use-cases.md` | Every agent use case with what it proves, layers, state, merges and the SDK, CLI and MCP gaps |
+| `usecases/knowledge/knowledge-use-cases.md` | Every knowledge use case with what it proves, layers, state, merges and the SDK, CLI and MCP gaps |
+| `usecases/tools-and-apps/tools-use-cases.md` | Every tools and apps use case with what it proves, layers, state, merges and the SDK, CLI and MCP gaps |
+| `usecases/tools-and-apps/an-app-key-never-comes-back.md` | uc-013 as a page (draft): an app's key reaches the system it calls and never comes back |
+| `usecases/agents/draft-publish-and-chat-with-an-agent.md` | uc-018 as a page (draft): draft, test, publish and chat with an agent |
+| `usecases/workflows/validate-apply-and-test-run-a-workflow.md` | uc-623 as a page (draft): check, save and test-run a workflow from a file |
+| `usecases/people-and-access/invite-change-roles-and-remove.md` | uc-023 as a page (draft): invite people, change their roles, remove them |
 | `usecases/README.md` | Use case registry: how to run, rules (scripted model only, PASS needs evidence), layout, exit codes |
+| `usecases/index.md` | Generated index of every use case: id, area, short title, layers, doc (`make usecase-index`) |
 | `usecases/agents-service/chat-turn-with-citation.md` | uc-001: chat turn with citation |
 | `usecases/agents-service/test-an-agent-on-a-real-thread.md` | uc-247: A builder tests an agent on a real chat thread the server marks test |
 | `usecases/agents-service/test-an-agent-in-its-page-panel.md` | uc-253: A builder tests an agent in the right panel of its page, with the chat page's components |
@@ -243,10 +288,10 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/tools-service/secrets.md` | uc-013: a tool's credential is a secret, sent at call time and never returned |
 | `usecases/tools-service/a-builder-adds-a-python-function-tool.md` | uc-531: a Python function tool runs sandboxed, reads bound tools through ops.call, hands a secret by name, and is stopped at an unbound tool, a socket, its time limit and its memory cap |
 | `usecases/console/tool-lifecycle-end-to-end.md` | uc-055: James imports the bank, Nadia reviews, James grants, the agent reads and holds, Maya approves in Reviews, on the shared stack |
-| `usecases/console/knowledge-bases-end-to-end.md` | uc-096: James creates a knowledge base, adds files and a page, watches them index (a scan fails with its reason), tests a question in the playground and retires the base |
+| `usecases/knowledge/knowledge-base-end-to-end.md` | uc-096: James creates a knowledge base, adds files and a page, watches them index (a scan fails with its reason), tests a question in the playground and retires the base |
 | `usecases/console/new-row-shows-after-add.md` | uc-710: a Security admin adds a host to a full, sorted, searched Egress list and sees it first, marked New; a member reads the list |
 | `usecases/console/edit-an-operation.md` | uc-090: James edits an operation's input in a form (a wrong-typed default refused on its field, an optional field minor, a required one major), sets step-up and access, and sees the secrets it reads as set or not |
-| `usecases/console/import-to-governed-call.md` | uc-086: James stores the bank's keys as secrets, imports its OpenAPI document, Nadia approves it on the module page, a second version publishes, the agent reads and holds, Maya approves and the bank holds once; the call log names actor, approver and outcome |
+| `usecases/agents/an-agent-with-three-tools.md` | uc-086: James stores the bank's keys as secrets, imports its OpenAPI document, Nadia approves it on the module page, a second version publishes, the agent reads and holds, Maya approves and the bank holds once; the call log names actor, approver and outcome |
 | `usecases/console/chat-find-start-continue.md` | uc-087: James starts a chat from a suggested prompt, regenerates, stops a slow reply, retries a refused send, pages his chats by cursor and finds an old one by its question through server search |
 | `usecases/console/chat-overrides-within-limits.md` | uc-091: the thread settings panel offers only what the agent allows; a switched-off tool is not offered; each turn records its settings; an attached PDF is cited by page |
 | `usecases/console/stale-grants-removed.md` | uc-056: a grant whose operation is no longer offered shows in the grant dialog and saving drops it |
@@ -264,7 +309,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/console/files-page-on-files-service.md` | uc-112: James searches Files, sees what uses a file, downloads it and deletes an unused one; Priya places a legal hold |
 | `usecases/console/pickers-search-the-server.md` | uc-113: James searches the agent page's knowledge picker for the 118th base and grants a tool; the version stores their ids |
 | `usecases/console/viewer-sees-read-only-pages.md` | uc-099: Ravi, a viewer, sees no create button and opens an agent read-only; James, a builder, sees and edits them |
-| `usecases/console/console-matches-page-plan.md` | uc-100: the Overview shows only what waits on a person, Agents has no Templates, Chat reaches Conversations, and roles say reviewer |
+| `usecases/console/console-matches-page-plan.md` | uc-100: the Overview shows only what waits on a person, Agents has no Templates, Chat reaches All chats, and roles say reviewer |
 | `usecases/console/lists-preview-and-versioned-saves.md` | uc-106: a 25-row list is one Tab stop per row; Settings shows Preview beside real services and Egress does not; Enter in Storage saves no version and the Save button does |
 | `usecases/console/widget-edited-with-forms.md` | uc-103: James adds a widget field, its sample and a caption bound to it with forms; the saved template keeps the JSON limits |
 | `usecases/console/guardrail-record-page.md` | uc-104: James saves and publishes v2 on a guardrail's page, sees both versions, and pins v1 on an agent |
@@ -308,7 +353,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/console/case-page-assembled.md` | uc-256: a case opened by a configured workflow shows its header and next action, fields in the case type's order, the task it waits on, the drafted action, linked records and recent activity from one case request; approved, the action reads approved |
 | `usecases/console/pdf-scripts-never-run.md` | uc-398: a crafted PDF carrying open-action, link and form-field scripts is drawn by the file viewer and none of its scripts run; the worker loaded is PDF.js 6.2.108 or later |
 | `usecases/console/table-column-kinds.md` | uc-257: tables size each column by what it holds, with names trimmed to one line, numbers right-aligned, a dash for an empty cell and the name pinned on a phone |
-| `usecases/console/shell-real-data.md` | uc-232: the header's workspace name and Tools › Workflows come from the services, not the mock |
+| `usecases/console/shell-real-data.md` | uc-232: the sidebar's workspace name and Tools › Workflows come from the services, and the header does not repeat it, not the mock |
 | `usecases/console/run-with-files.md` | uc-233: Start run is a form from the trigger's input schema, with files uploaded or picked |
 | `usecases/console/agent-channels.md` | uc-130: an agent's Channels tab shows its chat default, embeds with sites, keys and usage, and calling workflows; an embed retires for good |
 | `usecases/console/agent-shows-every-widget-kind.md` | uc-132: the agent shows every generic widget kind in a chat, each drawn once from its schema-checked data |
@@ -324,6 +369,8 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/console/workflow-access-approved-by-another-person.md` | uc-053: Approve compares the signed-in person with the requester; James requests, Priya approves |
 | `usecases/console/access-is-read-or-write.md` | uc-052: no console control or badge offers a "Moves money" class; access is Read or Write |
 | `usecases/console/sub-pages-in-the-sidebar.md` | uc-047: every sidebar parent lists its sub-pages as rows, the active one lit, closed parents remembered |
+| `usecases/console/console-areas.md` | uc-723: the sidebar lists every area as an open section; area tabs only with the area_tabs flag |
+| `usecases/console/console-areas-server-facts.md` | uc-722: the seeded people hold the cells the areas are built from, and the tool-call list shows one call by its id |
 | `usecases/console/tool-workbench.md` | uc-101: an operation on its full-width workbench; draft mock and transform, a secret typed for one run, the request sent masked, the mock staged for review |
 | `usecases/console/secrets-in-one-place.md` | uc-107: Settings > Secrets lists the operations each secret serves, a rotation reaches them all, a delete in use is refused, and a team scope is enforced by the gateway |
 | `usecases/console/sample-data-pages-say-so.md` | uc-125: a page the mock stores shows "Sample data, changes aren't saved" and cannot be saved, while a live setting keeps its value after a reload |
@@ -363,7 +410,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/tools-service/an-agent-reads-a-team-file.md` | uc-613: An agent reads a team's file and a document's fields by its type, and never another team's |
 | `usecases/agents-service/agent-guardrails-blocked-topics.md` | uc-085: an agent refuses a blocked topic before answering, through a guardrail it pins by version |
 | `usecases/kb-service/knowledge-cited-answers.md` | uc-080: uploaded PDFs indexed by page and section; a granted agent cites them in chat; a replaced document leaves a change row |
-| `usecases/kb-service/add-documents-from-files.md` | uc-129: Add documents on a base uploads to Files or picks from it; both index and Files keeps them referenced |
+| `usecases/knowledge/add-documents-from-files.md` | uc-129: Add documents on a base uploads to Files or picks from it; both index and Files keeps them referenced |
 | `usecases/kb-service/people-and-services-read-knowledge-usage.md` | uc-399: People and services read knowledge usage, refs, search and workflow refs on one route each |
 | `usecases/files-service/file-lifecycle.md` | uc-093: James stores a PDF through files-service's proxy route; download waits for the scan hook; Priya holds it and delete is refused; released, it deletes |
 | `usecases/files-service/file-team-boundary.md` | uc-094: another team's admin gets 404 on every files-service route for a file it does not own; another tenant's service gets 404 |
@@ -374,6 +421,11 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/platform-service/password-sign-in-and-reset.md` | uc-160: a mailed reset link sets a hashed password once and ends the old sessions |
 | `usecases/platform-service/oidc-sign-in-creates-a-chat-user.md` | uc-161: a first OIDC sign-in makes one chat-only member; the console offers SSO for the email |
 | `usecases/platform-service/saml-sign-in-and-step-up.md` | uc-162: SAML sign-in, and a step-up at the same provider that must ask again |
+| `usecases/platform-service/saml-group-grants-and-removal.md` | uc-711: leaving a provider group ends only the membership that group gave |
+| `usecases/platform-service/a-new-workspace-chats-and-writes.md` | uc-751: a new workspace chats and writes with no extra setup; the first admin is asked for a model key |
+| `usecases/platform-service/company-sign-in-required-and-break-glass.md` | uc-712: company sign-in required, with a break-glass Security admin |
+| `usecases/platform-service/saml-test-sign-in.md` | uc-713: an admin tests a company provider before anyone signs in through it |
+| `usecases/platform-service/mcp-company-sign-in.md` | uc-733: a person connects an assistant to a team's MCP address with their company sign-in; a console token, another address and a person who left the team are refused |
 | `usecases/platform-service/wrong-sign-in-provider-refused.md` | uc-163: a password in an SSO-only workspace, another provider's answer and a reused code are refused |
 | `usecases/platform-service/workspace-admins-manage-teams.md` | uc-164: workspace admins create, rename, archive and restore teams; an archived team leaves tokens |
 | `usecases/platform-service/workspace-security-default-teams-and-groups.md` | uc-212: a workspace sets its security and default teams; SSO groups map new people to teams |
@@ -416,6 +468,8 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/agents-service/another-team-s-records-answer-not.md` | uc-526: Another team's records answer not found |
 | `usecases/models-service/an-account-admin-saves-a-model.md` | uc-532: An account admin saves a model provider key on Settings and a model call signs in to the provider with it; no other person sees or sets one |
 | `usecases/models-service/a-refused-model-call-says-what-to-do.md` | uc-720: A refused model call in chat says what went wrong with the provider and what to do, worded for an admin or a member |
+| `usecases/tools-service/a-connected-app-writes-at-once.md` | uc-721: A connected app writes at once; a team admin turns asking on per team or per app |
+| `usecases/console/an-admin-decides-approvals-with-one-switch.md` | uc-730: A team admin decides whether agents ask before changing an app with one switch on Approvals, and a test-account checkbox under Advanced |
 | `usecases/models-service/a-team-connects-azure-openai.md` | uc-605: A team runs its agents on its own Azure OpenAI resource, set on Settings or at install, and calls stay in its region |
 | `usecases/tools-service/per-person-sign-in.md` | uc-558: people connect their own Salesforce account; a call acts as the person who asked |
 | `usecases/tools-service/agents-query-salesforce-many-ways.md` | uc-581: an agent queries Salesforce seven ways, a page at a time, and nothing it types changes a query |
@@ -488,6 +542,8 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `packages/ops_service_kit/logging.md` | Logging: one JSON line per event on stdout, its fields and ids, what is redacted, the rules and checks |
 | `sdk/python.md` | Python SDK: connect with an API key, run workflows and decide their tasks, the client's resources and errors |
 | `sdk/typescript.md` | TypeScript SDK: the same client for Node, typed from the API reference |
+| `sdk/changelog-next-major.md` | Draft changelog of the coming SDK major version: each changed route and the nouns and commands that follow |
+| `sdk/upgrading.md` | Upgrading to SDK 1.0.0: list paging and the 50-row cap, unknown body fields refused, the error format, each with before and after code |
 | `guide/ops-assistant.md` | The Ops Assistant: checklist, Connect card, Think harder, Save read-back, reused reads, suggestion chips, memories |
 | `guide/whats-new.md` | What's new: every change a person would notice, newest first, built from the changelog |
 | `guide/use-cases/card-disputes.md` | Use case: card disputes, from the request to the approved credit, with SDK code |
@@ -533,5 +589,25 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/tools-service/callers-from-before-several-accounts-keep-working.md` | uc-705: Callers from before several accounts keep working |
 | `usecases/tools-service/add-account-lives-on-the-accounts-tab.md` | uc-703: Add account is on the Accounts tab for whoever manages apps, and never for a member |
 | `usecases/kb-service/typed-text-and-pushed-items.md` | uc-676: Typed text and pushed items become cited knowledge |
-| `usecases/kb-service/rerank-and-query-rewrite.md` | uc-677: A knowledge owner turns on rerank and query rewrite |
-| `usecases/kb-service/sharepoint-and-confluence-sources.md` | uc-678: A team takes in SharePoint libraries and Confluence spaces |
+| `usecases/knowledge/rerank-and-rewrite.md` | uc-677: A knowledge owner turns on rerank and query rewrite |
+| `usecases/knowledge/sharepoint-and-confluence.md` | uc-678: A team takes in SharePoint libraries and Confluence spaces |
+| `usecases/agents-service/guardrail-names-per-team.md` | uc-731: Two teams keep a guardrail of the same name and one team cannot hold two |
+| `usecases/agents-service/start-from-a-template-sdk.md` | uc-740: A team lists templates of each kind and installs a starter skill through the SDK |
+| `usecases/agents-service/templates-over-mcp.md` | uc-741: An assistant on the team MCP address lists templates and installs one as the signed-in person |
+| `usecases/agents-service/skills-as-mcp-prompts.md` | uc-742: A team skill is offered as an MCP prompt with its inputs as arguments |
+| `usecases/agents-service/prepare-a-meeting-from-the-slash-menu.md` | uc-743: A part of a published skill is picked in chat and offered as an MCP prompt |
+| `usecases/agents-service/update-an-opportunity-from-the-same-skill.md` | uc-744: A second part of the same skill is used in the same chat; the first is carried |
+| `usecases/agents-service/no-skills-view-no-menu.md` | uc-745: A person without the Skills right is offered no skill and cannot name one |
+| `usecases/agents-service/only-published-skills-in-the-menu.md` | uc-746: Drafts and retired skills are neither listed nor served |
+| `usecases/agents-service/a-missing-input-stops-the-send.md` | uc-747: A required input left empty refuses the send or the prompt |
+| `usecases/agents-service/a-reply-over-the-skill-budget-is-refused.md` | uc-748: A pick past the reply's skill cap is refused before the model is called |
+| `usecases/agents-service/a-skill-needing-a-tool-the-agent-lacks.md` | uc-749: A part naming a tool the agent lacks is locked and refused |
+| `usecases/agents-service/an-admin-limits-the-menu.md` | uc-750: An agent's menu setting limits which skills a member can pick |
+| `usecases/agents-service/a-schedule-starts-a-run-once.md` | uc-workflows-1: A Schedule trigger starts one run per tick key |
+| `usecases/platform-service/team-usage-guards-team-deletion.md` | uc-platform-1: A team's running work is counted for that team only and stops its deletion |
+| `usecases/agents-service/evals-keep-saved-cases-and-runs.md` | uc-751: Evals keep saved cases and runs for the team |
+| `usecases/agents-service/an-agent-answers-from-a-knowledge.md` | uc-752: An agent answers from a knowledge source with a citation, in mock and real mode |
+| `usecases/tools-service/an-agent-reads-with-a-tool.md` | uc-753: An agent reads with a tool, asks for approval, and the write runs only after approval, in mock and real mode |
+| `usecases/tools-service/approval-fails-closed-when-the-approval.md` | uc-754: Approval fails closed: when the approval rules cannot be read, a write that needs approval is refused and never runs |
+| `usecases/tools-service/a-team-holding-only-a-workflow.md` | uc-755: A team holding only a workflow grant on another team's tool module uses it through the workflow and cannot edit, publish, run, revoke or delete it |
+| `usecases/agents-service/a-shared-form-filled-in-signed.md` | uc-756: A shared form filled in signed out starts a workflow with knowledge and a tool, a person approves a step, and the run finishes with a record |

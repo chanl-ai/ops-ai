@@ -12,6 +12,7 @@ from ops_agents.api.ops_tools import (
     OPS_ASSISTANT,
     SYSTEM,
     catch_up_assistants,
+    made_before_id,
     ops_assistant_id,
 )
 from ops_agents.store.team_defaults import TeamDefaults
@@ -22,17 +23,19 @@ from tests.api.test_team_default_agent import Stack, stack, start  # noqa: F401 
 from tests.engine.test_lifecycle_rights import TENANT
 
 TEAM = "team_ops"
-AID = ops_assistant_id(TEAM)
+AID = ops_assistant_id(TENANT, TEAM)
+# An assistant made before ids took the tenant keeps its id.
+OLD = made_before_id(TEAM)
 
 
 async def made_before(rt: Runtime) -> None:
     """The team's assistant as the first declaration made it: no built-in reads granted."""
-    old = AgentDefinition.model_validate({**OPS_ASSISTANT, "id": AID, "version": 1, "tools": []})
+    old = AgentDefinition.model_validate({**OPS_ASSISTANT, "id": OLD, "version": 1, "tools": []})
     spec = spec_from_seed(old, rt.settings.model_alias)
     with tenant_scope(TENANT):
-        assert await registry(rt).create_if_absent(spec, by=SYSTEM, team_id=TEAM, agent_id=AID)
-        go_live(rt, AID, 1, spec)
-        await TeamDefaults(rt.db).set_agent(TEAM, AID, by=SYSTEM)
+        assert await registry(rt).create_if_absent(spec, by=SYSTEM, team_id=TEAM, agent_id=OLD)
+        go_live(rt, OLD, 1, spec)
+        await TeamDefaults(rt.db).set_agent(TEAM, OLD, by=SYSTEM)
 
 
 async def test_a_teams_first_chat_gets_an_assistant_granted_the_built_in_reads(stack: Stack) -> None:  # noqa: F811
@@ -47,7 +50,7 @@ async def test_a_restart_brings_an_older_assistant_to_the_declared_one(stack: St
     _, rt = stack
     await made_before(rt)
     assert await catch_up_assistants(rt) == 1
-    live = rt.catalog.agent(AID)
+    live = rt.catalog.agent(OLD)
     assert live is not None and set(BUILT_IN_READS) <= set(live.tools), live
 
 
@@ -75,12 +78,12 @@ async def test_an_assistant_a_person_changed_is_left_as_it_is(stack: Stack) -> N
     await made_before(rt)
     with tenant_scope(TENANT):
         reg = registry(rt)
-        spec = dict((await reg.version(AID, 1))["spec"])
-        n = await reg.save(AID, {**spec, "role": "Our desk helper"}, by="priya@harborpine.example")
-        await reg.publish(AID, n, by="priya@harborpine.example", review_id="test")
-        go_live(rt, AID, n, {**spec, "role": "Our desk helper"})
+        spec = dict((await reg.version(OLD, 1)).spec)
+        n = await reg.save(OLD, {**spec, "role": "Our desk helper"}, by="priya@harborpine.example")
+        await reg.publish(OLD, n, by="priya@harborpine.example", review_id="test")
+        go_live(rt, OLD, n, {**spec, "role": "Our desk helper"})
     await catch_up_assistants(rt)
-    live = rt.catalog.agent(AID)
+    live = rt.catalog.agent(OLD)
     assert live is not None and live.role == "Our desk helper" and not set(BUILT_IN_READS) & set(live.tools), live
 
 
@@ -100,7 +103,7 @@ async def test_a_new_team_gets_its_assistant_from_the_team_created_event(stack: 
     assert done.status_code == 200 and done.json()["data"]["changed"] == 1, done.text
     again = await c.post("/v1/platform-events", json=body, headers=platform_token("team_new", ["agents:create"]))
     assert again.json()["data"]["changed"] == 0, again.text
-    live = rt.catalog.agent(ops_assistant_id("team_new"))
+    live = rt.catalog.agent(ops_assistant_id(TENANT, "team_new"))
     assert live is not None and set(BUILT_IN_READS) <= set(live.tools), live
     with tenant_scope(TENANT):
-        assert await TeamDefaults(rt.db).agent("team_new") == ops_assistant_id("team_new")
+        assert await TeamDefaults(rt.db).agent("team_new") == ops_assistant_id(TENANT, "team_new")

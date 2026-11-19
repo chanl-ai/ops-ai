@@ -6,6 +6,7 @@ import re
 
 from usecase_harness import TEAM, agents, check, data, finish, sse
 
+SECURITY = {"X-Dev-User": "Nadia Petrov", "X-Team-Id": "team_security"}
 ASK = "Start workflow dispute_email: I was charged twice for order 4411 and want the second charge reversed."
 
 
@@ -47,9 +48,18 @@ with agents() as api:
     started = next((e["call"] for e in events if e["type"] == "tool_start"), {})
     check("the agent calls the workflow as a tool", started.get("name") == "workflow__dispute_email", started)
     reply = events[-1].get("message", {}).get("content", "")
-    child = re.search(r"gth_\w+", reply)
-    check("the reply hands back the child's review", "waiting for a review" in reply and child is not None, reply)
-    child_id = child.group(0) if child else ""
+    # A reply never shows a record id (answer_check); the tool card's output names the child's review.
+    ended = next((e["call"] for e in events if e["type"] == "tool_end"), {})
+    output = ended.get("output") or {}
+    child_id = str(output.get("reviewId") or "")
+    check(
+        "the reply hands back the child's review",
+        "waiting for a review" in reply
+        and output.get("status") == "waiting_review"
+        and re.fullmatch(r"gth_\w+", child_id) is not None
+        and re.search(r"\b[a-z]{2,8}_[0-9a-f]{8,}\b", reply) is None,
+        {"reply": reply, "output": output},
+    )
     row = next(
         (
             r
@@ -64,6 +74,12 @@ with agents() as api:
         row,
     )
 
+    outsider = api.post(f"/reviews/{child_id}/decision", json={"decision": "approved"}, headers=SECURITY)
+    check(
+        "a reviewer from another team cannot decide it (403 or 404)",
+        outsider.status_code in (403, 404),
+        outsider.text[:200],
+    )
     decided = api.post(f"/reviews/{child_id}/decision", json={"decision": "approved"}, headers=TEAM)
     check("its review is decided in Reviews (200)", decided.status_code == 200, decided.text[:200])
     messages = data(api.get(f"/chat/threads/{thread['id']}", headers=TEAM))["messages"]

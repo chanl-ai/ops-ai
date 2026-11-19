@@ -6,6 +6,7 @@ app. Rig: test_app_accounts."""
 
 from __future__ import annotations
 
+from ops_service_kit.listing import ListParams
 from ops_tools.store.secrets import SecretStore
 
 from .test_app_accounts import (
@@ -53,13 +54,13 @@ async def test_a_credential_needs_no_account_and_its_secret_is_not_a_value_tools
     listed = await world.client.get("/v1/app-credentials", params={"app": APP}, headers=admin(tenant))
     assert [c["id"] for c in listed.json()["data"] if c["type"] == "own"] == [row["id"]], listed.text
     cred = await world.store.credential(tenant, str(row["id"]))
-    assert cred is not None and cred["secret_name"], cred
+    assert cred is not None and cred.secret_name, cred
     secrets = SecretStore(world.store.engine)
-    shown = await secrets.page(tenant, str(cred["team_id"]), "", offset=0, limit=100)
-    held = [s for s in await secrets.listed(tenant, str(cred["team_id"])) if s["name"] == cred["secret_name"]]
-    assert held and held[0]["credential_id"] == row["id"] and held[0]["connection_id"] is None, held
+    _, shown = await secrets.page(tenant, str(cred.team_id), ListParams(ids=[str(cred.secret_name)]))
+    held = [s for s in await secrets.listed(tenant, str(cred.team_id)) if s.name == cred.secret_name]
+    assert held and held[0].credential_id == row["id"] and held[0].connection_id is None, held
     # Listed read only beside the team's secrets, and changed on the credential (test_secrets_auth_config_read_only).
-    assert cred["secret_name"] in [s["name"] for s in shown]
+    assert cred.secret_name in [s.name for s in shown]
     assert SECRET not in str(row) + listed.text
 
 
@@ -117,8 +118,8 @@ async def test_deleting_an_account_leaves_the_credential_for_the_next(world: Wor
     assert gone.status_code == 204, gone.text
     cred = await world.store.credential(tenant, str(row["id"]))
     assert cred is not None, "deleting an account deleted the team's credential"
-    held = [s["name"] for s in await SecretStore(world.store.engine).listed(tenant, str(cred["team_id"]))]
-    assert cred["secret_name"] in held, "deleting an account deleted the credential's client secret"
+    held = [s.name for s in await SecretStore(world.store.engine).listed(tenant, str(cred.team_id))]
+    assert cred.secret_name in held, "deleting an account deleted the credential's client secret"
     left = await world.client.get(f"/v1/app-credentials/{row['id']}", headers=admin(tenant))
     assert [a["id"] for a in left.json()["data"]["accountsList"]] == [conn], left.text
     assert (await world.client.get("/v1/app-credentials/cred_none", headers=admin(tenant))).status_code == 404
@@ -160,7 +161,7 @@ async def test_replacing_the_secret_changes_the_teams_own_client_only(world: Wor
     assert replaced.status_code == 200 and "bank-rotated-secret-2" not in replaced.text, replaced.text
     fresh = await world.store.get(tenant, conn)
     assert fresh is not None
-    assert fresh["settings"]["clientId"] == "bank-own-client" and fresh["credential_id"] == row["id"]
+    assert fresh.settings["clientId"] == "bank-own-client" and fresh.credential_id == row["id"]
     ops_ai = await world.client.put(
         f"/v1/app-credentials/ops-ai:{APP}/secret", json={"clientSecret": "x"}, headers=admin(tenant)
     )

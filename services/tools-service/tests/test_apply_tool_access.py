@@ -146,7 +146,7 @@ async def test_the_requester_does_not_approve_their_own_request(gateway: Gateway
     asker = next(a for a in m["approvals"] if a["id"] == approval["id"])["requested_by_email"]
     assert asker, "the request keeps its asker's email"
     r = await apply_access(gateway.client, gateway.tenant, approval, approvers=[asker.upper()])
-    assert r.status_code == 200 and r.json()["data"]["output"]["code"] == "requester_decides", r.text
+    assert r.status_code == 200 and r.json()["data"]["output"]["code"] == "own_request", r.text
     assert (await _status(gateway, approval))["status"] == "requested"
 
 
@@ -181,8 +181,8 @@ async def test_the_requester_approves_their_own_request_only_while_the_policy_al
     assert applied["status"] == "approved", applied
 
 
-async def test_with_no_platform_service_the_requester_policy_is_the_dev_policy_at_its_open_default() -> None:
+async def test_with_no_platform_service_the_requester_policy_is_the_dev_policy_at_its_default() -> None:
     """With no platform URL the decision followed no policy and always refused; it follows the dev policies,
     as the dev caller's own identity does for every other decision."""
-    assert await RequesterMayDecide(None).allowed("t") is True
-    assert await RequesterMayDecide(None, dev={"requesterMayDecide": False}).allowed("t") is False
+    assert await RequesterMayDecide(None).allowed("t") is False, "the asker does not decide by default"
+    assert await RequesterMayDecide(None, dev={"requesterMayDecide": True}).allowed("t") is True

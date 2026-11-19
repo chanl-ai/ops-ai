@@ -1,0 +1,2 @@
+# pilot lane: role-name compares, owner compares and policy reads outside policy() in this lane's code today
+# (scripts/check_access_exceptions.py). `path kind key count`. A kind's total may only fall; the lane takes it to zero.

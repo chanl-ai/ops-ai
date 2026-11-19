@@ -216,7 +216,7 @@ async def part_real() -> None:
         out(
             f"models-service logged {totals.get('calls')} calls costing {totals.get('cost')} at the alias's price (0 unless priced)"
         )
-        tokens = [(c["inputTokens"], c["outputTokens"]) for c in logged["items"]]
+        tokens = [(c["inputTokens"], c["outputTokens"]) for c in logged["data"]]
         out(f"tokens per call through models-service (in, out): {tokens}")
         await through.client.close()
     finally:

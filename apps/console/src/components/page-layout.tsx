@@ -10,10 +10,12 @@ import { ArrowLeft, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { PreviewBadge } from '@/components/shared/preview-badge';
-import { TitleSwitcher } from '@/components/shared/title-switcher';
+import { SectionTabs, TitleSwitcher } from '@/components/shared/title-switcher';
 import { SampleNoteOnPage, SampleOnPage } from '@/components/shared/sample-data';
+import { SampleDataBanner } from '@/components/shared/sample-data-banner';
 import { WholeTokens } from '@/components/shared/whole-tokens';
-import { usePreview } from '@/hooks/use-preview';
+import { PageSaveSlot } from '@/components/shared/page-save-actions';
+import { usePreview, useSampleReads } from '@/hooks/use-preview';
 import {
   BulkSelectionContext,
   useBulkSelectionProvider,
@@ -93,7 +95,10 @@ export function PageLayout({
   // A sample note on the page says why already; the header then keeps only its badge, so the words appear once.
   const [notes, setNotes] = useState(0);
   const reportNote = useCallback((change: 1 | -1) => setNotes((n) => n + change), []);
-  const preview = previewProp ?? (previewOfArea || samples > 0);
+  // A read the mock answered on this page counts whatever the area table says: a page under a served prefix can
+  // still call an area no service serves.
+  const mockReads = useSampleReads();
+  const preview = (previewProp ?? (previewOfArea || samples > 0)) || mockReads.length > 0;
 
   const renderIcon = () => {
     if (!icon) return null;
@@ -118,6 +123,9 @@ export function PageLayout({
     // Otherwise, render as-is
     return icon;
   };
+
+  // Save and Discard of a form on the page (PageSaveActions) are drawn here.
+  const [saveSlot, setSaveSlot] = useState<HTMLElement | null>(null);
 
   // Bulk selection UI replaces normal actions when rows are selected
   const renderActions = () => {
@@ -174,6 +182,7 @@ export function PageLayout({
   };
 
   return (
+    <PageSaveSlot.Provider value={saveSlot}>
     <SampleOnPage.Provider value={reportSample}>
     <SampleNoteOnPage.Provider value={reportNote}>
     <BulkSelectionContext.Provider value={ctxValue}>
@@ -272,17 +281,7 @@ export function PageLayout({
                   className="flex flex-wrap items-center gap-2 gap-y-1 mt-2 [contain:inline-size]"
                   data-testid="page-badges"
                 >
-                  {preview && (
-                    // The reason in words, not only on hover: a touch screen never shows the badge's title.
-                    <>
-                      <PreviewBadge />
-                      {notes === 0 && (
-                        <span className="text-xs text-muted-foreground" data-testid="preview-reason">
-                          Parts of this page show sample data that isn’t stored yet, so they are read only.
-                        </span>
-                      )}
-                    </>
-                  )}
+                  {preview && <PreviewBadge />}
                   {badge}
                 </div>
               )}
@@ -290,12 +289,27 @@ export function PageLayout({
           </div>
 
           {/* Actions area — bulk selection overrides normal actions; wraps to own row on narrow */}
-          <div className="flex max-w-full flex-wrap items-center gap-2 sm:shrink-0">{renderActions()}</div>
+          <div className="flex max-w-full flex-wrap items-center gap-2 sm:shrink-0">
+            <span ref={setSaveSlot} className="flex items-center gap-2 empty:hidden" data-testid="page-save-actions" />
+            {renderActions()}
+          </div>
         </div>
 
         {/* Tabs (if provided). shrink-0: the layout is a full-height column, and a scroll container may shrink to its
             padding in one, so on a page taller than the window the tab row collapsed to 8px and its tabs were clipped. */}
+        {/* A page's sibling pages as tabs when the one sidebar lists only the page itself; drawn nothing otherwise. */}
+        <div className="scroll-edge-x max-w-full shrink-0 overflow-x-auto pt-2 empty:hidden [&_[data-slot=tabs-list]]:w-max">
+          <SectionTabs />
+        </div>
         {tabs && <div className="scroll-edge-x max-w-full shrink-0 overflow-x-auto pt-2 [&_[data-slot=tabs-list]]:w-max">{tabs}</div>}
+
+        {/* The reason in words, not only on the badge's hover: a touch screen never shows a title. A sample note in the
+            page names its own section, so the page's banner is not drawn twice. */}
+        {preview && notes === 0 && (
+          <div className="shrink-0 pt-4">
+            <SampleDataBanner />
+          </div>
+        )}
 
         {/* Content */}
         {/* px-1 / -mx-1 gives cards breathing room so borders & focus rings
@@ -306,5 +320,6 @@ export function PageLayout({
     </BulkSelectionContext.Provider>
     </SampleNoteOnPage.Provider>
     </SampleOnPage.Provider>
+    </PageSaveSlot.Provider>
   );
 }

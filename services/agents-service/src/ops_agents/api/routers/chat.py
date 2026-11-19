@@ -14,6 +14,7 @@ import math
 import re
 from collections.abc import AsyncIterator
 from contextlib import aclosing
+from dataclasses import replace
 from typing import Annotated, Any, TypeAlias, cast
 
 from fastapi import APIRouter, Body, Depends, Query, Request
@@ -53,6 +54,7 @@ from ops_contracts.chat import (
     ThreadList,
     WidgetAction,
 )
+from ops_identity.fastapi import Tx
 from ops_service_kit.errors import (
     ApiError,
     Conflict,
@@ -67,13 +69,14 @@ from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.logging import get_logger
 from ops_store import isolation
 
+from ...store.chat_list import ChatListQuery, ChatPage, chat_facets, chat_page
 from ...store.events import EventLog
 from ...store.leases import LeaseHeldError
 from ...store.team_defaults import TeamDefaults
 from ...store.tenancy import current_tenant
 from .. import hitl_facade
 from ..agent_calls import agent_team
-from ..agent_registry import definition_of, pinned_definition, refuse_new_turns, registry
+from ..agent_registry import definition_of, live_agent, pinned_definition, refuse_new_turns, registry
 from ..auth import Principal, caller_of, principal, require_chat_use
 from ..chat_attachments import ChatAttachmentReader
 from ..chat_budget import ensure_budget
@@ -85,29 +88,31 @@ from ..chat_threads import (
     AssistantBuilder,
     assistant_id,
     chat_row,
-    chat_rows,
-    matching_ids,
     may_read,
     messages_of,
     store_summary,
     thread_row_view,
     thread_view,
     update_meta,
-    with_summaries,
+    with_stored_summaries,
 )
 from ..child_runs import acting_for
 from ..deps import Runtime, runtime
 from ..envelope import ok
-from ..memory import finish_learning, person_of, start_learning
+from ..memory import Extraction, finish_learning, person_of, start_learning
 from ..ops_tools import ensure_ops_assistant, fill_cards
 from ..review_text import tool_titles
 from ..runs import config, execute, graph_store, pending, require_graphs, resolve
+from ..skills import skill_turn
 from .agents import changeable
 
 log = get_logger("ops_agents.chat")
 router = APIRouter(prefix="/chat", dependencies=[Depends(principal)])
 # A person asking for more thought in the quick reply's words: these two words matched, no reading of intent.
 THINK_HARDER_ASK = re.compile(r"\bthink harder\b", re.IGNORECASE)
+# The turns still running, held so none is collected mid-run. A turn outlives its request when the reader leaves; it
+# belongs on `ops_store.background.start` once this service's lifespan holds `background.supervisor()`.
+_TURNS: set[asyncio.Task[None]] = set()
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
 
@@ -153,18 +158,18 @@ async def _check_kbs(rt: Runtime, agent: AgentDefinition, kb_ids: list[str]) -> 
     return [names[k] for k in kb_ids]
 
 
-def _state(meta: dict[str, Any]) -> str:
-    return "archived" if meta.get("archived") else "pinned" if meta.get("pinned") else "active"
-
-
 # ── agents ──
 
 
 @router.get("/agents")
-async def agents(rt: Rt) -> JSONResponse:
+async def agents(rt: Rt, me: Me) -> JSONResponse:
     """The live agents the caller's team may chat with: the catalogue serves every team's, so it is narrowed to the
-    agents the team reads, and another team's agent is not offered."""
-    ours = {r["id"] for r in await registry(rt).rows()}
+    agents the team reads, and another team's agent is not offered. A person needs chat.run in the team, never
+    agents.view, so a Chat user still chats; an API key keeps its own path. Off the request transaction: it asks
+    kb-service for the bases' names."""
+    if not me.is_key:
+        require_chat_use(me, team_id=me.team_id or None)
+    ours = {r.id for r in await registry(rt).rows()}
     try:
         names = {k.id: k.name for k in await rt.kbs().bases()}
     except ApiError:
@@ -211,12 +216,27 @@ def _uncursor(cursor: str, order: str, numeric: bool) -> tuple[str | int, str]:
     return key, thread_id
 
 
+def _sort_key(sort_by: str, row: dict[str, Any]) -> str | int:
+    """The value a cursor carries for a thread under an explicit sort; the same value the store orders by."""
+    m = _meta(row)
+    match sort_by:
+        case "title":
+            return str(m.get("title") or "").lower()
+        case "createdAt":
+            return str(row["created_at"])
+        case "messageCount":
+            return int(m.get("messageCount") or 0)
+        case _:
+            return str(m.get("lastMessageAt") or row["created_at"])
+
+
 @router.get("/threads")
 async def list_threads(
     *,
     request: Request,
     rt: Rt,
     me: Me,
+    _: Tx,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(alias="pageSize", ge=1, le=200)] = 25,
     search: str | None = None,
@@ -224,64 +244,77 @@ async def list_threads(
     sort_order: Annotated[str | None, Query(alias="sortOrder")] = None,
     cursor: str | None = None,
     test: bool = False,
+    recent: Annotated[int | None, Query(ge=0, le=20)] = None,
 ) -> JSONResponse:
     """Search runs in SQL over titles, agents, last replies and every question asked; filters, facets and order read
     each thread's meta; only the rows returned are rebuilt from their events. `cursor` pages by position in the order,
-    so a thread added or answered meanwhile neither repeats nor skips a row; `page` serves the conversations table.
-    Either read returns `nextCursor` while more rows follow."""
-    rows = await chat_rows(rt, me)
-    await with_summaries(rt, rows)
-    # A builder's tests are their own list: the conversations, their facets and counts leave them out.
-    metas = [(r, m) for r in rows if bool((m := _meta(r)).get("test")) == test]
-
+    so a thread added meanwhile does not shift the rows, and a thread that changes on a page already read moves to the
+    top without repeating. A thread not yet read that moves above the cursor shows at the top of the next first page;
+    closing that gap needs a snapshot of the order, which this list does not keep.
+    `recent` (default order only) answers the sidebar: the pinned chats, then that many of the newest others, in one
+    response, with `hasNext` set when more pinned chats exist than one page holds. `page` serves the conversations
+    table. Either read returns `nextCursor` while more rows follow."""
+    await with_stored_summaries(rt, me.email, me.name)
+    engine = graph_store(rt).engine
     facet_keys = ("agentId", "kbIds", "state")
-    facets: dict[str, dict[str, int]] = {k: {} for k in facet_keys}
+    q = ChatListQuery(
+        graph=CHAT_GRAPH,
+        owner_email=me.email,
+        owner_name=me.name,
+        test=test,
+        states=request.query_params.getlist("state"),
+        agents=request.query_params.getlist("agentId"),
+        kbs=request.query_params.getlist("kbIds"),
+        search=search,
+        sort_by=sort_by if sort_by in ("title", "createdAt", "messageCount", "lastMessageAt") else "default",
+        descending=(sort_order or ("asc" if sort_by == "title" else "desc")) == "desc",
+    )
+    # Reads a person's own chats only: an API key holds no chat.view, so it lists none.
+    readable = may_read({"ownerEmail": me.email}, me)
+    facets: dict[str, dict[str, int]] = await chat_facets(engine, q) if readable else {k: {} for k in facet_keys}
+    order = f"{sort_by or 'default'}:{'desc' if q.descending else 'asc'}"
 
-    def values(meta: dict[str, Any], key: str) -> list[str]:
-        if key == "agentId":
-            return [str(meta.get("agentId"))]
-        if key == "kbIds":
-            return [str(k) for k in cast(list[Any], meta.get("kbIds") or [])]
-        return [_state(meta)]
-
-    for _, m in metas:
-        for k in facet_keys:
-            for v in values(m, k):
-                facets[k][v] = facets[k].get(v, 0) + 1
-
-    found = await matching_ids(rt, search) if search and search.strip() else None
-    filters = {k: request.query_params.getlist(k) for k in facet_keys if request.query_params.getlist(k)}
-    selected = [
-        (r, m)
-        for r, m in metas
-        if all(set(values(m, k)) & set(want) for k, want in filters.items()) and (found is None or r["id"] in found)
-    ]
-
-    def key_of(r: dict[str, Any], m: dict[str, Any]) -> str | int:
-        match sort_by:
-            case "title":
-                return str(m.get("title") or "").lower()
-            case "createdAt":
-                return str(r["created_at"])
-            case "messageCount":
-                return int(m.get("messageCount") or 0)
-            case _:
-                return str(m.get("lastMessageAt") or r["created_at"])
-
-    descending = (sort_order or ("asc" if sort_by == "title" else "desc")) == "desc"
-    order = f"{sort_by or 'lastMessageAt'}:{'desc' if descending else 'asc'}"
-    ordered = sorted(((key_of(r, m), str(r["id"]), r) for r, m in selected), key=lambda x: x[:2], reverse=descending)
-    total = len(ordered)
-    if cursor is not None:
-        after = _uncursor(cursor, order, numeric=sort_by == "messageCount")
-        rest = [x for x in ordered if (x[:2] < after if descending else x[:2] > after)]
-        chosen, more = rest[:page_size], len(rest) > page_size
-        start = total - len(rest)
+    if recent is not None:
+        if sort_by or cursor is not None:
+            raise ValidationFailed("The sidebar slice has its own order; leave out sortBy and cursor.")
+        # Pinned chats first, then the newest few that are not pinned, so a long pinned list never hides recent chats.
+        pins = await chat_page(engine, replace(q, pinned=True), limit=page_size) if readable else None
+        rest = await chat_page(engine, replace(q, pinned=False), limit=recent) if readable else None
+        chosen_rows = [*(pins.rows if pins else []), *(rest.rows[:recent] if rest else [])]
+        total = (pins.total if pins else 0) + (rest.total if rest else 0)
+        # Pinned chats beyond the page size are not paged: `hasNext` says they exist, and the table pages them.
+        more, next_cursor, start = bool(pins and pins.more), None, 0
     else:
+        after = None
+        if cursor is not None:
+            key, after_id = _uncursor(cursor, order, numeric=sort_by == "messageCount")
+            if q.sort_by == "default":
+                try:
+                    pin, stamp = str(key).split("|", 1)
+                    after = ([int(pin), stamp], after_id)
+                except ValueError as e:
+                    raise ValidationFailed("That cursor is not one this list returned.") from e
+            else:
+                after = ([key], after_id)
         start = (page - 1) * page_size
-        chosen, more = ordered[start : start + page_size], start + page_size < total
-    next_cursor = _cursor(order, *chosen[-1][:2]) if more and chosen else None
-    page_rows = [x[2] for x in chosen]
+        got = (
+            await chat_page(engine, q, limit=page_size, offset=start, after=after)
+            if readable
+            else ChatPage([], 0, False, None)
+        )
+        chosen_rows, total, more = got.rows, got.total, got.more
+        if after is not None:
+            start = total - (got.remaining or 0)
+        last = chosen_rows[-1] if chosen_rows else None
+        next_cursor = None
+        if more and last is not None:
+            if q.sort_by == "default":
+                m = _meta(last)
+                key = f"{int(bool(m.get('pinned')))}|{m.get('lastMessageAt') or last['created_at']}"
+            else:
+                key = _sort_key(q.sort_by, last)
+            next_cursor = _cursor(order, key, str(last["id"]))
+    page_rows = [r for r in chosen_rows if may_read(_meta(r), me)]
     msgs = await messages_of(rt, [r["id"] for r in page_rows], reader=person_of(me))
     result = ThreadList(
         data=[thread_row_view(rt, r, msgs[r["id"]]) for r in page_rows],
@@ -300,10 +333,10 @@ async def list_threads(
 
 
 @router.get("/default-agent", response_model=Envelope[TeamDefaultAgent])
-async def get_default_agent(rt: Rt, me: Me) -> JSONResponse:
+async def get_default_agent(rt: Rt, me: Me, _: Tx) -> JSONResponse:
     """The agent the caller's team starts chats on; its name is absent when that agent is no longer live."""
     agent_id = await TeamDefaults(rt.db).agent(me.team_id)
-    agent = rt.catalog.agent(agent_id) if agent_id else None
+    agent = await live_agent(rt, agent_id) if agent_id else None
     try:
         can(caller_of(me), "chat", "manage", team=me.team_id, what="the team's default agent")
         may = True
@@ -313,14 +346,15 @@ async def get_default_agent(rt: Rt, me: Me) -> JSONResponse:
 
 
 @router.put("/default-agent", response_model=Envelope[TeamDefaultAgent])
-async def set_default_agent(rt: Rt, me: Me, body: TeamDefaultAgentInput) -> JSONResponse:
+async def set_default_agent(rt: Rt, me: Me, body: TeamDefaultAgentInput, _: Tx) -> JSONResponse:
     """chat.manage (team admins): the default changes where every member's new chat starts. Provisioning sets
     a team's first one through this route; the agent must be live and belong to the team, or to no team."""
     can(caller_of(me), "chat", "manage", team=me.team_id, what="the team's default agent")
+    team = await agent_team(rt, body.agent_id)
     agent = rt.catalog.agent(body.agent_id)
     if agent is None:
         raise Unprocessable("That agent is not live, so new chats cannot start on it.", code="agent_not_live")
-    if (team := await agent_team(rt, agent.id)) and team != me.team_id:
+    if team and team != me.team_id:
         raise Unprocessable(f"{agent.name} belongs to another team.", code="other_team_agent")
     await TeamDefaults(rt.db).set_agent(me.team_id, agent.id, by=me.email)
     return ok(TeamDefaultAgent(agent_id=agent.id, agent_name=agent.name, can_change=True).wire())
@@ -333,7 +367,7 @@ async def _team_default(rt: Runtime, me: Principal) -> AgentDefinition:
     agent_id = await TeamDefaults(rt.db).agent(me.team_id)
     if agent_id is None:
         return await ensure_ops_assistant(rt, me.team_id)
-    agent = rt.catalog.agent(agent_id)
+    agent = await live_agent(rt, agent_id)
     if agent is None:
         why = "default agent is not live"
         raise Conflict(
@@ -348,16 +382,26 @@ async def _test_agent(rt: Runtime, me: Principal, agent_id: str, version: int | 
     cache keyed by a version number a draft keeps while it changes; or the saved version the thread was started on, for
     a compare. Refused unless the caller may test the agent."""
     row = await changeable(rt, me, agent_id, "test")
-    n = version if version is not None else int(row["version"])
+    n = version if version is not None else int(row.version)
     try:
         saved = await registry(rt).version(agent_id, n)
     except NotFound:
         raise Unprocessable(f"The agent has no version {n}.", code="unknown_version") from None
-    return definition_of(agent_id, n, saved["spec"])
+    return definition_of(agent_id, n, saved.spec)
+
+
+async def thread_agent(rt: Runtime, me: Principal, meta: dict[str, Any]) -> AgentDefinition | None:
+    """The agent a thread runs: for a test thread the saved agent it tests (a draft is not in the live catalog),
+    otherwise the live one; None when it is not live. The one place the settings, connectors and kb routes ask."""
+    agent_id = str(meta.get("agentId"))
+    if meta.get("test"):
+        return await _test_agent(rt, me, agent_id, cast(int | None, meta.get("testVersion")))
+    return await live_agent(rt, agent_id)
 
 
 @router.post("/threads")
 async def create_thread(rt: Rt, me: Me, body: ChatThreadInput) -> JSONResponse:
+    """Off the request transaction: it asks kb-service which bases the thread may search."""
     if body.test:
         if body.agent_id is None:
             raise Unprocessable("A test names the agent it tests.")
@@ -365,6 +409,7 @@ async def create_thread(rt: Rt, me: Me, body: ChatThreadInput) -> JSONResponse:
     elif body.agent_id is None:
         agent = await _team_default(rt, me)
     else:
+        await agent_team(rt, body.agent_id)
         agent = rt.catalog.agent(body.agent_id)
         if agent is None:
             await refuse_new_turns(rt, body.agent_id)
@@ -417,8 +462,17 @@ async def create_thread(rt: Rt, me: Me, body: ChatThreadInput) -> JSONResponse:
 async def get_thread(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
     """The conversation, for whoever may read it. A teammate's conversation that the reader may not read answers
     `{id, readable: false}` and nothing else, so a link to it says it is someone else's instead of failing; a
-    conversation that does not exist, or is another team's, is not found."""
-    row = await chat_row(rt, thread_id, None)
+    conversation that does not exist, or is another team's, is not found. One transaction reads the conversation and
+    its messages; the cards it fills then read their own records, each in its own (case pages ask other services for
+    their files' names, so none is held while they answer)."""
+    messages: list[ChatMessage] = []
+    async with isolation.request_transaction():
+        row = await chat_row(rt, thread_id, None)
+        readable = row is not None and may_read(_meta(row), me)
+        if row is not None and readable:
+            # Text a guardrail kept or took back from the person is shown to whoever the roles grid lets view the audit.
+            audit = ACCESS.may(caller_of(me), "audit", "view", team=me.team_id)
+            messages = (await messages_of(rt, [thread_id], audit=audit, reader=person_of(me)))[thread_id]
     if row is None:
         # A link opened while acting in another team: the conversation may be in one of the reader's other teams. Its
         # own conversation there names that team so the console can switch; anyone else's says only that it is not
@@ -432,11 +486,8 @@ async def get_thread(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
                 name = await rt.team_names.name(team) if rt.team_names is not None else None
                 return ok({"id": thread_id, "readable": False, "teamId": team, "teamName": name or team})
         raise NotFound("Conversation")
-    if not may_read(_meta(row), me):
+    if not readable:
         return ok({"id": thread_id, "readable": False})
-    # Text a guardrail kept or took back from the person is shown to whoever the roles grid lets view the audit.
-    audit = ACCESS.may(caller_of(me), "audit", "view", team=me.team_id)
-    messages = (await messages_of(rt, [thread_id], audit=audit, reader=person_of(me)))[thread_id]
     # An open approval says whether the reader may decide it, so the card offers Approve and Reject only then.
     for w in (w for m in messages for w in m.widgets or [] if isinstance(w, ApprovalWidget)):
         if w.state in ("pending", "awaiting_second"):
@@ -448,6 +499,7 @@ async def get_thread(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
 
 @router.patch("/threads/{thread_id}")
 async def update_thread(rt: Rt, me: Me, thread_id: str, body: ChatThreadPatch) -> JSONResponse:
+    """Off the request transaction: a change of bases or agent asks kb-service, and the reply is the thread read."""
     row = await _thread_row(rt, me, thread_id)
     meta = _meta(row)
     patch: dict[str, Any] = {}
@@ -460,7 +512,7 @@ async def update_thread(rt: Rt, me: Me, thread_id: str, body: ChatThreadPatch) -
     if body.archived is not None:
         patch["archived"] = body.archived
     if body.kb_ids is not None:
-        agent = rt.catalog.agent(str(meta.get("agentId")))
+        agent = await thread_agent(rt, me, meta)
         if agent is None:
             raise Unprocessable("This conversation's agent is no longer live.")
         patch["kbNames"] = await _check_kbs(rt, agent, body.kb_ids)
@@ -479,10 +531,11 @@ async def _handover(rt: Runtime, me: Principal, meta: dict[str, Any], agent_id: 
     it started on, and that agent's bases, are kept so handing back to it restores them."""
     if meta.get("deploymentId"):
         raise Unprocessable("A conversation on an embedded page stays on its agent.", code="handover_not_allowed")
+    team = await agent_team(rt, agent_id)
     agent = rt.catalog.agent(agent_id)
     if agent is None:
         raise Unprocessable("That agent is not live, so the conversation cannot move to it.", code="agent_not_live")
-    require_chat_use(me, team_id=await agent_team(rt, agent.id))
+    require_chat_use(me, team_id=team)
     start = {
         "id": meta.get("startAgentId") or meta.get("agentId"),
         "name": meta.get("startAgentName") or meta.get("agentName"),
@@ -512,14 +565,14 @@ async def _handover(rt: Runtime, me: Principal, meta: dict[str, Any], agent_id: 
 
 
 @router.delete("/threads/{thread_id}")
-async def delete_thread(rt: Rt, me: Me, thread_id: str) -> Response:
+async def delete_thread(rt: Rt, me: Me, thread_id: str, _: Tx) -> Response:
     await _thread_row(rt, me, thread_id)
     await update_meta(rt, thread_id, hidden=True)
     return ok(None)
 
 
 @router.post("/threads/bulk-update")
-async def bulk_update(rt: Rt, me: Me, body: BulkUpdateInput) -> JSONResponse:
+async def bulk_update(rt: Rt, me: Me, body: BulkUpdateInput, _: Tx) -> JSONResponse:
     result = BulkResult(updated=[], skipped=[])
     patch = body.patch
     for tid in body.ids:
@@ -544,7 +597,7 @@ async def bulk_update(rt: Rt, me: Me, body: BulkUpdateInput) -> JSONResponse:
 
 
 @router.post("/threads/bulk-delete")
-async def bulk_delete(rt: Rt, me: Me, body: BulkDeleteInput) -> JSONResponse:
+async def bulk_delete(rt: Rt, me: Me, body: BulkDeleteInput, _: Tx) -> JSONResponse:
     result = BulkResult(updated=[], skipped=[])
     for tid in body.ids:
         row = await chat_row(rt, tid, me)
@@ -611,6 +664,8 @@ async def _compacted(
 
 @router.post("/threads/{thread_id}/messages", response_model=None)
 async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceResponse:
+    """Off the request transaction: a long history is summarised by a model and attachments are read before the
+    stream starts, and the stream holds nothing while the model answers."""
     row = await _thread_row(rt, me, thread_id)
     meta = _meta(row)
     if not body.content.strip() and not body.regenerate:
@@ -623,7 +678,7 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
     tested = (
         await _test_agent(rt, me, str(meta.get("agentId")), cast(int | None, meta.get("testVersion"))) if test else None
     )
-    if pinned is not None and rt.catalog.agent(str(meta.get("agentId"))) is None:
+    if pinned is not None and await live_agent(rt, str(meta.get("agentId"))) is None:
         # The pin chooses the version only: a paused or withdrawn agent takes no new turns on a widget conversation.
         await refuse_new_turns(rt, str(meta.get("agentId")))
         raise Unprocessable("This conversation's agent is no longer live.")
@@ -632,7 +687,7 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
         if test
         else await pinned_definition(rt, str(meta.get("agentId")), int(pinned))
         if pinned is not None
-        else rt.catalog.agent(str(meta.get("agentId")))
+        else await live_agent(rt, str(meta.get("agentId")))
     )
     if agent is None:
         await refuse_new_turns(rt, str(meta.get("agentId")))
@@ -684,6 +739,20 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
         "history": await _compacted(rt, thread_id, meta, [history_entry(m) for m in transcript]),
         "requested_by": me.email,
     }
+    # The / menu needs skills: view in the conversation's team; a part picked earlier keeps loading only while the
+    # person still holds it.
+    try:
+        can(caller_of(me), "skills", "view", team=str(row["team_id"]), what="the team's skills", code="forbidden")
+        may_pick = True
+    except Forbidden:
+        if body.skill is not None:
+            raise
+        may_pick = False
+    last = next((m for m in reversed(transcript) if m.role == "assistant"), None)
+    earlier = cast(list[dict[str, Any]], history_entry(last).get("skills") or []) if last is not None else []
+    team = str(row["team_id"] or "")
+    if (turn := await skill_turn(rt, agent, body.skill, earlier, team=team, may_pick=may_pick)) is not None:
+        graph_input["skill_turn"] = turn
     # The settings this turn runs on: the agent's limits, then the thread's overrides, then this message's; a value
     # outside the limits is a 422 naming the field and no run starts.
     thread_overrides = ChatOverrides.model_validate(row["overrides"]) if row.get("overrides") else None
@@ -766,28 +835,60 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
         rt.catalog, assistant, titles=await tool_titles(rt), think_alias=rt.settings.think_harder_alias
     )
 
-    # What the person said about themselves is read while the reply is written: the extraction needs only the
-    # messages so far, and run after the reply it held the reply's end back by a whole model call.
-    extraction = (
-        asyncio.ensure_future(
-            start_learning(
+    # A test remembers nothing about the builder.
+    learns = not body.regenerate and agent.memory_enabled and not test
+
+    async def learn(into: asyncio.Future[Extraction]) -> None:
+        """What the person said about themselves, read while the reply is written: the extraction needs only the
+        messages so far, and run after the reply it held the reply's end back by a whole model call. Its outcome,
+        failure included, is read by finish_learning, so it never fails the turn early."""
+        try:
+            found = await start_learning(
                 rt, me, agent, team_id=str(row["team_id"]), thread_id=thread_id, message=question, history=transcript
             )
-        )
-        # A test remembers nothing about the builder.
-        if not body.regenerate and agent.memory_enabled and not test
-        else None
-    )
+        except Exception as e:
+            if not into.done():
+                into.set_exception(e)
+        else:
+            if not into.done():
+                into.set_result(found)
+
+    async def run_turn(frames: asyncio.Queue[dict[str, str] | BaseException | None]) -> None:
+        """The reply, run to its end whether or not anyone still reads it: a reader who leaves (a closed tab, a dropped
+        connection) stops reading, never the run, so its model calls and cost are recorded and its lease let go."""
+        failed: BaseException | None = None
+        try:
+            async with asyncio.TaskGroup() as group:
+                extraction: asyncio.Future[Extraction] | None = None
+                child = None
+                if learns:
+                    extraction = asyncio.get_running_loop().create_future()
+                    child = group.create_task(learn(extraction))
+                try:
+                    async for frame in reply(extraction):
+                        frames.put_nowait(frame)
+                finally:
+                    if child is not None:
+                        child.cancel()
+        except BaseExceptionGroup as group_failed:
+            failed = group_failed.exceptions[0]
+        except Exception as e:
+            failed = e
+        if failed is not None:
+            log.warning("chat_turn_failed", thread_id=thread_id, run_id=run_id, error=type(failed).__name__)
+        frames.put_nowait(failed)
 
     async def stream() -> AsyncIterator[dict[str, str]]:
-        try:
-            async for frame in reply():
-                yield frame
-        finally:
-            if extraction is not None and not extraction.done():
-                extraction.cancel()
+        frames: asyncio.Queue[dict[str, str] | BaseException | None] = asyncio.Queue()
+        running = asyncio.create_task(run_turn(frames), name=f"chat_turn:{run_id}")
+        _TURNS.add(running)
+        running.add_done_callback(_TURNS.discard)
+        while (item := await frames.get()) is not None:
+            if isinstance(item, BaseException):
+                raise item
+            yield item
 
-    async def reply() -> AsyncIterator[dict[str, str]]:
+    async def reply(extraction: asyncio.Future[Extraction] | None) -> AsyncIterator[dict[str, str]]:
         yield _frame(StartEvent(user_message=user_message, message_id=assistant.id))
         # The turn runs for this person: a workflow tool is offered and started only if they may start it.
         with acting_for(me):
@@ -834,7 +935,10 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
 
 async def _decide_own_write(rt: Runtime, me: Principal, thread_id: str, reply: ChatMessage) -> None:
     """Approves the turn's waiting write as `me` when they may decide it and it asks for no step-up."""
-    waiting = [w for w in reply.widgets or [] if isinstance(w, ApprovalWidget) and w.state == "pending"]
+    # A write whose app asks before changes is the person's to answer on its card, whatever their role.
+    waiting = [
+        w for w in reply.widgets or [] if isinstance(w, ApprovalWidget) and w.state == "pending" and not w.ask_first
+    ]
     if not waiting or any(w.step_up for w in waiting) or not await hitl_facade.can_decide(rt, me, thread_id):
         return
     try:
@@ -845,7 +949,7 @@ async def _decide_own_write(rt: Runtime, me: Principal, thread_id: str, reply: C
 
 
 @router.put("/threads/{thread_id}/messages/{message_id}/feedback")
-async def feedback(rt: Rt, me: Me, thread_id: str, message_id: str, body: FeedbackInput) -> JSONResponse:
+async def feedback(rt: Rt, me: Me, thread_id: str, message_id: str, body: FeedbackInput, _: Tx) -> JSONResponse:
     row = await _thread_row(rt, me, thread_id)
     if not any(m.id == message_id for m in (await messages_of(rt, [thread_id], reader=person_of(me)))[thread_id]):
         raise NotFound("Message")
@@ -866,7 +970,8 @@ async def widget_action(
 ) -> JSONResponse:
     """An approval widget's decision goes through Reviews' decide, like every review-owned step: requester check,
     step-up for money, the approval token, then the resume, whose reply is a new assistant message. An approver who is
-    not the chat's owner decides here too, so the owner rule is left to the review policy; the team rule holds."""
+    not the chat's owner decides here too, so the owner rule is left to the review policy; the team rule holds. Off
+    the request transaction: the resume runs the model."""
     await _thread_row(rt, None, thread_id)
     message = next(
         (m for m in (await messages_of(rt, [thread_id], reader=person_of(me)))[thread_id] if m.id == message_id), None
@@ -881,7 +986,7 @@ async def widget_action(
         raise ValidationFailed("An approval is approved or rejected, not submitted.")
     if widget.state not in ("pending", "awaiting_second"):
         raise Conflict("This approval was already decided.")
-    if isinstance(action, RejectAction) and not action.reason.strip():
+    if isinstance(action, RejectAction) and not action.reason.strip() and not widget.ask_first:
         raise ValidationFailed("Give a reason for rejecting.")
     if rt.ports is None:
         raise ServiceUnavailable(rt.model_error or "No model is configured.")
@@ -890,8 +995,12 @@ async def widget_action(
         me,
         thread_id,
         decision="approved" if isinstance(action, ApproveAction) else "rejected",
-        reason=action.reason.strip() if isinstance(action, RejectAction) else None,
+        # A Deny on an app that asks before changes needs no reason; the agent is told the person said no.
+        reason=(action.reason.strip() or ("the person in the chat chose Deny" if widget.ask_first else ""))
+        if isinstance(action, RejectAction)
+        else None,
         step_up_token=action.step_up_token if isinstance(action, ApproveAction) else None,
+        for_chat=bool(action.for_chat) if isinstance(action, ApproveAction) else False,
     )
     await update_meta(rt, thread_id, lastMessageAt=now_iso())
     decided = next(

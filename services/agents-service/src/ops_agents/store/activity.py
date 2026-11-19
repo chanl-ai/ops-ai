@@ -11,15 +11,18 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Any, ClassVar, Literal, cast
+from typing import Any, ClassVar, Literal
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_engine import default_registry
 from ops_engine.store.tables import engine_definitions, engine_runs, engine_steps, engine_work
+from ops_service_kit.http import Json, Out
+from ops_service_kit.narrow import json_object
 from ops_store import Guarantee
 from ops_store.background import PROCESSES
+from ops_store.rows import rows
 from ops_store.team_scope import team_visible
 
 from .agent_registry import publish_requests
@@ -101,9 +104,29 @@ class Filters:
     case: tuple[str, str] | None = None  # (case id, its team)
 
 
+class ActivityEntry(Out):
+    """One row of the union, the columns every source selects. A column is optional where some source can give
+    NULL: a JSON path a row lacks, an outer join that found nothing, or text joined with either. Kind, status and
+    the ref's kind stay plain text, as selected."""
+
+    kind: str
+    row_id: str
+    title: str | None
+    status: str
+    outcome: str | None
+    team_id: str | None
+    source_type: str
+    source_id: str | None
+    source_name: str | None
+    actor: str | None
+    at: str
+    ref_kind: str
+    ref_id: str | None
+
+
 @dataclass
 class Page:
-    rows: list[dict[str, Any]]
+    rows: list[ActivityEntry]
     total: int
     by_kind: dict[str, int] = field(default_factory=dict[str, int])
     by_status: dict[str, int] = field(default_factory=dict[str, int])
@@ -156,8 +179,8 @@ def _threads(kind: Kind, scope: Scope) -> sa.Select[*tuple[Any, ...]]:
     is part of its parent's row, not one of its own."""
     t = graph_threads
     meta = t.c.meta
-    is_chat = meta["chat"].as_boolean().is_(True)
-    shown = sa.or_(meta["hidden"].as_boolean().is_(None), meta["hidden"].as_boolean().is_(False))
+    is_chat = meta["chat"].as_boolean() == sa.true()
+    shown = sa.or_(meta["hidden"].as_boolean().is_(None), meta["hidden"].as_boolean() == sa.false())
     status = sa.case(
         (t.c.status.in_(("busy", "running", "route", "resume", "input")), "running"),
         (t.c.status == "interrupted", "waiting"),
@@ -605,7 +628,7 @@ class Activity:
     def __init__(self, engine: AsyncEngine) -> None:
         self.engine = engine
 
-    async def calls(self, rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    async def calls(self, rows: list[Json]) -> dict[str, Json]:
         """The call behind each tool-call row of a page, `{tool, input}` keyed by the row's id: a workflow step's
         journaled input and a chat tool's event data, read in one query each, so the page words them without a read
         per row. The rows were already read in the caller's scope; these reads only follow their ids."""
@@ -621,7 +644,7 @@ class Activity:
                 steps.append((run_id, node, int(iteration), int(attempt)))
             else:
                 events.append(rid)
-        out: dict[str, dict[str, Any]] = {}
+        out: dict[str, Json] = {}
         async with tenant_tx(self.engine) as c:
             if steps:
                 s = engine_steps
@@ -630,9 +653,11 @@ class Activity:
                     s.c.tenant_id == current_tenant(), key.in_(steps)
                 )
                 for run_id, node, iteration, attempt, given in (await c.execute(q)).all():
-                    g = cast(dict[str, Any], given) if isinstance(given, dict) else {}
-                    call: dict[str, Any] = {"tool": str(g.get("operation") or node), "input": g.get("input") or {}}
-                    out[f"{run_id}:{node}:{iteration}:{attempt}"] = call
+                    g = json_object(given)
+                    out[f"{run_id}:{node}:{iteration}:{attempt}"] = {
+                        "tool": str(g.get("operation") or node),
+                        "input": g.get("input") or {},
+                    }
             if events:
                 e = thread_events
                 # The row ids came from the caller's page, but an event id read on its own crosses teams.
@@ -640,26 +665,26 @@ class Activity:
                     e.c.tenant_id == current_tenant(), e.c.id.in_(events), team_visible(e)
                 )
                 for event_id, data in (await c.execute(q)).all():
-                    d = cast(dict[str, Any], data) if isinstance(data, dict) else {}
+                    d = json_object(data)
                     out[str(event_id)] = {"tool": str(d.get("tool") or "tool"), "input": d.get("input") or {}}
         return out
 
-    async def email_details(self, rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    async def email_details(self, rows: list[ActivityEntry]) -> dict[str, Json]:
         """Each email row's recorded detail (why it was skipped, set aside or capped), keyed by the row's id, in one
         query. The rows were read in the caller's scope; this read follows their ids within the caller's teams."""
-        ids = [str(r["row_id"]) for r in rows if r["kind"] in ("email", "form")]
+        ids = [r.row_id for r in rows if r.kind in ("email", "form")]
         if not ids:
             return {}
         e = trigger_events
         q = sa.select(e.c.id, e.c.detail).where(e.c.tenant_id == current_tenant(), e.c.id.in_(ids), team_visible(e))
-        out: dict[str, dict[str, Any]] = {}
+        out: dict[str, Json] = {}
         async with tenant_tx(self.engine) as c:
             for event_id, raw in (await c.execute(q)).all():
                 try:
-                    detail = json.loads(raw or "{}")
+                    detail: object = json.loads(raw or "{}")
                 except ValueError:
-                    detail = {}
-                out[str(event_id)] = cast(dict[str, Any], detail) if isinstance(detail, dict) else {}
+                    detail = None
+                out[str(event_id)] = json_object(detail)
         return out
 
     async def page(self, scope: Scope, filters: Filters, *, page: int, page_size: int) -> Page:
@@ -688,8 +713,8 @@ class Activity:
         kinds_q = sa.select(a.c.kind, sa.func.count()).where(*common, by_status).group_by(a.c.kind)
         statuses_q = sa.select(a.c.status, sa.func.count()).where(*common, by_kind).group_by(a.c.status)
         async with tenant_tx(self.engine) as c:
-            rows = [dict(r) for r in (await c.execute(rows_q)).mappings().all()]
+            found = await rows(c, rows_q, ActivityEntry)
             total = int((await c.execute(total_q)).scalar_one())
             kinds = {str(k): int(n) for k, n in (await c.execute(kinds_q)).all()}
             statuses = {str(s): int(n) for s, n in (await c.execute(statuses_q)).all()}
-        return Page(rows, total, kinds, statuses)
+        return Page(found, total, kinds, statuses)

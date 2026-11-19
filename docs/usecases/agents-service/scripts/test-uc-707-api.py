@@ -6,6 +6,7 @@ and goes through once neither names it (lib/several_accounts.py)."""
 from __future__ import annotations
 
 from several_accounts import SF, add_org, code_of, flow, retail_on, rig, save_and_publish
+from steps import required
 from usecase_harness import check, data, finish
 
 FLOW = "uc707_eu"
@@ -29,7 +30,7 @@ with rig("uc-707", with_agents=True) as r:
     # 3. An agent naming EU org keeps it from being deleted after the step names Retail org.
     _, moved = save_and_publish(r, flow(FLOW, {SF: "Retail org"}))
     assert r.api is not None
-    agent = data(r.api.post("/v1/agents", json={"name": "Case desk", "role": "Finds cases"}, headers=r.priya)) or {}
+    agent = required(r.api.post("/v1/agents", json={"name": "Case desk", "role": "Finds cases"}, headers=r.priya), "/v1/agents")
     aid = str(agent.get("id") or "ag_missing")
     named = r.api.patch(f"/v1/agents/{aid}", json={"toolIds": ["salesforce_query"], "accounts": {SF: "EU org"}},
                         headers=r.priya)  # fmt: skip

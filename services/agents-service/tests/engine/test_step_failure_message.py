@@ -103,6 +103,6 @@ async def test_a_failing_step_shows_people_a_plain_message_and_keeps_the_detail_
     assert "Error" not in error and "ValueError" not in error, f"a Python exception reaches people: {error}"
     [step] = [s for s in shown["steps"] if s["nodeId"] == "ack"]
     assert step["status"] == "error" and "is empty when ack opens" in str(step["error"]), step
-    [failed] = [e for e in events if e.get("type") == "failed" or e.get("event") == "failed"]
-    data = cast(dict[str, Any], failed.get("data") or {})
+    [failed] = [e for e in events if e.type == "failed"]
+    data = cast(dict[str, Any], failed.data or {})
     assert data.get("message") == error and "is empty when ack opens" in str(data.get("detail")), failed

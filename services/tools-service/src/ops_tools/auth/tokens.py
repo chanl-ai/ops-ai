@@ -11,18 +11,20 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
-from collections.abc import Awaitable, Callable, Iterable, Sequence
+from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from urllib.parse import urlsplit
 
 import httpx
+from pydantic import JsonValue
 
 from ops_policy import CipherError, CredentialStore
+from ops_service_kit.http import Json
 
 from ..egress import EgressDenied, EgressPolicy, for_tenant
-from ..store.connections import SHARED, ConnectionStore, Row, held_of
+from ..store.connections import SHARED, ConnectionStore, Held, TokenFields, TokenRow, held_of
 from ..store.connections import token_context as _context
 from .assertion import SigningError, sign
 
@@ -43,7 +45,7 @@ class AuthFailed(Exception):
         message: str,
         side: str = "ours",
         status: int | None = None,
-        details: dict[str, Any] | None = None,
+        details: Json | None = None,
     ) -> None:
         super().__init__(message)
         self.code, self.side, self.status = code, side, status
@@ -75,7 +77,7 @@ class ClientProof:
     signed: list[str] = field(default_factory=list[str])
 
 
-def _claims(raw: Any) -> dict[str, Any]:
+def _claims(raw: Any) -> Json:
     """A JWT's claims, unverified; empty when `raw` is not one."""
     if not isinstance(raw, str) or raw.count(".") < 1:
         return {}
@@ -84,7 +86,7 @@ def _claims(raw: Any) -> dict[str, Any]:
         claims: Any = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
     except ValueError:
         return {}
-    return cast(dict[str, Any], claims) if isinstance(claims, dict) else {}
+    return cast(Json, claims) if isinstance(claims, dict) else {}
 
 
 # The key under which a plugin's sign-in hook hands back whom a lookup after sign-in named; never an account setting.
@@ -99,13 +101,13 @@ def person_named(doc: Any) -> str | None:
     if not isinstance(doc, dict):
         return None
     for name in PERSON_FIELDS:
-        value = cast(dict[str, Any], doc).get(name)
+        value = cast(Json, doc).get(name)
         if isinstance(value, str) and value.strip() and "://" not in value:
             return value.strip()
     return None
 
 
-def account_of(answer: dict[str, Any]) -> str | None:
+def account_of(answer: Mapping[str, JsonValue]) -> str | None:
     """Who signed in, from the token answer's id token when it names a person. The id token is not verified here;
     nothing is decided from it."""
     return person_named(_claims(answer.get("id_token")))
@@ -116,7 +118,7 @@ def scope_list(value: Any) -> list[str]:
     return [str(x) for x in cast(list[Any], value)] if isinstance(value, list) else []
 
 
-def granted_scopes(answer: dict[str, Any], requested: list[str]) -> list[str]:
+def granted_scopes(answer: Mapping[str, JsonValue], requested: list[str]) -> list[str]:
     """The scopes a token answer granted: its `scope`, else the access token's `scope` or `scp` claim, else the
     scopes asked for, as RFC 6749 5.1 says an answer that omits them granted. Unverified: it only decides whether a
     person is asked to sign in again; the system still refuses what the token was not granted."""
@@ -133,7 +135,7 @@ def granted_scopes(answer: dict[str, Any], requested: list[str]) -> list[str]:
 
 
 def _client(
-    form: dict[str, str], settings: dict[str, Any], proof: ClientProof | None
+    form: dict[str, str], settings: Mapping[str, JsonValue], proof: ClientProof | None
 ) -> tuple[dict[str, str], dict[str, str]]:
     """The form and headers of a request to the system's sign-in: the client sent in the body or as basic auth."""
     client_id = str(settings.get("clientId") or "")
@@ -155,7 +157,7 @@ def _client(
 
 
 def _signed(
-    settings: dict[str, Any], proof: ClientProof | None, *, subject: str | None, extra: dict[str, Any] | None = None
+    settings: Mapping[str, JsonValue], proof: ClientProof | None, *, subject: str | None, extra: Json | None = None
 ) -> str:
     """An assertion naming the client as its issuer and the token address as its audience (or the `audience` the
     system names, as DocuSign's account host), kept in `proof.signed` for the scrub set."""
@@ -204,12 +206,12 @@ class Tokens:
         tenant_id: str,
         url: str,
         form: dict[str, str],
-        settings: dict[str, Any],
+        settings: Mapping[str, JsonValue],
         proof: ClientProof | None,
         *,
         client: bool = True,
         hosts: Iterable[str] = (),
-    ) -> dict[str, Any]:
+    ) -> Json:
         """A token request: the form, with the client sent as `clientAuth` says, or not at all (`client` False, for a
         JWT grant). `hosts` are a plugin's own, reached unlisted. Raises AuthFailed naming the host and the system's
         error code, never the secret."""
@@ -230,12 +232,8 @@ class Tokens:
             answer: Any = res.json()
         except ValueError:
             answer = {}
-        if (
-            res.status_code >= 400
-            or not isinstance(answer, dict)
-            or not cast(dict[str, Any], answer).get("access_token")
-        ):
-            said = cast(dict[str, Any], answer) if isinstance(answer, dict) else {}
+        if res.status_code >= 400 or not isinstance(answer, dict) or not cast(Json, answer).get("access_token"):
+            said = cast(Json, answer) if isinstance(answer, dict) else {}
             error, description = said.get("error"), said.get("error_description")
             # Only an error code made of word characters is named back: it reaches a message a person reads.
             code = str(error) if isinstance(error, str) and error.isidentifier() else None
@@ -248,60 +246,60 @@ class Tokens:
             failed.provider_error = code
             failed.provider_description = str(description)[:500] if isinstance(description, str) else None
             raise failed
-        return cast(dict[str, Any], answer)
+        return cast(Json, answer)
 
     async def _row(
         self,
         tenant_id: str,
         key: tuple[str, str],
-        answer: dict[str, Any],
+        answer: Mapping[str, JsonValue],
         rotations: int,
         *,
         keep_refresh: str | None,
         requested: list[str],
-    ) -> dict[str, Any]:
+    ) -> TokenFields:
         connection_id, person = key
         now = self.clock()
         expires = answer.get("expires_in")
         refresh = answer.get("refresh_token")
-        return {
-            "access_ct": await self.credentials.put(
+        return TokenFields(
+            access_ct=await self.credentials.put(
                 str(answer["access_token"]), context=_context(tenant_id, "access", connection_id, person)
             ),
             # A system that does not rotate keeps the refresh token it gave before.
-            "refresh_ct": await self.credentials.put(
+            refresh_ct=await self.credentials.put(
                 str(refresh), context=_context(tenant_id, "refresh", connection_id, person)
             )
             if isinstance(refresh, str) and refresh
             else keep_refresh,
-            "expires_at": now + timedelta(seconds=float(expires)) if isinstance(expires, (int, float)) else None,
-            "scopes": granted_scopes(answer, requested),
-            "account": account_of(answer),
-            "rotations": rotations,
-            "refreshed_at": now,
-        }
+            expires_at=now + timedelta(seconds=float(expires)) if isinstance(expires, (int, float)) else None,
+            scopes=list[JsonValue](granted_scopes(answer, requested)),
+            account=account_of(answer),
+            rotations=rotations,
+            refreshed_at=now,
+        )
 
-    async def _token(self, tenant_id: str, row: dict[str, Any], key: tuple[str, str]) -> Token:
+    async def _token(self, tenant_id: str, row: TokenFields, key: tuple[str, str]) -> Token:
         connection_id, person = key
         try:
             access = await self.credentials.get(
-                str(row["access_ct"]), context=_context(tenant_id, "access", connection_id, person)
+                row.access_ct, context=_context(tenant_id, "access", connection_id, person)
             )
         except CipherError as e:
             raise AuthFailed("NOT_SIGNED_IN", "The stored token no longer decrypts; sign in again.") from e
-        return Token(access, int(row["rotations"]), row.get("expires_at"), row.get("account"))
+        return Token(access, row.rotations, row.expires_at, row.account)
 
-    def _fresh(self, row: dict[str, Any] | None, stale_rotation: int | None) -> bool:
-        if row is None or (stale_rotation is not None and int(row["rotations"]) == stale_rotation):
+    def _fresh(self, row: TokenFields | None, stale_rotation: int | None) -> bool:
+        if row is None or (stale_rotation is not None and row.rotations == stale_rotation):
             return False
-        expires: datetime | None = row.get("expires_at")
+        expires = row.expires_at
         return expires is None or expires - EARLY > self.clock()
 
     async def access(
         self,
         tenant_id: str,
         connection_id: str,
-        settings: dict[str, Any],
+        settings: Mapping[str, JsonValue],
         proof: ClientProof | None,
         *,
         grant: str,
@@ -321,36 +319,39 @@ class Tokens:
             if self._fresh(row, stale_rotation):
                 assert row is not None
                 return await self._token(tenant_id, row, key)
-            read = int(row["rotations"]) if row else None
+            read = row.rotations if row else None
             try:
                 fresh = await self._fetch(tenant_id, key, row, settings, proof=proof, grant=grant)
             except AuthFailed:
                 again = await self.store.token(tenant_id, connection_id, person)
-                if again is not None and int(again["rotations"]) != read and self._fresh(again, None):
+                if again is not None and again.rotations != read and self._fresh(again, None):
                     return await self._token(tenant_id, again, key)
                 raise
-            if not await self.store.put_token(tenant_id, connection_id, fresh, expected_rotations=read, person=person):
+            stored = await self.store.put_token(
+                tenant_id, connection_id, fresh.columns(), expected_rotations=read, person=person
+            )
+            if not stored:
                 await self._forget(tenant_id, key, fresh, keep=row)
                 fresh = await self.store.token(tenant_id, connection_id, person) or fresh
             elif row is not None:
                 await self._forget(tenant_id, key, row, keep=fresh)
             return await self._token(tenant_id, fresh, key)
 
-    async def drop(self, tenant_id: str, rows: Sequence[Row]) -> None:
+    async def drop(self, tenant_id: str, rows: Sequence[Held]) -> None:
         """Drops from the credential store what deleted token and sign-in state rows held (ConnectionStore's
         forget_token, forget_person, delete and add_state): a row deleted alone leaves its value in a vault."""
         for ref, context in held_of(tenant_id, rows):
             await self.credentials.delete(ref, context=context)
 
     async def _forget(
-        self, tenant_id: str, key: tuple[str, str], row: dict[str, Any], *, keep: dict[str, Any] | None
+        self, tenant_id: str, key: tuple[str, str], row: TokenFields, *, keep: TokenFields | None
     ) -> None:
         """Lets the credential store drop the references a row no longer names: the token a refresh replaced, or the
         one a lost race wrote and nobody stored. A refresh token the system did not rotate is kept."""
         connection_id, person = key
-        for part in ("access", "refresh"):
-            ref = row.get(f"{part}_ct")
-            if ref and (keep is None or keep.get(f"{part}_ct") != ref):
+        kept = (keep.access_ct, keep.refresh_ct) if keep is not None else (None, None)
+        for part, ref, still in (("access", row.access_ct, kept[0]), ("refresh", row.refresh_ct, kept[1])):
+            if ref and (keep is None or still != ref):
                 context = _context(tenant_id, part, connection_id, person)
                 await self.credentials.delete(str(ref), context=context)
 
@@ -358,15 +359,15 @@ class Tokens:
         self,
         tenant_id: str,
         key: tuple[str, str],
-        row: dict[str, Any] | None,
-        settings: dict[str, Any],
+        row: TokenFields | None,
+        settings: Mapping[str, JsonValue],
         *,
         proof: ClientProof | None,
         grant: str,
-    ) -> dict[str, Any]:
+    ) -> TokenFields:
         connection_id, person = key
-        rotations = int(row["rotations"]) + 1 if row else 1
-        refresh_ct = row.get("refresh_ct") if row else None
+        rotations = row.rotations + 1 if row else 1
+        refresh_ct = row.refresh_ct if row else None
         if refresh_ct:
             try:
                 refresh = await self.credentials.get(
@@ -381,7 +382,7 @@ class Tokens:
             hosts = await self.hosts(tenant_id, connection_id)
             answer = await self.post(tenant_id, str(settings["tokenUrl"]), form, settings, proof, hosts=hosts)
             # A refresh grants what the sign-in did unless it says otherwise (RFC 6749 6).
-            held = scope_list((row or {}).get("scopes"))
+            held = scope_list(row.scopes if row else None)
             return await self._row(tenant_id, key, answer, rotations, keep_refresh=str(refresh_ct), requested=held)
         if grant == "jwt_bearer":
             return await self._jwt_grant(tenant_id, key, settings, proof, rotations)
@@ -400,10 +401,10 @@ class Tokens:
         self,
         tenant_id: str,
         key: tuple[str, str],
-        settings: dict[str, Any],
+        settings: Mapping[str, JsonValue],
         proof: ClientProof | None,
         rotations: int,
-    ) -> dict[str, Any]:
+    ) -> TokenFields:
         """RFC 7523 2.1: the signed JWT is the grant, with no client sent and no refresh token, so a new one is signed
         when the token expires. Scopes go in the form, or as a `scope` claim where Google reads them."""
         scopes = str(settings.get("scopes") or "")
@@ -423,9 +424,9 @@ class Tokens:
         self,
         tenant_id: str,
         connection_id: str,
-        row: dict[str, Any],
+        row: TokenRow,
         *,
-        settings: dict[str, Any],
+        settings: Mapping[str, JsonValue],
         proof: ClientProof | None,
     ) -> bool:
         """Ends a held sign-in at the system's `revokeUrl` (RFC 7009): its refresh token, which ends the grant, else its
@@ -434,12 +435,14 @@ class Tokens:
         url = str(settings.get("revokeUrl") or "")
         if not url or self.http is None or self.policy is None:
             return False
-        person = str(row["person_id"])
-        part, hint = ("refresh", "refresh_token") if row.get("refresh_ct") else ("access", "access_token")
+        person = row.person_id
+        ref, part, hint = (
+            (row.refresh_ct, "refresh", "refresh_token")
+            if row.refresh_ct
+            else (row.access_ct, "access", "access_token")
+        )
         try:
-            token = await self.credentials.get(
-                str(row[f"{part}_ct"]), context=_context(tenant_id, part, connection_id, person)
-            )
+            token = await self.credentials.get(ref, context=_context(tenant_id, part, connection_id, person))
         except CipherError:
             return False
         body, headers = _client({"token": token, "token_type_hint": hint}, settings, proof)
@@ -463,21 +466,21 @@ class Tokens:
         sealed = await self.credentials.put(
             json.dumps(values), context=_context(tenant_id, "access", connection_id, person)
         )
-        row: dict[str, Any] = {
-            "access_ct": sealed,
-            "refresh_ct": None,
-            "expires_at": None,
-            "scopes": [],
-            "account": values.get("username"),
-            "rotations": int(held["rotations"]) + 1 if held else 1,
-            "refreshed_at": self.clock(),
-        }
-        await self.store.replace_token(tenant_id, connection_id, row, person)
+        row = TokenFields(
+            access_ct=sealed,
+            refresh_ct=None,
+            expires_at=None,
+            scopes=[],
+            account=values.get("username"),
+            rotations=held.rotations + 1 if held else 1,
+            refreshed_at=self.clock(),
+        )
+        await self.store.replace_token(tenant_id, connection_id, row.columns(), person)
         if held is not None:
             await self._forget(tenant_id, (connection_id, person), held, keep=row)
 
     async def own(
-        self, tenant_id: str, connection_id: str, person: str, *, row: dict[str, Any] | None = None
+        self, tenant_id: str, connection_id: str, person: str, *, row: TokenRow | None = None
     ) -> dict[str, str] | None:
         """The person's own credential fields, or None when they gave none or the row no longer opens. `row`: the
         row already read for this call."""
@@ -486,7 +489,7 @@ class Tokens:
             return None
         try:
             opened = await self.credentials.get(
-                str(row["access_ct"]), context=_context(tenant_id, "access", connection_id, person)
+                row.access_ct, context=_context(tenant_id, "access", connection_id, person)
             )
             found = json.loads(opened)
         except (CipherError, ValueError):
@@ -499,7 +502,7 @@ class Tokens:
         self,
         tenant_id: str,
         connection_id: str,
-        answer: dict[str, Any],
+        answer: Mapping[str, JsonValue],
         person: str = SHARED,
         *,
         requested: list[str] | None = None,
@@ -508,9 +511,9 @@ class Tokens:
         the sign-in asked for: what it granted when the answer does not say."""
         key = (connection_id, person)
         held = await self.store.token(tenant_id, connection_id, person)
-        rotations = int(held["rotations"]) + 1 if held else 1
+        rotations = held.rotations + 1 if held else 1
         values = await self._row(tenant_id, key, answer, rotations, keep_refresh=None, requested=requested or [])
-        await self.store.replace_token(tenant_id, connection_id, values, person)
+        await self.store.replace_token(tenant_id, connection_id, values.columns(), person)
         if held is not None:
             await self._forget(tenant_id, key, held, keep=values)
         return await self._token(tenant_id, values, key)

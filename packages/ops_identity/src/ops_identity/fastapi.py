@@ -25,15 +25,15 @@ only. platform-service, the issuer, resolves its own sessions and does not use t
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import AsyncGenerator, Callable, Mapping
 from dataclasses import dataclass
-from typing import Annotated, Any
+from typing import Annotated
 
 import httpx
 from fastapi import Depends, FastAPI, Header, Request
 
 from ops_service_kit.errors import Forbidden
-from ops_service_kit.http import mark_public
+from ops_service_kit.http import Json, JsonValue, mark_public
 from ops_service_kit.settings import Settings
 from ops_store import isolation
 
@@ -48,11 +48,11 @@ DEV_TENANT = "local"
 DEV_TEAM = "team_ops"
 
 
-async def _no_keys() -> dict[str, Any]:
+async def _no_keys() -> Json:
     return {"keys": []}
 
 
-async def _no_api_keys(_key: str) -> dict[str, Any] | None:
+async def _no_api_keys(_key: str) -> Json | None:
     return None
 
 
@@ -76,7 +76,7 @@ class Auth:
             raise ValueError("auth_mode 'platform' needs OPS_PLATFORM_URL")
         http = client or httpx.AsyncClient(timeout=10)
         signer = service_signer(settings)
-        internal = settings.platform_internal_url or f"http://127.0.0.1:{settings.platform_internal_port}"
+        internal = settings.endpoint("platform_internal").base
         services = ServiceAuth(
             audience=audience, verifiers=service_verifiers(settings, audience), scopes=settings.service_scopes
         )
@@ -108,11 +108,11 @@ class Auth:
         email: str,
         tenant_id: str = DEV_TENANT,
         team_id: str = DEV_TEAM,
-        policies: dict[str, Any] | None = None,
+        policies: Mapping[str, JsonValue] | None = None,
     ) -> Auth:
         """The fixed dev user; tests pass their own tenant so each runs on its own rows. `policies` stand in for the
         tenant's access policies a platform token would carry."""
-        dev_user: dict[str, Any] = {
+        dev_user: Json = {
             "sub": "usr_dev",
             "email": email,
             "name": name,
@@ -211,6 +211,15 @@ async def current_tenant_caller(
         return await current_service(request, authorization)
 
 
+async def request_tx() -> AsyncGenerator[None]:
+    async with isolation.request_transaction():
+        yield
+
+
+# A route that reads or writes takes `_: Tx` beside its caller: the request then holds one transaction that every
+# store call joins (`ops_store.isolation.request_transaction`), committed when the route function returns and rolled
+# back when it raises. Function scope ends it before the response is sent, so a stream's generator opens its own.
+Tx = Annotated[None, Depends(request_tx, scope="function")]
 CurrentPrincipal = Annotated[Principal, Depends(current_principal)]
 CurrentCaller = Annotated[Principal, Depends(current_caller)]
 CurrentService = Annotated[Principal, Depends(current_service)]

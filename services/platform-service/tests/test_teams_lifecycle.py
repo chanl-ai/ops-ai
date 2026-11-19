@@ -166,3 +166,29 @@ async def test_another_workspaces_team_answers_404_and_the_security_team_stays(s
     assert (await signin.public.post(f"/v1/settings/teams/{theirs}/archive", headers=signin.admin)).status_code == 404
     r = await signin.public.post(f"/v1/settings/teams/{signin.security_team}/archive", headers=signin.admin)
     assert r.status_code == 409 and r.json()["error"]["code"] == "security_team"
+
+
+async def test_the_team_list_never_shows_another_workspaces_teams(signin: SignInRig) -> None:
+    # A search, a status or `ids` naming them each still answers this workspace's teams only.
+    other, theirs = new_id("ten"), new_id("team")
+    async with signin.engine.begin() as c:
+        await c.execute(
+            sa.text(
+                "insert into tenants (id, name, status, allowed_domains, created_at) "
+                "values (:t, :t, 'active', '[]', :n)"
+            ),
+            {"t": other, "n": now_iso()},
+        )
+        await c.execute(
+            teams.insert().values(
+                id=theirs, tenant_id=other, name="Isolated desk", owner_groups=[], scope="owned", created_at=now_iso()
+            )
+        )
+    await signin.person(f"desk@{signin.zone}", role="viewer")
+    mine = (await _create(signin, "Isolated counter", f"desk@{signin.zone}")).json()["data"]["id"]
+    asks: list[dict[str, Any]] = [{}, {"search": "isolated"}, {"status": "active"}, {"ids": [mine, theirs]}]
+    for params in asks:
+        r = await signin.public.get("/v1/settings/teams", params=params, headers=signin.admin)
+        assert r.status_code == 200, r.text
+        listed = {t["id"] for t in r.json()["data"]["data"]}
+        assert mine in listed and theirs not in listed, (params, listed)

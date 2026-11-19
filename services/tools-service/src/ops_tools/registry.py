@@ -6,21 +6,34 @@ module holds is unknown. Without one (the agents-service gateway tests) the agen
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, TypedDict, cast
 
+from ops_access import tool_waits
 from ops_agents.activities.catalog import Catalog
+from ops_service_kit.http import Json, JsonValue
 from ops_store.team_scope import acting_team
 
 from .connections.records import account_for
 from .defaults import ensure_defaults
 from .environments import LIVE
+from .modules.directory import Sees
+from .modules.policy import tool_mode
 from .modules.seed import PLATFORM_TOOLS, READ_TOOLS, SENDS, ensure_platform_tools, tool_title
 from .modules.seed import WORKFLOW_TOOLS as PLATFORM_MODULE_TOOLS
 from .store.connections import ConnectionStore
-from .store.modules import Aggregate, ModuleStore, served_operations
+from .store.modules import (
+    Aggregate,
+    CodeLimits,
+    InputField,
+    Module,
+    ModuleStore,
+    Operation,
+    operation_defaults,
+    served_operations,
+)
 from .store.team_defaults import TeamDefaults
 
 if TYPE_CHECKING:
@@ -40,7 +53,13 @@ WORKFLOW_TOOLS: dict[str, tuple[str, bool]] = {name: ("write", waits) for name, 
 SYSTEM_ONLY = frozenset(str(t["name"]) for t in PLATFORM_TOOLS if t.get("system"))
 
 
-def approval_policy(module: Aggregate, op: dict[str, Any]) -> dict[str, Any]:
+class ApprovalPolicy(TypedDict):
+    approvers: int
+    approver_team: str | None
+    step_up: bool
+
+
+def approval_policy(module: Module, op: Operation) -> ApprovalPolicy:
     """How a write to `op` is approved, as the gateway, OPA and the review service read it: `approvers` distinct people
     from `approverTeam`, and whether approving asks for a step-up (`stepUp`): set on the operation, or implied by two
     approvers. Whether the person who asked may approve is the tenant's `requesterMayDecide` policy."""
@@ -52,22 +71,51 @@ def approval_policy(module: Aggregate, op: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def input_schema(fields: list[dict[str, Any]]) -> dict[str, Any]:
+class GrantableTool(TypedDict):
+    """One tool as the grant lists and the MCP adapter show it (`ToolRegistry.grantable`)."""
+
+    name: str
+    title: str | None
+    description: str
+    access: str
+    input_schema: Json
+    requires_approval: bool
+    setting: str | bool | None
+    setting_role: str | None
+    approvers: int
+    step_up: bool
+    output_shape: str | None
+    module_id: str | None
+    module_name: str | None
+
+
+class GrantableRow(GrantableTool, total=False):
+    """A grantable tool with what `/v1/grantable-operations` adds to it: whether the team added it, the approval answer
+    its setting, app and team give, and whether its app has a test account."""
+
+    added: bool
+    answer: str
+    reviewer_role: str | None
+    source: str
+    test_account: bool
+
+
+def input_schema(fields: list[InputField]) -> Json:
     """An operation's input fields as the JSON Schema a model is handed. Unknown arguments are refused at the gateway
     (`invalid_fields`), so the schema says so too."""
-    props: dict[str, Any] = {}
+    props: Json = {}
     for f in fields:
-        prop: dict[str, Any] = {"type": f["type"] if f["type"] in JSON_TYPES else "string"}
-        if f.get("description"):
-            prop["description"] = f["description"]
-        if f.get("enum"):
-            prop["enum"] = list(f["enum"])
-        if f.get("example") is not None:
-            prop["examples"] = [f["example"]]
-        if f.get("default") is not None:
-            prop["default"] = f["default"]
+        prop: Json = {"type": f["type"] if f["type"] in JSON_TYPES else "string"}
+        if description := f.get("description"):
+            prop["description"] = description
+        if enum := f.get("enum"):
+            prop["enum"] = list(enum)
+        if (example := f.get("example")) is not None:
+            prop["examples"] = [example]
+        if (default := f.get("default")) is not None:
+            prop["default"] = default
         props[f["name"]] = prop
-    required = [f["name"] for f in fields if f.get("required")]
+    required: list[JsonValue] = [f["name"] for f in fields if f.get("required")]
     return {"type": "object", "properties": props, "required": required, "additionalProperties": False}
 
 
@@ -81,6 +129,34 @@ def inferred(value: Any) -> dict[str, Any]:
     return {}
 
 
+def platform_operation(
+    name: str, access: Literal["read", "write"], rate_limit_per_min: int, *, draft: bool
+) -> Operation:
+    """An operation of the platform itself (the MCP surface's), which belongs to no module and is granted to no agent:
+    the gateway decides its access class and spends its own rate window."""
+    return {
+        **operation_defaults(),
+        "id": name,
+        "tool_id": name,
+        "name": name,
+        "description": "",
+        "access": access,
+        "enabled": True,
+        "executor": "local",
+        "method": None,
+        "path": None,
+        "headers": [],
+        "body": None,
+        "input": [],
+        "masked_output": [],
+        "binding": None,
+        "rate_limit_per_min": rate_limit_per_min,
+        "requires_approval": None,
+        "amount_max": None,
+        "draft": draft,
+    }
+
+
 @dataclass(frozen=True)
 class Resolved:
     """A tool the gateway may run: its access class, how it runs (`local`, `stub` or `http`), and, from the registry,
@@ -89,7 +165,13 @@ class Resolved:
     access: str
     executor: str
     module: Aggregate | None = None
-    operation: dict[str, Any] | None = None
+    operation: Operation | None = None
+
+
+def _declared(waits: bool | None) -> str | None:
+    """A catalogue or workflow declaration as the tool's own answer: a wait is a reviewer; run-at-once or nothing is not
+    set, so the app, then the team decide. Only an admin's explicit "none" means none."""
+    return "reviewer" if waits else None
 
 
 class ToolRegistry:
@@ -135,7 +217,7 @@ class ToolRegistry:
         definition = self.catalog.tool(tool)
         return definition.access if definition else "unknown"
 
-    async def grantable(self, tenant_id: str, sees: Callable[[Aggregate], bool] | None = None) -> list[dict[str, Any]]:
+    async def grantable(self, tenant_id: str, sees: Sees | None = None) -> list[GrantableTool]:
         """The operations an agent may be granted: every enabled operation of a published module that has not drifted,
         the same conditions `/v1/calls` checks before it runs one. Without a module store, the agents catalogue.
         `sees` keeps the modules one team sees (the MCP adapter lists a team's tools)."""
@@ -147,8 +229,9 @@ class ToolRegistry:
                     "description": t.description,
                     "access": t.access,
                     "input_schema": t.input_schema,
-                    # Off unless the tool declares it (approvals are off by default).
-                    "requires_approval": t.access in WRITES and t.requires_approval is True,
+                    "requires_approval": tool_waits(t.access, t.approval_mode),
+                    "setting": t.requires_approval,
+                    "setting_role": None,
                     "approvers": t.approvers,
                     "step_up": t.approvers > 1,
                     "output_shape": None,
@@ -160,7 +243,7 @@ class ToolRegistry:
         await self._platform_tools(tenant_id)
         if self.plugins is not None:
             await self.plugins.ensure(tenant_id, datetime.now(UTC))
-        rows: list[dict[str, Any]] = []
+        rows: list[GrantableTool] = []
         # A person's grant list reads their team's modules; another service's, every team's (`all_teams`).
         modules = await (self.modules.all(tenant_id) if sees is not None else self.modules.all_teams(tenant_id))
         # A tool the acting team holds in a module of its own (its built-in copy) is the one a call resolves to,
@@ -189,6 +272,9 @@ class ToolRegistry:
                 op = self.plugins.operation(view, served) if view is not module and self.plugins is not None else served
                 if not op["enabled"] or (module["team_id"] is None and op["name"] in own):
                     continue
+                if sees is not None and not sees(module, str(op["name"])):
+                    # Another team's module is reached through a grant, which names the operations it opens.
+                    continue
                 rows.append(
                     {
                         "name": op["name"],
@@ -197,7 +283,10 @@ class ToolRegistry:
                         "description": op["description"],
                         "access": op["access"],
                         "input_schema": input_schema(op["input"]),
-                        "requires_approval": bool(op["requires_approval"]),
+                        "requires_approval": tool_waits(op["access"], tool_mode(op)),
+                        # The tool's own setting before the team's and app's answer is applied (app.py).
+                        "setting": tool_mode(op),
+                        "setting_role": op.get("reviewer_role"),
                         "approvers": approval_policy(module, op)["approvers"],
                         "step_up": approval_policy(module, op)["step_up"],
                         "output_shape": op.get("output_shape"),
@@ -213,7 +302,7 @@ class ToolRegistry:
 
     async def described(
         self, tool: str, tenant_id: str, team_id: str | None = None
-    ) -> tuple[str, dict[str, Any] | None, dict[str, Any] | None, float | None]:
+    ) -> tuple[str, ApprovalPolicy | None, Json | None, float | None]:
         """access_for, policy_for, output_schema_for and the deadline of `tool`, from one resolve: a review list asks
         this once per tool, and resolving three times read the tool's module three times."""
         resolved = await self.resolve(tool, tenant_id=tenant_id, team_id=team_id)
@@ -239,31 +328,35 @@ class ToolRegistry:
             return None
         op, module = resolved.operation, resolved.module
         if op.get("executor") == "code":
-            limits = cast(dict[str, Any], cast(dict[str, Any], op.get("code") or {}).get("limits") or {})
+            code = op.get("code")
+            limits: CodeLimits | dict[str, float] = (code.get("limits") if code else None) or {}
             return float(limits.get("timeS", 10)) + 15.0
         limit_ms = op.get("timeout_ms") or module.get("timeout_ms")
         return float(limit_ms) / 1000 + 5.0 if limit_ms else None
 
-    async def requires_approval(self, tool: str, tenant_id: str, team_id: str | None = None) -> bool:
-        """Whether a write to `tool` waits for a person's approval, from its registry entry alone: the operation's own
-        flag, else the workflow tool's or the agents catalogue's declaration. A write that declares nothing runs:
-        approvals are off by default and a team turns them on in its policies."""
+    async def approval_setting(
+        self, tool: str, tenant_id: str, team_id: str | None = None
+    ) -> tuple[str | bool | None, str | None]:
+        """The tool's own approval answer and reviewer role, from its registry entry alone: the operation's mode, else
+        the workflow tool's or the agents catalogue's declaration (True waits, False runs). None follows the app and
+        team (`effective_answer` decides what a write with none does)."""
         resolved = await self.resolve(tool, tenant_id=tenant_id, team_id=team_id)
         if resolved is not None and resolved.operation is not None:
-            return bool(resolved.operation["requires_approval"])
+            return tool_mode(resolved.operation), resolved.operation.get("reviewer_role")
+        # A catalogue or workflow declaration is the tool's own answer (not a stored flag): true waits for a reviewer.
         if tool in WORKFLOW_TOOLS:
-            return WORKFLOW_TOOLS[tool][1]
+            return _declared(WORKFLOW_TOOLS[tool][1]), None
         definition = self.catalog.tool(tool)
-        return definition is not None and definition.requires_approval is True
+        return _declared(definition.requires_approval if definition is not None else None), None
 
-    async def policy_for(self, tool: str, tenant_id: str, team_id: str | None = None) -> dict[str, Any] | None:
+    async def policy_for(self, tool: str, tenant_id: str, team_id: str | None = None) -> ApprovalPolicy | None:
         """The write approval policy of the tenant's operation `tool`; without a module store, the agents catalogue's
         (its `approvers`, no particular team). None for a tool neither holds."""
         if self.modules is None:
             return self._policy(tool, None)
         return self._policy(tool, await self.resolve(tool, tenant_id=tenant_id, team_id=team_id))
 
-    def _policy(self, tool: str, resolved: Resolved | None) -> dict[str, Any] | None:
+    def _policy(self, tool: str, resolved: Resolved | None) -> ApprovalPolicy | None:
         if self.modules is None:
             definition = self.catalog.tool(tool)
             if definition is None:
@@ -277,19 +370,19 @@ class ToolRegistry:
             return None
         return approval_policy(resolved.module, resolved.operation)
 
-    async def output_schema_for(self, tool: str, tenant_id: str, team_id: str | None = None) -> dict[str, Any] | None:
+    async def output_schema_for(self, tool: str, tenant_id: str, team_id: str | None = None) -> Json | None:
         """The shape of what the tenant's operation `tool` answers: its imported response schema, else one
         inferred from its example response (open, since an example may leave fields out), else None."""
         if self.modules is None:
             return None
         return self._output(await self.resolve(tool, tenant_id=tenant_id, team_id=team_id))
 
-    def _output(self, resolved: Resolved | None) -> dict[str, Any] | None:
+    def _output(self, resolved: Resolved | None) -> Json | None:
         if self.modules is None or resolved is None or resolved.operation is None:
             return None
         op = resolved.operation
         if isinstance(op.get("response_schema"), dict) and op["response_schema"]:
-            return cast(dict[str, Any], op["response_schema"])
+            return op["response_schema"]
         stub = op.get("stub")
         # {"ok": true} is the stub an import writes when the document gives no example.
         return inferred(stub) if stub not in (None, {"ok": True}) else None
@@ -325,6 +418,8 @@ class ToolRegistry:
             # A system tool is no module's operation, so no agent can be granted it; it resolves as the
             # platform's own, and the gateway runs it only for its system workflow.
             return Resolved(WORKFLOW_TOOLS[tool][0], "local") if tool in SYSTEM_ONLY else None
+        module: Module
+        op: Operation
         module, op = found
         if (
             self.plugins is not None
@@ -346,8 +441,8 @@ class ToolRegistry:
             )
             if conn is not None and self.connections is not None:
                 # A test run takes the app's sandbox account when the team has one (records.account_for).
-                found = await self.connections.accounts(tenant_id, str(conn["team_id"]), str(conn["app_id"]))
+                found = await self.connections.accounts(tenant_id, conn.team_id, conn.app_id)
                 conn = account_for(conn, found, run) or conn
-                module = {**module, "connection_id": conn["id"]}
-            module = {**module, "sandbox": bool((conn or {}).get("sandbox"))}
+                module = {**module, "connection_id": conn.id}
+            module = {**module, "sandbox": bool(conn.sandbox) if conn else False}
         return Resolved(op["access"], op["executor"], module, op)

@@ -24,6 +24,7 @@ from ops_contracts.chat import ApprovalWidget, ChatMessage, WidgetEvent
 from ops_engine.journal import StepRow
 from ops_engine.store import RunStore, SqlJournal
 from ops_engine.store.tables import engine_definitions
+from ops_service_kit.http import Json
 from ops_store.team_scope import acting_as
 from tests.api.test_activity import activity
 from tests.api.test_case_routes import started_run
@@ -125,10 +126,10 @@ async def test_the_write_preview_carries_the_operations_labels(stack: Stack) -> 
     """The Human Task page drew a write's input keys made readable in the browser; the region now carries the
     operation's own labels and values, as the one describer words them."""
     _, rt = stack
-    call = {"tool": "place_hold", "input": {"accountId": "CHQ-2219", "amount": 2140.55}}
-    payload = {"taskType": {"id": "write_approval"}, "params": {"title": "Hold the funds", "call": call}}
+    call: Json = {"tool": "place_hold", "input": {"accountId": "CHQ-2219", "amount": 2140.55}}
+    payload: Json = {"taskType": {"id": "write_approval"}, "params": {"title": "Hold the funds", "call": call}}
     with tenant_scope(TENANT), acting_as("team_ops"):
-        task = await task_view.typed_task(rt, payload) or {}
+        task: dict[str, Any] = await task_view.typed_task(rt, payload) or {}
         expected = await describe_call(rt, call, currency=None, money_key=None)
     [preview] = [r["data"] for r in task["regions"] if r["region"] == "write_preview"]
     assert preview["fields"] == expected["fields"] and preview["fields"], preview
@@ -166,11 +167,11 @@ def test_a_chat_widget_names_its_tool_in_words() -> None:
 
 
 async def _opened(store: CaseStore) -> str:  # noqa: F811
-    return str((await store.open(team_id="team_ops", subject="Dispute W-1", priority="high", by="run:r1")).case["id"])
+    return str((await store.open(team_id="team_ops", subject="Dispute W-1", priority="high", by="run:r1")).case.id)
 
 
 async def _responded(store: CaseStore, case_id: str) -> str | None:  # noqa: F811
-    return (await store.get(case_id, ["team_ops"]))["responded_at"]
+    return (await store.get(case_id, ["team_ops"])).responded_at
 
 
 async def test_only_a_person_starts_the_first_response_clock(store: CaseStore) -> None:  # noqa: F811
@@ -265,12 +266,12 @@ async def test_a_call_of_another_team_is_not_read(stack: Stack) -> None:  # noqa
         theirs = await EventLog(rt.db).append(
             thread_id="th_other", team_id="team_other", run_id=None, type_="tool_end", node="agent", data=data
         )
-        rows = [{"kind": "tool_call", "source_type": "chat", "row_id": theirs["id"]}]
+        rows: list[Json] = [{"kind": "tool_call", "source_type": "chat", "row_id": theirs.id}]
         with acting_as("team_ops"):
             seen = await Activity(rt.db).calls(rows)
         with acting_as("team_other"):
             own = await Activity(rt.db).calls(rows)
-    assert seen == {} and own[str(theirs["id"])]["tool"] == "list_accounts", (seen, own)
+    assert seen == {} and own[theirs.id]["tool"] == "list_accounts", (seen, own)
 
 
 async def test_a_call_carrying_an_object_reads_without_it(stack: Stack) -> None:  # noqa: F811

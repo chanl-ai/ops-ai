@@ -17,23 +17,24 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, FastAPI, Header, Query, Request, Response
+from fastapi import APIRouter, Body, Depends, FastAPI, Header, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import Field
 
 from ops_access import Access, can
 from ops_files.models import (
+    BulkResult,
     CompletedUpload,
     DownloadLink,
-    FileData,
+    FileDataIn,
     FileDetail,
+    FileList,
     FilePurpose,
     FileReferenceType,
-    Model,
-    PurposeLimit,
     ReadRequest,
     ReadRequestIn,
+    UploadLimits,
     UploadRequest,
     UploadTicket,
 )
@@ -63,31 +64,36 @@ from ops_files.settings import (
     StorageSettingsInput,
     StorageSettingsView,
     StorageTarget,
+    StorageTargetIn,
     TargetInUseError,
     UnknownCredentialError,
 )
 from ops_files.store import StaleVersionError, reachable
 from ops_files.tenant_files import HoldRefusedError, TenantFiles, Who
 from ops_identity import Auth, CurrentCaller, CurrentPrincipal, CurrentService, install_auth
+from ops_identity.fastapi import Tx
 from ops_service_kit.background import BackgroundHealthOut
 from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, Unprocessable, ValidationFailed
 from ops_service_kit.http import (
     Envelope,
-    ListResult,
+    In,
     OptionsPage,
     Out,
-    error_body,
     error_responses,
     install_error_handlers,
     ok,
     operation_id,
 )
+from ops_service_kit.listing import ListQuery
+from ops_service_kit.logging import get_logger
 from ops_service_kit.settings import Settings
 from ops_storage.base import ObjectLockedError, ObjectNotFoundError, content_disposition
+from ops_store import isolation
 from ops_store.background import LOCAL as LOCAL_BEATS
 from ops_store.background import report as background_report
 
 _TEAM = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
+log = get_logger(__name__)
 
 
 class PayloadTooLarge(ApiError):
@@ -110,84 +116,46 @@ class Health(Out):
     reason: str | None = None
 
 
-class FileRow(Model):
-    """A list row: the file record without versions and references."""
-
-    id: str
-    name: str
-    mime: str
-    size: int
-    digest: str
-    purpose: FilePurpose
-    team: str
-    uploaded_by: str
-    uploaded_at: str
-    scan: dict[str, Any]
-    sensitivity: str
-    sensitivity_suggested: bool
-    retention: dict[str, Any]
-    immutable: bool
-    reference_count: int
-    version_count: int
-    legal_hold: dict[str, Any] | None = None
-    storage: dict[str, Any] | None = None
-    # What was read from the file, so the list's "read as" column needs no call per row.
-    data: FileData | None = None
-
-
-class FileList(ListResult[FileRow]):
-    """A page of files, the counts of each view the Files page offers, and facet counts, all from the query."""
-
-    view_counts: dict[str, int]
-
-
-class DownloadIn(Model):
+class DownloadIn(In):
     ttl_seconds: int | None = None
 
 
-class LegalHoldIn(Model):
+# The body is optional: a link asked for with none lasts the tenant's longest.
+_NO_TTL = DownloadIn()
+
+
+class LegalHoldIn(In):
     ids: list[str] = Field(min_length=1, max_length=100)
     hold: bool
     reason: str
 
 
-class Skipped(Model):
-    id: str
-    reason: str
-
-
-class BulkResult(Model):
-    # The console names it `updated` (lib/types/domain.ts BulkResult), as every bulk route does.
-    updated: list[str]
-    skipped: list[Skipped]
-
-
-class BulkDeleteIn(Model):
+class BulkDeleteIn(In):
     ids: list[str] = Field(min_length=1, max_length=100)
 
 
-class UploadLimits(Model):
-    per_purpose: list[PurposeLimit]
-    scanning: bool
-
-
-class ReferenceIn(Model):
+class ReferenceIn(In):
     type: FileReferenceType
     ref_id: str
     name: str
     href: str | None = None
 
 
-class ScanResultIn(Model):
+class ScanResultIn(In):
     file_id: str
     status: Literal["clean", "infected", "failed"]
     engine: str = Field(min_length=1, max_length=64)
     detail: str | None = Field(default=None, max_length=500)
 
 
-def _status(e: FilesError) -> ApiError:
+def _status(e: FilesError | HoldRefusedError | ObjectLockedError) -> ApiError:
     """The files rules' refusals as HTTP answers (files 5 and 6)."""
     message = str(e) or type(e).__name__
+    if isinstance(e, HoldRefusedError):
+        return Forbidden(message)
+    if isinstance(e, ObjectLockedError):
+        # Storage's own retention or legal hold refused the change, behind the service's checks; never a 500.
+        return Conflict(message, code="locked_in_storage")
     if isinstance(e, FileMissingError):
         return NotFound("File")
     if isinstance(e, DeleteNotAllowedError | EditNotAllowedError):
@@ -267,8 +235,6 @@ async def who(p: CurrentCaller, request: Request) -> Who:
 
 
 Caller = Annotated[Who, Depends(who)]
-Page = Annotated[int, Query(ge=1)]
-PageSize = Annotated[int, Query(alias="pageSize", ge=1, le=100)]
 IdempotencyKey = Annotated[
     str | None, Header(alias="Idempotency-Key", description="A retry with the same key returns the same file.")
 ]
@@ -291,16 +257,25 @@ def create_files_app(
     Settings for audience "files": platform tokens are verified locally against platform-service's key set.
     `settings` serves the storage settings routes; without it they are not mounted."""
 
+    async def kept(start: Callable[[], Coroutine[Any, Any, None]]) -> None:
+        # Each process reports its own failures on /health/background; one that still escapes is logged here, so it
+        # never cancels the group, which would stop the server and the other processes with it.
+        try:
+            await start()
+        except Exception as e:
+            log.warning("files_background_stopped", error=f"{type(e).__name__}: {e}"[:500])
+
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
-        # Work that runs beside the server, such as the service event relay, stopped with it.
-        tasks = [asyncio.create_task(start()) for start in background]
-        try:
-            yield
-        finally:
-            for task in tasks:
-                task.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
+        # Work that runs beside the server, such as the service event relay, on one TaskGroup: leaving it cancels each
+        # process and waits for it, so none outlives the server.
+        async with asyncio.TaskGroup() as group:
+            tasks = [group.create_task(kept(start)) for start in background]
+            try:
+                yield
+            finally:
+                for task in tasks:
+                    task.cancel()
 
     app = FastAPI(title="files-service", version="0.1.0", lifespan=lifespan, generate_unique_id_function=operation_id)
     config = Settings()
@@ -317,19 +292,15 @@ def create_files_app(
             max_age=600,
         )
 
-    @app.exception_handler(FilesError)
-    async def files_error(request: Request, e: FilesError) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        api = _status(e)
-        return JSONResponse(error_body(api.status, api.code, api.message), status_code=api.status)
+    async def refused(request: Request, e: Exception) -> Response:
+        """A refusal raised below the routes, rendered by the kit's ApiError handler so it answers exactly as one a
+        route raises (details, the request id, Retry-After) rather than through a second copy of the envelope."""
+        assert isinstance(e, FilesError | HoldRefusedError | ObjectLockedError)
+        reply = app.exception_handlers[ApiError](request, _status(e))
+        return reply if isinstance(reply, Response) else await reply
 
-    @app.exception_handler(ObjectLockedError)
-    async def storage_locked(request: Request, e: ObjectLockedError) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        # Storage's own retention or legal hold refused the change, behind the service's checks; never a 500.
-        return JSONResponse(error_body(409, "locked_in_storage", str(e)), status_code=409)
-
-    @app.exception_handler(HoldRefusedError)
-    async def hold_refused(request: Request, e: HoldRefusedError) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        return JSONResponse(error_body(403, "forbidden", str(e)), status_code=403)
+    for refusal in (FilesError, HoldRefusedError, ObjectLockedError):
+        app.add_exception_handler(refusal, refused)
 
     errors = error_responses({413: "Above the purpose's size limit", 415: "Type not allowed", 423: "Not scanned clean"})
 
@@ -340,15 +311,18 @@ def create_files_app(
         response_model_exclude_none=True,
         responses={503: {"model": Health}},
     )
-    async def health() -> dict[str, str] | JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def health(response: Response) -> Health:  # pyright: ignore[reportUnusedFunction]
         if not await reachable(engine):
-            return JSONResponse({"status": "degraded", "reason": "database"}, status_code=503)
-        return {"status": "ok"}
+            response.status_code = 503
+            return Health(status="degraded", reason="database")
+        return Health(status="ok")
 
     @app.get("/health/background", tags=["health"], response_model=BackgroundHealthOut)
-    async def health_background() -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
+    async def health_background() -> BackgroundHealthOut:  # pyright: ignore[reportUnusedFunction]
         """This service's background processes and their state; counts and error types only, no record's data."""
-        return {"processes": background_report(await LOCAL_BEATS.read(), "files", time.time())}
+        return BackgroundHealthOut.model_validate(
+            {"processes": background_report(await LOCAL_BEATS.read(), "files", time.time())}
+        )
 
     public = APIRouter(prefix="/v1/files", tags=["files"], responses=errors)
 
@@ -356,9 +330,13 @@ def create_files_app(
     async def create_upload(  # pyright: ignore[reportUnusedFunction]
         body: UploadRequest, request: Request, who: Caller, idempotency_key: IdempotencyKey = None
     ) -> JSONResponse:
-        """A ticket for one upload: a signed storage URL, or this service's content route on the local backend."""
+        """A ticket for one upload: a signed storage URL, or this service's content route on the local backend. Not
+        on Tx: the rows are read in one transaction and written in another, with none open while the URL is signed
+        (tests/test_request_transactions.py)."""
         ticket = await files.create_upload(who, body, idempotency_key=idempotency_key)
-        ticket.upload_url = _absolute(request, ticket.upload_url, config.files_public_url)
+        ticket = ticket.model_copy(
+            update={"upload_url": _absolute(request, ticket.upload_url, config.files_public_url)}
+        )
         return ok(ticket.model_dump(mode="json", by_alias=True), 201)
 
     @public.put("/uploads/{file_id}/content", status_code=204, response_class=Response)
@@ -380,9 +358,9 @@ def create_files_app(
     @public.get("", response_model=Envelope[FileList], dependencies=[service_scope("view")])
     async def list_files(  # pyright: ignore[reportUnusedFunction]
         who: Caller,
+        _: Tx,
+        q: ListQuery,
         *,
-        page: Page = 1,
-        page_size: PageSize = 25,
         uploaded_by: Annotated[Literal["me"] | None, Query(alias="uploadedBy")] = None,
         purpose: Annotated[list[FilePurpose] | None, Query()] = None,
         scan: Annotated[list[str] | None, Query()] = None,
@@ -391,40 +369,32 @@ def create_files_app(
         read_path: Annotated[list[Literal["template", "model"]] | None, Query(alias="readPath")] = None,
         ref_type: Annotated[FileReferenceType | None, Query(alias="refType")] = None,
         ref_id: Annotated[str | None, Query(alias="refId")] = None,
-        search: str = "",
         uploaded_after: Annotated[datetime | None, Query(alias="uploadedAfter")] = None,
         uploaded_before: Annotated[datetime | None, Query(alias="uploadedBefore")] = None,
         view: Literal["all", "quarantined", "legal_hold", "unreferenced", "expiring"] = "all",
     ) -> JSONResponse:
-        """Available files of the caller's team, newest first; `uploadedBy=me` keeps the caller's own. Search, the
-        uploaded-since date, the view and the purpose, scan, sensitivity, read-as type and read path filters run in
-        the query, which also answers each view's count and the facet counts; `readPath=model` keeps files no
-        template matched."""
-        return ok(
-            await files.list(
-                who,
-                page=page,
-                page_size=page_size,
-                mine=uploaded_by == "me",
-                ref_type=ref_type,
-                ref_id=ref_id,
-                search=search,
-                uploaded_after=uploaded_after,
-                uploaded_before=uploaded_before,
-                view=view,
-                filters={
-                    "purpose": list(purpose or []),
-                    "scan": scan or [],
-                    "sensitivity": sensitivity or [],
-                    "readAs": read_as or [],
-                    "readPath": list(read_path or []),
-                },
-            )
+        """Available files of the caller's team on the shared list contract, newest first (`sortBy` name, uploadedAt,
+        size, scan or purpose; equal values stay newest first); `uploadedBy=me` keeps the caller's own. Search, the
+        uploaded dates, the view and the purpose, scan, sensitivity, read-as type and read path filters run in the
+        query, which also answers each view's count and the facet counts; `readPath=model` keeps files no template
+        matched. The filters are declared here so a bad value is refused; ListQuery reads the same keys as its
+        filters."""
+        del purpose, scan, sensitivity, read_as, read_path
+        listed = await files.list(
+            who,
+            q,
+            mine=uploaded_by == "me",
+            ref_type=ref_type,
+            ref_id=ref_id,
+            uploaded_after=uploaded_after,
+            uploaded_before=uploaded_before,
+            view=view,
         )
+        return ok(listed.model_dump(mode="json", by_alias=True))
 
     @public.post("/{file_id}/read-requests", status_code=202, response_model=Envelope[ReadRequest])
     async def request_read(  # pyright: ignore[reportUnusedFunction]
-        file_id: str, body: ReadRequestIn, who: Caller, idempotency_key: IdempotencyKey = None
+        file_id: str, body: ReadRequestIn, who: Caller, _: Tx, idempotency_key: IdempotencyKey = None
     ) -> JSONResponse:
         """Asks for the file to be read with a document type: the system extract workflow runs as the caller,
         started by this service's file.read_requested event, and saves what was read on the file. 202 at once; the
@@ -434,12 +404,12 @@ def create_files_app(
         return ok(found.model_dump(mode="json", by_alias=True), status=202)
 
     @public.get("/{file_id}/read-requests/{key}", response_model=Envelope[ReadRequest])
-    async def get_read_request(file_id: str, key: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def get_read_request(file_id: str, key: str, who: Caller, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """A read request and, once its event was delivered, the run it started."""
         return ok((await files.read_request(who, file_id, key)).model_dump(mode="json", by_alias=True))
 
     @public.put("/{file_id}/data", response_model=Envelope[FileDetail], dependencies=[service_scope("edit")])
-    async def set_file_data(file_id: str, body: FileData, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def set_file_data(file_id: str, body: FileDataIn, who: Caller, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Records what was read from the file: its document type and version, template or model, how many fields
         wait for a person, and the extraction. The extract workflow's step writes it; files-service calls no
         other service for it."""
@@ -449,6 +419,7 @@ def create_files_app(
     @public.get("/options", response_model=Envelope[OptionsPage])
     async def file_options(  # pyright: ignore[reportUnusedFunction]
         who: Caller,
+        _: Tx,
         search: str = "",
         cursor: str | None = None,
         limit: Annotated[int, Query(ge=1, le=100)] = 25,
@@ -456,25 +427,30 @@ def create_files_app(
     ) -> JSONResponse:
         """The team's files a picker offers, searched and paged in the query; one not scanned clean is disabled with
         the reason. `ids` labels stored values instead of searching."""
-        return ok(await files.options(who, search=search, cursor=cursor, limit=limit, ids=ids))
+        return ok(
+            (await files.options(who, search=search, cursor=cursor, limit=limit, ids=ids)).model_dump(
+                mode="json", by_alias=True
+            )
+        )
 
     @public.get("/limits", response_model=Envelope[UploadLimits])
-    async def upload_limits(who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def upload_limits(who: Caller, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """The purpose limits uploads are checked against; readable by everyone who can upload."""
-        return ok(await files.limits(who))
+        return ok((await files.limits(who)).model_dump(mode="json", by_alias=True))
 
     @public.post("/bulk-delete", response_model=Envelope[BulkResult])
     async def bulk_delete(body: BulkDeleteIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Deletes each file the rules allow; one that is referenced, held or retained is skipped with the reason."""
-        return ok(await files.bulk_delete(who, body.ids))
+        return ok((await files.bulk_delete(who, body.ids)).model_dump(mode="json", by_alias=True))
 
     @public.post("/legal-hold", response_model=Envelope[BulkResult])
     async def set_legal_hold(body: LegalHoldIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Places or releases holds; an admin of the team only, with a reason. Sets the storage-level hold too."""
-        return ok(await files.set_legal_hold(who, body.ids, hold=body.hold, reason=body.reason))
+        done = await files.set_legal_hold(who, body.ids, hold=body.hold, reason=body.reason)
+        return ok(done.model_dump(mode="json", by_alias=True))
 
     @public.get("/{file_id}", response_model=Envelope[FileDetail], dependencies=[service_scope("view")])
-    async def get_file(file_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def get_file(file_id: str, who: Caller, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         detail = await files.get(who, file_id)
         # The console shows View only and hides Delete from these instead of guessing from the caller's role.
         flags = {
@@ -486,18 +462,22 @@ def create_files_app(
 
     @public.post("/{file_id}/download-url", response_model=Envelope[DownloadLink])
     async def download_url(  # pyright: ignore[reportUnusedFunction]
-        file_id: str, request: Request, who: Caller, body: DownloadIn | None = None
+        file_id: str, request: Request, who: Caller, body: Annotated[DownloadIn, Body()] = _NO_TTL
     ) -> JSONResponse:
-        """A short-lived link; 423 until the file is scanned clean."""
-        link = await files.download_url(who, file_id, expires_in=body.ttl_seconds if body else None)
-        link.url = _absolute(request, link.url, config.files_public_url)
+        """A short-lived link; 423 until the file is scanned clean. Not on Tx: no transaction is open while the link
+        is signed."""
+        link = await files.download_url(who, file_id, expires_in=body.ttl_seconds)
+        link = link.model_copy(update={"url": _absolute(request, link.url, config.files_public_url)})
         return ok(link.model_dump(mode="json", by_alias=True))
 
     @public.get("/{file_id}/content", response_class=StreamingResponse, dependencies=[service_scope("view")])
     async def get_content(file_id: str, who: Caller) -> StreamingResponse:  # pyright: ignore[reportUnusedFunction]
         """A clean file's bytes: the proxy download for people, and the read agent runs, knowledge ingest and tool
         fixtures use with a service token."""
-        detail, chunks = await files.open_content(who, file_id)
+        # Not on Tx: the file's rows are read in the request's one transaction, closed before the first byte is read
+        # from storage, so a slow download holds no connection (tests/test_request_transactions.py).
+        async with isolation.request_transaction():
+            detail, chunks = await files.open_content(who, file_id)
         return await _stream(detail, chunks)
 
     @public.delete("/{file_id}", status_code=204, response_class=Response)
@@ -527,7 +507,7 @@ def create_files_app(
         return ok(done.model_dump(mode="json", by_alias=True), 201)
 
     @public.post("/scan-results", response_model=Envelope[FileDetail])
-    async def scan_result(body: ScanResultIn, caller: CurrentService) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def scan_result(body: ScanResultIn, caller: CurrentService, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """A scanner's verdict on one file of the token's tenant; the file stays pending and unreadable until then. Only
         a token holding `files:decide`, which Settings.service_scopes gives the scanner alone, records one."""
         if not caller.tenant_id:
@@ -543,7 +523,7 @@ def create_files_app(
         response_model=Envelope[FileDetail],
         dependencies=[service_scope("edit", services_only=True)],
     )
-    async def attach(file_id: str, body: ReferenceIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def attach(file_id: str, body: ReferenceIn, who: Caller, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """A service records that one of its records uses the file; 409 when it is pending or quarantined."""
         detail = await files.add_reference(
             who,
@@ -561,7 +541,7 @@ def create_files_app(
         response_model=Envelope[FileDetail],
         dependencies=[service_scope("edit", services_only=True)],
     )
-    async def detach(file_id: str, ref_type: FileReferenceType, ref_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def detach(file_id: str, ref_type: FileReferenceType, ref_id: str, who: Caller, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         detail = await files.remove_reference(who, file_id, type=ref_type, ref_id=ref_id)
         return ok(detail.model_dump(mode="json", by_alias=True))
 
@@ -611,7 +591,7 @@ def _settings_router(settings: StorageSettings) -> APIRouter:
         raise ValidationFailed(rule)
 
     @router.get("", response_model=Envelope[StorageSettingsView])
-    async def get_settings(who: StorageAdmin) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def get_settings(who: StorageAdmin, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok((await settings.view(who.tenant_id)).model_dump(mode="json", by_alias=True))
 
     @router.put("", response_model=Envelope[StorageSettingsView])
@@ -632,22 +612,23 @@ def _settings_router(settings: StorageSettings) -> APIRouter:
         return ok(view.model_dump(mode="json", by_alias=True))
 
     @router.post("/test", response_model=Envelope[ProbeResult])
-    async def test_target(body: StorageTarget, who: StorageAdmin) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def test_target(body: StorageTargetIn, who: StorageAdmin) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Writes, reads and deletes a small object on the target with its credential; saves nothing."""
-        return ok((await settings.test(who.tenant_id, body)).model_dump(mode="json", by_alias=True))
+        target = StorageTarget.model_validate(body.model_dump())
+        return ok((await settings.test(who.tenant_id, target)).model_dump(mode="json", by_alias=True))
 
     @router.get("/credentials", response_model=Envelope[list[CredentialView]])
-    async def list_credentials(who: StorageAdmin) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def list_credentials(who: StorageAdmin, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok([c.model_dump(mode="json", by_alias=True) for c in await settings.credentials(who.tenant_id)])
 
     @router.put("/credentials/{name}", response_model=Envelope[CredentialView])
-    async def set_credential(name: str, body: CredentialInput, who: StorageAdmin) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def set_credential(name: str, body: CredentialInput, who: StorageAdmin, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Sets or replaces a credential. The values are sealed and never returned; the answer names it only."""
         view = await settings.set_credential(who.tenant_id, await named(who.tenant_id, name), body, by=who.actor)
         return ok(view.model_dump(mode="json", by_alias=True))
 
     @router.delete("/credentials/{name}", status_code=204, response_class=Response)
-    async def delete_credential(name: str, who: StorageAdmin) -> Response:  # pyright: ignore[reportUnusedFunction]
+    async def delete_credential(name: str, who: StorageAdmin, _: Tx) -> Response:  # pyright: ignore[reportUnusedFunction]
         try:
             if not (_NAME.fullmatch(name) or _OLD_NAME.fullmatch(name)):
                 raise ValidationFailed(rule)

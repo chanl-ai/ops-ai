@@ -9,18 +9,30 @@ transaction.
 
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Any, ClassVar
+from typing import ClassVar
 
 import sqlalchemy as sa
+from pydantic import Field
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncConnection
 
-from ops_store import Guarantee
-from ops_store.search import contains
-from ops_store.team_scope import team_visible
+from ops_service_kit.http import Out
+from ops_service_kit.listing import ListParams
+from ops_store import Guarantee, isolation
+from ops_store.listing import LISTED, ListPage, list_page
+from ops_store.rows import rows
+from ops_store.schema import TENANT_SCOPED
+from ops_store.store import Store
 
-from .modules import metadata, module_egress_hosts, tool_modules
+from .modules import metadata, module_egress_hosts, team_modules, tool_modules
+from .tenancy import ROLE
+
+# Why the allow-list is read and written across the tenant's teams: it is the tenant's one list, never a team's, and
+# its callers include start-up and the gateway's connect check, which name the tenant and no team.
+ALLOW_LIST = "the egress allow-list is the tenant's, not a team's"
 
 _TS = sa.DateTime(timezone=True)
 
@@ -36,8 +48,9 @@ def _listed(name: str, key: str, length: int) -> sa.Table:
         sa.Column("added_at", _TS, nullable=False),
         # The template slot a provisioned record fills, found again by it on the next run, and what a person may change:
         # `system` nothing, `managed` anything. Null on a record no template made.
-        sa.Column("template_id", sa.String(120), index=True),
+        sa.Column("template_id", sa.String(120), index=True, info=LISTED),
         sa.Column("protection", sa.String(16)),
+        info=TENANT_SCOPED,
     )
 
 
@@ -57,18 +70,63 @@ egress_audit = sa.Table(
     sa.Column("action", sa.String(16), nullable=False),
     sa.Column("actor", sa.String(200), nullable=False),
     sa.Column("at", _TS, nullable=False),
+    info=TENANT_SCOPED,
 )
 
 TABLES = {"host": (egress_hosts, egress_hosts.c.host), "range": (egress_ranges, egress_ranges.c.cidr)}
 
 
-def _by_name(modules: list[dict[str, str]]) -> list[dict[str, str]]:
-    return sorted(modules, key=lambda m: m["name"].lower())
+class ModuleUse(Out):
+    """A module whose endpoint is on a listed host, by id and the name a person knows it by."""
+
+    id: str
+    name: str
 
 
-def _users(tenant_id: str) -> sa.Select[str, str, str | None]:
+class _Listed(Out):
+    tenant_id: str
+    note: str
+    added_by: str
+    added_at: datetime
+    template_id: str | None
+    protection: str | None
+
+
+class ListedHost(_Listed):
+    host: str
+    # Filled after the host is read: the modules that use it, by name.
+    modules: list[ModuleUse] = Field(default_factory=list[ModuleUse])
+
+
+class ListedRange(_Listed):
+    cidr: str
+
+
+class AllowList(Out):
+    hosts: list[ListedHost]
+    ranges: list[ListedRange]
+
+
+class EgressChange(Out):
+    """One audit row: a host or range added or removed, by whom and when."""
+
+    id: int
+    tenant_id: str
+    kind: str
+    value: str
+    action: str
+    actor: str
+    at: datetime
+
+
+def _by_name(modules: list[ModuleUse]) -> list[ModuleUse]:
+    return sorted(modules, key=lambda m: m.name.lower())
+
+
+def _users(tenant_id: str, named: sa.ColumnElement[bool]) -> sa.Select[str, str, str | None]:
     """Each host's modules with the name a person knows them by, so the allow list never shows a bare module id. A
-    module of a team the reader is not acting in keeps its id: its name is that team's record."""
+    module of a team the reader is not acting in keeps its id: its name is that team's record. `named` is
+    `team_modules()` taken BEFORE the list's tenant-wide block, which has no acting team and would name every team's."""
     return (
         sa.select(module_egress_hosts.c.host, module_egress_hosts.c.module_id, tool_modules.c.display_name)
         .outerjoin(
@@ -76,7 +134,7 @@ def _users(tenant_id: str) -> sa.Select[str, str, str | None]:
             sa.and_(
                 tool_modules.c.tenant_id == module_egress_hosts.c.tenant_id,
                 tool_modules.c.id == module_egress_hosts.c.module_id,
-                team_visible(tool_modules),
+                named,
             ),
         )
         .where(module_egress_hosts.c.tenant_id == tenant_id)
@@ -90,90 +148,89 @@ class HostInUseError(RuntimeError):
         self.modules = modules
 
 
-class EgressStore:
+class EgressStore(Store):
     # A change and its audit row land together (TRANSACTION).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION})
+    role = ROLE
 
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
+    @asynccontextmanager
+    async def _list_tx(self, tenant_id: str) -> AsyncGenerator[AsyncConnection]:
+        """The request's transaction, or one of its own, in the tenant whose list it is."""
+        with isolation.tenant_wide(ALLOW_LIST, tenant_id=tenant_id):
+            async with self.tx() as c:
+                yield c
 
-    async def allow_list(self, tenant_id: str) -> dict[str, list[dict[str, Any]]]:
+    async def allow_list(self, tenant_id: str) -> AllowList:
         """Hosts, each with the modules that use it, and ranges."""
         hosts_q = egress_hosts.select().where(egress_hosts.c.tenant_id == tenant_id).order_by(egress_hosts.c.host)
         ranges_q = egress_ranges.select().where(egress_ranges.c.tenant_id == tenant_id).order_by(egress_ranges.c.cidr)
-        users_q = _users(tenant_id)
-        async with self.engine.connect() as c:
-            hosts = [dict(r) for r in (await c.execute(hosts_q)).mappings()]
-            ranges = [dict(r) for r in (await c.execute(ranges_q)).mappings()]
-            used: dict[str, list[dict[str, str]]] = {}
+        users_q = _users(tenant_id, team_modules())
+        async with self._list_tx(tenant_id) as c:
+            hosts = await rows(c, hosts_q, ListedHost)
+            ranges = await rows(c, ranges_q, ListedRange)
+            used: dict[str, list[ModuleUse]] = {}
             for host, module_id, name in await c.execute(users_q):
-                used.setdefault(host, []).append({"id": module_id, "name": name or module_id})
-        return {"hosts": [{**h, "modules": _by_name(used.get(h["host"], []))} for h in hosts], "ranges": ranges}
+                used.setdefault(host, []).append(ModuleUse(id=module_id, name=name or module_id))
+        return AllowList(hosts=[_using(h, used) for h in hosts], ranges=ranges)
 
-    async def hosts_page(
-        self, tenant_id: str, search: str, offset: int, limit: int, template_id: str | None = None
-    ) -> list[dict[str, Any]]:
-        """One page of the listed hosts whose name or note contains `search`, by host, each with the modules that use
-        it; LIMIT and OFFSET run in the query, and only that page's modules are read."""
-        q = (
-            egress_hosts.select()
-            .where(self._hosts_matching(tenant_id, search, template_id))
-            .order_by(sa.func.lower(egress_hosts.c.host))
-        )
-        async with self.engine.connect() as c:
-            hosts = [dict(r) for r in (await c.execute(q.offset(offset).limit(limit))).mappings()]
-            return await self._with_modules(c, tenant_id, hosts)
+    async def host_page(self, tenant_id: str, params: ListParams) -> tuple[ListPage, list[ListedHost]]:
+        """One page of the listed hosts, by host name and then the key, searched by host or note and filtered by the
+        template slot (`templateId`), each with the modules that use it; only that page's modules are read."""
+        h = egress_hosts.c
+        q = sa.select(*egress_hosts.c).where(h.tenant_id == tenant_id)
+        named = team_modules()
+        async with self._list_tx(tenant_id) as c:
+            page = await list_page(
+                c,
+                q,
+                params,
+                search=[h.host, h.note],
+                default_sort=sa.func.lower(h.host),
+                filters={"templateId": h.template_id},
+            )
+            hosts = [ListedHost.model_validate(r) for r in page["data"]]
+            return page, await self._with_modules(c, tenant_id, hosts, named)
 
-    async def entry(self, tenant_id: str, kind: str, value: str) -> dict[str, Any] | None:
+    async def entry(self, tenant_id: str, kind: str, value: str) -> ListedHost | ListedRange | None:
         """One listed host, with the modules that use it, or one listed range, in the shape the lists return; None
         when it is not listed. An add returns it, so a screen can show the new row wherever its list is paged."""
-        table, col = TABLES[kind]
-        q = table.select().where(table.c.tenant_id == tenant_id, col == value)
-        async with self.engine.connect() as c:
-            rows = [dict(r) for r in (await c.execute(q)).mappings()]
-            if kind == "host":
-                rows = await self._with_modules(c, tenant_id, rows)
-        return rows[0] if rows else None
+        if kind == "host":
+            q = egress_hosts.select().where(egress_hosts.c.tenant_id == tenant_id, egress_hosts.c.host == value)
+            named = team_modules()
+            async with self._list_tx(tenant_id) as c:
+                found = await self._with_modules(c, tenant_id, await rows(c, q, ListedHost), named)
+            return found[0] if found else None
+        q = egress_ranges.select().where(egress_ranges.c.tenant_id == tenant_id, egress_ranges.c.cidr == value)
+        async with self._list_tx(tenant_id) as c:
+            ranges = await rows(c, q, ListedRange)
+        return ranges[0] if ranges else None
 
     @staticmethod
-    async def _with_modules(c: AsyncConnection, tenant_id: str, hosts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    async def _with_modules(
+        c: AsyncConnection, tenant_id: str, hosts: list[ListedHost], named: sa.ColumnElement[bool]
+    ) -> list[ListedHost]:
         """`hosts`, each with the modules that use it; only these hosts' modules are read."""
-        users_q = _users(tenant_id).where(module_egress_hosts.c.host.in_([h["host"] for h in hosts]))
-        used: dict[str, list[dict[str, str]]] = {}
+        users_q = _users(tenant_id, named).where(module_egress_hosts.c.host.in_([h.host for h in hosts]))
+        used: dict[str, list[ModuleUse]] = {}
         for host, module_id, name in await c.execute(users_q):
-            used.setdefault(host, []).append({"id": module_id, "name": name or module_id})
-        return [{**h, "modules": _by_name(used.get(h["host"], []))} for h in hosts]
-
-    async def hosts_count(self, tenant_id: str, search: str, template_id: str | None = None) -> int:
-        q = (
-            sa.select(sa.func.count())
-            .select_from(egress_hosts)
-            .where(self._hosts_matching(tenant_id, search, template_id))
-        )
-        async with self.engine.connect() as c:
-            return int((await c.execute(q)).scalar_one())
-
-    @staticmethod
-    def _hosts_matching(tenant_id: str, search: str, template_id: str | None = None) -> sa.ColumnElement[bool]:
-        named = sa.or_(contains(egress_hosts.c.host, search), contains(egress_hosts.c.note, search))
-        held = sa.and_(egress_hosts.c.tenant_id == tenant_id, named)
-        return held if template_id is None else sa.and_(held, egress_hosts.c.template_id == template_id)
+            used.setdefault(host, []).append(ModuleUse(id=module_id, name=name or module_id))
+        return [_using(h, used) for h in hosts]
 
     async def protection(self, tenant_id: str, kind: str, value: str) -> str | None:
         """A listed entry's protection; None when it is unprotected or not listed."""
         table, col = TABLES[kind]
         q = sa.select(table.c.protection).where(table.c.tenant_id == tenant_id, col == value)
-        async with self.engine.connect() as c:
+        async with self._list_tx(tenant_id) as c:
             return (await c.execute(q)).scalar_one_or_none()
 
     async def host_allowed(self, tenant_id: str, host: str) -> bool:
         q = sa.select(sa.literal(1)).where(egress_hosts.c.tenant_id == tenant_id, egress_hosts.c.host == host)
-        async with self.engine.connect() as c:
+        async with self._list_tx(tenant_id) as c:
             return (await c.execute(q)).first() is not None
 
     async def ranges(self, tenant_id: str) -> list[str]:
         q = sa.select(egress_ranges.c.cidr).where(egress_ranges.c.tenant_id == tenant_id)
-        async with self.engine.connect() as c:
+        async with self._list_tx(tenant_id) as c:
             return [r[0] for r in await c.execute(q)]
 
     async def _audit(
@@ -197,9 +254,9 @@ class EgressStore:
         """Adds a host or a range, with the provisioner's `template_id` and `protection` when `template` names them;
         False when it was already listed (nothing written)."""
         table, col = TABLES[kind]
-        async with self.engine.begin() as c:
+        async with self._list_tx(tenant_id) as c:
             try:
-                async with c.begin_nested():
+                async with self.attempt(c):
                     row = {"tenant_id": tenant_id, col.name: value, "note": note, "added_by": actor, "added_at": at}
                     row |= template or {}
                     await c.execute(table.insert().values(**row))
@@ -219,13 +276,13 @@ class EgressStore:
             )
             .values(added_by=now[0], note=now[1])
         )
-        async with self.engine.begin() as c:
+        async with self._list_tx(tenant_id) as c:
             return (await c.execute(q)).rowcount
 
     async def remove(self, tenant_id: str, kind: str, value: str, *, actor: str, at: datetime) -> bool:
         """Removes a host or a range; False when it was not listed. HostInUseError while a module uses the host."""
         table, col = TABLES[kind]
-        async with self.engine.begin() as c:
+        async with self._list_tx(tenant_id) as c:
             if kind == "host":
                 used = sa.select(module_egress_hosts.c.module_id).where(
                     module_egress_hosts.c.tenant_id == tenant_id, module_egress_hosts.c.host == value
@@ -239,7 +296,11 @@ class EgressStore:
             await self._audit(c, tenant_id, (kind, value, "removed"), actor=actor, at=at)
         return True
 
-    async def audit(self, tenant_id: str) -> list[dict[str, Any]]:
+    async def audit(self, tenant_id: str) -> list[EgressChange]:
         q = egress_audit.select().where(egress_audit.c.tenant_id == tenant_id).order_by(egress_audit.c.id)
-        async with self.engine.connect() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+        async with self._list_tx(tenant_id) as c:
+            return await rows(c, q, EgressChange)
+
+
+def _using(host: ListedHost, used: dict[str, list[ModuleUse]]) -> ListedHost:
+    return host.model_copy(update={"modules": _by_name(used.get(host.host, []))})

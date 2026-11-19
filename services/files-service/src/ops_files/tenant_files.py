@@ -15,28 +15,39 @@ import contextlib
 import hashlib
 import re
 import uuid
-from collections.abc import AsyncIterable, AsyncIterator, Callable, Mapping, Sequence
+from collections.abc import AsyncIterable, AsyncIterator, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Literal, cast, get_args
 
 from ops_files.models import (
+    BulkResult,
     CompletedUpload,
     DownloadLink,
     FileData,
+    FileDataIn,
     FileDetail,
+    FileList,
     FilePurpose,
     FileReference,
     FileReferenceType,
     FileRetention,
     FileScan,
+    FileSensitivity,
     FileVersion,
     LegalHold,
     ReadRequest,
     ReadRequestIn,
+    ScanStatus,
+    Skipped,
+    StorageBackendName,
     StorageLocation,
+    UploadLimits,
     UploadRequest,
     UploadTicket,
+)
+from ops_files.models import (
+    FileRow as FileListRow,
 )
 from ops_files.scanning import Scanner, ScanResult
 from ops_files.service import (
@@ -67,8 +78,25 @@ from ops_files.service import (
     retain_until,
 )
 from ops_files.sniffing import SNIFF_BYTES, prove
-from ops_files.store import AsyncEngine, FileRow, FilesStore, HoldRow, ReadRequestsStore
-from ops_service_kit.http import options_page, options_window
+from ops_files.store import (
+    AsyncEngine,
+    FileDeletedPayload,
+    FileRow,
+    FilesStore,
+    HoldRow,
+    ListedFile,
+    NewReadRequest,
+    NewReference,
+    NewUpload,
+    NewVersion,
+    ReadRequestedPayload,
+    ReadRequestRow,
+    ReadRequestsStore,
+    UploadClaim,
+    UploadCompleted,
+)
+from ops_service_kit.http import OptionsPage, Pagination, options_page, options_window
+from ops_service_kit.listing import ListParams
 from ops_storage.base import ObjectExistsError, StreamingObjectStore
 from ops_store import isolation
 
@@ -125,16 +153,16 @@ class Who:
     edits: bool = True
 
 
-def _read_request(row: Mapping[str, Any]) -> ReadRequest:
+def _read_request(row: ReadRequestRow) -> ReadRequest:
     return ReadRequest(
-        key=row["request_key"],
-        file_id=row["file_id"],
-        document_type_id=row["document_type_id"],
-        version=row["version"],
-        status=row["status"],
-        run_id=row["run_id"],
-        requested_by=row["requested_by"],
-        requested_at=row["requested_at"],
+        key=row.request_key,
+        file_id=row.file_id,
+        document_type_id=row.document_type_id,
+        version=row.version,
+        status=row.status,
+        run_id=row.run_id,
+        requested_by=row.requested_by,
+        requested_at=row.requested_at,
     )
 
 
@@ -209,20 +237,20 @@ class TenantFiles:
         placed = await self._settings.for_upload(tenant, purpose)
         return placed.store, placed.proxy
 
-    async def _placement(self, row: FileRow | Mapping[str, Any]) -> tuple[StreamingObjectStore, bool]:
+    async def _placement(self, row: FileRow) -> tuple[StreamingObjectStore, bool]:
         """The store a file was written to, from its recorded backend and container: a change of target never moves
         files, so reads, deletes and holds go where the bytes are."""
-        if self._settings is None or (row["storage_backend"], row["storage_container"]) == (
+        if self._settings is None or (row.file.storage_backend, row.file.storage_container) == (
             self._store.backend,
             self._store.container,
         ):
             return self._store, self.proxy
-        placed = await self._settings.located(row["tenant_id"], row["storage_backend"], row["storage_container"])
+        placed = await self._settings.located(row.file.tenant_id, row.file.storage_backend, row.file.storage_container)
         return placed.store, placed.proxy
 
     async def _owned(self, who: Who, file_id: str) -> FileRow:
         row = await self._files.get(file_id)
-        if row is None or row["team"] != who.team:
+        if row is None or row.file.team != who.team:
             raise FileMissingError(file_id)
         return row
 
@@ -234,20 +262,20 @@ class TenantFiles:
             raise EditNotAllowedError("your role in this team does not change files")
         row = await self._owned(who, file_id)
         self._readable(row)
-        values = {
+        values: NewReadRequest = {
             "tenant_id": who.tenant_id,
             "request_key": f"{file_id}:{key or uuid.uuid4().hex}",
             "file_id": file_id,
-            "team": row["team"],
+            "team": row.file.team,
             "requested_by": who.actor,
             "document_type_id": body.document_type_id,
             "version": body.version,
             "type_name": body.type_name,
             "requested_at": self._clock(),
         }
-        payload = {
+        payload: ReadRequestedPayload = {
             "fileId": file_id,
-            "fileName": row["name"],
+            "fileName": row.file.name,
             "documentTypeId": body.document_type_id,
             "version": body.version,
             "typeName": body.type_name,
@@ -261,22 +289,22 @@ class TenantFiles:
     async def read_request(self, who: Who, file_id: str, key: str) -> ReadRequest:
         await self._owned(who, file_id)
         found = await ReadRequestsStore(self._files.engine).get(key)
-        if found is None or found["file_id"] != file_id:
+        if found is None or found.file_id != file_id:
             raise FileMissingError(key)
         return _read_request(found)
 
-    async def set_data(self, who: Who, file_id: str, data: FileData) -> FileDetail:
+    async def set_data(self, who: Who, file_id: str, data: FileDataIn) -> FileDetail:
         """Records what was read from an available file of the caller's team, replacing what was recorded before. For
         the same extraction the fields to check never rise again: the read's own save (extraction.read) can
         arrive after a workflow saved it checked or a correction lowered the count, and must not put fields back."""
         if not who.edits:
             raise EditNotAllowedError("your role in this team does not change files")
         row = await self._owned(who, file_id)
-        if row["status"] != "available":
-            raise UploadStateError(f"{file_id} is {row['status']}")
-        before = cast(dict[str, Any] | None, row["data"])
-        if before and before.get("extractionId") == data.extraction_id:
-            kept = int(before.get("fieldsToCheck") or 0)
+        if row.file.status != "available":
+            raise UploadStateError(f"{file_id} is {row.file.status}")
+        before = FileData.model_validate(row.file.data) if row.file.data else None
+        if before and before.extraction_id == data.extraction_id:
+            kept = before.fields_to_check
             if kept < data.fields_to_check:
                 data = data.model_copy(update={"fields_to_check": kept})
         stored = data.model_dump(mode="json", by_alias=True)
@@ -289,76 +317,81 @@ class TenantFiles:
         """The file as `who` may see it. The storage location (container and key) goes to admins of the file's team
         only (files 8.1); services and other members get none."""
         f = row.file
-        sees_storage = who is not None and f["team"] in who.admin_teams
-        retention = self._config.retention_class(f["retention_class_id"])
+        sees_storage = who is not None and f.team in who.admin_teams
+        retention = self._config.retention_class(f.retention_class_id)
         references = [
             FileReference(
-                type=r["ref_type"],
-                id=r["ref_id"],
-                name=r["name"],
-                href=r["href"],
-                added_at=r["added_at"],
-                blocked=r["blocked"],
+                type=cast(FileReferenceType, r.ref_type),
+                id=r.ref_id,
+                name=r.name,
+                href=r.href,
+                added_at=r.added_at,
+                blocked=r.blocked,
             )
             for r in row.references
         ]
         return FileDetail(
-            id=f["id"],
-            name=f["name"],
-            mime=f["mime"],
-            size=f["size"],
-            digest=f["digest"] or "",
-            purpose=f["purpose"],
-            team=f["team"],
-            uploaded_by=f["uploaded_by"],
-            uploaded_at=f["uploaded_at"],
-            scan=FileScan(status=f["scan_status"], engine=f["scan_engine"], at=f["scan_at"], detail=f["scan_detail"]),
-            sensitivity=f["sensitivity"],
-            sensitivity_suggested=f["sensitivity_suggested"],
-            retention=FileRetention(class_id=retention.id, class_name=retention.name, delete_after=f["delete_after"]),
+            id=f.id,
+            name=f.name,
+            mime=f.mime,
+            size=f.size,
+            digest=f.digest or "",
+            purpose=cast(FilePurpose, f.purpose),
+            team=f.team,
+            uploaded_by=f.uploaded_by,
+            uploaded_at=f.uploaded_at,
+            scan=FileScan(
+                status=cast(ScanStatus, f.scan_status), engine=f.scan_engine, at=f.scan_at, detail=f.scan_detail
+            ),
+            sensitivity=cast(FileSensitivity, f.sensitivity),
+            sensitivity_suggested=f.sensitivity_suggested,
+            retention=FileRetention(class_id=retention.id, class_name=retention.name, delete_after=f.delete_after),
             legal_hold=LegalHold(by=row.hold.placed_by, at=row.hold.placed_at, reason=row.hold.reason)
             if row.hold
             else None,
-            immutable=f["immutable"],
+            immutable=f.immutable,
             reference_count=len(references),
-            version_count=f["version_count"],
-            data=FileData.model_validate(f["data"]) if f.get("data") else None,
+            version_count=f.version_count,
+            data=FileData.model_validate(f.data) if f.data else None,
             storage=StorageLocation(
-                backend=f["storage_backend"],
+                backend=cast(StorageBackendName, f.storage_backend),
                 environment=self._config.environment,
-                container=f["storage_container"],
-                key=f["storage_key"],
+                container=f.storage_container,
+                key=f.storage_key,
                 region=self._config.region,
                 encryption=self._config.encryption,
-                locked=f["immutable"],
+                locked=f.immutable,
             )
             if sees_storage
             else None,
             versions=[
                 FileVersion(
-                    version=v["version"],
-                    digest=v["digest"],
-                    size=v["size"],
-                    uploaded_by=v["uploaded_by"],
-                    uploaded_at=v["uploaded_at"],
-                    current=v["current"],
+                    version=v.version,
+                    digest=v.digest,
+                    size=v.size,
+                    uploaded_by=v.uploaded_by,
+                    uploaded_at=v.uploaded_at,
+                    current=v.current,
                 )
                 for v in row.versions
             ],
             references=references,
         )
 
-    def _row_detail(self, f: Mapping[str, Any], who: Who) -> dict[str, Any]:
+    def _row_detail(self, f: ListedFile, who: Who) -> FileListRow:
         """A list row: the record without versions and references, in the console's JSON."""
-        hold = HoldRow("", f["hold_by"], f["hold_at"], f["hold_reason"]) if f.get("hold_by") else None
+        hold = (
+            HoldRow(id="", placed_by=f.hold_by, placed_at=f.hold_at, reason=f.hold_reason or "")
+            if f.hold_by and f.hold_at
+            else None
+        )
         detail = self._detail(FileRow(file=f, versions=[], references=[], hold=hold), who)
         out = detail.model_dump(
             mode="json",
             by_alias=True,
             exclude={"versions", "references", "delete_blocked_by", "can_edit", "can_delete", "can_publish"},
         )
-        out["referenceCount"] = int(f.get("reference_count", 0))
-        return out
+        return FileListRow.model_validate({**out, "referenceCount": f.reference_count})
 
     # ── upload ──
 
@@ -385,12 +418,14 @@ class TenantFiles:
         file_id, held_hash = claimed
         if held_hash != request_hash:
             raise IdempotencyConflictError("this Idempotency-Key was used for a different upload")
-        row = await self._files.get(file_id)
-        if row is None or row["team"] != who.team:
-            raise IdempotencyConflictError("the file this Idempotency-Key created has been deleted")
-        store, proxy = await self._placement(row)
+        async with isolation.request_transaction():
+            row = await self._files.get(file_id)
+            if row is None or row.file.team != who.team:
+                raise IdempotencyConflictError("the file this Idempotency-Key created has been deleted")
+            store, proxy = await self._placement(row)
+        # Signed with nothing open: on Azure an expired delegation key makes a signature a network call.
         return await self._ticket(
-            store, proxy, file_id=file_id, key=row["storage_key"], mime=row["mime"], size=row["declared_size"]
+            store, proxy, file_id=file_id, key=row.file.storage_key, mime=row.file.mime, size=row.file.declared_size
         )
 
     async def create_upload(
@@ -402,29 +437,35 @@ class TenantFiles:
             raise InvalidUploadError(f"invalid team {who.team!r}")
         if request.team is not None and request.team != who.team:
             raise InvalidUploadError("the owning team comes from the caller's context")
-        name = display_name(request.name)
-        config = await self._config_for(who.tenant_id)
-        check_limits(config, request)
-        chosen = await self._settings.retention_for(who.tenant_id, request.purpose) if self._settings else None
-        retention = config.retention_class(request.retention_class or chosen or default_class(config, request))
-        claim: dict[str, str] | None = None
-        request_hash = ""
-        if idempotency_key is not None:
-            if not 0 < len(idempotency_key) <= 255:
-                raise InvalidUploadError("Idempotency-Key is 1 to 255 characters")
-            # Outside text is indexed only through its hash (database portability D7).
-            scope = "\n".join([who.tenant_id, who.team, who.actor, idempotency_key])
-            request_hash = hashlib.sha256(request.model_dump_json().encode()).hexdigest()
-            claim = {"key_hash": hashlib.sha256(scope.encode()).hexdigest(), "request_hash": request_hash}
-            held = await self._files.idempotent_upload(claim["key_hash"])
-            if held is not None:
-                return await self._replay(who, held, request_hash)
-        now = self._clock()
-        file_id = self._new_id()
-        key = f"{who.tenant_id}/{who.team}/{request.purpose}/{now:%Y}/{now:%m}/{file_id}"
-        store, proxy = await self._upload_placement(who.tenant_id, request.purpose)
+        # The gate reads in one transaction, closed before the URL is signed; the row is written after it.
+        held: tuple[str, str] | None = None
+        async with isolation.request_transaction():
+            name = display_name(request.name)
+            config = await self._config_for(who.tenant_id)
+            check_limits(config, request)
+            chosen = await self._settings.retention_for(who.tenant_id, request.purpose) if self._settings else None
+            retention = config.retention_class(request.retention_class or chosen or default_class(config, request))
+            claim: UploadClaim | None = None
+            request_hash = ""
+            if idempotency_key is not None:
+                if not 0 < len(idempotency_key) <= 255:
+                    raise InvalidUploadError("Idempotency-Key is 1 to 255 characters")
+                # Outside text is indexed only through its hash (database portability D7).
+                scope = "\n".join([who.tenant_id, who.team, who.actor, idempotency_key])
+                request_hash = hashlib.sha256(request.model_dump_json().encode()).hexdigest()
+                claim = {
+                    "key_hash": hashlib.sha256(scope.encode()).hexdigest(),
+                    "request_hash": request_hash,
+                }
+                held = await self._files.idempotent_upload(claim["key_hash"])
+            now = self._clock()
+            file_id = self._new_id()
+            key = f"{who.tenant_id}/{who.team}/{request.purpose}/{now:%Y}/{now:%m}/{file_id}"
+            store, proxy = await self._upload_placement(who.tenant_id, request.purpose)
+        if held is not None:
+            return await self._replay(who, held, request_hash)
         ticket = await self._ticket(store, proxy, file_id=file_id, key=key, mime=request.mime, size=request.size)
-        values: dict[str, Any] = {
+        values: NewUpload = {
             "id": file_id,
             "tenant_id": who.tenant_id,
             "team": who.team,
@@ -466,38 +507,38 @@ class TenantFiles:
         store, proxy = await self._placement(row)
         if not proxy:
             raise UploadStateError("uploads go to the signed storage URL; this service does not take the bytes")
-        if row["status"] != "uploading":
-            raise UploadStateError(f"{file_id} is {row['status']}")
-        if row["upload_expires_at"] is not None and self._clock() >= row["upload_expires_at"]:
+        if row.file.status != "uploading":
+            raise UploadStateError(f"{file_id} is {row.file.status}")
+        if row.file.upload_expires_at is not None and self._clock() >= row.file.upload_expires_at:
             raise UploadStateError(f"the upload ticket for {file_id} has expired")
-        if content_type != row["mime"]:
-            raise UploadVerificationError(f"sent {content_type}; the ticket is for {row['mime']}")
+        if content_type != row.file.mime:
+            raise UploadVerificationError(f"sent {content_type}; the ticket is for {row.file.mime}")
         seen = [0]
         try:
             await store.put_stream(
-                row["storage_key"], _counted(chunks, row["declared_size"], seen), content_type=row["mime"]
+                row.file.storage_key, _counted(chunks, row.file.declared_size, seen), content_type=row.file.mime
             )
         except ObjectExistsError as error:
             raise UploadStateError(f"{file_id} already has its bytes") from error
 
     async def complete(self, who: Who, file_id: str) -> CompletedUpload:
         row = await self._owned(who, file_id)
-        if row["status"] == "available":
+        if row.file.status == "available":
             return CompletedUpload(file=self._detail(row, who), deduplicated=False)
-        if row["status"] != "uploading":
-            raise UploadStateError(f"{file_id} is {row['status']}")
-        key = row["storage_key"]
+        if row.file.status != "uploading":
+            raise UploadStateError(f"{file_id} is {row.file.status}")
+        key = row.file.storage_key
         store, _ = await self._placement(row)
         info = await asyncio.to_thread(store.head, key)
         if info is None:
             raise UploadMissingError(file_id)
-        declared = row["declared_size"]
+        declared = row.file.declared_size
         if info.size != declared:
             raise await self._reject(row, SizeMismatchError(f"stored {info.size} bytes; declared {declared}"))
         try:
             head = await store.read_range(key, start=0, length=min(SNIFF_BYTES, declared))
-            proven = prove(row["mime"], row["name"], head)
-            check_type(await self._config_for(who.tenant_id), row["purpose"], proven.mime, proven.extensions)
+            proven = prove(row.file.mime, row.file.name, head)
+            check_type(await self._config_for(who.tenant_id), row.file.purpose, proven.mime, proven.extensions)
         except (UploadVerificationError, TypeNotAllowedError) as error:
             raise await self._reject(row, error) from None
 
@@ -510,13 +551,13 @@ class TenantFiles:
         digest = hasher.hexdigest()
         if size != declared:
             raise await self._reject(row, SizeMismatchError(f"read {size} bytes; declared {declared}"))
-        if row["declared_digest"] is not None and row["declared_digest"] != digest:
+        if row.file.declared_digest is not None and row.file.declared_digest != digest:
             raise await self._reject(
-                row, DigestMismatchError(f"stored sha256 {digest}; declared {row['declared_digest']}")
+                row, DigestMismatchError(f"stored sha256 {digest}; declared {row.file.declared_digest}")
             )
 
         now = self._clock()
-        values: dict[str, Any] = {
+        values: UploadCompleted = {
             "digest": digest,
             "mime": proven.mime,
             "sniffed_mime": proven.mime if proven.signed else None,
@@ -525,17 +566,23 @@ class TenantFiles:
             "version_count": 1,
         }
         if self._scanning == "off":
-            values.update(scan_status="clean", scan_engine="off", scan_at=now, scan_detail="scanning is off")
+            values["scan_status"] = "clean"
+            values["scan_engine"] = "off"
+            values["scan_at"] = now
+            values["scan_detail"] = "scanning is off"
         elif self._scanning == "inline":
             assert self._scanner is not None
             result = await asyncio.to_thread(self._scanner.scan, store.iter_bytes(key))
-            values.update(scan_status=result.status, scan_engine=result.engine, scan_at=now, scan_detail=result.detail)
-        version = {
+            values["scan_status"] = result.status
+            values["scan_engine"] = result.engine
+            values["scan_at"] = now
+            values["scan_detail"] = result.detail
+        version: NewVersion = {
             "version": 1,
             "digest": digest,
             "size": size,
             "storage_key": key,
-            "uploaded_by": row["uploaded_by"],
+            "uploaded_by": row.file.uploaded_by,
             "uploaded_at": now,
             "current": True,
         }
@@ -552,18 +599,18 @@ class TenantFiles:
             await self._files.remove(file_id)
             first = await self._files.get(existing)
             assert first is not None
-            if first.file["purpose"] == SAMPLE_PURPOSE and row["purpose"] != SAMPLE_PURPOSE:
+            if first.file.purpose == SAMPLE_PURPOSE and row.file.purpose != SAMPLE_PURPOSE:
                 # Files shows what people use a file for: a document type sample's bytes arriving as a mail or
                 # chat attachment take that purpose. Nothing else changes on dedupe, so an attachment later uploaded
                 # as a sample stays the attachment.
-                await self._files.update(existing, {"purpose": row["purpose"]})
+                await self._files.update(existing, {"purpose": row.file.purpose})
                 first = await self._files.get(existing)
                 assert first is not None
             return CompletedUpload(file=self._detail(first, who), deduplicated=True)
 
-        retention = self._config.retention_class(row["retention_class_id"])
-        if retention.worm and row["delete_after"] is not None:
-            await asyncio.to_thread(store.set_retention, key, retain_until(row["delete_after"]), "compliance")
+        retention = self._config.retention_class(row.file.retention_class_id)
+        if retention.worm and row.file.delete_after is not None:
+            await asyncio.to_thread(store.set_retention, key, retain_until(row.file.delete_after), "compliance")
             await self._files.update(file_id, {"immutable": True})
         done = await self._files.get(file_id)
         assert done is not None
@@ -571,8 +618,8 @@ class TenantFiles:
 
     async def _reject[E: FilesError](self, row: FileRow, error: E) -> E:
         store, _ = await self._placement(row)
-        await asyncio.to_thread(store.delete, row["storage_key"])
-        await self._files.update(row["id"], {"status": "rejected"})
+        await asyncio.to_thread(store.delete, row.file.storage_key)
+        await self._files.update(row.file.id, {"status": "rejected"})
         return error
 
     # ── read ──
@@ -581,100 +628,87 @@ class TenantFiles:
         row = await self._owned(who, file_id)
         return self._detail(row, who).model_copy(update={"delete_blocked_by": self.delete_blocked_by(row)})
 
-    async def limits(self, who: Who) -> dict[str, Any]:
+    async def limits(self, who: Who) -> UploadLimits:
         """What the upload component enforces before asking for a ticket: the tenant's purpose limits, the ones
         `create_upload` checks, and whether files are scanned."""
         config = await self._config_for(who.tenant_id)
-        return {
-            "perPurpose": [item.model_dump(mode="json", by_alias=True) for item in config.limits],
-            "scanning": self._scanning != "off",
-        }
+        return UploadLimits(per_purpose=list(config.limits), scanning=self._scanning != "off")
 
     async def options(
         self, who: Who, *, search: str, cursor: str | None, limit: int, ids: list[str] | None
-    ) -> dict[str, Any]:
+    ) -> OptionsPage:
         """The file picker: the team's files labelled by name with size and date as the hint. A file not scanned clean
         is shown but cannot be picked, since nothing may use it yet (files 5.3.4)."""
         offset, window = options_window(None if ids else cursor, limit)
         rows = await self._files.options(who.team, search=search, offset=offset, limit=window, ids=ids)
         options = [
             {
-                "id": r["id"],
-                "label": r["name"],
-                "hint": f"{_size(r['size'])} · {r['uploaded_at']:%d %b %Y}",
-                "disabled": None if r["scan_status"] == "clean" else f"Not usable: scan is {r['scan_status']}",
+                "id": r.id,
+                "label": r.name,
+                "hint": f"{_size(r.size)} · {r.uploaded_at:%d %b %Y}",
+                "disabled": None if r.scan_status == "clean" else f"Not usable: scan is {r.scan_status}",
             }
             for r in rows
         ]
-        return options_page(options, offset, limit)
+        return OptionsPage.model_validate(options_page(options, offset, limit))
 
     async def list(
         self,
         who: Who,
+        params: ListParams,
         *,
-        page: int,
-        page_size: int,
         mine: bool = False,
-        purpose: FilePurpose | None = None,
         ref_type: FileReferenceType | None = None,
         ref_id: str | None = None,
-        search: str = "",
         uploaded_after: datetime | None = None,
         uploaded_before: datetime | None = None,
         view: str = "all",
-        filters: Mapping[str, Sequence[str]] | None = None,
-    ) -> dict[str, Any]:
-        found = await self._files.list(
+    ) -> FileList:
+        page, counts = await self._files.list(
             who.team,
-            page=page,
-            page_size=page_size,
+            params,
+            purposes=get_args(FilePurpose),
             uploaded_by=who.actor if mine else None,
-            purpose=purpose,
             ref_type=ref_type,
             ref_id=ref_id,
-            search=search,
             uploaded_after=uploaded_after,
             uploaded_before=uploaded_before,
             view=view,
-            filters=filters,
             now=self._clock(),
         )
-        pages = max(1, -(-found.total // page_size))
-        return {
-            "data": [self._row_detail(r, who) for r in found.rows],
-            "pagination": {
-                "page": page,
-                "pageSize": page_size,
-                "total": found.total,
-                "totalPages": pages,
-                "hasNext": page < pages,
-                "hasPrev": page > 1,
-            },
-            "facets": dict(found.facets),
-            "viewCounts": dict(found.view_counts),
-        }
+        rows = [self._row_detail(ListedFile.model_validate(r), who) for r in page["data"]]
+        return FileList(
+            data=rows,
+            pagination=Pagination.model_validate(page["pagination"]),
+            facets=page["facets"],
+            view_counts=counts,
+        )
 
     @staticmethod
     def _readable(row: FileRow) -> None:
-        if row["status"] != "available":
-            raise UploadStateError(f"{row['id']} is {row['status']}")
-        if row["scan_status"] == "infected":
-            raise QuarantinedError(f"{row['id']} is quarantined: {row['scan_detail']}")
-        if row["scan_status"] != "clean":
-            raise NotScannedError(f"{row['id']} scan is {row['scan_status']}")
+        if row.file.status != "available":
+            raise UploadStateError(f"{row.file.id} is {row.file.status}")
+        if row.file.scan_status == "infected":
+            raise QuarantinedError(f"{row.file.id} is quarantined: {row.file.scan_detail}")
+        if row.file.scan_status != "clean":
+            raise NotScannedError(f"{row.file.id} scan is {row.file.scan_status}")
 
     async def download_url(self, who: Who, file_id: str, *, expires_in: int | None = None) -> DownloadLink:
-        row = await self._owned(who, file_id)
-        self._readable(row)
-        config = await self._config_for(who.tenant_id)
-        ttl = expires_in if expires_in is not None else config.max_download_url_seconds
-        if not 0 < ttl <= config.max_download_url_seconds:
-            raise DownloadTtlError(f"download links last at most {config.max_download_url_seconds} seconds")
-        store, proxy = await self._placement(row)
+        # The gate reads in one transaction, closed before the link is signed.
+        async with isolation.request_transaction():
+            row = await self._owned(who, file_id)
+            self._readable(row)
+            config = await self._config_for(who.tenant_id)
+            ttl = expires_in if expires_in is not None else config.max_download_url_seconds
+            if not 0 < ttl <= config.max_download_url_seconds:
+                raise DownloadTtlError(f"download links last at most {config.max_download_url_seconds} seconds")
+            store, proxy = await self._placement(row)
         if proxy:
             url = f"/v1/files/{file_id}/content"
         else:
-            url = await asyncio.to_thread(store.presign_get, row["storage_key"], expires_in=ttl, filename=row["name"])
+            url = await asyncio.to_thread(
+                store.presign_get, row.file.storage_key, expires_in=ttl, filename=row.file.name
+            )
         return DownloadLink(url=url, expires_at=self._clock() + timedelta(seconds=ttl), ttl_seconds=ttl)
 
     async def open_content(self, who: Who, file_id: str) -> tuple[FileDetail, AsyncIterator[bytes]]:
@@ -682,7 +716,7 @@ class TenantFiles:
         row = await self._owned(who, file_id)
         self._readable(row)
         store, _ = await self._placement(row)
-        return self._detail(row, who), store.open_read(row["storage_key"])
+        return self._detail(row, who), store.open_read(row.file.storage_key)
 
     # ── delete ──
 
@@ -694,10 +728,10 @@ class TenantFiles:
             return f"Used by {n} record{'s' if n != 1 else ''}. Remove it from each first."
         if row.hold is not None:
             return f"Under legal hold: {row.hold.reason}"
-        retention = self._config.retention_class(row["retention_class_id"])
-        delete_after = row["delete_after"]
+        retention = self._config.retention_class(row.file.retention_class_id)
+        delete_after = row.file.delete_after
         if (
-            (retention.keep_until_end or retention.worm or row["immutable"])
+            (retention.keep_until_end or retention.worm or row.file.immutable)
             and delete_after is not None
             and self._clock().date() <= delete_after
         ):
@@ -715,10 +749,15 @@ class TenantFiles:
         if (blocked := self.delete_blocked_by(row)) is not None:
             raise FileRetainedError(f"{file_id}: {blocked}")
         store, _ = await self._placement(row)
-        if await asyncio.to_thread(store.head, row["storage_key"]) is not None:
-            await asyncio.to_thread(store.delete, row["storage_key"])
-        payload = {"fileId": file_id, "digest": row["digest"], "name": row["name"], "deletedBy": who.actor}
-        await self._files.remove(file_id, event={"team": row["team"], "payload": payload})
+        if await asyncio.to_thread(store.head, row.file.storage_key) is not None:
+            await asyncio.to_thread(store.delete, row.file.storage_key)
+        payload: FileDeletedPayload = {
+            "fileId": file_id,
+            "digest": row.file.digest,
+            "name": row.file.name,
+            "deletedBy": who.actor,
+        }
+        await self._files.remove(file_id, event={"team": row.file.team, "payload": payload})
 
     async def purge_released(self, today: date | None = None) -> int:
         """Deletes every file of a class counted from release (knowledge snapshots) whose days have passed, each as
@@ -734,26 +773,26 @@ class TenantFiles:
                 deleted += 1
         return deleted
 
-    async def bulk_delete(self, who: Who, ids: list[str]) -> dict[str, Any]:
+    async def bulk_delete(self, who: Who, ids: list[str]) -> BulkResult:
         """Deletes each file the rules allow; one that cannot be deleted is skipped with the reason the sheet shows."""
         done: list[str] = []
-        skipped: list[dict[str, str]] = []
+        skipped: list[Skipped] = []
         for file_id in ids:
             try:
                 row = await self._owned(who, file_id)
             except FileMissingError:
-                skipped.append({"id": file_id, "reason": "not found"})
+                skipped.append(Skipped(id=file_id, reason="not found"))
                 continue
             if (blocked := self.delete_blocked_by(row)) is not None:
-                skipped.append({"id": file_id, "reason": blocked})
+                skipped.append(Skipped(id=file_id, reason=blocked))
                 continue
             await self.delete(who, file_id)
             done.append(file_id)
-        return {"updated": done, "skipped": skipped}
+        return BulkResult(updated=done, skipped=skipped)
 
     # ── legal hold ──
 
-    async def set_legal_hold(self, who: Who, ids: list[str], *, hold: bool, reason: str) -> dict[str, Any]:
+    async def set_legal_hold(self, who: Who, ids: list[str], *, hold: bool, reason: str) -> BulkResult:
         """Places or releases holds on files of the caller's team; a file not found is skipped with its reason. The
         storage-level hold is set too, so a hold holds against a storage administrator (files 5.6.5)."""
         if who.team not in who.admin_teams:
@@ -761,21 +800,21 @@ class TenantFiles:
         if not reason.strip():
             raise ReasonRequiredError("a legal hold needs a reason")
         done: list[str] = []
-        skipped: list[dict[str, str]] = []
+        skipped: list[Skipped] = []
         for file_id in ids:
             try:
                 row = await self._owned(who, file_id)
             except FileMissingError:
-                skipped.append({"id": file_id, "reason": "not found"})
+                skipped.append(Skipped(id=file_id, reason="not found"))
                 continue
-            if row["status"] != "available":
-                skipped.append({"id": file_id, "reason": f"file is {row['status']}"})
+            if row.file.status != "available":
+                skipped.append(Skipped(id=file_id, reason=f"file is {row.file.status}"))
                 continue
             if hold == (row.hold is not None):
-                skipped.append({"id": file_id, "reason": "already held" if hold else "not held"})
+                skipped.append(Skipped(id=file_id, reason="already held" if hold else "not held"))
                 continue
             store, _ = await self._placement(row)
-            await asyncio.to_thread(store.set_legal_hold, row["storage_key"], hold)
+            await asyncio.to_thread(store.set_legal_hold, row.file.storage_key, hold)
             now = self._clock()
             if hold:
                 hold_id = f"hold_{uuid.uuid4().hex}"
@@ -784,7 +823,7 @@ class TenantFiles:
                 assert row.hold is not None
                 await self._files.release_hold(row.hold.id, by=who.actor, at=now, reason=reason)
             done.append(file_id)
-        return {"updated": done, "skipped": skipped}
+        return BulkResult(updated=done, skipped=skipped)
 
     # ── for other services ──
 
@@ -796,13 +835,15 @@ class TenantFiles:
         same `idempotency_key` returns the file the first call stored."""
         ticket = await self.create_upload(who, request, idempotency_key=idempotency_key)
         row = await self._owned(who, ticket.file_id)
-        if row["status"] == "available":
+        if row.file.status == "available":
             return CompletedUpload(file=self._detail(row, who), deduplicated=False)
         seen = [0]
         # A retry whose first attempt stored the bytes and stopped before completing finds them in place.
         store, _ = await self._placement(row)
         with contextlib.suppress(ObjectExistsError):
-            await store.put_stream(row["storage_key"], _counted(chunks, request.size, seen), content_type=request.mime)
+            await store.put_stream(
+                row.file.storage_key, _counted(chunks, request.size, seen), content_type=request.mime
+            )
         return await self.complete(who, ticket.file_id)
 
     async def add_reference(
@@ -817,19 +858,21 @@ class TenantFiles:
             self._readable(row)
         except NotDownloadableError as error:
             raise UploadStateError(f"{file_id} cannot be attached: {error}") from error
-        await self._files.add_reference(
-            {
-                "file_id": file_id,
-                "ref_type": type,
-                "ref_id": ref_id,
-                "owner_service": owner,
-                "name": name[:255],
-                "href": href,
-                "added_at": self._clock(),
-                "blocked": None,
-            },
-        )
-        if self._config.retention_class(row["retention_class_id"]).after_release and row["delete_after"] is not None:
+        reference: NewReference = {
+            "file_id": file_id,
+            "ref_type": type,
+            "ref_id": ref_id,
+            "owner_service": owner,
+            "name": name[:255],
+            "href": href,
+            "added_at": self._clock(),
+            "blocked": None,
+        }
+        await self._files.add_reference(reference)
+        if (
+            self._config.retention_class(row.file.retention_class_id).after_release
+            and row.file.delete_after is not None
+        ):
             await self._files.update(file_id, {"delete_after": None})
         return await self.get(who, file_id)
 
@@ -837,7 +880,7 @@ class TenantFiles:
         await self._owned(who, file_id)
         await self._files.remove_reference(file_id, type, ref_id)
         row = await self._owned(who, file_id)
-        retention = self._config.retention_class(row["retention_class_id"])
+        retention = self._config.retention_class(row.file.retention_class_id)
         if retention.after_release and retention.days is not None and not row.references:
             # The last record let it go: its retention counts from today.
             await self._files.update(file_id, {"delete_after": self._clock().date() + timedelta(days=retention.days)})

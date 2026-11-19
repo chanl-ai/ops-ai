@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-13",
+  "title": "Attach decks and pictures in chat",
+  "description": "Chat now takes .pptx decks and PNG or JPG pictures as attachments. Text in a picture is read for the agent.",
+  "tag": "new"
+}

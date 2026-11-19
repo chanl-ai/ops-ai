@@ -97,7 +97,7 @@ export function DeploymentSheet({
               <FieldSectionLabel>Serves</FieldSectionLabel>
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
                 <div>
-                  <Link href={`/workflows/${d.workflowId}`} className="font-medium hover:underline">
+                  <Link href={`/build/workflows/${d.workflowId}`} className="font-medium hover:underline">
                     {d.workflowName}
                   </Link>
                   <div className="mt-0.5">

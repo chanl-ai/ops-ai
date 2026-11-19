@@ -128,3 +128,14 @@ async def test_deleting_a_skill_or_workflow_copy_marks_it_removed(client: AsyncC
         assert gone.status_code == 204, gone.text
     listed = ok(await client.get("/v1/templates", headers=OPS))
     assert {t["id"]: t["installed"]["copies"] for t in listed} == {"close-politely": 0, "case-review": 0}
+
+
+async def test_a_skill_template_whose_body_fails_the_skill_checks_is_refused_not_a_server_error(
+    client: AsyncClient,
+) -> None:
+    broken = SKILL | {"body": {**SKILL["body"], "use_when": ["not", "text"]}}  # type: ignore[dict-item]
+    wire(client, [broken])
+    r = await install(client, "close-politely")
+    assert r.status_code == 422 and r.json()["error"]["code"] == "template_invalid", r.text
+    listed = ok(await client.get("/v1/templates", params={"kind": "skill"}, headers=OPS))
+    assert listed[0]["installed"]["copies"] == 0

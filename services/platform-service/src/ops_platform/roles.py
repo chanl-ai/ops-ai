@@ -8,14 +8,77 @@ the caller is not found, so the route cannot be used to list who exists elsewher
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import NotRequired, TypedDict
 
-from ops_access import ACTIONS, ANY_TEAM, AREAS, BUILTIN_GRIDS, SECURITY_TEAM_ACTIONS, Grant, effective
+from ops_access import ACTIONS, ANY_TEAM, AREAS, BUILTIN_GRIDS, SECURITY_TEAM_ACTIONS, Grant, Granted, effective
 from ops_access.catalogue import ADMIN
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
+from ops_service_kit.http import Json
 from ops_service_kit.ids import now_iso
+from ops_service_kit.listing import ListParams
+from ops_store.listing import ListPage
 
-from .store.roles import AlreadyGrantedError, Holdings, RoleInUseError, RoleNameTakenError, RoleStore
+from .store.roles import (
+    AlreadyGrantedError,
+    Holdings,
+    RoleInUseError,
+    RoleNameTakenError,
+    RoleRow,
+    RoleStore,
+)
+
+
+class Cell(TypedDict):
+    area: str
+    action: str
+    scope: str
+
+
+class GridRow(TypedDict):
+    area: str
+    # Every action in the catalogue: the scope this role grants it, or None.
+    actions: dict[str, str | None]
+
+
+class RoleView(TypedDict):
+    """One role as `RoleDetail` sends it; the routes add `canEdit`, and a created role names the cells it left out."""
+
+    id: str
+    name: str
+    builtin: bool
+    description: str
+    assignmentCount: int
+    permissionCount: int
+    permissions: list[Cell]
+    grid: list[GridRow]
+    notHeld: list[str]
+    leftOut: NotRequired[list[str]]
+    canEdit: NotRequired[bool]
+
+
+class EffectiveCell(TypedDict):
+    area: str
+    action: str
+    scope: str
+    securityTeamOnly: bool
+    roles: list[dict[str, str]]
+
+
+class TeamCells(TypedDict):
+    teamId: str
+    teamName: str
+    permissions: list[EffectiveCell]
+
+
+class PermissionsView(TypedDict):
+    """What a person may do, as `PermissionsOut` sends it; the person route adds their name and address."""
+
+    workspace: list[EffectiveCell]
+    personId: str
+    permissionVersion: int
+    teams: list[TeamCells]
+    name: NotRequired[str]
+    email: NotRequired[str]
 
 
 def custom_role_refuses(area: str, action: str) -> bool:
@@ -34,17 +97,21 @@ def _checked(cells: list[Grant]) -> None:
 class Roles:
     store: RoleStore
 
-    async def list(self, tenant_id: str) -> list[dict[str, Any]]:
-        return await self.store.roles(tenant_id)
+    async def list(self, tenant_id: str, params: ListParams) -> ListPage:
+        return await self.store.roles(tenant_id, params)
 
-    async def get(self, tenant_id: str, role_id: str) -> dict[str, Any]:
-        role = await self.store.role(tenant_id, role_id)
+    async def get(self, tenant_id: str, role_id: str) -> RoleView:
+        role = await self.store.role_by_id(tenant_id, role_id)
         if role is None:
             raise NotFound("No role with that id.")
-        grants = role.pop("grants")
+        grants = role.grants
         held = {(a, x): s for a, x, s in grants}
         return {
-            **role,
+            "id": role.id,
+            "name": role.name,
+            "builtin": role.builtin,
+            "description": role.description,
+            "assignmentCount": role.assignment_count,
             "permissionCount": len(grants),
             "permissions": [{"area": a, "action": x, "scope": s} for a, x, s in grants],
             # The whole catalogue, one row per area, so a grid shows refused cells as well as granted ones.
@@ -53,21 +120,19 @@ class Roles:
             ],
             # The cells this role may never hold: a custom role's secrets, egress and Security-team ones (D40).
             "notHeld": []
-            if role["builtin"]
+            if role.builtin
             else [f"{a}.{x}" for a in AREAS for x in ACTIONS if custom_role_refuses(a, x)],
         }
 
-    async def edit(
-        self, tenant_id: str, role_id: str, cells: list[Grant], *, by: str, request_id: str
-    ) -> dict[str, Any]:
+    async def edit(self, tenant_id: str, role_id: str, cells: list[Grant], *, by: str, request_id: str) -> RoleView:
         """Sets a role's cells, built-in or custom. Admin keeps every cell: 409
         `admin_holds_every_cell`. A cell outside the catalogue is 400 `unknown_cell`. The caller's right to change roles
         is checked by the route."""
         if role_id == ADMIN.id:
             raise Conflict("Admin holds every permission in its team; it is not edited.", code="admin_holds_every_cell")
         _checked(cells)
-        role = await self.store.role(tenant_id, role_id)
-        if role is not None and not role["builtin"]:
+        role = await self.store.role_by_id(tenant_id, role_id)
+        if role is not None and not role.builtin:
             self._custom_cells(cells)
         if not await self.store.set_grid(tenant_id, role_id, cells, by=by, request_id=request_id, action="role.edit"):
             raise NotFound("No role with that id.")
@@ -93,15 +158,15 @@ class Roles:
         cells: list[Grant] | None,
         by: str,
         request_id: str,
-    ) -> dict[str, Any]:
+    ) -> RoleView:
         """A custom role: from `cells`, or a copy of `copy_of`'s cells less those a custom role may not hold (named in
         `leftOut`), or empty. 409 `name_taken` for a name another role has."""
         left_out: list[str] = []
         if copy_of is not None:
-            source = await self.store.role(tenant_id, copy_of)
+            source = await self.store.role_by_id(tenant_id, copy_of)
             if source is None:
                 raise NotFound("No role with that id to copy.")
-            grants: list[Grant] = list(source["grants"])
+            grants: list[Grant] = list(source.grants)
             left_out = sorted(f"{a}.{x}" for a, x, _ in grants if custom_role_refuses(a, x))
             grants = [g for g in grants if not custom_role_refuses(g[0], g[1])]
         else:
@@ -114,15 +179,17 @@ class Roles:
             )
         except RoleNameTakenError as e:
             raise Conflict(f"A role named {name} exists already.", code="name_taken") from e
-        return await self.get(tenant_id, role_id) | {"leftOut": left_out}
+        made = await self.get(tenant_id, role_id)
+        made["leftOut"] = left_out
+        return made
 
     async def rename(
         self, tenant_id: str, role_id: str, *, name: str, description: str | None, by: str, request_id: str
-    ) -> dict[str, Any]:
+    ) -> RoleView:
         role = await self._custom(tenant_id, role_id, "renamed")
         try:
             await self.store.rename(
-                tenant_id, role["id"], name=name, description=description, by=by, request_id=request_id
+                tenant_id, role.id, name=name, description=description, by=by, request_id=request_id
             )
         except RoleNameTakenError as e:
             raise Conflict(f"A role named {name} exists already.", code="name_taken") from e
@@ -131,29 +198,29 @@ class Roles:
     async def delete(self, tenant_id: str, role_id: str, *, move_to: str | None, by: str, request_id: str) -> int:
         """409 `role_in_use` naming the holders while anyone holds it, unless `move_to` names the role they move to."""
         await self._custom(tenant_id, role_id, "deleted")
-        if move_to is not None and (move_to == role_id or await self.store.role(tenant_id, move_to) is None):
+        if move_to is not None and (move_to == role_id or await self.store.role_by_id(tenant_id, move_to) is None):
             raise ValidationFailed("Move the holders to another role of this workspace.", code="move_to_unknown")
         try:
             return await self.store.delete(tenant_id, role_id, move_to=move_to, by=by, request_id=request_id)
         except RoleInUseError as e:
-            names = ", ".join(sorted({str(h["name"]) for h in e.holders}))
+            names = ", ".join(sorted({h.name for h in e.holders}))
             raise Conflict(
                 f"{names} hold this role. Move them to another role, or delete it moving them.",
                 code="role_in_use",
-                details={"holders": e.holders},
+                details={"holders": [h.model_dump(by_alias=True) for h in e.holders]},
             ) from e
 
     async def grant(
         self, tenant_id: str, person_id: str, role_id: str, team_id: str, *, by: str, request_id: str
-    ) -> dict[str, Any]:
+    ) -> Json:
         """Gives a person a custom role in a team they belong to. A built-in role comes with their team role instead
         (409 `builtin_role`); 409 `not_a_member` outside their teams, `already_granted` when they hold it there."""
-        role = await self.store.role(tenant_id, role_id)
+        role = await self.store.role_by_id(tenant_id, role_id)
         if role is None:
             raise NotFound("No role with that id.")
-        if role["builtin"]:
+        if role.builtin:
             raise Conflict(
-                f"{role['name']} comes with a person's team role; change their role in the team instead.",
+                f"{role.name} comes with a person's team role; change their role in the team instead.",
                 code="builtin_role",
             )
         if team_id not in (await self.store.holdings(tenant_id, person_id)).teams:
@@ -161,18 +228,19 @@ class Roles:
         try:
             grant_id = await self.store.grant(tenant_id, person_id, role_id, team_id, by=by, request_id=request_id)
         except AlreadyGrantedError as e:
-            raise Conflict(f"They hold {role['name']} in that team already.", code="already_granted") from e
-        return next(g for g in await self.store.grants_of(tenant_id, person_id) if g["id"] == grant_id)
+            raise Conflict(f"They hold {role.name} in that team already.", code="already_granted") from e
+        [given] = (await self.store.grants_of(tenant_id, person_id, ListParams(ids=[grant_id])))["data"]
+        return given
 
-    async def _custom(self, tenant_id: str, role_id: str, verb: str) -> dict[str, Any]:
-        role = await self.store.role(tenant_id, role_id)
+    async def _custom(self, tenant_id: str, role_id: str, verb: str) -> RoleRow:
+        role = await self.store.role_by_id(tenant_id, role_id)
         if role is None:
             raise NotFound("No role with that id.")
-        if role["builtin"]:
+        if role.builtin:
             raise Conflict(f"A built-in role is not {verb}; copy it to make your own.", code="builtin_role")
         return role
 
-    async def reset(self, tenant_id: str, role_id: str, *, by: str, request_id: str) -> dict[str, Any]:
+    async def reset(self, tenant_id: str, role_id: str, *, by: str, request_id: str) -> RoleView:
         """Puts a built-in role back to the cells it ships with; a custom role has none to go back to (400
         `not_builtin`)."""
         seed = BUILTIN_GRIDS.get(role_id)
@@ -183,11 +251,12 @@ class Roles:
         await self.store.set_grid(tenant_id, role_id, list(seed), by=by, request_id=request_id, action="role.reset")
         return await self.get(tenant_id, role_id)
 
-    async def of_me(self, tenant_id: str, user_id: str) -> dict[str, Any]:
+    async def of_me(self, tenant_id: str, user_id: str) -> PermissionsView:
         mine = await self.store.holdings(tenant_id, user_id)
-        return await self._view(tenant_id, user_id, mine, teams=None)
+        grids, security, version = await self._view_inputs(tenant_id, mine)
+        return permissions_view(user_id, mine, grids, security=security, version=version, teams=None)
 
-    async def of_person(self, tenant_id: str, caller_id: str, person_id: str) -> dict[str, Any]:
+    async def of_person(self, tenant_id: str, caller_id: str, person_id: str) -> PermissionsView:
         if person_id == caller_id:
             return await self.of_me(tenant_id, caller_id)
         caller = await self.store.holdings(tenant_id, caller_id)
@@ -198,52 +267,66 @@ class Roles:
             shared = list(person.teams)
         if not shared:
             raise NotFound("No person with that id shares a team with you.")
-        return await self._view(tenant_id, person_id, person, teams=shared)
+        grids, security, version = await self._view_inputs(tenant_id, person)
+        return permissions_view(person_id, person, grids, security=security, version=version, teams=shared)
 
-    async def _view(self, tenant_id: str, person_id: str, h: Holdings, *, teams: list[str] | None) -> dict[str, Any]:
-        """`teams` limits the answer to those teams; None shows every team the person belongs to or is assigned in."""
-        role_ids = sorted({a.role_id for a in h.assignments})
-        grids = await self.store.grids(tenant_id, role_ids)
-        assignments = h.assignments if teams is None else [a for a in h.assignments if a.team_id in (*teams, ANY_TEAM)]
-        per_team = effective(assignments, grids, teams if teams is not None else list(h.teams), now_iso())
-        if teams is not None:
-            per_team = {t: v for t, v in per_team.items() if t in teams}
-        # A Security-team action is decided in the workspace's Security team whatever team a request acts in, so a
-        # grid cell for it in any other team grants nothing and is not listed there; with no Security team named,
-        # nobody holds it.
-        security = await self.store.security_team(tenant_id)
-        per_team = {
-            t: {cell: g for cell, g in held.items() if t == security or cell not in SECURITY_TEAM_ACTIONS}
-            for t, held in per_team.items()
-        }
-        order = {(a, x): (AREAS.index(a), ACTIONS.index(x)) for a in AREAS for x in ACTIONS}
-        # What the person may do in every team at once: their `*` assignments only (a workspace admin).
-        every = [a for a in assignments if a.team_id == ANY_TEAM]
-        workspace = effective(every, grids, [ANY_TEAM], now_iso()).get(ANY_TEAM, {}) if every else {}
+    async def _view_inputs(self, tenant_id: str, h: Holdings) -> tuple[dict[str, list[Grant]], str | None, int]:
+        """The grids of the roles `h` holds, the workspace's Security team and its permission version."""
+        grids = await self.store.grids(tenant_id, sorted({a.role_id for a in h.assignments}))
+        return grids, await self.store.security_team(tenant_id), await self.store.version(tenant_id)
 
-        def rows(held: dict[tuple[str, str], Any]) -> list[dict[str, Any]]:
-            return [
-                {
-                    "area": area,
-                    "action": action,
-                    "scope": g.scope,
-                    # Held in the Security team whichever team a request acts in (SECURITY_TEAM_ACTIONS).
-                    "securityTeamOnly": (area, action) in SECURITY_TEAM_ACTIONS,
-                    "roles": g.roles,
-                }
-                for (area, action), g in sorted(held.items(), key=lambda kv: order[kv[0]])
-            ]
 
-        return {
-            "workspace": rows(workspace),
-            "personId": person_id,
-            "permissionVersion": await self.store.version(tenant_id),
-            "teams": [
-                {
-                    "teamId": team,
-                    "teamName": h.teams.get(team, team),
-                    "permissions": rows(held),
-                }
-                for team, held in per_team.items()
-            ],
-        }
+def permissions_view(
+    person_id: str,
+    h: Holdings,
+    grids: dict[str, list[Grant]],
+    *,
+    security: str | None,
+    version: int,
+    teams: list[str] | None,
+) -> PermissionsView:
+    """What a person may do, per team and in every team, from their holdings and the grids of the roles they hold: what
+    `/v1/me/permissions` answers. `teams` limits the answer to those teams; None shows every team the person belongs to
+    or is assigned in."""
+    assignments = h.assignments if teams is None else [a for a in h.assignments if a.team_id in (*teams, ANY_TEAM)]
+    per_team = effective(assignments, grids, teams if teams is not None else list(h.teams), now_iso())
+    if teams is not None:
+        per_team = {t: v for t, v in per_team.items() if t in teams}
+    # A Security-team action is decided in the workspace's Security team whatever team a request acts in, so a
+    # grid cell for it in any other team grants nothing and is not listed there; with no Security team named,
+    # nobody holds it.
+    per_team = {
+        t: {cell: g for cell, g in held.items() if t == security or cell not in SECURITY_TEAM_ACTIONS}
+        for t, held in per_team.items()
+    }
+    order = {(a, x): (AREAS.index(a), ACTIONS.index(x)) for a in AREAS for x in ACTIONS}
+    # What the person may do in every team at once: their `*` assignments only (a workspace admin).
+    every = [a for a in assignments if a.team_id == ANY_TEAM]
+    workspace = effective(every, grids, [ANY_TEAM], now_iso()).get(ANY_TEAM, {}) if every else {}
+
+    def rows(held: dict[tuple[str, str], Granted]) -> list[EffectiveCell]:
+        return [
+            {
+                "area": area,
+                "action": action,
+                "scope": g.scope,
+                # Held in the Security team whichever team a request acts in (SECURITY_TEAM_ACTIONS).
+                "securityTeamOnly": (area, action) in SECURITY_TEAM_ACTIONS,
+                "roles": g.roles,
+            }
+            for (area, action), g in sorted(held.items(), key=lambda kv: order[kv[0]])
+        ]
+
+    return {
+        "workspace": rows(workspace),
+        "personId": person_id,
+        "permissionVersion": version,
+        "teams": [
+            {
+                "teamId": team,
+                "teamName": h.teams.get(team, team),
+                "permissions": rows(held),
+            }
+            for team, held in per_team.items()
+        ],
+    }

@@ -609,6 +609,89 @@
       },
       "FileData": {
         "additionalProperties": false,
+        "description": "What was recorded from a file, as FileDataIn took it.",
+        "properties": {
+          "extractionId": {
+            "title": "Extractionid",
+            "type": "string"
+          },
+          "fieldsToCheck": {
+            "title": "Fieldstocheck",
+            "type": "integer"
+          },
+          "path": {
+            "enum": [
+              "template",
+              "model"
+            ],
+            "title": "Path",
+            "type": "string"
+          },
+          "readAt": {
+            "format": "date-time",
+            "title": "Readat",
+            "type": "string"
+          },
+          "templateId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Templateid"
+          },
+          "typeId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Typeid"
+          },
+          "typeName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Typename"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "typeId",
+          "typeName",
+          "version",
+          "path",
+          "templateId",
+          "fieldsToCheck",
+          "extractionId",
+          "readAt"
+        ],
+        "title": "FileData",
+        "type": "object"
+      },
+      "FileDataIn": {
+        "additionalProperties": false,
         "description": "What was read from the file, as the extract workflow records it: the document type and version it was\nread as, whether a template or the model read it, how many fields wait for a person, and the extraction. A file read\nwith Detect whose kind is none of the team's types has no type and no version: it was not recognised.",
         "properties": {
           "extractionId": {
@@ -691,7 +774,7 @@
           "extractionId",
           "readAt"
         ],
-        "title": "FileData",
+        "title": "FileDataIn",
         "type": "object"
       },
       "FileDetail": {
@@ -879,11 +962,27 @@
           "name",
           "mime",
           "size",
+          "digest",
           "purpose",
           "team",
           "uploadedBy",
           "uploadedAt",
-          "retention"
+          "scan",
+          "sensitivity",
+          "sensitivitySuggested",
+          "retention",
+          "legalHold",
+          "immutable",
+          "referenceCount",
+          "versionCount",
+          "storage",
+          "data",
+          "versions",
+          "references",
+          "deleteBlockedBy",
+          "canEdit",
+          "canDelete",
+          "canPublish"
         ],
         "title": "FileDetail",
         "type": "object"
@@ -986,7 +1085,9 @@
           "type",
           "id",
           "name",
-          "addedAt"
+          "href",
+          "addedAt",
+          "blocked"
         ],
         "title": "FileReference",
         "type": "object"
@@ -1017,7 +1118,8 @@
         },
         "required": [
           "classId",
-          "className"
+          "className",
+          "deleteAfter"
         ],
         "title": "FileRetention",
         "type": "object"
@@ -1051,14 +1153,12 @@
           "legalHold": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/LegalHold"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Legalhold"
+            ]
           },
           "mime": {
             "title": "Mime",
@@ -1090,14 +1190,10 @@
             "type": "integer"
           },
           "retention": {
-            "additionalProperties": true,
-            "title": "Retention",
-            "type": "object"
+            "$ref": "#/components/schemas/FileRetention"
           },
           "scan": {
-            "additionalProperties": true,
-            "title": "Scan",
-            "type": "object"
+            "$ref": "#/components/schemas/FileScan"
           },
           "sensitivity": {
             "title": "Sensitivity",
@@ -1114,14 +1210,12 @@
           "storage": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/StorageLocation"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Storage"
+            ]
           },
           "team": {
             "title": "Team",
@@ -1156,7 +1250,10 @@
           "retention",
           "immutable",
           "referenceCount",
-          "versionCount"
+          "versionCount",
+          "legalHold",
+          "storage",
+          "data"
         ],
         "title": "FileRow",
         "type": "object"
@@ -1210,6 +1307,12 @@
             "type": "string"
           }
         },
+        "required": [
+          "status",
+          "engine",
+          "at",
+          "detail"
+        ],
         "title": "FileScan",
         "type": "object"
       },
@@ -1528,6 +1631,46 @@
         "title": "PurposeLimit",
         "type": "object"
       },
+      "PurposeLimitIn": {
+        "additionalProperties": false,
+        "properties": {
+          "allowedTypes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowedtypes",
+            "type": "array"
+          },
+          "maxSizeMb": {
+            "title": "Maxsizemb",
+            "type": "integer"
+          },
+          "purpose": {
+            "enum": [
+              "knowledge_source",
+              "chat_attachment",
+              "case_attachment",
+              "document_type_sample",
+              "email_body",
+              "knowledge_snapshot",
+              "test_import",
+              "evidence_bundle",
+              "export",
+              "tool_spec",
+              "avatar"
+            ],
+            "title": "Purpose",
+            "type": "string"
+          }
+        },
+        "required": [
+          "purpose",
+          "allowedTypes",
+          "maxSizeMb"
+        ],
+        "title": "PurposeLimitIn",
+        "type": "object"
+      },
       "PurposeRetention": {
         "additionalProperties": false,
         "properties": {
@@ -1558,6 +1701,38 @@
           "retentionClass"
         ],
         "title": "PurposeRetention",
+        "type": "object"
+      },
+      "PurposeRetentionIn": {
+        "additionalProperties": false,
+        "properties": {
+          "purpose": {
+            "enum": [
+              "knowledge_source",
+              "chat_attachment",
+              "case_attachment",
+              "document_type_sample",
+              "email_body",
+              "knowledge_snapshot",
+              "test_import",
+              "evidence_bundle",
+              "export",
+              "tool_spec",
+              "avatar"
+            ],
+            "title": "Purpose",
+            "type": "string"
+          },
+          "retentionClass": {
+            "title": "Retentionclass",
+            "type": "string"
+          }
+        },
+        "required": [
+          "purpose",
+          "retentionClass"
+        ],
+        "title": "PurposeRetentionIn",
         "type": "object"
       },
       "ReadRequest": {
@@ -1766,6 +1941,37 @@
         "title": "ReferenceIn",
         "type": "object"
       },
+      "RetentionClassView": {
+        "additionalProperties": false,
+        "properties": {
+          "days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Days"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "days"
+        ],
+        "title": "RetentionClassView",
+        "type": "object"
+      },
       "ScanResultIn": {
         "additionalProperties": false,
         "properties": {
@@ -1830,11 +2036,10 @@
       },
       "StorageDocument": {
         "additionalProperties": false,
+        "description": "A saved document, as StorageDocumentIn took it.",
         "properties": {
           "downloadLinkSeconds": {
             "default": 300,
-            "maximum": 3600.0,
-            "minimum": 30.0,
             "title": "Downloadlinkseconds",
             "type": "integer"
           },
@@ -1860,7 +2065,48 @@
             "type": "array"
           }
         },
+        "required": [
+          "targets",
+          "limits",
+          "retention",
+          "downloadLinkSeconds"
+        ],
         "title": "StorageDocument",
+        "type": "object"
+      },
+      "StorageDocumentIn": {
+        "additionalProperties": false,
+        "properties": {
+          "downloadLinkSeconds": {
+            "default": 300,
+            "maximum": 3600.0,
+            "minimum": 30.0,
+            "title": "Downloadlinkseconds",
+            "type": "integer"
+          },
+          "limits": {
+            "items": {
+              "$ref": "#/components/schemas/PurposeLimitIn"
+            },
+            "title": "Limits",
+            "type": "array"
+          },
+          "retention": {
+            "items": {
+              "$ref": "#/components/schemas/PurposeRetentionIn"
+            },
+            "title": "Retention",
+            "type": "array"
+          },
+          "targets": {
+            "items": {
+              "$ref": "#/components/schemas/StorageTargetIn"
+            },
+            "title": "Targets",
+            "type": "array"
+          }
+        },
+        "title": "StorageDocumentIn",
         "type": "object"
       },
       "StorageLocation": {
@@ -1912,7 +2158,10 @@
           "backend",
           "environment",
           "container",
-          "key"
+          "key",
+          "region",
+          "encryption",
+          "locked"
         ],
         "title": "StorageLocation",
         "type": "object"
@@ -1921,7 +2170,7 @@
         "additionalProperties": false,
         "properties": {
           "document": {
-            "$ref": "#/components/schemas/StorageDocument"
+            "$ref": "#/components/schemas/StorageDocumentIn"
           },
           "version": {
             "minimum": 0.0,
@@ -1944,8 +2193,7 @@
           },
           "retentionClasses": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/RetentionClassView"
             },
             "title": "Retentionclasses",
             "type": "array"
@@ -1994,6 +2242,91 @@
         "type": "object"
       },
       "StorageTarget": {
+        "additionalProperties": false,
+        "description": "A saved target, as StorageTargetIn took it.",
+        "properties": {
+          "backend": {
+            "enum": [
+              "local",
+              "s3",
+              "azure_blob"
+            ],
+            "title": "Backend",
+            "type": "string"
+          },
+          "container": {
+            "title": "Container",
+            "type": "string"
+          },
+          "credential": {
+            "default": "",
+            "title": "Credential",
+            "type": "string"
+          },
+          "encryption": {
+            "default": "",
+            "title": "Encryption",
+            "type": "string"
+          },
+          "endpoint": {
+            "default": "",
+            "title": "Endpoint",
+            "type": "string"
+          },
+          "purpose": {
+            "anyOf": [
+              {
+                "enum": [
+                  "knowledge_source",
+                  "chat_attachment",
+                  "case_attachment",
+                  "document_type_sample",
+                  "email_body",
+                  "knowledge_snapshot",
+                  "test_import",
+                  "evidence_bundle",
+                  "export",
+                  "tool_spec",
+                  "avatar"
+                ],
+                "type": "string"
+              },
+              {
+                "const": "default",
+                "type": "string"
+              }
+            ],
+            "title": "Purpose"
+          },
+          "region": {
+            "default": "",
+            "title": "Region",
+            "type": "string"
+          },
+          "uploadPath": {
+            "default": "direct",
+            "enum": [
+              "direct",
+              "proxy"
+            ],
+            "title": "Uploadpath",
+            "type": "string"
+          }
+        },
+        "required": [
+          "purpose",
+          "backend",
+          "container",
+          "region",
+          "endpoint",
+          "credential",
+          "uploadPath",
+          "encryption"
+        ],
+        "title": "StorageTarget",
+        "type": "object"
+      },
+      "StorageTargetIn": {
         "additionalProperties": false,
         "description": "Where one purpose's bytes go. `default` covers every purpose without its own target.",
         "properties": {
@@ -2073,7 +2406,7 @@
           "backend",
           "container"
         ],
-        "title": "StorageTarget",
+        "title": "StorageTargetIn",
         "type": "object"
       },
       "UploadLimits": {
@@ -2290,32 +2623,9 @@
     },
     "/v1/files": {
       "get": {
-        "description": "Available files of the caller's team, newest first; `uploadedBy=me` keeps the caller's own. Search, the\nuploaded-since date, the view and the purpose, scan, sensitivity, read-as type and read path filters run in\nthe query, which also answers each view's count and the facet counts; `readPath=model` keeps files no\ntemplate matched.",
+        "description": "Available files of the caller's team on the shared list contract, newest first (`sortBy` name, uploadedAt,\nsize, scan or purpose; equal values stay newest first); `uploadedBy=me` keeps the caller's own. Search, the\nuploaded dates, the view and the purpose, scan, sensitivity, read-as type and read path filters run in the\nquery, which also answers each view's count and the facet counts; `readPath=model` keeps files no template\nmatched. The filters are declared here so a bad value is refused; ListQuery reads the same keys as its\nfilters.",
         "operationId": "files_list_files",
         "parameters": [
-          {
-            "in": "query",
-            "name": "page",
-            "required": false,
-            "schema": {
-              "default": 1,
-              "minimum": 1,
-              "title": "Page",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "pageSize",
-            "required": false,
-            "schema": {
-              "default": 25,
-              "maximum": 100,
-              "minimum": 1,
-              "title": "Pagesize",
-              "type": "integer"
-            }
-          },
           {
             "in": "query",
             "name": "uploadedBy",
@@ -2489,16 +2799,6 @@
           },
           {
             "in": "query",
-            "name": "search",
-            "required": false,
-            "schema": {
-              "default": "",
-              "title": "Search",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
             "name": "uploadedAfter",
             "required": false,
             "schema": {
@@ -2546,6 +2846,100 @@
               ],
               "title": "View",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {
@@ -4129,7 +4523,7 @@
     },
     "/v1/files/uploads": {
       "post": {
-        "description": "A ticket for one upload: a signed storage URL, or this service's content route on the local backend.",
+        "description": "A ticket for one upload: a signed storage URL, or this service's content route on the local backend. Not\non Tx: the rows are read in one transaction and written in another, with none open while the URL is signed\n(tests/test_request_transactions.py).",
         "operationId": "files_create_upload",
         "parameters": [
           {
@@ -5523,7 +5917,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/FileData"
+                "$ref": "#/components/schemas/FileDataIn"
               }
             }
           },
@@ -5670,7 +6064,7 @@
     },
     "/v1/files/{file_id}/download-url": {
       "post": {
-        "description": "A short-lived link; 423 until the file is scanned clean.",
+        "description": "A short-lived link; 423 until the file is scanned clean. Not on Tx: no transaction is open while the link\nis signed.",
         "operationId": "files_download_url",
         "parameters": [
           {
@@ -5751,15 +6145,8 @@
           "content": {
             "application/json": {
               "schema": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/DownloadIn"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Body"
+                "$ref": "#/components/schemas/DownloadIn",
+                "default": {}
               }
             }
           }
@@ -7842,7 +8229,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/StorageTarget"
+                "$ref": "#/components/schemas/StorageTargetIn"
               }
             }
           },

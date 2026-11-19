@@ -17,18 +17,17 @@ import tempfile
 import threading
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, TypedDict
 
 from wasmtime import Config, Engine, ExitTrap, Linker, Module, Store, Trap, WasiConfig
 
-from .domain import CallAnswer, Limits, RunResult, failure
+from ops_service_kit.http import JsonValue
+from ops_service_kit.settings import RunnerWaits
 
-# Seconds between epoch ticks. A run's time limit is counted in ticks on its own store, so overlapping runs on the one
-# engine each keep their own limit; a per-run timer advancing the shared epoch would stop every run in flight.
-TICK_S = 0.1
-# Grace after the limit before the host stops waiting for a guest that trapped but has not let go of its pipes.
-GRACE_S = 2.0
+from .domain import CallAnswer, CallReply, Failure, Limits, RunResult, failure
+
 LOG_CAP = 8192
 OUTPUT_CAP = 1 << 20
 
@@ -45,13 +44,18 @@ def sha256_of(path: Path) -> str:
 
 
 class WasmPython:
-    """One engine and one compiled module for the process; each run gets its own store, directory and pipes."""
+    """One engine and one compiled module for the process; each run gets its own store, directory and pipes.
 
-    def __init__(self, wasm: Path, *, sha256: str, compiled_dir: Path) -> None:
+    `waits` (settings.runner_waits): a run's time limit is counted in epoch ticks on its own store, so overlapping
+    runs on the one engine each keep their own limit; a per-run timer advancing the shared epoch would stop every run
+    in flight. The host's pipe waits are joins on the guest's thread, so each ends at once when the guest ends."""
+
+    def __init__(self, wasm: Path, *, sha256: str, compiled_dir: Path, waits: RunnerWaits) -> None:
         if not wasm.is_file():
             raise SystemExit(f"The runner's Python build is missing at {wasm}: run `make runner-wasm`.")
         if (found := sha256_of(wasm)) != sha256:
             raise SystemExit(f"The runner's Python build at {wasm} has SHA-256 {found}, not the pinned {sha256}.")
+        self.waits = waits
         cfg = Config()
         cfg.epoch_interruption = True
         # wasmtime's compiled-module cache, in a directory the service owns: a systemd unit has no writable home.
@@ -65,7 +69,7 @@ class WasmPython:
         threading.Thread(target=self._tick, daemon=True, name="wasm-epoch").start()
 
     def _tick(self) -> None:
-        while not self._stop.wait(TICK_S):
+        while not self._stop.wait(timeout=self.waits.tick_s):
             self.engine.increment_epoch()
 
     def close(self) -> None:
@@ -82,7 +86,26 @@ class WasmPython:
             shutil.rmtree(work, ignore_errors=True)
 
 
+class _Request(TypedDict):
+    """The one line the guest reads first (guest.py)."""
+
+    source: str
+    entry: str
+    input: JsonValue
+
+
+@dataclass
+class _Ended:
+    """How the guest's thread ended: its exit code, the trap that stopped it, or what kept it from starting."""
+
+    exit: int | None = None
+    trap: str | None = None
+    setup: str | None = None
+
+
 class _Run:
+    """One run's directory, pipes and guest thread, and the conversation with the guest over them."""
+
     def __init__(self, runtime: WasmPython, work: Path, started: float, limits: Limits, answer: CallAnswer) -> None:
         self.runtime = runtime
         self.work = work
@@ -91,13 +114,13 @@ class _Run:
         self.answer = answer
         self.app = work / "app"
         self.stdin, self.stdout, self.stderr = (str(work / n) for n in ("in", "out", "err"))
-        self.ended: dict[str, Any] = {}
+        self.ended = _Ended()
 
     def _guest(self) -> None:
         store = Store(self.runtime.engine)
         try:
             store.set_limits(memory_size=self.limits.memory_mb << 20)
-            store.set_epoch_deadline(max(1, round(self.limits.time_s / TICK_S)))
+            store.set_epoch_deadline(max(1, round(self.limits.time_s / self.runtime.waits.tick_s)))
             wasi = WasiConfig()
             wasi.argv = ["python", "-I", "-S", "/app/main.py"]
             wasi.preopen_dir(str(self.app), "/app")
@@ -111,11 +134,11 @@ class _Run:
             start: Callable[..., Any] = instance.exports(store)["_start"]  # pyright: ignore[reportAssignmentType]
             start(store)
         except ExitTrap as e:
-            self.ended["exit"] = e.code
+            self.ended.exit = e.code
         except Trap as e:
-            self.ended["trap"] = str(e)
+            self.ended.trap = str(e)
         except Exception as e:  # a wasmtime error before the guest starts
-            self.ended["setup"] = f"{type(e).__name__}: {e}"
+            self.ended.setup = f"{type(e).__name__}: {e}"
         finally:
             # Dropping the store closes the guest's ends of the pipes, so the host's reads see end of file.
             del store
@@ -130,9 +153,9 @@ class _Run:
         # A fifo's open blocks until the other end opens. Non-blocking opens keep a guest that dies during set-up from
         # hanging the host.
         out_fd = os.open(self.stdout, os.O_RDONLY | os.O_NONBLOCK)
-        in_fd = _open_writer(self.stdin, thread)
+        deadline = self.started + self.limits.time_s + self.runtime.waits.grace_s
+        in_fd = _open_writer(self.stdin, thread, self.runtime.waits.open_poll_s, deadline)
         result = RunResult(ok=False, create_ms=self._ms())
-        deadline = self.started + self.limits.time_s + GRACE_S
         try:
             if in_fd is not None:
                 _write(in_fd, {"source": source, "entry": entry, "input": input})
@@ -140,7 +163,7 @@ class _Run:
         finally:
             if in_fd is not None:
                 os.close(in_fd)
-            thread.join(timeout=GRACE_S)
+            thread.join(timeout=self.runtime.waits.grace_s)
             os.close(out_fd)
         if not result.ok and result.error is None:
             result.error = self._why(thread)
@@ -162,7 +185,8 @@ class _Run:
             if not chunk:
                 if not thread.is_alive():
                     return
-                time.sleep(0.01)  # no writer yet: the guest has not opened stdout
+                # No writer: the guest has not opened stdout, or closed it and is ending.
+                thread.join(timeout=self.runtime.waits.read_poll_s)
                 continue
             buf.extend(chunk)
             if len(buf) > OUTPUT_CAP:
@@ -172,12 +196,11 @@ class _Run:
                 line = bytes(buf[:end])
                 del buf[: end + 1]
                 try:
-                    parsed: Any = json.loads(line)
+                    msg: JsonValue = json.loads(line)
                 except ValueError:
                     continue
-                if not isinstance(parsed, dict):
+                if not isinstance(msg, dict):
                     continue
-                msg = cast(dict[str, Any], parsed)
                 if "call" in msg:
                     reply = self._call(result, str(msg["call"]), msg.get("args"))
                     if in_fd is not None:
@@ -186,47 +209,49 @@ class _Run:
                     result.ok, result.output = True, msg["result"]
                     return
                 elif "error" in msg:
-                    error = cast(dict[str, Any], msg["error"] if isinstance(msg["error"], dict) else {})
+                    error = msg["error"] if isinstance(msg["error"], dict) else {}
                     result.error = failure(str(error.get("code")), str(error.get("message")))
                     return
 
-    def _call(self, result: RunResult, tool: str, args: Any) -> dict[str, Any]:
+    def _call(self, result: RunResult, tool: str, args: JsonValue) -> CallReply:
         result.calls += 1
         if result.calls > self.limits.calls:
-            reply: dict[str, Any] = {
+            reply: CallReply = {
                 "ok": False,
                 "error": failure("call_limit", f"At most {self.limits.calls} calls per run."),
             }
         elif not isinstance(args, dict):
             reply = {"ok": False, "error": failure("invalid_input", "A call's arguments are an object.")}
         else:
-            reply = self.answer(tool, cast(dict[str, Any], args))
-        error = cast(dict[str, Any], reply.get("error") or {})
-        result.trace.append({"tool": tool, "ok": bool(reply.get("ok")), "code": error.get("code")})
+            reply = self.answer(tool, args)
+        error = reply.get("error")
+        result.trace.append({"tool": tool, "ok": bool(reply.get("ok")), "code": error["code"] if error else None})
         return reply
 
-    def _why(self, thread: threading.Thread) -> dict[str, str]:
-        trap = str(self.ended.get("trap", ""))
+    def _why(self, thread: threading.Thread) -> Failure:
+        trap = self.ended.trap or ""
         if "interrupt" in trap or thread.is_alive() or time.monotonic() >= self.started + self.limits.time_s:
             return failure("time_limit", f"The function ran past its {self.limits.time_s:g} s limit.")
-        why = trap or self.ended.get("setup") or f"exit {self.ended.get('exit')}"
+        why = trap or self.ended.setup or f"exit {self.ended.exit}"
         return failure("runner_error", str(why).splitlines()[0][:300])
 
     def _ms(self) -> int:
         return int((time.monotonic() - self.started) * 1000)
 
 
-def _open_writer(path: str, thread: threading.Thread) -> int | None:
+def _open_writer(path: str, thread: threading.Thread, poll_s: float, deadline: float) -> int | None:
+    """The host's end of the guest's stdin, once the guest opens its own; None when the guest ends first or the run's
+    deadline passes, so a guest stuck in set-up cannot hold the host."""
     while True:
         try:
             return os.open(path, os.O_WRONLY | os.O_NONBLOCK)
         except OSError:  # ENXIO: the guest has not opened its stdin yet
-            if not thread.is_alive():
+            if not thread.is_alive() or time.monotonic() >= deadline:
                 return None
-            time.sleep(0.005)
+            thread.join(timeout=poll_s)
 
 
-def _write(fd: int, msg: dict[str, Any]) -> None:
+def _write(fd: int, msg: _Request | CallReply) -> None:
     os.set_blocking(fd, True)
     # A broken pipe means the guest ended; its outcome is read from the trap.
     with contextlib.suppress(BrokenPipeError):

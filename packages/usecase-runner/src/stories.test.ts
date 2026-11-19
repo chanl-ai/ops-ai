@@ -24,7 +24,7 @@ Status: current. Id: \`uc-900\`. Service: \`agents-service\`. Layers: api, ui.
 ## Steps and expected results
 `;
 
-const UC: UseCase = { id: 'uc-900', service: 'agents-service', title: 'Approve a hold', layers: ['api', 'ui'], status: 'passing' };
+const UC: UseCase = { id: 'uc-900', service: 'agents-service', title: 'Approve a hold', layers: ['api', 'ui'], status: 'passing', deployed: false };
 const ui = parseStories(DOC).filter((s) => s.layer === 'ui');
 
 test('stories parse with their layer, steps and proving step', () => {

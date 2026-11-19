@@ -7,9 +7,13 @@ from typing import Any, ClassVar, cast
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
 
+from ops_service_kit.http import Json, JsonValue, Out
+from ops_service_kit.listing import ListParams
 from ops_store import Guarantee
 from ops_store.dialect import locked
-from ops_store.team_scope import team_visible
+from ops_store.listing import ListPage, list_page
+from ops_store.rows import one, rows
+from ops_store.team_scope import acting_team, team_visible
 
 from .clock import db_now, now_iso
 from .tables import ENGINE_BUILD, engine_definitions, engine_runs, engine_steps, engine_waits, engine_work
@@ -19,6 +23,60 @@ from .work import WorkQueue
 TERMINAL = ("succeeded", "failed", "cancelled")
 # A run that another run's step started names that run in created_by: `run:<parent id>`.
 CHILD_PREFIX = "run:"
+
+
+class RunRow(Out):
+    """One stored run, as `engine_runs` holds it. The input, output and waiting state stay JSON as stored: the
+    waiting state is read, changed and written back, so it is never rebuilt from a model."""
+
+    id: str
+    tenant_id: str
+    team_id: str
+    workflow_id: str
+    version: int
+    digest: str
+    run_key: str
+    mode: str
+    status: str
+    input: JsonValue = None
+    outcome: str | None = None
+    output: JsonValue = None
+    error: str | None = None
+    # While waiting: {node, iteration, interruptId, payload}; its own model comes later.
+    waiting: Json | None = None
+    created_by: str
+    started_via: str | None = None
+    started_by_approver: bool = False
+    created_at: str
+    updated_at: str
+    finished_at: str | None = None
+
+
+class ListedRun(RunRow):
+    """A run on a list page, with its workflow version's display name (None when that version is gone)."""
+
+    workflow_name: str | None = None
+
+
+class RunStep(Out):
+    """One stored attempt of one node, as `engine_steps` holds it."""
+
+    run_id: str
+    node_id: str
+    iteration: int
+    attempt: int
+    tenant_id: str
+    status: str
+    effects: str
+    key: str
+    input: JsonValue = None
+    port: str | None = None
+    output: JsonValue = None
+    error: str | None = None
+    started_at: str
+    finished_at: str | None = None
+    # None on a step recorded before node types were kept.
+    node_type: str | None = None
 
 
 class DefinitionGoneError(LookupError):
@@ -41,7 +99,7 @@ class RunStore:
     def __init__(self, tx: Transactions) -> None:
         self.tx = tx
 
-    async def create(self, run: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+    async def create(self, run: dict[str, Any]) -> tuple[RunRow, bool]:
         """Writes the run (status queued) and its start work row; a run with the same key is returned instead.
         A live run is refused (NotLiveError) unless the version it pins is live, read under the same lock a pause
         takes, so a pause and a start cannot both pass. Returns (run, created)."""
@@ -90,9 +148,9 @@ class RunStore:
             if found is None:
                 raise
             return found, False
-        return await self.get(str(run["id"])) or values, True
+        return await self.row(str(run["id"])) or RunRow.model_validate(values), True
 
-    async def by_key(self, workflow_id: str, run_key: str) -> dict[str, Any] | None:
+    async def by_key(self, workflow_id: str, run_key: str) -> RunRow | None:
         q = engine_runs.select().where(
             engine_runs.c.tenant_id == self.tx.tenant(),
             team_visible(engine_runs),
@@ -100,18 +158,22 @@ class RunStore:
             engine_runs.c.run_key == run_key,
         )
         async with self.tx.tenant_tx() as c:
-            row = (await c.execute(q)).mappings().first()
-        return dict(row) if row else None
+            return await one(c, q, RunRow)
 
-    async def get(self, run_id: str) -> dict[str, Any] | None:
+    async def row(self, run_id: str) -> RunRow | None:
+        """The run as the engine reads it."""
         q = engine_runs.select().where(
             engine_runs.c.id == run_id, engine_runs.c.tenant_id == self.tx.tenant(), team_visible(engine_runs)
         )
         async with self.tx.tenant_tx() as c:
-            row = (await c.execute(q)).mappings().first()
-        return dict(row) if row else None
+            return await one(c, q, RunRow)
 
-    async def many(self, run_ids: list[str]) -> list[dict[str, Any]]:
+    async def get(self, run_id: str) -> dict[str, Any] | None:
+        """row() as a mapping, key for key the stored row; only tests still read it, until they read row()."""
+        found = await self.row(run_id)
+        return found.model_dump() if found else None
+
+    async def many(self, run_ids: list[str]) -> list[RunRow]:
         """The tenant's runs among `run_ids`, in one query (a step's started children, up to its item limit)."""
         if not run_ids:
             return []
@@ -119,7 +181,7 @@ class RunStore:
             engine_runs.c.id.in_(run_ids), engine_runs.c.tenant_id == self.tx.tenant(), team_visible(engine_runs)
         )
         async with self.tx.tenant_tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await rows(c, q, RunRow)
 
     async def list(
         self,
@@ -128,7 +190,7 @@ class RunStore:
         status: str | None = None,
         team_id: str | None = None,
         limit: int | None = 200,
-    ) -> list[dict[str, Any]]:
+    ) -> list[RunRow]:
         """The newest runs first, at most `limit` of them; None reads every one (Human Tasks' waiting runs)."""
         q = engine_runs.select().where(engine_runs.c.tenant_id == self.tx.tenant(), team_visible(engine_runs))
         if workflow_id:
@@ -137,11 +199,11 @@ class RunStore:
             q = q.where(engine_runs.c.status == status)
         if team_id:
             q = q.where(engine_runs.c.team_id == team_id)
-        q = q.order_by(engine_runs.c.created_at.desc())
+        q = q.order_by(engine_runs.c.created_at.desc(), engine_runs.c.id)
         if limit is not None:
             q = q.limit(limit)
         async with self.tx.tenant_tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await rows(c, q, RunRow)
 
     async def page(
         self,
@@ -151,7 +213,7 @@ class RunStore:
         team_id: str | None = None,
         offset: int = 0,
         limit: int = 25,
-    ) -> tuple[list[dict[str, Any]], int, dict[str, int]]:
+    ) -> tuple[list[ListedRun], int, dict[str, int]]:
         """One page of runs, newest first, each with `workflow_name`, plus the total that matches and the count per
         status. The status counts leave the status filter out, so a filter chip shows how many runs choosing it would
         list."""
@@ -162,14 +224,7 @@ class RunStore:
             base.append(engine_runs.c.team_id == team_id)
         where = [*base, engine_runs.c.status.in_(statuses)] if statuses else base
         # Each row carries its workflow version's display name, so a list names the workflow, not its id.
-        named = engine_runs.outerjoin(
-            engine_definitions,
-            sa.and_(
-                engine_definitions.c.tenant_id == engine_runs.c.tenant_id,
-                engine_definitions.c.workflow_id == engine_runs.c.workflow_id,
-                engine_definitions.c.version == engine_runs.c.version,
-            ),
-        )
+        named = _named(engine_runs)
         rows_q = (
             sa.select(*engine_runs.c, engine_definitions.c.name.label("workflow_name"))
             .select_from(named)
@@ -179,10 +234,32 @@ class RunStore:
         total_q = sa.select(sa.func.count()).select_from(engine_runs).where(*where)
         by_status_q = sa.select(engine_runs.c.status, sa.func.count()).where(*base).group_by(engine_runs.c.status)
         async with self.tx.tenant_tx() as c:
-            rows = [dict(r) for r in (await c.execute(rows_q.offset(offset).limit(limit))).mappings()]
+            listed = await rows(c, rows_q.offset(offset).limit(limit), ListedRun)
             total = int((await c.execute(total_q)).scalar_one())
             by_status = {str(k): int(n) for k, n in (await c.execute(by_status_q)).all()}
-        return rows, total, by_status
+        return listed, total, by_status
+
+    async def listed(self, params: ListParams, *, workflow_id: str | None = None) -> ListPage:
+        """The runs list on the shared contract: the acting team's runs (only `workflow_id`'s when given, for a key
+        scoped to one workflow), newest first, then by id, each with `workflow_name`; `status` and `workflowId`
+        filter, given once per value; `facets` counts the runs per status and per workflow under the other filters,
+        and `labels.workflowId` names each counted workflow."""
+        r = engine_runs
+        tenant = self.tx.tenant()
+        where = [r.c.tenant_id == tenant, team_visible(r)]
+        if workflow_id:
+            where.append(r.c.workflow_id == workflow_id)
+        q = sa.select(*r.c, engine_definitions.c.name.label("workflow_name")).select_from(_named(r)).where(*where)
+        async with self.tx.tenant_tx() as c:
+            return await list_page(
+                c,
+                q,
+                params,
+                default_sort=r.c.created_at.desc(),
+                filters={"status": r.c.status, "workflowId": r.c.workflow_id},
+                facets={"status": r.c.status, "workflowId": r.c.workflow_id},
+                labels={"workflowId": _workflow_names(tenant)},
+            )
 
     async def update(self, run_id: str, *, generation: int | None = None, **values: Any) -> None:
         """`generation`: the writing worker's lease generation, checked in this transaction, so a superseded worker's
@@ -313,16 +390,16 @@ class RunStore:
             )
         return True
 
-    async def settle_parents(self, run: dict[str, Any]) -> None:
-        """After `run` changed status: the run that started it, once its own graph has ended (its outcome is set),
-        takes the status its unfinished runs leave it, and succeeds when none is left; then the same for that run's
-        parent. The parent row is locked, so two runs ending at once cannot both leave it unsettled. A parent paused at
-        a Run workflow step waiting for its children is woken instead: one resume per change of a child's
-        status, keyed so settling twice queues it once, naming the step rather than the pause."""
+    async def settle_parents(self, run_id: str, created_by: str) -> None:
+        """After run `run_id`, started by `created_by`, changed status: the run that started it, once its own graph
+        has ended (its outcome is set), takes the status its unfinished runs leave it, and succeeds when none is left;
+        then the same for that run's parent. The parent row is locked, so two runs ending at once cannot both leave it
+        unsettled. A parent paused at a Run workflow step waiting for its children is woken instead: one resume per
+        change of a child's status, keyed so settling twice queues it once, naming the step rather than the pause."""
         r = engine_runs
-        here = run
-        while str(here.get("created_by") or "").startswith(CHILD_PREFIX):
-            parent_id = str(here["created_by"])[len(CHILD_PREFIX) :]
+        here, by = run_id, created_by
+        while by.startswith(CHILD_PREFIX):
+            parent_id = by[len(CHILD_PREFIX) :]
             at = now_iso()
             wake: tuple[str, str, str | None] | None = None
             async with self.tx.tenant_tx() as c:
@@ -336,7 +413,7 @@ class RunStore:
                     waits = cast(dict[str, Any], waiting.get("payload") or {})
                     if waits.get("kind") != "children":
                         return
-                    child = str(here["id"])
+                    child = here
                     mine_child = sa.and_(r.c.id == child, r.c.tenant_id == self.tx.tenant(), team_visible(r))
                     now = await c.scalar(sa.select(r.c.status).where(mine_child))
                     # The pause it wakes, by interrupt id: a wake for one pass of the step never resumes a later one.
@@ -350,13 +427,13 @@ class RunStore:
                     await c.execute(r.update().where(mine).values(status=status, finished_at=finished, updated_at=at))
             if wake is not None:
                 key, node, interrupt_id = wake
-                payload = {"resume": {"child": str(here["id"])}, "node": node, "interruptId": interrupt_id}
+                payload = {"resume": {"child": here}, "node": node, "interruptId": interrupt_id}
                 await WorkQueue(self.tx, owner="settle", ttl=0).enqueue(parent_id, "resume", key, payload)
                 return
-            parent = await self.get(parent_id)
+            parent = await self.row(parent_id)
             if parent is None:
                 return
-            here = parent
+            here, by = parent.id, parent.created_by
 
     async def children(self, parent_run_id: str, key_prefix: str, *, outputs: bool = False) -> list[dict[str, Any]]:
         """The runs `parent_run_id` started under keys beginning `key_prefix`, in one read on the parent index, each
@@ -394,7 +471,7 @@ class RunStore:
                 return status
         return None
 
-    async def cancel(self, run_id: str, *, reason: str = "by_user") -> tuple[dict[str, Any] | None, bool]:
+    async def cancel(self, run_id: str, *, reason: str = "by_user") -> tuple[RunRow | None, bool]:
         """Cancels a run that has not ended: status cancelled with `reason` as its outcome, its waiting step cleared
         (which withdraws its review), and its queued work dropped so no worker starts it. A worker already in a pass
         finishes and journals the step under way, and the next step's journal row is refused (SqlJournal.begin).
@@ -418,9 +495,9 @@ class RunStore:
                     .where(w.c.run_id == run_id, w.c.tenant_id == self.tx.tenant(), w.c.status == "queued")
                     .values(status="done", error=f"run cancelled ({reason})")
                 )
-        return await self.get(run_id), changed
+        return await self.row(run_id), changed
 
-    async def retry(self, run_id: str) -> tuple[dict[str, Any] | None, bool]:
+    async def retry(self, run_id: str) -> tuple[RunRow | None, bool]:
         """Queues a Stuck run again: its set-aside work rows are closed and one new row goes on under the
         current engine build. A run paused at a step is resumed at that step, which reads its state again; any other
         continues from its last checkpoint, where recorded steps return their record and a write reconciles by its
@@ -433,7 +510,7 @@ class RunStore:
             if found is None:
                 return None, False
             if found.status != "stuck":
-                return await self.get(run_id), False
+                return await self.row(run_id), False
             await c.execute(r.update().where(mine).values(status="queued", error=None, updated_at=at))
             await c.execute(
                 w.update()
@@ -447,9 +524,9 @@ class RunStore:
             await queue.enqueue(run_id, "resume", f"retry:{run_id}:{at}", payload)
         else:
             await queue.enqueue(run_id, "retry", f"retry:{run_id}:{at}")
-        return await self.get(run_id), True
+        return await self.row(run_id), True
 
-    async def steps(self, run_id: str) -> list[dict[str, Any]]:
+    async def step_rows(self, run_id: str) -> list[RunStep]:
         """Every attempt of every node, in the order they started."""
         q = (
             engine_steps.select()
@@ -457,10 +534,14 @@ class RunStore:
             .order_by(engine_steps.c.started_at, engine_steps.c.node_id, engine_steps.c.attempt)
         )
         async with self.tx.tenant_tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await rows(c, q, RunStep)
 
-    async def steps_of(self, run_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
-        """steps() for each of these runs in one query, so a list of runs does not read them one run at a time."""
+    async def steps(self, run_id: str) -> list[dict[str, Any]]:
+        """step_rows() as mappings; only tests still read it, and it goes once they read step_rows()."""
+        return [s.model_dump() for s in await self.step_rows(run_id)]
+
+    async def steps_of(self, run_ids: list[str]) -> dict[str, list[RunStep]]:
+        """step_rows() for each of these runs in one query, so a list of runs does not read them one run at a time."""
         if not run_ids:
             return {}
         s = engine_steps
@@ -469,10 +550,10 @@ class RunStore:
             .where(s.c.run_id.in_(run_ids), s.c.tenant_id == self.tx.tenant())
             .order_by(s.c.started_at, s.c.node_id, s.c.attempt)
         )
-        out: dict[str, list[dict[str, Any]]] = {r: [] for r in run_ids}
+        out: dict[str, list[RunStep]] = {r: [] for r in run_ids}
         async with self.tx.tenant_tx() as c:
-            for row in (await c.execute(q)).mappings():
-                out[str(row["run_id"])].append(dict(row))
+            for step in await rows(c, q, RunStep):
+                out[step.run_id].append(step)
         return out
 
     async def work(self, run_id: str) -> list[dict[str, Any]]:
@@ -516,3 +597,31 @@ class RunStore:
             for run_id, payload in (await c.execute(q)).all():
                 out.setdefault(str(run_id), []).append(dict(payload or {}))
         return out
+
+
+def _workflow_names(tenant: str) -> sa.Select[str, str]:
+    """(workflow id, name) of each workflow's newest version the acting team may see, as the workflows list names it
+    (`store/definition_list.py` in agents-service): each version carries its own team."""
+    d, newer = engine_definitions, engine_definitions.alias("newer")
+    team = acting_team()
+    seen: list[sa.ColumnElement[bool]] = [d.c.tenant_id == tenant]
+    later: list[sa.ColumnElement[bool]] = [
+        newer.c.tenant_id == d.c.tenant_id,
+        newer.c.workflow_id == d.c.workflow_id,
+        newer.c.version > d.c.version,
+    ]
+    if team is not None:
+        seen.append(sa.or_(d.c.team_id == team, d.c.team_id.is_(None)))
+        later.append(sa.or_(newer.c.team_id == team, newer.c.team_id.is_(None)))
+    return sa.select(d.c.workflow_id, d.c.name).where(*seen, ~sa.exists().where(*later))
+
+
+def _named(runs: sa.Table) -> sa.Join:
+    """Runs joined to their workflow version, so a list names the workflow, not its id."""
+    d = engine_definitions
+    return runs.outerjoin(
+        d,
+        sa.and_(
+            d.c.tenant_id == runs.c.tenant_id, d.c.workflow_id == runs.c.workflow_id, d.c.version == runs.c.version
+        ),
+    )

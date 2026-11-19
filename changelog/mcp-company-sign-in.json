@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-11",
+  "title": "Connect assistants to a team with your company sign-in",
+  "description": "Paste a team's MCP address into Claude, Cursor, VS Code or ChatGPT, sign in in the browser window and press Allow. The assistant runs only what you may run in that team, for 8 hours, and stops when you leave the team.",
+  "tag": "new"
+}

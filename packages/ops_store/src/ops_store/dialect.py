@@ -15,6 +15,7 @@ portability check refuses it outside this package.
 
 from __future__ import annotations
 
+import re
 from collections.abc import AsyncGenerator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from typing import Any, cast
@@ -30,6 +31,12 @@ from sqlalchemy.sql.functions import FunctionElement
 SUPPORTED = ("postgresql", "mssql", "sqlite")
 Bind = sa.Connection | sa.Engine | AsyncConnection | AsyncEngine | sa.Dialect
 
+# The execution option on a statement the isolation layer runs to enter or leave a transaction's scope or role. A
+# request's statement count leaves these out: PostgreSQL needs one per transaction and SQL Server two (and two more
+# around a system block), so a route's budget counts only its own statements and holds on both databases.
+ISOLATION_STATEMENT = "ops_isolation_statement"
+ISOLATION = {ISOLATION_STATEMENT: True}
+
 
 def dialect_of(bind: Bind) -> str:
     name = bind.name if isinstance(bind, sa.Dialect) else bind.dialect.name
@@ -42,6 +49,9 @@ def dialect_of(bind: Bind) -> str:
 
 _ROW_LOCK = "WITH (UPDLOCK, ROWLOCK)"
 _CLAIM_LOCK = "WITH (UPDLOCK, ROWLOCK, READPAST)"
+_KEY_RANGE_LOCK = "WITH (UPDLOCK, HOLDLOCK)"
+# The table hints this module attaches; an install-wide block refuses any other hint text (`isolation`).
+LOCK_HINTS = frozenset({_ROW_LOCK, _CLAIM_LOCK, _KEY_RANGE_LOCK})
 
 
 def locked[S: sa.Select[Any]](query: S, table: sa.FromClause) -> S:
@@ -56,22 +66,28 @@ def claim[S: sa.Select[Any]](query: S, table: sa.FromClause) -> S:
     return query.with_for_update(skip_locked=True).with_hint(table, _CLAIM_LOCK, "mssql")
 
 
+_PG_KEY_LOCK = sa.select(
+    sa.func.pg_advisory_xact_lock(sa.func.hashtextextended(sa.bindparam("key", type_=sa.String), 0))
+)
+# sp_getapplock answers below zero when it did not get the lock; THROW turns that into an error.
+_MS_KEY_LOCK = sa.text(
+    "DECLARE @granted int; EXEC @granted = sp_getapplock @Resource = :key, @LockMode = 'Exclusive', "
+    "@LockOwner = 'Transaction', @LockTimeout = -1; "
+    "IF @granted < 0 THROW 51000, 'ops_store.lock_key: lock not granted', 1;"
+)
+# The statements `lock_key` sends, built once here. An install-wide block lets these objects through by identity
+# (`isolation`), so an equal statement built anywhere else, or the same text, is still refused; only the key varies.
+KEY_LOCKS = (_PG_KEY_LOCK, _MS_KEY_LOCK)
+
+
 async def lock_key(conn: AsyncConnection, key: str) -> None:
     """Serialises every transaction that locks `key` until it ends: an advisory lock on PostgreSQL, an application
     lock on SQL Server. SQLite runs one writer at a time, so it needs none."""
     match dialect_of(conn):
         case "postgresql":
-            await conn.execute(sa.select(sa.func.pg_advisory_xact_lock(sa.func.hashtextextended(key, 0))))
+            await conn.execute(_PG_KEY_LOCK, {"key": key})
         case "mssql":
-            # sp_getapplock answers below zero when it did not get the lock; THROW turns that into an error.
-            await conn.execute(
-                sa.text(
-                    "DECLARE @granted int; EXEC @granted = sp_getapplock @Resource = :key, @LockMode = 'Exclusive', "
-                    "@LockOwner = 'Transaction', @LockTimeout = -1; "
-                    "IF @granted < 0 THROW 51000, 'ops_store.lock_key: lock not granted', 1;"
-                ),
-                {"key": key[:255]},
-            )
+            await conn.execute(_MS_KEY_LOCK, {"key": key[:255]})
         case _:
             return
 
@@ -82,7 +98,7 @@ async def lock_key(conn: AsyncConnection, key: str) -> None:
 def upsert(
     bind: Bind,
     table: sa.Table,
-    values: Mapping[str, Any],
+    values: Mapping[str, object],
     *,
     keys: Sequence[str],
     update: Sequence[str] | None = None,
@@ -103,7 +119,7 @@ def upsert(
     return done.returning(*[table.c[c] for c in returning]) if returning else done
 
 
-def insert_ignore(bind: Bind, table: sa.Table, values: Mapping[str, Any], *, keys: Sequence[str]) -> sa.Executable:
+def insert_ignore(bind: Bind, table: sa.Table, values: Mapping[str, object], *, keys: Sequence[str]) -> sa.Executable:
     """Inserts `values` unless a row with the same `keys` exists; neither an error nor an update when one does."""
     if dialect_of(bind) != "mssql":
         return upsert(bind, table, values, keys=keys, update=[])
@@ -122,14 +138,14 @@ def insert_ignore(bind: Bind, table: sa.Table, values: Mapping[str, Any], *, key
         sa.select(sa.literal(1))
         .select_from(table)
         .where(*[table.c[k] == value(k) for k in keys])
-        .with_hint(table, "WITH (UPDLOCK, HOLDLOCK)", "mssql")
+        .with_hint(table, _KEY_RANGE_LOCK, "mssql")
     )
     return table.insert().from_select(cols, row.where(~sa.exists(taken)))
 
 
 def _merge(
     table: sa.Table,
-    values: Mapping[str, Any],
+    values: Mapping[str, object],
     *,
     keys: Sequence[str],
     changed: Sequence[str],
@@ -148,7 +164,7 @@ def _merge(
     ]
     if changed:
         parts.append("WHEN MATCHED THEN UPDATE SET " + ", ".join(f"t.{q(c)} = s.{q(c)}" for c in changed))
-    parts.append(f"WHEN NOT MATCHED THEN INSERT ({names}) VALUES ({', '.join(f's.{q(c)}' for c in cols)})")
+    parts.append(f"WHEN NOT MATCHED THEN INSERT ({names}) VALUES ({', '.join(f's.{q(c)}' for c in cols)})")  # noqa: S608 - column names go through q()
     if returning:
         parts.append("OUTPUT " + ", ".join(f"inserted.{q(c)}" for c in returning))
     params = [sa.bindparam(f"v_{i}", values[c], type_=table.c[c].type) for i, c in enumerate(cols)]
@@ -242,7 +258,9 @@ async def system_tx(engine: AsyncEngine, *, role: str | None = None) -> AsyncGen
     tenant is known; callers go through `ops_store.isolation.system_tx`, which names and logs the reason. PostgreSQL
     switches to it (a BYPASSRLS role); SQL Server impersonates the database user of that name (EXECUTE AS USER), which
     the read predicates pass and its grants limit, table by table and column by column (deploy/database/mssql.py). The
-    impersonation outlives the transaction, so it is reverted however it ends."""
+    impersonation outlives the transaction, so it is reverted however it ends: inside the transaction when the block
+    succeeds, since a REVERT after the commit begins a second transaction that the request's counters count; after the
+    rollback when it fails."""
     async with engine.connect() as conn:
         impersonating = False
         try:
@@ -250,17 +268,22 @@ async def system_tx(engine: AsyncEngine, *, role: str | None = None) -> AsyncGen
                 match dialect_of(conn):
                     case "postgresql":
                         if role:
-                            await conn.execute(sa.text(f"SET LOCAL ROLE {_pg_role(role)}"))
+                            await conn.execute(sa.text(f"SET LOCAL ROLE {_pg_role(role)}"), execution_options=ISOLATION)
                     case "mssql":
                         if role:
-                            await conn.execute(sa.text(f"EXECUTE AS USER = N'{_ms_user(role)}'"))
+                            await conn.execute(
+                                sa.text(f"EXECUTE AS USER = N'{_ms_user(role)}'"), execution_options=ISOLATION
+                            )
                             impersonating = True
                     case _:
                         pass
                 yield conn
+                if impersonating:
+                    await conn.execute(sa.text("REVERT"), execution_options=ISOLATION)
+                    impersonating = False
         finally:
             if impersonating:
-                await conn.execute(sa.text("REVERT"))
+                await conn.execute(sa.text("REVERT"), execution_options=ISOLATION)
             if conn.in_transaction():
                 await conn.commit()
 
@@ -305,6 +328,236 @@ class _Contains(ColumnElement[bool]):
 @compiles(_Contains)
 def _contains(e: _Contains, c: SQLCompiler, **kw: Any) -> str:
     return f"CONTAINS({c.process(e.column, **kw)}, {c.process(e.words, **kw)})"
+
+
+# JSON fields --------------------------------------------------------------------------------------------------------
+
+_JSON_KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def _checked_key(key: str) -> sa.ColumnElement[Any]:
+    """The key as a SQL literal; it names a field in code, never a request value, and is refused if it is not a
+    plain identifier."""
+    if not _JSON_KEY.fullmatch(key):
+        raise ValueError(f"ops_store.dialect: {key!r} is not a plain JSON field name")
+    return sa.literal_column(f"'{key}'")
+
+
+class json_text(FunctionElement[str]):  # noqa: N801
+    """A top-level scalar field of a JSON column as text, NULL when absent: `->>` on PostgreSQL, JSON_VALUE on SQL
+    Server. A boolean reads 'true' on both and '1' on SQLite, so test it with `IN ('true', '1')`."""
+
+    type = sa.String()
+    inherit_cache = True
+
+    def __init__(self, column: sa.ColumnElement[Any], key: str) -> None:
+        super().__init__(column, _checked_key(key))
+
+
+class json_fragment(FunctionElement[str]):  # noqa: N801
+    """A top-level array or object field of a JSON column as JSON text, NULL when absent."""
+
+    type = sa.String()
+    inherit_cache = True
+
+    def __init__(self, column: sa.ColumnElement[Any], key: str) -> None:
+        super().__init__(column, _checked_key(key))
+
+
+def _literal_text(literal: Any) -> str:
+    """The field name inside a `_checked_key` literal."""
+    return str(literal.name).strip("'")
+
+
+def _key_of(e: FunctionElement[Any]) -> str:
+    return _literal_text(e.clauses.clauses[1])
+
+
+@compiles(json_text, "postgresql")
+def _json_text_pg(e: json_text, c: SQLCompiler, **kw: Any) -> str:
+    col, key = e.clauses.clauses
+    return f"({c.process(col, **kw)} ->> {c.process(key, **kw)})"
+
+
+@compiles(json_text, "mssql")
+def _json_text_mssql(e: json_text, c: SQLCompiler, **kw: Any) -> str:
+    return f"JSON_VALUE({c.process(e.clauses.clauses[0], **kw)}, '$.{_key_of(e)}')"
+
+
+@compiles(json_text)
+def _json_text_other(e: json_text, c: SQLCompiler, **kw: Any) -> str:
+    return f"CAST(json_extract({c.process(e.clauses.clauses[0], **kw)}, '$.{_key_of(e)}') AS TEXT)"
+
+
+@compiles(json_fragment, "postgresql")
+def _json_fragment_pg(e: json_fragment, c: SQLCompiler, **kw: Any) -> str:
+    col, key = e.clauses.clauses
+    return f"CAST(({c.process(col, **kw)} -> {c.process(key, **kw)}) AS TEXT)"
+
+
+@compiles(json_fragment, "mssql")
+def _json_fragment_mssql(e: json_fragment, c: SQLCompiler, **kw: Any) -> str:
+    return f"JSON_QUERY({c.process(e.clauses.clauses[0], **kw)}, '$.{_key_of(e)}')"
+
+
+@compiles(json_fragment)
+def _json_fragment_other(e: json_fragment, c: SQLCompiler, **kw: Any) -> str:
+    return f"json_extract({c.process(e.clauses.clauses[0], **kw)}, '$.{_key_of(e)}')"
+
+
+class JsonTextLength(FunctionElement[int]):
+    """The length of a top-level string field of a JSON column, NULL when the field is absent, JSON null or not a
+    string. SQL Server's JSON_VALUE answers NULL for a string over 4000 characters, so a check that reads it cannot
+    tell a long string from no string; this reads the whole value (OPENJSON) to tell them apart."""
+
+    type = sa.Integer()
+    inherit_cache = True
+
+    def __init__(self, column: sa.ColumnElement[Any], key: str) -> None:
+        super().__init__(column, _checked_key(key))
+
+
+@compiles(JsonTextLength, "postgresql")
+def _json_text_length_pg(e: JsonTextLength, c: SQLCompiler, **kw: Any) -> str:
+    col, key = e.clauses.clauses
+    col_sql, key_sql = c.process(col, **kw), c.process(key, **kw)
+    return (
+        f"(CASE WHEN json_typeof(CAST(({col_sql} -> {key_sql}) AS JSON)) = 'string' "
+        f"THEN length({col_sql} ->> {key_sql}) END)"
+    )
+
+
+@compiles(JsonTextLength, "mssql")
+def _json_text_length_mssql(e: JsonTextLength, c: SQLCompiler, **kw: Any) -> str:
+    col, key = e.clauses.clauses
+    j = sa.func.openjson(col).table_valued(sa.column("key"), sa.column("value"), sa.column("type")).alias("j")
+    # LEN drops trailing spaces; the appended character keeps them counted. Type 1 is a JSON string.
+    size = sa.func.len(j.c.value + sa.literal_column("N'.'")) - 1
+    whole = sa.select(sa.func.max(size)).where(j.c.key == key, j.c.type == sa.literal_column("1")).scalar_subquery()
+    return c.process(whole, **kw)
+
+
+@compiles(JsonTextLength)
+def _json_text_length_other(e: JsonTextLength, c: SQLCompiler, **kw: Any) -> str:
+    col, key = c.process(e.clauses.clauses[0], **kw), _key_of(e)
+    return f"(CASE WHEN json_type({col}, '$.{key}') = 'text' THEN length(json_extract({col}, '$.{key}')) END)"
+
+
+class json_array_has(ColumnElement[bool]):  # noqa: N801
+    """Rows whose JSON array field `key` holds the string `value`."""
+
+    inherit_cache = True
+    # Not Boolean: SQL Server has no boolean type, so a Boolean-typed element in a WHERE is rendered `<it> = 1`,
+    # which is invalid when `<it>` is an EXISTS condition.
+    type: sa.types.TypeEngine[Any] = sa.types.NullType()
+
+    def __init__(self, column: sa.ColumnElement[Any], key: str, value: str) -> None:
+        self.column, self.field = column, _checked_key(key)
+        self.value = sa.bindparam(None, value, type_=sa.String())
+
+
+@compiles(json_array_has, "postgresql")
+def _has_pg(e: json_array_has, c: SQLCompiler, **kw: Any) -> str:
+    col, key, val = c.process(e.column, **kw), c.process(e.field, **kw), c.process(e.value, **kw)
+    return f"jsonb_exists((CAST({col} AS JSONB) -> {key}), {val})"
+
+
+@compiles(json_array_has, "mssql")
+def _has_mssql(e: json_array_has, c: SQLCompiler, **kw: Any) -> str:
+    key = _literal_text(e.field)
+    col, val = c.process(e.column, **kw), c.process(e.value, **kw)
+    return f"EXISTS (SELECT 1 FROM OPENJSON({col}, '$.{key}') WHERE value = {val})"  # noqa: S608 - the key goes through _literal_text
+
+
+@compiles(json_array_has)
+def _has_other(e: json_array_has, c: SQLCompiler, **kw: Any) -> str:
+    key = _literal_text(e.field)
+    col, val = c.process(e.column, **kw), c.process(e.value, **kw)
+    return f"EXISTS (SELECT 1 FROM json_each({col}, '$.{key}') WHERE value = {val})"  # noqa: S608 - the key goes through _literal_text
+
+
+# JSON read in a migration's set-based fill, as SQLAlchemy expressions: the same value Python's json reading gives,
+# per dialect. Keys and matches are bound parameters, rendered as literals only in offline SQL.
+
+# OPENJSON's default schema; `type` 1 is a string, 2 a number, 3 true or false, 5 an object.
+_OPENJSON = ("key", "value", "type")
+
+
+def _openjson(doc: ColumnElement[Any], name: str) -> Any:
+    return sa.func.openjson(doc).table_valued(*_OPENJSON).alias(name)
+
+
+def _isjson(doc: ColumnElement[Any], kind: str) -> ColumnElement[Any]:
+    # ISJSON's second argument is a keyword (OBJECT, ARRAY), not a value; `kind` is one of those two.
+    return sa.func.isjson(doc, sa.literal_column(kind))
+
+
+def json_whole_number(dialect: str, column: ColumnElement[Any], key: str) -> ColumnElement[int]:
+    """`column`'s top-level `key` as Python's `int()` reads a JSON value: a number truncated toward zero, true 1, false
+    0; anything else, or a column that is not a JSON object, 0."""
+    if dialect == "mssql":
+        j = _openjson(sa.case((_isjson(column, "OBJECT") == 1, column)), "j")
+        read = sa.case(
+            (j.c.type == 2, sa.cast(sa.cast(j.c.value, sa.Float), sa.Integer)),
+            (j.c.type == 3, sa.case((j.c.value == "true", 1), else_=0)),
+        )
+        return sa.func.coalesce(sa.select(read).where(j.c.key == key).scalar_subquery(), 0)
+    v = sa.cast(column, postgresql.JSONB)[key]
+    kind = sa.func.jsonb_typeof(v)
+    as_text = sa.cast(v, sa.Text)
+    return sa.case(
+        (kind == "number", sa.cast(sa.func.trunc(sa.cast(as_text, sa.Numeric)), sa.Integer)),
+        (kind == "boolean", sa.case((as_text == "true", 1), else_=0)),
+        else_=0,
+    )
+
+
+def json_first_match_text(
+    dialect: str,
+    column: ColumnElement[Any],
+    *,
+    array: str,
+    match_key: str,
+    match: str,
+    path: tuple[str, str],
+    max_length: int,
+) -> ColumnElement[str | None]:
+    """In the list `column`.`array`, the first object whose `match_key` is the string `match`, and its `path` (an
+    object key, then a key in it) when that is a string of 1 to `max_length` characters; else NULL, as is a column
+    whose `array` is not a list."""
+    outer, inner = path
+    if dialect == "mssql":
+        items = sa.func.json_query(column, f"$.{array}")
+        n = _openjson(sa.case(((_isjson(column, "OBJECT") == 1) & (_isjson(items, "ARRAY") == 1), items)), "n")
+        p = _openjson(sa.func.json_query(n.c.value, f"$.{outer}"), "p")
+        # LEN drops trailing spaces, so a character is added and counted off.
+        length = sa.func.len(p.c.value + ".") - 1
+        found = (
+            sa.select(p.c.value).where(p.c.key == inner, p.c.type == 1, length.between(1, max_length)).scalar_subquery()
+        )
+        return (
+            sa.select(found)
+            .where(n.c.type == 5, sa.func.json_value(n.c.value, f"$.{match_key}") == match)
+            .order_by(sa.cast(n.c.key, sa.Integer))
+            .limit(1)
+            .scalar_subquery()
+        )
+    doc = sa.cast(column, postgresql.JSONB)[array]
+    listed = sa.case((sa.func.jsonb_typeof(doc) == "array", doc), else_=sa.func.jsonb_build_array())
+    n = sa.func.jsonb_array_elements(listed).table_valued("value", with_ordinality="i").render_derived("n")
+    value = sa.cast(n.c.value, postgresql.JSONB)
+    box = value[outer][inner]
+    text = box.astext
+    read = sa.case(
+        ((sa.func.jsonb_typeof(box) == "string") & sa.func.length(text).between(1, max_length), text),
+    )
+    return (
+        sa.select(read)
+        .where(sa.func.jsonb_typeof(value) == "object", value[match_key] == sa.func.to_jsonb(sa.cast(match, sa.Text)))
+        .order_by(n.c.i)
+        .limit(1)
+        .scalar_subquery()
+    )
 
 
 # Vectors ----------------------------------------------------------------------------------------------------------
@@ -368,6 +621,8 @@ def vector_index_ddl(dialect: str, table: str, column: str, width: int) -> str |
 
 
 __all__ = [
+    "ISOLATION",
+    "ISOLATION_STATEMENT",
     "Vector",
     "claim",
     "db_after",

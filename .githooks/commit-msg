@@ -1,7 +1,8 @@
 #!/bin/sh
-# ops-ai hook: the message gate (scripts/commit-message-check.mjs), then the changelog gate (scripts/changelog-check.mjs).
+# ops-ai hook: the message gate (scripts/commit-message-check.mjs), then the QA fix limits (scripts/qa-fix-check.mjs), then the changelog gate (scripts/changelog-check.mjs).
 d=$(git rev-parse --git-common-dir) || exit 1
 if [ -x "$d/hooks/commit-msg.local" ]; then "$d/hooks/commit-msg.local" "$1" || exit 1; fi
 root=$(git rev-parse --show-toplevel)
 node "$root/scripts/commit-message-check.mjs" --commit "$1" || exit 1
+node "$root/scripts/qa-fix-check.mjs" --commit "$1" || exit 1
 exec node "$root/scripts/changelog-check.mjs" --commit "$1"

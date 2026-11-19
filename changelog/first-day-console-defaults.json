@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-12",
+  "title": "Invites start as Builder, and Chat shows the model setup",
+  "description": "The invite dialog now preselects Builder, so an invited person can make agents from day one. Chat shows admins where to add a model key, and an empty templates list links to Connectors."
+  ,"tag": "improved"
+}

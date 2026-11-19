@@ -27,6 +27,7 @@ from ops_agent_kernel.ports import ToolOutcome
 from ops_identity import Auth, Identity, ServiceAuth, service_verifiers
 from ops_plugin_sdk.loader import discover
 from ops_plugin_sdk.manifest import PER_PERSON_KINDS
+from ops_service_kit.http import Json
 from ops_service_kit.settings import Settings
 from ops_tools.auth import Authenticator
 from ops_tools.auth.kinds import KINDS
@@ -176,7 +177,7 @@ async def call_as_team(rig: Rig, tenant: str, plugin: str, tool: str = "get_reco
     assert module is not None
     seen = await rig.host.for_call(tenant, TEAM, module, "production")
     op = next(o for o in seen["operations"] if o["name"] == manifest.operation(tool))
-    args = {"id": "rec-1042"} if tool == "get_record" else {}
+    args: Json = {"id": "rec-1042"} if tool == "get_record" else {}
     return await rig.executor.run(seen, op, args, actor="test", environment="live", acting_for=None)
 
 
@@ -184,7 +185,7 @@ async def account_url(rig: Rig, tenant: str, connection_id: str) -> str:
     """The account's address under its app, the plugin's (`plugin:<id>`)."""
     conn = await rig.store.get(tenant, connection_id)
     assert conn is not None
-    return f"/v1/apps/{conn['app_id']}/accounts/{connection_id}"
+    return f"/v1/apps/{conn.app_id}/accounts/{connection_id}"
 
 
 async def health_of(rig: Rig, tenant: str, connection_id: str) -> dict[str, Any]:
@@ -311,7 +312,7 @@ async def test_a_wrong_client_secret_fails_at_the_token_fetch_and_the_connection
     assert "not-the-secret" not in str(refused.output)
     conn = await rig.store.get(tenant, str(on.json()["data"]["connectionId"]))
     assert conn is not None
-    assert conn["status"] == "needs_reconnect", conn["status"]
+    assert conn.status == "needs_reconnect", conn.status
 
 
 def _pem(label: str, body: str) -> str:

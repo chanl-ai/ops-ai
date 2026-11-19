@@ -4,13 +4,13 @@ it cannot, the result says why and the keyword lane answers alone."""
 
 from __future__ import annotations
 
-from typing import Any
+import asyncio
 
 from .embedding import Embedder, EmbedFailed
 from .retrieval import Found, Lane, Search, fuse
 from .store import AsyncEngine
-from .store.fulltext import KeywordLane
-from .store.vectors import PgVectorStore
+from .store.fulltext import KeywordHit, KeywordLane
+from .store.vectors import MeaningHit, PgVectorStore
 
 
 class HybridRetriever:
@@ -19,9 +19,11 @@ class HybridRetriever:
         self.vectors = PgVectorStore(engine)
         self.embedder = embedder
 
-    async def search(self, tenant: str, kb_ids: list[str], question: str, how: Search) -> Found:
+    async def search(
+        self, tenant: str, kb_ids: list[str], question: str, how: Search, *, deadline: float | None = None
+    ) -> Found:
         asked = list(how.lanes)
-        ran: dict[str, list[dict[str, Any]]] = {}
+        ran: dict[str, list[KeywordHit] | list[MeaningHit]] = {}
         skipped: dict[str, str] = {}
         tokens = 0
         if not kb_ids or not question.strip():
@@ -29,12 +31,12 @@ class HybridRetriever:
         if "keyword" in how.lanes:
             if self.keyword.ready():
                 ran["keyword"] = await self.keyword.hits(
-                    tenant, kb_ids, question, threshold=how.threshold, limit=how.limit
+                    tenant, kb_ids, question, threshold=how.threshold, limit=how.limit, how=how
                 )
             else:
                 skipped["keyword"] = "no_full_text"
         if "meaning" in how.lanes:
-            why, hits, tokens = await self._meaning(tenant, kb_ids, question, how)
+            why, hits, tokens = await self._meaning(tenant, kb_ids, question, how, deadline)
             if why:
                 skipped["meaning"] = why
             else:
@@ -42,8 +44,8 @@ class HybridRetriever:
         return Found(fuse(ran, how), list(asked), list(ran), skipped, tokens)
 
     async def _meaning(
-        self, tenant: str, kb_ids: list[str], question: str, how: Search
-    ) -> tuple[str | None, list[dict[str, Any]], int]:
+        self, tenant: str, kb_ids: list[str], question: str, how: Search, deadline: float | None
+    ) -> tuple[str | None, list[MeaningHit], int]:
         """(why it did not run, the hits above the threshold, the question's embedding tokens)."""
         embedder = self.embedder
         if embedder is None:
@@ -54,17 +56,20 @@ class HybridRetriever:
         if embedded == 0:
             return "no_vectors", [], 0
         try:
-            [vector], tokens = await embedder.embed([question], tenant=tenant)
+            async with asyncio.timeout_at(deadline):
+                [vector], tokens = await embedder.embed([question], tenant=tenant)
         except EmbedFailed as e:
             return f"embedding_unavailable: {e.code}", [], 0
+        except TimeoutError:
+            return "embedding_unavailable: timeout", [], 0
         rows = await self.vectors.nearest(
-            tenant, kb_ids, vector, model=embedder.model, width=embedder.width, limit=how.limit
+            tenant, kb_ids, vector, model=embedder.model, width=embedder.width, limit=how.limit, how=how
         )
         if not rows:
             # The index answered no candidate in these bases at all: the lane did not run in any useful sense.
             return "no_candidates", [], tokens
         floor = how.meaning_threshold
-        hits = [{**r, "lane_score": float(r["similarity"])} for r in rows if float(r["similarity"]) >= floor]
+        hits = [MeaningHit(**r, lane_score=float(r["similarity"])) for r in rows if float(r["similarity"]) >= floor]
         return None, hits, tokens
 
 

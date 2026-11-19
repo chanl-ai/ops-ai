@@ -1,4 +1,4 @@
-import type { FilePurpose, FileReference, FileSensitivity, PurposeLimit, RetentionClass, StorageEnvironment } from '@/lib/types/files';
+import type { FilePurpose, FileReference, FileSensitivity, PurposeLimit, RetentionClass, StorageEnvironment, NewFileReference } from '@/lib/types/files';
 
 const DAY = 86_400_000;
 export const daysAgo = (d: number) => new Date(Date.now() - d * DAY).toISOString();
@@ -85,7 +85,7 @@ export interface FileSeed {
   by: string;
   daysAgo: number;
   sizeKb: number;
-  refs?: Omit<FileReference, 'addedAt'>[];
+  refs?: NewFileReference[];
   sensitivity?: FileSensitivity;
   scan?: 'infected' | 'failed' | 'pending';
   scanDetail?: string;
@@ -94,7 +94,7 @@ export interface FileSeed {
   content?: string;
 }
 
-const source = (id: string, name: string): Omit<FileReference, 'addedAt'> => ({ type: 'source', id, name, href: `/sources/${id}` });
+const source = (id: string, name: string): NewFileReference => ({ type: 'source', id, name, href: `/sources/${id}` });
 
 /** Uploaded files outside the case mailboxes (those come from the cases mock as intake attachments). */
 export function fileSeeds(contracts: string[], lendingFiles: string[]): FileSeed[] {

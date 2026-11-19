@@ -32,7 +32,7 @@ Run from the repo root.
 | Regenerate only the SDKs from the committed documents | `make sdk` |
 | Generated layer matches the documents (no stack, seconds) | `uv run python sdk/generate.py --check` |
 | Python tests | `uv run --isolated --quiet --with pytest --with-editable sdk/python pytest -q sdk/python/tests` |
-| TypeScript build and tests (rewrites `typescript/dist/`, which the console type-checks against) | `pnpm --filter @chanl-ai/ops-ai test` |
+| TypeScript build and tests (rewrites the TypeScript `dist` folder, which the console type-checks against) | `pnpm --filter @chanl-ai/ops-ai test` |
 | All three, as `make verify` runs them | `make sdk-verify` (`SDK_REF=HEAD` reads the documents as committed) |
 | The packages installed in an empty folder, then the examples on the live stack | `make sdk-check` (`SDK_LIVE=0` skips the stack part) |
 | One call as a seeded person on the stack | `make sdk-call CALL='ops.raw.platform.me_me()' AS=builder` ([Calling the API as a person](../CLAUDE.md#calling-the-api-as-a-person)) |
@@ -49,7 +49,16 @@ what the package itself declares, as an outside developer's install would.
 | The documents are the source | A method is missing or wrong because the service's route or its `x-ops-public` marker is; fix the service and run `make openapi`, never the generated files |
 | Both languages move together | The hand-written nouns match one for one (`python/src/ops_ai/_words.py` and `typescript/src/words.ts` define the same classes); a noun or verb added to one is added to the other in the same change. The CLI is Python only |
 | No stack in unit tests | `python/tests` and `typescript/test` run without services; the live examples (`python/examples/seed_team.py`, `typescript/examples/run-and-decide.mjs`) run only under `make sdk-check` |
-| Publishing | `.github/workflows/sdk-publish.yml` builds and dry-runs both packages; it publishes only when the repository variable it names is set |
+| Publishing | `.github/workflows/sdk-publish.yml` runs on a `vX.Y.Z` tag or by hand, never on a branch push; it builds and dry-runs both packages and publishes only when the repository variable it names is set |
+
+Use cases drive these packages through their `sdk` and `cli` layers: `make usecase-test UC=<id> LAYER=sdk` (or
+`LAYER=cli`); `make usecase-list` shows each use case's layers ([registry](../docs/usecases/README.md)).
 
 Changes here are `feat(sdk)` or `fix(sdk)` commits; they need no What's new entry unless they also change `apps/` or
 `services/` ([Commits](../CLAUDE.md#commits)).
+
+## Engineering standards
+
+The rules the code in this folder is held to, each with a real example from this repository and the check that
+enforces it: [console, SDKs and CLI](../docs/architecture/standards/console-and-sdk.md) (`UI1` to `UI7`), [API contracts and models](../docs/architecture/standards/api-and-models.md) (`AP1` to `AP7`, `MD1` to `MD4`). The index of every rule is
+[engineering standards](../docs/architecture/engineering-standards.md); a review cites the rule id.

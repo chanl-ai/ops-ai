@@ -21,12 +21,14 @@ from uuid import uuid4
 import httpx
 from fake_multi_auth import CLIENTS, SECRETS, SITE, digest, multi_auth
 from fake_salesforce import salesforce
+from usecase_harness import PLUGINS_REPO
 from usecase_harness import (
     PLATFORM_INTERNAL_PORT,
     PLATFORM_PORT,
     bearer,
     check,
     data,
+    every_page,
     finish,
     platform,
     service_headers,
@@ -43,7 +45,7 @@ AUTH = {
 FIELDS = REPO / "services/tools-service/tests/plugin_fields"
 SALESFORCE = Path(
     os.environ.get("OPS_SALESFORCE_PLUGIN")
-    or REPO.parent / "ops-ai-plugins/plugins/salesforce/src/ops_plugin_salesforce"
+    or PLUGINS_REPO / "plugins/salesforce/src/ops_plugin_salesforce"
 )
 TENANT: dict[str, str] = {}
 SEEN: list[str] = []
@@ -125,7 +127,7 @@ with ExitStack() as stack:
     james = bearer(signed_in(api, "j.richardson@harborpine.example"), "team_ops")
 
     # 1. The three test plugins load; Security lists the fake's hosts.
-    loaded = data(gw.get("/v1/apps", headers=priya)) or []
+    loaded = every_page(gw, "/v1/apps", headers=priya)
     ids = sorted(str(c["pluginId"]) for c in loaded if c.get("kind") == "plugin")
     for h in m["hosts"]:
         gw.post("/v1/egress/hosts", json={"value": h, "note": "uc-584"}, headers=sam)
@@ -138,6 +140,10 @@ with ExitStack() as stack:
 
     # 2. S1: a data tool carries the plugin's header and its own, beside the team's token, unchanged.
     on = turn_on(gw, priya, "test.fields", credentials={"token": SECRETS["token"]})
+    # A new app hands agents its read tools only; the team admin adds the two writes, as from the app's Tools tab.
+    gw.post(
+        "/v1/apps/plugin:test.fields/tools", json={"tools": ["fields_post_message", "fields_transfer"]}, headers=priya
+    )
     searched = call(gw, "fields_search", {"q": "card"})
     seen = (calls_of(fake, "fields") or [{}])[-1]
     check(
@@ -294,6 +300,7 @@ with ExitStack() as stack:
     # The org's company address, one of the places the Salesforce plugin signs in.
     login = sf["login_url"]
     team_on = {
+        "signIn": "team",
         "settings": {"login_url": login},
         "credentialId": credential(gw, priya, "opsai.salesforce", "ops-ai-acme", "s3"),
     }

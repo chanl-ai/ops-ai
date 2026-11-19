@@ -25,6 +25,7 @@ from ops_agents.store.tenancy import tenant_scope
 from ops_engine.definition import parse
 from ops_engine.store import DefinitionStore, RunStore
 from ops_engine.store.tables import engine_steps
+from ops_service_kit.http import Json, JsonList
 from ops_service_kit.ids import new_id
 from tests.engine.test_run_reads_masked import Policies
 from tests.engine.test_worker import M
@@ -134,7 +135,7 @@ class World:
         with tenant_scope(self.tenant):
             store = CaseStore(self.engine)
             opened = await store.open(team_id=team, priority="high", by="a@x", **given)
-            case_id = str(opened.case["id"])
+            case_id = str(opened.case.id)
             await store.add_event(case_id, "run", ref=run_id, detail={}, by="a@x")
         return case_id
 
@@ -241,7 +242,7 @@ async def test_a_scoped_key_sees_other_workflows_children_by_status_only(engine:
     rt: Any = SimpleNamespace(db=engine)
     with tenant_scope(w.tenant):
         run = await RunStore(w.tx).get(parent)
-        steps = run_story.steps_view(await RunStore(w.tx).steps(parent))
+        steps = run_story.steps_view(await RunStore(w.tx).step_rows(parent))
         story = await run_story.story(rt, run or {}, steps, scope=("workflow", "intake"), masking=False)
     assert [(c["label"], c["cases"], c["tasks"]) for c in story["children"]] == [("Debtor", [], [])] * 2
 
@@ -309,9 +310,9 @@ async def test_an_email_with_no_attachments_and_a_step_that_started_none_say_so(
 
 
 def test_past_the_cap_the_rest_are_counted() -> None:
-    nodes = {"each": {"id": "each", "type": "ops.action.workflow", "typeVersion": 1}}
-    runs = [{"index": i, "runId": f"wfrun_{i:012d}"} for i in range(run_story.MAX_CHILDREN + 3)]
-    step = {"nodeId": "each", "status": "ok", "port": "started", "output": {"runs": runs}}
+    nodes: dict[str, Json] = {"each": {"id": "each", "type": "ops.action.workflow", "typeVersion": 1}}
+    runs: JsonList = [{"index": i, "runId": f"wfrun_{i:012d}"} for i in range(run_story.MAX_CHILDREN + 3)]
+    step: Json = {"nodeId": "each", "status": "ok", "port": "started", "output": {"runs": runs}}
     told, more = run_story.started_entries([step], nodes)
     assert len(told) == run_story.MAX_CHILDREN and more == 3
 
@@ -361,7 +362,9 @@ def _tool_step(node: str, iteration: int, operation: str, given: dict[str, Any])
 async def test_a_tool_without_a_catalogue_entry_reads_as_words_and_the_directory_is_read_once() -> None:
     directory = _Directory()
     rt: Any = SimpleNamespace(directory=lambda: directory, catalog=SimpleNamespace(tool=_no_entry))
-    nodes = {"hold": {"id": "hold", "type": "ops.action.tool", "typeVersion": 1, "name": "Hold the funds"}}
+    nodes: dict[str, Json] = {
+        "hold": {"id": "hold", "type": "ops.action.tool", "typeVersion": 1, "name": "Hold the funds"}
+    }
     steps = [_tool_step("hold", i, "place_hold", {"accountId": "CHQ-2219", "amount": 2140.55}) for i in (1, 2, 3)]
     calls = await review_text.describe_calls(rt, run_story.tool_calls(steps, nodes))
     run: dict[str, Any] = {"id": "wfrun_x", "created_by": "a@x", "created_at": "2026-10-21T09:00:00Z", "input": {}}
@@ -382,14 +385,17 @@ async def test_with_masking_on_the_story_lines_keep_the_channel_addresses(engine
 
 def test_a_review_line_never_shows_an_unresolved_title() -> None:
     at = "2026-10-21T09:00:01Z"
-    nodes = {"ask": {"id": "ask", "type": "ops.flow.humanReview", "typeVersion": 1, "name": "Reply",
+    nodes: dict[str, Json] = {"ask": {"id": "ask", "type": "ops.flow.humanReview", "typeVersion": 1, "name": "Reply",
                      "parameters": {"title": "Reply to {$.input.from}"}}}  # fmt: skip
     run: dict[str, Any] = {"id": "wfrun_x", "created_by": "a@x", "created_at": at, "input": {}}
 
     def asked(given: dict[str, Any]) -> str:
-        step = {"nodeId": "ask", "iteration": 1, "status": "waiting", "port": None, "output": None, "input": given,
-                "attempts": [{"startedAt": at, "finishedAt": None}]}  # fmt: skip
-        return run_story.lines(run, [step], nodes, workflow="Levy", team="Operations", calls={}, who={})[1]["text"]
+        step: Json = {"nodeId": "ask", "iteration": 1, "status": "waiting", "port": None, "output": None,
+                      "input": given, "attempts": [{"startedAt": at, "finishedAt": None}]}  # fmt: skip
+        told: list[dict[str, Any]] = run_story.lines(
+            run, [step], nodes, workflow="Levy", team="Operations", calls={}, who={}
+        )
+        return told[1]["text"]
 
     assert asked({"title": "Reply to registry@court.example"}) == "Asked Operations: Reply to registry@court.example"
     assert asked({}) == "Asked Operations: Reply", "the step's name, not the template"

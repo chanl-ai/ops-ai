@@ -789,18 +789,6 @@ export function createSkillsMock(deps: SkillsDeps) {
   const facetValue = (r: Skill & { tools: string[]; knowledgeBases: string[] }, k: string) => (k === 'tools' ? r.tools : k === 'knowledgeBases' ? r.knowledgeBases : field(r, k));
 
   const api: SkillsApi = {
-    list: (p) =>
-      respond((m) => {
-        const rows = visible().map((sk) => ({ ...row(sk), tools: newest(sk).content.toolIds.map((t) => toolById(t)?.name ?? t), knowledgeBases: newest(sk).content.knowledgeBases }));
-        const src = m === 'empty' ? [] : rows;
-        const inView = p.view === 'all' ? rows : rows.filter(VIEW[p.view]);
-        const res = list(inView, p, { text: (r) => `${r.name} ${r.slug} ${r.useWhen} ${r.ownerTeam}`, value: facetValue, facetKeys: ['status', 'ownerTeam', 'tools', 'knowledgeBases', 'origin', 'loading'] }, m);
-        return {
-          ...res,
-          data: res.data.map(({ tools: _t, knowledgeBases: _k, ...r }) => r),
-          viewCounts: { all: src.length, published: src.filter(VIEW.published).length, always: src.filter(VIEW.always).length, drafts: src.filter(VIEW.drafts).length, in_review: src.filter(VIEW.in_review).length, deprecated: src.filter(VIEW.deprecated).length, unused: src.filter(VIEW.unused).length },
-        };
-      }),
     get: (sid) =>
       respond((m) => {
         if (m === 'empty') notFound('Skill');

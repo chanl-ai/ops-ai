@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Extracted-field checks: a field's confidence from its quote, its value's type and how its page was read, and whether a person must check it"
 license = "Apache-2.0"
 requires-python = ">=3.12,<3.13"
-dependencies = ["ops-contracts", "ops-identity", "ops-ingest", "jsonschema>=4.23", "pdfplumber>=0.11.4", "regex>=2024.11.6"]
+dependencies = ["ops-contracts", "ops-identity", "ops-ingest", "ops-service-kit", "jsonschema>=4.23", "pdfplumber>=0.11.4", "regex>=2024.11.6"]
 
 [build-system]
 requires = ["hatchling>=1.25"]
@@ -22,3 +22,4 @@ asyncio_mode = "auto"
 ops-contracts = { workspace = true }
 ops-identity = { workspace = true }
 ops-ingest = { workspace = true }
+ops-service-kit = { workspace = true }

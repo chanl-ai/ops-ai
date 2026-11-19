@@ -197,7 +197,14 @@ export const kbOperations = {
     "query": [
       "page",
       "pageSize",
-      "search"
+      "search",
+      "sourceId",
+      "status",
+      "collection",
+      "docType",
+      "freshness",
+      "sensitivity",
+      "tags"
     ],
     "stream": false
   },
@@ -211,7 +218,9 @@ export const kbOperations = {
       "page",
       "pageSize",
       "search",
-      "templateId"
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -385,7 +394,10 @@ export const kbOperations = {
     "query": [
       "page",
       "pageSize",
-      "search"
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -410,7 +422,11 @@ export const kbOperations = {
     ],
     "query": [
       "page",
-      "pageSize"
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -423,7 +439,10 @@ export const kbOperations = {
     "query": [
       "page",
       "pageSize",
-      "search"
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },

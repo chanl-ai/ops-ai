@@ -1,5 +1,6 @@
 'use client';
 
+import * as React from 'react';
 import Link from 'next/link';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Route } from 'lucide-react';
@@ -7,9 +8,13 @@ import { Route } from 'lucide-react';
 import { WORKFLOW_TOOL_APPROVAL } from '@/components/agents/workflow-tool-facts';
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableWithViews } from '@/components/data-table-with-views';
-import { ListEmpty } from '@/components/shared/query-states';
+import { PageSkeleton } from '@/components/shared/page-skeleton';
+import { ListEmpty, QueryError } from '@/components/shared/query-states';
+import { serverPagination } from '@/components/shared/server-pagination';
 import { AccessBadge, RiskBadge } from '@/components/status-badges';
 import { useFlag } from '@/hooks/flag-queries';
+import { useTools } from '@/hooks/queries';
+import { useListParams } from '@/hooks/use-list-params';
 import { plural } from '@/lib/format';
 import type { Tool } from '@/lib/types/domain';
 
@@ -19,7 +24,7 @@ const columns: ColumnDef<Tool>[] = [
     header: ({ column }) => <DataTableColumnHeader column={column} title="Workflow tool" />,
     cell: ({ row }) => (
       <div>
-        <Link href={`/workflows/${row.original.workflow?.workflowId}`} className="font-mono text-sm hover:underline">
+        <Link href={`/build/workflows/${row.original.workflow?.workflowId}`} className="font-mono text-sm hover:underline">
           {row.original.name}
         </Link>
         <div className="font-mono text-xs text-muted-foreground">{row.original.workflow?.workflowId}</div>
@@ -45,8 +50,15 @@ const columns: ColumnDef<Tool>[] = [
  * Workflows exposed to agents, as they sit beside app tools: each is a write tool that starts a run. Exposure is
  * switched on the Deployments MCP tab, so the empty state and footer point there while the install serves MCP.
  */
-export function WorkflowToolsTable({ tools, total }: { tools: Tool[]; total: number }) {
+export function WorkflowToolsTable() {
   const mcpOn = useFlag('mcp_gateway');
+  const list = useListParams<Record<string, never>>('name');
+  const [filterResetKey, setFilterResetKey] = React.useState(0);
+  const q = useTools({ page: list.params.page, pageSize: list.params.pageSize, search: list.params.search, filters: { type: ['workflow'] } });
+  const tools = q.data?.data ?? [];
+  const total = q.data?.pagination.total ?? 0;
+  if (q.isPending) return <PageSkeleton statCards={0} tableRows={4} showToolbar={false} />;
+  if (q.isError && !q.data) return <QueryError what="the workflow tools" error={q.error} onRetry={() => void q.refetch()} retrying={q.isFetching} />;
   return (
     <div className="flex flex-col gap-2" data-testid="workflow-tools">
       <DataTableWithViews
@@ -55,14 +67,17 @@ export function WorkflowToolsTable({ tools, total }: { tools: Tool[]; total: num
         getRowId={(t) => t.id}
         searchColumn="name"
         searchPlaceholder="Search workflow tools…"
-        emptyState={<ListEmpty icon={Route} noun="workflow tools" filtered={false} description={mcpOn ? "Expose a published workflow to agents on the Deployments MCP tab; it then appears here and in every agent's Grant tools." : "A published workflow exposed to agents appears here and in every agent's Grant tools."} />}
+        onColumnFiltersChange={list.onColumnFiltersChange}
+        filterResetKey={filterResetKey}
+        serverPagination={serverPagination(list, q)}
+        emptyState={<ListEmpty icon={Route} noun="workflow tools" filtered={list.isFiltered} onClear={() => setFilterResetKey((k) => k + 1)} description={mcpOn ? "Expose a published workflow to agents on the Deployments MCP tab; it then appears here and in every agent's Grant tools." : "A published workflow exposed to agents appears here and in every agent's Grant tools."} />}
       />
       <p className="text-sm text-muted-foreground">
         {plural(total, 'workflow')} exposed to agents.
         {mcpOn && (
           <>
             {' '}
-            <Link href="/channels/mcp" className="underline underline-offset-2" data-testid="workflow-tools-manage">
+            <Link href="/build/channels/mcp" className="underline underline-offset-2" data-testid="workflow-tools-manage">
               Manage exposure on the MCP tab →
             </Link>
           </>

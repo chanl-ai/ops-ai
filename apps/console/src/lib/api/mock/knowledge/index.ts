@@ -30,7 +30,7 @@ import { aiApproved, aiSteps, applyMapping, chunkCountFor, DEFAULT_INGEST_MODEL,
 /** What a new mock source splits with when the request names no ingest settings, as kb-service's file default. */
 const MOCK_INGEST: IngestSettings = { preset: 'email_templates', strategies: ['structure', 'context_headers'], size: 400, overlap: 40, childSize: 120, questionsPerSection: 3, columns: [], model: DEFAULT_INGEST_MODEL, approval: { status: 'not_needed', approvedSteps: [] } };
 import { createRetrieval, type IndexSnapshot } from './retrieve';
-import { defaultRetrieval, kbs as SEED_KBS, retrievalPresets, suggestedQuestions } from './seed-kbs';
+import { defaultAnswer, defaultRetrieval, defaultSourceDefaults, defaultSync, kbs as SEED_KBS, retrievalPresets, suggestedQuestions } from './seed-kbs';
 import { buildItems, runs as SEED_RUNS, sources as SEED_SOURCES } from './seed-sources';
 
 const now = () => new Date().toISOString();
@@ -154,6 +154,8 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
     lastSyncAt: k.sources.map((l) => sources.find((s) => s.id === l.sourceId)?.lastSyncAt).filter((t): t is string => !!t).sort().at(-1),
     sourceNames: k.sources.map((l) => sources.find((s) => s.id === l.sourceId)?.name ?? l.sourceId),
     agentNames: deps.agentNames(k.name),
+    agentsElsewhere: 0,
+    agentsKnown: true,
   });
   // Seeded health reasons quote counts; restate them from the derived numbers.
   for (const k of kbs) {
@@ -362,7 +364,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
             ...kbRow(k),
             attached: k.sources.flatMap((l) => {
               const source = sources.find((s) => s.id === l.sourceId);
-              return source ? [{ ...l, source }] : [];
+              return source ? [{ ...l, source, running: !!runningRun(source.id) }] : [];
             }),
             metadataKeys: Array.from(new Set(['owner', 'effective_date', 'version', 'topic', ...items.filter((i) => ids.has(i.sourceId)).flatMap((i) => Object.keys(i.metadata))])).sort(),
             suggestedQuestions: suggestedQuestions[k.id] ?? suggestedQuestions.kb_all,
@@ -378,6 +380,10 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
           const k: KnowledgeBase = {
             id: id('kb'),
             name: input.name,
+            owner: input.owner,
+            answer: defaultAnswer,
+            sync: defaultSync,
+            sourceDefaults: defaultSourceDefaults,
             slug,
             description: input.description,
             color: input.color,
@@ -509,11 +515,11 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
           const ids = new Set(k.sources.map((l) => l.sourceId));
           const rows: DocumentRow[] = items
             .filter((it) => ids.has(it.sourceId) && it.status !== 'excluded')
-            .map((it) => ({ ...it, sourceName: sources.find((s) => s.id === it.sourceId)?.name ?? it.sourceId, freshness: isStale(it) ? 'stale' : 'fresh' }));
+            .map((it) => ({ ...it, sourceName: sources.find((s) => s.id === it.sourceId)?.name ?? it.sourceId, freshness: isStale(it) ? 'stale' : 'fresh', docType: mockDocType(it.mimeType, sources.find((s) => s.id === it.sourceId)?.type) }));
           return list(rows, p, {
             text: (d) => `${d.title} ${d.path}`,
             value: (d, key) => (key === 'tags' ? d.tags : String((d as unknown as Record<string, unknown>)[key])),
-            facetKeys: ['sourceId', 'status', 'freshness', 'sensitivity', 'tags'],
+            facetKeys: ['sourceId', 'status', 'collection', 'docType', 'freshness', 'sensitivity', 'tags'],
           }, m);
         }),
       query: (kid, input) =>
@@ -600,6 +606,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
           for (const fid of fileIds ?? []) deps.files().link(fid, { type: 'source', id: sid, name: input.name.trim(), href: `/integrations/sources/${sid}` }, ['knowledge_source']);
           const kind = input.type === 'file' ? 'file' : (input.config as { site?: boolean } | undefined)?.site ? 'web' : 'tool';
           const s: Source = {
+            aiCeiling: 5,
             parsing: { ocr: 'auto', tables: true, vision: false },
             cleaning: { furniture: kind !== 'file', mainContent: kind === 'web', siteRepeats: kind === 'web', duplicates: 'flag' },
             ingest: { ...structuredClone(MOCK_INGEST), ...ingest },
@@ -620,7 +627,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
             deletedAtSource: 'remove',
             staleAfterDays: 365,
             notifyOnFailure: false,
-            config: { ...rest.config, fileIds },
+            config: sourceConfig(kind, input.config, fileIds ?? []),
             id: sid,
             owner: deps.currentUser,
             status: input.status ?? 'active',
@@ -871,6 +878,12 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
           kind: 'file' as const,
           group: 'built_in' as const,
           title: 'Files',
+          canCreate: true,
+          connected: true,
+          needsConnection: false,
+          pickers: false,
+          previews: false,
+          site: false,
           defaults: { parsing: { ocr: 'auto' as const, tables: true, vision: false }, cleaning: { furniture: false, mainContent: false, siteRepeats: false, duplicates: 'flag' as const }, ingest: structuredClone(MOCK_INGEST), rules: [], metadataMapping: [], schedule: { kind: 'manual' as const } },
         },
       ]),
@@ -895,4 +908,24 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
       }
     },
   };
+}
+
+/** What kb-service keeps of a new source's settings: the ids of a file source's files, or an app source's plugin, source and values. */
+function sourceConfig(kind: Source['kind'], given: Record<string, unknown> | undefined, fileIds: string[]): Source['config'] {
+  if (kind === 'file') return { fileIds };
+  const text = (key: string) => (typeof given?.[key] === 'string' ? String(given[key]) : null);
+  const values = typeof given?.values === 'object' && given.values !== null && !Array.isArray(given.values) ? Object.fromEntries(Object.entries(given.values)) : null;
+  return { connectionId: null, getTool: null, listTool: null, paused: null, plugin: text('plugin'), site: kind === 'web' ? true : null, source: text('source'), title: null, values };
+}
+
+/** kb-service's `doc_type` rule (service.py), for the mock's Documents rows. */
+function mockDocType(mime: string, sourceType?: string): DocumentRow['docType'] {
+  if (sourceType === 'text') return 'typed';
+  if (sourceType === 'tool') return 'app';
+  if (mime === 'text/html' || sourceType === 'web') return 'web';
+  if (mime === 'application/pdf') return 'pdf';
+  if (mime.includes('wordprocessing') || mime === 'application/msword') return 'word';
+  if (mime.includes('spreadsheet') || mime === 'text/csv' || mime === 'application/vnd.ms-excel') return 'spreadsheet';
+  if (mime.includes('presentation') || mime === 'application/vnd.ms-powerpoint') return 'slides';
+  return mime.startsWith('text/') ? 'text' : 'other';
 }

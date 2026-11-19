@@ -8,7 +8,7 @@ import { mkdirSync, mkdtempSync, openSync, readFileSync, writeFileSync } from 'n
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  AGENTS_PORT, DOCUMENTS_PORT, FILES_PORT, KB_PORT, MODELS_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, finish, withUiStack,
+  AGENTS_PORT, DOCUMENTS_PORT, FILES_PORT, KB_PORT, MODELS_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, evidenceDir, finish, withUiStack,
 } from '@ops-ai/usecase-runner/harness';
 
 const TAG = Math.random().toString(36).slice(2, 6);
@@ -17,7 +17,7 @@ const PASSWORD = 'northfield-demo';
 const ADMIN = 'w.kamau@harborpine.example';
 // The sample team's lead, one of the people the installer adds (scripts/sample-team/sample-team.json).
 const LEAD = 'alex.morgan@harborpine.example';
-const LOG_DIR = join(ROOT, '.logs/usecase');
+const LOG_DIR = evidenceDir('563', 'logs');
 
 /** Runs the installer as a person would from the repository root; its lines go to its own log. */
 function install(adminEnv, consoleUrl, extra = []) {

@@ -74,7 +74,8 @@ export interface paths {
          * Access Holders
          * @description Which roles grant `area.action` in a team (the Security team for its actions), and who holds them there:
          *     what a "View only" notice names. The team is `team`, the record's, when the page shows another team's
-         *     record, else the one the request acts in; a member of that team, or a workspace admin, may ask.
+         *     record, else the one the request acts in; a member of that team, or a workspace admin, may ask, holding
+         *     access.view where the request acts (a Chat user does not: 403 `admin_required`).
          */
         get: operations["access_access_holders"];
         put?: never;
@@ -114,7 +115,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Api Keys */
+        /**
+         * List Api Keys
+         * @description The team's keys on the shared list contract, newest first, searched on name;
+         *     `targetKind` and `targetId` keep the keys made for one target, as an MCP link's Keys tab lists them. The
+         *     filters are declared here so a bad value is refused; ListQuery reads the same keys as its filters.
+         */
         get: operations["api_keys_list_api_keys"];
         put?: never;
         /** Create Api Key */
@@ -149,7 +155,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Read Audit */
+        /**
+         * Read Audit
+         * @description The team's entries on the shared list contract, newest first then by id; `ids` names entries. The filters
+         *     narrow the page; `facets` and `viewCounts` count every entry the reader may see.
+         */
         get: operations["audit_read_audit"];
         put?: never;
         post?: never;
@@ -268,9 +278,31 @@ export interface paths {
         put?: never;
         /**
          * Saml Acs
-         * @description The SAML POST binding: a form with SAMLResponse and RelayState, posted by the provider's page.
+         * @description The SAML POST binding for providers saved before each had its own address: a form with SAMLResponse and
+         *     RelayState, posted by the provider's page.
          */
         post: operations["auth_saml_acs"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/saml/acs/{sp_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Saml Provider Acs
+         * @description One provider's own consumer URL. A response that answers none of our requests (an app-portal tile) is
+         *     checked, discarded, and the browser is sent to start a normal sign-in.
+         */
+        post: operations["auth_saml_provider_acs"];
         delete?: never;
         options?: never;
         head?: never;
@@ -290,6 +322,26 @@ export interface paths {
          *     certificate for signed requests and encrypted assertions. Public: it holds nothing secret.
          */
         get: operations["auth_saml_metadata"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/saml/metadata/{sp_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Saml Provider Metadata
+         * @description One provider's own SAML service provider metadata: its entity id and consumer URL. Public.
+         */
+        get: operations["auth_saml_provider_metadata"];
         put?: never;
         post?: never;
         delete?: never;
@@ -559,6 +611,73 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/oauth/consent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Oauth Consent
+         * @description What the consent page shows for an assistant's request: the assistant, the team its address names, the
+         *     host the browser returns to and how long the connection lasts. 403 `team_forbidden` for a person outside the
+         *     team.
+         */
+        get: operations["oauth_oauth_consent"];
+        put?: never;
+        /**
+         * Oauth Decide
+         * @description The person's answer. Allow opens a grant and returns where to send the browser, with a single-use code;
+         *     Deny sends it back with `access_denied`.
+         */
+        post: operations["oauth_oauth_decide"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/oauth/grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Oauth Grants
+         * @description The assistants the signed-in person has connected, newest first.
+         */
+        get: operations["oauth_oauth_grants"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/oauth/grants/{grant_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Oauth Disconnect
+         * @description Ends one of the person's own connections; the assistant cannot renew.
+         */
+        delete: operations["oauth_oauth_disconnect"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/people-names": {
         parameters: {
             query?: never;
@@ -568,8 +687,9 @@ export interface paths {
         };
         /**
          * People Names
-         * @description Every person's display name in the workspace by email, so a list naming who did something shows a
-         *     name rather than an address. Any member reads them; a service token needs the `settings:view` scope.
+         * @description Every person's display name in the workspace by email, so a list naming who did something shows a name
+         *     rather than an address. A person needs access.view where the request acts (no console screen calls it, a Chat
+         *     user's none); a service token needs the `settings:view` scope.
          */
         get: operations["people_people_names"];
         put?: never;
@@ -590,7 +710,7 @@ export interface paths {
         /**
          * Person Permissions
          * @description What a person may do in the teams they share with the caller, with their name and address; 404 when they
-         *     share none.
+         *     share none. Another person's needs access.view where the request acts (a Chat user reads only their own).
          */
         get: operations["people_person_permissions"];
         put?: never;
@@ -610,8 +730,9 @@ export interface paths {
         };
         /**
          * Person Role Grants
-         * @description The custom roles given to a person on their own, each with its team; read by whoever shares a team with
-         *     them, as their permissions are (404 otherwise).
+         * @description The custom roles given to a person on their own, each with its team, on the shared list contract by role
+         *     name, searched on it; read by whoever shares a team with them, as their permissions are (404 otherwise), and
+         *     holds access.view where the request acts when it is another person (a Chat user reads only their own).
          */
         get: operations["people_person_role_grants"];
         put?: never;
@@ -656,7 +777,8 @@ export interface paths {
         };
         /**
          * List Policies
-         * @description Every policy with its value and open default; any member of the workspace reads them.
+         * @description Every policy with its value and open default; whoever holds access.view where the request acts reads them
+         *     (every membership role but Chat user: 403 `admin_required`).
          */
         get: operations["policies_list_policies"];
         put?: never;
@@ -676,7 +798,7 @@ export interface paths {
         };
         /**
          * Get Policy
-         * @description One policy of the workspace. Any member reads it; a service token needs the
+         * @description One policy of the workspace. A person needs access.view where the request acts; a service token needs the
          *     `settings:view` scope and reads its own tenant's value, as a background job with no person does (the
          *     memory sweep). 400 `policy_value` for a key the catalogue does not hold.
          */
@@ -703,7 +825,11 @@ export interface paths {
         };
         /**
          * List Roles
-         * @description Every role in the tenant, built-in first, with how many permissions it grants and how many hold it.
+         * @description The tenant's roles on the shared list contract, built-in first in their fixed order, then by name, searched
+         *     on name, with how many permissions each grants and how many hold it. `builtin` keeps built-in or custom roles,
+         *     `canDecideReviews` the roles that do or do not grant reviews.decide. Needs access.view in the acting team:
+         *     403 `admin_required`. The filters are declared here so a bad value is refused; ListQuery reads the same keys
+         *     as its filters.
          */
         get: operations["roles_list_roles"];
         put?: never;
@@ -759,7 +885,8 @@ export interface paths {
         };
         /**
          * Role Holders
-         * @description Who holds the role and in which team: what deleting it would take from them. A workspace admin's.
+         * @description Who holds the role and in which team, on the shared list contract by name, searched on name and email:
+         *     what deleting it would take from them. A workspace admin's.
          */
         get: operations["roles_role_holders"];
         put?: never;
@@ -819,7 +946,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Members */
+        /**
+         * List Members
+         * @description The team's people and invites on the shared list contract: `role` and `status` filter and are counted,
+         *     `search` matches name and email, oldest first (`sortBy` name, role, status, or teamId for the team's name).
+         *     Every built-in role but Chat user reads the team's people. The filters are declared here so a bad value is
+         *     refused; ListQuery reads the same keys as its filters.
+         */
         get: operations["members_list_members"];
         put?: never;
         post?: never;
@@ -903,6 +1036,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/settings/sign-in/break-glass": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Break Glass
+         * @description The Security admins who may sign in by password while company sign-in is required.
+         */
+        get: operations["sign_in_providers_list_break_glass"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/settings/sign-in/break-glass/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Add Break Glass
+         * @description Adds a Security admin to the list (at most three); 422 `break_glass_not_security_admin`,
+         *     `break_glass_full`. Returns the list.
+         */
+        put: operations["sign_in_providers_add_break_glass"];
+        post?: never;
+        /**
+         * Remove Break Glass
+         * @description Takes a person off the list; 409 `break_glass_last` while company sign-in is required. Returns the list.
+         */
+        delete: operations["sign_in_providers_remove_break_glass"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/settings/sign-in/domains/{domain}/verify": {
         parameters: {
             query?: never;
@@ -944,6 +1122,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/settings/sign-in/providers/metadata": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Read Signin Metadata
+         * @description What an identity provider's metadata says (entity id, sign-in URL, certificates and their dates), read from
+         *     its URL or file; saves nothing. Security team admins only.
+         */
+        post: operations["sign_in_providers_read_signin_metadata"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/settings/sign-in/providers/{provider_id}": {
         parameters: {
             query?: never;
@@ -960,6 +1159,47 @@ export interface paths {
         post?: never;
         /** Delete Signin Provider */
         delete: operations["sign_in_providers_delete_signin_provider"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/settings/sign-in/providers/{provider_id}/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh Signin Provider
+         * @description Reads the provider's metadata URL now and adds its new certificates for the same entity id.
+         */
+        post: operations["sign_in_providers_refresh_signin_provider"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/settings/sign-in/providers/{provider_id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test Signin Provider
+         * @description Starts a test sign-in: the admin signs in at the provider as themself, in a new tab, and the result is read
+         *     from `GET /v1/settings/sign-in/test-results/{flowId}`. Runs while the provider is off; signs nobody in.
+         */
+        post: operations["sign_in_providers_test_signin_provider"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1030,6 +1270,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/settings/sign-in/test-results/{flow_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Signin Test Result
+         * @description What a test sign-in got back: email, name and groups, or the check that failed. 404 to anyone but the admin
+         *     who started it.
+         */
+        get: operations["sign_in_providers_signin_test_result"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/settings/teams": {
         parameters: {
             query?: never;
@@ -1039,8 +1300,8 @@ export interface paths {
         };
         /**
          * List Workspace Teams
-         * @description Every team of the workspace with its member and admin counts; workspace admins (`access.view` in every
-         *     team) only.
+         * @description Every team of the workspace with its member and admin counts on the shared list contract, by name, searched
+         *     on name; `status` keeps active or archived teams. Workspace admins (`access.view` in every team) only.
          */
         get: operations["teams_list_workspace_teams"];
         put?: never;
@@ -1210,8 +1471,9 @@ export interface paths {
         };
         /**
          * Team Names
-         * @description Every team's display name in the workspace, so a page showing another team's record names its team.
-         *     Any member reads them; a service token needs the `settings:view` scope and reads its own tenant's.
+         * @description Every team's display name in the workspace, so a page showing another team's record names its team. A
+         *     person needs access.view where the request acts (no console screen calls it, a Chat user's none); a service
+         *     token needs the `settings:view` scope and reads its own tenant's.
          */
         get: operations["teams_team_names"];
         put?: never;
@@ -1429,6 +1691,8 @@ export interface components {
             name: string;
             /** Prefix */
             prefix: string;
+            /** Revision */
+            revision: number;
             /**
              * Status
              * @enum {string}
@@ -1584,6 +1848,19 @@ export interface components {
             /** Waiting */
             waiting: number | null;
         };
+        /** BreakGlassOut */
+        BreakGlassOut: {
+            /** Addedat */
+            addedAt: string;
+            /** Addedby */
+            addedBy: string;
+            /** Email */
+            email: string;
+            /** Lastusedat */
+            lastUsedAt: string | null;
+            /** Userid */
+            userId: string;
+        };
         /** BulkOut */
         BulkOut: {
             /** Skipped */
@@ -1604,12 +1881,85 @@ export interface components {
              */
             scope: "all" | "own";
         };
+        /** CertificateOut */
+        CertificateOut: {
+            /** Addedat */
+            addedAt: string;
+            /** Fingerprint */
+            fingerprint: string;
+            /** Notafter */
+            notAfter: string;
+            /** Notbefore */
+            notBefore: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "metadata" | "upload" | "manual";
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "current" | "expiring" | "expired";
+        };
         /** CheckRefusal */
         CheckRefusal: {
             /** Code */
             code: string;
             /** Reason */
             reason: string;
+        };
+        /** ConsentClient */
+        ConsentClient: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Nameisselfreported */
+            nameIsSelfReported: boolean;
+        };
+        /** ConsentDecided */
+        ConsentDecided: {
+            /** Redirectto */
+            redirectTo: string;
+        };
+        /** ConsentIn */
+        ConsentIn: {
+            /** Clientid */
+            clientId: string;
+            /** Codechallenge */
+            codeChallenge: string;
+            /** Codechallengemethod */
+            codeChallengeMethod: string;
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "allow" | "deny";
+            /** Redirecturi */
+            redirectUri: string;
+            /** Resource */
+            resource: string;
+            /** State */
+            state?: string | null;
+        };
+        /** ConsentOut */
+        ConsentOut: {
+            client: components["schemas"]["ConsentClient"];
+            /** Connectionhours */
+            connectionHours: number;
+            /** Redirecthost */
+            redirectHost: string;
+            /** Resource */
+            resource: string;
+            team: components["schemas"]["ConsentTeam"];
+        };
+        /** ConsentTeam */
+        ConsentTeam: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
         };
         /** DeleteIn */
         DeleteIn: {
@@ -1697,6 +2047,24 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[ConsentDecided] */
+        Envelope_ConsentDecided_: {
+            data: components["schemas"]["ConsentDecided"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[ConsentOut] */
+        Envelope_ConsentOut_: {
+            data: components["schemas"]["ConsentOut"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[HoldersOut] */
         Envelope_HoldersOut_: {
             data: components["schemas"]["HoldersOut"];
@@ -1724,9 +2092,45 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[ListResult[ApiKeyOut]] */
+        Envelope_ListResult_ApiKeyOut__: {
+            data: components["schemas"]["ListResult_ApiKeyOut_"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[ListResult[MemberOut]] */
         Envelope_ListResult_MemberOut__: {
             data: components["schemas"]["ListResult_MemberOut_"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[ListResult[RoleGrantOut]] */
+        Envelope_ListResult_RoleGrantOut__: {
+            data: components["schemas"]["ListResult_RoleGrantOut_"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[ListResult[RoleHolderOut]] */
+        Envelope_ListResult_RoleHolderOut__: {
+            data: components["schemas"]["ListResult_RoleHolderOut_"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[ListResult[RoleOut]] */
+        Envelope_ListResult_RoleOut__: {
+            data: components["schemas"]["ListResult_RoleOut_"];
             /**
              * Success
              * @constant
@@ -1745,6 +2149,15 @@ export interface components {
         /** Envelope[Me] */
         Envelope_Me_: {
             data: components["schemas"]["Me"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[MetadataOut] */
+        Envelope_MetadataOut_: {
+            data: components["schemas"]["MetadataOut"];
             /**
              * Success
              * @constant
@@ -1859,6 +2272,24 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[SignInTestOut] */
+        Envelope_SignInTestOut_: {
+            data: components["schemas"]["SignInTestOut"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[SignInTestStartOut] */
+        Envelope_SignInTestStartOut_: {
+            data: components["schemas"]["SignInTestStartOut"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[SsoStarted] */
         Envelope_SsoStarted_: {
             data: components["schemas"]["SsoStarted"];
@@ -1931,20 +2362,30 @@ export interface components {
              */
             success: true;
         };
-        /** Envelope[list[ApiKeyOut]] */
-        Envelope_list_ApiKeyOut__: {
+        /** Envelope[list[ApiKeySummary]] */
+        Envelope_list_ApiKeySummary__: {
             /** Data */
-            data: components["schemas"]["ApiKeyOut"][];
+            data: components["schemas"]["ApiKeySummary"][];
             /**
              * Success
              * @constant
              */
             success: true;
         };
-        /** Envelope[list[ApiKeySummary]] */
-        Envelope_list_ApiKeySummary__: {
+        /** Envelope[list[BreakGlassOut]] */
+        Envelope_list_BreakGlassOut__: {
             /** Data */
-            data: components["schemas"]["ApiKeySummary"][];
+            data: components["schemas"]["BreakGlassOut"][];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[list[GrantOut]] */
+        Envelope_list_GrantOut__: {
+            /** Data */
+            data: components["schemas"]["GrantOut"][];
             /**
              * Success
              * @constant
@@ -1975,36 +2416,6 @@ export interface components {
         Envelope_list_ProviderOut__: {
             /** Data */
             data: components["schemas"]["ProviderOut"][];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
-        /** Envelope[list[RoleGrantOut]] */
-        Envelope_list_RoleGrantOut__: {
-            /** Data */
-            data: components["schemas"]["RoleGrantOut"][];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
-        /** Envelope[list[RoleHolderOut]] */
-        Envelope_list_RoleHolderOut__: {
-            /** Data */
-            data: components["schemas"]["RoleHolderOut"][];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
-        /** Envelope[list[RoleOut]] */
-        Envelope_list_RoleOut__: {
-            /** Data */
-            data: components["schemas"]["RoleOut"][];
             /**
              * Success
              * @constant
@@ -2084,7 +2495,7 @@ export interface components {
              * Name
              * @enum {string}
              */
-            name: "mcp_gateway" | "tool_search" | "plugin_updates";
+            name: "mcp_gateway" | "tool_search" | "plugin_updates" | "area_tabs";
             /** On */
             on: boolean;
         };
@@ -2092,6 +2503,27 @@ export interface components {
         ForgotIn: {
             /** Email */
             email: string;
+        };
+        /** GrantOut */
+        GrantOut: {
+            /** Clientid */
+            clientId: string;
+            /** Clientname */
+            clientName: string;
+            /** Createdat */
+            createdAt: string;
+            /** Expiresat */
+            expiresAt: string;
+            /** Id */
+            id: string;
+            /** Lastusedat */
+            lastUsedAt: string | null;
+            /** Resource */
+            resource: string;
+            /** Teamid */
+            teamId: string;
+            /** Teamname */
+            teamName: string;
         };
         /** GrantingRole */
         GrantingRole: {
@@ -2140,6 +2572,8 @@ export interface components {
         GroupSettings: {
             /** Map */
             map: components["schemas"]["GroupRule"][];
+            /** Onmissing */
+            onMissing?: ("keep" | "remove") | null;
             /** Source */
             source?: string | null;
         };
@@ -2147,6 +2581,11 @@ export interface components {
         GroupSettingsOut: {
             /** Map */
             map: components["schemas"]["GroupRuleOut"][];
+            /**
+             * Onmissing
+             * @enum {string}
+             */
+            onMissing: "keep" | "remove";
             /** Source */
             source: string | null;
         };
@@ -2291,7 +2730,8 @@ export interface components {
         };
         /**
          * KeyTarget
-         * @description What an API key may start. `version` pins a workflow version; null runs the live one.
+         * @description What an API key may start, or the one MCP link it opens (`mcp_link`, read only). `version` pins a workflow
+         *     version; null runs the live one.
          */
         KeyTarget: {
             /** Id */
@@ -2300,7 +2740,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "agent" | "workflow";
+            kind: "agent" | "workflow" | "mcp_link";
             /** Version */
             version?: number | null;
         };
@@ -2312,14 +2752,62 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "agent" | "workflow";
+            kind: "agent" | "workflow" | "mcp_link";
             /** Version */
             version?: number | null;
+        };
+        /** ListResult[ApiKeyOut] */
+        ListResult_ApiKeyOut_: {
+            /** Data */
+            data: components["schemas"]["ApiKeyOut"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
         };
         /** ListResult[MemberOut] */
         ListResult_MemberOut_: {
             /** Data */
             data: components["schemas"]["MemberOut"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
+        };
+        /** ListResult[RoleGrantOut] */
+        ListResult_RoleGrantOut_: {
+            /** Data */
+            data: components["schemas"]["RoleGrantOut"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
+        };
+        /** ListResult[RoleHolderOut] */
+        ListResult_RoleHolderOut_: {
+            /** Data */
+            data: components["schemas"]["RoleHolderOut"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
+        };
+        /** ListResult[RoleOut] */
+        ListResult_RoleOut_: {
+            /** Data */
+            data: components["schemas"]["RoleOut"][];
             /** Facets */
             facets: {
                 [key: string]: {
@@ -2344,6 +2832,7 @@ export interface components {
         Me: {
             /** Flags */
             flags: components["schemas"]["FlagOut"][];
+            permissions: components["schemas"]["PermissionsOut"];
             /** Policies */
             policies: {
                 [key: string]: unknown;
@@ -2402,6 +2891,44 @@ export interface components {
             userId?: string | null;
             /** Workspaceroles */
             workspaceRoles?: string[];
+        };
+        /** MetadataCertificateOut */
+        MetadataCertificateOut: {
+            /** Fingerprint */
+            fingerprint: string;
+            /** Notafter */
+            notAfter: string;
+            /** Notbefore */
+            notBefore: string;
+        };
+        /**
+         * MetadataIn
+         * @description An identity provider's metadata to read: its URL, or the file's contents.
+         */
+        MetadataIn: {
+            /** Url */
+            url?: string | null;
+            /** Xml */
+            xml?: string | null;
+        };
+        /** MetadataOut */
+        MetadataOut: {
+            /** Certificates */
+            certificates: components["schemas"]["MetadataCertificateOut"][];
+            /** Idpentityid */
+            idpEntityId: string;
+            /** Ssourl */
+            ssoUrl: string;
+        };
+        /**
+         * OAuthErrorOut
+         * @description An answer to an assistant's request in the shape OAuth clients read (RFC 6749 section 5.2).
+         */
+        OAuthErrorOut: {
+            /** Error */
+            error: string;
+            /** Error Description */
+            error_description: string;
         };
         /** OidcSettings */
         OidcSettings: {
@@ -2550,7 +3077,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "bool" | "floor" | "days" | "hours" | "publish_modes" | "names" | "choice";
+            kind: "bool" | "floor" | "days" | "hours" | "publish_modes" | "names" | "choice" | "app_changes" | "app_changes_by_app";
             /** Note */
             note?: string | null;
             /** Title */
@@ -2802,11 +3329,15 @@ export interface components {
         /** SamlSettings */
         SamlSettings: {
             /** Certificate */
-            certificate: string;
+            certificate?: string | null;
+            /** Certificates */
+            certificates?: string[] | null;
             /** Emailattribute */
             emailAttribute?: string | null;
             /** Idpentityid */
             idpEntityId: string;
+            /** Metadataurl */
+            metadataUrl?: string | null;
             /** Nameattribute */
             nameAttribute?: string | null;
             /**
@@ -2821,23 +3352,46 @@ export interface components {
             signRequests: boolean;
             /** Ssourl */
             ssoUrl: string;
+            /**
+             * Tiles
+             * @default true
+             */
+            tiles: boolean;
         };
         /** SamlSettingsOut */
         SamlSettingsOut: {
+            /** Acsurl */
+            acsUrl: string | null;
             /** Certificate */
-            certificate: string;
+            certificate: string | null;
+            /** Certificates */
+            certificates: components["schemas"]["CertificateOut"][];
             /** Emailattribute */
             emailAttribute: string | null;
             /** Idpentityid */
             idpEntityId: string;
+            /** Metadataerror */
+            metadataError: string | null;
+            /** Metadatareadat */
+            metadataReadAt: string | null;
+            /** Metadataurl */
+            metadataUrl: string | null;
             /** Nameattribute */
             nameAttribute: string | null;
             /** Requireencryption */
             requireEncryption: boolean;
+            /** Signonurl */
+            signOnUrl: string | null;
             /** Signrequests */
             signRequests: boolean;
+            /** Spentityid */
+            spEntityId: string | null;
+            /** Spmetadataurl */
+            spMetadataUrl: string | null;
             /** Ssourl */
             ssoUrl: string;
+            /** Tiles */
+            tiles: boolean;
         };
         /** SessionOut */
         SessionOut: {
@@ -2877,6 +3431,31 @@ export interface components {
             /** Version */
             version: number;
         };
+        /** SignInTestOut */
+        SignInTestOut: {
+            /** Email */
+            email?: string | null;
+            /** Groups */
+            groups?: string[] | null;
+            /** Name */
+            name?: string | null;
+            /** Reason */
+            reason?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "waiting" | "ok" | "refused";
+            /** Subject */
+            subject?: string | null;
+        };
+        /** SignInTestStartOut */
+        SignInTestStartOut: {
+            /** Flowid */
+            flowId: string;
+            /** Redirecturl */
+            redirectUrl: string;
+        };
         /** Skip */
         Skip: {
             /** Id */
@@ -2901,12 +3480,17 @@ export interface components {
             /** Label */
             label: string;
         };
-        /** SsoStartIn */
+        /**
+         * SsoStartIn
+         * @description Either the person's work email, or a provider's address id (`/sso?provider=`, from an app-portal tile).
+         */
         SsoStartIn: {
             /** Email */
-            email: string;
+            email?: string | null;
             /** Next */
             next?: string | null;
+            /** Provider */
+            provider?: string | null;
         };
         /** SsoStarted */
         SsoStarted: {
@@ -3475,7 +4059,16 @@ export interface operations {
     };
     api_keys_list_api_keys: {
         parameters: {
-            query?: never;
+            query?: {
+                targetKind?: ("agent" | "workflow" | "mcp_link") | null;
+                targetId?: string | null;
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -3488,7 +4081,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_list_ApiKeyOut__"];
+                    "application/json": components["schemas"]["Envelope_ListResult_ApiKeyOut__"];
                 };
             };
             /** @description Invalid request */
@@ -3793,7 +4386,11 @@ export interface operations {
                 from?: string | null;
                 to?: string | null;
                 page?: number;
-                pageSize?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -4514,11 +5111,217 @@ export interface operations {
             };
         };
     };
+    auth_saml_provider_acs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sp_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     auth_saml_metadata: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/samlmetadata+xml": string;
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    auth_saml_provider_metadata: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sp_id: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -5981,6 +6784,414 @@ export interface operations {
             };
         };
     };
+    oauth_oauth_consent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ConsentOut_"];
+                };
+            };
+            /** @description The request was refused */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OAuthErrorOut"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    oauth_oauth_decide: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsentIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ConsentDecided_"];
+                };
+            };
+            /** @description The request was refused */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OAuthErrorOut"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    oauth_oauth_grants: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_list_GrantOut__"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    oauth_oauth_disconnect: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                grant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     people_people_names: {
         parameters: {
             query?: never;
@@ -6187,7 +7398,14 @@ export interface operations {
     };
     people_person_role_grants: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
+            };
             header?: never;
             path: {
                 person_id: string;
@@ -6202,7 +7420,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_list_RoleGrantOut__"];
+                    "application/json": components["schemas"]["Envelope_ListResult_RoleGrantOut__"];
                 };
             };
             /** @description Invalid request */
@@ -6810,7 +8028,16 @@ export interface operations {
     };
     roles_list_roles: {
         parameters: {
-            query?: never;
+            query?: {
+                builtin?: ("true" | "false") | null;
+                canDecideReviews?: ("true" | "false") | null;
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -6823,7 +8050,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_list_RoleOut__"];
+                    "application/json": components["schemas"]["Envelope_ListResult_RoleOut__"];
                 };
             };
             /** @description Invalid request */
@@ -7329,7 +8556,14 @@ export interface operations {
     };
     roles_role_holders: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
+            };
             header?: never;
             path: {
                 role_id: string;
@@ -7344,7 +8578,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_list_RoleHolderOut__"];
+                    "application/json": components["schemas"]["Envelope_ListResult_RoleHolderOut__"];
                 };
             };
             /** @description Invalid request */
@@ -7644,7 +8878,13 @@ export interface operations {
         parameters: {
             query?: {
                 role?: string[] | null;
-                status?: string[] | null;
+                status?: ("active" | "invited")[] | null;
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -8165,6 +9405,313 @@ export interface operations {
             };
         };
     };
+    sign_in_providers_list_break_glass: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_list_BreakGlassOut__"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    sign_in_providers_add_break_glass: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_list_BreakGlassOut__"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    sign_in_providers_remove_break_glass: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_list_BreakGlassOut__"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     sign_in_providers_verify_signin_domain: {
         parameters: {
             query?: never;
@@ -8284,6 +9831,111 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_list_ProviderOut__"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    sign_in_providers_read_signin_metadata: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MetadataIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_MetadataOut_"];
                 };
             };
             /** @description Invalid request */
@@ -8493,6 +10145,212 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    sign_in_providers_refresh_signin_provider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ProviderOut_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    sign_in_providers_test_signin_provider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SignInTestStartOut_"];
+                };
             };
             /** @description Invalid request */
             400: {
@@ -8987,13 +10845,119 @@ export interface operations {
             };
         };
     };
+    sign_in_providers_signin_test_result: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                flow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SignInTestOut_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     teams_list_workspace_teams: {
         parameters: {
             query?: {
                 status?: ("active" | "archived")[] | null;
-                search?: string;
                 page?: number;
-                pageSize?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;

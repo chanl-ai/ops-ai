@@ -24,7 +24,7 @@ identity provider and no model is called.
 | 3 | Ask how `new.teller@<domain>` signs in | `sso: {kind: oidc, label: Harbor & Pine SSO}` |
 | 4 | The teller signs in at the provider and completes with the flow key | An `oidc` session, role `chat_user` on team_ops; only chat permissions; members list 403 |
 | 5 | Sign in again | The same person; team_ops lists them once as a chat user |
-| 6 | The provider vouches for an address outside its domains | `error=sign_in_refused`; nobody is made |
+| 6 | The provider vouches for an address outside its domains | `error=no_access`; nobody is made |
 | ui | On the console, type the domain's email: the form becomes Continue with SSO naming Harbor & Pine SSO; continue | The fake provider sends the browser back and the console signs the teller in |
 
 ## Acceptance layers

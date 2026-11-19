@@ -7,18 +7,20 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
-from pydantic.alias_generators import to_camel
+from pydantic import ConfigDict, Field
 
-from ops_ingest.reading import FileFacts, OcrMode
-from ops_ingest.reading import Page as ReadingPage
-
-
-class Model(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
+from ops_ingest.reading import OcrMode
+from ops_service_kit.http import In, JsonValue, ListResult, Out
 
 
-class ExtractionRequest(Model):
+class Reply(Out):
+    """A reply model. Every field is sent, defaulted ones too (no route drops a None), so its schema lists each as
+    required and a generated client reads it as present."""
+
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+
+
+class ExtractionRequest(In):
     """`fields` follow the Extract from file step's schema (key, label, type, required, description, enum,
     reviewBelow, alwaysReview); `many` answers one record per thing the document names."""
 
@@ -47,26 +49,26 @@ class ExtractionRequest(Model):
     max_tokens: int | None = Field(default=None, ge=1)
 
 
-class CorrectionIn(Model):
+class CorrectionIn(In):
     value: Any
     # The record's position, for an extraction of several records.
     record: int | None = Field(default=None, ge=0)
 
 
-class DocumentTypeRef(Model):
+class DocumentTypeRef(Out):
     id: str
     version: int
     # The type's name when it was read, so whatever records the read names it without asking again.
     name: str | None = None
 
 
-class ExtractionError(Model):
+class ExtractionError(Out):
     code: str | None
     message: str | None
     details: list[str] | None = None
 
 
-class Classification(Model):
+class Classification(Out):
     """Which of the team's document types a file is: the model's choice and how sure it is, or none.
     `needsReview` when none fits or the confidence is under the floor."""
 
@@ -78,36 +80,60 @@ class Classification(Model):
     floor: float
 
 
-class TemplateMiss(Model):
+class TemplateMiss(Out):
     template_id: str
     score: float
     missing_anchors: list[str]
 
 
-class Extraction(Model):
+class ExtractionCorrection(Out):
+    """A person's value for a field, with the value and confidence it replaced (`record` for a read of several)."""
+
+    field: str
+    record: int | None
+    original: JsonValue
+    original_confidence: float
+    corrected: JsonValue
+    corrected_by: str
+    corrected_at: datetime
+
+
+class ImageCall(Out):
+    """A model call that carried page images: its step, the pages shown, how many images and the alias."""
+
+    step: str
+    pages: list[int]
+    images: int
+    alias: str
+
+
+class Extraction(Out):
     """An extraction's state, and its scored answer once done: what the Extract from file step's outputs carry."""
 
     id: str
     file_id: str
     status: Literal["queued", "running", "done", "failed", "unreadable"]
     outcome: Literal["ok", "review", "unreadable", "unknown"] | None = None
-    fields: dict[str, Any] | None = None
-    records: list[dict[str, Any]] | None = None
+    # Each field's answer: value, extractedValue, confidence, needsReview and its citation, as the engine scores it.
+    fields: dict[str, JsonValue] | None = None
+    records: list[dict[str, JsonValue]] | None = None
     count: int | None = None
-    needs_review: list[Any] | None = None
+    # The field keys under review, or the record positions for a read of several.
+    needs_review: list[str | int] | None = None
     floor: float | None = None
-    asked: list[dict[str, Any]] | None = Field(default=None, alias="schema")
+    # The field definitions the read asked for, as the type version or the request holds them.
+    asked: list[dict[str, JsonValue]] | None = Field(default=None, alias="schema")
     # How many pages an unreadable file has; a full-text read's pages, each {number, text, tables}.
-    pages: int | list[dict[str, Any]] | None = None
+    pages: int | list[dict[str, JsonValue]] | None = None
     # A full-text read's text, page after page in reading order.
     text: str | None = None
     # A proposed read's fields in the document type's shape and a suggested name.
-    proposal: dict[str, Any] | None = None
+    proposal: dict[str, JsonValue] | None = None
     # The pages read when a limit applied, and whether the token ceiling left pages unread.
     read_pages: int | None = None
     partial: bool | None = None
     error: ExtractionError | None = None
-    corrections: list[dict[str, Any]] | None = None
+    corrections: list[ExtractionCorrection] | None = None
     document_type: DocumentTypeRef | None = None
     classification: Classification | None = None
     # How the read was made: from a layout template's zones, with its id, or by the model, with the best
@@ -117,18 +143,18 @@ class Extraction(Model):
     template_miss: TemplateMiss | None = None
     # Every model call that carried a page image: {step, pages, images, alias}; and why none was sent though
     # the version and the team allowed it (the alias is not cleared for images).
-    image_calls: list[dict[str, Any]] | None = None
+    image_calls: list[ImageCall] | None = None
     image_refused: str | None = None
     # The tokens a template read's re-read of failed fields spent, kept out of the test estimate's average.
     reread_tokens: dict[str, int] | None = None
 
 
-class ClassifyIn(Model):
+class ClassifyIn(In):
     file_id: str = Field(min_length=1, max_length=64)
     ocr: bool = False
 
 
-class DocumentTypeIn(Model):
+class DocumentTypeIn(In):
     """A new document type and its version 1. `id` is the caller's (lowercase, e.g. levy_notice) or generated."""
 
     id: str | None = Field(default=None, max_length=64)
@@ -159,7 +185,7 @@ class DocumentTypeIn(Model):
     sample_file_id: str | None = Field(default=None, min_length=1, max_length=64)
 
 
-class DocumentTypeVersionIn(Model):
+class DocumentTypeVersionIn(In):
     fields: list[dict[str, Any]] = Field(
         min_length=1,
         description=(
@@ -189,14 +215,17 @@ class DocumentTypeVersionIn(Model):
     note: str | None = Field(default=None, max_length=500)
 
 
-class DocumentTypeVersion(Model):
+class DocumentTypeVersion(Out):
+    """A saved version. Its field definitions, layout templates and checks are the documents the builder wrote, held
+    as JSON: the engine (`ops_extract`) reads them and DocumentTypeVersionIn bounds what is saved."""
+
     version: int
-    fields: list[dict[str, Any]]
+    fields: list[dict[str, JsonValue]]
     many: bool
     review_below: float | None
     date_order: Literal["MDY", "DMY"]
-    templates: list[dict[str, Any]]
-    checks: list[dict[str, Any]]
+    templates: list[dict[str, JsonValue]]
+    checks: list[dict[str, JsonValue]]
     page_images: bool = False
     offer_at: int
     note: str | None
@@ -204,21 +233,22 @@ class DocumentTypeVersion(Model):
     created_at: datetime
 
 
-class TemplateSuggestIn(Model):
+class TemplateSuggestIn(In):
     """The team's finished reads of the type a suggestion is drawn from."""
 
     extraction_ids: list[str] = Field(min_length=1, max_length=20)
 
 
-class TemplateSuggestion(Model):
+class TemplateSuggestion(Out):
     """A draft template, saved by nobody until a builder posts it as a new version, and how it reads each read it came
     from: matched or the anchors it missed, and per field the read's value against the template's."""
 
-    template: dict[str, Any]
-    checks: list[dict[str, Any]]
+    # A layout template as a version holds it (anchors, zones), and per source read what it matched and missed.
+    template: dict[str, JsonValue]
+    checks: list[dict[str, JsonValue]]
 
 
-class TemplateOffer(Model):
+class TemplateOffer(Out):
     """Checked model reads of the type that share one layout no current template reads."""
 
     fingerprint: str
@@ -226,44 +256,46 @@ class TemplateOffer(Model):
     count: int
 
 
-class SampleIn(Model):
+class SampleIn(In):
     file_id: str
     # {field: value}, or a list of them in order for a type reading several records.
     expected: Any
 
 
-class DocumentTypeExample(Model):
+class DocumentTypeExample(Out):
     """A correction a person made on a read of the type, which later reads of it are given. `line` is where the
     value was printed, masked as the team masks personal data; `record` is the record's position, for several."""
 
     id: str
     field: str
     line: str | None
-    value: Any
+    value: JsonValue
     extraction_id: str
     record: int | None
     corrected_by: str
     created_at: datetime
 
 
-class Sample(Model):
+class Sample(Out):
     id: str
     file_id: str
     name: str
-    expected: Any
+    # {field: value}, or a list of them in order for a type reading several records.
+    expected: JsonValue
     added_by: str
     added_at: datetime
 
 
-class DocumentTypeRow(Model):
+class DocumentTypeRow(Out):
     id: str
     name: str
     description: str | None
     latest_version: int
 
 
-class DocumentTypeList(Model):
-    items: list[DocumentTypeRow]
+class DocumentTypeList(ListResult[DocumentTypeRow]):
+    """A page of the team's types on the shared list contract."""
+
     # Whether the caller may add a type in the team, so the console never decides it from a role.
     can_create: bool
 
@@ -278,7 +310,7 @@ class DocumentType(DocumentTypeRow):
     can_edit: bool
 
 
-class TestEstimate(Model):
+class TestEstimate(Out):
     """What testing a version spends, before it runs: priced at the type's measured tokens per call, the
     tenant's when the type has none yet, else a fixed guess; `basis` says which."""
 
@@ -292,13 +324,13 @@ class TestEstimate(Model):
     basis: Literal["type", "tenant", "default"] = "default"
 
 
-class LayoutIn(Model):
+class LayoutIn(In):
     file_id: str = Field(min_length=1, max_length=64)
     # Read a page with no text layer through OCR; a layout read with OCR is cached apart from one read without.
     ocr: bool = False
 
 
-class LayoutPage(Model):
+class LayoutPage(Out):
     number: int
     # Points; None for formats with no pages (DOCX, HTML).
     width: float | None
@@ -306,7 +338,7 @@ class LayoutPage(Model):
     source: Literal["text", "ocr", "mixed", "none"]
 
 
-class LayoutCell(Model):
+class LayoutCell(Out):
     id: str
     row: int
     col: int
@@ -317,7 +349,7 @@ class LayoutCell(Model):
     box: list[float] | None
 
 
-class LayoutBlock(Model):
+class LayoutBlock(Out):
     id: str
     page: int
     kind: Literal["title", "heading", "line", "paragraph", "table"]
@@ -327,7 +359,7 @@ class LayoutBlock(Model):
     cells: list[LayoutCell] | None = None
 
 
-class LayoutWord(Model):
+class LayoutWord(Out):
     page: int
     text: str
     box: list[float]
@@ -335,7 +367,7 @@ class LayoutWord(Model):
     conf: float
 
 
-class Layout(Model):
+class Layout(Out):
     """A file's layout: pages, blocks in reading order with their table cells, and words."""
 
     engine: str
@@ -344,7 +376,39 @@ class Layout(Model):
     words: list[LayoutWord]
 
 
-class TestRun(Model):
+class FieldScore(Out):
+    """How a version read one field across the samples."""
+
+    matches: int
+    misses: int
+    accuracy: float | None
+
+
+class SampleComparison(Out):
+    expected: JsonValue
+    got: JsonValue
+    match: bool
+
+
+class SampleResult(Out):
+    """One sample's read in a test: its extraction, how it was read and each field against what it should be."""
+
+    sample_id: str
+    name: str
+    extraction_id: str | None
+    status: str | None
+    path: Literal["template", "model"] | None = None
+    template_id: str | None = None
+    fields: dict[str, list[SampleComparison]]
+
+
+class TestResult(Out):
+    accuracy: float | None
+    fields: dict[str, FieldScore]
+    samples: list[SampleResult]
+
+
+class TestRun(Out):
     id: str
     type_id: str
     version: int
@@ -352,11 +416,11 @@ class TestRun(Model):
     samples: int
     asked_by: str
     asked_at: datetime
-    result: dict[str, Any] | None = None
+    result: TestResult | None = None
     error: str | None = None
 
 
-class ReadingIn(Model):
+class ReadingIn(In):
     file_id: str = Field(min_length=1, max_length=64)
     # off: text layers only; auto: scans and the picture parts of mixed pages; always: every page, for a bad text layer.
     ocr: OcrMode = "auto"
@@ -364,17 +428,104 @@ class ReadingIn(Model):
     language: str = Field("eng", min_length=2, max_length=64, pattern=r"^[A-Za-z_]+(\+[A-Za-z_]+)*$")
 
 
-class ReadingSettingsOut(Model):
+class ReadingSettingsOut(Out):
     ocr: OcrMode
     language: str
 
 
-class ReadingError(Model):
+class ReadingError(Out):
     code: str
     message: str
 
 
-class FileReading(Model):
+# A reading's parts as this service answers them: the same fields as ops_ingest's reading models, owned here so the
+# reply is an `Out` (frozen, extra forbidden) and the contract does not move when the reader's models do.
+Box = list[float]
+
+
+class ReadingLine(Out):
+    text: str
+    box: Box | None = None
+
+
+class ReadingCell(Out):
+    id: str
+    row: int
+    col: int
+    row_span: int = 1
+    col_span: int = 1
+    text: str
+    box: Box | None = None
+    header: bool = False
+
+
+class ReadingBlock(Out):
+    id: str
+    kind: Literal["title", "heading", "paragraph", "table"]
+    text: str
+    box: Box | None = None
+    order: int = 0
+    level: int | None = None
+    lines: list[ReadingLine] = Field(default_factory=list[ReadingLine])
+    cells: list[ReadingCell] = Field(default_factory=list[ReadingCell])
+    caption: str | None = None
+    sheet: str | None = None
+    read_by: Literal["text", "ocr"] = "text"
+    furniture: bool = False
+    main: bool = False
+
+
+class ReadingWord(Out):
+    text: str
+    box: Box
+    confidence: float
+
+
+class ReadingFormField(Out):
+    name: str
+    value: str
+    kind: Literal["text", "checkbox", "choice", "signature"]
+    page: int
+    box: Box | None = None
+
+
+class ReadingOcrQuality(Out):
+    mean: float
+    low_share: float
+    words: int
+
+
+class ReadingPage(Out):
+    number: int
+    width: float | None = None
+    height: float | None = None
+    source: Literal["text", "ocr", "mixed", "none"]
+    image_share: float = 0.0
+    text: str = ""
+    blocks: list[ReadingBlock] = Field(default_factory=list[ReadingBlock])
+    words: list[ReadingWord] = Field(default_factory=list[ReadingWord])
+    form_fields: list[ReadingFormField] = Field(default_factory=list[ReadingFormField])
+    ocr: ReadingOcrQuality | None = None
+    unread_reason: str | None = None
+    warnings: list[str] = Field(default_factory=list[str])
+    duration_ms: int = 0
+
+
+class FileFacts(Out):
+    filename: str
+    mime_type: str
+    size_bytes: int
+    page_count: int
+    title: str | None = None
+    author: str | None = None
+    created: str | None = None
+    modified: str | None = None
+    paged: bool = True
+    removed_chars: int = 0
+    warnings: list[str] = Field(default_factory=list[str])
+
+
+class FileReading(Out):
     """A file's reading: queued, reading or none (never asked) with its progress, failed with the reason, or done with
     the file's facts and its pages (all of them, or the one asked for). Keyed by the file's bytes and settings, so every
     caller that reads the same file gets this one reading."""
@@ -392,11 +543,11 @@ class FileReading(Model):
     pages: list[ReadingPage] | None = None
 
 
-class PurgeIn(Model):
+class PurgeIn(In):
     file_id: str = Field(min_length=1, max_length=64)
 
 
-class Purged(Model):
+class Purged(Out):
     """What was removed for a deleted file: its extractions (with their corrections), the samples naming it, and the
     readings of its bytes once no other file of the workspace holds them."""
 

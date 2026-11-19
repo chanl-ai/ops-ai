@@ -102,7 +102,7 @@ async def start(engine: AsyncEngine, tenant: str, payload: dict[str, Any], key: 
                 "created_by": "a@x",
             }
         )
-        return str(run["id"])
+        return run.id
 
 
 async def drain(w: Worker) -> int:
@@ -139,9 +139,9 @@ async def test_a_queued_run_waits_for_a_worker_then_reaches_its_review_and_ends_
         events = await EventLog(engine).run_events(run_id, run_id, 0)
     assert nodes == ["start", "fields", "big", "lookup", "review", "approved"]
     assert len([k for k in tools.calls if k.startswith(run_id)]) == 1
-    types = [e["type"] for e in events]
+    types = [e.type for e in events]
     assert types[0] == "started" and "waiting_review" in types and "decided" in types and types[-1] == "finished"
-    assert [e["seq"] for e in events] == sorted(e["seq"] for e in events)
+    assert [e.seq for e in events] == sorted(e.seq for e in events)
 
 
 async def test_two_workers_never_claim_one_row(engine: AsyncEngine) -> None:
@@ -339,7 +339,7 @@ async def test_a_pass_acts_as_its_runs_team_whatever_team_the_claiming_loop_hold
     assert run["status"] == "waiting"
     assert events.teams and set(events.teams) == {"team_a"}, events.teams
     assert tools.teams_of(tenant) == ["team_a"]
-    assert written and written[0]["type"] == "started"
+    assert written and written[0].type == "started"
 
 
 class BlippingTools(CountingTools):

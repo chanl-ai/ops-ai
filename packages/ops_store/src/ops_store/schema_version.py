@@ -35,7 +35,7 @@ async def recorded_revisions(engine: AsyncEngine) -> list[str]:
         # information_schema lists the tables a role holds any right on; a runtime role reads only its own.
         try:
             async with engine.connect() as c:
-                found += [str(r[0]) for r in await c.execute(sa.text(f'SELECT version_num FROM "{table}"'))]
+                found += [str(r[0]) for r in await c.execute(sa.text(f'SELECT version_num FROM "{table}"'))]  # noqa: S608
         except DBAPIError:
             continue
     return found

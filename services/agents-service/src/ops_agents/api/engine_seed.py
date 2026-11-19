@@ -9,18 +9,19 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 from ops_engine import default_registry
 from ops_engine.definition import parse, validate
-from ops_engine.store import DefinitionStore
+from ops_service_kit.http import Json
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
 from ops_store import isolation
 
-from ..store.engine import DatabaseError, EngineTransactions
+from ..store.engine import DatabaseError
 from ..store.tenancy import LOCAL_TENANT, SEED
 from .deps import Runtime
+from .engine_lifecycle import definitions
 
 log = get_logger("ops_agents.api.engine_seed")
 
@@ -30,10 +31,10 @@ def seed_path(seed_dir: Path, agents_seed_file: Path | None) -> Path:
 
 
 async def load_seed(rt: Runtime, path: Path) -> None:
-    if not path.is_file():
+    if not path.is_file():  # noqa: ASYNC240
         return
-    store = DefinitionStore(EngineTransactions(rt.db))
-    raw: list[dict[str, Any]] = json.loads(path.read_text())
+    store = definitions(rt)
+    raw: list[Json] = json.loads(path.read_text())  # noqa: ASYNC240
     for item in raw:
         team = cast(str | None, item.get("teamId"))
         d = parse({k: v for k, v in item.items() if k != "teamId"})
@@ -52,7 +53,7 @@ async def load_seed(rt: Runtime, path: Path) -> None:
                 )
                 # A shipped seed is live, as a v1 seed is published by "seed"; a restart never takes back a version a
                 # person approved since, so an unchanged seed goes live only when nothing serves the workflow.
-                if created or await store.current(d.id) is None:
+                if created or await store.serving(d.id) is None:
                     await store.go_live(d.id, version)
             except DatabaseError as e:  # a database not yet migrated to the runner's tables seeds v1 alone
                 log.warning("engine_seed_skipped", workflow=d.id, error=type(e).__name__)

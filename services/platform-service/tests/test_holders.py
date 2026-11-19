@@ -10,14 +10,14 @@ from ops_platform.store.roles import mirror_membership
 from ops_platform.store.tables import members, users
 from ops_service_kit.ids import new_id, now_iso
 
-from .conftest import Person, Platform
+from .conftest import Person, Platform, seed_tx
 from .test_permissions import grant
 
 
 async def join(platform: Platform, tenant: str, team: str, email: str, role: str) -> str:
     """A second person, active in `team` with the membership `role`, as the member routes would write them."""
     now, user = now_iso(), new_id("usr")
-    async with platform.engine.begin() as c:
+    async with seed_tx(platform.engine, tenant) as c:
         await c.execute(
             users.insert().values(id=user, tenant_id=tenant, email=email, name=email, status="active", created_at=now)
         )
@@ -124,7 +124,7 @@ async def test_holders_of_a_records_team_name_that_teams_people_and_only_for_its
 async def join_existing(platform: Platform, p: Person, team: str, role: str) -> None:
     """An existing person made an active member of a second team."""
     now = now_iso()
-    async with platform.engine.begin() as c:
+    async with seed_tx(platform.engine, p.tenant_id) as c:
         await c.execute(
             members.insert().values(
                 id=new_id("mem"),

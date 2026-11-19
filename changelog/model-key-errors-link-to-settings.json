@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-11",
+  "title": "Model key errors link to the page that fixes them",
+  "description": "When a reply stops because an agent's model key was revoked, expired, missing or out of budget, an admin gets a link to Model providers and a member is told to ask an admin. An error the console has no wording for now reads as one plain sentence, with its code under Details.",
+  "tag": "fix"
+}

@@ -5,25 +5,21 @@ from __future__ import annotations
 from typing import ClassVar
 
 import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_store import Guarantee
 from ops_store.team_scope import team_visible
 
 from .graphs import graph_runs, graph_threads
 from .leases import thread_leases
-from .tenancy import tenant_tx
+from .tenancy import RuntimeStore
 
 # Statuses a thread can be resumed from. "interrupted" waits on a person and "busy" is mid-run; both need history.
 OPEN_STATUSES = ("busy", "interrupted")
 
 
-class GraphJournal:
+class GraphJournal(RuntimeStore):
     # Reads only: whether a thread still needs its checkpoint history.
     requires: ClassVar[frozenset[Guarantee]] = frozenset()
-
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
 
     async def closed_with_journal(self, thread_id: str) -> bool:
         """True when the thread is not running, paused or leased, and at least one finished run of it is recorded."""
@@ -52,5 +48,5 @@ class GraphJournal:
             ~running,
             ~leased,
         )
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             return (await c.execute(query)).first() is not None

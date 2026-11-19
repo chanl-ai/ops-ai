@@ -13,6 +13,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_documents.store.extractions import extractions
+from ops_extract.shapes import Layout
 
 from .conftest import OPS, Make
 from .test_extractions import Floor
@@ -131,7 +132,7 @@ async def test_offers_group_stored_fingerprints_and_read_one_layout_per_offered_
     layouts = 0
     layout_of = s.extractor.layout_of
 
-    async def counted(who: Any, row: Any) -> dict[str, Any]:
+    async def counted(who: Any, row: Any) -> Layout:
         nonlocal layouts
         layouts += 1
         return await layout_of(who, row)

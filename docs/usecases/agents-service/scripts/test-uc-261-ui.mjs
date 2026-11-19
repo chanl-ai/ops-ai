@@ -15,11 +15,13 @@ const STEP = {
 const DEFINITION = aiDefinition(ID, [STEP], [['start', 'payload', 'reply'], ['reply', 'ok', 'end_drafted'], ['reply', 'error', 'end_failed']]);
 
 await withUiStack(async (consoleUrl, stack) => {
-  const J = await as(JAMES);
+  let J = await as(JAMES);
   const browser = await chromium.launch();
   const errors = [];
   try {
     const turned = await turnOnPolicy(await consoleSignIn(browser, consoleUrl, PRIYA, PASSWORD, errors), consoleUrl, 'aiSteps');
+    // A policy change refuses every token issued before it (permissions_changed), so James signs in again.
+    J = await as(JAMES);
     const made = await saveAndPublish(J, DEFINITION);
     check('0 Priya turns AI steps on in Policies and the workflow publishes', turned === 200 && made.live, { policy: turned, live: made.live });
     await stack.startWorker();

@@ -3,9 +3,10 @@ them, with each body a copy is made from, and its knowledge sources, which a tea
 
 tools-service is the one service that loads plugins, so agents-service and documents-service read a template's body
 here (their service tokens hold `tools:view` and name the team) and make the team's copy through their own create
-paths. A plugin's templates are listed only while it is on for the team (the install switch and the team's), the same
-rule its tools follow, so a team never copies an agent that grants tools it cannot call. A template's required tools
-are answered as the operations the team's plugin module serves.
+paths. Every installed plugin's templates are listed for every team; the team's switch decides only what runs, so a
+template of a plugin off for the team carries `off`, why, and the services that make copies refuse a copy that needs
+its tools while it is off. A template's required tools are answered as the operations the team's plugin module
+serves.
 
 `/v1/apps/{app}/resources` is the app's Resources tab in one answer: each resource with its state for the team, the
 team's copy and whether the caller may add it. agents-service and documents-service keep the copies, so their template
@@ -17,44 +18,40 @@ knowledge bases), so its row says only whether it can be added now."""
 
 import hashlib
 import json
-from typing import Annotated, Any, Literal, Protocol, cast
+from typing import Annotated, Literal, Protocol, cast
 
 import yaml
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
-from pydantic.alias_generators import to_camel
+from pydantic import Field
 
-from ops_access import Access
+from ops_access import Access, reader_of
 from ops_access.check import granted_by
 from ops_identity import Principal, ServiceCallError, ServiceClient, ServiceUnreachable
+from ops_identity.fastapi import Tx
 from ops_plugin_sdk import Plugin
 from ops_plugin_sdk.manifest import KnowledgeSource, Template
 from ops_service_kit.errors import NotFound, ServiceUnavailable, ValidationFailed
-from ops_service_kit.http import Envelope, ok
+from ops_service_kit.http import Envelope, Json, JsonValue, Out, ok
 
 from ..callers import tools_reader
 from ..modules.routes import ERRORS
 from .host import PluginHost
 
-Kind = Literal["agent", "skill", "workflow", "document_type", "knowledge_source"]
+Kind = Literal["agent", "skill", "workflow", "document_type", "case_type", "task_type", "guardrail", "knowledge_source"]
 
 
 class TemplateOutside(ValueError):
     """A template's path leads out of its plugin's folder; its file is never read."""
 
 
-class _Wire(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
-
-
-class PluginRef(_Wire):
+class PluginRef(Out):
     id: str
     title: str
     version: str
 
 
-class TemplateRequires(_Wire):
+class TemplateRequires(Out):
     # The operations the team's plugin module serves, `<plugin short name>_<tool>`.
     tools: list[str]
     # What the person names at install: `{"knowledge_base": "<what it is>"}` or `{"model_alias": "<capability>"}`.
@@ -63,7 +60,7 @@ class TemplateRequires(_Wire):
     resources: list[str] = Field(default_factory=list[str])
 
 
-class PluginTemplate(_Wire):
+class PluginTemplate(Out):
     # Where the template comes from, `plugin:<plugin id>`; a built-in pack is another source later.
     source: str
     plugin: PluginRef
@@ -73,26 +70,28 @@ class PluginTemplate(_Wire):
     title: str
     requires: TemplateRequires
     # The request body the kind's create route takes (a workflow's is its definition).
-    body: dict[str, Any] = Field(default_factory=dict[str, Any])
+    body: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
     # sha256 of the body as canonical JSON: a copy keeps the digest it was made from, so a template whose body changed
     # since then shows as changed even when its version did not move.
     digest: str
+    # Why the plugin is off for the team, in words naming who turns it on; None while it is on.
+    off: str | None = None
 
 
-def body_of(plugin: Plugin, template: Template) -> dict[str, Any]:
+def body_of(plugin: Plugin, template: Template) -> Json:
     """The template's body, read only from inside the plugin's folder."""
     root = plugin.root.resolve()
     path = (root / template.path).resolve()
     if root not in path.parents:
         raise TemplateOutside(f"{plugin.manifest.id} template {template.id}: {template.path} is outside the plugin")
-    return cast(dict[str, Any], yaml.safe_load(path.read_text()) or {})
+    return cast(Json, yaml.safe_load(path.read_text()) or {})
 
 
-def digest_of(body: dict[str, Any]) -> str:
+def digest_of(body: Json) -> str:
     return hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
-def view_of(plugin: Plugin, template: Template) -> dict[str, Any]:
+def view_of(plugin: Plugin, template: Template) -> Json:
     m = plugin.manifest
     body = body_of(plugin, template)
     return PluginTemplate(
@@ -112,7 +111,14 @@ def view_of(plugin: Plugin, template: Template) -> dict[str, Any]:
     ).model_dump(by_alias=True)
 
 
-def source_view(plugin: Plugin, source: KnowledgeSource) -> dict[str, Any]:
+def summary_of(body: Json) -> str | None:
+    for key in ("description", "use_when", "useWhen", "role"):
+        if isinstance(v := body.get(key), str) and v.strip():
+            return v.strip()
+    return None
+
+
+def source_view(plugin: Plugin, source: KnowledgeSource) -> Json:
     """A knowledge source as a resource: kb-service makes it, in a knowledge base the team picks, syncing through the
     two tools named here. Its body is the source's definition, so its digest moves when the plugin changes it."""
     m = plugin.manifest
@@ -139,13 +145,16 @@ SERVICES: dict[str, str] = {
     "skill": "agents",
     "workflow": "agents",
     "document_type": "documents",
+    "case_type": "agents",
+    "task_type": "agents",
+    "guardrail": "agents",
     "knowledge_source": "kb",
 }
 # Who may add a knowledge source: those who may edit the knowledge base it goes into.
 KNOWLEDGE_CELL = {"area": "knowledge", "action": "edit"}
 
 
-class ResourceCopy(_Wire):
+class ResourceCopy(Out):
     id: str
     kind: str
     record_id: str
@@ -154,20 +163,22 @@ class ResourceCopy(_Wire):
     version: int
 
 
-class ResourceInstalled(_Wire):
+class ResourceInstalled(Out):
     copies: int
     version: int | None
     newer_available: bool
     changed: bool = False
 
 
-class AppResource(_Wire):
+class AppResource(Out):
     source: str
     plugin: PluginRef
     kind: Kind
     id: str
     version: int
     title: str
+    # One line on what it does, from its definition: a description, a skill's use-when or an agent's role.
+    summary: str | None = None
     requires: TemplateRequires
     # The copies the team holds; None for a knowledge source, which has no single copy.
     installed: ResourceInstalled | None = None
@@ -189,9 +200,9 @@ class Copies(Protocol):
     """The template lists of the services that keep copies, as the caller's team sees them, and the knowledge
     sources the team made from a plugin."""
 
-    async def of(self, tenant_id: str, team_id: str, source: str) -> list[dict[str, Any]]: ...
+    async def of(self, tenant_id: str, team_id: str, source: str) -> list[Json]: ...
 
-    async def sources(self, tenant_id: str, team_id: str, plugin: str) -> list[dict[str, Any]]: ...
+    async def sources(self, tenant_id: str, team_id: str, plugin: str) -> list[Json]: ...
 
 
 class ServiceCopies:
@@ -201,7 +212,7 @@ class ServiceCopies:
     def __init__(self, agents: ServiceClient, documents: ServiceClient, kb: ServiceClient | None = None) -> None:
         self.agents, self.documents, self.kb = agents, documents, kb
 
-    async def sources(self, tenant_id: str, team_id: str, plugin: str) -> list[dict[str, Any]]:
+    async def sources(self, tenant_id: str, team_id: str, plugin: str) -> list[Json]:
         """kb-service's `GET /v1/sources/from-plugin` as the caller's team; none while this service has no address for
         kb-service, which then lists no knowledge source as added."""
         if self.kb is None:
@@ -215,17 +226,17 @@ class ServiceCopies:
                 "kb-service did not answer with the team's knowledge sources. Try again shortly.",
                 code="resources_unavailable",
             ) from e
-        return cast(list[dict[str, Any]], found)
+        return cast(list[Json], found)
 
-    async def of(self, tenant_id: str, team_id: str, source: str) -> list[dict[str, Any]]:
-        out: list[dict[str, Any]] = []
+    async def of(self, tenant_id: str, team_id: str, source: str) -> list[Json]:
+        out: list[Json] = []
         for name, client, params in (
             ("agents-service", self.agents, {"source": source}),
             ("documents-service", self.documents, None),
         ):
             try:
                 rows = cast(
-                    list[dict[str, Any]],
+                    list[Json],
                     await client.get("/v1/templates", params=params, tenant=tenant_id, team=team_id),
                 )
             except (ServiceCallError, ServiceUnreachable) as e:
@@ -252,19 +263,20 @@ def plugin_templates_router(host: PluginHost, copies: Copies | None = None) -> A
         """Whether the app's syncs would run as no one: it signs in, and its team account is not connected."""
         if set(plugin.manifest.connection.kinds) <= {"none"}:
             return False
-        b = await host.bindings.get(tenant_id, team_id, plugin.manifest.id) or {}
-        if not b.get("connection_id") or host.connections is None:
+        b = await host.bindings.get(tenant_id, team_id, plugin.manifest.id)
+        if b is None or not b.connection_id or host.connections is None:
             return True
-        conn = await host.connections.get(tenant_id, str(b["connection_id"]))
-        return (conn or {}).get("status") != "connected"
+        conn = await host.connections.get(tenant_id, b.connection_id)
+        return (conn.status if conn else None) != "connected"
 
     @r.get("/v1/apps/{app_id}/resources", response_model=Envelope[list[AppResource]])
     async def list_app_resources(  # pyright: ignore[reportUnusedFunction]
-        app_id: str, who: Annotated[Principal, Depends(tools_reader)]
+        app_id: str, who: Annotated[Principal, Depends(tools_reader)], _: Tx
     ) -> JSONResponse:
         """The app's Resources tab: every agent, skill, workflow, document type and knowledge source the app brings,
         and every copy the team holds of one it no longer ships or of an app turned off, each with its state, the
-        team's copy, and whether the caller may add it (with who can, when they cannot)."""
+        team's copy, and whether the caller may add it (with who can, when they cannot). The copies are asked before
+        any read, so the request's transaction opens only after both services answer."""
         if not who.team_id:
             raise ValidationFailed("Resources are listed for one team; this call names none.", code="team_required")
         plugin = host.plugins.get(app_id.removeprefix("plugin:")) if app_id.startswith("plugin:") else None
@@ -273,12 +285,18 @@ def plugin_templates_router(host: PluginHost, copies: Copies | None = None) -> A
         if copies is None:
             raise ServiceUnavailable("This service has no address for the services that keep copies.")
         m = plugin.manifest
-        out: list[dict[str, Any]] = []
-        for row in await copies.of(who.tenant_id, who.team_id, app_id):
+        summaries = {(t.kind, t.id): summary_of(body_of(plugin, t)) for t in m.templates}
+        out: list[Json] = []
+        # Both services are asked before the first read, so no transaction is held while either answers.
+        held_copies = await copies.of(who.tenant_id, who.team_id, app_id)
+        made = await copies.sources(who.tenant_id, who.team_id, m.id) if m.knowledge_sources else []
+        for row in held_copies:
             cell = cast(dict[str, str], row.get("addCell") or {})
             held = row.get("state") != "available"
             may = row.get("state") != "removed_upstream" and access.may(who, cell["area"], cell["action"])
-            gone = cast(dict[str, Any], row.get("removeCell") or {})
+            # Its app is off for the team and the copy needs the app's tools (agents-service decides which).
+            blocked = cast(str | None, row.get("off"))
+            gone = cast(Json, row.get("removeCell") or {})
             removes = bool(row.get("copy") and gone) and access.may(
                 who, str(gone.get("area")), str(gone.get("action")), owner=gone.get("owner")
             )
@@ -288,21 +306,26 @@ def plugin_templates_router(host: PluginHost, copies: Copies | None = None) -> A
                     view
                     | {
                         "plugin": {"id": m.id, "title": m.title, "version": m.version},
+                        "summary": summaries.get((str(row["kind"]), str(row["id"]))),
                         "state": row["state"],
-                        "canAdd": may and not held,
+                        "canAdd": may and not held and blocked is None,
                         "canRemove": removes,
-                        "reason": None if may or held else who_adds(cell["area"], cell["action"]),
+                        "reason": blocked
+                        if blocked and not held
+                        else None
+                        if may or held
+                        else who_adds(cell["area"], cell["action"]),
                         "service": SERVICES[str(row["kind"])],
                     }
                 ).model_dump(by_alias=True)
             )
-        if m.knowledge_sources and await host.off_reason(who.tenant_id, who.team_id, plugin) is None:
+        if m.knowledge_sources:
+            off = await host.off_reason(who.tenant_id, who.team_id, plugin)
             signed_out = await needs_sign_in(who.tenant_id, who.team_id, plugin)
             may = access.may(who, KNOWLEDGE_CELL["area"], KNOWLEDGE_CELL["action"])
             removes = access.may(who, "knowledge", "delete")
-            made = await copies.sources(who.tenant_id, who.team_id, m.id)
             for s in m.knowledge_sources:
-                view = {k: v for k, v in source_view(plugin, s).items() if k not in ("body", "digest")}
+                view = {k: v for k, v in source_view(plugin, s).items() if k not in ("body", "digest", "off")}
                 # Added once the team made a source of it in any of its knowledge bases; the newest is the copy.
                 mine = [x for x in made if x.get("source") == s.name]
                 copy = (
@@ -322,36 +345,41 @@ def plugin_templates_router(host: PluginHost, copies: Copies | None = None) -> A
                     AppResource.model_validate(
                         view
                         | {
+                            "summary": f"Keeps {s.title} pages in a knowledge base you pick, synced as they change.",
                             "state": state,
                             "copy": copy,
                             "installed": {"copies": len(mine), "version": 1 if mine else None, "newerAvailable": False},
                             "canRemove": bool(mine) and removes,
-                            "canAdd": may and state == "available",
-                            "reason": None if may else who_adds(KNOWLEDGE_CELL["area"], KNOWLEDGE_CELL["action"]),
+                            "canAdd": may and state == "available" and off is None,
+                            "reason": off
+                            or (None if may else who_adds(KNOWLEDGE_CELL["area"], KNOWLEDGE_CELL["action"])),
                             "service": "kb",
                         }
                     ).model_dump(by_alias=True)
                 )
         return ok(out)
 
-    @r.get("/v1/plugin-templates", response_model=Envelope[list[PluginTemplate]])
+    @r.get(
+        "/v1/plugin-templates",
+        response_model=Envelope[list[PluginTemplate]],
+        dependencies=[Depends(reader_of("tools"))],
+    )
     async def list_plugin_templates(  # pyright: ignore[reportUnusedFunction]
-        who: Annotated[Principal, Depends(tools_reader)], kind: Annotated[Kind | None, Query()] = None
+        who: Annotated[Principal, Depends(tools_reader)], _: Tx, kind: Annotated[Kind | None, Query()] = None
     ) -> JSONResponse:
-        """Every template and knowledge source of every plugin on for the caller's team, with its body. A person in the
-        team, or a service holding `tools:view` that names the team, may read it; a call naming no team is refused,
-        since templates are listed per team."""
+        """Every template and knowledge source of every installed plugin, with its body, each marked `off` while its
+        plugin is off for the caller's team. A person in the team, or a service holding `tools:view` that names the
+        team, may read it; a call naming no team is refused, since templates are listed per team."""
         if not who.team_id:
             raise ValidationFailed("Templates are listed for one team; this call names none.", code="team_required")
-        out: list[dict[str, Any]] = []
+        out: list[Json] = []
         for plugin in host.plugins.values():
             m = plugin.manifest
             if not (m.templates or m.knowledge_sources):
                 continue
-            if await host.off_reason(who.tenant_id, who.team_id, plugin) is not None:
-                continue
-            out += [view_of(plugin, t) for t in m.templates if kind in (None, t.kind)]
-            out += [source_view(plugin, s) for s in m.knowledge_sources if kind in (None, "knowledge_source")]
+            off = {"off": await host.off_reason(who.tenant_id, who.team_id, plugin)}
+            out += [view_of(plugin, t) | off for t in m.templates if kind in (None, t.kind)]
+            out += [source_view(plugin, s) | off for s in m.knowledge_sources if kind in (None, "knowledge_source")]
         return ok(out)
 
     return r

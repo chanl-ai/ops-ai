@@ -5,13 +5,20 @@ readable name."""
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator, Mapping
 from typing import Any, cast
+
+import pytest
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.pool import StaticPool
 
 from ops_agents.activities.catalog import load_catalog
 from ops_agents.activities.tool_directory import OperationRef
 from ops_agents.api.chat_threads import AssistantBuilder
 from ops_agents.api.review_text import describe_call, humanize
 from ops_agents.api.routers.tool_catalog import known_tools, tool_options
+from ops_agents.store.agent_registry import registry_agents
+from ops_agents.store.tenancy import LOCAL_TENANT, tenant_scope
 from ops_contracts.chat import ApprovalWidget, ChatMessage, WidgetEvent
 from tests.conftest import SEED
 
@@ -42,15 +49,26 @@ class Directory:
 
 
 class Rt:
-    """The runtime parts describe_call and the tools catalog read: the catalogue, the tool directory, and no app cards
-    (a runtime without tools-service's apps, as Runtime defaults)."""
+    """The runtime parts describe_call and the tools catalog read: the catalogue, the tool directory, no app cards
+    (a runtime without tools-service's apps, as Runtime defaults), and a registry holding none of the catalogue's
+    agents, so the catalog lists only tools."""
 
-    def __init__(self) -> None:
+    def __init__(self, db: AsyncEngine | None = None) -> None:
         self.catalog = load_catalog(SEED)
         self.app_states = None
+        self.db = db
 
     def directory(self) -> Directory:
         return Directory()
+
+
+@pytest.fixture
+async def db() -> AsyncIterator[AsyncEngine]:
+    engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
+    async with engine.begin() as c:
+        await c.run_sync(registry_agents.create)
+    yield engine
+    await engine.dispose()
 
 
 async def test_an_approval_card_names_a_plugin_tool_by_its_title() -> None:
@@ -63,10 +81,11 @@ async def test_an_approval_card_names_a_plugin_tool_by_its_title() -> None:
     assert plain["label"] == humanize("crm_lookup_account"), plain
 
 
-async def test_the_tools_catalog_lists_a_plugin_tools_title(monkeypatch: Any) -> None:
+async def test_the_tools_catalog_lists_a_plugin_tools_title(monkeypatch: Any, db: AsyncEngine) -> None:
     monkeypatch.setattr("ops_agents.api.routers.tool_catalog.published_workflows", _none)
     monkeypatch.setattr("ops_agents.api.routers.tool_catalog.engine_workflows", _none)
-    rows = {r["name"]: r for r in await known_tools(cast(Any, Rt()))}
+    with tenant_scope(LOCAL_TENANT):
+        rows: dict[str, Mapping[str, object]] = {r["name"]: r for r in await known_tools(cast(Any, Rt(db)))}
     assert rows["salesforce_update_record"]["title"] == "Update a record", rows["salesforce_update_record"]
     assert rows["crm_lookup_account"]["title"] is None
 
@@ -75,10 +94,11 @@ async def _none(*_: Any) -> list[Any]:
     return []
 
 
-async def test_the_tools_picker_labels_and_finds_a_plugin_tool_by_its_title(monkeypatch: Any) -> None:
+async def test_the_tools_picker_labels_and_finds_a_plugin_tool_by_its_title(monkeypatch: Any, db: AsyncEngine) -> None:
     monkeypatch.setattr("ops_agents.api.routers.tool_catalog.published_workflows", _none)
     monkeypatch.setattr("ops_agents.api.routers.tool_catalog.engine_workflows", _none)
-    found = await tool_options(cast(Any, Rt()), search="update a record", cursor=None, limit=25, ids=None)
+    with tenant_scope(LOCAL_TENANT):
+        found = await tool_options(cast(Any, Rt(db)), search="update a record", cursor=None, limit=25, ids=None)
     labels = [o["label"] for o in json.loads(bytes(found.body))["data"]["data"]]
     assert labels == ["Update a record"], labels
 

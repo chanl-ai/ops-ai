@@ -14,7 +14,14 @@ from ops_agents.api import ops_tools
 from ops_agents.api.agent_registry import registry
 from ops_agents.api.auth import Principal
 from ops_agents.api.child_runs import acting_for
-from ops_agents.api.ops_tools import REQUEST_APP, TOOLS, OpsReads, declared_args, ensure_ops_assistant
+from ops_agents.api.ops_tools import (
+    REQUEST_APP,
+    TOOLS,
+    OpsReads,
+    declared_args,
+    ensure_ops_assistant,
+    ops_assistant_id,
+)
 from ops_agents.store.cases import CaseStore
 from ops_contracts.chat import ChatMessage, ToolCall
 from ops_store.isolation import scope
@@ -28,6 +35,8 @@ from tests.api.test_team_default_agent import (  # noqa: F401
     viewer,  # pyright: ignore[reportUnusedImport]
 )
 from tests.engine.test_lifecycle_rights import TENANT
+
+AID = ops_assistant_id(TENANT, "team_ops")
 
 CARD_DISPUTE = json.loads(
     (Path(__file__).parents[4] / "scripts/sample-team/workflows/card_dispute_intake.json").read_text()
@@ -52,7 +61,7 @@ async def opened(stack_: Stack, team: str, subject: str) -> str:
         case = await CaseStore(rt.db).open(
             team_id=team, subject=subject, priority="normal", by="seed@harborpine.example"
         )
-    return str(case.case["id"])
+    return str(case.case.id)
 
 
 def ids(outcome: Any) -> list[str]:
@@ -152,20 +161,18 @@ async def test_a_team_with_no_default_gets_one_ops_assistant_and_the_tools_follo
         first_made = await ensure_ops_assistant(rt, "team_ops")
         # A second first chat in another process: its catalogue has not served the assistant yet, so it inserts again,
         # meets the first's row and serves it instead of failing.
-        rt.catalog.drop_agent("ag_ops_team_ops")
+        rt.catalog.drop_agent(AID)
         second_made = await ensure_ops_assistant(rt, "team_ops")
-        rows = [r for r in await registry(rt).rows() if r["id"] == "ag_ops_team_ops"]
-    assert first_made.id == second_made.id == "ag_ops_team_ops", "two first chats make one assistant"
-    assert len(rows) == 1 and rows[0]["team_id"] == "team_ops", rows
+        rows = [r for r in await registry(rt).rows() if r.id == AID]
+    assert first_made.id == second_made.id == AID, "two first chats make one assistant"
+    assert len(rows) == 1 and rows[0].team_id == "team_ops", rows
     first = (await start(c, VIEWER))["id"]
     ops = OpsReads(rt)
     with scope(TENANT, "team_ops"), acting_for(viewer()):
-        assert {g.name for g in await ops.offers_in("ag_ops_team_ops", first)} == set(TOOLS) - {REQUEST_APP}, (
-            "the default gets them"
-        )
+        assert {g.name for g in await ops.offers_in(AID, first)} == set(TOOLS) - {REQUEST_APP}, "the default gets them"
     assert (await c.put(URL, json={"agentId": "ag_branch"}, headers=ADMIN)).status_code == 200
     with scope(TENANT, "team_ops"), acting_for(viewer()):
-        assert await ops.offers_in("ag_ops_team_ops", first) == [], "a team admin's default takes the tools over"
+        assert await ops.offers_in(AID, first) == [], "a team admin's default takes the tools over"
         assert {g.name for g in await ops.offers_in("ag_branch", first)} == set(TOOLS) - {REQUEST_APP}
 
 
@@ -229,7 +236,7 @@ async def test_a_case_read_brings_its_customer_due_date_and_notes(stack: Stack) 
             by="seed@harborpine.example",
             customer_name="Okafor Family Trust",
         )
-        cid = str(made.case["id"])
+        cid = str(made.case.id)
         await store.add_event(
             cid, "note", ref=None, detail={"text": "Risk profile last refreshed 14 months ago."}, by="x"
         )
@@ -239,3 +246,52 @@ async def test_a_case_read_brings_its_customer_due_date_and_notes(stack: Stack) 
         found = await ops.run("find_cases", {"search": "annual review"})
     for summary in (read.output["summary"], found.output["summary"]):
         assert "Okafor Family Trust" in summary and "Risk profile last refreshed 14 months ago." in summary, summary
+
+
+async def test_a_start_card_is_drawn_only_where_the_person_may_run_the_workflows_owning_team(stack: Stack) -> None:  # noqa: F811 - the shared fixture
+    # A builder in one team and a viewer in another: a workflow the second team owns is never drawn as a start card,
+    # acting in either team, while the first team's is.
+    from ops_agents.api.routers.engine import definitions  # noqa: PLC0415 - the routers import this module's neighbours
+
+    _, rt = stack
+    for workflow, team in (("wf_ops_start", "team_ops"), ("wf_fraud_start", "team_fraud")):
+        with scope(TENANT, team):
+            await definitions(rt).publish(
+                workflow,
+                name=workflow,
+                definition=CARD_DISPUTE,
+                digest=workflow,
+                now="2026-11-18T00:00:00Z",
+                by="seed@harborpine.example",
+                team=team,
+            )
+
+    def jane_in(team: str) -> Principal:
+        return Principal(
+            name="jane",
+            email="jane@harborpine.example",
+            team_id=team,
+            tenant_id=TENANT,
+            team_ids=("team_ops", "team_fraud"),
+            role="builder",
+            roles={"team_ops": "builder", "team_fraud": "viewer"},
+        )
+
+    async def drawn(team: str, workflow: str) -> dict[str, Any]:
+        call = ToolCall(
+            id="c1",
+            name="start_workflow_form",
+            server="ops",
+            input={},
+            output={"cards": [{"type": "start", "id": workflow}], "summary": ""},
+            status="success",
+            duration_ms=1,
+        )
+        message = ChatMessage(id="m1", role="assistant", content="", at="2026-11-18T00:00:00Z", tool_calls=[call])
+        with scope(TENANT, team):
+            await ops_tools.fill_cards(rt, jane_in(team), [message])
+        return cast(dict[str, Any], cast(dict[str, Any], call.output)["cards"][0])
+
+    assert "view" in await drawn("team_ops", "wf_ops_start"), "a builder of the owning team gets the form"
+    assert (await drawn("team_ops", "wf_fraud_start")).get("missing"), "another team's workflow is never drawn"
+    assert (await drawn("team_fraud", "wf_fraud_start")).get("missing"), "a viewer of the owning team may not run it"

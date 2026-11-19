@@ -1,20 +1,25 @@
 """The one way a service calls another service's API. Every caller builds a `ServiceClient` for its callee and
 asks it for `get`, `post`, `delete` or `pages`; no service writes its own token minting, envelope reading or retry.
 
-  kb = ServiceClient.for_settings(settings, http, service="agents", audience="kb", scopes=["knowledge:view"],
+  kb = ServiceClient.for_settings(settings, service="agents", audience="kb", scopes=["knowledge:view"],
                                   tenant=current_tenant, team=current_team)
   refs = await kb.get("/v1/knowledge-bases/refs")
+
+The client owns its `httpx.AsyncClient`, built from the callee's `Settings` endpoint: its address, its timeout and how
+many more times a read is tried. No other code builds one (scripts/check_config_literals.py). A callee whose endpoint
+is unset is a ValueError naming the setting, raised when the client is built.
 
 Each call mints a short service token naming the tenant (and team) the caller acts for, so a token never outlives
 the request it was made for. An answer is the `{success, data, error}` envelope: `data` is returned, and an error
 comes back as `ServiceCallError` carrying the callee's status and `error.code`, so the caller can pass a 404 or a
 409 on to the person unchanged. A read that fails in transport (a refused or reset connection, a timeout) is tried
-once more; a write never is, because the callee may have acted before the connection broke.
+again, as many times as the endpoint's `retries`; a write never is, because the callee may have acted before the
+connection broke.
 """
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, cast
 from urllib.parse import quote
@@ -23,7 +28,9 @@ import httpx
 
 from ops_policy import Ed25519Signer
 from ops_service_kit.errors import ApiError, ServiceUnavailable
-from ops_service_kit.request_timing import current_request_id
+from ops_service_kit.http import Json, JsonValue
+from ops_service_kit.narrow import json_object
+from ops_service_kit.request_timing import current, current_request_id
 from ops_service_kit.settings import Settings
 
 from .resolve import mint_service_token
@@ -33,9 +40,7 @@ from .service_keys import service_signer
 class ServiceCallError(ApiError):
     """The callee answered with an error: its status and code, kept so the caller can pass them on."""
 
-    def __init__(
-        self, status: int, message: str, *, code: str | None = None, details: dict[str, Any] | None = None
-    ) -> None:
+    def __init__(self, status: int, message: str, *, code: str | None = None, details: Json | None = None) -> None:
         super().__init__(message, code=code, details=details)
         self.status = status
 
@@ -70,21 +75,36 @@ class ServiceClient:
     tenant: Callable[[], str | None] = _none
     team: Callable[[], str | None] = _none
     timeout: float = 10.0
+    # How many more times a read that failed in transport is tried.
+    retries: int = 1
 
     @classmethod
     def for_settings(
         cls,
         settings: Settings,
-        http: httpx.AsyncClient,
+        http: httpx.AsyncClient | None = None,
         *,
         service: str,
         audience: str,
-        scopes: list[str] | None = None,
+        scopes: Sequence[str] | None = None,
         tenant: Callable[[], str | None] = _none,
         team: Callable[[], str | None] = _none,
-        timeout: float = 10.0,
+        timeout: float | None = None,
+        endpoint: str | None = None,
     ) -> ServiceClient:
-        return cls(http, service_signer(settings), service, audience, list(scopes or []), tenant, team, timeout)
+        """The client for `audience`, on the Settings endpoint of that name (`endpoint` names another: platform-service
+        is called on `platform_internal`). It owns its HTTP client, with the endpoint's timeout and retries.
+
+        A caller that still passes its own `http` keeps that client and its own timeout; the endpoint is not read."""
+        signer = service_signer(settings)
+        if http is not None:
+            return cls(http, signer, service, audience, list(scopes or []), tenant, team, timeout or cls.timeout)
+        callee = settings.endpoint(endpoint or audience)
+        owned = httpx.AsyncClient(base_url=callee.base, timeout=callee.timeout_s)
+        return cls(owned, signer, service, audience, list(scopes or []), tenant, team, callee.timeout_s, callee.retries)
+
+    async def aclose(self) -> None:
+        await self.http.aclose()
 
     def headers(
         self, *, team: str | None = None, tenant: str | None = None, token_header: str = "Authorization"
@@ -117,10 +137,13 @@ class ServiceClient:
         team: str | None = None,
         tenant: str | None = None,
         token_header: str = "Authorization",
-        timeout: float | None = None,
+        timeout: float | None = None,  # noqa: ASYNC109
     ) -> Any:
         """The callee's `data`, or ServiceCallError / ServiceUnreachable."""
-        tries = 2 if method.upper() == "GET" else 1
+        tries = 1 + self.retries if method.upper() == "GET" else 1
+        # On the request's line, so a call made while its transaction is open is seen (the statement budget fails it).
+        if (timing := current()) is not None:
+            timing.add_service_call()
         for attempt in range(tries):
             try:
                 r = await self.http.request(
@@ -152,17 +175,18 @@ class ServiceClient:
         method: str,
         path: str,
         *,
-        body: dict[str, Any] | None = None,
+        body: Mapping[str, JsonValue] | None = None,
         cursor_field: str = "cursor",
         next_field: str = "nextLink",
         items_field: str = "items",
         **kw: Any,
-    ) -> AsyncIterator[dict[str, Any]]:
+    ) -> AsyncIterator[Json]:
         """Each page of a cursor list, the first without a cursor, then each `next_field` until a page has none."""
         cursor: str | None = None
         while True:
             payload = {**(body or {}), **({cursor_field: cursor} if cursor else {})}
-            page = cast(dict[str, Any], await self.request(method, path, json=payload, **kw))
+            # Not narrowed: a page of another shape fails at `page.get` after it is yielded, as callers expect.
+            page: Json = await self.request(method, path, json=payload, **kw)
             yield page
             following = page.get(next_field)
             if not following or not page.get(items_field, True):
@@ -181,14 +205,16 @@ def _data(audience: str, r: httpx.Response) -> Any:
                 r.status_code, f"{audience} answered {r.status_code} with a body that is not JSON", code="bad_response"
             ) from None
         body = None
-    envelope: dict[str, Any] = cast(dict[str, Any], body) if isinstance(body, dict) else {}
+    envelope = json_object(body)
     if r.is_success:
         return envelope.get("data", body)
-    error: dict[str, Any] = cast(dict[str, Any], envelope.get("error") or {})
+    # Not narrowed: an `error` of another shape fails here as an AttributeError, which callers that catch ValueError
+    # around a call (an unknown tool's policy, a file not ready) must not take for an answer.
+    error = cast(Json, envelope.get("error") or {})
     raise ServiceCallError(
         r.status_code,
         # An error that is not the envelope (a proxy's page) keeps the start of its body, so the reason survives.
         str(error.get("message") or f"{audience} answered {r.status_code}: {r.text[:200]}".rstrip(": ")),
         code=str(error["code"]) if error.get("code") else None,
-        details=cast(dict[str, Any], error.get("details")) if isinstance(error.get("details"), dict) else None,
+        details=json_object(error.get("details")) if isinstance(error.get("details"), dict) else None,
     )

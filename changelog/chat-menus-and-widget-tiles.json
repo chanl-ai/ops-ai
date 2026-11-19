@@ -1,0 +1,1 @@
+{"date": "2026-11-12", "title": "Chat menus and widget tiles fit their space", "description": "The skills and agent menus in chat open below the message box when there is no room above it. Figure tiles in a widget share the row at full width, and a small table in a widget shows without an empty toolbar.", "tag": "fix"}

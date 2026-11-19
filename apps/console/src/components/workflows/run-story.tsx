@@ -27,7 +27,7 @@ export function RunEmailSection({ email }: { email: RunEmail }) {
           body={email.body}
           attachments={email.attachments.map((a) => ({
             name: a.name,
-            href: `/files/${encodeURIComponent(a.fileId)}`,
+            href: `/data/files/${encodeURIComponent(a.fileId)}`,
             type: a.type,
             size: a.size,
           }))}
@@ -78,16 +78,16 @@ function ChildRow({ child, testId }: { child: RunStoryChild; testId: string }) {
           </p>
         )}
         <div className="flex flex-wrap gap-x-3 gap-y-1">
-          <Link href={`/workflows/runs/${encodeURIComponent(child.runId)}`} className="font-medium underline underline-offset-2" data-testid={`${testId}-run`}>
+          <Link href={`/build/runs/${encodeURIComponent(child.runId)}`} className="font-medium underline underline-offset-2" data-testid={`${testId}-run`}>
             Open run
           </Link>
           {kase && (
-            <Link href={`/cases/${encodeURIComponent(kase.caseId)}`} className="font-medium break-words underline underline-offset-2" data-testid={`${testId}-case`}>
+            <Link href={`/work/cases/${encodeURIComponent(kase.caseId)}`} className="font-medium break-words underline underline-offset-2" data-testid={`${testId}-case`}>
               Case: {kase.subject}
             </Link>
           )}
           {task && (
-            <Link href={`/reviews/${encodeURIComponent(task.reviewId)}`} className="font-medium underline underline-offset-2" data-testid={`${testId}-task`}>
+            <Link href={`/work/tasks/${encodeURIComponent(task.reviewId)}`} className="font-medium underline underline-offset-2" data-testid={`${testId}-task`}>
               {task.open ? 'Open Human Task' : 'View Human Task'}
             </Link>
           )}
@@ -116,7 +116,7 @@ export function RunStoryView({ story, document }: { story: RunStory; document?: 
           actions={
             story.childrenMore ? (
               <Button asChild variant="outline" size="sm">
-                <Link href="/workflows/runs">All runs</Link>
+                <Link href="/build/runs">All runs</Link>
               </Button>
             ) : undefined
           }

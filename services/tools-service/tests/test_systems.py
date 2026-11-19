@@ -4,8 +4,9 @@ its accounts' state or its details."""
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+import asyncio
+from collections.abc import AsyncIterator, Callable, Coroutine
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -14,10 +15,15 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_identity import Auth, Identity, ServiceAuth, service_verifiers
 from ops_plugin_sdk.loader import Loaded
+from ops_service_kit.http import Json
+from ops_service_kit.listing import ListParams
 from ops_service_kit.settings import Settings
+from ops_store import isolation
+from ops_store.team_scope import acting_as
 from ops_tools.modules.seed import ensure_platform_tools, load
 from ops_tools.plugins.host import PluginHost
-from ops_tools.store.connections import ConnectionStore
+from ops_tools.store.app_cards import AppCards
+from ops_tools.store.connections import ConnectionStore, TokenWrite
 from ops_tools.store.egress import EgressStore
 from ops_tools.store.modules import ModuleStore
 from ops_tools.store.plugin_bindings import PluginBindings
@@ -62,9 +68,10 @@ def admin(tenant: str, team: str = TEAM) -> dict[str, str]:
 
 
 async def systems(client: httpx.AsyncClient, tenant: str) -> list[dict[str, Any]]:
-    got = await client.get("/v1/apps", headers=admin(tenant))
+    got = await client.get("/v1/apps", params={"pageSize": 50}, headers=admin(tenant))
     assert got.status_code == 200, got.text
-    return list(got.json()["data"])
+    assert not got.json()["data"]["pagination"]["hasNext"], got.text
+    return list(got.json()["data"]["data"])
 
 
 async def test_a_module_and_the_connection_it_uses_are_one_card(
@@ -105,6 +112,8 @@ async def test_a_plugins_connection_is_part_of_the_plugins_card(client: httpx.As
     # The account the plugin made is the app's default, the live one; the team has made no sandbox account.
     assert plugin["sandboxId"] is None, plugin
     assert not [c for c in cards if c["kind"] == "connection" and c["connectionId"] == conn_id], "shown twice"
+    ids, _ = await _ids(client, tenant, accountId=conn_id)
+    assert ids == [f"plugin:{ID}"], ids
 
 
 async def test_another_teams_connection_never_reaches_this_teams_grid(client: httpx.AsyncClient, tenant: str) -> None:
@@ -226,8 +235,8 @@ async def _app(client: httpx.AsyncClient, tenant: str) -> tuple[dict[str, Any], 
     return card, next(a for a in page["accounts"] if a["kind"] == "team" if a["default"])
 
 
-def _token(**extra: Any) -> dict[str, Any]:
-    return {"access_ct": "ct", "scopes": [], "rotations": 0, "refreshed_at": datetime.now(UTC), **extra}
+def _token(**extra: Any) -> TokenWrite:
+    return TokenWrite(access_ct="ct", scopes=[], rotations=0, refreshed_at=datetime.now(UTC), **extra)
 
 
 async def test_an_app_turned_on_reads_not_signed_in_until_the_team_account_signs_in(
@@ -265,7 +274,7 @@ async def test_a_passing_test_with_no_token_reads_connected(
 ) -> None:
     """An API key or password signs in with no token row: Test connection passing is what shows it works."""
     conn = await _turned_on(client, tenant)
-    health = {
+    health: Json = {
         "status": "ok",
         "account": "team",
         "at": "2026-11-01T00:00:00Z",
@@ -273,6 +282,17 @@ async def test_a_passing_test_with_no_token_reads_connected(
     }
     await ConnectionStore(engine).set_health(tenant, conn, health)
     assert (await _app(client, tenant))[0]["state"] == "connected"
+    # `sortBy=connected` puts the connected cards first, then by name: Alpha sorts first by name and is not connected.
+    alpha = await client.post("/v1/apps", json={"name": "Alpha", "authKind": "bearer"}, headers=admin(tenant))
+    assert alpha.status_code == 201, alpha.text
+    orders: dict[str, list[str]] = {}
+    for params in ({}, {"sortBy": "connected"}):
+        got = (await client.get("/v1/apps", params=params, headers=admin(tenant))).json()["data"]["data"]
+        orders[str(params)] = [c["name"] for c in got]
+    assert orders == {
+        "{}": ["Alpha", "Desk", "Header key desk"],
+        "{'sortBy': 'connected'}": ["Desk", "Alpha", "Header key desk"],
+    }
 
 
 async def test_the_approval_pickers_list_keeps_the_built_in_apps(
@@ -282,7 +302,7 @@ async def test_the_approval_pickers_list_keeps_the_built_in_apps(
     await ensure_platform_tools(ModuleStore(engine), tenant_id=tenant, at=datetime.now(UTC), team_id=TEAM)
     r = await client.get("/v1/apps", params={"include": "builtin"}, headers=admin(tenant))
     assert r.status_code == 200, r.text
-    assert "builtin:mailboxes" in {c["id"] for c in r.json()["data"]}, r.json()["data"]
+    assert "builtin:mailboxes" in {c["id"] for c in r.json()["data"]["data"]}, r.json()["data"]
 
 
 async def test_a_team_never_provisioned_gets_its_built_in_apps_when_they_are_asked_for(
@@ -292,4 +312,325 @@ async def test_a_team_never_provisioned_gets_its_built_in_apps_when_they_are_ask
     # first listing provisions it, as a first tool lookup does.
     r = await client.get("/v1/apps", params={"include": "builtin"}, headers=admin(tenant, "team_cards"))
     assert r.status_code == 200, r.text
-    assert "builtin:mailboxes" in {c["id"] for c in r.json()["data"]}, r.json()["data"]
+    assert "builtin:mailboxes" in {c["id"] for c in r.json()["data"]["data"]}, r.json()["data"]
+
+
+async def test_the_apps_list_holds_each_card_once_by_name_ignoring_case(
+    client: httpx.AsyncClient, engine: AsyncEngine, tenant: str
+) -> None:
+    """Which cards the grid and the approval picker list and in what order: by name ignoring case, a person's
+    custom apps beside the installed plugins; the picker adds the built-in apps; another team's app never shows."""
+    await ensure_platform_tools(ModuleStore(engine), tenant_id=tenant, at=datetime.now(UTC), team_id=TEAM)
+    made: dict[str, str] = {}
+    for name, team in (("beta ledger", TEAM), ("Alpha desk", TEAM), ("Another team's", "team_ops")):
+        r = await client.post("/v1/apps", json={"name": name, "authKind": "none"}, headers=admin(tenant, team))
+        assert r.status_code == 201, r.text
+        made[name] = r.json()["data"]["id"]
+    custom = [made["Alpha desk"], made["beta ledger"]]
+    plugins = ["plugin:test.desk"]
+    builtins = ["builtin:document-types", "builtin:files"]
+    for params, want in (
+        ({}, [*custom, *plugins, "plugin:test.header-key"]),
+        (
+            {"include": "builtin"},
+            [*custom, *plugins, *builtins, "plugin:test.header-key", "builtin:knowledge", "builtin:mailboxes"],
+        ),
+        # The card an account belongs to, so the console needs no paging to find it; another team's account none.
+        ({"accountId": made["Alpha desk"]}, [made["Alpha desk"]]),
+        ({"accountId": [made["beta ledger"], made["Another team's"]]}, [made["beta ledger"]]),
+        ({"accountId": made["Another team's"]}, []),
+    ):
+        got = await client.get("/v1/apps", params=params, headers=admin(tenant))
+        assert got.status_code == 200, got.text
+        assert [c["id"] for c in got.json()["data"]["data"]] == want, got.json()["data"]
+
+
+# ── The list is chosen, searched and counted in SQL over the team's card rows ──
+
+
+async def _ids(client: httpx.AsyncClient, tenant: str, **params: Any) -> tuple[list[str], dict[str, Any]]:
+    got = await client.get("/v1/apps", params=params, headers=admin(tenant))
+    assert got.status_code == 200, got.text
+    page = got.json()["data"]
+    return [c["id"] for c in page["data"]], page["pagination"]
+
+
+async def test_the_apps_list_pages_searches_and_names_cards_in_sql(client: httpx.AsyncClient, tenant: str) -> None:
+    made: list[str] = []
+    for name, category in (("Ledger", "Finance"), ("ledger", None), ("Claims core", "Insurance")):
+        body = {"name": name, "authKind": "none", **({"category": category} if category else {})}
+        r = await client.post("/v1/apps", json=body, headers=admin(tenant))
+        assert r.status_code == 201, r.text
+        made.append(r.json()["data"]["id"])
+    ledger, ledger_lower, claims = made
+    # Equal names ignoring case keep one place each: by id after the name.
+    equal = sorted([ledger, ledger_lower])
+    every = [claims, "plugin:test.desk", "plugin:test.header-key", *equal]
+    for params, want, at in (
+        ({"pageSize": 2}, every[:2], (1, 5, True)),
+        ({"pageSize": 2, "page": 3}, every[4:], (3, 5, False)),
+        ({"pageSize": 2, "page": 9}, every[4:], (3, 5, False)),
+        ({"search": "insur"}, [claims], (1, 1, False)),
+        ({"search": "LEDGER"}, equal, (1, 2, False)),
+        ({"ids": [ledger, "plugin:test.desk", "plugin:nobody"]}, ["plugin:test.desk", ledger], (1, 2, False)),
+    ):
+        ids, pagination = await _ids(client, tenant, **params)
+        assert ids == want, (params, ids)
+        assert (pagination["page"], pagination["total"], pagination["hasNext"]) == at, (params, pagination)
+
+
+async def test_a_write_to_an_app_shows_on_the_next_list(
+    client: httpx.AsyncClient, engine: AsyncEngine, tenant: str
+) -> None:
+    # Each write lands after a list built the rows, so only the write's clearing of the stamp can show it.
+    await _ids(client, tenant)
+    made = await client.post("/v1/apps", json={"name": "Ledger", "authKind": "none"}, headers=admin(tenant))
+    app = made.json()["data"]["id"]
+    assert app in (await _ids(client, tenant))[0]
+    store = ConnectionStore(engine)
+    row = await store.get(tenant, app)
+    assert row is not None
+    await store.change(tenant, app, int(row.revision), {"name": "Accounts payable"}, actor="t", at=datetime.now(UTC))
+    ids, _ = await _ids(client, tenant)
+    assert ids[0] == app, ids
+    await store.delete(tenant, app, actor="t", at=datetime.now(UTC))
+    assert app not in (await _ids(client, tenant))[0]
+    # A plugin the install no longer holds keeps its card while the team has it on, and loses it when turned off.
+    bindings = PluginBindings(engine)
+    for on in (True, False):
+        await bindings.put(tenant, TEAM, "gone", enabled=on, connection_id=None, settings={}, by="t")
+        assert ("plugin:gone" in (await _ids(client, tenant))[0]) is on
+
+
+async def test_a_module_write_changes_the_built_in_cards_on_the_next_list(
+    client: httpx.AsyncClient, engine: AsyncEngine, tenant: str
+) -> None:
+    # A built-in app's card is built from the team's module of it: deleting and adding the module back clear the stamp.
+    every = {"include": "builtin", "pageSize": 50}
+    got = await client.get("/v1/apps", params=every, headers=admin(tenant))
+    files = next(c for c in got.json()["data"]["data"] if c["id"] == "builtin:files")
+    store = ModuleStore(engine)
+    held = [await store.get(tenant, m) for m in files["moduleIds"]]
+    for m in files["moduleIds"]:
+        assert await store.delete(tenant, m)
+    ids, pagination = await _ids(client, tenant, **every)
+    assert "builtin:files" not in ids and pagination["total"] == len(ids), (ids, pagination)
+    for m in held:
+        assert m is not None
+        await store.put(m, expected_revision=None)
+    ids, pagination = await _ids(client, tenant, **every)
+    assert "builtin:files" in ids and pagination["total"] == len(ids), (ids, pagination)
+
+
+async def test_a_list_of_fresh_card_rows_answers_the_cards_a_rebuild_does(
+    client: httpx.AsyncClient, engine: AsyncEngine, tenant: str
+) -> None:
+    # A list whose rows are fresh builds only its page's cards, from the accounts and modules those cards name: a
+    # custom app counting its module's tools, a built-in app, both plugins and one the install no longer holds.
+    module = next(m for m in await ModuleStore(engine).all_teams(tenant) if m["team_id"] == TEAM and m["connection_id"])
+    made = await client.post("/v1/apps", json={"name": "Claims core", "authKind": "bearer"}, headers=admin(tenant))
+    bound = await client.put(
+        f"/v1/tool-modules/{module['id']}/connection", json={"connectionId": made.json()["data"]["id"]},
+        headers=admin(tenant),
+    )  # fmt: skip
+    assert bound.status_code == 200, bound.text
+    await PluginBindings(engine).put(tenant, TEAM, "gone", enabled=True, connection_id=None, settings={}, by="t")
+    every = {"include": "builtin", "pageSize": 50}
+    rebuilt = (await client.get("/v1/apps", params=every, headers=admin(tenant))).json()["data"]["data"]
+    assert {"builtin:files", "plugin:gone", made.json()["data"]["id"]} <= {c["id"] for c in rebuilt}, rebuilt
+    fresh = (await client.get("/v1/apps", params=every, headers=admin(tenant))).json()["data"]["data"]
+    assert fresh == rebuilt
+    for card in rebuilt:
+        alone = await client.get("/v1/apps", params={"include": "builtin", "ids": card["id"]}, headers=admin(tenant))
+        assert alone.json()["data"]["data"] == [card], card["id"]
+
+
+async def _while_rebuilding(
+    monkeypatch: pytest.MonkeyPatch, other: Callable[[], Coroutine[Any, Any, httpx.Response]], *, before: bool
+) -> list[asyncio.Task[httpx.Response]]:
+    """Runs `other` beside the first card rebuild, before or after its writes and before its transaction ends, and
+    waits up to a second for it: a request the rebuild's lock holds back finishes after the list instead."""
+    started: list[asyncio.Task[httpx.Response]] = []
+    rebuild = AppCards.rebuild
+
+    async def paused(self: AppCards, *args: Any, **kwargs: Any) -> None:
+        if not before:
+            await rebuild(self, *args, **kwargs)
+        if not started:
+            started.append(asyncio.create_task(other()))
+            await asyncio.wait(started, timeout=1)
+        if before:
+            await rebuild(self, *args, **kwargs)
+
+    monkeypatch.setattr(AppCards, "rebuild", paused)
+    return started
+
+
+async def test_an_account_made_while_a_list_rebuilds_is_on_the_next_list(
+    client: httpx.AsyncClient, tenant: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await _ids(client, tenant)
+    first = await client.post("/v1/apps", json={"name": "Ledger", "authKind": "none"}, headers=admin(tenant))
+    assert first.status_code == 201, first.text
+    started = await _while_rebuilding(
+        monkeypatch,
+        lambda: client.post("/v1/apps", json={"name": "Payroll", "authKind": "none"}, headers=admin(tenant)),
+        before=True,
+    )
+    await _ids(client, tenant)
+    made = await started[0]
+    assert made.status_code == 201, made.text
+    assert made.json()["data"]["id"] in (await _ids(client, tenant))[0]
+
+
+async def test_two_lists_after_a_write_both_answer(
+    client: httpx.AsyncClient, tenant: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await _ids(client, tenant)
+    made = await client.post("/v1/apps", json={"name": "Ledger", "authKind": "none"}, headers=admin(tenant))
+    assert made.status_code == 201, made.text
+    started = await _while_rebuilding(monkeypatch, lambda: client.get("/v1/apps", headers=admin(tenant)), before=False)
+    ids, _ = await _ids(client, tenant)
+    other = await started[0]
+    assert other.status_code == 200, other.text
+    assert [c["id"] for c in other.json()["data"]["data"]] == ids
+
+
+async def test_the_card_rows_hold_the_acting_team_when_the_policy_lets_every_team_through(
+    client: httpx.AsyncClient, engine: AsyncEngine, tenant: str
+) -> None:
+    for team in (TEAM, "team_ops"):
+        r = await client.post(
+            "/v1/apps", json={"name": f"Desk of {team}", "authKind": "none"}, headers=admin(tenant, team)
+        )
+        assert r.status_code == 201, r.text
+        assert (await client.get("/v1/apps", headers=admin(tenant, team))).status_code == 200
+    # Tenant-wide with a team acting, so the database policy lets every team through and the query alone holds them.
+    wide = isolation.tenant_wide("a test reads the app cards with every team let through", tenant_id=tenant)
+    with wide, acting_as(TEAM):
+        page, _ = await AppCards(engine).page(
+            tenant, TEAM, ListParams(page_size=50), builtins=True, person="someone", is_person=True
+        )
+    assert [r["name"] for r in page["data"] if r["kind"] == "connection"] == [f"Desk of {TEAM}"], page["data"]
+
+
+# The states the Connected tab holds (store/app_cards.CONNECTED_STATES): an app that works or one that was removed.
+CONNECTED_TAB = {"connected", "test_failed", "removed", "not_installed"}
+
+
+async def _tab(client: httpx.AsyncClient, headers: dict[str, str], app: str) -> tuple[str, str]:
+    """The app's appState as its card is built, and the tab its card row puts it under for the same caller."""
+    every = (await client.get("/v1/apps", params={"pageSize": 50}, headers=headers)).json()["data"]
+    state = next(c["appState"] for c in every["data"] if c["id"] == app)
+    tabs: list[str] = []
+    for view in ("connected", "available"):
+        got = (await client.get("/v1/apps", params={"pageSize": 50, "view": view}, headers=headers)).json()["data"]
+        assert got["viewCounts"] == every["viewCounts"], got
+        assert got["viewCounts"][view] == got["pagination"]["total"], got
+        tabs += [view] * (app in {c["id"] for c in got["data"]})
+    assert len(tabs) == 1, tabs
+    return state, tabs[0]
+
+
+async def test_the_connected_tab_follows_every_write_that_changes_an_apps_state(
+    client: httpx.AsyncClient, engine: AsyncEngine, tenant: str
+) -> None:
+    # Each write lands after a list built the rows, so only its clearing of the stamp (or the row's due time) can move
+    # the card to the tab its state belongs in.
+    conn = await _turned_on(client, tenant)
+    store, app, now = ConnectionStore(engine), f"plugin:{ID}", datetime.now(UTC)
+    bindings = PluginBindings(engine)
+    _passed: Json = {"status": "ok", "account": "team", "at": "2026-11-01T00:00:00Z", "by": "Priya Shah"}
+    steps: list[tuple[str, Callable[[], Coroutine[Any, Any, object]], str]] = [
+        ("turned on", lambda: asyncio.sleep(0), "needs_sign_in"),
+        ("team signs in", lambda: store.replace_token(tenant, conn, _token()), "connected"),
+        ("test fails", lambda: store.set_token_test(tenant, conn, "", {"status": "failed"}), "test_failed"),
+        ("refused", lambda: store.mark_refused(tenant, conn, "", reason="invalid_grant", at=now), "needs_sign_in"),
+        ("signs in again", lambda: store.replace_token(tenant, conn, _token()), "connected"),
+        ("revoked", lambda: store.set_status(tenant, conn, "revoked", None), "needs_sign_in"),
+        ("reconnected", lambda: store.set_status(tenant, conn, "draft", None), "connected"),
+        (
+            "token ends unrenewed",
+            lambda: store.replace_token(tenant, conn, _token(expires_at=datetime.now(UTC) + timedelta(seconds=2))),
+            "connected",
+        ),
+        ("its end passes", lambda: asyncio.sleep(2.2), "needs_sign_in"),
+        ("signed out", lambda: store.forget_token(tenant, conn), "needs_sign_in"),
+        ("test passes with no token", lambda: store.set_health(tenant, conn, _passed), "connected"),
+        (
+            "plugin off",
+            lambda: bindings.put(tenant, TEAM, ID, enabled=False, connection_id=conn, settings={}, by="t"),
+            "off",
+        ),
+    ]
+    for step, write, state in steps:
+        await write()
+        got = await _tab(client, admin(tenant), app)
+        assert got == (state, "connected" if state in CONNECTED_TAB else "available"), (step, got)
+
+
+async def test_each_person_sees_their_own_sign_in_in_the_connected_tab(
+    client: httpx.AsyncClient, engine: AsyncEngine, tenant: str
+) -> None:
+    conn = await _turned_on(client, tenant)
+    store, app = ConnectionStore(engine), f"plugin:{ID}"
+    row = await store.get(tenant, conn)
+    assert row is not None
+    await store.change(tenant, conn, int(row.revision), {"sign_in": "person"}, actor="t", at=datetime.now(UTC))
+    priya, maya = admin(tenant), person(tenant, "Maya Lee", {TEAM: "admin"})
+    await store.replace_token(tenant, conn, _token(), person="usr_priya")
+    assert await _tab(client, priya, app) == ("connected", "connected")
+    assert await _tab(client, maya, app) == ("needs_sign_in", "available")
+    await store.set_token_test(tenant, conn, "usr_priya", {"status": "failed"})
+    assert await _tab(client, priya, app) == ("test_failed", "connected")
+
+
+async def test_the_apps_list_filters_by_category_kind_and_state_and_counts_each(
+    client: httpx.AsyncClient, tenant: str
+) -> None:
+    made: dict[str, str] = {}
+    for name, category in (("Ledger", "Finance"), ("Claims core", "Insurance"), ("Payroll", "Finance")):
+        r = await client.post(
+            "/v1/apps", json={"name": name, "authKind": "none", "category": category}, headers=admin(tenant)
+        )
+        assert r.status_code == 201, r.text
+        made[name] = r.json()["data"]["id"]
+    await _turned_on(client, tenant)
+    page = (await client.get("/v1/apps", params={"pageSize": 50}, headers=admin(tenant))).json()["data"]
+    cards = {c["id"]: c for c in page["data"]}
+    assert {k: page["facets"]["category"].get(k) for k in ("Finance", "Insurance")} == {"Finance": 2, "Insurance": 1}
+    assert page["facets"]["kind"] == {"connection": 3, "plugin": len(cards) - 3}, page["facets"]
+    states: dict[str, int] = {}
+    for c in cards.values():
+        states[c["appState"]] = states.get(c["appState"], 0) + 1
+    assert page["facets"]["appState"] == states, page["facets"]
+    ids, _ = await _ids(client, tenant, category="Finance", pageSize=50)
+    assert ids == [made["Ledger"], made["Payroll"]], ids
+    ids, _ = await _ids(client, tenant, category=["Finance", "Insurance"], kind="connection", pageSize=50)
+    assert sorted(ids) == sorted(made.values()), ids
+    one = next(iter(states))
+    ids, _ = await _ids(client, tenant, appState=one, pageSize=50)
+    assert sorted(ids) == sorted(i for i, c in cards.items() if c["appState"] == one), ids
+    wrong = await client.get("/v1/apps", params={"view": "mine"}, headers=admin(tenant))
+    assert wrong.status_code == 400, wrong.text
+
+
+async def test_the_apps_list_filters_on_having_an_account_and_counts_it(
+    client: httpx.AsyncClient, engine: AsyncEngine, tenant: str
+) -> None:
+    """hasAccount keeps the cards with a default account (a custom app, a plugin turned on) or without (a plugin
+    left off); the total and the facet count the filtered set; another team's custom app never shows."""
+    await _turned_on(client, tenant)
+    for team in (TEAM, "team_ops"):
+        r = await client.post(
+            "/v1/apps", json={"name": f"Ledger {team}", "authKind": "none"}, headers=admin(tenant, team)
+        )
+        assert r.status_code == 201, r.text
+    seen: dict[str, list[str]] = {}
+    for want in ("true", "false"):
+        r = await client.get("/v1/apps", params={"hasAccount": want, "pageSize": 50}, headers=admin(tenant))
+        assert r.status_code == 200, r.text
+        body = r.json()["data"]
+        seen[want] = sorted(c["name"] for c in body["data"])
+        assert body["pagination"]["total"] == len(seen[want]), body["pagination"]
+    assert seen == {"true": ["Desk", f"Ledger {TEAM}"], "false": ["Header key desk"]}, seen

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-10",
+  "title": "A connected app can make changes at once, and asks you first",
+  "description": "A newly added app starts with every tool on, writes included, while apps set up earlier keep the tools they had. Before the AI changes anything, the person in the chat gets an Allow or Deny card unless a team admin turns the app's Ask before changes switch off, and a test account never asks.",
+  "tag": "improved"
+}

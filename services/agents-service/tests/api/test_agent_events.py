@@ -17,6 +17,7 @@ from ops_agents.api.app import create_app
 from ops_agents.api.deps import Runtime
 from ops_agents.store.base import metadata
 from ops_agents.store.events import thread_events
+from ops_engine.store import metadata as engine_metadata
 from ops_service_kit.settings import Settings
 from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model, step_up
 
@@ -40,6 +41,7 @@ async def client_for(**settings: Any) -> AsyncIterator[AsyncClient]:
     app, engine = app_for(**settings)
     async with engine.begin() as c:
         await c.run_sync(metadata.create_all)
+        await c.run_sync(engine_metadata.create_all)
     async with (
         app.router.lifespan_context(app),
         AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
@@ -50,7 +52,8 @@ async def client_for(**settings: Any) -> AsyncIterator[AsyncClient]:
 
 @pytest.fixture
 async def client() -> AsyncIterator[AsyncClient]:
-    async for c in client_for():
+    # A workspace that turned requesterMayDecide on; `strict` is the default.
+    async for c in client_for(dev_policies={"requesterMayDecide": True}):
         yield c
 
 
@@ -61,7 +64,11 @@ async def strict() -> AsyncIterator[AsyncClient]:
 
 
 async def agent_run(client: AsyncClient, message: str) -> str:
-    tid = (await client.post("/v1/threads", json={"graph": "agent_wrapper", "metadata": {}})).json()["data"]["threadId"]
+    # The asker starts the thread they run: an agent's conversation is read by the person it is for.
+    made = await client.post(
+        "/v1/threads", json={"graph": "agent_wrapper", "metadata": {}}, headers={"X-Dev-User": ASKER}
+    )
+    tid = made.json()["data"]["threadId"]
     body = {"input": {"agent_id": "ag_fraud", "message": message, "kb_ids": ["kb_people"], "requested_by": ASKER}}
     res = await client.post(f"/v1/threads/{tid}/runs/stream", json=body, headers={"X-Dev-User": ASKER})
     assert res.status_code == 200, res.text

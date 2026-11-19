@@ -31,7 +31,7 @@ async def test_a_tenants_share_is_hidden_from_another_tenant(models: Models, dat
         with isolation.scope(mine, None):
             share = await store.tenant_share(key_id, mine, Decimal("2"))
             await store.spend(key_id, Decimal("0.5"), tenant_id=mine)
-        assert share["budget"] == Decimal("2")
+        assert share.budget == Decimal("2")
         with isolation.scope(other, None):
             async with isolation.isolated_tx(engine, role=ROLE) as c:
                 where = {"k": key_id}

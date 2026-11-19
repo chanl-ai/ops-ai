@@ -169,7 +169,8 @@ async def test_a_mailbox_is_read_with_the_teams_registration_and_the_secret_neve
     assert item["internetMessageId"] == NOTICE["internetMessageId"]
     assert "s3cret" not in page.text + first.text
     used = await SecretStore(engine).audit(tenant, TEAM)
-    assert [u for u in used if u["name"] == SECRET and u["action"] == "used"], used
+    # The mail listener reads every few seconds: its reads keep the secret's time of use and leave one row a day.
+    assert len([u for u in used if u.name == SECRET and u.action == "used"]) == 1, used
 
 
 async def test_test_connection_names_the_step_that_failed_and_sends_nothing(stores: tuple[AsyncEngine, str]) -> None:

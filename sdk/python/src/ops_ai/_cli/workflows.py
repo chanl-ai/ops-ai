@@ -11,7 +11,7 @@ from typing import Any
 from ops_ai._io import definition_in, dump_definition, load_definition
 from ops_ai._workflows import PLANNED, WorkflowCheck
 
-from .common import client, emit, parser, payload, refuse
+from .common import client, emit, parser, payload, refuse, table
 
 STARTER = """schemaVersion: 2
 id: {id}
@@ -76,6 +76,17 @@ def main(argv: list[str]) -> int:
     email = sub.add_parser("send-test-email", help="start from an email trigger's test form")
     email.add_argument("id")
     email.add_argument("--event", required=True)
+    listing = sub.add_parser("list", help="the team's workflows, every page")
+    listing.add_argument("--search")
+    listing.add_argument("--status", action="append", help="draft, live, paused, in_review or archived")
+    forms = sub.add_parser("forms", help="a workflow's hosted forms")
+    forms.add_argument("id")
+    forms.add_argument("--search")
+    start = sub.add_parser("batch-start", help="start a batch over an uploaded file's rows")
+    start.add_argument("id")
+    start.add_argument("--file-id", required=True, help="the uploaded file (opsai files upload)")
+    start.add_argument("--dry-run", action="store_true")
+    start.add_argument("--live", action="store_true")
     batch = sub.add_parser("batch", help="one run per CSV or JSON row")
     batch.add_argument("id")
     batch.add_argument("--file", required=True)
@@ -158,6 +169,13 @@ def _dispatch(ns: argparse.Namespace) -> int:
         return emit(ns, wf.run(ns.id, input=payload(ns.input), mode=mode, wait=ns.wait))
     if ns.verb == "send-test-email":
         return emit(ns, wf.send_test_email(ns.id, ns.event))
+    if ns.verb == "list":
+        return table(ns, wf.list(search=ns.search, status=ns.status), "workflowId", "name", "status", "version")
+    if ns.verb == "forms":
+        return table(ns, wf.forms(ns.id, search=ns.search), "id", "title", "slug", "paused")
+    if ns.verb == "batch-start":
+        mode = "live" if ns.live else "test"
+        return emit(ns, wf.start_batch(ns.id, ns.file_id, mode=mode, dry_run=ns.dry_run or None))
     if ns.verb == "batch":
         return emit(ns, wf.batch(ns.id, ns.file, mode="live" if ns.live else "test", dry_run=ns.dry_run))
     if ns.verb == "watch":

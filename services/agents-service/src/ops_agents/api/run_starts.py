@@ -14,16 +14,18 @@ import base64
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Literal, cast
+from typing import Literal, cast
 
 from ops_email import InboundAttachment, InboundMessage
 from ops_engine import default_registry
 from ops_engine.node_types import start_form
 from ops_engine.starts import form_values
-from ops_engine.store import RunStore
+from ops_engine.store import DefinitionRow, RunRow, RunStore
 from ops_files_client import FileNotFound, FileNotReady, FilesClient, FilesRefused
 from ops_service_kit.errors import Conflict, ServiceUnavailable, Unprocessable
+from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.ids import now_iso
+from ops_service_kit.narrow import an_object
 
 from ..store.engine import EngineTransactions
 from ..store.tenancy import current_tenant
@@ -41,18 +43,18 @@ class HandStart:
     """One start by hand: who, on which definition row, the form's values, the mode, and `started_via`."""
 
     me: Principal
-    stored: dict[str, Any]
-    values: dict[str, Any]
+    stored: DefinitionRow
+    values: Json
     mode: Mode
     via: str
 
 
-Adapter = Callable[[Runtime, HandStart], Awaitable[dict[str, Any]]]
+Adapter = Callable[[Runtime, HandStart], Awaitable[RunRow]]
 # The prefix of `started_via` for a run started by hand; the kind follows, and actors read it as the form's `via`.
 VIA_PREFIX = "start:"
 
 
-async def by_form(rt: Runtime, h: HandStart) -> dict[str, Any]:
+async def by_form(rt: Runtime, h: HandStart) -> RunRow:
     run, _ = await start_run(
         RunStore(EngineTransactions(rt.db)),
         h.stored,
@@ -67,15 +69,15 @@ async def by_form(rt: Runtime, h: HandStart) -> dict[str, Any]:
     return run
 
 
-def _text(values: dict[str, Any], key: str) -> str:
+def _text(values: Json, key: str) -> str:
     v = values.get(key)
     return v.strip() if isinstance(v, str) else ""
 
 
-async def _attachment(files: FilesClient, tenant: str, team: str, ref: Any) -> InboundAttachment:
+async def _attachment(files: FilesClient, tenant: str, team: str, ref: JsonValue) -> InboundAttachment:
     """A file in Files as the attachment a mailbox would have delivered: its name, type and bytes. A file the team
     cannot see, or one not scanned clean, is refused, as files-service refuses to hand its bytes to anyone."""
-    file_id = str(cast(dict[str, Any], ref).get("fileId") if isinstance(ref, dict) else ref or "")
+    file_id = str(ref.get("fileId") if isinstance(ref, dict) else ref or "")
     try:
         info = await files.get(tenant, team, file_id)
         data = await files.read(tenant, team, file_id)
@@ -92,7 +94,7 @@ async def _attachment(files: FilesClient, tenant: str, team: str, ref: Any) -> I
     return InboundAttachment(name=info.name, mime=info.mime, content=base64.b64encode(data).decode())
 
 
-async def by_email(rt: Runtime, h: HandStart) -> dict[str, Any]:
+async def by_email(rt: Runtime, h: HandStart) -> RunRow:
     me, stored, values = h.me, h.stored, h.values
     files = cast(FilesClient | None, rt.start_files)
     if files is None:
@@ -101,7 +103,7 @@ async def by_email(rt: Runtime, h: HandStart) -> dict[str, Any]:
     if not sender:
         raise Unprocessable("A test email needs who sent it.", code="invalid_input", details={"field": "from"})
     tenant, team = current_tenant(), me.team_id
-    refs = cast(list[Any], values.get("attachments") or [])
+    refs = cast(list[JsonValue], values.get("attachments") or [])
     msg = InboundMessage(
         # A Message-ID of its own, so each test email is a new message with its own run key.
         key=f"<{uuid.uuid4().hex}@test-email.ops-ai>",
@@ -111,7 +113,7 @@ async def by_email(rt: Runtime, h: HandStart) -> dict[str, Any]:
         received_at=now_iso(),
         attachments=tuple([await _attachment(files, tenant, team, r) for r in refs]),
     )
-    binding = binding_of(stored["definition"])
+    binding = binding_of(stored.definition)
     assert binding is not None  # the start form said email
     if (failed := binding.filter.failed(msg)) is not None:
         raise Unprocessable(
@@ -130,18 +132,19 @@ async def by_email(rt: Runtime, h: HandStart) -> dict[str, Any]:
 ADAPTERS: dict[str, Adapter] = {"form": by_form, "email": by_email, "schedule": by_form}
 
 
-def _blank(value: Any) -> bool:
+def _blank(value: JsonValue) -> bool:
     return value is None or (isinstance(value, str) and not value.strip()) or value in ([], {})
 
 
-def filled(form: dict[str, Any], values: dict[str, Any]) -> dict[str, Any]:
+def filled(form: Json, values: Json) -> Json:
     """The start form's values with its defaults, or 422 `invalid_input` naming each required field left empty, as the
     console's start dialog says it. Every start of a form takes this path: by hand, the hosted form, and
     POST /v1/runs for a Request trigger. `details.path` is the schema property name."""
-    schema = cast(dict[str, Any], form.get("schema") or {})
+    schema = an_object(form.get("schema") or {}, "start form schema")
     out, missing = form_values(schema, values)
     if missing:
-        paths = [str(k) for k in cast(list[Any], schema.get("required") or []) if _blank(out.get(k))]
+        required = cast(list[JsonValue], schema.get("required") or [])
+        paths = [str(k) for k in required if _blank(out.get(k) if isinstance(k, str) else None)]
         raise Unprocessable(
             f"{', '.join(missing)} {'is' if len(missing) == 1 else 'are'} required.",
             code="invalid_input",
@@ -150,11 +153,9 @@ def filled(form: dict[str, Any], values: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-async def start(
-    rt: Runtime, me: Principal, stored: dict[str, Any], values: dict[str, Any], mode: Mode
-) -> dict[str, Any]:
+async def start(rt: Runtime, me: Principal, stored: DefinitionRow, values: Json, mode: Mode) -> RunRow:
     """Starts the run on `stored` from the start form's `values` with the adapter for its trigger's kind."""
-    form = start_form(stored["definition"], REGISTRY)
+    form = start_form(stored.definition, REGISTRY)
     adapter = ADAPTERS.get(str(form["kind"])) if form else None
     if form is None or adapter is None:
         raise Unprocessable("This workflow's trigger is started only by its source, not by hand.", code="no_start_form")

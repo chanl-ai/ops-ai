@@ -58,6 +58,10 @@ await withUiStack(
     const browser = await chromium.launch();
     const errors = [];
     try {
+      // A new workspace takes any public host (egressNewHosts any_public); Sam, a Security admin, turns asking on for
+      // this story before anyone signs in, since a policy change refuses every token issued before it.
+      const asking = await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/policies/egressNewHosts`, { method: 'PUT', headers: { ...(await as(SAM, 'team_security')), 'Content-Type': 'application/json' }, body: JSON.stringify({ value: 'ask_security' }) });
+      check('6 setup: Sam sets new addresses to ask Security first', asking.status === 200, (await asking.text()).slice(0, 200));
       await step('6 James saves a tool on an unlisted host: the dialog says it waits for Security, and nothing is saved', async () => {
         const page = await consoleSignIn(browser, consoleUrl, JAMES, PASSWORD, errors);
         await page.setViewportSize({ width: 1280, height: 900 });
@@ -68,7 +72,7 @@ await withUiStack(
         const before = (await page.getByTestId('egress-host-notice').innerText()).replace(/\s+/g, ' ');
         await page.screenshot({ path: join(SHOTS, 'host-held-1280.png') });
         const james = await as(JAMES, 'team_ops');
-        const saved = (await (await fetch(`http://127.0.0.1:${TOOLS_PORT}/v1/tool-modules?pageSize=200&search=ping`, { headers: james })).json()).data?.data ?? [];
+        const saved = (await (await fetch(`http://127.0.0.1:${TOOLS_PORT}/v1/tool-modules?pageSize=50&search=ping`, { headers: james })).json()).data?.data ?? [];
         const task = await taskFor(REFUSED);
         check(
           '6 James saves a tool on an unlisted host: the dialog says it waits for Security, and nothing is saved',

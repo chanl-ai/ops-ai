@@ -11,9 +11,10 @@ from typing import Any
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
+from ops_store import isolation
 from ops_tools.mocks import MockAnswers
 from ops_tools.modules.seed import blank
-from ops_tools.store.mocks import MockStore
+from ops_tools.store.mocks import MockStore, NewMock
 from ops_tools.store.modules import ModuleStore
 
 from .test_calls import MODULE, Gateway, gateway  # noqa: F401  # pyright: ignore[reportUnusedImport]
@@ -51,7 +52,7 @@ async def test_the_example_is_one_answer_that_never_holds_back_a_real_run(gatewa
 async def test_a_mock_answers_only_its_own_modules_operation(engine: AsyncEngine, tenant: str) -> None:
     store = MockStore(engine)
     now = datetime.now(UTC)
-    row = {
+    row: NewMock = {
         "tenant_id": tenant, "id": "mck_a", "module_id": "mod_team_a", "operation": "lookup", "environment": "test",
         "name": "A", "match": {}, "status": 200, "body": {"team": "a"}, "headers": {}, "delay_ms": 0,
         "timeout": False, "is_default": True, "from_call_id": None, "created_by": "t", "created_at": now,
@@ -90,7 +91,8 @@ async def test_the_downgrade_puts_each_example_back_on_its_operation() -> None:
                 at=datetime.now(UTC), input={"displayName": "Example", "name": "example", "type": "http"},
             )  # fmt: skip
             m["operations"] = [{**OPERATION, "stub": {"balance": 3}}]
-            await ModuleStore(engine).put(m, expected_revision=None)
+            with isolation.tenant_wide("TESTS", tenant_id="t_ex"):
+                await ModuleStore(engine).put(m, expected_revision=None)
             _alembic(target, "downgrade", "tools_0052_reconnect_notice")
             async with engine.connect() as c:
                 stub = (
@@ -101,9 +103,9 @@ async def test_the_downgrade_puts_each_example_back_on_its_operation() -> None:
                 ).scalar()
             assert (stub, left) == ({"balance": 3}, 0)
             _alembic(target, "upgrade", "head")
-            assert (await ModuleStore(engine).get("t_ex", "mod_example") or {})["operations"][0]["stub"] == {
-                "balance": 3
-            }
+            with isolation.tenant_wide("TESTS", tenant_id="t_ex"):
+                held = await ModuleStore(engine).get("t_ex", "mod_example") or {}
+            assert held["operations"][0]["stub"] == {"balance": 3}
         finally:
             await engine.dispose()
 

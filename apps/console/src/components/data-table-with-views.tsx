@@ -30,6 +30,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { DataTablePagination, ServerPaginationProps } from './data-table-pagination';
 import { EdgeFade, useMoreToTheRight } from '@/components/shared/edge-fade';
 import { RowOpen } from '@/components/shared/row-open';
@@ -42,7 +43,7 @@ import {
 import { PaginationState, PAGINATION_DEFAULTS } from '@/lib/types/pagination';
 import { useBulkSelectionTransport } from '@/components/bulk-selection-context';
 import { useCurrentPerson } from '@/hooks/auth-queries';
-import { type ColumnMeta, kindClass } from '@/components/data-table-column-kinds';
+import { type ColumnMeta, kindClass, markTruncated } from '@/components/data-table-column-kinds';
 import { idLast } from '@/lib/column-order';
 import { withCreatedRows } from '@/lib/created-rows';
 import type { CreatedRows } from '@/hooks/use-created-rows';
@@ -107,6 +108,8 @@ interface DataTableWithViewsProps<TData, TValue> {
   hideViewSwitcher?: boolean;
   /** Leaves out the paging bar when every row fits on one page (a short result in chat). */
   hidePaginationOnOnePage?: boolean;
+  /** No search, filter or View row, and no space around the table: for a small table inside a card. */
+  hideToolbar?: boolean;
   /** What the list holds, for the pager's count ("2 connectors"); rows by default. */
   rowNoun?: string;
   // Selection callback
@@ -142,6 +145,11 @@ interface DataTableWithViewsProps<TData, TValue> {
    * When enabled, DataTableWithViews uses manual pagination instead of client-side.
    */
   serverPagination?: DataTableWithViewsServerPagination;
+  /**
+   * The server orders the rows: only `columns` sort (by a click on the header), and a change is reported through
+   * `onChange` instead of re-ordering the page held (a page sorted alone is not the order of the whole list).
+   */
+  serverSorting?: { columns: string[]; onChange: (sorting: SortingState) => void };
   /** Date range filter — renders a DateRangePicker in the toolbar */
   dateRange?: DateRangeFilter;
   /** Initial column visibility state (e.g., { toolId: false } to hide a column) */
@@ -168,13 +176,23 @@ function useRememberedColumns<T, V>(columns: ColumnDef<T, V>[], initial: Visibil
   const storageKey = `ops-columns:${ids[0] ?? 'anyone'}:${pathname}:${keys.join(',')}`;
   const defaults = React.useMemo(() => {
     const out: VisibilityState = { ...initial };
-    let shown = 0;
+    // Columns that always show (cannot be hidden, or the page turns them on) take their places in the cap first and the
+    // hideable ones fill what is left, so the total is the cap however the page orders or forces its columns.
+    const isId = (c: ColumnDef<T, V>) => (c.meta as ColumnMeta | undefined)?.kind === 'id';
+    const isData = (c: ColumnDef<T, V>) => {
+      const k = keyOf(c);
+      return !!k && k !== 'select' && k !== 'actions' && !isId(c);
+    };
+    const always = (c: ColumnDef<T, V>) => c.enableHiding === false || initial[keyOf(c)!] === true;
+    const fixed = columns.filter((c) => isData(c) && !(initial[keyOf(c)!] === false) && always(c)).length;
+    let room = Math.max(0, SHOWN_BY_DEFAULT - fixed);
     for (const c of columns) {
       const k = keyOf(c);
       if (!k || k === 'select' || k === 'actions' || k in initial) continue;
       // The record id is a detail: under View until the person turns it on, and never counted among the five.
-      if ((c.meta as ColumnMeta | undefined)?.kind === 'id') out[k] = false;
-      else if (c.enableHiding === false || shown < SHOWN_BY_DEFAULT) shown++;
+      if (isId(c)) out[k] = false;
+      else if (c.enableHiding === false) continue;
+      else if (room > 0) room--;
       else out[k] = false;
     }
     return out;
@@ -220,6 +238,7 @@ export function DataTableWithViews<TData, TValue>({
   defaultView = 'table',
   hideViewSwitcher = false,
   hidePaginationOnOnePage = false,
+  hideToolbar = false,
   rowNoun,
   onSelectionChange,
   selectionResetKey,
@@ -228,6 +247,7 @@ export function DataTableWithViews<TData, TValue>({
   initialColumnFilters = [],
   emptyState,
   serverPagination,
+  serverSorting,
   dateRange,
   initialColumnVisibility = {},
   toolbarExtra,
@@ -238,7 +258,12 @@ export function DataTableWithViews<TData, TValue>({
   // A row checkbox only where picking rows does something: a bulk action the person may take, or a page that reads the
   // selection. Without either (a viewer, whose bulk actions are all withheld) the column is left out.
   const selects = bulkActions.length > 0 || !!onSelectionChange;
-  const columns = React.useMemo(() => (selects ? given : given.filter((c) => c.id !== 'select')), [given, selects]);
+  const sortableOnServer = serverSorting?.columns;
+  const columns = React.useMemo(() => {
+    const kept = selects ? given : given.filter((c) => c.id !== 'select');
+    if (!sortableOnServer) return kept;
+    return kept.map((c) => ({ ...c, enableSorting: sortableOnServer.includes(c.id ?? (c as { accessorKey?: string }).accessorKey ?? '') }));
+  }, [given, selects, sortableOnServer]);
   const [rowSelection, setRowSelection] = React.useState({});
   const [columnVisibility, setColumnVisibility] = useRememberedColumns(columns, initialColumnVisibility);
   const [columnFilters, setColumnFilters] =
@@ -290,6 +315,7 @@ export function DataTableWithViews<TData, TValue>({
     },
     // Server-side pagination configuration
     manualPagination: serverPagination?.enabled ?? false,
+    manualSorting: !!serverSorting,
     pageCount: serverPagination?.enabled ? serverTotalPages : undefined,
     enableRowSelection: true,
     enableRowPinning: true,
@@ -319,6 +345,15 @@ export function DataTableWithViews<TData, TValue>({
   const shownRows = isCreated.size ? [...table.getTopRows(), ...table.getCenterRows()] : table.getRowModel().rows;
 
   // The created rows follow the list again once the person moves on: another page, page size, search, filter or sort.
+  const onSortingChange = serverSorting?.onChange;
+  const sortedOnce = React.useRef(false);
+  React.useEffect(() => {
+    if (!sortedOnce.current) {
+      sortedOnce.current = true;
+      return;
+    }
+    onSortingChange?.(sorting);
+  }, [sorting]); // eslint-disable-line react-hooks/exhaustive-deps
   const clearCreated = created?.clear;
   const didMountCreatedRef = React.useRef(false);
   React.useEffect(() => {
@@ -363,6 +398,15 @@ export function DataTableWithViews<TData, TValue>({
   // Imperative selection clear — parent bumps selectionResetKey after a bulk
   // action so the checkboxes don't linger on rows that shifted under a refetch.
   const tableBox = React.useRef<HTMLDivElement>(null);
+  // Titles follow the current widths: measured after every render, and again when the box is resized.
+  React.useEffect(() => {
+    const box = tableBox.current;
+    if (!box) return;
+    markTruncated(box);
+    const watch = new ResizeObserver(() => markTruncated(box));
+    watch.observe(box);
+    return () => watch.disconnect();
+  });
   const newest = shownData.pinned[0];
   React.useEffect(() => {
     if (newest) tableBox.current?.querySelector('[data-created]')?.scrollIntoView({ block: 'nearest' });
@@ -445,8 +489,8 @@ export function DataTableWithViews<TData, TValue>({
     : undefined;
 
   return (
-    <div className="space-y-4 py-4" data-testid="data-table-container">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+    <div className={hideToolbar ? 'space-y-2' : 'space-y-4 py-4'} data-testid="data-table-container">
+      <div className={cn('flex flex-wrap items-center gap-x-4 gap-y-2', hideToolbar && 'hidden')}>
         {renderGridItem && !hideViewSwitcher && (
           <div
             className="flex items-center gap-1 border rounded-md shrink-0 bg-card"
@@ -574,8 +618,7 @@ export function DataTableWithViews<TData, TValue>({
                           return (
                             <TableCell
                               key={cell.id}
-                              className={kindClass(meta, pinOf(cell.column.id), hasSelect)}
-                              title={meta?.kind === 'name' && typeof value === 'string' ? value : undefined}
+                              className={kindClass(meta, pinOf(cell.column.id), hasSelect, typeof value === 'string')}
                             >
                               {cell.id === openCellId ? <RowOpen href={rowData.href}>{content}</RowOpen> : content}
                               {isNew && cell.id === firstDataCellId && (

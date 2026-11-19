@@ -16,6 +16,7 @@ from ops_agents.activities.tool_directory import AppStates, CatalogTools, ToolDi
 from ops_agents.graphs.common import GraphDeps
 from ops_agents.graphs.definition import CompiledCache
 from ops_identity.jwks import JwksCache
+from ops_service_kit.http import Json
 from ops_service_kit.settings import Settings
 from ops_store.database import Database
 
@@ -95,12 +96,10 @@ class Runtime:
     people_names: Any = None
     # The apps line kept per team and person (apps_line.AppsLine); set with the graphs, forgotten on a turn-on.
     apps_line: Any = None
-    # API keys from platform-service for the Channels list (key_summaries.py); None without a platform URL.
-    key_summaries: Any = None
     # System workflows (service_events.py): the shipped list when None; a test sets its own. Published to a tenant the
     # first time it needs them, once per process and version.
     # The event workflows to provision (seed/event_workflows.json when None), and the (tenant, id) pairs provisioned.
-    event_workflows: list[dict[str, Any]] | None = None
+    event_workflows: list[Json] | None = None
     event_workflows_seen: set[tuple[str, str]] = field(default_factory=set[tuple[str, str]])
 
     def directory(self) -> ToolDirectory:

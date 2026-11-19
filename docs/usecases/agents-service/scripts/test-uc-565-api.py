@@ -87,5 +87,8 @@ def main(head: Path, base: Path | None = None, upgrade: Path | None = None) -> N
         drop(upgraded)
 
 
+if len(sys.argv) < 2:
+    # The bundles are built beside the SQL Server test machine; a runner without them has nothing to install.
+    raise SystemExit("FAIL uc-565 needs the head bundle folder: run it with `make uc-sql-server`.")
 main(*(Path(p) for p in sys.argv[1:4]))
 finish()

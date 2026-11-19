@@ -17,6 +17,7 @@ import { countLabel, SavedViewTabs } from '@/components/shared/saved-view-tabs';
 import { serverPagination } from '@/components/shared/server-pagination';
 import { useDecideChanges, useEditChange, useKnowledgeChange, useKnowledgeChanges } from '@/hooks/knowledge-change-queries';
 import { useListParams } from '@/hooks/use-list-params';
+import { ApiError } from '@/lib/api/contract';
 import { plural } from '@/lib/format';
 import type { ChangeFilters, ChangeView, KnowledgeChange } from '@/lib/types/knowledge-changes';
 
@@ -32,6 +33,7 @@ export function KnowledgeChangesQueue({ kbId }: { kbId?: string }) {
   const decide = useDecideChanges();
   const edit = useEditChange();
   const [busy, setBusy] = React.useState<'save' | 'approve' | 'reject' | null>(null);
+  const [reasonError, setReasonError] = React.useState<string>();
   const [clearSelection, setClearSelection] = React.useState(0);
 
   const searchParams = useSearchParams();
@@ -50,13 +52,15 @@ export function KnowledgeChangesQueue({ kbId }: { kbId?: string }) {
   );
 
   const run = React.useCallback(
-    async (ids: string[], decision: 'approve' | 'reject') => {
+    async (ids: string[], decision: 'approve' | 'reject', reason?: string) => {
+      setReasonError(undefined);
       try {
-        await decide.mutateAsync({ ids, decision });
+        await decide.mutateAsync({ ids, decision, reason });
         toast.success(`${decision === 'approve' ? 'Approved' : 'Rejected'} ${plural(ids.length, 'FAQ draft')}`, { description: decision === 'approve' ? 'Approved pairs are searchable now and cite their passage.' : undefined });
         setClearSelection((n) => n + 1);
         return true;
       } catch (e) {
+        if (e instanceof ApiError && e.status === 400) setReasonError(e.message);
         toast.error(`Couldn’t ${decision} ${plural(ids.length, 'draft')}`, { description: (e as Error).message });
         return false;
       }
@@ -71,13 +75,13 @@ export function KnowledgeChangesQueue({ kbId }: { kbId?: string }) {
   const tableRows: ChangeRow[] = React.useMemo(() => rows.map((r) => ({ ...r, onRowClick: (x: KnowledgeChange) => setActiveId(x.id), rowTestId: `change-row-${r.id}` })), [rows, setActiveId]);
   const columns = React.useMemo(() => changeColumns({ onEdit: (c) => setActiveId(c.id), onReject: (c) => void run([c.id], 'reject') }), [setActiveId, run]);
 
-  const act = async (what: 'save' | 'approve' | 'reject', pair: { question: string; answer: string }) => {
+  const act = async (what: 'save' | 'approve' | 'reject', pair: { question: string; answer: string }, reason?: string) => {
     if (!active) return;
     setBusy(what);
     try {
       if (what !== 'reject' && needsSave(active, pair)) await edit.mutateAsync({ id: active.id, ...pair });
       if (what === 'save') toast.success('Draft saved', { description: 'It still waits for review.' });
-      else if (await run([active.id], what)) setActiveId(null);
+      else if (await run([active.id], what, reason)) setActiveId(null);
     } catch (e) {
       toast.error('Couldn’t save the draft', { description: (e as Error).message });
     } finally {
@@ -172,7 +176,7 @@ export function KnowledgeChangesQueue({ kbId }: { kbId?: string }) {
         testId="change-sheet"
         scrollKey={active?.id}
       >
-        {active && (active.faq ? <FaqDraftEditor change={active} busy={busy} onAct={act} /> : <ChangeDetailBody change={active} />)}
+        {active && (active.faq ? <FaqDraftEditor change={active} busy={busy} onAct={act} reasonError={reasonError} /> : <ChangeDetailBody change={active} />)}
       </DetailSheet>
     </div>
   );

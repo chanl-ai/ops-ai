@@ -26,6 +26,16 @@
 			import wait_for_upstream
 		}
 	}
+	# platform-service is the authorization server for a team's MCP address, and its issuer has a path
+	# (<origin>/api/platform). An assistant finds the server's metadata the RFC 8414 way, at the origin's
+	# /.well-known/oauth-authorization-server/api/platform, which the service answers at its own root. The OpenID
+	# Connect paths are left to the console's 404: the service is no OpenID provider, and a client tries this path first.
+	handle /.well-known/oauth-authorization-server/api/platform {
+		rewrite * /.well-known/oauth-authorization-server
+		reverse_proxy {$OPS_UPSTREAM_PLATFORM:127.0.0.1:8710} {
+			import wait_for_upstream
+		}
+	}
 	handle_path /api/agents/* {
 		reverse_proxy {$OPS_UPSTREAM_AGENTS:127.0.0.1:8700} {
 			import wait_for_upstream

@@ -121,7 +121,7 @@ await withUiStack(
       await page.getByRole('tab', { name: 'JSON' }).click({ timeout: 5000 }).catch(() => undefined);
       await page.getByTestId('definition-run-input').fill(JSON.stringify({ customerId: 'CUS-1001', amount: 250 }));
       await page.getByTestId('definition-start-run-submit').click();
-      await page.waitForURL(/\/workflows\/runs\/[^/?]+/, { timeout: 60_000 });
+      await page.waitForURL(/\/build\/runs\/[^/?]+/, { timeout: 60_000 });
       const runId = decodeURIComponent(new URL(page.url()).pathname.split('/').pop());
       await page.getByTestId('run-status').waitFor({ timeout: 60_000 });
       await page.waitForTimeout(2_000);
@@ -145,7 +145,7 @@ await withUiStack(
       await sheet.waitFor({ timeout: 15_000 });
       const attempts = await sheet.getByTestId('run-step-attempt').count();
       const sheetText = await sheet.innerText();
-      const calls = (await json(await fetch(`${tools}/v1/executions?thread=${runId}&pageSize=200`, { headers: H }))).data.filter((r) => r.target === 'get_customer');
+      const calls = (await json(await fetch(`${tools}/v1/executions?thread=${runId}&tool=get_customer`, { headers: H }))).data.filter((r) => r.target === 'get_customer');
       check('the tool step shows one attempt with its port and output, and the gateway saw one call', attempts === 1 && /\bok\b/.test(sheetText) && /Marcus Bell|CUS-1001/.test(sheetText) && calls.length === 1, { attempts, calls: calls.length, port: /\bok\b/.test(sheetText) });
       await second.stop();
 

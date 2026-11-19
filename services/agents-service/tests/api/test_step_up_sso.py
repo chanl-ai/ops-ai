@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 
+import pytest
 from httpx import AsyncClient
 
 from tests.api.test_chat import new_thread, send
@@ -15,6 +16,7 @@ def code_for(email: str) -> str:
     return base64.b64encode(email.encode()).decode()
 
 
+@pytest.mark.usefixtures("requester_may_decide")
 async def test_sso_callback_for_the_caller_mints_a_step_up_money_decisions_accept(client: AsyncClient) -> None:
     res = await client.post("/v1/auth/step-up/sso", json={"code": code_for(DEV)})
     assert res.status_code == 200, res.text

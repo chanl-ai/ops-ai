@@ -7,7 +7,7 @@ import { TabLabel } from '@/components/shared/tab-label';
 
 /**
  * Page-level tabs where each tab is its own route, rendered in PageLayout's `tabs` slot. A tab may carry a query
- * (`/tools?kind=app`, a filtered view of the same list): it is active only on its path with that query, and wins over a
+ * (`/data/tools?kind=app`, a filtered view of the same list): it is active only on its path with that query, and wins over a
  * tab of the same path without one.
  *
  * Each tab navigates to a page, so this is a nav of links with `aria-current="page"` on the active one, drawn like the

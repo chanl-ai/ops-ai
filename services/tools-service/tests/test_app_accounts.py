@@ -225,6 +225,23 @@ async def test_an_account_a_step_or_agent_names_is_not_deleted_until_nothing_nam
     assert gone.status_code == 204, gone.text
 
 
+async def test_an_in_use_answer_with_counts_as_text_or_junk_never_lets_the_delete_through(
+    world: World, tenant: str
+) -> None:
+    # The agents service's counts as a numeric string or a float still count; a count that is no number refuses.
+    await connected(world, tenant)
+    eu = str((await another(world, tenant, "EU org")).json()["data"]["id"])
+    world.users.account_uses[(APP, "eu org")] = {"published": "2", "drafts": 1.0}
+    refused = await world.client.delete(f"/v1/apps/plugin:{ID}/accounts/{eu}", headers=admin(tenant))
+    assert refused.status_code == 409, refused.text
+    assert (refused.json()["error"]["details"]["published"], refused.json()["error"]["details"]["drafts"]) == (2, 1)
+    world.users.account_uses[(APP, "eu org")] = {"published": "many", "drafts": None}
+    junk = await world.client.delete(f"/v1/apps/plugin:{ID}/accounts/{eu}", headers=admin(tenant))
+    assert junk.status_code != 204, junk.text
+    still = await world.client.get(f"/v1/apps/plugin:{ID}/accounts/{eu}", headers=admin(tenant))
+    assert still.status_code == 200, still.text
+
+
 async def test_each_account_counts_the_people_signed_in_to_it_and_says_who_signs_in(world: World, tenant: str) -> None:
     """The "Each person signs in" card shows how many people signed in to that account, so a count read off the
     team's default, or off every account of the app, says the wrong number on the second account."""

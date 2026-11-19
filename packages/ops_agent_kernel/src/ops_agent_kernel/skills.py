@@ -1,14 +1,17 @@
 """Skills in a turn (spec 11 5.3): the index of on-match skills in the system prompt, always-on bodies after the
 agent's instructions, and the `load_skill` built-in that returns an on-match body. A load past either cap (two
 on-match skills a turn, 6,000 tokens of bodies a turn after always-on bodies) is refused and the turn goes on without
-it. A skill adds instructions and, while loaded, guardrails; it never adds a tool.
+it, as is a part over its own budget. A skill with parts is offered as one entry per part (`<skill>/<part>`); a part
+picked from the / menu arrives loaded and counts against the caps like a load. A skill adds instructions and, while
+loaded, guardrails; it never adds a tool.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from ops_service_kit.http import Json, JsonList
 
-from .types import Guardrail, Skill, ToolGrant
+from .events import SkillLoaded
+from .types import Guardrail, LoadedSkill, Skill, ToolGrant
 
 NAME = "load_skill"
 MAX_PER_TURN = 2
@@ -22,7 +25,7 @@ ALWAYS = "Always on"
 
 def grant(skills: list[Skill]) -> ToolGrant | None:
     """The built-in, offered only when the agent pins an on-match skill; its slug argument is one of theirs."""
-    slugs = [s.slug for s in skills if s.loading == "on_match"]
+    slugs: JsonList = [s.slug for s in skills if s.loading == "on_match"]
     if not slugs:
         return None
     return ToolGrant(
@@ -35,6 +38,7 @@ def grant(skills: list[Skill]) -> ToolGrant | None:
             "type": "object",
             "properties": {
                 "slug": {"type": "string", "enum": slugs},
+                "part": {"type": "string", "description": "The part to load, for a slug of the form <skill>/<part>"},
                 "matched": {"type": "string", "description": "The words in the request that match the use-when line"},
             },
             "required": ["slug"],
@@ -68,15 +72,33 @@ def guardrails_of(skill: Skill) -> list[Guardrail]:
     return [Guardrail(skill.skill_id, skill.version, f"{skill.name} (skill)", skill.guardrails, message, scopes)]
 
 
-def loaded_entry(skill: Skill, matched: str) -> dict[str, Any]:
-    """`matched` comes from the model: kept to one plain line of at most 200 characters before it is journalled."""
+def loaded_entry(skill: Skill, matched: str, inputs: dict[str, str] | None = None) -> LoadedSkill:
+    """`matched` comes from the model: kept to one plain line of at most 200 characters before it is journalled. A
+    part and a picked part's inputs are kept only when there are any."""
     clean = " ".join("".join(ch if ch.isprintable() else " " for ch in matched).split())[:MATCHED_MAX]
-    return {
+    entry: LoadedSkill = {
         "skillId": skill.skill_id,
         "name": skill.name,
         "version": skill.version,
         "matched": clean or skill.use_when[:MATCHED_MAX],
     }
+    if skill.part:
+        entry["part"] = skill.part
+    if inputs:
+        entry["inputs"] = inputs
+    return entry
+
+
+def event(entry: LoadedSkill, how: str) -> SkillLoaded:
+    """The journal event for one entry of the turn's loads, with how it entered the reply."""
+    return SkillLoaded(
+        entry["skillId"], entry["version"], entry["name"], entry["matched"], entry.get("part"), how, entry.get("inputs")
+    )
+
+
+def same(skill: Skill, entry: LoadedSkill | Json) -> bool:
+    """Whether a journalled entry names this skill, and this part of it."""
+    return skill.skill_id == entry.get("skillId") and skill.part == (entry.get("part") or "")
 
 
 def load(
@@ -89,6 +111,8 @@ def load(
         return None, f"No skill named {slug} is attached to this agent."
     if skill in loaded:
         return skill, None
+    if skill.budget and skill.tokens > skill.budget:
+        return None, f"{skill.name} is over its own {skill.budget}-token budget; go on without it."
     on_match = [s for s in loaded if s.loading == "on_match" and s not in (carried or [])]
     if len(on_match) >= MAX_PER_TURN:
         return None, f"At most {MAX_PER_TURN} skills load in one reply; go on without {skill.name}."

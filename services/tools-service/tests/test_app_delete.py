@@ -93,8 +93,12 @@ async def test_deleting_an_app_takes_every_account_and_its_secrets(
     for account in (first, second):
         assert (await client.get(_at(account), headers=who)).status_code == 404
     left = (await client.get("/v1/secrets", headers=person(tenant, "Sam Adeyemi", {TEAM: "admin"}))).json()["data"]
+    assert not left["pagination"]["hasNext"], left["pagination"]
+    left = left["data"]
     assert not [s for s in left if s.get("connectionId") in (first["id"], second["id"])], left
-    assert app not in [c["id"] for c in (await client.get("/v1/apps", headers=who)).json()["data"]]
+    assert app not in [
+        c["id"] for c in (await client.get("/v1/apps", params={"ids": app}, headers=who)).json()["data"]["data"]
+    ]
 
 
 async def test_only_someone_who_manages_the_teams_apps_deletes_one(
@@ -136,4 +140,6 @@ async def test_changing_an_apps_sign_in_kind_names_every_account_and_drops_what_
         held = [k for k, part in detail["secrets"].items() if part["set"]]
         assert detail["settings"].get("baseUrl") == "https://ledger.test" and not held, detail
     left = (await client.get("/v1/secrets", headers=who)).json()["data"]
+    assert not left["pagination"]["hasNext"], left["pagination"]
+    left = left["data"]
     assert not [s for s in left if s.get("connectionId") in (first["id"], second["id"])], left

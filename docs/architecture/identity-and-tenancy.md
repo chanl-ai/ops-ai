@@ -5,6 +5,7 @@ Status: current, updated 2026-10-22: the team is the workspace, and that rule ov
 Every run acts for someone. Detail: [ADR-0005](decisions/identity-and-entitlement.md) (workflow identities,
 delegation, approval tokens), [ADR-0013](decisions/auth-provider-seam.md) and
 [sign-in library](../packages/ops_signin/overview.md) (human sign-in, step-up).
+Company sign-in over SAML (providers, groups to teams, break-glass): [SAML sign-in](saml-sign-in.md).
 
 ## The team is the workspace
 
@@ -43,7 +44,7 @@ counting other teams' agents, case reads with no team filter, and every agents-s
 Knowledge bases are held to their team by the database as well (kb_0011).
 
 Account-level records, named in the lock with their reason: people, memberships, role assignments, API keys, sign-in
-and membership audit entries (shown only to the account admin), the outboxes, and the background processes (the
+and membership audit entries (shown to people who hold `audit.view`, which Admin and Builder do), the outboxes, and the background processes (the
 built-in event workflows, their update notices, and the loops), which act in each record's team.
 
 `isolation.tenant_wide` stays for background loops that claim across teams and seed data, each listed by reason in
@@ -56,14 +57,27 @@ a request.
 |---|---|
 | Sign-in is a seam | The console calls one `AuthProvider` with `mock`, `oidc` and `firebase` adapters; a workspace's policy (methods, SSO domains, MFA, session length) comes from the API. Bank default: `oidc` against the bank's IdP, MFA required, invite only |
 | Delegation per run | The adapter exchanges the caller's token for a short-lived delegation token: `sub` is who the work is for, `act` is who does it (the graph version), audience the tools gateway. OAuth token exchange (RFC 8693) where the IdP supports it |
-| Process principals | Mailbox, schedule and webhook runs use a non-human principal owned by the team that owns the channel, with the entitlements that team approved. It can read and draft; it writes only with an approval token |
+| Process principals | Mailbox, schedule and webhook runs use a non-human principal owned by the team that owns the channel, with the entitlements that team approved. Its writes run without asking, as register row E49 sets, and a run with nobody in it is not asked |
 | Workload identity | Each service and worker pool has its own (SPIFFE or the platform's equivalent); service-to-service calls use mTLS or OIDC |
-| Tool calls | Every tool call goes through tools-service, which asks OPA. A write needs an approval token bound to the input hash; money needs two approvers |
+| Tool calls | Every tool call goes through tools-service, which asks OPA. A write runs without asking by default (row E49); where a team or an operation asks, the approval is bound to the input hash, and money needs two approvers |
 | Model calls | Every model call goes through models-service with the identity's own key and budget; workers hold no model keys ([ADR-0008](decisions/ai-gateway.md)) |
 | Tenant and team | From the identity, never from a parameter or a run config |
 | One auth dependency | Every service installs `ops_identity.fastapi.Auth` (`install_auth`) and its routes depend on `CurrentPrincipal` or `CurrentService`; no service reads tokens, keys or dev headers itself. `Auth.from_settings` picks dev or platform from `OPS_AUTH_MODE` alone |
 | Calling service | An internal call's caller is its Ed25519 service token's subject (`service:<name>`), bound to that service's key; tools-service logs and decides on it and no body field names the caller |
 | Trust facts stay out of model-visible text | Tenant, tier and identity come from the run context, never from the chat message |
+
+## Assistants at a team's MCP address
+
+platform-service is the one authorization server for assistants (Claude, Cursor, VS Code, ChatGPT). The team's MCP
+address (`<OPS_TOOLS_PUBLIC_URL>/mcp/<team>`, tools-service's own public base, not platform-service's) names the team, so there is no team to choose and a person outside it is told so
+on the consent page. A grant is a `sessions` row of kind `mcp` with `client_id`, `team_id` and `resource`; its access
+token has `aud` equal to the address only, `team_ids` equal to that team, and lives 15 minutes. A refresh rotates the
+token, re-reads the person's teams and role and ends the grant when the team or `tools.run` is gone; a token used twice
+ends the grant and writes `auth.refresh_reuse`. A console token is refused at `/mcp`, and an assistant's token is
+refused at every REST route. tools-service verifies assistant tokens only through `ops_identity` `bearer(resource=…)`
+and the expected audience comes from the configured public URL, never the request's Host header. Client records are
+install-wide (registration happens before anyone signs in); codes and grants are tenant-scoped. A person sees and ends
+their own connections in My security › Connected assistants.
 
 ## What each outbound call carries
 
@@ -126,7 +140,7 @@ The one list of trust shortcuts; other pages link here.
 | The review key reaches OPA by a data write anyone who can reach port 8181 could overwrite | tools-service start-up | A signed OPA bundle |
 | Internal routes accept any registered calling service | models-service's `/v1/models/*` routes take `CurrentService`; providers, keys and alias versions are what a person administers. TODO in `ops_models/app.py` | When the console gets a models admin page, those routes move to `CurrentPrincipal` with an admin role check; aliases, admit and calls stay service-only |
 | Step-up from the demo password: agents-service's dev route, and platform-service's `POST /v1/auth/step-up`, which re-checks the one dev password | money decisions verify signature, subject and five-minute age | The identity provider re-authenticates (SSO, MFA) and platform-service mints |
-| The requester check is partial. Workflow reviews refuse the requester (403, `hitl_facade.requester_of`); chat refuses self-approval only when `OPS_ALLOW_SELF_APPROVAL_IN_CHAT` is false (default true, owner decision pending), comparing display names; money refuses the same approver twice. `POST /v1/threads/{id}/approvals` has no requester check | `hitl_facade.py`, `routers/chat.py`, `routers/reviews.py` | The rule moves into the `ops_hitl` package with the requester taken from identity |
+| The requester check differs by path. Workflow reviews refuse the requester (403, `hitl_facade.requester_of`) while `requesterMayDecide` is off (row E51); a chat confirmation is answered only by the person who asked (row E50); money refuses the same approver twice. `POST /v1/threads/{id}/approvals` runs the same decider check (`hitl_facade.check_thread_decider`) | `hitl_facade.py`, `routers/chat.py`, `routers/reviews.py` | The rule moves into the `ops_hitl` package with the requester taken from identity |
 | Key budgets admit every key | `KeyAdmission` port in agents-service | A per-key ledger in models-service ([service-map.md](service-map.md)) |
 | Chat approvals use `dev-approval:<id>` | `routers/chat.py` | Chat decide calls the approvals route; until then turning the gateway on refuses chat writes |
 

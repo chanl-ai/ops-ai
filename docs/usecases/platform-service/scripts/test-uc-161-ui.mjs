@@ -10,7 +10,7 @@ import { PLATFORM_PORT, ROOT, SIGNIN_SECRET, check, chromium, evidenceDir, finis
 const platform = `http://127.0.0.1:${PLATFORM_PORT}`;
 const zone = `${randomBytes(4).toString('hex')}.harborpine.test`;
 const TELLER = `new.teller@${zone}`;
-const SHOTS = evidenceDir('188');
+const SHOTS = evidenceDir('161');
 
 async function call(method, path, body, token, team) {
   const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(team ? { 'X-Team-Id': team } : {}) };

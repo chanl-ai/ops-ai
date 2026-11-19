@@ -4,6 +4,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
+import { sdk } from '@/lib/api/ops-sdk';
+import type { OpsAI } from '@chanl-ai/ops-ai';
 import type { BulkResult } from '@/lib/types/domain';
 import type { EngineDefinition, EngineRunInput, EngineRunsParams, OptionSource, StartWorkflowInput } from '@/lib/types/engine';
 import { useTeamQuery } from './team-query';
@@ -110,9 +112,17 @@ export function useStartWorkflow() {
   });
 }
 
+/** A row of the runs list, as `GET /v1/runs` answers it. */
+export type EngineRunRow = Awaited<ReturnType<OpsAI['raw']['agents']['workflows_list_engine_runs']>>['data'][number];
+
 /** One page of the team's runs; polled, since workers move runs on without the page asking. */
 export const useEngineRuns = (p: EngineRunsParams) =>
-  usePagedQuery({ queryKey: ek.runs(p), queryFn: () => api.engine.runs(p), refetchInterval: 5_000 });
+  usePagedQuery({ queryKey: ek.runs(p), queryFn: () =>
+      sdk((ops) =>
+        ops.raw.agents.workflows_list_engine_runs({ query: { workflowId: p.workflowId ? [p.workflowId] : undefined, status: p.status?.length ? p.status : undefined, page: p.page ?? 1, pageSize: p.pageSize ?? 20 } }),
+      ),
+    refetchInterval: 5_000,
+  });
 
 /** A run's detail, polled while a worker may still be moving it; a run waiting on a person is polled more slowly. */
 export const useEngineRun = (runId: string) =>

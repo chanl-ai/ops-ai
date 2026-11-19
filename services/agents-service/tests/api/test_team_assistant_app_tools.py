@@ -8,17 +8,17 @@ from __future__ import annotations
 import hashlib
 import json
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 from ops_agents.activities.tool_directory import OperationRef
 from ops_agents.api.agent_registry import registry
 from ops_agents.api.ops_tools import ops_assistant_id
-from ops_agents.store.tenancy import tenant_scope
+from ops_agents.store.tenancy import LOCAL_TENANT, tenant_scope
 from tests.api.test_team_default_agent import Stack, stack, start  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from tests.engine.test_lifecycle_rights import ADMIN, TENANT, VIEWER
 
 URL = "/v1/team-assistant/app-tools"
-AID = ops_assistant_id("team_ops")
+AID = ops_assistant_id(LOCAL_TENANT, "team_ops")
 SALESFORCE = "mod_plugin_salesforce"
 
 
@@ -56,10 +56,10 @@ async def test_the_assistant_gets_the_apps_read_tools_once_and_nothing_else(stac
     assert live is not None and {"salesforce_query", "salesforce_get_record"} <= set(live.tools), live
     assert not {"salesforce_update_record", "github_list_issues"} & set(live.tools), live.tools
     with tenant_scope(TENANT):
-        before = (await registry(rt).row(AID))["version"]
+        before = (await registry(rt).row(AID)).version
     again = (await give(c, ADMIN)).json()["data"]
     with tenant_scope(TENANT):
-        after = (await registry(rt).row(AID))["version"]
+        after = (await registry(rt).row(AID)).version
     assert again["state"] == "already" and before == after, again
 
 
@@ -77,16 +77,16 @@ async def test_a_draft_someone_is_editing_is_not_stepped_over(stack: Stack) -> N
     await start(c, ADMIN)
     with tenant_scope(TENANT):
         reg = registry(rt)
-        spec = dict((await reg.version(AID, int((await reg.row(AID))["published_version"])))["spec"])
+        spec = dict((await reg.version(AID, cast(int, (await reg.row(AID)).published_version))).spec)
         await reg.save(AID, {**spec, "role": "Our desk helper"}, by="jane@harborpine.example")
     data = (await give(c, ADMIN)).json()["data"]
     live = rt.catalog.agent(AID)
     assert data["state"] == "waiting" and live is not None and "salesforce_query" not in live.tools, data
 
 
-def skill(tid: str, name: str, tools: list[str]) -> dict[str, Any]:
+def skill(tid: str, name: str, tools: list[str], source: str = "plugin:opsai.salesforce") -> dict[str, Any]:
     return {
-        "source": "plugin:opsai.salesforce",
+        "source": source,
         "kind": "skill",
         "id": tid,
         "version": 1,
@@ -103,7 +103,8 @@ def digested(t: dict[str, Any]) -> dict[str, Any]:
 
 
 class Templates:
-    """tools-service's plugin templates for the team: two skills the team can use and one naming a tool it lacks."""
+    """tools-service's plugin templates for the team: two skills the team can use, one naming a tool it lacks, and
+    another plugin's skill that names no tool."""
 
     async def get(self, path: str, **_: Any) -> list[dict[str, Any]]:
         assert path == "/v1/plugin-templates"
@@ -113,6 +114,7 @@ class Templates:
                 "salesforce-opportunities", "Salesforce opportunities", ["salesforce_query", "salesforce_update_record"]
             ),
             skill("salesforce-saving", "Salesforce saving", ["salesforce_save_records"]),
+            skill("qa", "Clarifying questions", [], source="plugin:opsai.starters"),
         ]
 
 

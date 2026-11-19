@@ -14,7 +14,7 @@ from ops_platform.keys import dev_signer
 from ops_platform.store.tables import password_credentials, password_resets
 from ops_policy import Ed25519Verifier, verify
 
-from .conftest import DEMO_PASSWORD, Platform, SignInRig
+from .conftest import DEMO_PASSWORD, Platform, SignInRig, seed_tx
 
 NEW = "a long new password 1"
 
@@ -45,7 +45,7 @@ async def test_a_reset_sets_a_hashed_password_that_signs_in_and_retires_the_demo
     token = await _reset_link(signin, email)
     r = await signin.public.post("/v1/auth/password/reset", json={"token": token, "password": NEW})
     assert r.status_code == 204, r.text
-    async with signin.engine.connect() as c:
+    async with seed_tx(signin.engine, signin.tenant) as c:
         stored = (
             await c.execute(sa.select(password_credentials.c.hash).where(password_credentials.c.user_id == user))
         ).scalar_one()
@@ -79,7 +79,7 @@ async def test_an_expired_reset_link_is_refused_and_changes_nothing(signin: Sign
     email = f"cy@{signin.zone}"
     await signin.person(email)
     token = await _reset_link(signin, email)
-    async with signin.engine.begin() as c:
+    async with seed_tx(signin.engine, signin.tenant) as c:
         await c.execute(password_resets.update().values(expires_at="2000-01-01T00:00:00.000Z"))
     r = await signin.public.post("/v1/auth/password/reset", json={"token": token, "password": NEW})
     assert r.status_code == 400 and r.json()["error"]["code"] == "reset_invalid"

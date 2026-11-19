@@ -3,7 +3,7 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-export const LAYERS = ['api', 'sdk', 'cli', 'ui'] as const;
+export const LAYERS = ['api', 'sdk', 'cli', 'ui', 'mcp'] as const;
 export type Layer = (typeof LAYERS)[number];
 
 /** Paths whose presence makes a layer available. api and ui need only the running stack and the console. */
@@ -14,6 +14,8 @@ export const LAYER_PROVIDERS: Record<Layer, string[]> = {
   // packages/ops_plugins joins it once it is built.
   cli: ['scripts/sample_team.py', 'packages/ops_plugins'],
   ui: ['apps/console'],
+  // An outside assistant on a team's MCP address, driven by the official MCP SDK client.
+  mcp: ['services/tools-service/src/ops_tools/mcp_server.py'],
 };
 
 export type Availability = { available: true } | { available: false; reason: string };

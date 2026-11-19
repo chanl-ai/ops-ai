@@ -14,12 +14,15 @@ export interface Choice {
 
 const CARD = 'flex cursor-pointer items-start gap-3 rounded-lg border bg-card p-4 transition-colors hover:bg-accent/40 has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5';
 
-/** Radio or checkbox cards with a title and a description, for policy modes where each option needs explaining. */
-export function ChoiceCards({ name, choices, value, onChange, label }: { name: string; choices: Choice[]; value: string; onChange: (v: string) => void; label: string }) {
+/**
+ * Radio or checkbox cards with a title and a description, for modes where each option needs explaining. `columns` 3
+ * sets three side by side from 640px (a create dialog's presets, each listing what it fills); one column below that.
+ */
+export function ChoiceCards({ name, choices, value, onChange, label, columns = 2 }: { name: string; choices: Choice[]; value: string; onChange: (v: string) => void; label: string; columns?: 2 | 3 }) {
   return (
-    <RadioGroup value={value} onValueChange={onChange} aria-label={label} className="grid gap-3 sm:grid-cols-2">
+    <RadioGroup value={value} onValueChange={onChange} aria-label={label} className={cn('grid gap-3', columns === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2')}>
       {choices.map((c) => (
-        <label key={c.value} htmlFor={`${name}-${c.value}`} className={CARD}>
+        <label key={c.value} htmlFor={`${name}-${c.value}`} className={CARD} data-testid={`${name}-${c.value}`}>
           <RadioGroupItem value={c.value} id={`${name}-${c.value}`} className="mt-0.5" />
           <span className="min-w-0">
             <span className="block text-sm font-medium">{c.title}</span>

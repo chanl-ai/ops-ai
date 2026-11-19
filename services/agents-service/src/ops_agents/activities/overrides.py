@@ -12,7 +12,7 @@ clamped. Guardrails and approval policy are not settings here at all.
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import ValidationError
 
@@ -20,6 +20,7 @@ from ops_agents.activities.agent_limits import AgentLimits
 from ops_agents.activities.catalog import AgentDefinition
 from ops_contracts.chat import ChatOverrides, EffectiveSettings
 from ops_service_kit.errors import Unprocessable
+from ops_service_kit.http import Json
 
 CallerClass = Literal["trusted", "public_key"]
 Layer = Literal["thread", "turn"]
@@ -152,7 +153,7 @@ def resolve(
     return effective
 
 
-def parse(raw: dict[str, Any] | None, layer: Layer) -> Overrides | None:
+def parse(raw: Json | None, layer: Layer) -> Overrides | None:
     """Overrides from a request body: 422 naming the field for an unknown or mistyped one."""
     if raw is None:
         return None

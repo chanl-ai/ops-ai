@@ -27,17 +27,21 @@ def test_review_options_are_its_out_ports() -> None:
 
 def test_every_built_type_has_a_form_for_each_of_its_parameters() -> None:
     for t in default_registry().all():
-        props = set(t.parameters.get("properties") or {})
-        assert set(t.ui["fields"]) == props, t.id
-        assert t.view()["ui"]["order"], t.id
+        parameters: dict[str, Any] = dict(t.parameters)
+        ui: dict[str, Any] = dict(t.ui)
+        view: dict[str, Any] = t.view()
+        props = set(parameters.get("properties") or {})
+        assert set(ui["fields"]) == props, t.id
+        assert view["ui"]["order"], t.id
 
 
 def test_a_form_that_misses_or_invents_a_setting_is_refused() -> None:
     end = default_registry().get("ops.flow.end", 1)
-    missing = replace(end, ui={"order": ["outcome"], "fields": {"outcome": end.ui["fields"]["outcome"]}})
+    end_fields: dict[str, Any] = cast(dict[str, Any], end.ui["fields"])
+    missing = replace(end, ui={"order": ["outcome"], "fields": {"outcome": end_fields["outcome"]}})
     with pytest.raises(ValueError, match="output has no form field"):
         TypeRegistry([missing])
-    fields = {**end.ui["fields"], "script": {"label": "Script", "widget": "textarea"}}
+    fields = {**end_fields, "script": {"label": "Script", "widget": "textarea"}}
     invented = replace(end, ui={"order": [*fields], "fields": fields})
     with pytest.raises(ValueError, match="script: not a parameter"):
         TypeRegistry([invented])
@@ -45,7 +49,7 @@ def test_a_form_that_misses_or_invents_a_setting_is_refused() -> None:
         end,
         ui={
             "order": ["outcome", "output"],
-            "fields": {**end.ui["fields"], "outcome": {"label": "O", "widget": "source", "source": "http"}},
+            "fields": {**end_fields, "outcome": {"label": "O", "widget": "source", "source": "http"}},
         },
     )
     with pytest.raises(ValueError, match="unknown option source 'http'"):

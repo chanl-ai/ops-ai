@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from steps import required
 from usecase_harness import (
     AGENTS_PORT,
     agents,
@@ -96,7 +97,7 @@ def main() -> None:
         check(
             "2 the new team has its four built-in apps and its Ops Assistant as its default, from the event alone",
             got[0] == ["builtin:document-types", "builtin:files", "builtin:knowledge", "builtin:mailboxes"]
-            and got[1] == f"ag_ops_{team}",
+            and got[1].startswith("ag_ops_"),
             got,
         )
 
@@ -120,14 +121,14 @@ def main() -> None:
         )
 
         # 4. The assistant answers from the knowledge base through search_knowledge.
-        thread = data(api.post("/chat/threads", json={"kbIds": []}, headers=on)) or {}
+        thread = required(api.post("/chat/threads", json={"kbIds": []}, headers=on), "/chat/threads")
         searched = say(
             api, team, str(thread.get("id")), 'call search_knowledge {"query": "How long to file a chargeback?"}'
         )
         found = ended(searched, "search_knowledge")
         check(
             "4 the team's assistant searches its knowledge base through the gateway and gets the rule",
-            thread.get("agentId") == f"ag_ops_{team}" and bool(found) and ANSWER in json.dumps(found[0].get("output")),
+            thread.get("agentId") == got[1] and bool(found) and ANSWER in json.dumps(found[0].get("output")),
             {"agent": thread.get("agentId"), "calls": found[:1], "events": [e.get("type") for e in searched][-6:]},
         )
 

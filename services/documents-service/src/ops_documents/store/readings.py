@@ -14,19 +14,25 @@ from __future__ import annotations
 
 import gzip
 import json
-from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import sqlalchemy as sa
+from pydantic import Field
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncConnection
 
+from ops_documents.store.columns import JSON_TEXT
 from ops_documents.store.extractions import service_outbox
 from ops_documents.store.metadata import RECOVER_PENDING, ROLE, SYSTEM_ROLE, metadata
+from ops_ingest.reading import Page
+from ops_service_kit.http import Json, Out
+from ops_service_kit.narrow import Malformed
 from ops_store import isolation
 from ops_store.outbox import add
+from ops_store.rows import one, rows
 from ops_store.schema import TENANT_SCOPED, team_owned
+from ops_store.store import Store
 from ops_store.team_scope import any_team, team_visible
 
 ReadingStatus = Literal["queued", "reading", "done", "failed"]
@@ -94,16 +100,17 @@ documents_reading_files = sa.Table(
 )
 
 
-@dataclass(frozen=True)
-class ReadingRow:
+class ReadingRow(Out):
+    """A reading's row, its key columns under shorter names."""
+
     tenant_id: str
-    digest: str
-    version: str
-    key: str
+    digest: str = Field(alias="file_digest")
+    version: str = Field(alias="reader_version")
+    key: str = Field(alias="settings_key")
     status: ReadingStatus
     pages_total: int | None
     pages_done: int
-    facts: dict[str, Any] | None
+    facts: Annotated[Json | None, JSON_TEXT]
     error_code: str | None
     error: str | None
     attempts: int
@@ -113,41 +120,28 @@ class ReadingRow:
     duration_ms: int | None
 
 
-def _row(m: Any) -> ReadingRow:
-    return ReadingRow(
-        tenant_id=m["tenant_id"],
-        digest=m["file_digest"],
-        version=m["reader_version"],
-        key=m["settings_key"],
-        status=m["status"],
-        pages_total=m["pages_total"],
-        pages_done=m["pages_done"],
-        facts=json.loads(m["facts"]) if m["facts"] else None,
-        error_code=m["error_code"],
-        error=m["error"],
-        attempts=m["attempts"],
-        file_id=m["file_id"],
-        team=m["team"],
-        actor=m["actor"],
-        duration_ms=m["duration_ms"],
-    )
+_t = documents_readings.c
+# The columns a ReadingRow names: every other column (its times) is read by no caller.
+ROW = (
+    _t.tenant_id, _t.file_digest, _t.reader_version, _t.settings_key, _t.status, _t.pages_total, _t.pages_done,
+    _t.facts, _t.error_code, _t.error, _t.attempts, _t.file_id, _t.team, _t.actor, _t.duration_ms,
+)  # fmt: skip
 
 
-def _pack(page: dict[str, Any]) -> bytes:
+def _pack(page: Json) -> bytes:
     return gzip.compress(json.dumps(page, separators=(",", ":")).encode())
 
 
-def _unpack(body: bytes) -> dict[str, Any]:
-    out: dict[str, Any] = json.loads(gzip.decompress(body))
-    return out
+def _unpack(body: bytes) -> Page:
+    return Page.model_validate_json(gzip.decompress(body))
 
 
-class ReadingsStore:
+class ReadingsStore(Store):
     """Every read and write names the reading's team, and every read also carries `team_visible`, so a store call made
     as one team never reads another team's rows even where the database has no row policy."""
 
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
+    role = ROLE
+    system_role = SYSTEM_ROLE
 
     @staticmethod
     def _where(t: sa.Table, team: str, digest: str, version: str, key: str) -> sa.ColumnElement[bool]:
@@ -161,29 +155,30 @@ class ReadingsStore:
 
     async def get(self, team: str, digest: str, version: str, key: str) -> ReadingRow | None:
         t = documents_readings
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-            query = sa.select(t).where(self._where(t, team, digest, version, key), team_visible(t))
-            m = (await c.execute(query)).mappings().first()
-        return _row(m) if m is not None else None
+        async with self.tx() as c:
+            query = sa.select(*ROW).where(self._where(t, team, digest, version, key), team_visible(t))
+            return await one(c, query, ReadingRow)
 
     async def link(self, file_id: str, team: str, digest: str, at: datetime) -> None:
         """Records that the team's file holds these bytes; a file that changes content is linked to its new digest."""
         t = documents_reading_files
         tenant = isolation.tenant()
         mine = sa.and_(t.c.tenant_id == tenant, t.c.file_id == file_id, t.c.team == team, team_visible(t))
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             now = (await c.execute(sa.select(t.c.file_digest).where(mine))).scalar_one_or_none()
             if now is not None:
                 if now != digest:
                     await c.execute(sa.update(t).where(mine).values(file_digest=digest, created_at=at))
                 return
-        try:
-            async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-                await c.execute(
-                    sa.insert(t).values(tenant_id=tenant, file_id=file_id, team=team, file_digest=digest, created_at=at)
-                )
-        except IntegrityError:
-            return  # linked by a request racing this one
+            try:
+                async with self.attempt(c):
+                    await c.execute(
+                        sa.insert(t).values(
+                            tenant_id=tenant, file_id=file_id, team=team, file_digest=digest, created_at=at
+                        )
+                    )
+            except IntegrityError:
+                return  # linked by a request racing this one
 
     async def queue(
         self, digest: str, version: str, key: str, *, file_id: str, team: str, actor: str, at: datetime
@@ -203,16 +198,16 @@ class ReadingsStore:
             "actor": actor,
             "created_at": at,
         }
-        try:
-            async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-                await c.execute(sa.insert(t).values(**values))
-        except IntegrityError:
-            found = await self.get(team, digest, version, key)
-            assert found is not None
-            if found.status != "failed":
-                return found
-            p = documents_reading_pages
-            async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
+            try:
+                async with self.attempt(c):
+                    await c.execute(sa.insert(t).values(**values))
+            except IntegrityError:
+                found = await self.get(team, digest, version, key)
+                assert found is not None
+                if found.status != "failed":
+                    return found
+                p = documents_reading_pages
                 await c.execute(sa.delete(p).where(self._where(p, team, digest, version, key)))
                 await c.execute(
                     sa.update(t)
@@ -230,7 +225,7 @@ class ReadingsStore:
         """Marks the reading begun once more; the number of tries, this one included."""
         t = documents_readings
         tries = row.attempts + 1
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             await c.execute(
                 sa.update(t)
                 .where(self._where(t, row.team, row.digest, row.version, row.key))
@@ -238,26 +233,26 @@ class ReadingsStore:
             )
         return tries
 
-    async def opened(self, row: ReadingRow, *, pages_total: int, facts: dict[str, Any]) -> None:
+    async def opened(self, row: ReadingRow, *, pages_total: int, facts: Json) -> None:
         t = documents_readings
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             await c.execute(
                 sa.update(t)
                 .where(self._where(t, row.team, row.digest, row.version, row.key))
                 .values(pages_total=pages_total, facts=json.dumps(facts))
             )
 
-    async def save_page(self, row: ReadingRow, number: int, page: dict[str, Any]) -> None:
+    async def save_page(self, row: ReadingRow, number: int, page: Json) -> None:
         """One finished page, and the count of pages done; saving a page again (after a restart) replaces it."""
         t = documents_readings
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             await self._put_page(c, row.team, row.digest, row.version, row.key, number=number, page=page)
             await c.execute(
                 sa.update(t).where(self._where(t, row.team, row.digest, row.version, row.key)).values(pages_done=number)
             )
 
     async def _put_page(
-        self, c: AsyncConnection, team: str, digest: str, version: str, key: str, *, number: int, page: dict[str, Any]
+        self, c: AsyncConnection, team: str, digest: str, version: str, key: str, *, number: int, page: Json
     ) -> None:
         p = documents_reading_pages
         await c.execute(sa.delete(p).where(self._where(p, team, digest, version, key), p.c.page == number))
@@ -279,8 +274,8 @@ class ReadingsStore:
         version: str,
         key: str,
         *,
-        facts: dict[str, Any],
-        pages: list[dict[str, Any]],
+        facts: Json,
+        pages: list[Json],
         file_id: str,
         team: str,
         actor: str,
@@ -289,25 +284,29 @@ class ReadingsStore:
     ) -> None:
         """A reading made at once, kept whole in one transaction; two readers of the same bytes racing keep one."""
         t, p = documents_readings, documents_reading_pages
-        try:
-            async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-                await c.execute(sa.delete(t).where(self._where(t, team, digest, version, key)))
-                await c.execute(sa.delete(p).where(self._where(p, team, digest, version, key)))
-                await c.execute(
-                    sa.insert(t).values(
-                        tenant_id=isolation.tenant(), team=team, file_digest=digest, reader_version=version,
-                        settings_key=key, status="done", pages_total=len(pages), pages_done=len(pages),
-                        facts=json.dumps(facts), attempts=1, file_id=file_id, actor=actor, duration_ms=duration_ms,
-                        created_at=at, started_at=at, finished_at=at,
+        async with self.tx() as c:
+            try:
+                async with self.attempt(c):
+                    await c.execute(sa.delete(t).where(self._where(t, team, digest, version, key)))
+                    await c.execute(sa.delete(p).where(self._where(p, team, digest, version, key)))
+                    await c.execute(
+                        sa.insert(t).values(
+                            tenant_id=isolation.tenant(), team=team, file_digest=digest, reader_version=version,
+                            settings_key=key, status="done", pages_total=len(pages), pages_done=len(pages),
+                            facts=json.dumps(facts), attempts=1, file_id=file_id, actor=actor,
+                            duration_ms=duration_ms, created_at=at, started_at=at, finished_at=at,
+                        )
+                    )  # fmt: skip
+                    for page in pages:
+                        number = page.get("number")
+                        if not isinstance(number, int | float | str):
+                            raise Malformed(f"page number {number!r} is not a number")
+                        await self._put_page(c, team, digest, version, key, number=int(number), page=page)
+                    await self._events(
+                        c, team, digest, version, key, name=FINISHED_EVENT, said={"status": "done", "pages": len(pages)}
                     )
-                )  # fmt: skip
-                for page in pages:
-                    await self._put_page(c, team, digest, version, key, number=int(page["number"]), page=page)
-                await self._events(
-                    c, team, digest, version, key, name=FINISHED_EVENT, said={"status": "done", "pages": len(pages)}
-                )
-        except IntegrityError:
-            return
+            except IntegrityError:
+                return
 
     async def finish(
         self,
@@ -321,20 +320,20 @@ class ReadingsStore:
     ) -> None:
         """The reading ended, and the event each of the team's files with these bytes is sent, in one transaction."""
         t = documents_readings
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             await c.execute(
                 sa.update(t)
                 .where(self._where(t, row.team, row.digest, row.version, row.key))
                 .values(status=status, finished_at=at, duration_ms=duration_ms, error_code=error_code, error=error)
             )
             name = FINISHED_EVENT if status == "done" else FAILED_EVENT
-            said: dict[str, Any] = {"status": status, "pages": row.pages_total}
+            said: Json = {"status": status, "pages": row.pages_total}
             if error_code:
                 said |= {"errorCode": error_code, "error": error}
             await self._events(c, row.team, row.digest, row.version, row.key, name=name, said=said)
 
     async def _events(
-        self, c: AsyncConnection, team: str, digest: str, version: str, key: str, *, name: str, said: dict[str, Any]
+        self, c: AsyncConnection, team: str, digest: str, version: str, key: str, *, name: str, said: Json
     ) -> None:
         f = documents_reading_files
         tenant = isolation.tenant()
@@ -352,16 +351,14 @@ class ReadingsStore:
                 key=f"{name}:{digest}:{version}:{key}:{file_id}", payload=payload,
             )  # fmt: skip
 
-    async def pages(
-        self, team: str, digest: str, version: str, key: str, *, page: int | None = None
-    ) -> list[dict[str, Any]]:
+    async def pages(self, team: str, digest: str, version: str, key: str, *, page: int | None = None) -> list[Page]:
         p = documents_reading_pages
         query = (
             sa.select(p.c.body).where(self._where(p, team, digest, version, key), team_visible(p)).order_by(p.c.page)
         )
         if page is not None:
             query = query.where(p.c.page == page)
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             bodies = (await c.execute(query)).scalars().all()
         return [_unpack(b) for b in bodies]
 
@@ -369,21 +366,18 @@ class ReadingsStore:
         """Every queued or unfinished reading, across tenants and teams, oldest first: what a restart picks up again,
         each then read in its own team."""
         t = documents_readings
-        async with isolation.system_tx(self.engine, RECOVER_PENDING, role=SYSTEM_ROLE) as c:
+        async with self.system_tx(RECOVER_PENDING) as c:
             query = (
-                sa.select(t)
-                .where(t.c.status.in_(PENDING), any_team(t, "a restart picks up every team's unfinished readings"))
-                .order_by(t.c.created_at)
+                sa.select(*ROW).where(t.c.status.in_(PENDING), any_team(t, RECOVER_PENDING)).order_by(t.c.created_at)
             )
-            rows = (await c.execute(query)).mappings().all()
-        return [_row(m) for m in rows]
+            return await rows(c, query, ReadingRow)
 
     async def purge(self, file_id: str, team: str) -> int:
         """Forgets that the team's deleted file held its bytes, and removes the team's readings of those bytes once no
         other file of the team holds them; the number of readings removed."""
         f, t, p = documents_reading_files, documents_readings, documents_reading_pages
         tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             ours = sa.and_(f.c.tenant_id == tenant, f.c.team == team, team_visible(f))
             digest = (
                 await c.execute(sa.select(f.c.file_digest).where(ours, f.c.file_id == file_id))

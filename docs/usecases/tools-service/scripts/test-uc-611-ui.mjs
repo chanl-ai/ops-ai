@@ -10,7 +10,7 @@ import { JAMES, PASSWORD, PRIYA, as } from '../../lib/workflow_ui.mjs';
 const RUN = Math.random().toString(36).slice(2, 6);
 const tools = `http://127.0.0.1:${TOOLS_PORT}/v1/tool-modules`;
 const EMAIL = `jo.reyes+${RUN}@example.com`;
-const shots = evidenceDir('591', 'ui');
+const shots = evidenceDir('611', 'ui');
 
 async function send(method, path, headers, body) {
   const r = await fetch(`${tools}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });

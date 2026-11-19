@@ -19,7 +19,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import mssql
 
-from ops_store.schema import TENANT_SCOPED, isolation_ddl, mssql_predicates_ddl, team_owned
+from ops_store.schema import TENANT_SCOPED, isolation_ddl, isolation_drop_ddl, mssql_predicates_ddl, team_owned
 
 revision = "documents_0014"
 down_revision = "documents_0013"
@@ -82,5 +82,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # SQL Server refuses to drop a table its security policy still names.
+    if op.get_bind().dialect.name == "mssql":
+        for statement in isolation_drop_ddl(_marked(), "mssql"):
+            op.execute(statement)
     op.drop_index("uq_documents_template_copies_live", table_name="documents_template_copies")
     op.drop_table("documents_template_copies")

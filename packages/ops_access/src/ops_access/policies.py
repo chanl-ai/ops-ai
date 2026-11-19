@@ -1,7 +1,8 @@
-"""The stricter rules an admin may switch on for a workspace. Each policy's default is open, the AI uses
-aside (aiSteps, taskAssist, checkBeforeSend): a new workspace meets no control until an admin sets one, and every value
-is changed through `can(settings, manage)` in the security team. platform-service stores the values per tenant and puts
-them on every token; services read them there with `policy(p, key)`."""
+"""The rules an admin may set for a workspace, with each default in one place. Most defaults are open, agents' changes
+to apps included (appChanges: no team asks); the ones that hold something back are requesterMayDecide (off) and the
+AI uses (aiSteps, taskAssist, checkBeforeSend). A team changes any of them. Every value is changed through
+`can(settings, manage)` in the security team. platform-service stores the values per tenant and puts them on every
+token; services read them there with `policy(p, key)`."""
 
 from __future__ import annotations
 
@@ -9,23 +10,30 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 from ops_identity import Principal
+from ops_service_kit.http import Json, JsonValue
+from ops_service_kit.narrow import json_object
 
 
 @dataclass(frozen=True)
 class Policy:
     key: str
-    # The open value: the decision the policy names holds nothing back.
+    # The value a workspace has until an admin sets one.
     default: Any
     # One line, shown beside the switch.
     effect: str
     # "bool"; "floor": a number from 0 to 1, or None for no floor; "days": a whole number of days, or None for no limit;
     # "hours": a whole number of hours; "publish_modes": one team's {area: mode}, see PUBLISH_AREAS and PUBLISH_MODES.
     # "names": a list of names (appWritesNeedApproval: app ids). "choice": one of `choices`.
+    # "app_changes": one team's {ask, answer, reviewerRole, testAccountsNeverAsk} (appChanges); "app_changes_by_app":
+    # one team's {app id: {answer, reviewerRole}} (appChangesByApp).
     kind: str = "bool"
     # The grid cell a change needs; the security team holds it.
     changed_by: tuple[str, str] = ("settings", "manage")
     # A value per team ({team: value}): a change sets the acting team's part only, checked in that team.
     per_team: bool = False
+    # Where `changed_by` is held: "security" (the Security team, for a Security cell) or "team" (the acting team, so a
+    # team's Admin sets their own team's part).
+    held_in: str = "security"
     # Read live from platform-service on each decision (GET /v1/policies/{key}), never carried in a token, so a change
     # applies at once rather than at the next token refresh.
     live: bool = False
@@ -35,9 +43,11 @@ class Policy:
     choices: tuple[tuple[str, str, str], ...] = ()
     # A fact no value of the policy changes, said under it on the Policies page.
     note: str = ""
+    # An "hours" policy's largest value; None takes the general limit of a year.
+    maximum: int | None = None
 
 
-KINDS = ("bool", "floor", "days", "hours", "publish_modes", "names", "choice")
+KINDS = ("bool", "floor", "days", "hours", "publish_modes", "names", "choice", "app_changes", "app_changes_by_app")
 
 
 # Which publishes wait for a second person's review (moved here), per team and area:
@@ -52,8 +62,9 @@ DEFAULT_PUBLISH_MODE = "major"
 POLICIES: tuple[Policy, ...] = (
     Policy(
         "requesterMayDecide",
-        True,
-        "The person who asked for a decision may also make it. Off: someone else has to decide.",
+        # Off by default: someone other than the person who asked decides. A workspace that set it on keeps that.
+        False,
+        "The person who asked for a decision may also make it. Off (the default): someone else has to decide.",
         title="Requester may decide",
     ),
     Policy(
@@ -83,6 +94,14 @@ POLICIES: tuple[Policy, ...] = (
         title="Publish reviews",
     ),
     Policy(
+        "companySignInRequired",
+        # Off: a password follows the sign-in providers, as before company sign-in could be required.
+        False,
+        "People on the workspace's verified company domains sign in only through the company's provider; named "
+        "break-glass Security admins keep a password. Off: passwords follow the sign-in providers.",
+        title="Company sign-in required",
+    ),
+    Policy(
         "chatThreadsOwnerOnly",
         # People's chats stay private by default; off lets the team's admins read them.
         True,
@@ -108,10 +127,34 @@ POLICIES: tuple[Policy, ...] = (
         title="Review deadline",
     ),
     Policy(
+        "appChanges",
+        # No team set: nobody is asked before an agent changes an app. A team turns it on and picks who answers.
+        {},
+        "Ask before an agent changes anything in an app. Off: agents change apps without asking. On: the person in "
+        "the chat confirms, or a reviewer of a chosen role approves.",
+        kind="app_changes",
+        # A team admin's: settings.manage in the team.
+        changed_by=("settings", "manage"),
+        per_team=True,
+        held_in="team",
+        live=True,
+        title="Ask before an agent changes anything in an app",
+    ),
+    Policy(
+        "appChangesByApp",
+        # No app listed: every app follows the team's switch. An app's entry overrides the team for that app.
+        {},
+        "Per app: use the team setting, or change without asking, ask the person, or ask a reviewer.",
+        kind="app_changes_by_app",
+        changed_by=("settings", "manage"),
+        per_team=True,
+        held_in="team",
+        live=True,
+        title="Approval by app",
+    ),
+    Policy(
         "toolWritesNeedApproval",
-        # Approvals are off by default: no team set, a write waits only when its tool's own switch
-        # is on or its app is listed in appWritesNeedApproval; when one waits, a person holding reviews.decide is not
-        # asked.
+        # Derived from appChanges for one release (on when the team asks a reviewer); a write to it lands in appChanges.
         {},
         "Every tool write by the team waits for a person's approval, including the ones a tool lets run at once.",
         changed_by=("reviews", "manage"),
@@ -121,8 +164,8 @@ POLICIES: tuple[Policy, ...] = (
     ),
     Policy(
         "appWritesNeedApproval",
-        # Off by default like every approval: a team lists the apps whose writes wait, by the id
-        # the Apps page shows (plugin:<id>, a connection's id, or module:<id>).
+        # Derived from appChangesByApp for one release: the apps whose answer is a reviewer, by the id the Apps page
+        # shows (plugin:<id>, a connection's id, or module:<id>); a write to it lands in appChangesByApp.
         {},
         "Writes from the listed apps wait for a person's approval. Other writes run unless their tool asks for one.",
         kind="names",
@@ -130,6 +173,19 @@ POLICIES: tuple[Policy, ...] = (
         per_team=True,
         live=True,
         title="Approve writes of these apps",
+    ),
+    Policy(
+        "appsChangeWithoutAsking",
+        # Derived from appChangesByApp for one release: the apps whose answer is "none"; a write lands there.
+        {},
+        "Writes from the listed apps run in chat without asking the person first. Every other app asks before changes.",
+        kind="names",
+        # A team admin's: settings.manage in the team, which builders and members do not hold.
+        changed_by=("settings", "manage"),
+        per_team=True,
+        held_in="team",
+        live=True,
+        title="Apps that change without asking",
     ),
     Policy(
         "aiSteps",
@@ -211,6 +267,14 @@ POLICIES: tuple[Policy, ...] = (
         "private range, and only https is called.",
     ),
     Policy(
+        "mcpConnectionHours",
+        8,
+        "How long an assistant stays connected to a team's MCP address before the person signs in again.",
+        kind="hours",
+        title="Assistant connection length",
+        maximum=30 * 24,
+    ),
+    Policy(
         "securityTeamAddsSecrets",
         False,
         "Only the security team adds secrets. Off: builders add and use their own team's secrets.",
@@ -226,6 +290,8 @@ def check_value(key: str, value: Any) -> Any:
     policy = BY_KEY.get(key)
     if policy is None:
         raise ValueError(f"{key} is not a policy")
+    # Read before any check narrows `value`; used only once `value` is known to be an object.
+    held = json_object(value)
     if policy.kind == "bool" and isinstance(value, bool):
         return value
     if (
@@ -236,7 +302,7 @@ def check_value(key: str, value: Any) -> Any:
         return value
     if policy.kind == "days" and (value is None or (type(value) is int and 1 <= value <= 36500)):
         return value
-    if policy.kind == "hours" and type(value) is int and 1 <= value <= 8760:
+    if policy.kind == "hours" and type(value) is int and 1 <= value <= (policy.maximum or 8760):
         return value
     if (
         policy.kind == "names"
@@ -247,6 +313,36 @@ def check_value(key: str, value: Any) -> Any:
         return list(dict.fromkeys(cast(list[str], value)))
     if policy.kind == "choice" and isinstance(value, str) and value in {c[0] for c in policy.choices}:
         return value
+    if policy.kind == "app_changes" and isinstance(value, dict):
+        answer = held.get("answer", "person")
+        role = held.get("reviewerRole")
+        if (
+            isinstance(held.get("ask", False), bool)
+            and answer in ANSWERS
+            and (role is None or isinstance(role, str))
+            and isinstance(held.get("testAccountsNeverAsk", True), bool)
+            and isinstance(held.get("testRunsAsk", True), bool)
+            and isinstance(held.get("makersAsk", True), bool)
+        ):
+            # makersAsk is kept only when given: off, a wait a plugin or seed declared is not the tool's answer.
+            return {
+                "ask": held.get("ask", False),
+                "answer": answer,
+                "reviewerRole": role,
+                "testAccountsNeverAsk": held.get("testAccountsNeverAsk", True),
+                "testRunsAsk": held.get("testRunsAsk", True),
+                **({"makersAsk": held["makersAsk"]} if "makersAsk" in held else {}),
+            }
+    if policy.kind == "app_changes_by_app" and isinstance(value, dict):
+        out: Json = {}
+        for app, raw in cast(dict[Any, Any], value).items():
+            entry = json_object(raw)
+            role = entry.get("reviewerRole")
+            if not (isinstance(app, str) and entry.get("answer") in ANSWERS):
+                break
+            out[app] = {"answer": entry["answer"], **({"reviewerRole": role} if isinstance(role, str) else {})}
+        else:
+            return out
     if policy.kind == "publish_modes" and isinstance(value, dict):
         modes = cast(dict[Any, Any], value)
         if all(a in PUBLISH_AREAS and m in PUBLISH_MODES for a, m in modes.items()):
@@ -255,48 +351,128 @@ def check_value(key: str, value: Any) -> Any:
         "bool": "true or false",
         "floor": "a number from 0 to 1, or null",
         "days": "a whole number of days, or null",
-        "hours": "a whole number of hours from 1 to 8760",
+        "hours": f"a whole number of hours from 1 to {policy.maximum or 8760}",
         "names": "a list of up to 500 names, each 1 to 200 characters",
         "publish_modes": f"an object of area ({', '.join(PUBLISH_AREAS)}) to mode ({', '.join(PUBLISH_MODES)})",
         "choice": f"one of {', '.join(c[0] for c in policy.choices)}",
+        "app_changes": "{ask, answer (none, person or reviewer), reviewerRole, testAccountsNeverAsk, testRunsAsk, "
+        "makersAsk}",
+        "app_changes_by_app": "an object of app id to {answer (none, person or reviewer), reviewerRole}",
     }
     raise ValueError(f"{key} takes {takes[policy.kind]}")
 
 
 def policy(p: Principal, key: str) -> Any:
-    """The policy's value for the caller's tenant, from the token; its open default when the token predates it."""
+    """The policy's value for the caller's tenant, from the token; its default when the token carries none.
+
+    The one reader of a policy's value. Reading `p.policies` or `BY_KEY[key].default` anywhere else is a second copy
+    of the default, which `scripts/check_access_exceptions.py` counts as a `policy-read`."""
     return p.policies.get(key, BY_KEY[key].default)
 
 
-def team_on(values: Any, team: str | None) -> bool:
+def team_on(values: object, team: str | None) -> bool:
     """Whether `team` turned a per-team switch on (toolWritesNeedApproval, aiSteps, taskAssist, checkBeforeSend,
     pageImages), from the value GET /v1/policies/{key} returns (read live on each call); off for a team that set
     nothing."""
-    return team is not None and isinstance(values, dict) and cast(dict[str, Any], values).get(team) is True
+    return team is not None and json_object(values).get(team) is True
 
 
-def team_off(values: Any, team: str | None) -> bool:
+def team_off(values: object, team: str | None) -> bool:
     """Whether `team` turned a per-team switch that is on by default off (aiStepsMaskPersonalData): only an explicit
     false counts, so a team that set nothing keeps the protection."""
-    return team is not None and isinstance(values, dict) and cast(dict[str, Any], values).get(team) is False
+    return team is not None and json_object(values).get(team) is False
 
 
-def team_writes_need_approval(values: dict[str, Any], team: str | None) -> bool:
+def team_writes_need_approval(values: object, team: str | None) -> bool:
     """Whether `team` set toolWritesNeedApproval on."""
     return team_on(values, team)
 
 
-def team_names(values: Any, team: str | None) -> list[str]:
+def team_names(values: object, team: str | None) -> list[str]:
     """The names `team` listed in a per-team list policy (appWritesNeedApproval), from the value GET /v1/policies/{key}
     returns; none for a team that set nothing."""
-    if team is None or not isinstance(values, dict):
+    if team is None:
         return []
-    listed: object = cast(dict[str, Any], values).get(team)
+    listed: object = json_object(values).get(team)
     return [str(n) for n in cast(list[Any], listed)] if isinstance(listed, list) else []
 
 
 def publish_mode(modes: dict[str, Any], team: str, area: str) -> str:
     """The publish review mode of `area` in `team`, from `publishReview` as GET /v1/policies/publishReview returns it
     (read live on each decision); `major` where the team set none."""
-    of_team: dict[str, Any] = dict(modes.get(team) or {})
+    # `*` is the workspace's own value, which a new workspace writes so a team added later starts the same.
+    of_team: dict[str, Any] = {**dict(modes.get("*") or {}), **dict(modes.get(team) or {})}
     return str(of_team.get(area, DEFAULT_PUBLISH_MODE))
+
+
+ANSWERS = ("none", "person", "reviewer")
+
+
+def _level(value: object) -> tuple[str | None, JsonValue]:
+    """The (answer, reviewerRole) one level of the chain holds; answer None when the level says nothing (as a level
+    that is not an object says nothing)."""
+    held = json_object(value)
+    answer = held.get("answer")
+    if held.get("ask") is False:
+        answer = "none"
+    return (answer if answer in ANSWERS else None), held.get("reviewerRole")
+
+
+def effective_answer(*, tool: dict[str, Any], app: Any, team: Any, channel: str, test_account: bool) -> dict[str, Any]:
+    """Whether a call waits, and who answers, for one tool: the single rule every service reads.
+
+    The most specific level wins: the tool's `approvalMode`, then the app's entry of `appChangesByApp`, then the team's
+    `appChanges`. A read never waits; a write over MCP always does (nobody is in the chat), except one that only makes a
+    draft (`draft`), which still needs its own publish review before it does anything; a tool with two approvers
+    always asks a reviewer. A test run (channel "test") of a write on a live account asks the person while `testRunsAsk`
+    is on. A team's checkbox `testAccountsNeverAsk` (on unless saved off) lets a test account through.
+    "Ask the person" with nobody in the chat (a workflow) goes to the reviewer role. An unreadable team policy (None)
+    fails closed: the write waits for a reviewer.
+
+    Returns:
+        {waits, answer ("none" | "person" | "reviewer"), reviewerRole, source ("tool" | "app" | "team" | "mcp" |
+        "test-account")}.
+    """
+    if tool.get("access") != "write":
+        return {"waits": False, "answer": "none", "reviewerRole": None, "source": "tool"}
+    team_role = None
+    if team is None:
+        return {"waits": True, "answer": "reviewer", "reviewerRole": None, "source": "team"}
+    if channel == "mcp" and tool.get("draft"):
+        return {"waits": False, "answer": "none", "reviewerRole": None, "source": "draft"}
+    if channel == "mcp":
+        return {"waits": True, "answer": "reviewer", "reviewerRole": tool.get("reviewerRole"), "source": "mcp"}
+    if tool.get("approvers") == 2:
+        role = tool.get("reviewerRole") or _level(team)[1]
+        return {"waits": True, "answer": "reviewer", "reviewerRole": role, "source": "tool"}
+    team_answer, team_role = _level(team)
+    answer, role, source = team_answer or "none", team_role, "team"
+    app_answer, app_role = _level(app)
+    if app_answer is not None:
+        answer, role, source = app_answer, app_role or team_role, "app"
+    mode = tool.get("approvalMode")
+    if mode in ANSWERS:
+        answer, role, source = mode, tool.get("reviewerRole") or role, "tool"
+    if answer == "person" and channel == "workflow":
+        answer = "reviewer"
+    # A test run of a write on a live account pauses for the person's yes unless the team turned `testRunsAsk` off
+    # (on unless saved off); chats and workflows keep the answer above.
+    if answer == "none" and channel == "test" and not test_account and json_object(team).get("testRunsAsk", True):
+        answer, role, source = "person", None, "test-run"
+    if answer == "none":
+        return {"waits": False, "answer": "none", "reviewerRole": None, "source": source}
+    if test_account and json_object(team).get("testAccountsNeverAsk", True):
+        return {"waits": False, "answer": "none", "reviewerRole": None, "source": "test-account"}
+    return {"waits": True, "answer": answer, "reviewerRole": None if answer == "person" else role, "source": source}
+
+
+def tool_waits(access: str, mode: str | None = None) -> bool:
+    """Whether a call of a tool waits on its own setting alone, for a place with no team to ask (a seeded or plugin
+    tool's row, the agents' catalogue): `effective_answer` for a team that saved nothing. `mode` is the tool's own
+    answer (none, person or reviewer), None when it has none. The team's and app's levels are applied where the team
+    is known (the gateway's `WriteApprovals.answer`)."""
+    return bool(
+        effective_answer(
+            tool={"access": access, "approvalMode": mode}, app=None, team={}, channel="chat", test_account=False
+        )["waits"]
+    )

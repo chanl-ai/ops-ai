@@ -26,6 +26,9 @@ from ops_store.dialect import (
     dialect_of,
     full_text,
     insert_ignore,
+    json_array_has,
+    json_fragment,
+    json_text,
     lock_key,
     locked,
     upsert,
@@ -111,6 +114,21 @@ def test_full_text_renders_a_match_and_a_contains_predicate() -> None:
     q = sa.select(work.c.id).where(full_text(MS, work.c.id, 'rate NEAR "x"'))
     assert sql(q, MS).endswith("WHERE CONTAINS(store_test_dialect_work.id, :param_1)")
     assert "@@ plainto_tsquery" in sql(sa.select(work.c.id).where(full_text(PG, work.c.id, "rate")), PG)
+
+
+def test_json_fields_render_on_both_databases_and_refuse_a_key_that_is_not_a_name() -> None:
+    col = work.c.id
+    q = sa.select(json_text(col, "pinned"), json_fragment(col, "kbIds")).where(json_array_has(col, "kbIds", "kb_1"))
+    pg, ms = sql(q, PG), sql(q, MS)
+    assert "->> 'pinned'" in pg and "jsonb_exists" in pg
+    assert "JSON_VALUE(store_test_dialect_work.id, '$.pinned')" in ms and "OPENJSON(" in ms and "JSON_QUERY(" in ms
+    # SQL Server has no boolean type: a condition must never be compared with 0 or 1.
+    either = sa.or_(json_array_has(col, "kbIds", "a"), json_array_has(col, "kbIds", "b"))
+    flagged = sa.select(col).where(col == "x", either)
+    flagged = sql(flagged.where(~json_array_has(col, "kbIds", "c")), MS)
+    assert ") = 1" not in flagged and ") = 0" not in flagged, flagged
+    with pytest.raises(ValueError):
+        json_text(col, "a'); drop table x; --")
 
 
 def test_a_database_that_is_not_supported_is_refused() -> None:

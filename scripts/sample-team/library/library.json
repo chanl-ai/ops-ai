@@ -1,0 +1,370 @@
+{
+  "_about": "The demo policy library (scripts/sample_library.py): one knowledge base, one pushed source per collection, each document written in its format from the text file each version names. Brand-neutral: the documents say 'the bank'.",
+  "team": "team_platform",
+  "person": "platform",
+  "base": {
+    "name": "Policy library",
+    "description": "Bank policies, procedures, rate sheets and customer help pages.",
+    "color": "teal"
+  },
+  "collections": [
+    {
+      "name": "Retail products",
+      "source": "Retail products library",
+      "tags": [
+        "customer-facing",
+        "fees",
+        "products",
+        "rates",
+        "regulated"
+      ]
+    },
+    {
+      "name": "Branch operations",
+      "source": "Branch operations library",
+      "tags": [
+        "branch-only",
+        "controls",
+        "payments"
+      ]
+    },
+    {
+      "name": "Cards and disputes",
+      "source": "Cards and disputes library",
+      "tags": [
+        "cards",
+        "customer-facing",
+        "disputes",
+        "regulated"
+      ]
+    },
+    {
+      "name": "Lending",
+      "source": "Lending library",
+      "tags": [
+        "credit",
+        "customer-facing",
+        "policy",
+        "rates"
+      ]
+    },
+    {
+      "name": "Compliance",
+      "source": "Compliance library",
+      "tags": [
+        "aml",
+        "complaints",
+        "controls",
+        "customer-facing",
+        "kyc",
+        "policy",
+        "privacy",
+        "regulated",
+        "vulnerable-customers"
+      ]
+    },
+    {
+      "name": "Wealth",
+      "source": "Wealth library",
+      "tags": [
+        "customer-facing",
+        "fees",
+        "regulated",
+        "suitability",
+        "tax"
+      ]
+    }
+  ],
+  "documents": [
+    {
+      "collection": "Retail products",
+      "title": "Retail product sheet",
+      "format": "pdf",
+      "tags": [
+        "products",
+        "customer-facing"
+      ],
+      "versions": [
+        "retail-product-sheet"
+      ]
+    },
+    {
+      "collection": "Retail products",
+      "title": "Fee schedule",
+      "format": "pdf",
+      "tags": [
+        "fees",
+        "regulated"
+      ],
+      "versions": [
+        "fee-schedule-v1",
+        "fee-schedule-v2"
+      ]
+    },
+    {
+      "collection": "Retail products",
+      "title": "Deposit rate sheet",
+      "format": "docx",
+      "tags": [
+        "rates",
+        "regulated"
+      ],
+      "versions": [
+        "deposit-rate-sheet-v1",
+        "deposit-rate-sheet-v2"
+      ]
+    },
+    {
+      "collection": "Retail products",
+      "title": "Overdraft protection terms",
+      "format": "docx",
+      "tags": [
+        "products",
+        "regulated"
+      ],
+      "versions": [
+        "overdraft-protection-terms"
+      ]
+    },
+    {
+      "collection": "Retail products",
+      "title": "Everyday chequing questions",
+      "format": "html",
+      "tags": [
+        "customer-facing"
+      ],
+      "versions": [
+        "everyday-chequing-questions"
+      ],
+      "url": "https://bank.example/help/everyday-chequing-questions"
+    },
+    {
+      "collection": "Branch operations",
+      "title": "Branch operations manual",
+      "format": "pdf",
+      "tags": [
+        "branch-only"
+      ],
+      "versions": [
+        "branch-operations-manual"
+      ]
+    },
+    {
+      "collection": "Branch operations",
+      "title": "Cash handling and vault procedure",
+      "format": "docx",
+      "tags": [
+        "branch-only",
+        "controls"
+      ],
+      "versions": [
+        "cash-handling-and-vault-procedure"
+      ]
+    },
+    {
+      "collection": "Branch operations",
+      "title": "Outgoing wire transfer procedure",
+      "format": "pdf",
+      "tags": [
+        "payments",
+        "controls"
+      ],
+      "versions": [
+        "outgoing-wire-transfer-procedure"
+      ]
+    },
+    {
+      "collection": "Branch operations",
+      "title": "Safe deposit box rules",
+      "format": "text",
+      "tags": [
+        "branch-only"
+      ],
+      "versions": [
+        "safe-deposit-box-rules"
+      ]
+    },
+    {
+      "collection": "Cards and disputes",
+      "title": "Card dispute time limits",
+      "format": "text",
+      "tags": [
+        "disputes",
+        "regulated"
+      ],
+      "versions": [
+        "card-dispute-time-limits"
+      ]
+    },
+    {
+      "collection": "Cards and disputes",
+      "title": "Chargeback reason codes",
+      "format": "pdf",
+      "tags": [
+        "disputes"
+      ],
+      "versions": [
+        "chargeback-reason-codes"
+      ]
+    },
+    {
+      "collection": "Cards and disputes",
+      "title": "Lost or stolen card",
+      "format": "html",
+      "tags": [
+        "cards",
+        "customer-facing"
+      ],
+      "versions": [
+        "lost-or-stolen-card"
+      ],
+      "url": "https://bank.example/help/lost-or-stolen-card"
+    },
+    {
+      "collection": "Lending",
+      "title": "Small business credit policy",
+      "format": "pdf",
+      "tags": [
+        "credit",
+        "policy"
+      ],
+      "versions": [
+        "small-business-credit-policy"
+      ]
+    },
+    {
+      "collection": "Lending",
+      "title": "Mortgage underwriting guidelines",
+      "format": "docx",
+      "tags": [
+        "credit",
+        "policy"
+      ],
+      "versions": [
+        "mortgage-underwriting-guidelines"
+      ]
+    },
+    {
+      "collection": "Lending",
+      "title": "Personal loan rate card",
+      "format": "docx",
+      "tags": [
+        "rates"
+      ],
+      "versions": [
+        "personal-loan-rate-card"
+      ]
+    },
+    {
+      "collection": "Lending",
+      "title": "Home equity line questions",
+      "format": "html",
+      "tags": [
+        "customer-facing"
+      ],
+      "versions": [
+        "home-equity-line-questions"
+      ],
+      "url": "https://bank.example/help/home-equity-line-questions"
+    },
+    {
+      "collection": "Compliance",
+      "title": "AML and KYC procedures",
+      "format": "pdf",
+      "tags": [
+        "aml",
+        "regulated"
+      ],
+      "versions": [
+        "aml-and-kyc-procedures-v1",
+        "aml-and-kyc-procedures-v2"
+      ]
+    },
+    {
+      "collection": "Compliance",
+      "title": "Customer identification program",
+      "format": "docx",
+      "tags": [
+        "kyc",
+        "regulated"
+      ],
+      "versions": [
+        "customer-identification-program"
+      ]
+    },
+    {
+      "collection": "Compliance",
+      "title": "Complaints handling policy",
+      "format": "pdf",
+      "tags": [
+        "complaints",
+        "policy"
+      ],
+      "versions": [
+        "complaints-handling-policy"
+      ]
+    },
+    {
+      "collection": "Compliance",
+      "title": "Privacy notice",
+      "format": "html",
+      "tags": [
+        "privacy",
+        "customer-facing"
+      ],
+      "versions": [
+        "privacy-notice"
+      ],
+      "url": "https://bank.example/help/privacy-notice"
+    },
+    {
+      "collection": "Compliance",
+      "title": "Elder financial abuse escalation",
+      "format": "text",
+      "tags": [
+        "vulnerable-customers",
+        "controls"
+      ],
+      "versions": [
+        "elder-financial-abuse-escalation"
+      ]
+    },
+    {
+      "collection": "Wealth",
+      "title": "Investment suitability guidelines",
+      "format": "pdf",
+      "tags": [
+        "suitability",
+        "regulated"
+      ],
+      "versions": [
+        "investment-suitability-guidelines"
+      ]
+    },
+    {
+      "collection": "Wealth",
+      "title": "RRSP and TFSA contribution rules",
+      "format": "html",
+      "tags": [
+        "tax",
+        "customer-facing"
+      ],
+      "versions": [
+        "rrsp-and-tfsa-contribution-rules"
+      ],
+      "url": "https://bank.example/help/rrsp-and-tfsa-contribution-rules"
+    },
+    {
+      "collection": "Wealth",
+      "title": "Wealth fee disclosure",
+      "format": "docx",
+      "tags": [
+        "fees",
+        "regulated"
+      ],
+      "versions": [
+        "wealth-fee-disclosure"
+      ]
+    }
+  ]
+}

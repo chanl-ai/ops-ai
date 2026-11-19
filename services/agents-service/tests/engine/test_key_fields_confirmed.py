@@ -15,7 +15,9 @@ from ops_agents.api import engine_reviews
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.tenancy import tenant_scope
 from ops_engine.store import RunStore
+from ops_service_kit import narrow
 from ops_service_kit.errors import ValidationFailed
+from ops_service_kit.http import Json
 from tests.engine.review_flows import flow, paused
 from tests.engine.test_worker import M, drain
 
@@ -35,7 +37,7 @@ CHECK = flow(
         "summary": {"read": READ},
     }
 )
-BOTH = {"0": ["name", "amount"], "1": ["amount", "name"]}
+BOTH: Json = {"0": ["name", "amount"], "1": ["amount", "name"]}
 
 
 @pytest.fixture
@@ -73,7 +75,8 @@ async def test_a_confirmed_approve_resumes_and_keeps_what_was_confirmed(engine: 
     with tenant_scope(tenant):
         await engine_reviews.decide(rt, M, run_id, decision="approve", reason=None, inputs={"confirmed": BOTH})
         decided = await engine_reviews._decisions(rt, run_id)  # pyright: ignore[reportPrivateUsage]
-    assert decided[-1]["resume"]["confirmed"] == BOTH
+    resume = narrow.an_object(decided[-1]["resume"], "the decision's resume")
+    assert resume["confirmed"] == BOTH
     await drain(w)
     assert await _outcome(engine, tenant, run_id) == "approved"
 

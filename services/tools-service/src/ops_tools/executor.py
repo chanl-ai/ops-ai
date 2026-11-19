@@ -26,15 +26,19 @@ import json
 import re
 import ssl
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, TypedDict, cast
 from urllib.parse import parse_qsl, quote, quote_plus, urlencode, urlsplit
 
 import httpx
+from pydantic import JsonValue
 
 from ops_agent_kernel.ports import ToolOutcome
 from ops_identity import ActingForPerson
+from ops_plugin_sdk import NeedsReconnect
+from ops_plugin_sdk.answers import answer_error
+from ops_service_kit.http import Json
 
 from . import mcp, transform
 from .auth import Authenticator, AuthFailed, Prepared
@@ -45,6 +49,8 @@ from .mocks import MockAnswers
 from .plugins.host import plugin_id_of
 from .registry import Resolved
 from .secrets import SecretMissing, SecretResolver, scrub
+from .store.mocks import MockRow
+from .store.modules import Header, InputField, Module, Operation
 from .tools import ToolCaller, ToolRunner
 
 if TYPE_CHECKING:
@@ -73,7 +79,7 @@ PYTHON_TYPES: dict[str, tuple[type, ...]] = {
 SOURCE_SYNC_SCOPE = "knowledge:run"
 
 
-def invalid_fields(fields: list[dict[str, Any]], args: dict[str, Any]) -> list[dict[str, str]]:
+def invalid_fields(fields: list[InputField], args: Json) -> list[dict[str, str]]:
     """Per-field problems with `args` against the operation's input fields; empty when the input is valid. Unknown
     arguments are refused too, so a caller cannot smuggle a field the reviewer never saw."""
     problems: list[dict[str, str]] = []
@@ -88,18 +94,19 @@ def invalid_fields(fields: list[dict[str, Any]], args: dict[str, Any]) -> list[d
         # bool is an int in Python; a true/false is never a number here.
         if not isinstance(value, allowed) or (isinstance(value, bool) and f["type"] != "boolean"):
             problems.append({"field": f["name"], "message": f"Expected {f['type']}."})
-        elif f.get("enum") and value not in f["enum"]:
-            problems.append({"field": f["name"], "message": f"Must be one of {', '.join(f['enum'])}."})
+        elif (enum := f.get("enum")) and value not in enum:
+            problems.append({"field": f["name"], "message": f"Must be one of {', '.join(enum)}."})
     problems.extend({"field": k, "message": "Not an input of this operation."} for k in args if k not in known)
     return problems
 
 
-def with_defaults(fields: list[dict[str, Any]], args: dict[str, Any]) -> dict[str, Any]:
+def with_defaults(fields: list[InputField], args: Json) -> Json:
     """`args` with each optional field the call left out set to its default, as the agent's schema promised."""
     filled = dict(args)
     for f in fields:
-        if f.get("default") is not None and args.get(f["name"]) in (None, ""):
-            filled[f["name"]] = f["default"]
+        default = f.get("default")
+        if default is not None and args.get(f["name"]) in (None, ""):
+            filled[f["name"]] = default
     return filled
 
 
@@ -107,12 +114,12 @@ def masked(output: Any, paths: list[str]) -> Any:
     """`output` with each dotted path replaced by a redaction marker."""
     if not paths or not isinstance(output, dict):
         return output
-    out: dict[str, Any] = json.loads(json.dumps(output))
+    out: Json = json.loads(json.dumps(output))
     for path in paths:
         node: Any = out
         *parents, last = path.split(".")
         for p in parents:
-            node = cast(dict[str, Any], node).get(p) if isinstance(node, dict) else None
+            node = cast(Json, node).get(p) if isinstance(node, dict) else None
         if isinstance(node, dict) and last in node:
             node[last] = REDACTED
     return out
@@ -124,7 +131,7 @@ OURS, UPSTREAM = "ours", "upstream"
 
 
 def _failure(code: str, message: str, status: int | None = None, side: str | None = None) -> ToolOutcome:
-    error: dict[str, Any] = {"code": code, "message": message}
+    error: Json = {"code": code, "message": message}
     if status is not None:
         error["status"] = status
     if side is not None:
@@ -191,7 +198,7 @@ def status_failure(host: str | None, status: int) -> ToolOutcome:
 class HttpRequest:
     method: str
     url: str
-    params: dict[str, Any]
+    params: Json
     json_body: Any
     headers: dict[str, str]
     # A form-encoded body in place of the JSON one (a plugin's form tool, or a form operation).
@@ -200,7 +207,11 @@ class HttpRequest:
     content: str | None = None
 
 
-def _with_auth(req: HttpRequest, prepared: Prepared | None) -> tuple[dict[str, Any], dict[str, str]]:
+# What httpx accepts as a query string's values; the operation's own parameters are scalars and lists of them.
+Query = Mapping[str, str | int | float | bool | Sequence[str | int | float | bool | None] | None]
+
+
+def _with_auth(req: HttpRequest, prepared: Prepared | None) -> tuple[Json, dict[str, str]]:
     """The query and headers sent: the operation's, then the connection's, which win over a name they share."""
     if prepared is None:
         return req.params, req.headers
@@ -212,7 +223,7 @@ class Trial:
     """What the test console shows of one call: the request as sent and the gateway's steps, both with every
     secret value scrubbed, and the answer before any transform. Filled only for a test; a gateway call passes none."""
 
-    request: dict[str, Any] | None = None
+    request: Json | None = None
     raw: Any = None
     # The resolved secret values: the caller scrubs its draft transform's output with them, as the gateway does.
     used: list[str] = field(default_factory=list[str])
@@ -223,15 +234,34 @@ class Trial:
         self.log.append((round((time.perf_counter() - self.started) * 1000, 1), message))
 
 
-def secret_names(op: dict[str, Any]) -> list[str]:
+class ConsoleRan(TypedDict):
+    """A tool page's Real run that reached the executor: the call's id, whether it succeeded, and its answer."""
+
+    callId: str
+    ok: bool
+    output: JsonValue
+
+
+class ConsoleRefused(TypedDict):
+    """A tool page's Real run the gateway refused before it ran: why, in the gateway's words."""
+
+    callId: str
+    status: int
+    code: str
+    reasons: list[str]
+
+
+def secret_refs(headers: Sequence[Header], path: str | None) -> list[str]:
     """The secrets an operation's headers and path name, each once."""
-    texts = [h["value"] for h in cast(list[dict[str, str]], op.get("headers") or [])] + [op.get("path") or ""]
+    texts = [h["value"] for h in headers] + [path or ""]
     return sorted({n for t in texts for n in SECRET_REF.findall(t)})
 
 
-def build_request(
-    module: dict[str, Any], op: dict[str, Any], args: dict[str, Any], secrets: dict[str, str] | None = None
-) -> HttpRequest:
+def secret_names(op: Operation) -> list[str]:
+    return secret_refs(op.get("headers") or [], op.get("path"))
+
+
+def build_request(module: Module, op: Operation, args: Json, secrets: dict[str, str] | None = None) -> HttpRequest:
     """The request an operation makes. `secrets` resolves the `{{NAME}}` references; without it they stay as written,
     which is enough to read the host. The path's own query (`?api_key={{KEY}}`, `?email={email}`) is sent alongside the
     arguments it does not name: httpx would otherwise drop it in favour of `params`."""
@@ -252,7 +282,7 @@ def build_request(
     path = URL_VAR.sub(
         lambda m: quote(str(args.get(m.group(1), "")), safe=""), SECRET_REF.sub(lambda m: secret(m, True), template)
     )
-    url = module["endpoint"].rstrip("/") + path
+    url = module.get("endpoint", "").rstrip("/") + path
     # One pass over each query value, so an argument's value is never read again as a reference: `{name}` takes the
     # argument (left out when it is not given and is the whole value), `{{NAME}}` the secret.
     fixed: dict[str, str] = {}
@@ -264,23 +294,23 @@ def build_request(
     rest = {k: v for k, v in args.items() if k not in used}
     method = op.get("method") or "GET"
     body: Any = None
-    params: dict[str, Any] = dict(fixed)
+    params: Json = dict(fixed)
     form: dict[str, str] | None = None
     content: str | None = None
     encoding = op.get("body_encoding") or "json"
-    if op.get("body") and encoding == "form":
-        form = form_fields(cast(dict[str, str], json.loads(op["body"])), args)
-    elif op.get("body") and encoding == "raw":
-        content = BODY_VAR.sub(lambda m: _as_text(args.get(m.group(1))), op["body"])
-    elif op.get("body"):
-        body = json.loads(BODY_VAR.sub(lambda m: json.dumps(args.get(m.group(1))), op["body"]))
+    template_body = op.get("body")
+    if template_body and encoding == "form":
+        form = form_fields(cast(dict[str, str], json.loads(template_body)), args)
+    elif template_body and encoding == "raw":
+        content = BODY_VAR.sub(lambda m: _as_text(args.get(m.group(1))), template_body)
+    elif template_body:
+        body = json.loads(BODY_VAR.sub(lambda m: json.dumps(args.get(m.group(1))), template_body))
     elif method in ("GET", "DELETE"):
         # The operation's own query wins over an argument of the same name: a caller cannot replace a credential.
         params = {**rest, **fixed}
     else:
         body = rest
-    pairs: list[dict[str, str]] = op.get("headers") or []
-    headers = {h["key"]: SECRET_REF.sub(lambda m: secret(m, False), h["value"]) for h in pairs}
+    headers = {h["key"]: SECRET_REF.sub(lambda m: secret(m, False), h["value"]) for h in op.get("headers") or []}
     return HttpRequest(method, url, params, body, headers, form, content)
 
 
@@ -307,7 +337,7 @@ def _as_text(value: Any) -> str:
     return value if isinstance(value, str) else json.dumps(value)
 
 
-def form_fields(templates: dict[str, str], args: dict[str, Any]) -> dict[str, str]:
+def form_fields(templates: dict[str, str], args: Json) -> dict[str, str]:
     """A form body: each field's `{{arg}}` the argument as text (an object or a list as JSON), a field whose whole
     value is an argument not given left out. httpx encodes every value, so an argument cannot add a field."""
 
@@ -333,8 +363,8 @@ class _Secrets:
 
     async def _signed_in(
         self,
-        module: dict[str, Any],
-        op: dict[str, Any],
+        module: Module,
+        op: Operation,
         environment: str,
         actor: str,
         *,
@@ -364,8 +394,8 @@ class _Secrets:
 
     async def _resolve(
         self,
-        module: dict[str, Any],
-        op: dict[str, Any],
+        module: Module,
+        op: Operation,
         actor: str,
         given: dict[str, str] | None = None,
         trial: Trial | None = None,
@@ -436,9 +466,9 @@ class HttpExecutor(_Secrets):
 
     async def run(
         self,
-        module: dict[str, Any],
-        op: dict[str, Any],
-        args: dict[str, Any],
+        module: Module,
+        op: Operation,
+        args: Json,
         *,
         actor: str = "gateway",
         secret_values: dict[str, str] | None = None,
@@ -537,6 +567,14 @@ class HttpExecutor(_Secrets):
         # Scrubbed before the transform as well as after: a template given a secret could re-encode it (reverse,
         # join, a key lookup into an error) past any scrub of the literal value.
         output = scrub(masked(output, op.get("masked_output") or []), used)
+        # A system that reports failure inside a 200 (Slack's `ok: false`) fails the call in its own words.
+        refused = answer_error(output, op.get("error_when"))
+        if refused is not None:
+            if trial is not None:
+                trial.raw = output
+            if isinstance(refused, NeedsReconnect):
+                return _failure("AUTH_EXPIRED", str(refused), 401, UPSTREAM)
+            return _failure(refused.code, str(refused), res.status_code, UPSTREAM)
         if on_answer is not None:
             try:
                 output = on_answer(output, dict(res.headers))
@@ -548,22 +586,20 @@ class HttpExecutor(_Secrets):
             # draft to try; so the gateway shapes its answer here, once, as for an agent's call.
             if plugin_id_of(module) is None:
                 return ToolOutcome(True, output)
-        if op.get("response_transform"):
+        if template := op.get("response_transform"):
             # A plugin's transform also reads the team's merged settings; every other module's sees none.
-            shaped, failed = await transform.apply(op["response_transform"], output, module.get("plugin_settings"))
+            shaped, failed = await transform.apply(template, output, module.get("plugin_settings"))
             # A transform that fails on a real answer still returns the answer, with why, instead of failing the call.
             output = shaped if failed is None else {"response": output, "transform_error": failed}
         # After the transform, so a template that repeats a header cannot carry a secret out.
         return ToolOutcome(True, scrub(output, used))
 
-    async def _send(
-        self, module: dict[str, Any], req: HttpRequest, prepared: Prepared | None, limit_ms: int
-    ) -> httpx.Response:
+    async def _send(self, module: Module, req: HttpRequest, prepared: Prepared | None, limit_ms: int) -> httpx.Response:
         params, headers = _with_auth(req, prepared)
         return await self.client.request(
             req.method,
             req.url,
-            params=params or None,
+            params=cast(Query | None, params or None),
             json=req.json_body if req.form is None and req.content is None else None,
             data=req.form,
             content=req.content,
@@ -594,15 +630,15 @@ class McpExecutor(_Secrets):
 
     async def _call(
         self,
-        module: dict[str, Any],
-        op: dict[str, Any],
-        args: dict[str, Any],
+        module: Module,
+        op: Operation,
+        args: Json,
         headers: dict[str, str],
         prepared: Prepared | None,
-    ) -> dict[str, Any]:
+    ) -> Json:
         session = mcp.McpSession(
             self.client,
-            str(module["endpoint"]),
+            str(module.get("endpoint")),
             headers={**headers, **(prepared.headers if prepared else {})},
             tenant_id=module["tenant_id"],
             hosts=module["egress_hosts"],
@@ -613,9 +649,9 @@ class McpExecutor(_Secrets):
 
     async def run(
         self,
-        module: dict[str, Any],
-        op: dict[str, Any],
-        args: dict[str, Any],
+        module: Module,
+        op: Operation,
+        args: Json,
         *,
         actor: str = "gateway",
         secret_values: dict[str, str] | None = None,
@@ -624,7 +660,7 @@ class McpExecutor(_Secrets):
     ) -> ToolOutcome:
         if not module.get("endpoint"):
             return _failure("CONNECTION_NOT_SET", NO_ADDRESS)
-        url: str = module["endpoint"]
+        url = module.get("endpoint", "")
         host = urlsplit(url).hostname
         if self.policy is None:
             return _failure("EGRESS_DENIED", "This gateway has no egress policy, so it calls no external system.")
@@ -708,7 +744,7 @@ class Executor:
         # A plugin's Python tools; without it they fail.
         self.plugins = plugins
 
-    async def _mocked(self, module: dict[str, Any], op: dict[str, Any], mock: dict[str, Any]) -> ToolOutcome:
+    async def _mocked(self, module: Module, op: Operation, mock: MockRow) -> ToolOutcome:
         """A test call answered as the system would have, before any egress: the same failures a real answer
         or a real timeout gives, so a workflow's ports behave as they would against the system."""
         assert self.mocks is not None
@@ -721,7 +757,7 @@ class Executor:
             failed = status_failure(host, int(mock["status"]))
         else:
             return ToolOutcome(True, masked(mock.get("body"), op.get("masked_output") or []))
-        error = cast(dict[str, Any], failed.output)["error"]
+        error = cast(Json, cast(Json, failed.output)["error"])
         error["mock"] = mock["id"]
         if mock.get("body") is not None:
             error["body"] = masked(mock["body"], op.get("masked_output") or [])
@@ -731,7 +767,7 @@ class Executor:
         self,
         resolved: Resolved,
         tool: str,
-        args: dict[str, Any],
+        args: Json,
         *,
         key: str,
         caller: ToolCaller,
@@ -751,7 +787,7 @@ class Executor:
         if resolved.executor == "local" or op is None or module is None:
             return await self.local.run(tool, args, key=key, caller=caller)
         if resolved.executor == "stub":
-            return ToolOutcome(True, masked(op["stub"], op.get("masked_output") or []))
+            return ToolOutcome(True, masked(op.get("stub"), op.get("masked_output") or []))
         # Defaults fill reads only. A write runs exactly the input its approval token binds (the hash of what the
         # approver saw), so nothing the approver did not see is added to it.
         if resolved.access == "read":

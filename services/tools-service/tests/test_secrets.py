@@ -78,7 +78,7 @@ async def test_a_value_goes_in_and_never_comes_out(keyed: Bank) -> None:
     made = await c.post("/v1/secrets", json={"name": "BANK_KEY", "value": VALUE})
     assert made.status_code == 201, made.text
     listed = await c.get("/v1/secrets")
-    assert [s["name"] for s in listed.json()["data"]] == ["BANK_KEY"]
+    assert [s["name"] for s in listed.json()["data"]["data"]] == ["BANK_KEY"]
     rotated = await c.post("/v1/secrets/BANK_KEY/rotate", json={"value": ROTATED})
     assert rotated.json()["data"]["version"] == 2
     for r in (made, listed, rotated):
@@ -153,10 +153,7 @@ async def test_every_create_rotate_delete_and_use_is_audited(keyed: Bank, engine
     await c.post("/v1/secrets/SPARE_KEY/rotate", json={"value": ROTATED})
     gone = await c.delete("/v1/secrets/SPARE_KEY")
     assert gone.status_code == 204
-    trail = [
-        (a["name"], a["action"], a["version"], a["tool"])
-        for a in await SecretStore(engine).audit(keyed.api.tenant, TEAM)
-    ]
+    trail = [(a.name, a.action, a.version, a.tool) for a in await SecretStore(engine).audit(keyed.api.tenant, TEAM)]
     assert trail == [
         ("BANK_KEY", "created", 1, None),
         ("BANK_KEY", "used", 1, f"echo_{keyed.api.tenant}"),

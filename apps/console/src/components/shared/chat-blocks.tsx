@@ -6,7 +6,7 @@ import { defaultComponents, defaultRehypePlugins, type StreamdownProps } from 's
 
 import { Conversation, ConversationContent, ConversationScrollButton } from '@/components/ai-elements/conversation';
 import { Message, MessageAction, MessageActions, MessageContent, MessageResponse } from '@/components/ai-elements/message';
-import { PromptInput, PromptInputFooter, PromptInputSubmit, PromptInputTextarea, PromptInputTools } from '@/components/ai-elements/prompt-input';
+import { PromptInput, PromptInputFooter, PromptInputHeader, PromptInputSubmit, PromptInputTextarea, PromptInputTools } from '@/components/ai-elements/prompt-input';
 import { Shimmer } from '@/components/ai-elements/shimmer';
 import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from '@/components/ai-elements/tool';
 import { cn } from '@/lib/utils';
@@ -137,6 +137,7 @@ export function ChatPrompt({
   autoFocus,
   tools,
   status,
+  header,
 }: {
   value: string;
   onChange: (text: string) => void;
@@ -150,6 +151,8 @@ export function ChatPrompt({
   tools?: React.ReactNode;
   /** Right of the tools, e.g. a length warning. */
   status?: React.ReactNode;
+  /** Inside the box above the text, e.g. the skill picked for this message. */
+  header?: React.ReactNode;
 }) {
   return (
     <PromptInput
@@ -158,6 +161,7 @@ export function ChatPrompt({
         else if (canSubmit) onSubmit();
       }}
     >
+      {header && <PromptInputHeader className="px-3 pt-3">{header}</PromptInputHeader>}
       <PromptInputTextarea value={value} onChange={(e) => onChange(e.currentTarget.value)} placeholder={placeholder} autoFocus={autoFocus} aria-label="Message" className="max-h-48 min-h-14" />
       <PromptInputFooter>
         <PromptInputTools className="flex-wrap">{tools}</PromptInputTools>

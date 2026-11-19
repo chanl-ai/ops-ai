@@ -6,7 +6,6 @@ type Send = <T>(method: string, path: string, body?: unknown) => Promise<T>;
 /** On the chat base URL (agents-service's root), where memories are served only under /v1. */
 export function createMemoriesHttp(get: Get, send: Send): MemoriesApi {
   return {
-    list: (agentId) => get(`/v1/me/memories${agentId ? `?agentId=${encodeURIComponent(agentId)}` : ''}`),
     correct: (id, value) => send('PATCH', `/v1/me/memories/${id}`, { value }),
     keep: (id) => send('POST', `/v1/me/memories/${encodeURIComponent(id)}/confirm`),
     undo: (id) => send('POST', `/v1/me/memories/${encodeURIComponent(id)}/undo`),

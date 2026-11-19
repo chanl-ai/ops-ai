@@ -8,6 +8,7 @@ extraction."""
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import replace
 from typing import Any, cast
 
@@ -37,6 +38,9 @@ from tests.api.test_action_roles import BUILDER, OUTSIDER, VIEWER
 from tests.api.test_team_default_agent import Stack, say, stack  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from tests.api.test_team_default_agent import viewer as viewer_by_email
 from tests.engine.test_lifecycle_rights import TENANT
+
+from .connections import Request, connections
+from .test_reply_pins import FIXTURES, answer, compare
 
 MINE = "/v1/me/memories"
 TEAM = "team_ops"
@@ -420,7 +424,7 @@ async def keep(rt: Any, key: str, value: str, *, kind: str = "fact", agent: str 
             source="extraction",
             thread_id=None,
         )
-    return str(row["id"])
+    return str(row.id)
 
 
 def lines_of(text: str) -> list[str]:
@@ -470,8 +474,8 @@ async def test_a_turn_records_the_memory_versions_it_used(stack: Stack) -> None:
     assert fixed.status_code == 200, fixed.text
     with tenant_scope(TENANT):
         then = (await Memories(graph_store(rt).engine).by_ids([used]))[used]
-    assert (then["value"], then["status"]) == ("Leeds Central", SUPERSEDED), "the version used, as it was"
-    assert then["use_count"] == 1 and then["last_used_at"]
+    assert (then.value, then.status) == ("Leeds Central", SUPERSEDED), "the version used, as it was"
+    assert then.use_count == 1 and then.last_used_at
 
 
 async def test_a_forget_is_undone_within_its_grace_and_not_after(stack: Stack) -> None:  # noqa: F811
@@ -611,3 +615,46 @@ async def test_a_suggestion_confirmed_with_yes_is_used_in_a_new_thread_and_no_dr
     assert [m["value"] for m in await mine(c, VIEWER)] == ["Prefers amounts in thousands"]
     text = await profile(rt, question="amounts at the Leeds branch")
     assert "thousands" in text and "Leeds" not in text, text
+
+
+async def test_memory_routes_keep_every_reply_and_error(stack: Stack) -> None:  # noqa: F811
+    c, _ = stack
+    await say(c, await chat(c, VIEWER), "Remember that my preferred account is CHQ-2219.", VIEWER)
+    first = (await mine(c, VIEWER))[0]["id"]
+    seen: dict[str, Any] = {}
+    seen["list"] = answer(await c.get(MINE, headers=VIEWER))
+    seen["list.otherAgent"] = answer(await c.get(MINE, params={"agentId": "ag_fraud"}, headers=VIEWER))
+    seen["list.otherPerson"] = answer(await c.get(MINE, headers=BUILDER))
+    seen["correct.otherPerson"] = answer(await c.patch(f"{MINE}/{first}", json={"value": "x"}, headers=BUILDER))
+    seen["correct.empty"] = answer(await c.patch(f"{MINE}/{first}", json={"value": ""}, headers=VIEWER))
+    seen["correct.unknownField"] = answer(await c.patch(f"{MINE}/{first}", json={"value": "x", "k": 1}, headers=VIEWER))
+    corrected = await c.patch(f"{MINE}/{first}", json={"value": " Preferred account CHQ-3300 "}, headers=VIEWER)
+    seen["correct"] = answer(corrected)
+    now = corrected.json()["data"]["id"]
+    seen["correct.superseded"] = answer(await c.patch(f"{MINE}/{first}", json={"value": "y"}, headers=VIEWER))
+    seen["confirm.notSuggested"] = answer(await c.post(f"{MINE}/{now}/confirm", headers=VIEWER))
+    seen["forget"] = answer(await c.delete(f"{MINE}/{now}", headers=VIEWER))
+    seen["forget.again"] = answer(await c.delete(f"{MINE}/{now}", headers=VIEWER))
+    seen["undo"] = answer(await c.post(f"{MINE}/{now}/undo", headers=VIEWER))
+    seen["undo.missing"] = answer(await c.post(f"{MINE}/mem_missing1/undo", headers=VIEWER))
+    seen["erase.otherPerson"] = answer(await c.post(f"{MINE}/{now}/erase", headers=BUILDER))
+    seen["erase"] = answer(await c.post(f"{MINE}/{now}/erase", headers=VIEWER))
+    seen["erase.again"] = answer(await c.post(f"{MINE}/{now}/erase", headers=VIEWER))
+    seen["forgetAll.noAgent"] = answer(await c.delete(MINE, headers=VIEWER))
+    seen["forgetAll"] = answer(await c.delete(MINE, params={"agentId": "ag_branch"}, headers=VIEWER))
+    seen["export"] = answer(await c.get(f"{MINE}/export", headers=VIEWER))
+    named = json.dumps(seen).replace(first, "<first>").replace(now, "<corrected>")
+    compare(json.loads(named), FIXTURES / "reply-pins-memories.json")
+
+
+async def test_memory_routes_answer_in_one_transaction(stack: Stack) -> None:  # noqa: F811
+    c, _ = stack
+    await say(c, await chat(c, VIEWER), "Remember that my preferred account is CHQ-2219.", VIEWER)
+    first = (await mine(c, VIEWER))[0]["id"]
+    requests: list[Request] = [
+        ("GET", MINE, None, VIEWER),
+        ("PATCH", f"{MINE}/{first}", {"value": "Preferred account CHQ-3300"}, VIEWER),
+        ("GET", f"{MINE}/export", None, VIEWER),
+        ("DELETE", f"{MINE}?agentId=ag_branch", None, VIEWER),
+    ]
+    assert await connections(c, requests) == [(m, p, 200, 1) for m, p, _, _ in requests]

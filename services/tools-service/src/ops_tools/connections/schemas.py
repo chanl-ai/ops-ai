@@ -3,27 +3,22 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
-from pydantic.alias_generators import to_camel
+from pydantic import Field, model_validator
 
-from ops_service_kit.http import Out
+from ops_service_kit.http import In, JsonValue, Out
 
 # Whose account a call signs in with: the team's one sign-in, the person the call acts for, or the person's
 # with the team's as the backup for calls with nobody behind them.
 SignIn = Literal["team", "person", "person_or_team"]
 
 
-class _In(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
-
-
 # A credential value: a key, a password or token, or a PEM certificate or private key, the longest of them.
 CREDENTIAL_MAX = 16_000
 
 
-class NewAppIn(_In):
+class NewAppIn(In):
     """A custom app a builder adds, as its first account: by name with a sign-in kind, or an MCP server by its address,
     whose sign-in is found from the server."""
 
@@ -48,7 +43,7 @@ class NewAppIn(_In):
         return self
 
 
-class AccountIn(_In):
+class AccountIn(In):
     """Another account of an app the team has: a sandbox, or a second org of the same system. On a plugin's
     app it takes the first account's contract (the kind, whose account calls use, the OAuth app and the credentials);
     on a custom app it signs in with the app's kind, with the kind's fields given in `credentials`."""
@@ -56,7 +51,7 @@ class AccountIn(_In):
     name: str = Field(min_length=1, max_length=200)
     sandbox: bool = False
     # A plugin's settings this account keeps its own, such as a sandbox's sign-in address.
-    settings: dict[str, Any] = Field(default_factory=dict[str, Any])
+    settings: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
     # The team's app credential (GET /v1/app-credentials) the account signs in with; left out, Ops AI's app.
     credential_id: str | None = Field(default=None, min_length=1, max_length=64)
     sign_in: str | None = None
@@ -71,16 +66,16 @@ class AccountIn(_In):
     make_default: bool | None = None
 
 
-class AnotherOwnIn(_In):
+class AnotherOwnIn(In):
     """A person's second account of their own on an app: its name, which steps and chats pick it by and which no other
     account of the app in the team holds, and where it signs in (the app's per-account settings, such as a company
     server's address), kept as given rather than copied from the account it starts from."""
 
     name: str = Field(min_length=1, max_length=200)
-    settings: dict[str, Any] = Field(default_factory=dict[str, Any])
+    settings: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
 
 
-class AccountPatchIn(_In):
+class AccountPatchIn(In):
     revision: int = Field(ge=1)
     name: str | None = Field(default=None, max_length=200)
     sign_in: SignIn | None = None
@@ -95,38 +90,38 @@ class AccountPatchIn(_In):
     # Its accounts sign in again.
     credential_id: str | None = Field(default=None, min_length=1, max_length=64)
     # The kind's plain settings and the client certificate's (GET /v1/connection-kinds lists them).
-    settings: dict[str, Any] | None = None
+    settings: dict[str, JsonValue] | None = None
     # Secret parts by field name; one left out keeps its stored value.
     secret_values: dict[str, str] = Field(default_factory=dict[str, str])
 
 
-class SignInIn(_In):
+class SignInIn(In):
     # On an account each person signs in to: `self` signs in the caller's own account, `team` the team's backup
     # account, which needs connections.manage. Left out: the team's while the account has no team sign-in and the
     # caller manages the team's apps (the first sign-in of an app), else the caller's own.
     account: Literal["self", "team"] | None = None
 
 
-class PersonCredentialsIn(_In):
+class PersonCredentialsIn(In):
     """A person's own key, password or token on an account each person signs in to: the kind's person
     fields, each a value of at most 2,000 characters."""
 
     credentials: dict[str, str] = Field(max_length=4)
 
 
-class AccountTestIn(_In):
+class AccountTestIn(In):
     # `self` tests with the caller's own sign-in on an account each person signs in to; `team` with the team's,
     # which needs connections.manage. Left out: the caller's own when they hold one, else the team's.
     account: Literal["self", "team"] | None = None
 
 
-class ConnectLinkIn(_In):
+class ConnectLinkIn(In):
     """A connect link a call that needed someone's own sign-in handed back; only that person opens it."""
 
     link: str = Field(min_length=16, max_length=200)
 
 
-class SignInCompleteIn(_In):
+class SignInCompleteIn(In):
     """What the sign-in page was handed back: the `code` of a sign-in the system allowed, or the `error` and
     `errorDescription` of one it refused, with the `state` either way."""
 
@@ -246,7 +241,7 @@ class AccountEvent(Out):
     action: str
     actor: str
     at: str | None = None
-    detail: dict[str, Any]
+    detail: dict[str, JsonValue]
 
 
 Status = Literal["draft", "healthy", "needs_reconnect", "expiring", "revoked", "error"]
@@ -350,7 +345,7 @@ class AccountDetail(AccountRow):
     # The team's app credential it signs in with; null on Ops AI's app or a kind with no OAuth client.
     credential_id: str | None = None
     # An app from a plugin: its settings here as a call reads them, and for a secret one only whether it is set.
-    plugin_settings: dict[str, Any] | None = None
+    plugin_settings: dict[str, JsonValue] | None = None
     plugin_secrets: dict[str, bool] | None = None
     # The address to register with the system's sign-in, for a kind that signs in with an account.
     redirect_uri: str | None = None

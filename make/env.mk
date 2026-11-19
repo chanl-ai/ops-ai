@@ -5,13 +5,30 @@
 
 ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))..)
 
-# .env is optional. Plain KEY=value lines; values already in the caller's environment win (make does not override an
-# environment variable with a file assignment unless told to), so a wrapper or an exported shell variable still rules.
+# .env is optional. Plain KEY=value lines. A key set in .env replaces the same key in the caller's environment (make lets a
+# file assignment override an environment variable unless run with -e); keys the secrets command supplies (below) never do.
 -include $(ROOT)/.env
 export $(shell sed -n 's/^\([A-Z_][A-Z0-9_]*\)=.*/\1/p' $(ROOT)/.env 2>/dev/null)
 # Per-developer keys outside the image (devcontainer). Same KEY=value shape as .env.
 -include $(ROOT)/.devcontainer/.env.local
 export $(shell sed -n 's/^\([A-Z_][A-Z0-9_]*\)=.*/\1/p' $(ROOT)/.devcontainer/.env.local 2>/dev/null)
+
+# A secrets command is optional. When OPS_SECRETS_CMD is set (a secrets manager's export that prints KEY=value lines)
+# and OPS_NO_SECRETS_CMD is unset or 0, scripts/secrets_cmd_env.py runs it once per top-level make: the keys are
+# exported, so a sub-make sees them in its environment and OPS_SECRETS_LOADED skips the run. Precedence: the caller's
+# environment, then the command, then .env, then .devcontainer/.env.local. The fragment is a mode-600 file under .run/
+# that exists only while make reads it. `make help` skips it.
+OPS_SECRETS_FILE := $(ROOT)/.run/secrets.mk
+ifeq ($(strip $(OPS_SECRETS_CMD)),)
+else ifneq ($(filter-out 0,$(strip $(OPS_NO_SECRETS_CMD)))$(OPS_SECRETS_LOADED),)
+else ifneq ($(filter-out help,$(or $(MAKECMDGOALS),help)),)
+$(shell rm -f '$(OPS_SECRETS_FILE)'; python3 '$(ROOT)/scripts/secrets_cmd_env.py' "$$OPS_SECRETS_CMD" '$(OPS_SECRETS_FILE)' 1>&2)
+-include $(OPS_SECRETS_FILE)
+ifneq ($(wildcard $(OPS_SECRETS_FILE)),)
+export OPS_SECRETS_LOADED := 1
+endif
+$(shell rm -f '$(OPS_SECRETS_FILE)')
+endif
 
 # One stack per machine, on the fixed ports below, run from whichever checkout of this repository last ran `make up`
 # (`make review` runs it from the review worktree). Its pids, logs and state (the first admin, the fake bank's
@@ -96,6 +113,7 @@ export OPS_PORT ?= $(OPS_AGENTS_PORT)
 export OPS_GATEWAY_PORT ?= $(OPS_TOOLS_PORT)
 # Where the other services find platform-service's key set and introspection; the internal port binds to localhost.
 export OPS_PLATFORM_URL ?= http://127.0.0.1:$(OPS_PLATFORM_PORT)
+export OPS_PLATFORM_INTERNAL_URL ?= http://127.0.0.1:$(OPS_PLATFORM_INTERNAL_PORT)
 # OPS_INFRA=external: postgres, opa, greenmail and mailpit already run as side containers (the
 # devcontainer compose project). Skip db-up/db-down and use those service names. Every other default stays.
 # Tests run on their own database, never the live ops_runtime: the live service's timer poller claims timers on any
@@ -121,7 +139,15 @@ else
   export OPS_MAILPIT_HOST ?= 127.0.0.1
 endif
 # Prefix for a test recipe: creates and migrates the test database, then runs the command against it.
-TEST_DB = uv run --project $(ROOT) python $(ROOT)/scripts/test_db.py $(OPS_TEST_DATABASE_URL) && OPS_DATABASE_URL=$(OPS_TEST_DATABASE_URL)
+# PAR=<n> runs the suite on n pytest-xdist workers, each on its own copy of the test database (scripts/test_db.py
+# --workers), a whole test file to one worker. Only for the suites below, each of which passed three runs in a row in
+# parallel; any other refuses, since a suite that shares state between files fails at random instead.
+PAR_SUITES := agents-service tools-service platform-service documents-service files-service models-service
+PAR_RUN = $(if $(PAR),$(if $(filter $(notdir $(CURDIR)),$(PAR_SUITES)),--workers $(PAR),$(error PAR=: $(notdir $(CURDIR)) has not been proven safe in parallel; run it without PAR)))
+# The pytest arguments, which a suite's test recipe puts after `pytest` (not PYTEST_ADDOPTS: a test that starts pytest
+# itself would inherit them).
+PYTEST_PAR = $(if $(PAR),-n $(PAR) --dist loadfile)
+TEST_DB = uv run --project $(ROOT) python $(ROOT)/scripts/test_db.py $(OPS_TEST_DATABASE_URL) $(PAR_RUN) && OPS_DATABASE_URL=$(OPS_TEST_DATABASE_URL)
 export OPS_INFRA
 # AUTH=platform (the default): agents and tools verify platform-service tokens and the console signs people in through
 # it (James, Maya, Nadia from platform's dev seed); AUTH=dev runs dev auth and the mock sign-in. A stack already running
@@ -133,6 +159,9 @@ export OPS_CORS_ORIGINS ?= ["http://localhost:$(OPS_CONSOLE_PORT)","http://local
 
 COMPOSE := docker compose -p $(OPS_COMPOSE_PROJECT) -f $(ROOT)/deploy/compose/compose.yaml
 STACK := $(ROOT)/scripts/stack.sh
+# A service's `make run` in the foreground, on the command `make up` starts it with (`stack.sh cmd`): the other
+# services' addresses and the sign-in mode, without which the service refuses to start. `$(call STACK_RUN,kb)`.
+STACK_RUN = cd $(ROOT) && $$($(STACK) cmd $(1))
 
 # `make help` in any Makefile: targets with a `## ` comment, grouped by `##@` headings.
 define HELP_AWK

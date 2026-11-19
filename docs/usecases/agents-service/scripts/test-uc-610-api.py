@@ -16,12 +16,14 @@ import os
 from typing import Any
 
 import httpx
-from usecase_harness import DEMO_MAYA, chat, check, data, demo, finish, turn_text
+from usecase_harness import DEMO_JAMES, DEMO_MAYA, chat, check, data, demo, finish, turn_text
 
 AGENT = "ag_advisor"
 UNGRANTED = "open_dispute"
 OPS = {"X-Team-Id": "team_ops"}
 MAYA = {**OPS, "X-Dev-User": DEMO_MAYA}
+# Maya asks in chat; the asker does not decide her own request (requesterMayDecide is off by default), so James does.
+JAMES = {**OPS, "X-Dev-User": DEMO_JAMES}
 
 
 def calls(events: list[dict[str, Any]], name: str | None = None) -> list[dict[str, Any]]:
@@ -85,14 +87,20 @@ def main() -> None:
             url = f"/chat/threads/{thread}/messages/{hold[0]['messageId']}/widgets/{widget['id']}/actions"
             action: dict[str, Any] = {"type": "approve"}
             if widget.get("stepUp"):
-                minted = data(api.post("/v1/auth/step-up", json={"password": "northfield-demo"}, headers=MAYA))
+                minted = data(api.post("/v1/auth/step-up", json={"password": "northfield-demo"}, headers=JAMES))
                 action["stepUpToken"] = minted["token"]
-            approved = api.post(url, json=action, headers=MAYA)
+            own = api.post(url, json=action, headers=MAYA)
+            check(
+                "5a the person who asked cannot approve her own write (403 own_request)",
+                own.status_code == 403 and "own_request" in own.text,
+                own.text[:200],
+            )
+            approved = api.post(url, json=action, headers=JAMES)
             thread_now = data(api.get(f"/chat/threads/{thread}", headers=MAYA)) or {}
             last: dict[str, Any] = (thread_now.get("messages") or [{}])[-1]
             ran = [c for c in last.get("toolCalls") or [] if c.get("name") == "place_hold"]
             check(
-                "5 after approval the resumed turn runs the hold once and answers",
+                "5 approved by a second person, the resumed turn runs the hold once and answers",
                 approved.status_code == 200
                 and len(ran) == 1
                 and ran[0].get("status") == "success"

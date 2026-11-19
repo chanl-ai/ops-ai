@@ -4,6 +4,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { usePagedQuery } from '@/hooks/paged-query';
 import { api, brand } from '@/lib/api';
+import { sdk } from '@/lib/api/ops-sdk';
+import type { OpsAI } from '@chanl-ai/ops-ai';
 import type { ToolRowFilters } from '@/lib/types/tool-directory';
 import type {
   AgentInput,
@@ -21,7 +23,7 @@ import type {
   WorkflowInput,
   WorkflowSettingsInput,
 } from '@/lib/types/domain';
-import type { AgentFilters, DeploymentFilters, ListParams, PolicyFilters, ReviewListParams, RunFilters, ToolFilters, WorkflowFilters } from '@/lib/types/query';
+import type { AgentFilters, DeploymentFilters, ListParams, ListResult, PolicyFilters, ReviewListParams, RunFilters, ToolFilters, WorkflowFilters } from '@/lib/types/query';
 import { teamKey, useTeamQuery } from './team-query';
 
 export const qk = {
@@ -47,9 +49,51 @@ export const useBrand = () => brand;
 
 export const useLookups = () => useTeamQuery({ queryKey: qk.lookups, queryFn: api.lookups.get, staleTime: 5 * 60_000 });
 
-export const useAgents = (p: ListParams<AgentFilters>, opts: { enabled?: boolean } = {}) => usePagedQuery({ queryKey: qk.agents(p), queryFn: () => api.agents.list(p), ...opts });
+/** A row of the agents list, as `GET /v1/agents` answers it. */
+export type AgentRow = Awaited<ReturnType<OpsAI['raw']['agents']['agents_list_agents']>>['data'][number];
+
+/** One page of the team's agents; the filters, search, sort and paging go to the route. `ids` names the agents a stored choice holds. */
+export const fetchAgents = (p: ListParams<AgentFilters> & { ids?: string[] }) =>
+  sdk((ops) =>
+    ops.raw.agents.agents_list_agents({
+      query: {
+        page: p.page,
+        pageSize: p.pageSize,
+        search: p.search || undefined,
+        sortBy: p.sortBy,
+        sortOrder: p.sortOrder,
+        ids: p.ids?.length ? p.ids : undefined,
+        availability: p.filters?.availability?.length ? p.filters.availability : undefined,
+        teamId: p.filters?.teamId?.length ? p.filters.teamId : undefined,
+      },
+    }),
+  );
+export const useAgents = (p: ListParams<AgentFilters>, opts: { enabled?: boolean } = {}) => usePagedQuery({ queryKey: qk.agents(p), queryFn: () => fetchAgents(p), ...opts });
 export const useAgent = (id: string) => useTeamQuery({ queryKey: qk.agent(id), queryFn: () => api.agents.get(id) });
-export const useWorkflows = (p: ListParams<WorkflowFilters>) => usePagedQuery({ queryKey: qk.workflows(p), queryFn: () => api.workflows.list(p) });
+/** A row of the workflows list, as `GET /v1/workflows` answers it. */
+export type WorkflowRow = Awaited<ReturnType<OpsAI['raw']['agents']['workflows_list_workflows']>>['data'][number] & {
+  /** The route does not return the wrapped agent's name yet; pickers fall back to the workflow's name. */
+  wrapsAgentName?: string;
+};
+
+/** One page of the current engine's workflows; the filters, search and sort go to the route. */
+export const fetchWorkflows = (p: ListParams<WorkflowFilters>): Promise<ListResult<WorkflowRow>> =>
+  sdk((ops) =>
+    ops.raw.agents.workflows_list_workflows({
+      query: {
+        page: p.page,
+        pageSize: p.pageSize,
+        search: p.search || undefined,
+        sortBy: p.sortBy,
+        sortOrder: p.sortOrder,
+        status: p.filters?.status?.length ? p.filters.status : undefined,
+        startable: p.filters?.startable?.includes('true') || undefined,
+        takesFiles: p.filters?.takesFiles?.includes('true') || undefined,
+        engine: 'current',
+      },
+    }),
+  );
+export const useWorkflows = (p: ListParams<WorkflowFilters>) => usePagedQuery({ queryKey: qk.workflows(p), queryFn: () => fetchWorkflows(p) });
 export const useWorkflow = (id: string) => useTeamQuery({ queryKey: qk.workflow(id), queryFn: () => api.workflows.get(id) });
 // While a typed task's AI assist is still being written (its region says pending: true), the task is read again every
 // 2 s. The server drops the region once an assist runs past its limit, which ends the polling.
@@ -114,10 +158,6 @@ export const useAgentPaused = (id: string) => useWrite((paused: boolean) => api.
  */
 export const useModelAliases = (enabled = true) =>
   useTeamQuery({ queryKey: ['agent-model-aliases'], queryFn: () => api.agents.modelAliases(), staleTime: 5 * 60_000, enabled, meta: { side: true } });
-export const useGuardrails = () => useTeamQuery({ queryKey: ['agent-guardrails'], queryFn: () => api.guardrails.list(), staleTime: 60_000 });
-// Under the same key as the whole list, so the guardrail writes' invalidation refreshes the page too.
-export const useGuardrailsPage = (p: ListParams) => usePagedQuery({ queryKey: ['agent-guardrails', 'page', p], queryFn: () => api.guardrails.page(p) });
-export const useGuardrail = (id: string) => useTeamQuery({ queryKey: ['agent-guardrails', 'one', id], queryFn: () => api.guardrails.get(id) });
 export const useGrantableTools = () => useTeamQuery({ queryKey: ['agent-grantable-tools'], queryFn: () => api.agents.grantableTools(), staleTime: 5 * 60_000 });
 export const useBulkUpdateAgents = () =>
   useWrite(({ ids, patch }: { ids: string[]; patch: { paused?: boolean; owner?: string } }) => api.agents.bulkUpdate!(ids, patch), ['agents', 'agent', 'overview']);
@@ -164,7 +204,9 @@ export const useWorkflowStatus = (id: string) => useWrite((s: LifecycleStatus) =
 export const useDeleteWorkflow = () => useWrite((id: string) => api.workflows.remove(id), ['workflows', 'lookups', 'overview']);
 export const useRestoreWorkflow = (id: string) => useWrite((v: number) => api.workflows.restore(id, v), ['workflows', 'workflow']);
 export const useWorkflowRuns = (id: string, p: ListParams<RunFilters>) =>
-  usePagedQuery({ queryKey: qk.workflowRuns(id, p), queryFn: () => api.workflows.runs(id, p) });
+  usePagedQuery({ queryKey: qk.workflowRuns(id, p), queryFn: () =>
+      sdk((ops) => ops.raw.agents.workflows_list_runs({ path: { workflow_id: id }, query: { page: p.page, pageSize: p.pageSize, status: p.filters?.status?.length ? p.filters.status : undefined } })),
+  });
 export const useWorkflowVersions = (id: string) => useTeamQuery({ queryKey: qk.workflowVersions(id), queryFn: () => api.workflows.versions(id) });
 export const useBulkUpdateWorkflows = () =>
   useWrite(({ ids, patch }: { ids: string[]; patch: { status?: LifecycleStatus; owner?: string } }) => api.workflows.bulkUpdate!(ids, patch), ['workflows', 'overview']);

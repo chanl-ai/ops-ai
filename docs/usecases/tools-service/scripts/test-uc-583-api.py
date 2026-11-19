@@ -19,13 +19,16 @@ import httpx
 import jwt
 from fake_token_endpoint import LOGIN_HOST, make_pair, token_endpoint
 from usecase_harness import (
+    AGENTS_PORT,
     LOG_DIR,
     PLATFORM_INTERNAL_PORT,
     PLATFORM_PORT,
     TOOLS_PORT,
+    agents,
     bearer,
     check,
     data,
+    every_page,
     finish,
     platform,
     service_headers,
@@ -135,16 +138,26 @@ with ExitStack() as stack:
     fake = m["fake"]
     entra, google, docusign = (m["systems"][s] for s in ("entra", "google", "docusign"))
     api, _ = stack.enter_context(platform())
+    # Saving over an account asks agents-service which workflows and agents name it, so agents-service runs too.
     gw = stack.enter_context(
-        tools({**m["settings"], **AUTH, **PLUGINS, "OPS_CONSOLE_URL": "https://console.acme.test"})
+        tools(
+            {
+                **m["settings"],
+                **AUTH,
+                **PLUGINS,
+                "OPS_CONSOLE_URL": "https://console.acme.test",
+                "OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}",
+            }
+        )
     )
+    stack.enter_context(agents(gateway_url=str(gw.base_url).rstrip("/"), env=AUTH))
     sam = bearer(signed_in(api, "s.adeyemi@harborpine.example"), "team_security")
     priya_session = signed_in(api, "p.shah@harborpine.example")
     priya = bearer(priya_session, "team_ops")
     TENANT["id"] = str((priya_session.get("principal") or {}).get("tenantId") or priya_session.get("tenantId") or "")
     wanjiru = bearer(signed_in(api, "w.kamau@harborpine.example"), "team_platform")
 
-    loaded = data(gw.get("/v1/apps", headers=priya)) or []
+    loaded = every_page(gw, "/v1/apps", headers=priya)
     ids = sorted(str(c["pluginId"]) for c in loaded if c.get("kind") == "plugin")
     allowed = [gw.post("/v1/egress/hosts", json={"value": h, "note": "uc-583"}, headers=sam) for h in m["hosts"]]
     allowed.append(gw.post("/v1/egress/ranges", json={"value": m["range"], "note": "uc-583"}, headers=sam))

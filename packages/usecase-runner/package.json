@@ -6,7 +6,8 @@
   "description": "Resolves a use case and layer to its script, runs it, and reports PASS or FAIL per check.",
   "exports": {
     ".": "./src/index.ts",
-    "./harness": "./src/harness.ts"
+    "./harness": "./src/harness.ts",
+    "./steps": "./src/steps.ts"
   },
   "scripts": {
     "test": "node --test src/*.test.ts",
@@ -14,6 +15,7 @@
     "verify": "tsc --noEmit && node --test src/*.test.ts"
   },
   "dependencies": {
+    "@chanl-ai/ops-ai": "workspace:*",
     "playwright": "^1.64.0"
   },
   "devDependencies": {

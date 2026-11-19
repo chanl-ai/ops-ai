@@ -6,11 +6,10 @@ is read out of JSON.
 
 from __future__ import annotations
 
-from typing import Any
-
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ops_service_kit.http import Json
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.team_scope import team_visible
 
@@ -24,7 +23,7 @@ chat_search = sa.Table(
     "chat_search",
     metadata,
     sa.Column("thread_id", sa.String(64), primary_key=True),
-    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local", index=True),
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, index=True),
     sa.Column("team_id", sa.String(64), nullable=False, index=True),
     sa.Column("title", sa.String(200), nullable=False),
     sa.Column("agent_name", sa.String(200), nullable=False),
@@ -40,7 +39,7 @@ def _like(text: str) -> str:
     return f"%{escaped}%"
 
 
-async def index_thread(engine: AsyncEngine, row: dict[str, Any]) -> None:
+async def index_thread(engine: AsyncEngine, row: Json) -> None:
     """Replaces the thread's search row. Delete then insert in one transaction, so no dialect's upsert is needed."""
     questions = str(row["questions"])[-MAX_QUESTIONS_CHARS:]
     values = {**row, "questions": questions, "title": str(row["title"])[:200], "preview": str(row["preview"])[:400]}

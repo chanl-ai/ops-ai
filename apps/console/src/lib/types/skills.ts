@@ -72,6 +72,21 @@ export interface SkillContent {
   resources: SkillResource[];
   /** What the agent says when one of these guardrails refuses: a next step, not just a no. Absent uses the platform's sentence. */
   refusal?: string;
+  /** Jobs picked on their own from the chat's / menu, each loaded with the instructions as the shared overview. */
+  parts?: SkillPartContent[];
+}
+
+/** One part of a skill as saved in its version. */
+export interface SkillPartContent {
+  slug: string;
+  name: string;
+  useWhen: string;
+  instructions: string;
+  inputs: SkillInputField[];
+  /** Some of the skill's own tools. */
+  toolIds: string[];
+  /** Most tokens it may hold when loaded; absent takes the reply's whole skill budget. */
+  budget?: number;
 }
 
 export interface SkillTestRunSummary {
@@ -124,6 +139,31 @@ export interface Skill {
   updatedBy: string;
   origin: SkillOrigin;
   pendingReviewId?: string;
+}
+
+/** One input a skill or part asks for when picked from the chat's / menu. */
+export interface SkillInputField {
+  name: string;
+  type: 'string';
+  description: string;
+  required: boolean;
+}
+
+/** One part of a skill with parts, as the / menu offers it. */
+export interface SkillPartSummary {
+  slug: string;
+  name: string;
+  useWhen: string;
+  inputs: SkillInputField[];
+}
+
+/** A published skill the chat's / menu offers for one agent: its inputs or parts, and `locked` when the agent lacks
+ *  a tool or knowledge base it needs (named in `needs`). */
+export interface ChatMenuSkill extends Skill {
+  inputs?: SkillInputField[];
+  parts?: SkillPartSummary[];
+  locked?: boolean;
+  needs?: string[];
 }
 
 export interface SkillTestCase {
@@ -262,6 +302,7 @@ export interface SkillDraftPatch {
   knowledgeBases?: string[];
   guardrails?: string[];
   refusal?: string;
+  parts?: SkillPartContent[];
   note?: string;
   /** The version the edit was made against; a newer one returns 409. */
   baseVersion: number;

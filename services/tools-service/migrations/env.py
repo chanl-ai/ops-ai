@@ -14,6 +14,7 @@ from sqlalchemy import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from ops_service_kit.settings import Settings
+from ops_store.schema import offline_dialect_opts
 from ops_tools.store import metadata as gateway_metadata
 from ops_tools.store.modules import metadata as modules_metadata
 
@@ -33,7 +34,7 @@ def _configure(**kwargs: object) -> None:
 
 
 def run_offline() -> None:
-    _configure(url=URL, literal_binds=True)
+    _configure(url=URL, literal_binds=True, dialect_opts=offline_dialect_opts(URL))
     with context.begin_transaction():
         context.run_migrations()
 

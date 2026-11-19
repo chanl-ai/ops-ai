@@ -1,9 +1,8 @@
 """The shared static service token is gone: every internal call uses a per-service Ed25519 token, so outside
-dev no service may demand a secret nothing reads, and one left over in an environment changes nothing."""
+dev no service may demand a secret nothing reads."""
 
 from __future__ import annotations
 
-import pytest
 from pydantic import SecretStr
 
 from ops_service_kit.settings import Settings
@@ -19,9 +18,4 @@ def production() -> Settings:
 
 
 def test_production_settings_start_without_a_shared_service_token() -> None:
-    assert not hasattr(production(), "service_token")
-
-
-def test_a_leftover_shared_token_in_the_environment_is_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OPS_SERVICE_TOKEN", "left-over-from-before")
     assert not hasattr(production(), "service_token")

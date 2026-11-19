@@ -35,7 +35,7 @@ export function CaseConversation({ messages }: { messages: CaseMessage[] }) {
                 {a.blocked ? <ShieldX className="mt-0.5 size-3.5 shrink-0 text-destructive-text" /> : <Paperclip className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />}
                 <div className="min-w-0 flex-1">
                   <p className="flex flex-wrap items-center gap-x-2 font-medium">
-                    <Link href={`/files?file=${a.fileId}`} className="underline-offset-2 hover:underline">
+                    <Link href={`/data/files?file=${a.fileId}`} className="underline-offset-2 hover:underline">
                       {a.name}
                     </Link>
                     <span className="font-normal text-muted-foreground">{bytes(a.size)}</span>

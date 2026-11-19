@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-12",
+  "title": "Test a model key and list what it reaches",
+  "description": "An account admin can test a saved OpenAI, Azure OpenAI or Anthropic key and see the models or deployments it reaches. The key goes only to the provider's own address.",
+  "tag": "new"
+}

@@ -7,15 +7,20 @@ renaming a team is the change, and an entry the store refuses (None) fails the r
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
+from pydantic import JsonValue
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from ops_service_kit.http import Out
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.listing import ListParams
 from ops_store import Guarantee
+from ops_store.listing import ListPage, list_page
 
-from .tables import api_keys, audit_entries, members, teams, tenants, users
+from .tables import api_keys, audit_entries, members, sessions, teams, tenants, users
 from .tenancy import TenantDb
 
 # The console's action word for each platform action; the page filters and labels by these.
@@ -121,7 +126,7 @@ async def record(
     target_kind: str,
     target_id: str,
     request_id: str,
-    detail: dict[str, Any] | None,
+    detail: Mapping[str, JsonValue] | None,
 ) -> None:
     """One entry, on the caller's connection so it shares the caller's transaction. `detail` must not be None: the
     column refuses null, so a write that cannot say what it did fails as a whole."""
@@ -141,8 +146,33 @@ async def record(
     )
 
 
+async def record_grants_ending(
+    c: AsyncConnection,
+    *,
+    tenant_id: str,
+    user_id: str,
+    actor: str,
+    by: str,
+    request_id: str,
+    team_id: str | None = None,
+) -> None:
+    """One `oauth.grant_ended` entry, in the grant's own team, for each assistant connection of the person still live,
+    written before a caller ends those sessions. `by` says why: `admin` (removed from the team), `person` (left the
+    workspace), `password_reset` or `group` (company sign-in removed them from a team). With `team_id`, only that
+    team's connections, for a caller that ends only those."""
+    where = [sessions.c.user_id == user_id, sessions.c.kind == "mcp", sessions.c.revoked_at.is_(None)]
+    if team_id is not None:
+        where.append(sessions.c.team_id == team_id)
+    live = (await c.execute(sa.select(sessions.c.id, sessions.c.team_id, sessions.c.client_id).where(*where))).all()
+    for sid, team, client in live:
+        await record(
+            c, tenant_id=tenant_id, team_id=team, actor=actor, action="oauth.grant_ended", target_kind="session",
+            target_id=sid, request_id=request_id, detail={"by": by, "clientId": client},
+        )  # fmt: skip
+
+
 async def record_delivered(
-    db: TenantDb, *, tenant_id: str, entry_id: str, team_id: str, actor: str, payload: dict[str, Any]
+    db: TenantDb, *, tenant_id: str, entry_id: str, team_id: str, actor: str, payload: dict[str, JsonValue]
 ) -> bool:
     """An entry another service recorded in its outbox (ops_store.audit), kept once by its id: a relay delivers at
     least once, so a second delivery writes nothing. A team this account does not hold (deleted since) is kept in the
@@ -151,7 +181,8 @@ async def record_delivered(
         if (await c.execute(sa.select(audit_entries.c.id).where(audit_entries.c.id == entry_id))).first():
             return False
         known = (await c.execute(sa.select(teams.c.id).where(teams.c.id == team_id))).first() is not None
-        detail = dict(payload.get("detail") or {})
+        given = payload.get("detail")
+        detail: dict[str, JsonValue] = dict(given) if isinstance(given, dict) else {}
         if not known:
             detail["teamId"] = team_id
         await c.execute(
@@ -171,17 +202,17 @@ async def record_delivered(
     return True
 
 
-class TeamNameAudit:
+class TeamNameAudit(TenantDb):
     """Conformance adapter: one tenant and team per entity id, renamed with an audited write."""
 
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.RLS})
 
     def __init__(self, db: TenantDb, tenant_id: str) -> None:
-        self.db = db
+        super().__init__(db)
         self.tenant_id = tenant_id
 
     @classmethod
-    async def open(cls, url: str) -> TeamNameAudit:
+    async def create(cls, url: str) -> TeamNameAudit:
         db = TenantDb.open(url)
         tenant_id = new_id("ten")
         # The tenants policy keys on the row's own id, so the new tenant is written as itself.
@@ -193,8 +224,8 @@ class TeamNameAudit:
             )
         return cls(db, tenant_id)
 
-    async def apply(self, entity_id: str, value: str, entry: dict[str, Any] | None) -> None:
-        async with self.db.tenant_tx(self.tenant_id) as c:
+    async def apply(self, entity_id: str, value: str, entry: Mapping[str, JsonValue] | None) -> None:
+        async with self.tenant_tx(self.tenant_id) as c:
             updated = await c.execute(
                 teams.update().where(teams.c.id == entity_id).values(name=value, name_key=value.lower())
             )
@@ -222,12 +253,12 @@ class TeamNameAudit:
             )
 
     async def value(self, entity_id: str) -> str | None:
-        async with self.db.tenant_tx(self.tenant_id) as c:
+        async with self.tenant_tx(self.tenant_id) as c:
             return (await c.execute(sa.select(teams.c.name).where(teams.c.id == entity_id))).scalar()
 
     async def entries(self, entity_id: str) -> int:
         q = sa.select(sa.func.count()).select_from(audit_entries).where(audit_entries.c.target_id == entity_id)
-        async with self.db.tenant_tx(self.tenant_id) as c:
+        async with self.tenant_tx(self.tenant_id) as c:
             return int((await c.execute(q)).scalar_one())
 
 
@@ -239,14 +270,30 @@ def _seen(team_id: str, account: bool) -> sa.ColumnElement[bool]:
     return sa.or_(own, audit_entries.c.team_id.is_(None), audit_entries.c.team_id == "")
 
 
-class AuditLog:
+class AuditEntryRow(Out):
+    """An entry with the names the page shows beside it; a name is None when its person, team or target is gone."""
+
+    id: str
+    tenant_id: str
+    team_id: str | None
+    actor: str
+    action: str
+    target_kind: str
+    target_id: str
+    request_id: str
+    at: str
+    detail: dict[str, JsonValue]
+    actor_name: str | None
+    actor_email: str | None
+    team_name: str | None
+    target_name: str | None
+
+
+class AuditLog(TenantDb):
     """Reads one team's entries, newest first, and with `account` the entries no team holds (sign-in, membership: the
     account's own records). Never another team's."""
 
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.RLS})
-
-    def __init__(self, db: TenantDb) -> None:
-        self.db = db
 
     async def page(
         self,
@@ -255,9 +302,10 @@ class AuditLog:
         *,
         account: bool = False,
         filters: dict[str, str | None],
-        page: int,
-        size: int,
-    ) -> tuple[list[dict[str, Any]], int]:
+        params: ListParams,
+    ) -> tuple[ListPage, dict[tuple[str, str], int]]:
+        """One page of the entries on the shared list contract, newest first then by id, and the entries per
+        (action, target kind) the views and facets count, on one transaction. `filters` narrow the page only."""
         where: list[Any] = [_seen(team_id, account)]
         for column in ("action", "actor", "target_kind"):
             if filters.get(column):
@@ -273,9 +321,17 @@ class AuditLog:
         if filters.get("to"):
             where.append(audit_entries.c.at < filters["to"])
         # Names are joined here so the page shows people and targets without a second request per row; an actor or
-        # target removed since keeps its id and shows no name.
+        # target removed since keeps its id and shows no name. audit_entries first: list_page pages by its id.
         actor, person, target = users.alias("actor_user"), users.alias("target_user"), audit_entries.c.target_kind
-        rows = (
+        joined = (
+            audit_entries.outerjoin(actor, actor.c.id == audit_entries.c.actor)
+            .outerjoin(teams, teams.c.id == audit_entries.c.team_id)
+            .outerjoin(members, sa.and_(target == "member", members.c.id == audit_entries.c.target_id))
+            .outerjoin(api_keys, sa.and_(target == "api_key", api_keys.c.id == audit_entries.c.target_id))
+            # An access check is about a person: their name, so the line reads "Checked Maya Okafor's access".
+            .outerjoin(person, sa.and_(target == "person", person.c.id == audit_entries.c.target_id))
+        )
+        stmt = (
             sa.select(
                 audit_entries,
                 actor.c.name.label("actor_name"),
@@ -283,29 +339,20 @@ class AuditLog:
                 teams.c.name.label("team_name"),
                 sa.func.coalesce(members.c.email, api_keys.c.name, person.c.name).label("target_name"),
             )
-            .outerjoin(actor, actor.c.id == audit_entries.c.actor)
-            .outerjoin(teams, teams.c.id == audit_entries.c.team_id)
-            .outerjoin(members, sa.and_(target == "member", members.c.id == audit_entries.c.target_id))
-            .outerjoin(api_keys, sa.and_(target == "api_key", api_keys.c.id == audit_entries.c.target_id))
-            # An access check is about a person: their name, so the line reads "Checked Maya Okafor's access".
-            .outerjoin(person, sa.and_(target == "person", person.c.id == audit_entries.c.target_id))
+            .select_from(joined)
             .where(*where)
-            .order_by(audit_entries.c.at.desc(), audit_entries.c.id)
-            .limit(size)
-            .offset((page - 1) * size)
         )
-        total = sa.select(sa.func.count()).select_from(audit_entries).where(*where)
-        async with self.db.tenant_tx(tenant_id) as c:
-            found = [dict(r) for r in (await c.execute(rows)).mappings().all()]
-            count = int((await c.execute(total)).scalar_one())
-        return found, count
+        async with self.tenant_tx(tenant_id) as c:
+            found = await list_page(c, stmt, params, default_sort=audit_entries.c.at.desc())
+            counts = await _counts(c, team_id, account)
+        return found, counts
 
-    async def counts(self, tenant_id: str, team_id: str, *, account: bool = False) -> dict[tuple[str, str], int]:
-        """Entries per (action, target kind): what the audit page's views and filters count."""
-        q = (
-            sa.select(audit_entries.c.action, audit_entries.c.target_kind, sa.func.count())
-            .where(_seen(team_id, account))
-            .group_by(audit_entries.c.action, audit_entries.c.target_kind)
-        )
-        async with self.db.tenant_tx(tenant_id) as c:
-            return {(a, k): int(n) for a, k, n in (await c.execute(q)).all()}
+
+async def _counts(c: AsyncConnection, team_id: str, account: bool) -> dict[tuple[str, str], int]:
+    """Entries per (action, target kind): what the audit page's views and filters count."""
+    q = (
+        sa.select(audit_entries.c.action, audit_entries.c.target_kind, sa.func.count())
+        .where(_seen(team_id, account))
+        .group_by(audit_entries.c.action, audit_entries.c.target_kind)
+    )
+    return {(a, k): int(n) for a, k, n in (await c.execute(q)).all()}

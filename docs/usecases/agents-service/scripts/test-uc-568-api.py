@@ -35,6 +35,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen.canvas import Canvas
+from steps import required
 from usecase_harness import (
     AGENTS_DIR,
     AGENTS_PORT,
@@ -42,6 +43,7 @@ from usecase_harness import (
     _env,  # pyright: ignore[reportPrivateUsage]
     agents,
     check,
+    every_page,
     fake_openai,
     finish,
     kb,
@@ -226,9 +228,7 @@ def _settled(documents: httpx.Client, eid: str) -> dict[str, Any] | None:
 
 
 def model_calls(model_admin: httpx.Client, run_id: str) -> list[dict[str, Any]]:
-    items = (got(model_admin.get("/v1/models/calls", params={"pageSize": 200}, headers=MODELS_ADMIN)) or {}).get(
-        "items"
-    ) or []
+    items = every_page(model_admin, "/v1/models/calls", headers=MODELS_ADMIN)
     return [c for c in items if c.get("runId") == run_id]
 
 
@@ -438,7 +438,7 @@ def reads(
     valid = got(api.post("/v1/workflows/definitions/validate", json={"definition": wf}, headers=OPS)) or {}
     live = publish(api, wf)
     body_ = {"workflowId": text_wid, "mode": "live", "input": {"fileId": scan}}
-    run_id = str((got(api.post("/v1/runs", json=body_, headers=OPS)) or {}).get("runId"))
+    run_id = str((required(api.post("/v1/runs", json=body_, headers=OPS), "/v1/runs")).get("runId"))
 
     def ended() -> dict[str, Any] | None:
         run = got(api.get(f"/v1/runs/{run_id}", headers=OPS)) or {}
@@ -490,7 +490,7 @@ def proposed(documents: httpx.Client, scan: str) -> None:
     held = got(documents.get(f"/v1/document-types/{type_id}")) or {}
     samples = [s.get("fileId") for s in held.get("samples") or []]
     listed = got(documents.get("/v1/document-types", headers=NADIA)) or {}
-    elsewhere = [t.get("id") for t in listed.get("items") or []]
+    elsewhere = [t.get("id") for t in listed.get("data") or []]
     _, again = read(documents, scan, {"documentTypeId": type_id, "ocr": True})
     values = {k: (v or {}).get("value") for k, v in (again.get("fields") or {}).items()}
     want = {k: v["value"] for k, v in RENAMED.items()}
@@ -546,7 +546,7 @@ def forms(api: httpx.Client) -> None:
     shown = got(public) or {}
     days = 0.0
     if form.get("expiresAt"):
-        from datetime import UTC, datetime  # noqa: PLC0415
+        from datetime import UTC, datetime
 
         days = (datetime.fromisoformat(str(form["expiresAt"]).replace("Z", "+00:00")) - datetime.now(UTC)).days
     check(
@@ -747,7 +747,7 @@ def merge(api: httpx.Client) -> None:
     live = publish(api, merge_flow(wid))
     body_ = {"workflowId": wid, "mode": "live", "runKey": f"uc568-{uuid.uuid4().hex[:8]}",
              "input": {"noticeAmount": "1284.50", "bankAmount": "1248.50", "account": "CHK-0091"}}  # fmt: skip
-    run_id = str((got(api.post("/v1/runs", json=body_, headers=OPS)) or {}).get("runId"))
+    run_id = str((required(api.post("/v1/runs", json=body_, headers=OPS), "/v1/runs")).get("runId"))
 
     def waiting() -> dict[str, Any] | None:
         r = got(api.get(f"/v1/runs/{run_id}", headers=OPS)) or {}

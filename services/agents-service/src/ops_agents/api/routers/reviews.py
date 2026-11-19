@@ -4,21 +4,27 @@ with the token in its decision, so it lands in the checkpoint and a resume after
 
 The call comes from the interrupt (`payload.call = {tool, input, step}`), the call the node will make on resume, so
 the token is bound to what will run, not to a summary of it.
+
+No route here takes the request transaction (`Tx`): each builds a review, which asks tools-service for the held
+write's policy (`tool_access.policy_of`), and a decision resumes the run, which calls models and tools. Each store
+read opens and closes its own transaction around those calls, so no connection is held while another service answers
+(`tests/api/test_review_routes_hold_nothing.py`). A bulk decision or assignment answers per id, so one id's refusal
+leaves the others decided.
 """
 
 from __future__ import annotations
 
-from typing import Annotated, Any, TypeAlias
+from typing import Annotated, Any, TypeAlias, TypedDict, cast
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from ops_contracts.chat import WireModel
 from ops_policy import input_hash
 from ops_policy.approval import Binding, mint_approval
 from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound
-from ops_service_kit.http import Envelope, Out
+from ops_service_kit.http import Envelope, In, Json, Out
+from ops_store import isolation
 
 from ...store.review_assignments import ReviewAssignments
 from ...store.reviews import ReviewStore
@@ -28,7 +34,6 @@ from ..auth import (
     Principal,
     principal,
     reader_teams,
-    require_not_own,
     require_reviews_decide,
     require_step_up,
     review_teams,
@@ -36,6 +41,7 @@ from ..auth import (
 )
 from ..deps import Runtime, runtime
 from ..envelope import ok
+from ..review_sla import sla_hours
 from ..runs import config, graph_store, pending, resolve
 from ..schemas import Approval, BulkResult, Review, ReviewList
 from ..tool_access import one_read_per_tool, policy_of
@@ -45,7 +51,7 @@ Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI re
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
 
 
-class ApprovalInput(WireModel):
+class ApprovalInput(In):
     step_up_token: str | None = None
 
 
@@ -54,40 +60,47 @@ async def approve(rt: Rt, me: Me, thread_id: str, body: ApprovalInput) -> JSONRe
     return ok(await record_approval(rt, me, thread_id, body.step_up_token))
 
 
+class ApprovalOut(TypedDict):
+    """An approval as the route answers it (schemas.Approval): who has approved, how many must, the hash the token
+    binds, and the token once enough have."""
+
+    approvers: list[str]
+    needed: int
+    inputHash: str
+    approvalToken: str | None
+
+
 async def record_approval(
     rt: Runtime,
     approver: Principal,
     thread_id: str,
     step_up_token: str | None,
     *,
-    call: dict[str, Any] | None = None,
-) -> dict[str, Any]:
+    call: Json | None = None,
+) -> ApprovalOut:
     """Records `approver`'s approval of the call the thread waits on; the token is set once as many distinct people as
     the operation's policy names have approved. `call` is the one a decision chose when the step offers options (a
     levy review's hold or flag); else the payload's `call`."""
     row, graph = await resolve(rt, thread_id)
     waiting = pending(await graph.aget_state(config(thread_id)))
+    # The checkpoint's value as it is: a payload or call that is not an object fails its first read, as it did.
     if call is None:
-        call = waiting[0]["payload"].get("call") if waiting else None
+        call = cast(Json | None, cast(Json, waiting[0]["payload"]).get("call")) if waiting else None
     if call is None:
         raise Conflict("This thread is not waiting on a call to approve.", code="nothing_to_approve")
-    policy = await policy_of(rt, call["tool"])
-    # The thread's team reviews it, by its reviewers and admins.
-    require_reviews_decide(review_teams(approver), str(row["team_id"]), f"the write {call['tool']}")
-    payload: dict[str, Any] = waiting[0]["payload"] if waiting else {}
-    require_not_own(
-        approver,
-        [hitl_facade.requester_of(row, payload)],
-        team=str(row["team_id"]),
-        what=f"the write {call['tool']}",
-    )
+    policy = await policy_of(rt, cast(str, call["tool"]))
+    payload: Json = cast(Json, waiting[0]["payload"]) if waiting else {}
+    # Every route that records an approval passes through the one decider check: the asker alone for a card the person
+    # answers (ask_first), else a reviewer of the card's role who is not its asker unless requesterMayDecide lets them.
+    await hitl_facade.check_thread_decider(rt, approver, row, payload, [call])
     if policy.approvers > 1 or workspace_step_up(approver):
         require_step_up(rt, approver.email, step_up_token)
     digest = input_hash(call["input"])
     # Two approvers means two people: approving the same input again does not count as the second. Only approvals
     # of this exact input count: an approval of an earlier draft of the call is not one of these.
+    step, tool = cast(str, call["step"]), cast(str, call["tool"])
     found = await ReviewStore(graph_store(rt).engine).approve(
-        thread_id, call["step"], approver.email, digest, distinct=policy.approvers > 1
+        thread_id, step, approver.email, digest, distinct=policy.approvers > 1
     )
     if found is None:
         raise Forbidden("You already approved this; a second, different person has to approve it.")
@@ -95,7 +108,7 @@ async def record_approval(
     needed = policy.approvers
     token = (
         mint_approval(
-            Binding(thread_id, call["step"], call["tool"], digest, approvers),
+            Binding(thread_id, step, tool, digest, approvers),
             rt.settings.review_key.get_secret_value(),
             ttl_s=rt.settings.review_token_ttl_seconds,
         )
@@ -109,7 +122,7 @@ async def record_approval(
 console_router = APIRouter(prefix="/reviews", dependencies=[Depends(principal)])
 
 
-class ReviewDecisionInput(WireModel):
+class ReviewDecisionInput(In):
     """The console's `ReviewDecisionInput`. Conditions, acting-as and test cases apply to other review kinds and are
     accepted and ignored here, so one decide call serves every kind."""
 
@@ -141,24 +154,36 @@ class ReviewsQuery(BaseModel):
 
 @console_router.get("", response_model=Envelope[ReviewList])
 async def list_reviews(rt: Rt, me: Me, q: Annotated[ReviewsQuery, Query()]) -> JSONResponse:
+    """Human Tasks: one page of every review the team may see, with counts per view, facets and stats. The page is cut
+    after merging three sources in Python (hitl_facade.list_reviews): graph threads waiting on a person, agent and
+    workflow publish requests, and workflow runs waiting on a review step. They live in different tables (a thread's
+    pending step is in its checkpoint, not a column), so no one query can sort and count them together, and the counts
+    and facets cover every row, not the page. Each source therefore reads at most `review_list_rows_per_source` rows
+    (Settings), newest first, logging `review_source_capped` at the cap; the decisions and policies read are those of
+    the rows kept. The route stays off `Tx`: building a review asks tools-service for its write policy, so it holds
+    two transactions, 2 by design: one to read what the reviews name, then, once tools-service has answered with none
+    open, one to build the list."""
     filters = {"risk": q.risk, "workflowId": q.workflowId, "kind": q.kind, "agentSlug": q.agentSlug, "status": q.status}
     with one_read_per_tool():
-        rows = await hitl_facade.list_reviews(
-            rt,
-            view=q.view,
-            filters=filters,
-            search=q.search,
-            page_no=q.page,
-            size=q.pageSize,
-            me=frozenset({me.email, me.name}),
-            group=q.group,
-            teams=reader_teams(me),
-        )
-        rows["data"] = [await _with_can_decide(rt, me, r) for r in rows["data"]]
+        reads = await hitl_facade.read_then_ask(rt)
+        async with isolation.request_transaction():
+            rows = await hitl_facade.list_reviews(
+                rt,
+                view=q.view,
+                filters=filters,
+                search=q.search,
+                page_no=q.page,
+                size=q.pageSize,
+                me=frozenset({me.email, me.name}),
+                group=q.group,
+                teams=reader_teams(me),
+                approver=me,
+                reads=reads,
+            )
     return ok(rows)
 
 
-async def _with_can_decide(rt: Runtime, me: Principal, review: dict[str, Any]) -> dict[str, Any]:
+async def _with_can_decide(rt: Runtime, me: Principal, review: Json) -> Json:
     """The review with whether the caller may decide it now: the console shows Approve and Reject only then."""
     waiting = review.get("status") in ("pending", "in_review")
     return review | {"canDecide": waiting and await hitl_facade.can_decide(rt, me, str(review["id"]))}
@@ -192,13 +217,21 @@ async def get_queue_place(rt: Rt, me: Me, review_id: str, view: str = "open", gr
     """Where the review sits in a Human Tasks view (open by default): position, total and the reviews either side;
     `group=case` in the order the queue grouped by case lists them."""
     with one_read_per_tool():
-        return ok(await hitl_facade.queue_place(rt, review_id, view, group))
+        # Only the overdue view builds reviews, so only it asks tools-service (two transactions, as the list holds);
+        # the others word a deadline from the review policy, read first so none is open while platform-service answers.
+        if view != "overdue":
+            await sla_hours(rt)
+            async with isolation.request_transaction():
+                return ok(await hitl_facade.queue_place(rt, review_id, view, group))
+        reads = await hitl_facade.read_then_ask(rt)
+        async with isolation.request_transaction():
+            return ok(await hitl_facade.queue_place(rt, review_id, view, group, reads))
 
 
 @console_router.get("/{thread_id}", response_model=Envelope[Review])
 async def get_review(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
-    review = await hitl_facade.with_assignee(rt, await hitl_facade.get_review(rt, thread_id))
-    return ok(await _with_can_decide(rt, me, review))
+    with one_read_per_tool():
+        return ok(await hitl_facade.review_for(rt, me, thread_id))
 
 
 @console_router.post("/{thread_id}/decision", response_model=Envelope[Review])
@@ -223,14 +256,14 @@ async def run_as_team_account(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
     return ok(await engine_reviews.run_as_team_account(rt, me, thread_id))
 
 
-class BulkDecisionInput(WireModel):
+class BulkDecisionInput(In):
     ids: list[str]
     decision: str
     reason: str | None = None
     step_up_token: str | None = None
 
 
-class AssignInput(WireModel):
+class AssignInput(In):
     ids: list[str] = Field(min_length=1, max_length=200)
     # A person's email; the caller when left out (Assign to me).
     assignee: str | None = Field(default=None, min_length=3, max_length=320)

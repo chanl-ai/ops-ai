@@ -11,12 +11,15 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Any
+from typing import cast
 
 from ops_identity import ServiceCallError, ServiceUnreachable
 from ops_service_kit.errors import ApiError
+from ops_service_kit.http import Json
 
 from .deps import Runtime
+from .review_sla import review_hours_asked_once
+from .team_names import team_names_asked_once
 
 WORKFLOW_TOOLS = {"send_reply": "write", "send_acknowledgement": "write"}
 
@@ -46,10 +49,12 @@ _READ: ContextVar[dict[str, WritePolicy] | None] = ContextVar("tool_policies_rea
 def one_read_per_tool() -> Generator[None]:
     """Within the block, tools-service is asked once per tool: a list of Human Tasks names a few tools many times, and
     asking per review made the list one call per waiting write. Held for one request only, so a policy changed in
-    tools-service applies from the next request."""
+    tools-service applies from the next request. The same block keeps what platform-service answered (team names, the
+    review deadline), failures included, so a platform-service that is down is waited on once."""
     token = _READ.set({})
     try:
-        yield
+        with team_names_asked_once(), review_hours_asked_once():
+            yield
     finally:
         _READ.reset(token)
 
@@ -73,12 +78,11 @@ async def _policy_of(rt: Runtime, tool: str) -> WritePolicy:
                 f"The tools service cannot be reached, so the approvals {tool} needs are unknown. Try again shortly."
             ) from e
         access = str(data["access"])
-        approval: dict[str, Any] = data.get("approval") or {}
-        return WritePolicy(
-            access=access,
-            approvers=int(approval.get("approvers") or 1),
-            step_up=bool(approval.get("stepUp")) or int(approval.get("approvers") or 1) > 1,
-        )
+        # tools-service's policy as it answers it: an approval that is not an object fails at its first read, and a
+        # count it sends as "2" or 2.0 reads as 2, as before it was named.
+        approval: Json = data.get("approval") or {}
+        approvers = int(cast(float | str, approval.get("approvers") or 1))
+        return WritePolicy(access=access, approvers=approvers, step_up=bool(approval.get("stepUp")) or approvers > 1)
     access = await access_of(rt, tool)
     definition = rt.catalog.tool(tool)
     approvers = definition.approvers if definition else 1

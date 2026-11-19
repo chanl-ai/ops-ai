@@ -3,7 +3,8 @@
 // key in the query string, as the fake's legacy route takes it) and a mock answer are set up through the API; everything
 // after is clicked on the REST tool page (the API-client layout; functions keep the Function workbench). Each step is
 // checked on its own.
-import { PLATFORM_PORT, TOOLS_PORT, approveToolReview, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { PLATFORM_PORT, TOOLS_PORT, approveToolReview, check, chromium, finish, required, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { PEOPLE, allowBank, authHeaders, setWriteApprovals, setup, signInAs } from '@ops-ai/usecase-runner/steps';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
 const TAG = Math.random().toString(36).slice(2, 6);
@@ -13,13 +14,7 @@ const ACCOUNT = 'CHQ-2219';
 const BANK_KEY = 'dev-bank-key';
 const JAMES = 'j.richardson@harborpine.example';
 const RAVI = 'r.menon@harborpine.example';
-const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'northfield-demo' }) })).json()).data.token;
-const as = async (email, team) => ({ Authorization: `Bearer ${await tokenFor(email)}`, 'X-Team-Id': team, 'Content-Type': 'application/json' });
-const json = async (r) => {
-  const body = await r.json();
-  if (body.data === undefined) throw new Error(`${r.url} answered ${r.status}: ${JSON.stringify(body).slice(0, 300)}`);
-  return body.data;
-};
+const as = (email, team = 'team_ops') => authHeaders(email, { team });
 // A wait armed before a click must not reject unhandled if the script fails first; that crash skips harness cleanup.
 const armed = (p) => (p.catch(() => undefined), p);
 
@@ -37,15 +32,14 @@ await withUiStack(
     const SAM = await as('s.adeyemi@harborpine.example', 'team_security');
     const J = await as(JAMES, 'team_ops');
     const N = await as('n.petrov@harborpine.example', 'team_security');
-    await fetch(`${tools}/v1/egress/hosts`, { method: 'POST', headers: SAM, body: JSON.stringify({ value: stack.bank.host, note: 'uc-101' }) });
-    await fetch(`${tools}/v1/egress/ranges`, { method: 'POST', headers: SAM, body: JSON.stringify({ value: stack.bank.range, note: 'uc-101' }) });
-    const id = (await json(await fetch(`${tools}/v1/tool-modules/blank`, { method: 'POST', headers: J, body: JSON.stringify({ displayName: `Core bank ${TAG}`, name: `uc101-bank-${TAG}`, type: 'http' }) }))).id;
-    await json(await fetch(`${tools}/v1/tool-modules/${id}/operations`, { method: 'POST', headers: J, body: JSON.stringify({ name: OP, description: 'The latest statement', access: 'read', method: 'GET', url: `https://${stack.bank.host}/accounts/{account_id}/statement?api_key={{STATEMENTS_API_KEY}}`, headers: [] }) }));
-    await json(await fetch(`${tools}/v1/tool-modules/${id}/reviews`, { method: 'POST', headers: J, body: JSON.stringify({ note: 'uc-101' }) }));
+    await allowBank(await signInAs(PEOPLE.sam, { team: 'team_security' }), stack.bank, 'uc-101');
+    const id = (await setup(await fetch(`${tools}/v1/tool-modules/blank`, { method: 'POST', headers: J, body: JSON.stringify({ displayName: `Core bank ${TAG}`, name: `uc101-bank-${TAG}`, type: 'http' }) }))).id;
+    await setup(await fetch(`${tools}/v1/tool-modules/${id}/operations`, { method: 'POST', headers: J, body: JSON.stringify({ name: OP, description: 'The latest statement', access: 'read', method: 'GET', url: `https://${stack.bank.host}/accounts/{account_id}/statement?api_key={{STATEMENTS_API_KEY}}`, headers: [] }) }));
+    await setup(await fetch(`${tools}/v1/tool-modules/${id}/reviews`, { method: 'POST', headers: J, body: JSON.stringify({ note: 'uc-101' }) }));
     await approveToolReview(id, N, J);
-    const opNow = async () => (await json(await fetch(`${tools}/v1/tool-modules/${id}`, { headers: J }))).operations.find((o) => o.name === OP);
+    const opNow = async () => (await setup(await fetch(`${tools}/v1/tool-modules/${id}`, { headers: J }))).operations.find((o) => o.name === OP);
     // The operation's example answer, which Mock answers with and a Real run in Test never does: a balance to transform.
-    await json(await fetch(`${tools}/v1/tool-modules/${id}/operations/${(await opNow()).id}/mocks`, { method: 'POST', headers: J, body: JSON.stringify({ name: 'statement', environment: 'example', default: true, status: 200, body: { accountId: ACCOUNT, closingBalance: 1520.33, lines: 4 } }) }));
+    await setup(await fetch(`${tools}/v1/tool-modules/${id}/operations/${(await opNow()).id}/mocks`, { method: 'POST', headers: J, body: JSON.stringify({ name: 'statement', environment: 'example', default: true, status: 200, body: { accountId: ACCOUNT, closingBalance: 1520.33, lines: 4 } }) }));
 
     const browser = await chromium.launch();
     const errors = [];
@@ -62,7 +56,8 @@ await withUiStack(
         const ran = armed(page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/v1/tool-modules/${id}/test`), { timeout: 60_000 }));
         await panel.getByTestId('run').click();
         const res = await ran;
-        return { res, body: res ? await res.text() : '', data: res ? (JSON.parse((await res.text()) || '{}').data ?? {}) : {} };
+        const body = res ? await res.text() : '';
+        return { res, body, data: required({ status: res?.status() ?? 0, data: body ? JSON.parse(body).data : undefined, text: body }, 'module test run') };
       };
       const tab = async (name) => {
         await panel.getByRole('tab', { name }).click();
@@ -101,7 +96,7 @@ await withUiStack(
         await more('Raw response');
         const raw = await panel.getByRole('tabpanel').last().innerText();
         const op = await opNow();
-        const detail = await json(await fetch(`${tools}/v1/tool-modules/${id}`, { headers: J }));
+        const detail = await setup(await fetch(`${tools}/v1/tool-modules/${id}`, { headers: J }));
         check(
           '2 a mock answer and a draft transform run without changing the operation',
           res?.status() === 200 && /"balance":\s*1520\.33/.test(output) && /closingBalance/.test(raw) && !op.responseTransform && detail.pendingChanges.length === 0,
@@ -161,7 +156,7 @@ await withUiStack(
         await page.getByTestId('workbench-stage').click();
         const res = await saved;
         const sent = res ? JSON.parse(res.request().postData() ?? '{}') : {};
-        const detail = await json(await fetch(`${tools}/v1/tool-modules/${id}`, { headers: J }));
+        const detail = await setup(await fetch(`${tools}/v1/tool-modules/${id}`, { headers: J }));
         const change = detail.pendingChanges.find((c) => c.operation === OP);
         await page.goto(`${consoleUrl}/tools/${id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         const listed = await page.getByText(/unpublished change/).first().waitFor({ timeout: 60_000 }).then(() => true, () => false);

@@ -29,7 +29,7 @@ def builder(sub: str, team: str) -> dict[str, str]:
         "kind": "person",
         "security_team": "team_security",
         "aud": ["agents"],
-        "tenant_id": "acme",
+        "tenant_id": "local",
         "team_ids": [team],
         "roles": {team: "builder"},
     }
@@ -64,7 +64,7 @@ async def test_another_teams_thread_answers_404_on_every_read_route(dev_platform
         assert (await c.get(path, headers=OWNER)).status_code == 200, path
         seen = await c.get(path, headers=OUTSIDER)
         assert seen.status_code == 404, (path, seen.status_code, seen.text)
-    listed = (await c.get("/v1/threads", headers=OUTSIDER)).json()["data"]
+    listed = (await c.get("/v1/threads", headers=OUTSIDER)).json()["data"]["data"]
     assert tid not in [t["threadId"] for t in listed]
 
 

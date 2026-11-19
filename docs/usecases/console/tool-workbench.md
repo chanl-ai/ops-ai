@@ -37,3 +37,7 @@ table of the test database and the captured logs for it.
 | Layer | Script | State |
 |---|---|---|
 | ui | `console/scripts/test-uc-101-ui.mjs` | passing |
+
+## Setup state
+
+The test-run response the script reads goes through `required()`, so a missing or refused run stops the script as setup. Passing on 2026-11-12.

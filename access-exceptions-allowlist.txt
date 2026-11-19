@@ -1,89 +1,103 @@
-# 49 access exceptions: decisions taken outside can() and policy defaults that hold something back
+# 58 access exceptions: decisions taken outside can() and policy defaults that hold something back
 # (scripts/check_access_exceptions.py). This number may only go down. Each line is `path kind key count row`; row is
 # the line of the Exceptions register in docs/architecture/roles-and-permissions.md that records the decision.
 # When the code changes, lower the count or delete the line. A new line needs a register row and a Standards-exception:
 # trailer (delivery-rubric.md). Policy lines marked `open` pin each open default, so a new policy is classified once.
-apps/console/src/components/access/members-panel.tsx role-name admin 1 E20
-apps/console/src/hooks/me-queries.ts role-name admin 1 E19
-apps/console/src/hooks/me-queries.ts role-name builder 1 E19
-apps/console/src/lib/auth/providers/platform.ts role-name admin 1 E22
-apps/console/src/lib/auth/providers/platform.ts role-name viewer 1 E22
-packages/ops_access/src/ops_access/check.py lock dev-caller 1 E09
-packages/ops_access/src/ops_access/check.py lock protection-system 1 E05
-packages/ops_store/src/ops_store/isolation.py lock dev-caller 1 E09
-services/agents-service/src/ops_agents/api/auth.py lock dev-caller 1 E09
-services/agents-service/src/ops_agents/api/auth.py refusal role_required 1 E13
-services/agents-service/src/ops_agents/api/chat_budget.py refusal admin_only 1 E14
-services/agents-service/src/ops_agents/api/chat_budget.py refusal not_owner 3 E14
-services/agents-service/src/ops_agents/api/engine_reviews.py refusal forbidden 1 E10
-services/agents-service/src/ops_agents/api/engine_reviews.py refusal not_decided_by 1 E10
-services/agents-service/src/ops_agents/api/routers/reviews.py refusal forbidden 1 E10
-services/agents-service/src/ops_agents/api/routers/widgets.py conflict seeded_widget 1 E38
-services/agents-service/src/ops_agents/api/tool_module_reviews.py refusal service_required 1 E08
-services/agents-service/src/ops_agents/api/tool_module_reviews.py role-name service-sub 1 E08
-services/documents-service/src/ops_documents/app.py refusal role_required 1 E13
-services/documents-service/src/ops_documents/document_types.py refusal role_required 2 E13
-services/files-service/src/ops_files/app.py refusal forbidden 1 E13
-services/files-service/src/ops_files/tenant_files.py refusal role_required 3 E13
-services/models-service/src/ops_models/app.py refusal images_not_cleared 1 E16
-services/models-service/src/ops_models/app.py refusal sensitivity_not_cleared 1 E16
-services/platform-service/src/ops_platform/auth.py refusal workspace_closed 1 E44
-services/tools-service/src/ops_tools/modules/service.py refusal plugin_module 1 E45
-services/platform-service/src/ops_platform/store/teams.py role-name admin 1 E17
-services/platform-service/src/ops_platform/store/workspace.py role-name admin 1 E17
-services/platform-service/src/ops_platform/teams.py refusal domain_not_allowed 1 E18
-services/platform-service/src/ops_platform/workspace_lifecycle.py conflict last_admin 1 E43
-services/platform-service/src/ops_platform/workspace_lifecycle.py conflict owner_must_transfer 1 E42
-services/tools-service/src/ops_tools/gateway_calls.py lock SYSTEM_TOOLS 3 E06
-services/tools-service/src/ops_tools/gateway_calls.py lock system-claim 1 E06
-services/tools-service/src/ops_tools/gateway_calls.py refusal gateway_refused 1 E16
-services/tools-service/src/ops_tools/gateway_calls.py refusal system_workflow_only 1 E06
-services/tools-service/src/ops_tools/callers.py lock dev-caller 1 E09
-services/tools-service/src/ops_tools/limits.py refusal amount_over_limit 1 E16
-services/tools-service/src/ops_tools/mailboxes.py refusal egress_denied 2 E16
-services/tools-service/src/ops_tools/modules/directory.py refusal forbidden 1 E15
-services/tools-service/src/ops_tools/modules/review_events.py lock SYSTEM_TOOLS 1 E06
-services/tools-service/src/ops_tools/modules/routes.py refusal service_required 1 E07
-services/tools-service/src/ops_tools/modules/routes.py role-name service-sub 1 E07
-services/tools-service/src/ops_tools/modules/service.py refusal requester_decides 1 E11
-services/tools-service/src/ops_tools/modules/service.py refusal role_required 1 E41
-services/tools-service/src/ops_tools/registry.py lock SYSTEM_ONLY 2 E06
-services/tools-service/src/ops_tools/send_policy_routes.py refusal forbidden 1 E15
-packages/ops_access/src/ops_access/policies.py policy-default aiSteps={} 1 E03
-packages/ops_access/src/ops_access/policies.py policy-default aiStepsMaskPersonalData={} 1 E34
-packages/ops_access/src/ops_access/policies.py policy-default chatThreadsOwnerOnly=true 1 E02
-packages/ops_access/src/ops_access/policies.py policy-default checkBeforeSend={} 1 E03
-packages/ops_access/src/ops_access/policies.py policy-default egressNewHosts="ask_security" 1 E48
-packages/ops_access/src/ops_access/policies.py policy-default extractionFloor=0.8 1 open
-packages/ops_access/src/ops_access/policies.py policy-default memoryRetentionDays=null 1 open
-packages/ops_access/src/ops_access/policies.py policy-default pageImages={} 1 E03
-packages/ops_access/src/ops_access/policies.py policy-default publishReview={} 1 E01
-packages/ops_access/src/ops_access/policies.py policy-default requesterMayDecide=true 1 open
-packages/ops_access/src/ops_access/policies.py policy-default reviewSlaHours=8 1 open
-packages/ops_access/src/ops_access/policies.py policy-default securityTeamAddsSecrets=false 1 open
-packages/ops_access/src/ops_access/policies.py policy-default stepUp=false 1 open
-packages/ops_access/src/ops_access/policies.py policy-default taskAssist={} 1 E03
-packages/ops_access/src/ops_access/policies.py policy-default toolWritesNeedApproval={} 1 open
-packages/ops_access/src/ops_access/policies.py policy-default appWritesNeedApproval={} 1 E23
+# After ` # ` each line says what its lane of the migration (docs/architecture/migration/README.md) does with it:
+# `keep <lane>: <why it stays>`, `convert <lane>: <onto what>` or `delete <lane>: <with what>`. Role-name compares are
+# also counted per lane in scripts/access-baselines/<lane>.txt, which may only fall.
+apps/console/src/components/access/members-panel.tsx role-name admin 1 E20  # keep console: presentation only, the admin badge's style; decides nothing
+packages/ops_access/src/ops_access/check.py lock dev-caller 1 E09  # keep components: the dev header caller, in dev only, inside can() itself
+packages/ops_access/src/ops_access/check.py lock protection-system 1 E05  # keep components: can() reads the system mark to ask for <area>.manage
+packages/ops_store/src/ops_store/isolation.py lock dev-caller 1 E09  # keep components: the dev header caller, in dev only
+services/agents-service/src/ops_agents/api/auth.py lock dev-caller 1 E09  # keep agents: the dev header caller, in dev only
+services/agents-service/src/ops_agents/api/auth.py refusal role_required 1 E13  # keep agents: a typed refusal raised from a can() answer computed earlier
+services/agents-service/src/ops_agents/api/auth.py refusal not_the_asker 1 E50  # keep agents: the asker rule, only the person asked answers
+services/agents-service/src/ops_agents/api/chat_budget.py refusal admin_only 1 E14  # keep agents: the thread's owner or chat.manage, asked through can()
+services/agents-service/src/ops_agents/api/chat_budget.py refusal not_owner 3 E14  # keep agents: the thread's owner or chat.manage, asked through can()
+services/agents-service/src/ops_agents/api/engine_reviews.py refusal forbidden 1 E10  # keep agents: separation of duties on a step's decision
+services/agents-service/src/ops_agents/api/engine_reviews.py refusal not_decided_by 1 E10  # keep agents: separation of duties on a step's decision
+services/agents-service/src/ops_agents/api/routers/reviews.py refusal forbidden 1 E10  # keep agents: separation of duties on a step's decision
+services/agents-service/src/ops_agents/api/routers/widgets.py conflict seeded_widget 1 E38  # convert agents: the seeded lock goes; a seeded widget is edited through can()
+services/agents-service/src/ops_agents/api/tool_module_reviews.py refusal service_required 1 E08  # delete agents: with the import route
+services/documents-service/src/ops_documents/app.py refusal role_required 1 E13  # keep pilot: a typed refusal raised from a can() answer computed earlier
+services/documents-service/src/ops_documents/document_types.py refusal role_required 2 E13  # keep pilot: a typed refusal raised from a can() answer computed earlier
+services/files-service/src/ops_files/tenant_files.py refusal forbidden 1 E13  # keep pilot: a typed refusal raised from a can() answer computed earlier
+services/files-service/src/ops_files/tenant_files.py refusal role_required 3 E13  # keep pilot: a typed refusal raised from a can() answer computed earlier
+services/models-service/src/ops_models/app.py refusal images_not_cleared 1 E16  # keep pilot: refused by a record's own clearance setting
+services/models-service/src/ops_models/app.py refusal sensitivity_not_cleared 1 E16  # keep pilot: refused by a record's own clearance setting
+services/platform-service/src/ops_platform/auth.py refusal workspace_closed 1 E44  # keep platform: the workspace's state, closed to everyone
+services/tools-service/src/ops_tools/modules/service.py refusal plugin_module 1 E45  # keep tools: a plugin's module is changed by its plugin
+services/platform-service/src/ops_platform/teams.py refusal domain_not_allowed 1 E18  # keep platform: the workspace's allowed email domains, a setting
+services/platform-service/src/ops_platform/workspace_lifecycle.py conflict last_admin 1 E43  # keep platform: a team keeps one active admin
+services/platform-service/src/ops_platform/workspace_lifecycle.py conflict owner_must_transfer 1 E42  # keep platform: the owner leaves only by a transfer
+services/tools-service/src/ops_tools/gateway_calls.py lock SYSTEM_TOOLS 3 E06  # convert tools: the system lock becomes a grid cell or a policy
+services/tools-service/src/ops_tools/gateway_calls.py lock system-claim 1 E06  # convert tools: the system lock becomes a grid cell or a policy
+services/tools-service/src/ops_tools/gateway_calls.py refusal gateway_refused 1 E16  # keep tools: refused by a record's own settings
+services/tools-service/src/ops_tools/gateway_calls.py refusal system_workflow_only 1 E06  # convert tools: goes with the system lock
+services/tools-service/src/ops_tools/gateway_calls.py refusal ACCOUNT_CHOICE_NEEDED 1 E52  # keep tools: a person's own app account is used by that person
+services/tools-service/src/ops_tools/gateway_calls.py refusal ACCOUNT_NOT_YOURS 1 E52  # keep tools: a person's own app account is used by that person
+services/tools-service/src/ops_tools/gateway_calls.py refusal APP_OFF_FOR_TEAM 1 E53  # keep tools: the team has not set the app up
+services/tools-service/src/ops_tools/gateway_calls.py refusal CONNECTION_NOT_LINKED 1 E53  # keep tools: the team has not set the app up
+services/tools-service/src/ops_tools/gateway_calls.py refusal NOT_SIGNED_IN 1 E53  # keep tools: the team has not set the app up
+services/tools-service/src/ops_tools/gateway_calls.py refusal PLUGIN_DISABLED 1 E53  # keep tools: the team has not set the app up
+services/tools-service/src/ops_tools/gateway_calls.py refusal TOOL_NOT_ADDED 1 E53  # keep tools: the team has not set the app up
+services/tools-service/src/ops_tools/gateway_calls.py refusal module_drifted 1 E16  # keep tools: refused by a record's own settings
+services/tools-service/src/ops_tools/gateway_calls.py refusal module_not_published 1 E16  # keep tools: refused by a record's own settings
+services/tools-service/src/ops_tools/gateway_calls.py refusal operation_hidden 1 E16  # keep tools: refused by a record's own settings
+services/tools-service/src/ops_tools/callers.py lock dev-caller 1 E09  # keep tools: the dev header caller, in dev only
+services/tools-service/src/ops_tools/limits.py refusal amount_over_limit 1 E16  # keep tools: refused by a record's own settings
+services/tools-service/src/ops_tools/mailboxes.py refusal egress_denied 2 E16  # keep tools: refused by a record's own settings
+services/tools-service/src/ops_tools/modules/directory.py refusal forbidden 1 E15  # convert tools: raises the baseline code
+services/tools-service/src/ops_tools/modules/review_events.py lock SYSTEM_TOOLS 1 E06  # convert tools: the system lock becomes a grid cell or a policy
+services/tools-service/src/ops_tools/modules/routes.py refusal service_required 1 E07  # convert tools: a scope check through can()
+services/tools-service/src/ops_tools/modules/routes.py role-name service-sub 1 E07  # convert tools: a scope check through can()
+services/tools-service/src/ops_tools/modules/service.py refusal role_required 1 E41  # keep tools: the test console is a person's until its calls take the gateway path
+services/tools-service/src/ops_tools/registry.py lock SYSTEM_ONLY 2 E06  # convert tools: the system lock becomes a grid cell or a policy
+services/tools-service/src/ops_tools/send_policy_routes.py refusal forbidden 1 E15  # convert tools: raises the baseline code
+packages/ops_access/src/ops_access/policies.py policy-default aiSteps={} 1 E03  # keep platform: holds something back by decision, read through policy()
+packages/ops_access/src/ops_access/policies.py policy-default aiStepsMaskPersonalData={} 1 E34  # keep platform: holds something back by decision, read through policy()
+packages/ops_access/src/ops_access/policies.py policy-default chatThreadsOwnerOnly=true 1 E02  # keep platform: holds something back by decision, read through policy()
+packages/ops_access/src/ops_access/policies.py policy-default checkBeforeSend={} 1 E03  # keep platform: holds something back by decision, read through policy()
+packages/ops_access/src/ops_access/policies.py policy-default companySignInRequired=false 1 open  # keep platform: an open default, read through policy()
+packages/ops_access/src/ops_access/policies.py policy-default egressNewHosts="ask_security" 1 E48  # keep platform: holds something back by decision, read through policy()
+packages/ops_access/src/ops_access/policies.py policy-default extractionFloor=0.8 1 open  # keep platform: an open default, read through policy()
+packages/ops_access/src/ops_access/policies.py policy-default memoryRetentionDays=null 1 open  # keep platform: an open default, read through policy()
+packages/ops_access/src/ops_access/policies.py policy-default mcpConnectionHours=8 1 open  # keep platform: an open default, read through policy()
+packages/ops_access/src/ops_access/policies.py policy-default pageImages={} 1 E03  # keep platform: holds something back by decision, read through policy()
+packages/ops_access/src/ops_access/policies.py policy-default publishReview={} 1 E01  # keep platform: holds something back by decision, read through policy()
+packages/ops_access/src/ops_access/policies.py policy-default requesterMayDecide=false 1 E49  # keep platform: holds something back by decision, read through policy()
+packages/ops_access/src/ops_access/policies.py policy-default reviewSlaHours=8 1 open  # keep platform: an open default, read through policy()
+packages/ops_access/src/ops_access/policies.py policy-default securityTeamAddsSecrets=false 1 open  # keep platform: an open default, read through policy()
+packages/ops_access/src/ops_access/policies.py policy-default stepUp=false 1 open  # keep platform: an open default, read through policy()
+packages/ops_access/src/ops_access/policies.py policy-default taskAssist={} 1 E03  # keep platform: holds something back by decision, read through policy()
+packages/ops_access/src/ops_access/policies.py policy-default toolWritesNeedApproval={} 1 open  # keep platform: an open default, read through policy()
+packages/ops_access/src/ops_access/policies.py policy-default appWritesNeedApproval={} 1 E23  # keep platform: holds something back by decision, read through policy()
+packages/ops_access/src/ops_access/policies.py policy-default appsChangeWithoutAsking={} 1 E49  # keep platform: holds something back by decision, read through policy()
+packages/ops_access/src/ops_access/policies.py policy-default appChanges={} 1 open  # keep platform: an open default, read through policy()
+packages/ops_access/src/ops_access/policies.py policy-default appChangesByApp={} 1 open  # keep platform: an open default, read through policy()
 # 409 codes, each classified once (`* conflict <code> 0 state`): the record is in the wrong state, so the refusal is not
 # an access decision. A 409 that decides by who made a record gets a path line and a register row instead. A new code
 # fails until it is classified here; a code no 409 carries any more is stale. An access-deciding 409 carries its own code.
+* conflict account_in_use 0 state
 * conflict address_taken 0 state
 * conflict admin_holds_every_cell 0 state
 * conflict agent_paused 0 state
+* conflict alias_exists 0 state
 * conflict already_decided 0 state
 * conflict already_granted 0 state
 * conflict already_published 0 state
 * conflict already_resumed 0 state
 * conflict app_in_use 0 state
 * conflict archived_too_recently 0 state
+* conflict break_glass_last 0 state
+* conflict break_glass_none 0 state
 * conflict budget_paused 0 state
 * conflict builtin_role 0 state
 * conflict channel_managed_elsewhere 0 state
 * conflict channel_retired 0 state
 * conflict conflict 0 state
 * conflict connect_wait 0 state
-* conflict account_in_use 0 state
 * conflict connection_in_use 0 state
 * conflict connection_secret 0 state
 * conflict copy_edited 0 state
@@ -101,11 +115,15 @@ packages/ops_access/src/ops_access/policies.py policy-default appWritesNeedAppro
 * conflict file_not_ready 0 state
 * conflict form_needs_inputs 0 state
 * conflict guardrail_pinned 0 state
+* conflict host_waiting 0 state
 * conflict in_use 0 state
 * conflict invite_expired 0 state
 * conflict invite_used 0 state
+* conflict key_exists 0 state
 * conflict key_in_use 0 state
+* conflict last_sign_in_method 0 state
 * conflict live_workflows 0 state
+* conflict locked_in_storage 0 state
 * conflict mailbox_in_use 0 state
 * conflict name_taken 0 state
 * conflict needs_reconnect 0 state
@@ -129,6 +147,8 @@ packages/ops_access/src/ops_access/policies.py policy-default appWritesNeedAppro
 * conflict not_waiting 0 state
 * conflict nothing_to_approve 0 state
 * conflict owner_changed 0 state
+* conflict provider_exists 0 state
+* conflict provider_not_rebindable 0 state
 * conflict purged 0 state
 * conflict resume_via_budget 0 state
 * conflict resume_via_review 0 state
@@ -151,16 +171,16 @@ packages/ops_access/src/ops_access/policies.py policy-default appWritesNeedAppro
 * conflict stale_pause 0 state
 * conflict stale_version 0 state
 * conflict sync_running 0 state
-* conflict host_waiting 0 state
 * conflict target_in_use 0 state
 * conflict team_archived 0 state
 * conflict team_name_taken 0 state
 * conflict tools_unavailable 0 state
 * conflict update_changed 0 state
+* conflict update_stale 0 state
 * conflict widget_paused 0 state
 * conflict widget_retired 0 state
 * conflict widget_taken 0 state
 * conflict workflow_archived 0 state
 * conflict workflow_owned 0 state
 * conflict workflow_paused 0 state
-services/agents-service/src/ops_agents/api/routers/forms.py refusal form_members_only 1 E47
+services/agents-service/src/ops_agents/api/routers/forms.py refusal form_members_only 1 E47  # keep agents: a members-only form is its team's own

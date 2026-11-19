@@ -1,40 +1,40 @@
 // uc-104 a guardrail has its own page and an agent pins one of its versions, ui layer:
-// docs/usecases/console/guardrail-record-page.md. Headless Chromium against the console on agents-service (dev
-// auto-approve publishes at once). James opens a guardrail from the list, saves and publishes v2 on its page, sees both
-// versions, then pins v1 on an agent from the agent's Guardrails section and saves the agent.
-import { AGENTS_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+// docs/usecases/console/guardrail-record-page.md. Headless Chromium against the console signed in through
+// platform-service. James opens a guardrail from the list, saves and publishes v2 on its page (Maya, the team's
+// approver, approves each publish: a requester does not decide their own), sees both versions, then pins v1 on an agent
+// from the agent's Guardrails section and the agent saves itself.
+import { AGENTS_PORT, approvePublishRequest, asRole, check, chromium, consoleSignIn, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
-const TEAM = { 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
 const TAG = Math.random().toString(36).slice(2, 6);
 const NAME = `No tips ${TAG}`;
 const armed = (p) => (p.catch(() => undefined), p);
+let J = {};
 const api = async (path, init = {}) => {
-  const r = await fetch(`${agents}${path}`, { ...init, headers: TEAM });
+  const r = await fetch(`${agents}${path}`, { ...init, headers: J });
   const body = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(`setup: ${init.method ?? 'GET'} ${path} answered ${r.status}: ${JSON.stringify(body).slice(0, 300)}`);
   return body.data;
 };
 
 await withUiStack(async (consoleUrl) => {
+  J = await asRole('builder', 'team_ops');
+  const maya = await asRole('approver', 'team_ops');
   const g = await api('/v1/guardrails', { method: 'POST', body: JSON.stringify({ name: NAME, topics: ['stock tips'], message: 'I cannot give stock tips.' }) });
-  await api(`/v1/guardrails/${g.id}/publish-requests`, { method: 'POST', body: JSON.stringify({ version: 1, note: 'first' }) });
+  await approvePublishRequest(await api(`/v1/guardrails/${g.id}/publish-requests`, { method: 'POST', body: JSON.stringify({ version: 1, note: 'first' }) }), maya);
   const agent = await api('/v1/agents', { method: 'POST', body: JSON.stringify({ name: `Tips desk ${TAG}`, role: 'Answers account questions' }) });
 
   const browser = await chromium.launch();
   try {
-    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
-    // The dev console works in team_platform until a team is picked; this script's rows are in team_ops.
-    await page.addInitScript(() => sessionStorage.setItem('ops-team', 'team_ops'));
     const errors = [];
-    page.on('pageerror', (e) => errors.push(e.message));
+    const page = await consoleSignIn(browser, consoleUrl, 'j.richardson@harborpine.example', 'northfield-demo', errors);
 
     // The list row opens the guardrail's own page.
     await page.goto(`${consoleUrl}/guardrails`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
     await page.getByRole('row', { name: new RegExp(NAME) }).first().click({ timeout: 120_000 });
-    await page.waitForURL((u) => u.pathname === `/guardrails/${g.id}`, { timeout: 60_000 });
+    await page.waitForURL((u) => u.pathname === `/build/guardrails/${g.id}`, { timeout: 60_000 });
     await page.getByTestId('save-guardrail').waitFor({ timeout: 60_000 });
-    check('a guardrail row opens its own page', new URL(page.url()).pathname === `/guardrails/${g.id}`, page.url());
+    check('a guardrail row opens its own page', new URL(page.url()).pathname === `/build/guardrails/${g.id}`, page.url());
 
     // Save v2 on the page, then publish it.
     await page.getByLabel('Message instead of an answer').fill('I cannot give stock tips. An adviser can.');
@@ -45,8 +45,12 @@ await withUiStack(async (consoleUrl) => {
     await page.getByTestId('publish-guardrail').waitFor({ timeout: 30_000 });
     const published = armed(page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/v1/guardrails/${g.id}/publish-requests`), { timeout: 30_000 }));
     await page.getByTestId('publish-guardrail').click();
-    const publishedStatus = (await published)?.status();
-    await page.getByTestId('guardrail-versions-tab').click();
+    const publishedRes = await published;
+    const publishedStatus = publishedRes?.status();
+    // Maya approves v2's publish request as Reviews would; the page then shows v2 live.
+    if (publishedRes?.ok()) await approvePublishRequest((await publishedRes.json()).data, maya);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.getByTestId('guardrail-versions-tab').click({ timeout: 60_000 });
     const table = page.getByTestId('guardrail-versions');
     await table.getByTestId('guardrail-version-2').waitFor({ timeout: 30_000 });
     const rows = {
@@ -73,12 +77,12 @@ await withUiStack(async (consoleUrl) => {
     const res = await patched;
     const after = await api(`/v1/agents/${agent.id}`);
     const pins = (after.guardrailPins ?? []).map((p) => `${p.guardrailId}@${p.version}`);
-    check('the agent pins v1 of the guardrail, chosen from its published versions, and the pin links to its page', res?.status() === 200 && pins.includes(`${g.id}@1`) && link === `/guardrails/${g.id}`, { status: res?.status(), pins, link });
+    check('the agent pins v1 of the guardrail, chosen from its published versions, and the pin links to its page', res?.status() === 200 && pins.includes(`${g.id}@1`) && link === `/build/guardrails/${g.id}`, { status: res?.status(), pins, link });
 
     check('no page errors', errors.length === 0, errors);
   } finally {
     await browser.close();
   }
-});
+}, { platform: true });
 
 finish();

@@ -7,16 +7,22 @@ Timers need PostgreSQL: due times are `now()` on the database's clock, and a pol
 
 from __future__ import annotations
 
+from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, ClassVar, Literal
 
 import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncConnection
 
+from ops_service_kit.http import Out
 from ops_store import Guarantee
-from ops_store.dialect import db_now
+from ops_store.dialect import claim, db_after, db_now
+from ops_store.rows import rows
+from ops_store.schema import system
 
-from .leases import check_fence
+from .leases import check_fence, thread_leases
+from .tenancy import TIMERS, RuntimeStore
 
 timers = sa.Table(
     "timers",
@@ -36,6 +42,10 @@ timers = sa.Table(
     sa.Column("failed_at", sa.DateTime(timezone=True)),
     # db_now: now() on PostgreSQL, SYSDATETIMEOFFSET() on SQL Server, whose CURRENT_TIMESTAMP carries no offset.
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=db_now()),
+    info=system(
+        "the poller claims due timers across every tenant before it knows one; a timer holds ids, a node name and "
+        "times, none of a tenant's content"
+    ),
 )
 
 OPEN = sa.and_(timers.c.fired_at.is_(None), timers.c.cancelled_at.is_(None), timers.c.failed_at.is_(None))
@@ -48,7 +58,7 @@ Close = Literal["cancelled", "failed", "fired"]
 
 
 def _in(delay_s: float) -> Any:
-    return sa.func.now() + sa.func.make_interval(0, 0, 0, 0, 0, 0, delay_s)
+    return db_after(delay_s)
 
 
 def key_of(row: Any) -> tuple[str, str]:
@@ -66,15 +76,27 @@ class Claim:
     attempts: int = 0
 
 
-class TimerStore:
+class OpenDueOut(Out):
+    """A thread's earliest open timer of one kind."""
+
+    thread_id: str
+    kind: str
+    due_at: datetime
+
+
+class TimerStore(RuntimeStore):
     # Claims and closes are conditional updates (CAS) on the database's clock (CLOCK); a poller skips rows another
     # holds (LOCK); a fenced write and its fence check share one transaction (TRANSACTION).
     requires: ClassVar[frozenset[Guarantee]] = frozenset(
         {Guarantee.CAS, Guarantee.CLOCK, Guarantee.LOCK, Guarantee.TRANSACTION}
     )
 
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
+    def _tx(self) -> AbstractAsyncContextManager[AsyncConnection]:
+        return self.install_tx(TIMERS, tables=(timers,))
+
+    def _fenced_tx(self) -> AbstractAsyncContextManager[AsyncConnection]:
+        """A transaction on the timers that also checks the thread's lease (`check_fence`)."""
+        return self.install_tx(TIMERS, tables=(timers, thread_leases))
 
     @property
     def enabled(self) -> bool:
@@ -87,7 +109,7 @@ class TimerStore:
         existed. Returns (cancelled ids, [(armed id, due at)])."""
         cancelled: list[str] = []
         armed: list[tuple[str, Any]] = []
-        async with self.engine.begin() as c:
+        async with self._fenced_tx() as c:
             # A superseded run's timer writes are refused in this transaction (ADR-0016); the new owner syncs them.
             await check_fence(c, thread_id, generation)
             rows = (await c.execute(timers.select().where(timers.c.thread_id == thread_id))).all()
@@ -96,14 +118,14 @@ class TimerStore:
                 r.timer_id for r in rows if r.fired_at is None and r.cancelled_at is None and key_of(r) not in wanted
             ]
             if stale:
-                locked = self._open(thread_id).where(timers.c.timer_id.in_(stale)).with_for_update(skip_locked=True)
+                locked = claim(self._open(thread_id).where(timers.c.timer_id.in_(stale)), timers)
                 ids = [r.timer_id for r in (await c.execute(locked)).all()]
                 cancelled.extend(ids)
                 if ids:
                     await c.execute(
                         timers.update()
                         .where(timers.c.thread_id == thread_id, timers.c.timer_id.in_(ids))
-                        .values(cancelled_at=sa.func.now())
+                        .values(cancelled_at=db_now())
                     )
             for (base, kind), (node, interrupt_id, delay) in wanted.items():
                 # Never re-arm a timer that already fired or was cancelled for this interrupt.
@@ -124,8 +146,8 @@ class TimerStore:
     async def restart(self, thread_id: str, wanted: Wanted) -> list[tuple[str, str, Any]]:
         """Cancels each open wanted timer and arms its next round from now. Returns [(timer id, kind, due at)]."""
         out: list[tuple[str, str, Any]] = []
-        async with self.engine.begin() as c:
-            rows = (await c.execute(self._open(thread_id).with_for_update(skip_locked=True))).all()
+        async with self._tx() as c:
+            rows = (await c.execute(claim(self._open(thread_id), timers))).all()
             for r in rows:
                 key = key_of(r)
                 if key not in wanted:
@@ -135,7 +157,7 @@ class TimerStore:
                 await c.execute(
                     timers.update()
                     .where(timers.c.thread_id == thread_id, timers.c.timer_id == r.timer_id)
-                    .values(cancelled_at=sa.func.now())
+                    .values(cancelled_at=db_now())
                 )
                 timer_id, due_at = await self._arm(
                     c,
@@ -151,23 +173,23 @@ class TimerStore:
 
     async def rows(self, thread_id: str) -> list[Any]:
         q = timers.select().where(timers.c.thread_id == thread_id).order_by(timers.c.created_at)
-        async with self.engine.connect() as c:
+        async with self._tx() as c:
             return list((await c.execute(q)).all())
 
     async def get(self, thread_id: str, timer_id: str) -> Any:
         """The timer with `is_due` from the database's clock, or None."""
-        async with self.engine.connect() as c:
+        async with self._tx() as c:
             return await self._get(c, thread_id, timer_id)
 
     async def claim(self, thread_id: str, timer_id: str, generation: int, *, waiting: bool) -> Claim:
         """Under the fire's lease: re-reads the timer, cancels it when its interrupt no longer waits, else claims it
         for this generation. `busy` when a claim of this or a newer generation exists."""
-        async with self.engine.begin() as c:
+        async with self._fenced_tx() as c:
             row = await self._get(c, thread_id, timer_id)
             if row is None or row.fired_at is not None or row.cancelled_at is not None or row.failed_at is not None:
                 return Claim("duplicate" if row is not None and row.fired_at else "cancelled", row)
             if not waiting:
-                await self._close(c, row, generation, cancelled_at=sa.func.now())
+                await self._close(c, row, generation, cancelled_at=db_now())
                 return Claim("not_waiting", row)
             await check_fence(c, thread_id, generation)
             claimed = (
@@ -179,7 +201,7 @@ class TimerStore:
                         OPEN,
                         sa.or_(timers.c.claimed_generation.is_(None), timers.c.claimed_generation < generation),
                     )
-                    .values(claimed_generation=generation, claimed_at=sa.func.now(), attempts=timers.c.attempts + 1)
+                    .values(claimed_generation=generation, claimed_at=db_now(), attempts=timers.c.attempts + 1)
                     .returning(timers.c.attempts)
                 )
             ).first()
@@ -187,42 +209,45 @@ class TimerStore:
 
     async def close(self, row: Any, generation: int | None, how: Close, *, owner: str | None = None) -> bool:
         """Marks an open timer cancelled, failed or fired, fenced by `generation`. False when it was not open."""
-        values: dict[str, Any] = {f"{how}_at": sa.func.now()}
+        values: dict[str, db_now | str] = {f"{how}_at": db_now()}
         if owner is not None:
             values["owner"] = owner
-        async with self.engine.begin() as c:
+        async with self._fenced_tx() as c:
             return await self._close(c, row, generation, **values)
 
     async def due(self, limit: int) -> list[tuple[str, str]]:
         q = (
             sa.select(timers.c.thread_id, timers.c.timer_id)
-            .where(OPEN, timers.c.due_at <= sa.func.now())
+            .where(OPEN, timers.c.due_at <= db_now())
             .order_by(timers.c.due_at)
             .limit(limit)
         )
-        async with self.engine.connect() as c:
+        async with self._tx() as c:
             return [(str(r.thread_id), str(r.timer_id)) for r in (await c.execute(q)).all()]
 
-    async def open_due(self, thread_ids: list[str]) -> dict[str, dict[str, Any]]:
+    async def open_due(self, thread_ids: list[str]) -> dict[str, dict[str, datetime]]:
         """The earliest open breach and timeout due time per thread: {thread: {kind: due at}}."""
         if not thread_ids or not self.enabled:
             return {}
-        q = sa.select(timers.c.thread_id, timers.c.kind, timers.c.due_at).where(
-            timers.c.thread_id.in_(thread_ids), OPEN, timers.c.kind.in_(("breach", "timeout"))
+        t = timers.c
+        # Ordered latest first, so each thread's earliest of a kind is the one left. Not min() in SQL: the timers
+        # transaction is install-wide, which lets through only its listed functions (ops_store.isolation).
+        q = (
+            sa.select(t.thread_id, t.kind, t.due_at)
+            .where(t.thread_id.in_(thread_ids), OPEN, t.kind.in_(("breach", "timeout")))
+            .order_by(t.due_at.desc())
         )
-        found: dict[str, dict[str, Any]] = {}
-        async with self.engine.connect() as c:
-            for tid, kind, at in await c.execute(q):
-                current = found.setdefault(str(tid), {}).get(str(kind))
-                if current is None or at < current:
-                    found[str(tid)][str(kind)] = at
+        found: dict[str, dict[str, datetime]] = {}
+        async with self._tx() as c:
+            for r in await rows(c, q, OpenDueOut):
+                found.setdefault(r.thread_id, {})[r.kind] = r.due_at
         return found
 
     def _open(self, thread_id: str) -> sa.Select[Any]:
         return timers.select().where(timers.c.thread_id == thread_id, OPEN)
 
     async def _get(self, c: AsyncConnection, thread_id: str, timer_id: str) -> Any:
-        q = sa.select(timers, (timers.c.due_at <= sa.func.now()).label("is_due")).where(
+        q = sa.select(timers, (timers.c.due_at <= db_now()).label("is_due")).where(
             timers.c.thread_id == thread_id, timers.c.timer_id == timer_id
         )
         return (await c.execute(q)).first()

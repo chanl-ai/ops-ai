@@ -20,7 +20,7 @@ from contextlib import contextmanager
 from pathlib import PurePosixPath
 from typing import Protocol
 
-from ops_ingest.parsers import MAX_FILE_BYTES, UnsupportedFormatError, detect_mime
+from ops_ingest.parsers import MAX_FILE_BYTES, UnreadableDeckError, UnsupportedFormatError, detect_mime
 from ops_ingest.parsers.ocr import WordOcr
 from ops_ingest.reading.images import IMAGE_MIMES, LOW_CONFIDENCE, Engines, ImageFile
 from ops_ingest.reading.models import (
@@ -63,7 +63,7 @@ def _mime(filename: str, mime_type: str | None) -> str:
     try:
         return detect_mime(filename, mime_type)
     except UnsupportedFormatError as exc:
-        raise ReadingError("unsupported_format", str(exc)) from exc
+        raise ReadingError(exc.code, str(exc)) from exc
 
 
 @contextmanager
@@ -91,8 +91,8 @@ def open_file(
     else:
         try:
             reader = ParsedFile(data, filename=filename, mime_type=mime)
-        except UnsupportedFormatError as exc:
-            raise ReadingError("unsupported_format", str(exc)) from exc
+        except (UnsupportedFormatError, UnreadableDeckError) as exc:
+            raise ReadingError(exc.code, str(exc)) from exc
     try:
         yield reader
     finally:

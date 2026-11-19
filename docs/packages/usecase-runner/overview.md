@@ -12,13 +12,13 @@ services keep pytest and the console keeps its own checks.
 | File | Does |
 |---|---|
 | `src/registry.ts` | Parses the Id, Service, Title, Layers, Status table in `docs/usecases/README.md`; refuses unknown layers, duplicate ids and malformed ids |
-| `src/layers.ts` | The layers (api, sdk, cli, ui) and when each is available: sdk once `packages/sdk-py` or `packages/sdk-ts` exists, cli once `packages/ops-cli` exists |
+| `src/layers.ts` | The layers (api, sdk, cli, ui) and when each is available: sdk once `sdk/python` or `sdk/typescript` exists, cli once `scripts/sample_team.py` exists |
 | `src/resolve.ts` | Use case and layer to `docs/usecases/<service>/scripts/test-<id>-<layer>.py` or `.mjs`, or the reason there is none |
 | `src/report.ts` | The output contract (`PASS <name>`, `FAIL <name>: <detail>`), the verdict, and the exit codes |
 | `src/run.ts` | Spawns a script: Python in the agents-service uv project with `docs/usecases/lib` on `PYTHONPATH`, Node with the repo's node; removes model keys unless `APPROVED_REAL_CALLS=<n>` |
 | `src/coverage.ts` | Per service: script, missing, not required, or not available yet, per layer |
 | `src/scaffold.ts` | `new`: next id, doc from the template, registry row, docs index row, and an api script that fails until it is written |
-| `src/harness.ts` | For Node (ui) scripts: checks, and `withUiStack`, which starts the agents service on the scripted model and a console dev server pointed at it |
+| `src/harness.ts` | For Node (ui) scripts: checks, and `withUiStack`, which starts the agents service on the scripted model and a console dev server pointed at it. Its `chromium` fails the run when a page reads the console's mock beside real services, unless the script called `expectSampleData(path)` |
 | `src/cli.ts` | `list`, `show`, `test`, `coverage`, `new` |
 
 ## Verdict and exit codes

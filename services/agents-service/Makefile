@@ -3,7 +3,7 @@
 # with `make -C services/agents-service <target>`; the root `make up` runs it in the background.
 STACK_SVC := agents
 include ../../make/service-common.mk
-.PHONY: install run worker test lint typecheck verify checks migrate clean db-up db-down standards sbom openapi openapi-check
+.PHONY: install run worker test lint typecheck verify checks migrate registry-tenant-preflight clean db-up db-down standards sbom openapi openapi-check
 
 export PYDANTIC_AI_NO_BANNER := 1
 
@@ -17,7 +17,7 @@ install: ## uv sync for the workspace
 	uv sync --frozen
 
 run: ## Serve in the foreground on :8700
-	uv run python -m ops_agents.api
+	$(call STACK_RUN,agents)
 
 worker: ## Workflow runner worker in the foreground: claims engine_work and runs v2 workflows (no port, no model)
 	uv run python -m ops_agents.api.worker
@@ -26,11 +26,11 @@ lint: ## ruff format check and lint
 	uv run ruff format --check $(PY_DIRS)
 	uv run ruff check $(PY_DIRS)
 
-typecheck: ## Strict pyright
-	uv run pyright $(TYPED_DIRS)
+typecheck: ## Strict pyright, test-file errors held to tests-typecheck-baseline.txt
+	uv run python $(ROOT)/scripts/check_tests_typecheck.py $(TYPED_DIRS)
 
-test: ## pytest on the test database (needs db-up)
-	$(TEST_DB) uv run pytest $(or $(T),tests)
+test: ## pytest on the test database (needs db-up); T= runs only those files, PAR=<n> on n workers
+	$(TEST_DB) uv run pytest $(PYTEST_PAR) $(or $(T),tests)
 
 loader-test: ## The embedded chat loader's rules in a real browser
 	node --test tests/loader/loader.browser.mjs
@@ -41,6 +41,9 @@ checks: lint typecheck loader-test standards openapi-check ## Everything verify 
 
 migrate: ## Alembic upgrade head
 	uv run alembic upgrade head
+
+registry-tenant-preflight: ## Teams the registry tenant migration cannot place (none, or two tenants); exit 1 when any
+	uv run python scripts/registry_tenant_preflight.py
 
 clean: ## Remove caches
 	rm -rf .pytest_cache .ruff_cache

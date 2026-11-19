@@ -26,15 +26,17 @@ Every repository module, generated from the code; `make python-verify` fails whe
 |---|---|---|---|---|
 | agents-service | `ops_agents.store.activity` | `Activity` | none | none |
 | agents-service | `ops_agents.store.actor_names` | `ActorNames` | none | none |
-| agents-service | `ops_agents.store.agent_registry` | `AgentRegistry` | CAS, TRANSACTION | `registry_agent_versions`, `registry_agents`, `registry_publish_requests` |
+| agents-service | `ops_agents.store.agent_registry` | `AgentRegistry` | CAS, TRANSACTION | `agent_skill_pins`, `registry_agent_versions`, `registry_agents`, `registry_publish_requests` |
+| agents-service | `ops_agents.store.api_key_copies` | `ApiKeyCopies` | CAS, TRANSACTION | `api_key_copies` |
 | agents-service | `ops_agents.store.background` | `BackgroundJobs` | RLS, TRANSACTION | `background_heartbeats`, `background_jobs` |
 | agents-service | `ops_agents.store.batches` | `Batches` | none | `run_batch_rows`, `run_batches` |
 | agents-service | `ops_agents.store.case_links` | `CaseLinks` | none | none |
 | agents-service | `ops_agents.store.case_types` | `CaseTypeStore` | CAS, TRANSACTION | `case_type_versions`, `case_types` |
 | agents-service | `ops_agents.store.cases` | `CaseStore` | TRANSACTION | `case_events`, `cases` |
 | agents-service | `ops_agents.store.channel_list` | `ChannelList` | none | none |
-| agents-service | `ops_agents.store.channels` | `ChannelStore` | CAS, TRANSACTION | `channel_cursors`, `channel_files`, `channel_messages`, `deployments`, `thread_inbox` |
+| agents-service | `ops_agents.store.channels` | `ChannelStore` | CAS, TRANSACTION | `channel_cursors`, `channel_messages`, `deployments`, `thread_inbox` |
 | agents-service | `ops_agents.store.chat_search` | none: no repository class | | `chat_search` |
+| agents-service | `ops_agents.store.evals` | `EvalStore` | TRANSACTION | `eval_cases`, `eval_runs` |
 | agents-service | `ops_agents.store.events` | `EventLog` | CAS | `thread_events` |
 | agents-service | `ops_agents.store.form_links` | `FormLinks` | none | `form_links` |
 | agents-service | `ops_agents.store.graphs` | `GraphStore` | CAS, TRANSACTION | `graph_runs`, `graph_threads`, `graph_versions` |
@@ -43,22 +45,26 @@ Every repository module, generated from the code; `make python-verify` fails whe
 | agents-service | `ops_agents.store.leases` | `Leases` | CAS, CLOCK, LOCK | `thread_leases` |
 | agents-service | `ops_agents.store.mailboxes` | `MailboxStore` | CAS | `mailboxes` |
 | agents-service | `ops_agents.store.memories` | `Memories` | TRANSACTION | `agent_memories`, `memory_audit`, `message_memory_use` |
-| agents-service | `ops_agents.store.model_calls` | `ModelCallLedger` | CAS | `model_call_records` |
+| agents-service | `ops_agents.store.model_calls` | `ModelCallLedger` | CAS | `model_call_records`, `model_call_records_unattributed` |
+| agents-service | `ops_agents.store.pin_users` | `PinUsers` | none | none |
 | agents-service | `ops_agents.store.poll_cursors` | `PollCursors` | none | `poll_cursors` |
 | agents-service | `ops_agents.store.review_assignments` | `ReviewAssignments` | none | `review_assignments` |
 | agents-service | `ops_agents.store.reviews` | `ReviewStore` | CAS, TRANSACTION | `review_approvals`, `review_decisions` |
 | agents-service | `ops_agents.store.service_events` | `ServiceEvents` | RLS, TRANSACTION | `service_events` |
+| agents-service | `ops_agents.store.skill_names` | `SkillNames` | none | none |
 | agents-service | `ops_agents.store.skills` | `SkillRegistry` | CAS, TRANSACTION | `registry_skill_versions`, `registry_skills` |
 | agents-service | `ops_agents.store.task_assists` | `TaskAssistStore` | CAS | `task_assists` |
 | agents-service | `ops_agents.store.task_types` | `TaskTypeStore` | CAS, TRANSACTION | `task_type_versions`, `task_types` |
 | agents-service | `ops_agents.store.team_defaults` | `TeamDefaults` | none | `team_default_agents` |
 | agents-service | `ops_agents.store.template_copies` | `TemplateCopies` | none | `template_copies` |
 | agents-service | `ops_agents.store.timers` | `TimerStore` | CAS, CLOCK, LOCK, TRANSACTION | `timers` |
+| agents-service | `ops_agents.store.tool_copies` | `ToolCopies` | CAS, TRANSACTION | `tool_catalog`, `tool_catalog_operations`, `tool_team_state` |
 | agents-service | `ops_agents.store.trigger_events` | `TriggerEvents` | none | `trigger_events` |
 | agents-service | `ops_agents.store.typed_records` | `VersionedRecords` | CAS, TRANSACTION | none |
-| agents-service | `ops_agents.store.usage` | `UsageLedger` | TRANSACTION | `thread_budgets` |
+| agents-service | `ops_agents.store.usage` | `UsageLedger` | TRANSACTION | `thread_budgets`, `thread_budgets_unattributed` |
 | agents-service | `ops_agents.store.widget_deployments` | `WidgetDeployments` | CAS | `widget_deployments` |
 | agents-service | `ops_agents.store.widget_keys` | none: no repository class | | `widget_mint_key_audit`, `widget_mint_keys` |
+| agents-service | `ops_agents.store.widget_picker` | `WidgetPicker` | none | none |
 | agents-service | `ops_agents.store.widgets` | `WidgetRegistry` | CAS, TRANSACTION | `registry_widget_versions`, `registry_widgets` |
 | agents-service | `ops_agents.store.workflow_registry` | `WorkflowRegistry` | CAS | `registry_validations`, `registry_workflow_versions`, `registry_workflows` |
 | documents-service | `ops_documents.store.document_types` | none: no repository class | | `document_type_examples`, `document_type_samples`, `document_type_tests`, `document_type_versions`, `document_types` |
@@ -70,29 +76,34 @@ Every repository module, generated from the code; `make python-verify` fails whe
 | files-service | `ops_files.store.settings` | none: no repository class | | `storage_credentials`, `storage_settings`, `storage_settings_audit` |
 | kb-service | `ops_kb.store.knowledge` | `KnowledgeStore` | TRANSACTION | `kb_base_sources`, `kb_bases`, `kb_changes`, `kb_chunks`, `kb_item_versions`, `kb_items`, `kb_outbox`, `kb_retired_bases`, `kb_runs`, `kb_sources`, `kb_unit_vectors`, `kb_units` |
 | models-service | `ops_models.store.aliases` | `Aliases` | CAS, TRANSACTION | none |
-| models-service | `ops_models.store.calls` | `CallLog` | CLOCK | none |
+| models-service | `ops_models.store.calls` | `KeySpend` | CAS, TRANSACTION | none |
 | models-service | `ops_models.store.keys` | `ModelKeys` | CAS, TRANSACTION | none |
 | models-service | `ops_models.store.provider_keys` | `ProviderKeyStore` | CAS, TRANSACTION | none |
 | models-service | `ops_models.store.providers` | `Providers` | CAS | none |
-| models-service | `ops_models.store.tables` | none: no repository class | | `model_aliases`, `model_call_log`, `model_key_tenants`, `model_keys`, `provider_connections`, `provider_keys` |
+| models-service | `ops_models.store.tables` | none: no repository class | | `model_aliases`, `model_call_log`, `model_calls_untenanted`, `model_key_spend`, `model_key_tenants`, `model_keys`, `provider_connections`, `provider_keys` |
 | platform-service | `ops_platform.store.audit` | `AuditLog` | RLS | none |
 | platform-service | `ops_platform.store.audit` | `TeamNameAudit` | RLS, TRANSACTION | none |
 | platform-service | `ops_platform.store.holders` | `HolderStore` | RLS | none |
 | platform-service | `ops_platform.store.identity` | `IdentityStore` | CAS, RLS, TRANSACTION | none |
 | platform-service | `ops_platform.store.keys` | `KeyStore` | RLS, TRANSACTION | none |
 | platform-service | `ops_platform.store.lifecycle` | `LifecycleStore` | RLS, TRANSACTION | none |
+| platform-service | `ops_platform.store.me` | `MeStore` | RLS, TRANSACTION | none |
 | platform-service | `ops_platform.store.members` | `TeamStore` | LOCK, RLS, TRANSACTION | none |
 | platform-service | `ops_platform.store.policies` | `PolicyStore` | TRANSACTION | none |
 | platform-service | `ops_platform.store.roles` | `RoleStore` | RLS, TRANSACTION | none |
 | platform-service | `ops_platform.store.signin` | `SignInStore` | CAS, RLS, TRANSACTION | none |
 | platform-service | `ops_platform.store.signin_secrets` | `SignInSecretStore` | LOCK, RLS, TRANSACTION | none |
-| platform-service | `ops_platform.store.tables` | none: no repository class | | `api_keys`, `audit_entries`, `members`, `password_credentials`, `password_resets`, `platform_outbox`, `policies`, `role_assignments`, `role_permissions`, `roles`, `sessions`, `signin_domains`, `signin_email_failures`, `signin_flows`, `signin_identities`, `signin_lockouts`, `signin_providers`, `signin_secrets`, `teams`, `tenants`, `users` |
+| platform-service | `ops_platform.store.tables` | none: no repository class | | `api_keys`, `audit_entries`, `members`, `oauth_address_counts`, `oauth_clients`, `password_credentials`, `password_resets`, `platform_outbox`, `policies`, `role_assignments`, `role_permissions`, `roles`, `sessions`, `signin_break_glass`, `signin_certificates`, `signin_domains`, `signin_email_failures`, `signin_flows`, `signin_grants`, `signin_group_rules`, `signin_identities`, `signin_lockouts`, `signin_providers`, `signin_secrets`, `teams`, `tenants`, `users` |
 | platform-service | `ops_platform.store.teams` | `TeamAdminStore` | RLS, TRANSACTION | none |
 | platform-service | `ops_platform.store.workspace` | `WorkspaceStore` | RLS, TRANSACTION | none |
+| tools-service | `ops_tools.store.app_cards` | `AppCards` | LOCK, TRANSACTION | `app_cards` |
 | tools-service | `ops_tools.store.calls` | `CallLog` | CAS, TRANSACTION | `gateway_calls`, `gateway_fences` |
+| tools-service | `ops_tools.store.catalog` | `ToolCatalog` | CAS, TRANSACTION | none |
 | tools-service | `ops_tools.store.connections` | `ConnectionStore` | CAS, TRANSACTION | `app_credentials`, `connect_links`, `connection_audit`, `connection_tokens`, `connections`, `oauth_states` |
 | tools-service | `ops_tools.store.egress` | `EgressStore` | TRANSACTION | `egress_audit`, `egress_hosts`, `egress_ranges` |
+| tools-service | `ops_tools.store.mcp_links` | `McpLinks` | CAS | `mcp_links` |
 | tools-service | `ops_tools.store.mocks` | `MockStore` | TRANSACTION | none |
+| tools-service | `ops_tools.store.module_list` | `ModuleList` | none | none |
 | tools-service | `ops_tools.store.modules` | `ModuleStore` | CAS, TRANSACTION | `module_approvals`, `module_egress_hosts`, `module_operations`, `module_versions`, `operation_mocks`, `service_outbox`, `tool_modules` |
 | tools-service | `ops_tools.store.plugin_bindings` | `PluginBindings` | CAS | `plugin_bindings` |
 | tools-service | `ops_tools.store.rate_windows` | `RateWindows` | CAS | `operation_rate_windows` |
@@ -135,11 +146,10 @@ The columns those chains added that change a guarantee:
 | `ops_checkpoint_fences` | agents-service, `ops_checkpointer` | Highest lease generation seen per thread; RLS forced | 0008 |
 | `thread_leases` | agents-service | Lease per thread with generation; released rows kept so the count never restarts | 0005, 0008 |
 | `timers` | agents-service | SLA timers with fenced claims, attempts and failure | 0007, 0009 |
-| `deployments` | agents-service | Graph, channel, paused, multitask, default `budget` (JSON) for new threads, and `team_id`, the team that owns the deployment (empty for rows made earlier, which only an admin changes) | 0010, 0013, 0037 |
+| `deployments` | agents-service | Graph, channel, paused, multitask, default `budget` (JSON) for new threads, and `team_id`, the team that owns the deployment (empty for rows made earlier; no permission cell covers a row with no team) | 0010, 0013, 0037 |
 | `channel_messages` | agents-service | Ledger of handled channel messages per deployment and message key | 0010 |
 | `channel_cursors` | agents-service | Mailbox delta link per deployment, saved after the last page | 0010 |
 | `thread_inbox` | agents-service | Input queued for a busy thread, unique per message key, with `seq` and delivery time | 0010 |
-| `channel_files` | agents-service | Attachment bytes from the mailbox, by file id and SHA-256; stands in for files-service | 0010 |
 | `review_approvals` | agents-service today; the `ops_hitl` package by design | One approval per person per step, with the input hash it approved | 0006 |
 | `review_decisions` | agents-service today; the `ops_hitl` package by design | One decision per paused interrupt, recorded before the resume: decision, reason, who, the review as shown, attempts, resume run id, `resumed_at`, `step_up_ref` (a fingerprint of the verified step-up a money decision was made under, never the token; 0022) | 0012 |
 | `usage_records` | agents-service; models-service by design | One row per model call: thread, run, node, kind, model alias, calls, input and output tokens, `cost_micros`. Written as each call returns, outside the checkpoint and unfenced | 0013 |
@@ -158,6 +168,21 @@ The tools-service tables sit in agents-service's Alembic history and tools-servi
 Splitting migrations per service is a later step in [service-map.md](service-map.md). Databases that once ran the
 psycopg saver still hold LangGraph's `checkpoints`, `checkpoint_writes`, `checkpoint_blobs` and
 `checkpoint_migrations`; threads there do not carry over, and the tables can be dropped once nothing reads them.
+
+### Catalogue events
+
+What tools-service's outbox and `GET /v1/tool-catalog` carry for agents-service's tool catalogue copy
+(`packages/ops_store/src/ops_store/outbox.py`).
+Each is written in the transaction of the write it reports (`ops_tools.store.modules.report_module`) and keyed
+`<id>@<revision>`; the resync returns the same payloads. Every event names its tenant and team; none carries a secret,
+a credential or a person's state of an app. Fields are added with defaults; a payload model refuses fields it does not
+name, so a receiver deploys before its sender.
+
+| Event | Key; revision | Fields | Team |
+|---|---|---|---|
+| `tool.module.published`, `tool.module.changed` | module id; module revision | `id`, `name`, `title`, `app`, `ownerTeam`, `status`, `version`, `templateKind` (builtin, plugin, custom), `appCardId`, `deleted`, `truncated` (over 16,384 bytes: no operations, not applied by a receiver); per operation `id`, `name`, `title`, `description` (at most 500 characters), `access`, `requiresApproval`, `enabled` | the module's, or the acting team for a workspace-level one |
+| `tool.team_state.changed`, `via: approval` | `approval:<module>` per team; module revision | `moduleId`, `operations`, `expiresAt`, `deleted` | the granted team |
+| `tool.team_state.changed`, `via: added` | `added:<module>` per team; the team state's own revision | `moduleId`, `operations` (names added), `waits` (added names whose answer waits), `deleted`. Model only: no sender yet | the team |
 
 ## What the checkpointer package ships
 

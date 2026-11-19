@@ -338,12 +338,12 @@ export function StartWorkflowRunDialog({ open, onOpenChange, file, source, fileS
           onStart={async (input, mode) => {
             const run = await startDefinition({ workflowId: view.workflowId, input, mode });
             close();
-            router.push(`/workflows/runs/${run.runId}`);
+            router.push(`/build/runs/${run.runId}`);
           }}
           onStartForm={async (values, mode) => {
             const run = await startByForm({ workflowId: view.workflowId, values, mode });
             close();
-            router.push(`/workflows/runs/${run.runId}`);
+            router.push(`/build/runs/${run.runId}`);
           }}
         />
       )}

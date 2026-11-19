@@ -44,7 +44,7 @@ class Files:
 
 
 def test_start_run_asks_for_a_file_and_the_definition_passes() -> None:
-    form = start_form(EXTRACT, default_registry())
+    form: dict[str, Any] | None = start_form(EXTRACT, default_registry())
     assert form is not None and form["takesFiles"] is True
     assert form["schema"]["required"] == ["fileId"]
     assert form["schema"]["properties"]["fileId"]["format"] == "file"

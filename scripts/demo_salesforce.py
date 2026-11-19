@@ -25,6 +25,7 @@ import os
 import re
 import shutil
 import signal
+import ssl
 import subprocess
 import sys
 import time
@@ -186,7 +187,14 @@ def fake_info() -> dict[str, Any] | None:
     try:
         os.kill(int(info["owner"]), 0)
         url = urlsplit(str(info["control"]))
-        got = httpx.get(str(info["control"]), headers={"Host": "login.salesforce.test"}, verify=False, timeout=5)
+        # The fake answers on the machine's address with a certificate for its own host names, so the CA is trusted
+        # and the certificate is checked against that name through SNI.
+        with httpx.Client(verify=ssl.create_default_context(cafile=str(info["ca"])), timeout=5) as client:
+            got = client.get(
+                str(info["control"]),
+                headers={"Host": "login.salesforce.test"},
+                extensions={"sni_hostname": "login.salesforce.test"},
+            )
         if got.status_code != 200 or not url.hostname:
             return None
     except (OSError, httpx.HTTPError):
@@ -307,14 +315,14 @@ def model_alias() -> None:
 
     token = mint_service_token(dev_service_signer(), service="agents", audience="models", tenant_id="team_ops")
     with httpx.Client(base_url=MODELS, headers={"Authorization": f"Bearer {token}"}, timeout=20) as m:
-        providers = data(m.get("/v1/models/providers"), "model providers")
+        providers = data(m.get("/v1/models/providers", params={"search": DEMO_PROVIDER}), "model providers")["data"]
         found = next((p for p in providers if p["name"] == DEMO_PROVIDER), None)
         if found is None:
             body = {"name": DEMO_PROVIDER, "type": "openai-compatible", "baseUrl": FAKE_MODEL}
             found = data(m.post("/v1/models/providers", json=body), "fake model connection")
             say("MADE", f"model connection {DEMO_PROVIDER} to the fake model")
         if m.get(f"/v1/models/aliases/{DEMO_ALIAS}/versions").status_code == 404:
-            chat = data(m.get("/v1/models/aliases/default/versions"), "default alias")[-1]
+            chat = data(m.get("/v1/models/aliases", params={"ids": "default"}), "default alias")["data"][0]
             body = {"name": DEMO_ALIAS, "kind": "chat", "providerId": found["id"], "modelId": DEMO_ALIAS}
             body |= {"clearedSensitivity": chat["clearedSensitivity"], "inputPerMillion": "0", "outputPerMillion": "0"}
             data(m.post("/v1/models/aliases", json=body), "demo alias")

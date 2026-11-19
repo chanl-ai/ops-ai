@@ -13,6 +13,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol, cast
 
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
+from ops_service_kit.http import Json
 from ops_service_kit.logging import get_logger
 from ops_store import background, isolation
 from ops_store.background import HeartbeatStore
@@ -51,7 +52,7 @@ class PlatformRetention:
         if self.platform is None:
             return None
         try:
-            value: Any = cast(dict[str, Any], await self.platform.get(f"/v1/policies/{POLICY}") or {}).get("value")
+            value: Any = cast(Json, await self.platform.get(f"/v1/policies/{POLICY}") or {}).get("value")
         except (ServiceCallError, ServiceUnreachable) as e:
             log.warning("retention policy unread; keeping memories", extra={"error": str(e)})
             return None

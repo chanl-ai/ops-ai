@@ -169,8 +169,8 @@ email, or **Team account**.
 
 ## Approvals
 
-Approvals are off until your team turns them on. With them off, a write runs without waiting for a person. A team turns
-them on in **Settings › Policies**, three ways:
+A write waits for a person by default, unless its Tool is set to run at once. A team admin can make more writes wait in
+**Settings › Policies**, three ways:
 
 | Policy | What waits |
 |---|---|
@@ -178,8 +178,9 @@ them on in **Settings › Policies**, three ways:
 | Apps whose writes need approval | Writes from the Apps you pick; search for an App and add it |
 | A Tool's own approval switch, on its page under **Access and approval** | Writes of that one Tool |
 
-A write that waits becomes a Human Task. A person who decides your team's reviews is not asked to approve their own
-write, unless your workspace has someone else decide every request.
+A write that waits becomes a Human Task. The person who asked does not decide it unless a team admin turns on **Requester
+may decide** in Settings › Policies (off by default). Who may decide at all is the approve permission on a role. See
+[Approval settings](security-and-governance.md#approval-settings).
 
 ## A run waiting for a person
 

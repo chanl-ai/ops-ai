@@ -231,6 +231,14 @@ export interface PluginSpec {
 }
 
 /**
+ * Whether turning a plugin's app on asks nothing: it signs in to nothing (every kind it offers is `none`) and has no
+ * setting the team types. Turn on then saves at once, with no form; a key, a token or a setting always gets one.
+ */
+export function asksNothing(plugin: { kinds: readonly string[]; settings: readonly { locked: boolean }[] }): boolean {
+  return plugin.kinds.length > 0 && plugin.kinds.every((k) => k === 'none') && plugin.settings.every((s) => s.locked);
+}
+
+/**
  * A plugin account's groups of fields. A kind that signs in asks only for the settings each account keeps its own (a
  * sandbox's sign-in address): its OAuth client is an app credential, picked, never typed here. Any other kind asks
  * for its own fields, which the plugin keeps as the account's credentials. The system's address and test address come
@@ -272,6 +280,15 @@ export function pluginKeys(kind: Kind, plugin: PluginSpec, client: Client, draft
 }
 
 /** The `PUT /v1/apps/plugin:{id}/team` body that turns the plugin on with its default account's draft. */
+/**
+ * Whose account a first turn-on preselects: the team's wherever the app offers it, so nobody is asked for their own
+ * sign-in before their first call; each person signing in stays a choice in the window and on the app's settings.
+ */
+export function firstSignIn(offered: readonly string[]): 'team' | 'person' | 'person_or_team' {
+  const first = offered.includes('team') ? 'team' : offered[0];
+  return first === 'person' || first === 'person_or_team' ? first : 'team';
+}
+
 export function turnOnBody(
   kind: Kind,
   plugin: PluginSpec,

@@ -7,6 +7,7 @@ export const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 export const PASSWORD = 'northfield-demo';
 export const JAMES = 'j.richardson@harborpine.example';
 export const PRIYA = 'p.shah@harborpine.example';
+const WORKSPACE_ADMIN = 'w.kamau@harborpine.example';
 export const MAYA = 'm.okafor@harborpine.example';
 const SETTLED = ['succeeded', 'failed', 'cancelled'];
 
@@ -25,8 +26,21 @@ export async function as(email, team = 'team_ops') {
  * default (2026-11-01), so a use case proving a held chat or workflow write turns them on first.
  */
 export async function writeApprovalsOn(team = 'team_ops') {
-  const r = await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/policies/toolWritesNeedApproval`, { method: 'PUT', headers: await as(PRIYA, team), body: JSON.stringify({ value: true }) });
+  // The value is stored for the team the request acts in (X-Team-Id), and changing it needs settings.manage in the
+  // Security team: the workspace admin holds both in every team. Sam acting in team_security turns it on for Security only.
+  const r = await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/policies/toolWritesNeedApproval`, { method: 'PUT', headers: await as(WORKSPACE_ADMIN, team), body: JSON.stringify({ value: true }) });
   if (!r.ok) throw new Error(`turning write approvals on for ${team}: ${r.status} ${(await r.text()).slice(0, 200)}`);
+}
+
+/**
+ * Turns publish review on for `team` (publishReview), as Priya, its admin, does in Settings › Policies. Reviews are
+ * optional and a new workspace publishes at once, so a use case proving a publish that waits for a reviewer turns them
+ * on first. `areas` maps an area (agents, workflows, ...) to a mode (always, major, never). A policy change refuses
+ * every token issued before it, so sign people in after this call.
+ */
+export async function publishReviewOn(areas, team = 'team_ops') {
+  const r = await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/policies/publishReview`, { method: 'PUT', headers: await as(PRIYA, team), body: JSON.stringify({ value: areas }) });
+  if (!r.ok) throw new Error(`turning publish review on for ${team}: ${r.status} ${(await r.text()).slice(0, 200)}`);
 }
 
 /** Polls `probe` once a second until it returns something truthy, or `seconds` pass (then undefined). */
@@ -40,7 +54,8 @@ export async function until(probe, seconds = 90) {
 
 async function call(method, path, headers, body) {
   const r = await fetch(`${agents}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-  return { status: r.status, data: (await r.json().catch(() => ({}))).data };
+  const reply = await r.json().catch(() => ({}));
+  return { status: r.status, data: reply.data, error: reply.error };
 }
 
 /** Saves a workflow from YAML or a definition object and asks to publish it; `live` is true once it is approved. */
@@ -54,7 +69,7 @@ export async function saveAndPublish(headers, source) {
 /** Starts `workflowId` with `input` and returns its run id. */
 export async function start(headers, workflowId, input, extra = {}) {
   const r = await call('POST', '/v1/runs', headers, { workflowId, input, ...extra });
-  if (!r.data?.runId) throw new Error(`starting ${workflowId}: ${r.status} ${JSON.stringify(r.data).slice(0, 300)}`);
+  if (!r.data?.runId) throw new Error(`starting ${workflowId}: ${r.status} ${JSON.stringify(r.data ?? r.error ?? null).slice(0, 300)}`);
   return r.data.runId;
 }
 

@@ -38,7 +38,7 @@ async def test_a_producers_retry_finds_the_case_it_opened(store: CaseStore) -> N
     again = await store.open(
         team_id="team_ops", subject="Dispute W-88213", priority="high", by=ANA, producer_key="run:1"
     )
-    assert first.created and not again.created and again.case["id"] == first.case["id"]
+    assert first.created and not again.created and again.case.id == first.case.id
     other = await store.open(team_id="team_fraud", subject="x", priority="low", by=ANA, producer_key="run:1")
     assert other.created, "the key is per team"
 
@@ -46,7 +46,7 @@ async def test_a_producers_retry_finds_the_case_it_opened(store: CaseStore) -> N
 async def test_another_teams_case_is_not_found_or_listed(store: CaseStore) -> None:
     case = (await store.open(team_id="team_fraud", subject="x", priority="low", by=ANA)).case
     with pytest.raises(CaseNotFound):
-        await store.get(case["id"], ["team_ops"])
+        await store.get(case.id, ["team_ops"])
     assert (await store.list(["team_ops"]))[1] == 0
     assert (await store.list(["team_fraud"]))[1] == 1
 
@@ -55,27 +55,27 @@ async def test_waiting_on_the_customer_pauses_both_deadlines_and_any_other_statu
     store: CaseStore,
 ) -> None:
     case = (await store.open(team_id="team_ops", subject="x", priority="normal", by=ANA, now=T0)).case
-    response, resolution = case["response_due_at"], case["resolution_due_at"]
-    await store.change(case["id"], {"status": "waiting_on_customer"}, by=ANA, now=T0 + timedelta(hours=1))
+    response, resolution = case.response_due_at, case.resolution_due_at
+    await store.change(case.id, {"status": "waiting_on_customer"}, by=ANA, now=T0 + timedelta(hours=1))
     overdue = await store.list(["team_ops"], overdue=True, now=T0 + timedelta(days=10))
     assert overdue[1] == 0, "a paused case is not overdue"
-    after = await store.change(case["id"], {"status": "open"}, by=ANA, now=T0 + timedelta(hours=3))
+    after = await store.change(case.id, {"status": "open"}, by=ANA, now=T0 + timedelta(hours=3))
 
     def moved(s: str) -> datetime:
         return datetime.fromisoformat(s.replace("Z", "+00:00"))
 
-    assert moved(after["response_due_at"]) - moved(response) == timedelta(hours=2)
-    assert moved(after["resolution_due_at"]) - moved(resolution) == timedelta(hours=2)
-    assert after["paused_since"] is None
+    assert moved(after.response_due_at) - moved(response) == timedelta(hours=2)
+    assert moved(after.resolution_due_at) - moved(resolution) == timedelta(hours=2)
+    assert after.paused_since is None
 
 
 async def test_each_field_change_is_on_the_timeline_and_a_link_is_recorded_once(store: CaseStore) -> None:
     a = (await store.open(team_id="team_ops", subject="a", priority="low", by=ANA)).case
     b = (await store.open(team_id="team_ops", subject="b", priority="low", by=ANA)).case
-    await store.change(a["id"], {"assignee": "sam@harborpine.example", "priority": "urgent"}, by=ANA)
-    await store.change(a["id"], {"priority": "urgent"}, by=ANA)
-    await store.link(a["id"], b["id"], by=ANA)
-    await store.link(b["id"], a["id"], by=ANA)
-    kinds = [(e["kind"], e["detail"].get("field")) for e in await store.events(a["id"])]
+    await store.change(a.id, {"assignee": "sam@harborpine.example", "priority": "urgent"}, by=ANA)
+    await store.change(a.id, {"priority": "urgent"}, by=ANA)
+    await store.link(a.id, b.id, by=ANA)
+    await store.link(b.id, a.id, by=ANA)
+    kinds = [(e.kind, e.detail.get("field")) for e in await store.events(a.id)]
     assert kinds == [("opened", None), ("field", "assignee"), ("field", "priority"), ("link", None)]
-    assert [e["kind"] for e in await store.events(b["id"])] == ["opened", "link"]
+    assert [e.kind for e in await store.events(b.id)] == ["opened", "link"]

@@ -36,6 +36,9 @@ from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_mo
 from tests.engine.test_email_trigger_binding import email_workflow
 from tests.engine.test_lifecycle_rights import BUILDER, TENANT, VIEWER, introspect, jwks, person
 
+from .connections import Request, connections
+from .test_reply_pins import FIXTURES, answer, compare
+
 OTHER_TEAM = person("omar", "team_fraud", "builder")
 GMAIL: dict[str, Any] = {
     "name": "Levy intake",
@@ -196,3 +199,50 @@ async def test_tools_service_reads_its_teams_mailbox_by_address_and_nothing_else
     blind = service("tools", ["workflows:view"])
     r = await stack.c.get("/v1/channels/mailboxes", params={"address": GMAIL["address"]}, headers=blind)
     assert r.status_code == 403, r.text
+
+
+OTHER = GMAIL | {"name": "Disputes", "address": "disputes@gmail.com"}
+
+
+async def test_mailbox_routes_keep_every_reply_and_error(stack: Stack) -> None:
+    """Every mailbox route's reply, status and error object, the two that refuse a write included: an address taken
+    by a create or an edit answers 409 and stores nothing."""
+    c = stack.c
+    first = (await stack.connect()).json()["data"]["id"]
+    second = (await stack.connect(OTHER)).json()["data"]["id"]
+    rows: list[tuple[str, str, str, dict[str, Any] | None, dict[str, str]]] = [
+        ("list", "GET", "/v1/channels/mailboxes", None, VIEWER),
+        ("list.search", "GET", "/v1/channels/mailboxes?search=disp", None, VIEWER),
+        ("list.address", "GET", "/v1/channels/mailboxes?address=DISPUTES@gmail.com", None, VIEWER),
+        ("list.otherTeam", "GET", "/v1/channels/mailboxes", None, OTHER_TEAM),
+        ("connect.taken", "POST", "/v1/channels/mailboxes", GMAIL, BUILDER),
+        ("connect.viewer", "POST", "/v1/channels/mailboxes", GMAIL | {"address": "v@gmail.com"}, VIEWER),
+        ("connect.unknownField", "POST", "/v1/channels/mailboxes", GMAIL | {"password": "x"}, BUILDER),
+        ("connect.graphIncomplete", "POST", "/v1/channels/mailboxes", GMAIL | {"provider": "graph"}, BUILDER),
+        ("get", "GET", f"/v1/channels/mailboxes/{first}", None, VIEWER),
+        ("get.missing", "GET", "/v1/channels/mailboxes/mbx_missing1", None, VIEWER),
+        ("get.otherTeam", "GET", f"/v1/channels/mailboxes/{first}", None, OTHER_TEAM),
+        ("edit", "PATCH", f"/v1/channels/mailboxes/{first}", {"name": "Levies", "folder": "levies"}, BUILDER),
+        ("edit.addressTaken", "PATCH", f"/v1/channels/mailboxes/{first}", {"address": OTHER["address"]}, BUILDER),
+        ("edit.viewer", "PATCH", f"/v1/channels/mailboxes/{first}", {"name": "Mine"}, VIEWER),
+        ("edit.unknownField", "PATCH", f"/v1/channels/mailboxes/{first}", {"paused": True}, BUILDER),
+        ("test.noTools", "POST", f"/v1/channels/mailboxes/{second}/test", None, BUILDER),
+        ("test.unsavedNoTools", "POST", "/v1/channels/mailboxes/test", GMAIL, BUILDER),
+        ("listAfter", "GET", "/v1/channels/mailboxes", None, VIEWER),
+    ]
+    seen = {name: answer(await c.request(m, path, json=body, headers=who)) for name, m, path, body, who in rows}
+    # A refusal names the generated id in its message, which the scrub leaves alone.
+    named = json.dumps(seen).replace(first, "<first>").replace(second, "<second>")
+    compare(json.loads(named), FIXTURES / "reply-pins-mailboxes.json")
+
+
+async def test_local_mailbox_routes_answer_in_one_transaction(stack: Stack) -> None:
+    mid = (await stack.connect()).json()["data"]["id"]
+    requests: list[Request] = [
+        ("GET", "/v1/channels/mailboxes", None, BUILDER),
+        ("POST", "/v1/channels/mailboxes", OTHER, BUILDER),
+        ("GET", f"/v1/channels/mailboxes/{mid}", None, BUILDER),
+        ("PATCH", f"/v1/channels/mailboxes/{mid}", {"name": "Levies"}, BUILDER),
+    ]
+    expected = [(m, p, 201 if m == "POST" else 200, 1) for m, p, _, _ in requests]
+    assert await connections(stack.c, requests) == expected

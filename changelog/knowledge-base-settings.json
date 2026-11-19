@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-13",
+  "title": "Knowledge bases keep answer, sync and source settings",
+  "description": "A knowledge base now keeps what it gives back, how syncs treat changes and removals, how new sources split and its MCP tool name, all filled by the starting preset and editable afterwards. Its search filters by collection, source, tag and metadata, and a base can hold synced changes for review.",
+  "tag": "new"
+}

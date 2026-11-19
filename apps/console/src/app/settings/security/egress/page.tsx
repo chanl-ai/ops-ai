@@ -53,7 +53,7 @@ function hostColumns(canEdit: boolean, onRemove: (v: string) => void): ColumnDef
           <div className="flex flex-wrap gap-1">
             {row.original.modules.map((m) => (
               <Badge key={m.id} variant="outline" className="text-xs font-normal" asChild>
-                <Link href={`/tools/${encodeURIComponent(m.id)}`}>{m.name}</Link>
+                <Link href={`/data/tools/${encodeURIComponent(m.id)}`}>{m.name}</Link>
               </Badge>
             ))}
           </div>

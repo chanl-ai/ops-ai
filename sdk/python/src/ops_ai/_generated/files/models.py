@@ -83,6 +83,17 @@ class FileData(TypedDict, closed=True):
     fieldsToCheck: int
     path: Literal["template", "model"]
     readAt: str
+    templateId: str | None
+    typeId: str | None
+    typeName: str | None
+    version: int | None
+
+
+class FileDataIn(TypedDict, closed=True):
+    extractionId: str
+    fieldsToCheck: int
+    path: Literal["template", "model"]
+    readAt: str
     templateId: NotRequired[str | None]
     typeId: NotRequired[str | None]
     typeName: NotRequired[str | None]
@@ -91,8 +102,8 @@ class FileData(TypedDict, closed=True):
 
 class FileReference(TypedDict, closed=True):
     addedAt: str
-    blocked: NotRequired[str | None]
-    href: NotRequired[str | None]
+    blocked: str | None
+    href: str | None
     id: str
     name: str
     type: Literal[
@@ -110,48 +121,14 @@ class FileReference(TypedDict, closed=True):
 class FileRetention(TypedDict, closed=True):
     classId: str
     className: str
-    deleteAfter: NotRequired[str | None]
-
-
-class FileRow(TypedDict, closed=True):
-    data: NotRequired[FileData | None]
-    digest: str
-    id: str
-    immutable: bool
-    legalHold: NotRequired[dict[str, Any] | None]
-    mime: str
-    name: str
-    purpose: Literal[
-        "knowledge_source",
-        "chat_attachment",
-        "case_attachment",
-        "document_type_sample",
-        "email_body",
-        "knowledge_snapshot",
-        "test_import",
-        "evidence_bundle",
-        "export",
-        "tool_spec",
-        "avatar",
-    ]
-    referenceCount: int
-    retention: dict[str, Any]
-    scan: dict[str, Any]
-    sensitivity: str
-    sensitivitySuggested: bool
-    size: int
-    storage: NotRequired[dict[str, Any] | None]
-    team: str
-    uploadedAt: str
-    uploadedBy: str
-    versionCount: int
+    deleteAfter: str | None
 
 
 class FileScan(TypedDict, closed=True):
-    at: NotRequired[str | None]
-    detail: NotRequired[str | None]
-    engine: NotRequired[str | None]
-    status: NotRequired[Literal["pending", "clean", "infected", "failed"]]
+    at: str | None
+    detail: str | None
+    engine: str | None
+    status: Literal["pending", "clean", "infected", "failed"]
 
 
 class FileVersion(TypedDict, closed=True):
@@ -225,7 +202,42 @@ class PurposeLimit(TypedDict, closed=True):
     ]
 
 
+class PurposeLimitIn(TypedDict, closed=True):
+    allowedTypes: list[str]
+    maxSizeMb: int
+    purpose: Literal[
+        "knowledge_source",
+        "chat_attachment",
+        "case_attachment",
+        "document_type_sample",
+        "email_body",
+        "knowledge_snapshot",
+        "test_import",
+        "evidence_bundle",
+        "export",
+        "tool_spec",
+        "avatar",
+    ]
+
+
 class PurposeRetention(TypedDict, closed=True):
+    purpose: Literal[
+        "knowledge_source",
+        "chat_attachment",
+        "case_attachment",
+        "document_type_sample",
+        "email_body",
+        "knowledge_snapshot",
+        "test_import",
+        "evidence_bundle",
+        "export",
+        "tool_spec",
+        "avatar",
+    ]
+    retentionClass: str
+
+
+class PurposeRetentionIn(TypedDict, closed=True):
     purpose: Literal[
         "knowledge_source",
         "chat_attachment",
@@ -278,6 +290,12 @@ class ReferenceIn(TypedDict, closed=True):
     ]
 
 
+class RetentionClassView(TypedDict, closed=True):
+    days: int | None
+    id: str
+    name: str
+
+
 class ScanResultIn(TypedDict, closed=True):
     detail: NotRequired[str | None]
     engine: str
@@ -293,14 +311,40 @@ class Skipped(TypedDict, closed=True):
 class StorageLocation(TypedDict, closed=True):
     backend: Literal["s3", "azure_blob", "local"]
     container: str
-    encryption: NotRequired[str]
+    encryption: str
     environment: Literal["dev", "test", "prod"]
     key: str
-    locked: NotRequired[bool]
-    region: NotRequired[str]
+    locked: bool
+    region: str
 
 
 class StorageTarget(TypedDict, closed=True):
+    backend: Literal["local", "s3", "azure_blob"]
+    container: str
+    credential: str
+    encryption: str
+    endpoint: str
+    purpose: (
+        Literal[
+            "knowledge_source",
+            "chat_attachment",
+            "case_attachment",
+            "document_type_sample",
+            "email_body",
+            "knowledge_snapshot",
+            "test_import",
+            "evidence_bundle",
+            "export",
+            "tool_spec",
+            "avatar",
+        ]
+        | Literal["default"]
+    )
+    region: str
+    uploadPath: Literal["direct", "proxy"]
+
+
+class StorageTargetIn(TypedDict, closed=True):
     backend: Literal["local", "s3", "azure_blob"]
     container: str
     credential: NotRequired[str]
@@ -397,15 +441,15 @@ class EnvelopeUploadTicket(TypedDict, closed=True):
 
 
 class FileDetail(TypedDict, closed=True):
-    canDelete: NotRequired[bool | None]
-    canEdit: NotRequired[bool | None]
-    canPublish: NotRequired[bool | None]
-    data: NotRequired[FileData | None]
-    deleteBlockedBy: NotRequired[str | None]
-    digest: NotRequired[str]
+    canDelete: bool | None
+    canEdit: bool | None
+    canPublish: bool | None
+    data: FileData | None
+    deleteBlockedBy: str | None
+    digest: str
     id: str
-    immutable: NotRequired[bool]
-    legalHold: NotRequired[LegalHold | None]
+    immutable: bool
+    legalHold: LegalHold | None
     mime: str
     name: str
     purpose: Literal[
@@ -421,26 +465,53 @@ class FileDetail(TypedDict, closed=True):
         "tool_spec",
         "avatar",
     ]
-    referenceCount: NotRequired[int]
-    references: NotRequired[list[FileReference]]
+    referenceCount: int
+    references: list[FileReference]
     retention: FileRetention
-    scan: NotRequired[FileScan]
-    sensitivity: NotRequired[Literal["public", "internal", "confidential", "restricted"]]
-    sensitivitySuggested: NotRequired[bool]
+    scan: FileScan
+    sensitivity: Literal["public", "internal", "confidential", "restricted"]
+    sensitivitySuggested: bool
     size: int
-    storage: NotRequired[StorageLocation | None]
+    storage: StorageLocation | None
     team: str
     uploadedAt: str
     uploadedBy: str
-    versionCount: NotRequired[int]
-    versions: NotRequired[list[FileVersion]]
+    versionCount: int
+    versions: list[FileVersion]
 
 
-class FileList(TypedDict, closed=True):
-    data: list[FileRow]
-    facets: dict[str, dict[str, int]]
-    pagination: Pagination
-    viewCounts: dict[str, int]
+class FileRow(TypedDict, closed=True):
+    data: FileData | None
+    digest: str
+    id: str
+    immutable: bool
+    legalHold: LegalHold | None
+    mime: str
+    name: str
+    purpose: Literal[
+        "knowledge_source",
+        "chat_attachment",
+        "case_attachment",
+        "document_type_sample",
+        "email_body",
+        "knowledge_snapshot",
+        "test_import",
+        "evidence_bundle",
+        "export",
+        "tool_spec",
+        "avatar",
+    ]
+    referenceCount: int
+    retention: FileRetention
+    scan: FileScan
+    sensitivity: str
+    sensitivitySuggested: bool
+    size: int
+    storage: StorageLocation | None
+    team: str
+    uploadedAt: str
+    uploadedBy: str
+    versionCount: int
 
 
 class ProbeResult(TypedDict, closed=True):
@@ -449,20 +520,27 @@ class ProbeResult(TypedDict, closed=True):
 
 
 class StorageDocument(TypedDict, closed=True):
+    downloadLinkSeconds: int
+    limits: list[PurposeLimit]
+    retention: list[PurposeRetention]
+    targets: list[StorageTarget]
+
+
+class StorageDocumentIn(TypedDict, closed=True):
     downloadLinkSeconds: NotRequired[int]
-    limits: NotRequired[list[PurposeLimit]]
-    retention: NotRequired[list[PurposeRetention]]
-    targets: NotRequired[list[StorageTarget]]
+    limits: NotRequired[list[PurposeLimitIn]]
+    retention: NotRequired[list[PurposeRetentionIn]]
+    targets: NotRequired[list[StorageTargetIn]]
 
 
 class StorageSettingsInput(TypedDict, closed=True):
-    document: StorageDocument
+    document: StorageDocumentIn
     version: int
 
 
 class StorageSettingsView(TypedDict, closed=True):
     document: StorageDocument
-    retentionClasses: list[dict[str, Any]]
+    retentionClasses: list[RetentionClassView]
     scanning: str
     updatedAt: str | None
     updatedBy: str | None
@@ -484,11 +562,6 @@ class EnvelopeFileDetail(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeFileList(TypedDict, closed=True):
-    data: FileList
-    success: Literal[True]
-
-
 class EnvelopeProbeResult(TypedDict, closed=True):
     data: ProbeResult
     success: Literal[True]
@@ -496,4 +569,16 @@ class EnvelopeProbeResult(TypedDict, closed=True):
 
 class EnvelopeStorageSettingsView(TypedDict, closed=True):
     data: StorageSettingsView
+    success: Literal[True]
+
+
+class FileList(TypedDict, closed=True):
+    data: list[FileRow]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+    viewCounts: dict[str, int]
+
+
+class EnvelopeFileList(TypedDict, closed=True):
+    data: FileList
     success: Literal[True]

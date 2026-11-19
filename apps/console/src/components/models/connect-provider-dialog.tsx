@@ -5,10 +5,12 @@ import * as React from 'react';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
+import { SearchSelect } from '@/components/shared/search-select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { providerKeyOptions } from '@/hooks/provider-key-queries';
 import type { ProviderConnectionInput } from '@/lib/types/models';
 
 import { CONNECTABLE_TYPES, type ConnectableType, ENDPOINT_FIELD, PROVIDER_TYPES } from './provider-meta';
@@ -27,14 +29,14 @@ const NAMED: Field[] = ['baseUrl', 'apiVersion', 'region', 'keyRef', 'name'];
 export function ConnectProviderDialog({
   open,
   onOpenChange,
-  keys,
+  hasKeys,
   saving,
   onSave,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** The names of the account's saved model provider keys. */
-  keys: string[];
+  /** Whether the account has saved any model provider key; the picker searches them. */
+  hasKeys: boolean;
   saving: boolean;
   onSave: (input: ProviderConnectionInput) => Promise<void>;
 }) {
@@ -131,21 +133,20 @@ export function ConnectProviderDialog({
           id="provider-key"
           label="Key"
           error={errors.keyRef}
-          hint={keys.length ? (azure ? 'The saved key it signs in with. The alias’s model is the deployment name.' : 'Sent as a bearer token.') : 'No key saved yet: add one under Keys first.'}
+          hint={hasKeys ? (azure ? 'The saved key it signs in with. The alias’s model is the deployment name.' : 'Sent as a bearer token.') : 'No key saved yet: add one under Keys first.'}
         >
-          <Select value={keyRef} onValueChange={(v) => (setKeyRef(v), setErrors({}))}>
-            <SelectTrigger id="provider-key" className="w-full font-mono text-sm" aria-invalid={!!errors.keyRef} data-testid="provider-key-ref">
-              <SelectValue placeholder="Pick a saved key" />
-            </SelectTrigger>
-            <SelectContent>
-              {!azure && <SelectItem value={NO_KEY}>None (the endpoint takes no key)</SelectItem>}
-              {keys.map((k) => (
-                <SelectItem key={k} value={k} className="font-mono">
-                  {k}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SearchSelect
+            source={providerKeyOptions}
+            value={keyRef === NO_KEY ? null : keyRef ? { id: keyRef, label: keyRef } : null}
+            onChange={(id) => (setKeyRef(id || NO_KEY), setErrors({}))}
+            placeholder={!azure && keyRef === NO_KEY ? 'None (the endpoint takes no key)' : 'Pick a saved key'}
+            searchPlaceholder="Search keys…"
+            emptyText="No saved key matches."
+            noneLabel={azure ? undefined : 'None (the endpoint takes no key)'}
+            id="provider-key"
+            testId="provider-key-ref"
+            className="w-full font-mono text-sm"
+          />
         </FormField>
         {azure && (
           <Alert>

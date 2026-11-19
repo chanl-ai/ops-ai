@@ -1,0 +1,37 @@
+# The statement budget of each files-service GET at 5 and 50 rows (ops_service_kit.testing.budget_check, data-access
+# standard DA1 and DA6), measured on PostgreSQL by tests/test_statement_budget.py. A route is one transaction on one
+# connection, with no other service called while it is open, unless its row lists more and says why. No row lists more.
+
+["GET /health"]
+queries = 0
+
+["GET /health/background"]
+queries = 0
+
+# The page, its count, a count per view and a GROUP BY per facet, the same at any page size.
+["GET /v1/files"]
+queries = 12
+
+["GET /v1/files/options"]
+queries = 1
+
+# The tenant's saved limits are read once and kept by StorageSettings, so a repeat reads nothing.
+["GET /v1/files/limits"]
+queries = 0
+
+["GET /v1/files/{file_id}"]
+queries = 4
+
+# The file's rows only, in a transaction closed before storage is read and the bytes are sent.
+["GET /v1/files/{file_id}/content"]
+queries = 4
+
+["GET /v1/files/{file_id}/read-requests/{key}"]
+queries = 5
+
+# The saved settings document, kept by StorageSettings after its first read.
+["GET /v1/settings/storage"]
+queries = 0
+
+["GET /v1/settings/storage/credentials"]
+queries = 1

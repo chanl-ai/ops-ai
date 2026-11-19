@@ -12,6 +12,7 @@ from typing import Any
 from ops_agent_kernel import present
 from ops_agent_kernel.ports import KernelPorts
 from ops_agent_kernel.types import AgentSettings, TurnRequest, WidgetTemplate
+from ops_service_kit.narrow import json_object
 from tests.conftest import looping_model
 from tests.unit.test_kernel import SETTINGS, FixedKnowledge, RecordingTools, ports, run
 
@@ -132,11 +133,12 @@ async def test_an_answer_shows_no_more_widgets_than_the_agent_allows() -> None:
 def test_an_agent_with_no_widgets_keeps_todays_present_tool() -> None:
     assert present.grant(SETTINGS) is present.PRESENT
     g = present.grant(replace(WITH_WIDGETS, compose=True))
-    assert g.input_schema["properties"]["widget"]["enum"] == ["hold-review"]
+    props = json_object(g.input_schema["properties"])
+    assert json_object(props["widget"])["enum"] == ["hold-review"]
     assert "hold-review: A payment hold is being discussed" in g.description, (
         "the widget's use-when is the implicit skill"
     )
-    assert "layout" in g.input_schema["properties"] and "required" not in g.input_schema
+    assert "layout" in props and "required" not in g.input_schema
 
 
 async def test_a_composed_button_needing_a_tool_the_turn_lacks_is_refused() -> None:

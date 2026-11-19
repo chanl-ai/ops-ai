@@ -20,9 +20,11 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from email.message import EmailMessage
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Protocol
 
 import httpx
+
+from ops_service_kit.http import Json
 
 
 @dataclass(frozen=True)
@@ -115,7 +117,7 @@ class ResendSender:
         self.sender = sender
 
     async def send(self, message: OutboundMessage) -> str:
-        body: dict[str, Any] = {
+        body: Json = {
             "from": self.sender,
             "to": list(message.to),
             "subject": message.subject,

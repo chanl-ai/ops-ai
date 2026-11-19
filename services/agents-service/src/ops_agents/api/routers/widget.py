@@ -5,6 +5,12 @@ and lists the exact origins allowed to use it), list, change origins, pause, mov
 issue the per-deployment mint keys a bank's server mints sessions with. `/v1/widget/{deployment}` is for the
 page: exchange the bank's SSO token for a session, then start, read and continue conversations through the same chat
 code the console uses, as the public-key caller class, so budgets and guardrails apply exactly as there.
+
+A route that only reads and writes this service's database answers in one request transaction (`Tx`), taken before
+the credential is read, so the key or session check, the deployment read and any write land together or not at all.
+Three page routes take none, so no connection is held while another party answers: starting a conversation (chat's
+start may ask kb-service for the agent's knowledge bases), a message (a model turn, streamed) and continuing a spent
+budget (it runs the paused turn).
 """
 
 from __future__ import annotations
@@ -17,7 +23,7 @@ import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Annotated, Any, TypeAlias, cast
+from typing import Annotated, TypeAlias, cast
 
 from fastapi import APIRouter, Depends, Header, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -27,8 +33,9 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from ops_access import can
 from ops_agents.activities.overrides import limits_for, parse, resolve
-from ops_contracts.chat import BudgetAnswer, ChatThreadInput, SendInput, WireModel
+from ops_contracts.chat import BudgetAnswer, ChatThreadInput, SendInput
 from ops_identity import CurrentPrincipal
+from ops_identity.fastapi import Tx
 from ops_service_kit.errors import (
     Conflict,
     Forbidden,
@@ -38,13 +45,16 @@ from ops_service_kit.errors import (
     Unprocessable,
     ValidationFailed,
 )
+from ops_service_kit.http import Envelope, In, Json, JsonList, Out
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.narrow import json_object
 from ops_store import isolation
 
+from ...store.agent_registry import AgentRow
 from ...store.widget_deployments import WidgetDeployments
 from ...store.widget_keys import WidgetKeys
-from ..agent_registry import pinned_definition, registry
-from ..auth import Principal, caller_of, principal, require_builder
+from ..agent_registry import live_agent, pinned_definition, registry
+from ..auth import Principal, caller_of, principal, reader_of, require_builder
 from ..chat_threads import chat_row, update_meta
 from ..deps import Runtime, runtime
 from ..envelope import ok
@@ -64,6 +74,7 @@ from . import chat_settings as chat_settings_routes
 
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
+Deployments: TypeAlias = Annotated[Principal, Depends(reader_of("deployments"))]  # noqa: UP040
 
 deployments_router = APIRouter(prefix="/v1/widget-deployments", tags=["widget"], dependencies=[Depends(principal)])
 # The bank's server mints sessions here with a deployment's mint key, not a platform token, so no principal is read.
@@ -97,18 +108,89 @@ async def loader() -> FileResponse:
 limits = RateLimit()
 
 
-class WidgetDeploymentInput(WireModel):
+class WidgetDeploymentInput(In):
     name: str = Field(min_length=1, max_length=200)
     agent_id: str
     origins: list[str] = Field(min_length=1, max_length=20)
 
 
-class SessionInput(WireModel):
+class SessionInput(In):
     """A session the bank's server mints for one person on one page."""
 
     email: str = Field(min_length=3, max_length=320)
     name: str = Field(min_length=1, max_length=200)
     origin: str
+
+
+class WidgetDeploymentOut(Out):
+    id: str
+    name: str
+    agent_id: str
+    # None: the deployment follows the agent's newest published version.
+    agent_version: int | None
+    origins: list[str]
+    paused: bool
+    retired_at: str | None
+    team_id: str
+    created_by: str
+    created_at: str
+    updated_at: str
+
+
+class WidgetDeploymentUsageOut(WidgetDeploymentOut):
+    """A row of the list: the deployment and its use over the last USAGE_DAYS days."""
+
+    # Named as it is: the camelCase alias would read `conversations7D`.
+    conversations7d: int = Field(alias="conversations7d")
+    last_used_at: str | None
+    active_keys: int
+
+
+class MintKeyOut(Out):
+    id: str
+    name: str
+    created_by: str
+    created_at: str
+    last_used_at: str | None
+    revoked_at: str | None
+    expires_at: str | None
+
+
+class MintKeyCreatedOut(Out):
+    key: MintKeyOut
+    # `wk.<tenant>.<key id>.<secret>`: shown once, stored hashed.
+    secret: str
+
+
+class MintKeyRevokedOut(Out):
+    id: str
+    revoked: bool
+
+
+class KeyAuditOut(Out):
+    key_id: str
+    action: str
+    actor: str
+    at: str
+
+
+class SessionOut(Out):
+    session: str
+    expires_in: int
+
+
+class PageSessionOut(SessionOut):
+    agent_name: str
+    deployment_name: str
+
+
+class WidgetConfigOut(Out):
+    agent_name: str
+    deployment_name: str
+    allowed_origins: list[str]
+    paused: bool
+    retired: bool
+    suggestions: list[str]
 
 
 def _store(rt: Runtime) -> WidgetDeployments:
@@ -118,55 +200,60 @@ def _store(rt: Runtime) -> WidgetDeployments:
 USAGE_DAYS = 7
 
 
-def _view(row: dict[str, Any], usage: dict[str, Any] | None = None) -> dict[str, Any]:
-    return {
-        **(usage or {}),
-        "id": row["id"],
-        "name": row["name"],
-        "agentId": row["agent_id"],
-        "agentVersion": row["agent_version"],
-        "origins": list(row["origins"]),
-        "paused": bool(row["paused"]),
-        "retiredAt": row.get("retired_at"),
-        "teamId": row["team_id"],
-        "createdBy": row["created_by"],
-        "createdAt": row["created_at"],
-        "updatedAt": row["updated_at"],
-    }
+def _wire(reply: Out) -> Json:
+    return reply.model_dump(mode="json", by_alias=True)
 
 
-async def _published(rt: Runtime, agent_id: str) -> tuple[dict[str, Any], int]:
+def _view(row: Json) -> WidgetDeploymentOut:
+    return WidgetDeploymentOut.model_validate(
+        {
+            "id": row["id"],
+            "name": row["name"],
+            "agent_id": row["agent_id"],
+            "agent_version": row["agent_version"],
+            "origins": list(cast(JsonList, row["origins"])),
+            "paused": bool(row["paused"]),
+            "retired_at": row.get("retired_at"),
+            "team_id": row["team_id"],
+            "created_by": row["created_by"],
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
+    )
+
+
+async def _published(rt: Runtime, agent_id: str) -> tuple[AgentRow, int]:
     row = await registry(rt).row(agent_id)
-    if row["published_version"] is None or row["paused"]:
+    if row.published_version is None or row.paused:
         raise Unprocessable(
             "Publish the agent, and resume it if it is paused, before deploying it as a widget.", code="not_published"
         )
-    return row, int(row["published_version"])
+    return row, int(row.published_version)
 
 
-async def served_version(rt: Runtime, row: dict[str, Any]) -> int:
+async def served_version(rt: Runtime, row: Json) -> int:
     """The agent version a deployment serves now: its pin, or on Latest the agent's newest published version."""
     if row["agent_version"] is not None:
-        return int(row["agent_version"])
+        return int(cast(int | str | float, row["agent_version"]))
     return (await _published(rt, str(row["agent_id"])))[1]
 
 
-async def make_deployment(rt: Runtime, me: Principal, body: WidgetDeploymentInput) -> dict[str, Any]:
+async def make_deployment(rt: Runtime, me: Principal, body: WidgetDeploymentInput) -> Json:
     """A chat channel: the agent pinned at its published version, on exact origins, in the caller's team. The one
     create both `POST /v1/channels` and its deprecated alias here use."""
     agent_row, version = await _published(rt, body.agent_id)
-    team = me.team_id or str(agent_row["team_id"])
+    team = me.team_id or str(agent_row.team_id)
     require_builder(me, area="deployments", team_id=team, action="create", what=WHAT)
-    if agent_row["team_id"] and agent_row["team_id"] != team:
+    if agent_row.team_id and agent_row.team_id != team:
         raise Forbidden("Deploy an agent from the team that owns it.", code="team_forbidden")
     now = now_iso()
-    row = {
+    row: Json = {
         "id": new_id("wd"),
         "team_id": team,
         "name": body.name.strip(),
         "agent_id": body.agent_id,
         "agent_version": version,
-        "origins": sorted({normal_origin(o) for o in body.origins}),
+        "origins": [*sorted({normal_origin(o) for o in body.origins})],
         "paused": False,
         "created_by": me.email,
         "created_at": now,
@@ -178,48 +265,50 @@ async def make_deployment(rt: Runtime, me: Principal, body: WidgetDeploymentInpu
 
 # Deprecated: `POST /v1/channels` with `type: chat` creates and `GET /v1/channels?type=chat&agentId=` lists,
 # with these fields under `embed`. Kept until the console's adapter moves, then removed.
-@deployments_router.post("", status_code=201, deprecated=True)
-async def create_deployment(rt: Rt, me: Me, body: WidgetDeploymentInput) -> JSONResponse:
+@deployments_router.post("", status_code=201, deprecated=True, response_model=Envelope[WidgetDeploymentOut])
+async def create_deployment(rt: Rt, me: Me, _: Tx, body: WidgetDeploymentInput) -> JSONResponse:
     row = await make_deployment(rt, me, body)
-    return ok(_view({**row, "tenant_id": me.tenant_id}), status=201)
+    return ok(_wire(_view(row)), status=201)
 
 
-@deployments_router.get("", deprecated=True)
+@deployments_router.get("", deprecated=True, response_model=Envelope[list[WidgetDeploymentUsageOut]])
 async def list_deployments(
-    rt: Rt, me: Me, agent_id: Annotated[str | None, Query(alias="agentId")] = None
+    rt: Rt, me: Deployments, _: Tx, agent_id: Annotated[str | None, Query(alias="agentId")] = None
 ) -> JSONResponse:
-    """The team's widget deployments, newest first; `agentId` keeps one agent's."""
+    """The team's widget deployments, newest first; `agentId` keeps one agent's. Unpaged: it goes when the console's
+    adapter moves to `GET /v1/channels?type=chat&agentId=`, which pages."""
     rows = await _store(rt).for_team(me.team_id)
     rows = [r for r in rows if agent_id is None or r["agent_id"] == agent_id]
-    usage = await _usage(rt, rows)
-    return ok([_view(r, usage[r["id"]]) for r in rows])
+    return ok([_wire(r) for r in await _usage(rt, rows)])
 
 
-async def _usage(rt: Runtime, rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    """Per deployment: its conversations started in the last USAGE_DAYS days, when one last changed, and its unrevoked
-    keys, each counted in the database. A conversation counts for the deployment it was started on, in its team."""
+async def _usage(rt: Runtime, rows: list[Json]) -> list[WidgetDeploymentUsageOut]:
+    """Each deployment with its conversations started in the last USAGE_DAYS days, when one last changed, and its
+    unrevoked keys, each counted in the database. A conversation counts for the deployment it was started on, in its
+    team."""
     team_of = {str(r["id"]): str(r["team_id"]) for r in rows}
     since = (datetime.now(UTC) - timedelta(days=USAGE_DAYS)).isoformat()
     used = await graph_store(rt).deployment_usage(team_of, since)
     keys = await _key_store(rt).active_counts(list(team_of))
-    return {
-        d: {
-            "conversations7d": used.get(d, (0, None))[0],
-            "lastUsedAt": used.get(d, (0, None))[1],
-            "activeKeys": keys.get(d, 0),
-        }
-        for d in team_of
-    }
+    return [
+        WidgetDeploymentUsageOut(
+            **_view(r).model_dump(),
+            conversations7d=used.get(str(r["id"]), (0, None))[0],
+            last_used_at=used.get(str(r["id"]), (0, None))[1],
+            active_keys=keys.get(str(r["id"]), 0),
+        )
+        for r in rows
+    ]
 
 
-async def _owned(rt: Runtime, me: Principal, deployment_id: str) -> dict[str, Any]:
+async def _owned(rt: Runtime, me: Principal, deployment_id: str) -> Json:
     row = await _store(rt).get(deployment_id)
     if row is None or row["team_id"] not in me.team_ids:
         raise NotFound("Widget deployment")
     return row
 
 
-class MintKeyInput(WireModel):
+class MintKeyInput(In):
     name: str = Field(min_length=1, max_length=200)
     # As platform keys: every mint key ends; 90 days unless the builder picks another span up to a year.
     expires_in_days: int = Field(default=90, ge=1, le=365)
@@ -237,32 +326,34 @@ def _key_store(rt: Runtime) -> WidgetKeys:
     return WidgetKeys(graph_store(rt).engine)
 
 
-async def _named_deployment(rt: Runtime, deployment_id: str) -> dict[str, Any] | None:
+async def _named_deployment(rt: Runtime, deployment_id: str) -> Json | None:
     """The deployment a widget credential names, in its tenant, whichever team owns it."""
     with isolation.tenant_wide(WIDGET_LOOKUP):
         return await _store(rt).get(deployment_id)
 
 
-def _key_view(k: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "id": k["id"],
-        "name": k["name"],
-        "createdBy": k["created_by"],
-        "createdAt": k["created_at"],
-        "lastUsedAt": k["last_used_at"],
-        "revokedAt": k["revoked_at"],
-        "expiresAt": k.get("expires_at"),
-    }
+def _key_view(k: Json) -> MintKeyOut:
+    return MintKeyOut.model_validate(
+        {
+            "id": k["id"],
+            "name": k["name"],
+            "created_by": k["created_by"],
+            "created_at": k["created_at"],
+            "last_used_at": k["last_used_at"],
+            "revoked_at": k["revoked_at"],
+            "expires_at": k.get("expires_at"),
+        }
+    )
 
 
-@deployments_router.post("/{deployment_id}/keys", status_code=201)
-async def create_mint_key(rt: Rt, me: Me, deployment_id: str, body: MintKeyInput) -> JSONResponse:
+@deployments_router.post("/{deployment_id}/keys", status_code=201, response_model=Envelope[MintKeyCreatedOut])
+async def create_mint_key(rt: Rt, me: Me, _: Tx, deployment_id: str, body: MintKeyInput) -> JSONResponse:
     """A key the bank's server mints this deployment's sessions with; its secret is shown once and stored hashed."""
     row = await _owned(rt, me, deployment_id)
     require_builder(me, area="deployments", team_id=str(row["team_id"]), action="edit", what=WHAT)
     key_id, secret = new_id("wkk"), secrets.token_urlsafe(32)
     now = datetime.now(UTC)
-    record = {
+    record: Json = {
         "id": key_id,
         "deployment_id": deployment_id,
         "name": body.name.strip(),
@@ -274,26 +365,28 @@ async def create_mint_key(rt: Rt, me: Me, deployment_id: str, body: MintKeyInput
         "expires_at": (now + timedelta(days=body.expires_in_days)).isoformat(),
     }
     await _key_store(rt).add(record)
-    return ok({"key": _key_view(record), "secret": f"wk.{row['tenant_id']}.{key_id}.{secret}"}, status=201)
+    made = MintKeyCreatedOut(key=_key_view(record), secret=f"wk.{row['tenant_id']}.{key_id}.{secret}")
+    return ok(_wire(made), status=201)
 
 
-@deployments_router.get("/{deployment_id}/keys")
-async def list_mint_keys(rt: Rt, me: Me, deployment_id: str) -> JSONResponse:
+@deployments_router.get("/{deployment_id}/keys", response_model=Envelope[list[MintKeyOut]])
+async def list_mint_keys(rt: Rt, me: Deployments, _: Tx, deployment_id: str) -> JSONResponse:
+    """A deployment's keys, newest first, unpaged: a deployment holds a handful."""
     await _owned(rt, me, deployment_id)
-    return ok([_key_view(k) for k in await _key_store(rt).for_deployment(deployment_id)])
+    return ok([_wire(_key_view(k)) for k in await _key_store(rt).for_deployment(deployment_id)])
 
 
-@deployments_router.post("/{deployment_id}/keys/{key_id}/revoke")
-async def revoke_mint_key(rt: Rt, me: Me, deployment_id: str, key_id: str) -> JSONResponse:
+@deployments_router.post("/{deployment_id}/keys/{key_id}/revoke", response_model=Envelope[MintKeyRevokedOut])
+async def revoke_mint_key(rt: Rt, me: Me, _: Tx, deployment_id: str, key_id: str) -> JSONResponse:
     row = await _owned(rt, me, deployment_id)
     require_builder(me, area="deployments", team_id=str(row["team_id"]), action="edit", what=WHAT)
     if not await _key_store(rt).revoke(deployment_id, key_id, now_iso(), me.email):
         raise NotFound("Mint key")
-    return ok({"id": key_id, "revoked": True})
+    return ok(_wire(MintKeyRevokedOut(id=key_id, revoked=True)))
 
 
-@deployments_router.post("/{deployment_id}/preview-session", status_code=201)
-async def preview_session(rt: Rt, me: Me, caller: CurrentPrincipal, deployment_id: str) -> JSONResponse:
+@deployments_router.post("/{deployment_id}/preview-session", status_code=201, response_model=Envelope[SessionOut])
+async def preview_session(rt: Rt, me: Me, caller: CurrentPrincipal, _: Tx, deployment_id: str) -> JSONResponse:
     """The console's "Preview as a person": a session for the signed-in person who may edit this deployment, bound to
     the console's own origin (`console_url`), so it serves the console's preview frame and no bank page. Recorded on the
     deployment's key audit. An API key never previews: it would hand a person's chat to a server."""
@@ -306,15 +399,15 @@ async def preview_session(rt: Rt, me: Me, caller: CurrentPrincipal, deployment_i
         raise ServiceUnavailable("Preview needs the console's address (OPS_CONSOLE_URL) set on agents-service.")
     await _key_store(rt).previewed(deployment_id, me.email, now_iso())
     session = mint_session(rt, row, normal_origin(rt.settings.console_url), me)
-    return ok({"session": session, "expiresIn": SESSION_TTL_S}, status=201)
+    return ok(_wire(SessionOut(session=session, expires_in=SESSION_TTL_S)), status=201)
 
 
-@deployments_router.get("/{deployment_id}/keys/audit")
-async def mint_key_audit(rt: Rt, me: Me, deployment_id: str) -> JSONResponse:
-    """Who created and revoked this deployment's mint keys, newest first."""
+@deployments_router.get("/{deployment_id}/keys/audit", response_model=Envelope[list[KeyAuditOut]])
+async def mint_key_audit(rt: Rt, me: Deployments, _: Tx, deployment_id: str) -> JSONResponse:
+    """Who created, revoked and previewed with this deployment's mint keys, newest first; unpaged, as the keys."""
     await _owned(rt, me, deployment_id)
     rows = await _key_store(rt).audit(deployment_id)
-    return ok([{"keyId": r["key_id"], "action": r["action"], "actor": r["actor"], "at": r["at"]} for r in rows])
+    return ok([_wire(KeyAuditOut(key_id=r["key_id"], action=r["action"], actor=r["actor"], at=r["at"])) for r in rows])
 
 
 def _key_refused() -> Forbidden:
@@ -327,7 +420,7 @@ def _key_refused() -> Forbidden:
 @dataclass(frozen=True)
 class MintKey:
     key_id: str
-    deployment: dict[str, Any]
+    deployment: Json
 
 
 async def mint_key_caller(rt: Rt, deployment_id: str, authorization: Annotated[str | None, Header()] = None) -> MintKey:
@@ -359,10 +452,10 @@ async def mint_key_caller(rt: Rt, deployment_id: str, authorization: Annotated[s
 Minter: TypeAlias = Annotated[MintKey, Depends(mint_key_caller)]  # noqa: UP040
 
 
-@mint_router.post("/{deployment_id}/sessions", status_code=201)
-async def server_session(rt: Rt, minter: Minter, body: SessionInput) -> JSONResponse:
+@mint_router.post("/{deployment_id}/sessions", status_code=201, response_model=Envelope[SessionOut])
+async def server_session(rt: Rt, _: Tx, minter: Minter, body: SessionInput) -> JSONResponse:
     """The bank's server mints a session for one person and hands it to the page. The key itself never reaches the
-    page."""
+    page. The key check, the deployment read and the key's last use are one transaction."""
     row = minter.deployment
     _refuse_stopped(row)
     origin = allowed(row, body.origin)
@@ -370,7 +463,7 @@ async def server_session(rt: Rt, minter: Minter, body: SessionInput) -> JSONResp
         name=body.name, email=body.email, team_id=str(row["team_id"]), tenant_id=str(row["tenant_id"]), sub=body.email
     )
     await _key_store(rt).used(minter.key_id, now_iso())
-    return ok({"session": mint_session(rt, row, origin, person), "expiresIn": SESSION_TTL_S}, status=201)
+    return ok(_wire(SessionOut(session=mint_session(rt, row, origin, person), expires_in=SESSION_TTL_S)), status=201)
 
 
 # ── the page ──
@@ -383,7 +476,7 @@ def _claimed_origin(token: str) -> str | None:
         claims: object = json.loads(base64.urlsafe_b64decode(part + "=" * (-len(part) % 4)))
     except (IndexError, ValueError):
         return None
-    origin = cast(dict[str, object], claims).get("origin") if isinstance(claims, dict) else None
+    origin = json_object(claims).get("origin")
     return origin if isinstance(origin, str) and origin else None
 
 
@@ -405,11 +498,11 @@ def _page_origin(request: Request, session_token: str | None, embed_origins: lis
 
 def _listed(
     request: Request,
-    row: dict[str, Any] | None,
+    row: Json | None,
     session_token: str | None = None,
     embed_origins: list[str] | None = None,
     console_origin: str | None = None,
-) -> dict[str, Any]:
+) -> Json:
     """The deployment with the page's origin on its list. The origin is marked allowed before anything else is checked,
     so an error that follows (an ended session, a pause) still reaches the page; an unlisted origin reads nothing. The
     team every widget request acts in is the deployment's. A session on the console's own origin (a preview, which only
@@ -424,7 +517,7 @@ def _listed(
     return row
 
 
-def _refuse_stopped(row: dict[str, Any]) -> None:
+def _refuse_stopped(row: Json) -> None:
     """No session or turn for an embed that is retired (for good) or paused (until resumed)."""
     if row.get("retired_at"):
         raise Conflict("This chat has been retired by the team that ran it.", code="widget_retired")
@@ -435,9 +528,7 @@ def _refuse_stopped(row: dict[str, Any]) -> None:
 SessionHeader: TypeAlias = Annotated[str | None, Header(alias="X-Widget-Session")]  # noqa: UP040
 
 
-async def listed_deployment(
-    rt: Rt, request: Request, deployment_id: str, session_token: SessionHeader = None
-) -> dict[str, Any]:
+async def listed_deployment(rt: Rt, request: Request, deployment_id: str, session_token: SessionHeader = None) -> Json:
     """The deployment a page route names, in the tenant its session names (`claimed_tenant`); a session for another
     tenant finds no deployment."""
     tenant = claimed_tenant(session_token)
@@ -449,13 +540,13 @@ async def listed_deployment(
     return _listed(request, row, session_token, rt.settings.embed_origins, console)
 
 
-Listed: TypeAlias = Annotated[dict[str, Any], Depends(listed_deployment)]  # noqa: UP040
+Listed: TypeAlias = Annotated[Json, Depends(listed_deployment)]  # noqa: UP040
 
 
 @dataclass(frozen=True)
 class WidgetCaller:
     session: WidgetSession
-    deployment: dict[str, Any]
+    deployment: Json
 
 
 async def widget_caller(rt: Rt, request: Request, row: Listed, session_token: SessionHeader = None) -> WidgetCaller:
@@ -469,8 +560,10 @@ async def widget_caller(rt: Rt, request: Request, row: Listed, session_token: Se
 Caller: TypeAlias = Annotated[WidgetCaller, Depends(widget_caller)]  # noqa: UP040
 
 
-@widget_router.post("/session", status_code=201)
-async def page_session(rt: Rt, me: Me, caller: CurrentPrincipal, request: Request, deployment_id: str) -> JSONResponse:
+@widget_router.post("/session", status_code=201, response_model=Envelope[PageSessionOut])
+async def page_session(
+    rt: Rt, me: Me, caller: CurrentPrincipal, _: Tx, request: Request, deployment_id: str
+) -> JSONResponse:
     """The page exchanges the person's SSO token (the `Authorization` header) for a widget session on this origin. Only
     a person of the deployment's team, in its tenant: anyone else is refused, as for chat. An API key never
     mints here; the bank's server uses `/v1/widget-deployments/{id}/sessions`."""
@@ -489,24 +582,26 @@ async def page_session(rt: Rt, me: Me, caller: CurrentPrincipal, request: Reques
         code="team_forbidden",
     )
     agent = await pinned_definition(rt, str(row["agent_id"]), await served_version(rt, row))
-    body = {
-        "session": mint_session(rt, row, str(request.state.widget_origin), me),
-        "expiresIn": SESSION_TTL_S,
-        "agentName": agent.name if agent else str(row["agent_id"]),
-        "deploymentName": row["name"],
-    }
-    return ok(body, status=201)
+    body = PageSessionOut(
+        session=mint_session(rt, row, str(request.state.widget_origin), me),
+        expires_in=SESSION_TTL_S,
+        agent_name=agent.name if agent else str(row["agent_id"]),
+        deployment_name=cast(str, row["name"]),
+    )
+    return ok(_wire(body), status=201)
 
 
 async def _widget_thread(rt: Runtime, session: WidgetSession, thread_id: str) -> None:
     row = await chat_row(rt, thread_id, session.principal())
-    meta = cast(dict[str, Any], row["meta"] or {}) if row is not None else {}
+    meta = cast(Json, row["meta"] or {}) if row is not None else {}
     if row is None or meta.get("deploymentId") != session.deployment_id:
         raise NotFound("Conversation")
 
 
 @widget_router.post("/threads", status_code=201)
 async def create_thread(rt: Rt, caller: Caller) -> JSONResponse:
+    """No request transaction: chat's start asks kb-service for the names of the agent's knowledge bases when it has
+    any, and no connection is held while it answers. Each store call is its own short transaction."""
     session, row = caller.session, caller.deployment
     made = await chat_routes.create_thread(
         rt=rt, me=session.principal(), body=ChatThreadInput(agent_id=str(row["agent_id"]), kb_ids=[])
@@ -521,20 +616,22 @@ async def create_thread(rt: Rt, caller: Caller) -> JSONResponse:
 
 
 @widget_router.get("/threads/{thread_id}")
-async def get_thread(rt: Rt, caller: Caller, thread_id: str) -> JSONResponse:
+async def get_thread(rt: Rt, _: Tx, caller: Caller, thread_id: str) -> JSONResponse:
+    """The page's own conversation, read in one transaction with its session's deployment."""
     await _widget_thread(rt, caller.session, thread_id)
     return await chat_routes.get_thread(rt=rt, me=caller.session.principal(), thread_id=thread_id)
 
 
 @widget_router.post("/threads/{thread_id}/messages", response_model=None)
 async def send(rt: Rt, caller: Caller, deployment_id: str, thread_id: str, body: SendInput) -> EventSourceResponse:
+    """A model turn, streamed: no request transaction, so none is held while the model answers or the stream runs."""
     session, row = caller.session, caller.deployment
     await _widget_thread(rt, session, thread_id)
     limits.check(deployment_id, session.email)
     if body.overrides is not None:
         # A page is a public caller: only what the agent lets a public key change (overrides.resolve, caller class).
-        agent = rt.catalog.agent_at(str(row["agent_id"]), await served_version(rt, row)) or rt.catalog.agent(
-            str(row["agent_id"])
+        agent = await pinned_definition(rt, str(row["agent_id"]), await served_version(rt, row)) or await live_agent(
+            rt, str(row["agent_id"])
         )
         if agent is None:
             raise Unprocessable("This widget's agent is no longer live.")
@@ -552,7 +649,7 @@ async def send(rt: Rt, caller: Caller, deployment_id: str, thread_id: str, body:
 @widget_router.post("/threads/{thread_id}/budget")
 async def budget(rt: Rt, caller: Caller, thread_id: str, body: BudgetAnswer) -> JSONResponse:
     """Continue a spent conversation budget, as the conversation's owner; raising is chat.manage, which no widget
-    session holds."""
+    session holds. No request transaction: continuing runs the paused turn, a model call."""
     await _widget_thread(rt, caller.session, thread_id)
     # Raising is chat.manage; a widget session holds no role, so `can` refuses it as for any non-admin.
     return await chat_settings_routes.budget(rt=rt, me=caller.session.principal(), thread_id=thread_id, body=body)
@@ -561,9 +658,10 @@ async def budget(rt: Rt, caller: Caller, thread_id: str, body: BudgetAnswer) -> 
 TenantQuery: TypeAlias = Annotated[str, Query(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")]  # noqa: UP040
 
 
-@config_router.get("/config")
+@config_router.get("/config", response_model=Envelope[WidgetConfigOut])
 async def public_config(
     rt: Rt,
+    _: Tx,
     request: Request,
     deployment_id: str,
     tenant: TenantQuery,
@@ -589,16 +687,16 @@ async def public_config(
     else:
         request.state.widget_origin = allowed(row, origin)
     agent = await pinned_definition(rt, str(row["agent_id"]), await served_version(rt, row))
-    body = {
-        "agentName": agent.name if agent else str(row["agent_id"]),
-        "deploymentName": row["name"],
-        "allowedOrigins": list(row["origins"]),
+    body = WidgetConfigOut(
+        agent_name=agent.name if agent else str(row["agent_id"]),
+        deployment_name=cast(str, row["name"]),
+        allowed_origins=list(cast(list[str], row["origins"])),
         # A retired embed reads as paused to the embed app, which then shows it offline, and says why.
-        "paused": bool(row["paused"]) or bool(row.get("retired_at")),
-        "retired": bool(row.get("retired_at")),
-        "suggestions": list(agent.suggestions) if agent else [],
-    }
-    return ok(body)
+        paused=bool(row["paused"]) or bool(row.get("retired_at")),
+        retired=bool(row.get("retired_at")),
+        suggestions=list(agent.suggestions) if agent else [],
+    )
+    return ok(_wire(body))
 
 
 class WidgetCors:

@@ -33,7 +33,7 @@ import {
 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
-import type { ErrorClass, Item, ItemStatus, KbHealth, RunStatus, RunTrigger, Schedule, Sensitivity, SourceHealth, SourceKind, SourceStatus, SourceType, Weekday } from '@/lib/types/knowledge';
+import type { DocType, ErrorClass, Item, ItemStatus, KbHealth, RunStatus, RunTrigger, Schedule, Sensitivity, SourceHealth, SourceKind, SourceStatus, SourceType, Weekday } from '@/lib/types/knowledge';
 import { cn } from '@/lib/utils';
 
 type Tone = 'good' | 'warn' | 'bad' | 'neutral' | 'info';
@@ -123,7 +123,11 @@ export function SensitivityBadge({ level }: { level: Sensitivity }) {
   return <StatusBadge tone={tone} icon={icon} label={label} />;
 }
 
-export function FreshnessBadge({ reviewBy }: { reviewBy: string }) {
+export function FreshnessBadge({ reviewBy, freshness }: { reviewBy: string; freshness?: 'fresh' | 'stale' | 'no_schedule' }) {
+  // The service decides: stale when the source missed its schedule, and no schedule means nothing to be fresh against.
+  if (freshness === 'no_schedule') return <StatusBadge tone="neutral" icon={Clock} label="No schedule" />;
+  if (freshness === 'stale') return <StatusBadge tone="warn" icon={AlertTriangle} label="Stale" />;
+  if (freshness === 'fresh') return <StatusBadge tone="good" icon={CheckCircle2} label="Fresh" />;
   const days = Math.round((new Date(reviewBy).getTime() - Date.now()) / 86400_000);
   if (days < 0) return <StatusBadge tone="warn" icon={AlertTriangle} label={`Stale · ${-days} d`} />;
   if (days < 14) return <StatusBadge tone="warn" icon={Clock} label={`Review in ${days} d`} />;
@@ -140,6 +144,19 @@ export function MimeIcon({ mime, className }: { mime: string; className?: string
   if (mime === 'text/html') return <Globe className={c} />;
   return <File className={c} />;
 }
+
+/** The Documents table's Type, by kb-service's `docType`. */
+export const DOC_TYPE_LABEL: Record<DocType, string> = {
+  pdf: 'PDF',
+  word: 'Word',
+  spreadsheet: 'Spreadsheet',
+  slides: 'Slides',
+  web: 'Web page',
+  text: 'Text',
+  typed: 'Typed text',
+  app: 'App article',
+  other: 'Other',
+};
 
 export const KB_COLORS: Record<string, string> = {
   violet: 'bg-violet-500',
@@ -239,7 +256,10 @@ export const RULE_PLACEHOLDER: Record<(typeof RULE_FIELDS)[number]['value'], str
 export function itemReason(i: Item): string | undefined {
   if (i.status === 'excluded') return i.excludedBy ?? 'Excluded by hand';
   if (i.status === 'held' && i.held) return `Missing ${i.held.missing.join(', ')} · required by ${i.held.kbNames.join(', ')}`;
-  if (i.duplicateOf) return `Same content as ${i.duplicateOf.title} in ${i.duplicateOf.sourceName}; indexed once there`;
+  if (i.duplicateOf) {
+    const copy = i.duplicateCopy;
+    return copy ? `Same content as ${copy.title} in ${copy.sourceName}; indexed once there` : 'Same content as another document; indexed once there';
+  }
   if (i.versionStatus === 'superseded') return `Superseded by ${i.supersededBy}; kept for as-of questions`;
   if (i.versionStatus === 'scheduled') return `Takes effect ${i.effectiveDate}`;
   if (i.alsoIn?.length) return `Also in ${i.alsoIn.map((a) => a.sourceName).join(', ')}; indexed once`;

@@ -8,14 +8,15 @@ from datetime import datetime
 from typing import ClassVar
 
 import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import AsyncEngine
 
-from ops_store import Guarantee
+from ops_store import Guarantee, isolation
 from ops_store.dialect import upsert
-from ops_store.schema import TEAM_OWNED
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
+from ops_store.store import Store
 from ops_store.team_scope import acting_as, any_team, team_visible
 
 from .modules import metadata
+from .tenancy import ROLE, SYSTEM_ROLE
 
 team_defaults = sa.Table(
     "team_defaults",
@@ -24,7 +25,9 @@ team_defaults = sa.Table(
     sa.Column("team_id", sa.String(64), primary_key=True),
     sa.Column("version", sa.Integer, nullable=False),
     sa.Column("applied_at", sa.DateTime(timezone=True), nullable=False),
-    info=TEAM_OWNED,
+    # The install stamp the team's app cards (app_cards) were built for; cleared by a write that changes them.
+    sa.Column("cards_stamp", sa.String(64)),
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 # Why the sign-in keep-alive reads every team's row: it visits each team that has used this service, then refreshes
@@ -35,36 +38,37 @@ EVERY_TEAM = "the sign-in keep-alive visits every team that has used this servic
 CATCH_UP = "the start-up reconciler brings every team's defaults to this release's version"
 
 
-class TeamDefaults:
+class TeamDefaults(Store):
     # One row per (tenant, team): recording a version is an upsert on that key.
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS})
-
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
+    role = ROLE
+    system_role = SYSTEM_ROLE
 
     async def version(self, tenant_id: str, team_id: str) -> int:
         """The defaults version the team has; 0 for a team never provisioned."""
         t = team_defaults
         with acting_as(team_id):
             q = sa.select(t.c.version).where(t.c.tenant_id == tenant_id, team_visible(t), t.c.team_id == team_id)
-        async with self.engine.connect() as c:
-            return int((await c.execute(q)).scalar() or 0)
+        with isolation.scope(tenant_id, team_id):
+            async with self.tx() as c:
+                return int((await c.execute(q)).scalar() or 0)
 
     async def record(self, tenant_id: str, team_id: str, version: int, at: datetime) -> None:
         row = {"tenant_id": tenant_id, "team_id": team_id, "version": version, "applied_at": at}
-        async with self.engine.begin() as c:
-            await c.execute(upsert(c, team_defaults, row, keys=["tenant_id", "team_id"]))
+        with isolation.scope(tenant_id, team_id):
+            async with self.tx() as c:
+                await c.execute(upsert(c, team_defaults, row, keys=["tenant_id", "team_id"]))
 
     async def teams(self) -> list[tuple[str, str]]:
         """Every (tenant, team) this service has provisioned: each team that has listed its apps or looked up a tool."""
         t = team_defaults
         q = sa.select(t.c.tenant_id, t.c.team_id).where(any_team(t, EVERY_TEAM)).order_by(t.c.tenant_id, t.c.team_id)
-        async with self.engine.connect() as c:
+        async with self.system_tx(EVERY_TEAM) as c:
             return [(str(r.tenant_id), str(r.team_id)) for r in await c.execute(q)]
 
     async def behind(self, version: int) -> list[tuple[str, str]]:
         """Every (tenant, team) whose defaults are older than `version`."""
         t = team_defaults
         q = sa.select(t.c.tenant_id, t.c.team_id).where(any_team(t, CATCH_UP), t.c.version < version)
-        async with self.engine.connect() as c:
+        async with self.system_tx(CATCH_UP) as c:
             return [(str(r.tenant_id), str(r.team_id)) for r in await c.execute(q)]

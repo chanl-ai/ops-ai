@@ -29,7 +29,7 @@ export default function AccountPage() {
   const onPlatform = me.isEnabled;
   const role = useTeamRole();
   const { team } = useTeam();
-  const sample = useAccountProfile();
+  const sample = useAccountProfile(!onPlatform);
   const update = useUpdateProfile();
   const query = onPlatform ? me : sample;
   const p = onPlatform
@@ -87,7 +87,7 @@ export default function AccountPage() {
             description={
               <>
                 Changed by a team admin in{' '}
-                <Link href="/access" className="underline underline-offset-4">
+                <Link href="/govern/access" className="underline underline-offset-4">
                   Access
                 </Link>
                 .

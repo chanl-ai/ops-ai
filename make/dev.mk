@@ -1,6 +1,6 @@
 # The local stack: compose (PostgreSQL, OPA), migrations, then the agents service, tools service and console in the
 # background. scripts/stack.sh is the process manager: logs in .logs/<svc>.log, pids in .run/<svc>.pid.
-.PHONY: up down restart reset-db health logs ports demo-model sample-team sample-teams demo-walk demo demo-salesforce demo-salesforce-templates demo-salesforce-walk
+.PHONY: up down restart reset-db health logs ports demo-model sample-team sample-library sample-teams demo-walk demo demo-salesforce demo-salesforce-templates demo-salesforce-walk
 
 ##@ Stack (one per machine)
 
@@ -14,7 +14,7 @@ DEMO_MODEL ?= $(if $(OPENAI_API_KEY),gpt-5-mini,fake)
 DEMO_FAST_MODEL ?= $(if $(filter fake,$(DEMO_MODEL)),fake,gpt-4.1-mini)
 DEMO_CHAT_MODEL ?= $(if $(filter fake,$(DEMO_MODEL)),fake,gpt-5-nano)
 
-up: db-up ## Compose, migrate every chain in place, then the services, the worker, models-service and the demo fakes; AUTH=platform signs in through platform-service; RESET=1 wipes the database first (as make reset-db); OPS_INFRA=external uses side containers and skips db-up/db-down
+up: db-up ## Compose, migrate every chain in place, then the services, the worker, models-service and the demo fakes; AUTH=platform signs in through platform-service; RESET=1 wipes the database first (as make reset-db); a new database gets the sample team (SAMPLE=0 skips); OPS_INFRA=external uses side containers and skips db-up/db-down
 	@# Services started before their code last changed run old code: stopped here, started again after the schema step.
 	@$(STACK) stop-stale
 	@# Always migrate, never drop data on its own. A chain the database holds ahead of this checkout
@@ -33,14 +33,24 @@ up: db-up ## Compose, migrate every chain in place, then the services, the worke
 	@# egress list is brought up to date with it so mail and bank calls are not refused after a move.
 	@uv run --quiet --project $(ROOT) python $(ROOT)/scripts/dev_egress.py
 	@# The stack's agents and workflow reads run on a real OpenAI model (DEMO_MODEL picks it, DEMO_MODEL=fake keeps
-	@# the fake). Use cases and tests start their own services and keep the fake.
-	@{ \
+	@# the fake). Use cases and tests start their own services and keep the fake. An alias an admin pointed at their
+	@# own model in the console is left there (KEEP_ADMIN_CHOICE).
+	@{ export KEEP_ADMIN_CHOICE=1; \
 		MODEL=$(DEMO_MODEL) uv run --quiet --project $(ROOT) python $(ROOT)/scripts/demo_model.py && \
 		ALIAS=guardrail-check MODEL=$(DEMO_FAST_MODEL) uv run --quiet --project $(ROOT) python $(ROOT)/scripts/demo_model.py && \
 		ALIAS=gpt-5.5 MODEL=$(DEMO_CHAT_MODEL) uv run --quiet --project $(ROOT) python $(ROOT)/scripts/demo_model.py && \
 		ALIAS=memory-extract MODEL=$(DEMO_FAST_MODEL) uv run --quiet --project $(ROOT) python $(ROOT)/scripts/demo_model.py && \
 		ALIAS=extract MODEL=$(DEMO_MODEL) uv run --quiet --project $(ROOT) python $(ROOT)/scripts/demo_model.py; }
 	@$(STACK) health
+	@# A new database gets the sample team once, so a fresh clone has people, knowledge and agents to try; the marker
+	@# goes with the database (make reset-db removes it). SAMPLE=0 skips it.
+	@if [ "$(SAMPLE)" != "0" ] && [ ! -f "$(OPS_RUN_DIR)/sample-team.installed" ]; then \
+		$(MAKE) -s sample-team && touch "$(OPS_RUN_DIR)/sample-team.installed"; \
+	fi
+	@# The demo policy library, once per database, in team Platform where the signed-in dev admin sees it.
+	@if [ "$(SAMPLE)" != "0" ] && [ ! -f "$(OPS_RUN_DIR)/sample-library.installed" ]; then \
+		$(MAKE) -s sample-library && touch "$(OPS_RUN_DIR)/sample-library.installed"; \
+	fi
 
 reset-db: ## Wipe the stack's database and rebuild it empty from the chains; asks first (CONFIRM=yes skips)
 	@if [ "$(CONFIRM)" != yes ]; then \
@@ -48,6 +58,7 @@ reset-db: ## Wipe the stack's database and rebuild it empty from the chains; ask
 		[ "$$answer" = yes ] || { echo "reset-db: nothing changed"; exit 1; }; \
 	fi
 	@$(STACK) stop-for-reset
+	@rm -f "$(OPS_RUN_DIR)/sample-team.installed" "$(OPS_RUN_DIR)/sample-library.installed"
 	@uv run --quiet --project $(ROOT) python $(ROOT)/scripts/schema_sync.py "$(OPS_DATABASE_URL)" --reset
 	@$(MAKE) -s migrate
 
@@ -76,6 +87,9 @@ health: ## Probe every service, OPA and PostgreSQL; shows port, state and who ow
 
 sample-team: ## Install the sample team (scripts/sample-team/sample-team.json) as the first admin; a second run finds it (NAME= another team, EXPECT_FOUND=1 fails on anything made)
 	@MODEL=$(DEMO_MODEL) uv run --quiet --project $(ROOT) python $(ROOT)/scripts/sample_team.py install $(if $(NAME),--name "$(NAME)") $(if $(EXPECT_FOUND),--expect-found)
+
+sample-library: ## Install the demo policy library (scripts/sample-team/library/library.json) in team Platform as the platform dev role; a second run finds it (EXPECT_FOUND=1 fails on anything made)
+	@uv run --quiet --project $(ROOT) python $(ROOT)/scripts/sample_library.py $(if $(EXPECT_FOUND),--expect-found)
 
 sample-teams: ## Install the first teams (scripts/sample-team/teams/*.json) with their people and knowledge, and each team's assistant; a second run finds them
 	@for f in $(ROOT)/scripts/sample-team/teams/*.json; do \

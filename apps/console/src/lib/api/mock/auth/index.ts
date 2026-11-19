@@ -1,8 +1,8 @@
-import { AuthError, type AuthProvider, type MfaSetup, type Session, type SignInResult, type StepUp, type WorkspaceRole } from '@/lib/auth/provider';
+import { AuthError, type AuthProvider, type MfaSetup, type Session, type SignInResult, type StepUp } from '@/lib/auth/provider';
 
 import { auditSink } from '../governance';
 import { currentSignInPolicy } from '../sign-in-policy';
-import { ABSOLUTE_SESSION_HOURS, DEFAULT_USER_ID, DEMO_PASSWORD, DEMO_TOTP, type MockUser, USERS } from './seed';
+import { ABSOLUTE_SESSION_HOURS, DEFAULT_USER_ID, DEMO_PASSWORD, DEMO_TOTP, type MockRole, type MockUser, USERS } from './seed';
 
 const KEY = 'ops-auth';
 
@@ -13,7 +13,7 @@ const registered: MockUser[] = [];
  * Adds someone the adapter can sign in, for the invites mock on accept. They start without MFA, so a policy that
  * requires it sends them to /mfa/setup after their first sign-in.
  */
-export function registerMockUser(u: { email: string; name: string; teamIds: string[]; role: WorkspaceRole; method: 'password' | 'sso'; password: string | null }): void {
+export function registerMockUser(u: { email: string; name: string; teamIds: string[]; role: MockRole; method: 'password' | 'sso'; password: string | null }): void {
   const email = u.email.trim().toLowerCase();
   const existing = registered.findIndex((x) => x.email === email);
   const user: MockUser = { id: `usr_reg_${btoa(email).replace(/[^a-z0-9]/gi, '').slice(0, 8)}`, name: u.name, email, teamIds: u.teamIds, role: u.role, password: u.password, mfaEnrolled: false, method: u.method };
@@ -118,7 +118,7 @@ export function createMockAuthProvider(opts: { stepUpUrl?: string } = {}): AuthP
     const now = Date.now();
     // SSO and Google people have no console authenticator: their IdP applies MFA, and step-up goes back to it.
     const mfaEnrolled = method === 'password' ? (memory?.enrolled[u.id] ?? u.mfaEnrolled) : false;
-    return { user: { id: u.id, name: u.name, email: u.email, teamIds: u.teamIds, role: u.role }, mfaEnrolled, authMethod: method, issuedAt: new Date(now).toISOString(), expiresAt: expiryFrom(limits, now) };
+    return { user: { id: u.id, name: u.name, email: u.email, teamIds: u.teamIds }, mfaEnrolled, authMethod: method, issuedAt: new Date(now).toISOString(), expiresAt: expiryFrom(limits, now) };
   }
 
   /** Applies ?mock=signed-out or ?mock=expired once per page load. */
@@ -232,8 +232,9 @@ export function createMockAuthProvider(opts: { stepUpUrl?: string } = {}): AuthP
       const p = currentSignInPolicy();
       const host = email.trim().toLowerCase().split('@')[1] ?? '';
       const label = IDP_LABEL[p.sso.provider];
-      if (p.methods.sso && p.sso.domains.some((d) => d.verified && d.domain === host)) return { password: false, sso: { kind: 'sso', label } };
-      return { password: p.methods.password, sso: p.methods.sso ? { kind: 'sso', label } : null };
+      const ssoKind = p.sso.provider === 'saml' ? 'saml' : 'oidc';
+      if (p.methods.sso && p.sso.domains.some((d) => d.verified && d.domain === host)) return { password: false, sso: { kind: ssoKind, label } };
+      return { password: p.methods.password, sso: p.methods.sso ? { kind: ssoKind, label } : null };
     },
     startSso: async ({ email, domain, next }) => {
       const who = (email ?? `sso.user@${domain}`).trim().toLowerCase();

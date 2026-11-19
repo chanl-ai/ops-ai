@@ -9,12 +9,14 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any, Protocol, cast
+from typing import Any, Protocol
 
 from langgraph.config import get_config
 from langgraph.types import interrupt
 
 from ops_metering import Budget, Exhausted, Usage
+from ops_service_kit import narrow
+from ops_service_kit.http import Json, JsonValue
 
 from .models import Facts, Grade, GraphModels
 from .usage import collecting, report_usage
@@ -45,7 +47,7 @@ def call_site() -> CallSite | None:
         cfg = get_config()
     except RuntimeError:
         return None
-    configurable: Mapping[str, Any] = cfg.get("configurable", {})
+    configurable: Json = cfg.get("configurable", {})
     thread = configurable.get("thread_id")
     if not thread:
         return None
@@ -54,7 +56,7 @@ def call_site() -> CallSite | None:
     return CallSite(str(thread), str(run) if run else None, str(node))
 
 
-def budget_from(raw: Mapping[str, Any]) -> Budget:
+def budget_from(raw: Mapping[str, JsonValue]) -> Budget:
     """A budget from a request body or a resume decision, in either field style."""
 
     def pick(*names: str) -> Any:
@@ -83,12 +85,12 @@ async def guard(meter: Meter, site: CallSite) -> None:
                 "needed": "Raise the budget to continue, or reject to stop this case.",
             }
         )
-        decision = cast(dict[str, Any], answer) if isinstance(answer, dict) else {}
+        decision = narrow.json_object(answer)
         if decision.get("decision") != "approved":
             raise BudgetStoppedError(f"Stopped at its {spent.limit} budget ({spent.spent} of {spent.cap}).")
         raw = decision.get("budget")
         if isinstance(raw, dict):
-            await meter.update_budget(site.thread_id, budget_from(cast(dict[str, Any], raw)))
+            await meter.update_budget(site.thread_id, budget_from(raw))
 
 
 async def metered[T](
@@ -134,7 +136,7 @@ class MeteredModels:
     async def grade(self, email: str, draft: str) -> Grade:
         return await metered(self._meter, self._alias, "grade", lambda: self._inner.grade(email, draft))
 
-    async def extract_records(self, schema: str, text: str) -> list[dict[str, Any]]:
+    async def extract_records(self, schema: str, text: str) -> list[Json]:
         return await metered(
             self._meter, self._alias, "extract_records", lambda: self._inner.extract_records(schema, text)
         )

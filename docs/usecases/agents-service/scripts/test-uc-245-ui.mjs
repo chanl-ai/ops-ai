@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { AGENTS_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
-import { decideInConsole } from '../../lib/workflow_ui.mjs';
+import { decideInConsole, publishReviewOn } from '../../lib/workflow_ui.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
@@ -101,12 +101,23 @@ async function pickSecret(page, id) {
 
 await withUiStack(
   async (consoleUrl, stack) => {
+    // A new workspace publishes at once; the workflows here must wait for another person, so review is on for
+    // workflows first, before anyone signs in (a policy change refuses older tokens).
+    await publishReviewOn({ workflows: 'always' });
     const S = as(await tokenFor(SAM), 'team_security');
     const J = as(await tokenFor(JAMES));
     const P = as(await tokenFor(PRIYA));
     // A held write is decided in its run's team (Operations), so Maya acknowledges, not the mail module's owners.
     const M = as(await tokenFor(MAYA));
-    const runsOf = async (workflow) => (await get(`${agents}/v1/runs?workflowId=${workflow}&pageSize=100`, J))?.data ?? [];
+    // Every page: one page holds at most 50 runs.
+    const runsOf = async (workflow) => {
+      const rows = [];
+      for (let page = 1; ; page += 1) {
+        const body = await get(`${agents}/v1/runs?workflowId=${workflow}&pageSize=50&page=${page}`, J);
+        rows.push(...(body?.data ?? []));
+        if (!body?.pagination?.hasNext) return rows;
+      }
+    };
     const detail = (id) => get(`${agents}/v1/runs/${id}`, J);
     const out = (run, node) => (run?.steps ?? []).find((s) => s.nodeId === node)?.output;
 

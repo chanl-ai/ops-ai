@@ -23,6 +23,7 @@ from usecase_harness import (
     bearer,
     check,
     data,
+    every_page,
     finish,
     platform,
     service_headers,
@@ -142,7 +143,7 @@ with ExitStack() as stack:
     ravi = bearer(signed_in(api, "r.menon@harborpine.example"), "team_ops")
 
     # 1. Every test plugin loads; Security lists the system's hosts.
-    loaded = data(gw.get("/v1/apps", headers=priya)) or []
+    loaded = every_page(gw, "/v1/apps", headers=priya)
     ids = sorted(str(c["pluginId"]) for c in loaded if c.get("kind") == "plugin")
     allowed = [gw.post("/v1/egress/hosts", json={"value": h, "note": "uc-588"}, headers=sam) for h in m["hosts"]]
     allowed.append(gw.post("/v1/egress/ranges", json={"value": m["range"], "note": "uc-588"}, headers=sam))
@@ -405,7 +406,7 @@ with ExitStack() as stack:
 
     # 13. No answer read above, no call log row and no service log line carries any secret given.
     for who in (priya, wanjiru):
-        SEEN.append(gw.get("/v1/apps", headers=who).text)
+        SEEN.append(json.dumps(every_page(gw, "/v1/apps", headers=who)))
         SEEN.append(gw.get("/v1/executions", headers=who).text)
     logs = "".join(p.read_text(errors="replace") for p in LOG_DIR.glob(f"tools-{TOOLS_PORT}.log"))
     secrets = [*SECRETS.values(), *CLIENTS.values(), *PERSON_KEYS.values(), WRONG, m["client_key"].split("\n")[1]]

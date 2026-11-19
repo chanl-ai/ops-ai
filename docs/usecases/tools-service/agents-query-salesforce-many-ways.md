@@ -69,3 +69,7 @@ raises that card.
 | api | `tools-service/scripts/test-uc-581-api.py` | passing (2026-10-30), 14 checks |
 | ui | `tools-service/scripts/test-uc-581-ui.mjs` | failing at steps 16-17 (2026-11-03), 7 of 10: the agent page throws `tools.filter is not a function` (`apps/console/src/app/agents/[id]/_parts/instructions-assist.tsx:46`), since agents-service's `GET /v1/tools` answers a paged list (commit ba9f12c, 3 Nov) where the console's `grantableTools` reads an array |
 | cli | `tools-service/scripts/test-uc-581-cli.py` | passing (2026-10-30), 5 checks |
+
+## Setup state
+
+The agent read goes through `required()`. On 2026-11-12 its setup fails: `App plugin:opsai.salesforce was not found` when Salesforce is turned on.

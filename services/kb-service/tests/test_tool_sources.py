@@ -20,6 +20,7 @@ from ops_kb.agents import StaticAgents
 from ops_kb.app import _tools_service, create_kb_app  # pyright: ignore[reportPrivateUsage]
 from ops_kb.files import KnowledgeFiles
 from ops_kb.tool_sources import Answer
+from ops_service_kit.http import JsonValue
 from ops_service_kit.settings import Settings
 
 from .readings_fake import LocalReadings
@@ -93,7 +94,7 @@ class FakeTools:
             return Answer(True, out)
         item_id = str(args["id"])
         a = self.articles.get(item_id) or self.attachments[item_id]
-        kids = [
+        kids: list[JsonValue] = [
             {"id": c, "title": self.attachments[c]["title"], "updated_at": self.attachments[c]["updated_at"]}
             for c in a.get("children", [])
         ]
@@ -283,12 +284,15 @@ async def test_a_connection_that_signs_in_each_person_cannot_be_a_source(
 
 
 def test_on_an_install_without_plugins_kb_reaches_no_tool(tmp_path: Path) -> None:
-    # No plugin in the install's plugins folder: no gateway client, and no tools scope a kb token could claim.
-    off = Settings(plugins_dir=tmp_path, tools_url="http://tools.test")
+    # No plugin in the plugins folder and none built in: no gateway client, and no tools scope a kb token could claim.
+    dropped, builtin = tmp_path / "plugins", tmp_path / "builtin"
+    dropped.mkdir()
+    builtin.mkdir()
+    off = Settings(plugins_dir=dropped, builtin_plugins_dir=builtin, tools_url="http://tools.test")
     assert _tools_service(off) is None
     assert not {"tools:view", "tools:run"} & set(off.service_scopes["kb"])
-    (tmp_path / "ops_plugin_desk").mkdir()
-    on = Settings(plugins_dir=tmp_path, tools_url="http://tools.test")
+    (dropped / "ops_plugin_desk").mkdir()
+    on = Settings(plugins_dir=dropped, builtin_plugins_dir=builtin, tools_url="http://tools.test")
     assert _tools_service(on) is not None
     assert {"tools:view", "tools:run"} <= set(on.service_scopes["kb"])
 
@@ -326,3 +330,23 @@ async def test_a_source_names_its_kind_as_its_plugin_titles_it(kb: httpx.AsyncCl
     """The console kept its own list of source kinds, so an app's source showed a label nobody declared."""
     src = await source(kb)
     assert data(await kb.get(f"/v1/sources/{src['id']}"))["kindLabel"] == "Salesforce Knowledge articles"
+
+
+async def test_a_fetch_that_raises_fails_the_sync_and_keeps_nothing(kb: httpx.AsyncClient, tools: FakeTools) -> None:
+    real = tools.call
+
+    async def call(tenant_id: str, team_id: str, tool: str, args: dict[str, Any], *, act: str) -> Answer:
+        if tool == GET and args.get("id") == "ka2":
+            raise RuntimeError("tools-service went away")
+        return await real(tenant_id, team_id, tool, args, act=act)
+
+    tools.call = call  # type: ignore[method-assign]
+    src = await source(kb)
+    r = await kb.post(f"/v1/sources/{src['id']}/sync", json={"full": False})
+    assert r.status_code == 500 and r.json()["error"]["code"] == "internal", r.text
+    assert data(await kb.get(f"/v1/sources/{src['id']}/runs"))["data"] == []
+    assert await items(kb, src["id"]) == {}
+    # The failed run holds no lock: the next sync reads every article.
+    tools.call = real  # type: ignore[method-assign]
+    again = await sync(kb, src["id"])
+    assert again["status"] == "success" and again["counts"]["upserted"] == 4, again

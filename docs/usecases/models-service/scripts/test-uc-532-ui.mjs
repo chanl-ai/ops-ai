@@ -16,7 +16,7 @@ const JAMES = 'j.richardson@harborpine.example';
 const ALIAS = 'uc532-mini';
 const MODEL = 'gpt-4.1-mini';
 const KEY = 'OPENAI';
-const SHOTS = evidenceDir('509', 'uc-532');
+const SHOTS = evidenceDir('532', 'uc-532');
 mkdirSync(SHOTS, { recursive: true });
 const signIn = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: PASSWORD }) })).json()).data;
 const data = async (r) => {
@@ -47,7 +47,7 @@ await withUiStack(
     const J = { Authorization: `Bearer ${(await signIn(JAMES)).token}`, 'X-Team-Id': 'team_ops' };
     const S = { Authorization: `Bearer ${serviceToken(tenant)}`, 'Content-Type': 'application/json' };
     // A connection to the run's fake OpenAI that signs in with OPENAI, and an alias on gpt-4.1-mini through it.
-    const fake = (await data(await fetch(`${models}/v1/models/providers`, { headers: S }))).find((p) => p.id === 'openai-local').baseUrl;
+    const fake = (await data(await fetch(`${models}/v1/models/providers`, { headers: S }))).data.find((p) => p.id === 'openai-local').baseUrl;
     const made = await data(await fetch(`${models}/v1/models/providers`, { method: 'POST', headers: S, body: JSON.stringify({ name: 'openai-uc532', type: 'openai-compatible', baseUrl: fake, keyRef: KEY }) }));
     await data(await fetch(`${models}/v1/models/aliases`, { method: 'POST', headers: S, body: JSON.stringify({ name: ALIAS, kind: 'chat', providerId: made.id, modelId: MODEL, clearedSensitivity: 'confidential' }) }));
     const chat = () =>
@@ -97,7 +97,7 @@ await withUiStack(
       const refusal = (await wrong.json()).error ?? {};
       await save(FAKE_OPENAI_KEY, true);
       const right = await chat();
-      const rows = await data(await fetch(`${models}/v1/provider-keys`, { headers: N }));
+      const rows = (await data(await fetch(`${models}/v1/provider-keys`, { headers: N }))).data;
       check(
         '3 a replaced value is what reaches the provider: a wrong key is refused by it as provider_auth_failed, saying where an admin checks it and never quoting the key, and the right one answers again',
         wrong.status === 502 && refusal.code === 'provider_auth_failed' && String(refusal.message).includes('Settings > Model providers') && !JSON.stringify(refusal).includes('sk-not-the-fakes-key') && right.status === 200 && rows[0]?.version === 3,

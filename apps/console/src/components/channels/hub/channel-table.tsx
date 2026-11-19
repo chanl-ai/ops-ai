@@ -20,8 +20,8 @@ import { ServesCell } from './serves-cell';
 
 /** Where a channel's own settings live: a mailbox's page, the agent's Channels tab for an embed, API keys for a key. */
 export function channelHref(c: ChannelRow): string {
-  if (c.type === 'email') return `/channels/email/${encodeURIComponent(c.id)}`;
-  if (c.type === 'chat' && c.serves) return `/agents/${encodeURIComponent(c.serves.id)}?tab=channels`;
+  if (c.type === 'email') return `/build/channels/email/${encodeURIComponent(c.id)}`;
+  if (c.type === 'chat' && c.serves) return `/build/agents/${encodeURIComponent(c.serves.id)}?tab=channels`;
   return '/settings/api-keys';
 }
 

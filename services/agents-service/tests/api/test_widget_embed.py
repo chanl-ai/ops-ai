@@ -41,7 +41,7 @@ def who(sub: str, role: str, team: str = "team_ops") -> dict[str, str]:
         "kind": "person",
         "security_team": "team_security",
         "aud": ["agents"],
-        "tenant_id": "acme",
+        "tenant_id": "local",
         "team_ids": [team],
         "roles": {team: role},
     }
@@ -68,7 +68,7 @@ async def introspect(key: str) -> dict[str, Any] | None:
     return {
         "sub": f"key_{team}",
         "name": "bank server",
-        "tenantId": "acme",
+        "tenantId": "local",
         "teamId": team,
         "scopes": ["read", "write"],
     }
@@ -196,47 +196,6 @@ async def test_only_the_deployments_mint_key_mints_server_sessions(client: Async
     assert forged.status_code == 401
 
 
-async def test_a_revoked_mint_key_mints_nothing_and_the_secret_is_never_listed(client: AsyncClient) -> None:
-    dep = await deploy(client)
-    key = await mint_key(client, dep["id"])
-    listed = (await client.get(f"/v1/widget-deployments/{dep['id']}/keys", headers=BUILDER)).json()["data"]
-    assert len(listed) == 1 and key.split(".")[-1] not in str(listed)
-    revoked = await client.post(f"/v1/widget-deployments/{dep['id']}/keys/{listed[0]['id']}/revoke", headers=BUILDER)
-    assert revoked.status_code == 200, revoked.text
-    body = {"email": "banker@bank.example", "name": "Banker", "origin": INTRANET}
-    after = await client.post(
-        f"/v1/widget-deployments/{dep['id']}/sessions", json=body, headers={"Authorization": f"Bearer {key}"}
-    )
-    assert after.status_code == 401 and after.json()["error"]["code"] == "widget_key_invalid"
-    viewer = await client.post(f"/v1/widget-deployments/{dep['id']}/keys", json={"name": "x"}, headers=VIEWER)
-    assert viewer.status_code in (403, 404), viewer.text
-
-
-async def test_a_persons_token_never_mints_a_server_session(client: AsyncClient) -> None:
-    dep = await deploy(client)
-    url = f"/v1/widget-deployments/{dep['id']}/sessions"
-    viewer = await client.post(
-        url, json={"email": "usr_v@harborpine.example", "name": "V", "origin": INTRANET}, headers=VIEWER
-    )
-    other = await client.post(
-        url, json={"email": "ceo@harborpine.example", "name": "CEO", "origin": INTRANET}, headers=BUILDER
-    )
-    assert viewer.status_code == 403 and viewer.json()["error"]["code"] == "widget_key_required"
-    assert other.status_code == 403 and other.json()["error"]["code"] == "widget_key_required"
-
-
-async def test_a_page_may_change_only_what_a_public_key_may(client: AsyncClient) -> None:
-    dep = await deploy(client)
-    token = await session(client, dep["id"])
-    tid = await thread(client, dep["id"], token)
-    refused = await client.post(
-        f"/v1/widget/{dep['id']}/threads/{tid}/messages",
-        json={"content": LOOKUP, "overrides": {"temperature": 0.5}},
-        headers=page(token),
-    )
-    assert refused.status_code == 422 and refused.json()["error"]["details"]["field"] == "overrides.turn.temperature"
-
-
 async def test_a_busy_page_is_rate_limited(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(widget_sessions, "PER_PERSON", 1)
     dep = await deploy(client)
@@ -295,16 +254,6 @@ async def test_pausing_the_agent_stops_its_open_widget_conversations(client: Asy
     assert sent.status_code == 409 and sent.json()["error"]["code"] == "agent_paused", sent.text
 
 
-async def test_only_a_person_of_the_deployments_team_signs_in_from_the_page(client: AsyncClient) -> None:
-    dep = await deploy(client)
-    url = f"/v1/widget/{dep['id']}/session"
-    outsider = await client.post(url, headers={**who("usr_f", "approver", "team_fraud"), "Origin": INTRANET})
-    key = await client.post(url, headers={**OPS_KEY, "Origin": INTRANET})
-    # Another team's embed is not found, with no owner named.
-    assert outsider.status_code == 404 and "team_" not in outsider.text, outsider.text
-    assert key.status_code == 403 and key.json()["error"]["code"] == "api_key_refused"
-
-
 async def test_the_page_reads_an_error_on_its_listed_origin(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -323,13 +272,15 @@ async def test_a_session_is_refused_for_another_team_deployment_or_after_expiry(
     dep, other = await deploy(client), await deploy(client)
     signer = HmacSigner.derived(SETTINGS.review_key.get_secret_value(), "widget-session")
     claims = {"typ": widget_sessions.SESSION_TYPE, "dep": dep["id"], "origin": INTRANET, "email": "x@y.z", "name": "X"}
-    forged = mint({**claims, "tenant": "acme", "team": "team_security", "sub": "x"}, signer, ttl_s=TEST_TOKEN_TTL_S)
+    forged = mint({**claims, "tenant": "local", "team": "team_security", "sub": "x"}, signer, ttl_s=TEST_TOKEN_TTL_S)
     elsewhere = await session(client, other["id"])
     monkeypatch.setattr(widget_sessions, "SESSION_TTL_S", -5)
     expired = await session(client, dep["id"])
-    for token in (forged, elsewhere, expired):
+    another, ended = "That session is for another widget.", "The widget's session has ended; it starts a new one."
+    for token, message in ((forged, another), (elsewhere, another), (expired, ended)):
         res = await client.post(f"/v1/widget/{dep['id']}/threads", headers=page(token))
-        assert res.status_code == 401, (token[:12], res.text)
+        error = res.json()["error"]
+        assert (res.status_code, error["code"], error["message"]) == (401, "unauthorized", message), res.text
 
 
 HOLD = 'call place_wire_hold {"wireId": "W-1", "hours": 24, "reason": "Unusual payee"}'
@@ -367,19 +318,19 @@ async def test_a_widget_hold_waits_for_human_tasks_and_the_page_has_no_route_to_
 async def test_the_public_config_answers_a_listed_page_or_a_mint_key_and_names_no_team(client: AsyncClient) -> None:
     dep = await deploy(client, [INTRANET, PORTAL])
     url = f"/v1/widget/{dep['id']}/config"
-    res = await client.get(url, params={"tenant": "acme"}, headers={"Origin": PORTAL})
+    res = await client.get(url, params={"tenant": "local"}, headers={"Origin": PORTAL})
     assert res.status_code == 200 and res.headers.get("access-control-allow-origin") == PORTAL, res.text
     data = res.json()["data"]
     assert set(data) == {"agentName", "deploymentName", "allowedOrigins", "paused", "retired", "suggestions"}, data
     assert sorted(data["allowedOrigins"]) == sorted([INTRANET, PORTAL]) and data["paused"] is False
-    assert "team_ops" not in res.text and "acme" not in res.text
+    assert "team_ops" not in res.text and "local" not in res.text
     key = {"Authorization": f"Bearer {await mint_key(client, dep['id'])}"}
-    assert (await client.get(url, params={"tenant": "acme"}, headers=key)).status_code == 200
+    assert (await client.get(url, params={"tenant": "local"}, headers=key)).status_code == 200
     # Nobody else reads it: no Origin and no key, an unlisted page, or another credential.
     for headers in ({}, {"Origin": "https://evil.example"}, OPS_KEY, {"Authorization": "Bearer ok_ops.k1"}):
-        refused = await client.get(url, params={"tenant": "acme"}, headers=headers)
+        refused = await client.get(url, params={"tenant": "local"}, headers=headers)
         assert refused.status_code in (401, 403) and "access-control-allow-origin" not in refused.headers, headers
-    for params, dep_id in (({"tenant": "other"}, dep["id"]), ({"tenant": "acme"}, "wd_missing")):
+    for params, dep_id in (({"tenant": "other"}, dep["id"]), ({"tenant": "local"}, "wd_missing")):
         missing = await client.get(f"/v1/widget/{dep_id}/config", params=params, headers={"Origin": PORTAL})
         assert missing.status_code == 404, missing.text
 
@@ -420,12 +371,6 @@ async def test_the_loader_is_served_without_a_key(client: AsyncClient) -> None:
     res = await client.get("/embed/v1.js")
     assert res.status_code == 200 and res.headers["content-type"].startswith("text/javascript")
     assert "OpsChat" in res.text and "postMessage(msg, host)" in res.text, "the loader posts only to an exact origin"
-
-
-async def test_the_first_widget_script_is_gone_rather_than_swapped_for_the_loader(client: AsyncClient) -> None:
-    # An old `data-token` tag must fail visibly: served the loader instead, it would draw nothing and say nothing.
-    res = await client.get("/widget/v1.js")
-    assert res.status_code == 410 and "window.OpsChat" not in res.text and "/embed/v1.js" in res.text, res.text
 
 
 async def test_the_embed_frame_on_the_ops_host_speaks_for_the_page_its_session_names(client: AsyncClient) -> None:

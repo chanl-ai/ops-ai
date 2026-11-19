@@ -13,9 +13,17 @@ integration tests (pytest in the Python services); use cases only drive what a c
 | Prerequisite: PostgreSQL :5477 and OPA :8181 | `make db-up` |
 | One use case, every layer it lists | `make usecase-test UC=uc-001` |
 | One layer | `make usecase-test UC=uc-002 LAYER=ui` |
+| An api script against a deployed host | `OPS_USECASE_BASE_URL=https://<host> make usecase-test UC=uc-002 LAYER=api`: the script calls that origin for every service and starts nothing, runs no migration or seed and makes no database; a script that needs the services' internal ports or a fake provider cannot run there. The host must be exactly the one in `OPS_USECASE_STAGING_HOST` (the staging workflow sets it from its app variable; unset, every host is refused, and a name that says production is refused even then), only `LAYER=api` runs, only a use case whose `Deployed` column says `safe` runs (unmarked is not safe; none is marked yet), and a seed is refused. The runner and `lib/deployed_guard.py` apply the same rules |
 | All of them | `make usecase-test` |
 | Registry, one entry, coverage | `make usecase-list`, `make usecase-show UC=uc-002`, `make usecase-coverage SERVICE=agents-service` |
-| Register a new one | `make usecase-new SERVICE=<service> TITLE="<title>"` |
+| Register a new one | `make usecase-add AREA=<area> TITLE="<short title>" [LAYERS=api,sdk,cli]` (`usecase-new` is the older form) |
+| Every use case with its last run | `make usecase-list [AREA=<area>]`; the generated copy is `docs/usecases/index.md` (`make usecase-index`) |
+| What changed since the last green run | `make usecase-update UC=<id>` |
+| One use case, each step in plain words | `make usecase-run UC=<id> [LAYER=<layer>]`; full output in `.logs/usecases/<id>/<layer>.log` |
+
+Every use case writes all its output (screenshots, logs, scratch files) under one root: `.logs/usecases/<id>/`, or
+`$OPS_EVIDENCE_DIR/<id>/` when that is set. `evidenceDir()` in the Node harness and `evidence_dir()` in the Python one
+return it, and `scripts/check_usecase_outputs.py` fails a script that writes elsewhere.
 
 Run make under your secrets manager as for the rest of the stack. The scripts do not need model keys and the runner
 removes them.
@@ -44,9 +52,29 @@ This folder holds docs and their scripts together, so its agent guidance lives h
 | A pass needs evidence | A script prints one `PASS <name>` or `FAIL <name>: <detail>` line per check. The runner passes a use case only when the script exits 0, printed no FAIL line and printed at least one PASS line |
 | Every use case names its non-vacuous check | The check that fails when the behaviour breaks, often a refusal paired with the success it guards. Each doc says which check that is |
 | The status column is not evidence | It records the last state someone saw; only `make usecase-test` decides |
+| A ui stack runs the real stack's sign-in | `withUiStack` starts platform-service unless the script passes `platform: false`, so the console signs in and lists teams through it as on the shared stack (`resolveStack` in `packages/usecase-runner/src/harness.ts`). A script that leaves `platform` unset gets the dev builder (James) signed in for it: each browser context starts with his session, and each call to the run's services that carries no `Authorization` or `X-Api-Key` is sent as him. `signedInAs: '<dev role>'` names another seeded person, for a page whose rows another team owns. A script that sets `platform: true` signs in on `/login` itself. A page that reads tool modules also needs `tools` |
 | The console is a production build | A ui run serves the console with `next start` on a build made once per source hash and stack shape (`packages/usecase-runner/src/console-build.ts`, cached in `apps/console/node_modules/.cache/console-build-<hash>`, pruned after three days). A run copies the build and swaps its placeholder service URLs for its own ports, so a cold build costs one run and later runs start in seconds. `OPS_USECASE_CONSOLE=dev` runs `next dev` instead. Dev-only pages (`/dev`, `/preview`) answer because the run sets `OPS_ALLOW_PREVIEW_PAGES=1` |
 | Layers | `sdk` scripts call the SDK in `sdk/python` or `sdk/typescript`; `cli` scripts run a command a person runs, today the sample team installer (`scripts/sample_team.py`) and later `ops` from `packages/ops_plugins`. A layer whose provider is missing reports "not available yet; run LAYER=api" and exits 3 when nothing else ran |
 | Stories | Each doc opens with a `## Stories` table (`# \| Story \| Layer \| Steps \| Proved by`), four or five plain stories; checks are named by their step number, so a run reports each story as works or broken with the step that failed. `make usecase-report UC=<id>` prints the stories from the latest runs |
+
+## Shared steps
+
+Setup that several scripts repeat is a named step. Every step calls the public SDK (TypeScript in
+`packages/usecase-runner/src/steps.ts`, imported as `@ops-ai/usecase-runner/steps`; Python in `docs/usecases/lib/steps.py`),
+so a script that uses one also proves the SDK can do it. A step the SDK cannot do is a product gap: file a card and show
+the step as open in the use case, rather than adding a raw HTTP call or a helper that hides it. A request a script still
+makes by hand goes through `required(res, what)` (`@ops-ai/usecase-runner/harness`), which throws on a refused request so
+a failed create stops the script as setup and not as a later FAIL on an empty id.
+
+| Step (TypeScript / Python) | What it does | SDK call |
+|---|---|---|
+| `signInAs` / `sign_in_as` | Signs a seeded person in; the client acts in `team_ops`, another team, or none (the workspace admin) | `OpsAI.signIn`, `raw.platform.auth_sign_in` |
+| `makeTeam` / `make_team` | The workspace admin creates a team with a first admin, who invites each member; each accepts with a name and a password. Returns a client per member | `raw.platform.teams_create_team`, `members_invite_members`, `invites_accept_invite` |
+| `addKnowledgeBase` / `add_knowledge_base` | A knowledge base with a push source and its items, indexed on return (Python: written, not yet run) | `raw.kb.knowledge_bases_create_knowledge_base`, `sources_create_source`, `sources_put_item` |
+| `publishAgent` / `publish_agent` | Creates an agent on the stack's first chat alias and sends it for publish; live on return when the stack auto-approves | `agents.create`, `agents.publish`, `raw.agents.agents_list_model_aliases` |
+| `runWorkflow` / `run_workflow` | Starts a run and waits until it ends or stops at a human task (`taskId`) (written, not yet run) | `runs.start`, `runs.wait` |
+| `madeThings` / `Made` | Records what a run made; `cleanUp` / `clean_up` removes it in reverse order and reports every leftover. A team is archived, since the platform deletes one 30 days later | the matching `*_delete_*` and `teams_archive_team` calls |
+| `clientFor` | An SDK client pointed at the run's services | `new OpsAI({ services })` |
 
 ## Layout
 
@@ -55,6 +83,7 @@ This folder holds docs and their scripts together, so its agent guidance lives h
 | `docs/usecases/README.md` | This registry; the runner reads the table below |
 | `docs/usecases/<service>/<topic>.md` | The use case, named for its topic, with its id in the header: preconditions, steps and expected results, acceptance layers, non-vacuous check |
 | `docs/usecases/<service>/scripts/test-uc-NNN-<layer>.py` or `.mjs` | One script per layer; Python for api, Node with Playwright for ui |
+| `docs/usecases/lib/steps.py` | The Python shared steps (table above) |
 | `docs/usecases/lib/usecase_harness.py` | Checks, the four thread calls, and the scripted services, shared by the Python scripts |
 | `packages/usecase-runner/` | Registry parser, layer resolver, PASS/FAIL reporter, exit codes, and the ui harness; `scripts/usecase.mjs` calls it |
 
@@ -63,8 +92,8 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 
 ## Registry
 
-| Id | Service | Title | Layers | Status |
-|---|---|---|---|---|
+| Id | Service | Title | Layers | Status | Deployed |
+|---|---|---|---|---|---|
 | uc-001 | agents-service | Chat turn with citation | api | passing |
 | uc-002 | agents-service | Write tool pauses and approval resumes with step-up | api, ui | passing |
 | uc-003 | agents-service | Simple workflow through the four thread calls | api | passing |
@@ -77,13 +106,13 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-010 | tools-service | A builder manages a tool module | api, ui | passing |
 | uc-011 | tools-service | A tool call runs through the registry and is logged with its caller | api | passing |
 | uc-012 | tools-service | A builder imports tools from OpenAPI and MCP and calls them on allowed hosts only | api, ui | passing |
-| uc-013 | tools-service | A tool's credential is a secret that never comes back | api, ui | passing |
+| uc-013 | tools-service | Connect an app with an API key | api, sdk, cli, ui | passing |
 | uc-015 | tools-service | Tool module details page | ui | passing |
-| uc-018 | agents-service | Create, edit, publish an agent and chat with it | api, ui | passing |
+| uc-018 | agents-service | Chat with an agent | api, sdk, cli, ui | passing |
 | uc-019 | agents-service | Create a workflow from draft JSON, validate, test, publish and start it | api | passing |
 | uc-020 | agents-service | Chat starts a workflow | api | passing |
 | uc-021 | platform-service | Sign in, session, refresh, sign out | api, ui | passing |
-| uc-023 | platform-service | Members and roles | api, ui | passing |
+| uc-023 | platform-service | Invite people and change their roles | api, sdk, cli, ui | passing |
 | uc-025 | platform-service | Audit | api, ui | passing |
 | uc-026 | platform-service | Anonymous and dev boundary | api | passing |
 | uc-027 | agents-service | An approval outlives its token | api | passing |
@@ -92,7 +121,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-040 | tools-service | Security decides a tool module review | api, ui | passing |
 | uc-041 | tools-service | Workflow approvals use agents-service workflows | api | passing |
 | uc-042 | tools-service | A module's call counts and activity come from real calls | api | passing |
-| uc-047 | console | Sub-pages show as rows in the sidebar | ui | passing |
+| uc-047 | console | Sub-pages show as rows in the sidebar, in the area they belong to | ui | failing |
 | uc-048 | agents-service | An agent is granted and calls a published tools-service operation | api | passing |
 | uc-049 | agents-service | A write runs only after as many people as its policy names approve it | api, ui | passing |
 | uc-052 | console | Access is Read or Write in the console | ui | passing |
@@ -101,7 +130,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-055 | console | A bank API goes from import to a governed agent call | ui | passing |
 | uc-056 | console | A grant no longer offered shows as stale and can be removed | ui | passing |
 | uc-057 | console | A write held in a chat is listed in Reviews and approved there | ui | passing |
-| uc-058 | console | Another person's chat stays private: a teammate gets 404 | ui | passing |
+| uc-058 | console | Another person's chat stays private: a teammate gets 404 | api, ui | passing |
 | uc-059 | console | A builder sets a write's approval policy on the module page | ui | passing |
 | uc-060 | models-service | An alias reaches the fake OpenAI or the real one by its connection's base URL | api | passing |
 | uc-073 | console | Chat widgets draw by shape on the dev widget page | ui | passing |
@@ -115,7 +144,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-084 | agents-service | An agent finds a workflow with search_tools and runs it; its agent step answers by schema | api, ui | passing |
 | uc-081 | agents-service | Basic workflow nodes run through the queue, and a worker killed after the tool step leaves the tool called once | api, ui | passing |
 | uc-085 | agents-service | An agent refuses a blocked topic before answering, through a guardrail it pins by version | api, ui | passing |
-| uc-086 | console | A builder takes a bank API from import to a governed agent call | ui | passing |
+| uc-086 | console | An agent with three tools | sdk, cli, ui | ui passing |
 | uc-087 | console | A banker finds, starts and continues chats: suggested prompt, regenerate, stop, retry, server search and paging | ui | passing |
 | uc-088 | agents-service | A builder sets the limits callers override within and publishes them with the agent | ui | passing |
 | uc-089 | console | An agent shows a table and a figure in chat with no tool behind them | ui | passing |
@@ -125,11 +154,11 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-095 | console | An agent fills a pinned widget and lays out its own in chat | ui | passing |
 | uc-093 | files-service | A member stores a file once and it is downloaded, held and deleted under its rules | api | passing |
 | uc-094 | files-service | Another team's file is missing on every files-service route | api, ui | passing |
-| uc-096 | console | Knowledge bases work end to end from the console: create, add files and a page, watch ingestion, test a question, retire | ui | passing |
+| uc-096 | console | Make, fill, ask and retire a knowledge base | sdk, cli, ui | passing |
 | uc-097 | console | A builder saves create dialogs and account settings with Enter, and Cancel never saves | ui | passing |
 | uc-098 | console | A builder pages and searches a growing list on the server | ui | passing |
 | uc-099 | console | A viewer sees the team's records read-only | api, ui | passing |
-| uc-100 | console | The console matches the page plan: Overview, no Templates, Conversations under Chat, reviewer | ui | passing |
+| uc-100 | console | The console matches the page plan: Overview, no Templates, All chats under Chat, reviewer | ui | failing |
 | uc-103 | console | A builder edits a widget with forms; JSON stays the advanced view | ui | passing |
 | uc-104 | console | A guardrail has its own page and an agent pins one of its versions | ui | passing |
 | uc-105 | console | A Security admin sets where each purpose stores its files and with which credential | ui | passing |
@@ -170,10 +199,13 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-141 | console | The one Activity page lists a run by name, filters by kind on the server, narrows to a source, and opens the run | ui | passing |
 | uc-142 | console | Channels on real data: the hub, tab dots and an email landing match /v1/channels; Deployments lands on Channels; an embed's version changes in its row | ui | passing |
 | uc-143 | console | Access › Tool access lists every workflow's tool access by view, counted on the server | ui | passing |
-| uc-129 | kb-service | A builder adds documents to a knowledge base by uploading them or picking them from Files | ui | passing |
+| uc-129 | kb-service | Add files from Files to a knowledge base | sdk, cli, ui | passing |
 | uc-160 | platform-service | A person resets their password by a mailed link and signs in with it; the demo password stops working for them | api, ui | passing |
 | uc-161 | platform-service | A first OIDC sign-in creates a chat-only member once, and the console offers SSO for that email | api, ui | passing |
 | uc-162 | platform-service | A person signs in through SAML and steps up at the same provider, which must ask again | api | passing |
+| uc-711 | platform-service | Leaving a group at the identity provider ends only the membership that group gave | api | passing |
+| uc-712 | platform-service | Company sign-in required: passwords refused on company domains except for break-glass Security admins | api | passing |
+| uc-713 | platform-service | An admin tests a company provider, turned off, and sees what it sent; nobody is signed in or made | api | passing |
 | uc-163 | platform-service | A password in an SSO-only workspace, another provider's answer and a reused code are refused | api | passing |
 | uc-164 | platform-service | Workspace admins create a team with its first admin, rename, archive and restore it; others cannot | api, ui | passing |
 | uc-212 | platform-service | A workspace sets its security and default teams, and SSO groups put new people in mapped teams | api | passing |
@@ -203,7 +235,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-229 | agents-service | A guarded answer streams as it is written and is replaced when its check fails | ui | passing |
 | uc-230 | tools-service | A workflow step notifies an outside system's webhook with a case's data | api | passing |
 | uc-231 | agents-service | A Calculate step works out a court order's amount and deadline | api, ui | passing |
-| uc-232 | console | The header names the workspace from platform-service and Tools › Workflows lists the registry directory, not the mock | ui | passing |
+| uc-232 | console | The sidebar names the workspace from platform-service, the header does not repeat it, and Tools › Workflows lists the registry directory, not the mock | ui | passing |
 | uc-245 | agents-service | A team's mailbox runs end to end: connected and tested in the console, bound through a review, a PDF read, checked and decided by a person, a case opened, the reply sent from the mailbox, a redelivery ignored | ui | passing |
 | uc-246 | agents-service | A mixed court order email is read by kind in parallel: a case and a webhook per document, a person checks the doubtful read, and the sender gets a reply | ui | passing |
 | uc-247 | agents-service | A builder tests an agent on a real chat thread the server marks test | api, ui | passing |
@@ -226,13 +258,14 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-395 | tools-service | A tool presents a client certificate from its connection to a system that requires one | api, ui | current |
 | uc-396 | tools-service | A builder adds an MCP server behind OAuth by its address, signs in once, and its tools run through the same executor | api, ui | current |
 | uc-397 | tools-service | A workflow's tool step reaches its error and timeout ports on mock answers in a test run, and live reaches the system | api | current |
-| uc-410 | tools-service | An assistant lists and runs a team's read tools over MCP with an API key; writes, other teams and production are refused | api | current |
+| uc-410 | tools-service | An assistant lists and runs a team's read tools over MCP with an API key; writes, other teams and production are refused | api, ui | current |
 | uc-267 | console | Admins see roles, a person's effective access and why an action is refused | ui | current |
 | uc-233 | console | Start run is a form generated from the trigger's input schema; a file input uploads or picks files and the run gets their ids | ui | passing |
 | uc-234 | console | A Human Task opens as its own page: the question, the document beside the read values, Details folded, and the decision in a footer row that never covers the body | ui | passing |
 | uc-257 | console | Tables size each column by what it holds: names trimmed to one line with the whole value on hover, numbers right-aligned, a dash for an empty cell, and the name pinned on a phone | ui | passing |
 | uc-248 | agents-service | A hold on a customer's account: matched, worked out, approved in time or by a supervisor after the deadline, placed, noted on a case, and the outside system told | ui | passing |
 | uc-249 | agents-service | A complaint email: each attachment recognised and its read kept, the complaint read and triaged by an agent, a case by urgency, a hold started, and an approved reply | ui | passing |
+| uc-250 | documents-service | Every fixture of four document types is read end to end | api | current |
 | uc-251 | agents-service | A case reads assembled: typed fields in its case type's order, what it waits on and the drafted action, its run, workflow and file; decided on the task page, the action reads decided | api, ui | passing |
 | uc-252 | agents-service | A builder archives a workflow: it starts no run and leaves both lists, its run kept; restored, it serves its live version again | api, ui | passing |
 | uc-400 | agents-service | A workflow forks into two checks and a Join: the step after it runs once with both by the step they came from; a skipped branch is null; a fork meeting at a plain step is warned | api, ui | passing |
@@ -261,9 +294,9 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-526 | agents-service | Another team's records answer not found | api, ui | passing |
 | uc-531 | tools-service | A builder adds a Python function tool that runs sandboxed: it reads two bound tools through ops.call, hands a secret by name that the bank receives and no log holds, and is stopped at an unbound tool, a socket, its time limit and its memory cap | api, ui | passing |
 | uc-532 | models-service | An account admin saves a model provider key on Settings and a model call signs in to the provider with it; no other person sees or sets one | ui | passing |
-| uc-552 | console | A person works from one Chat, with Overview, their chats and every page in one folding sidebar, and an ended session keeps their draft | api,ui | passing |
+| uc-552 | console | A person works from one Chat, with Overview, their chats and the pages of one area in a folding sidebar, and an ended session keeps their draft | api,ui | failing |
 | uc-560 | console | Screens open from saved data, and every request logs its time and returns Server-Timing, with one request id across services | api, ui | passing |
-| uc-558 | tools-service | People connect their own Salesforce account: a call acts as the person who asked, an unconnected person gets a connect link made for them alone, and the body never chooses a token | api,ui | planned |
+| uc-558 | tools-service | Connect your own Salesforce account | api, sdk, cli, ui | planned |
 | uc-561 | agents-service | Memory follows a person across a team's agents and they take it back | api | api passing |
 | uc-562 | console | Every list, record and settings page reads well on a phone and on a desktop: no preselected decision, phone lists show the name, search boxes and descriptions read in full, tab strips scroll with a cue, a way back on record pages | ui | passing |
 | uc-563 | platform-service | A developer installs the sample team with one command, and a second run makes nothing | cli | passing |
@@ -294,7 +327,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-620 | agents-service | Any file a workflow or chat reads ends read or with a reason | api, ui | draft |
 | uc-621 | agents-service | A builder runs the three foundation Examples | sdk | current |
 | uc-622 | agents-service | A builder asks the first three published agents | sdk | current |
-| uc-623 | agents-service | A builder validates, applies and test-runs the three-node workflow | sdk, cli | current |
+| uc-623 | agents-service | Test-run a workflow from a file | sdk, cli | current |
 | uc-624 | agents-service | A builder runs the two composition Examples | sdk | current |
 | uc-625 | tools-service | Connect comes back Connected in any window, for every sign-in app | ui | draft |
 | uc-626 | tools-service | Apps screens offer only what you may do, in plain words | api, ui | draft |
@@ -307,9 +340,9 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-673 | agents-service | A scanned file attached in chat is read with OCR and reaches the agent whole | api, ui | passing |
 | uc-674 | tools-service | An app's page shows one state and its next action | ui | current |
 | uc-675 | kb-service | A website source keeps a knowledge base current, and answers cite it | api, sdk | passing |
-| uc-676 | kb-service | Typed text and pushed items become cited knowledge, kept as files and idempotent by name | api, sdk, ui | passing |
-| uc-677 | kb-service | A knowledge owner turns on rerank and query rewrite, and every search shows what they did | api, sdk, ui | passing |
-| uc-678 | kb-service | A team takes in SharePoint libraries and Confluence spaces picked by name | api, sdk, ui | passing |
+| uc-676 | kb-service | Push knowledge from another system | api, sdk, cli, ui | passing |
+| uc-677 | kb-service | Turn on rerank and query rewrite | api, sdk, cli, ui | passing |
+| uc-678 | kb-service | Take in SharePoint libraries and Confluence spaces | api, sdk, cli, ui | passing |
 | uc-691 | tools-service | A second live org signs in at its own address and a call naming it reaches it | api | current |
 | uc-692 | tools-service | A second account of an app that is not Salesforce signs in at its own server | api | current |
 | uc-693 | tools-service | Every account row says what it points at, also for an app that declares nothing and a custom app | api | current |
@@ -331,3 +364,28 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-709 | tools-service | Changing who signs in to each person makes calls act as the person, and schedules keep the shared login | api | current |
 | uc-710 | console | A new row shows right after it is added, whatever page or search the list is on | ui | passing |
 | uc-720 | models-service | A refused model call in chat says what went wrong with the provider and what to do, worded for an admin or a member | ui | passing |
+| uc-721 | tools-service | A connected app writes at once: every tool on and writes run without asking until a team admin turns asking on, per team or per app; a turned-off tool says how to turn it on | api, sdk | passing |
+| uc-730 | console | A team admin decides whether agents ask before changing an app with one switch on Approvals, who answers once it is on, and a test-account checkbox under Advanced | ui | current |
+| uc-731 | agents-service | A team that makes a second guardrail of the same name is refused with name_taken, and the first keeps the plain slug | api | draft |
+| uc-733 | platform-service | A person connects an assistant to a team's MCP address with their company sign-in; a console token, another address and a person who left the team are refused | api, ui | failing |
+| uc-740 | agents-service | Start a skill from a template | sdk, cli | page |
+| uc-741 | agents-service | List and install templates from an assistant | mcp | page |
+| uc-742 | agents-service | A team's skill is an assistant's prompt | mcp | page |
+| uc-743 | agents-service | Prepare a client meeting from the slash menu | api, sdk, cli, mcp, ui | page |
+| uc-744 | agents-service | Update an opportunity from the same skill | api, sdk, mcp, ui | page |
+| uc-745 | agents-service | Skills stay out of reach without the right | api, mcp | page |
+| uc-746 | agents-service | Only published skills are offered | api, mcp | page |
+| uc-747 | agents-service | A required input must be filled | api, mcp | page |
+| uc-748 | agents-service | A pick over the reply's budget is refused | api | page |
+| uc-749 | agents-service | A part needing a tool the agent lacks is locked | api | page |
+| uc-750 | agents-service | An admin limits what the menu offers | api | page |
+| uc-723 | console | The console lists every area as an open sidebar section, offered only by what the person may open: admin, builder, reviewer, viewer, a chat-only person and a person in two teams; with the area_tabs flag on, the area tabs come back | ui | passing |
+| uc-722 | console | The areas rest on server facts: the seeded people hold the cells the areas are built from, and the tool-call list shows one call by its id | api | failing |
+| uc-workflows-1 | agents-service | A Schedule trigger starts one run when its tick is due, the same tick key starts no second run, and a tick due later stays queued | api, sdk | failing |
+| uc-platform-1 | platform-service | A team's running work is counted for that team only, and the delete check names it and stops the deletion | api | passing |
+| uc-751 | agents-service | Evals keep saved cases and runs for the team | api, sdk, ui | draft |
+| uc-752 | agents-service | An agent answers from a knowledge source with a citation, in mock and real mode | api, sdk, ui | works |
+| uc-753 | tools-service | An agent reads with a tool, asks for approval, and the write runs only after approval, in mock and real mode | api, sdk, cli, ui | works |
+| uc-754 | tools-service | Approval fails closed: when the approval rules cannot be read, a write that needs approval is refused and never runs | api | works |
+| uc-755 | tools-service | A team holding only a workflow grant on another team's tool module uses it through the workflow and cannot edit, publish, run, revoke or delete it | api, ui | works |
+| uc-756 | agents-service | A shared form filled in signed out starts a workflow with knowledge and a tool, a person approves a step, and the run finishes with a record | api, ui | works |

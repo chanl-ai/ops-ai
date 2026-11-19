@@ -20,6 +20,8 @@ from ops_agent_kernel.types import (
     AgentSettings,
     Interrupt,
     PendingCall,
+    Plan,
+    PlanStep,
     PromptFragment,
     ToolGrant,
     TurnRequest,
@@ -30,6 +32,8 @@ from ops_agents.api.chat_history import history_entry
 from ops_agents.api.chat_threads import THINK_HARDER, AssistantBuilder
 from ops_agents.graphs.common import interrupt_from_state, interrupt_to_state
 from ops_contracts.chat import ChatMessage
+from ops_service_kit.http import Json, JsonValue
+from ops_service_kit.narrow import json_list, json_object
 from tests.conftest import SEED
 
 READ = ToolGrant(
@@ -38,21 +42,31 @@ READ = ToolGrant(
 SETTINGS = AgentSettings("ag_ops", 1, [PromptFragment("You help.")], "m", max_tool_calls=1, max_steps=4)
 
 
-def steps(*statuses: str) -> list[dict[str, Any]]:
+def steps(*statuses: str) -> list[PlanStep]:
     return [{"title": f"Step {i + 1}", "status": s} for i, s in enumerate(statuses)]
 
 
+def step_args(*statuses: str) -> list[JsonValue]:
+    return [{"title": f"Step {i + 1}", "status": s} for i, s in enumerate(statuses)]
+
+
+def plan_of(*statuses: str) -> Plan:
+    return {"title": "t", "steps": steps(*statuses)}
+
+
+def plan_args(*statuses: str, title: str = "t") -> Json:
+    return {"title": title, "steps": step_args(*statuses)}
+
+
 def plan_call(*statuses: str, **more: Any) -> ToolCallPart:
-    return ToolCallPart("plan", {"title": "Check the loan files", "steps": steps(*statuses), **more})
+    return ToolCallPart("plan", {"title": "Check the loan files", "steps": step_args(*statuses), **more})
 
 
 class Reads:
     def __init__(self) -> None:
         self.calls: list[str] = []
 
-    async def execute(
-        self, tool: str, arguments: dict[str, Any], *, key: str, approval_token: str | None
-    ) -> ToolOutcome:
+    async def execute(self, tool: str, arguments: Json, *, key: str, approval_token: str | None) -> ToolOutcome:
         self.calls.append(tool)
         return ToolOutcome(True, {"cases": [{"title": "Renewal"}]})
 
@@ -86,6 +100,15 @@ def scripted(*responses: list[Any] | str) -> tuple[FunctionModel, list[str]]:
     return FunctionModel(respond, stream_function=stream), seen
 
 
+def rows(part: JsonValue) -> list[Json]:
+    """The drawn plan's step rows."""
+    return [json_object(row) for row in json_list(json_object(part)["data"])]
+
+
+def hint_title(part: JsonValue) -> JsonValue:
+    return json_object(json_object(part)["hint"])["title"]
+
+
 async def run(model: FunctionModel, req: TurnRequest) -> tuple[TurnResult, list[Any]]:
     events = [e async for e in run_turn(req, KernelPorts(model=model, tools=Reads(), knowledge=NoKnowledge()))]
     last = events[-1]
@@ -93,13 +116,13 @@ async def run(model: FunctionModel, req: TurnRequest) -> tuple[TurnResult, list[
     return last.result, events
 
 
-async def plans(model: FunctionModel, req: TurnRequest) -> tuple[TurnResult, list[dict[str, Any]]]:
+async def plans(model: FunctionModel, req: TurnRequest) -> tuple[TurnResult, list[Json]]:
     """The turn's result and each plan part as it was drawn: an event's record changes after it is sent."""
-    drawn: list[dict[str, Any]] = []
+    drawn: list[Json] = []
     result: TurnResult | None = None
     async for e in run_turn(req, KernelPorts(model=model, tools=Reads(), knowledge=NoKnowledge())):
         if isinstance(e, ToolOutput) and e.call.tool == "plan" and e.call.view:
-            drawn.append(copy.deepcopy(e.call.view["part"]))
+            drawn.append(json_object(copy.deepcopy(e.call.view["part"])))
         if isinstance(e, TurnFinished):
             result = e.result
     assert result is not None
@@ -107,29 +130,23 @@ async def plans(model: FunctionModel, req: TurnRequest) -> tuple[TurnResult, lis
 
 
 def test_one_step_at_a_time_forward_only_and_finished_titles_kept() -> None:
-    before = {"title": "t", "steps": steps("done", "doing", "todo")}
-    assert "One step" in str(
-        planner.check(None, {"title": "t", "steps": steps("doing", "doing", "todo")}, replan=False, replans=0)
-    )
-    assert "cannot go back" in str(
-        planner.check(before, {"title": "t", "steps": steps("done", "todo", "todo")}, replan=False, replans=0)
-    )
-    renamed = {"title": "t", "steps": [{"title": "Other", "status": "done"}, *steps("done", "doing", "todo")[1:]]}
+    before = plan_of("done", "doing", "todo")
+    assert "One step" in str(planner.check(None, plan_of("doing", "doing", "todo"), replan=False, replans=0))
+    assert "cannot go back" in str(planner.check(before, plan_of("done", "todo", "todo"), replan=False, replans=0))
+    renamed: Plan = {"title": "t", "steps": [{"title": "Other", "status": "done"}, *steps("done", "doing", "todo")[1:]]}
     assert "keeps its title" in str(planner.check(before, renamed, replan=False, replans=0))
-    assert (
-        planner.check(before, {"title": "t", "steps": steps("done", "done", "doing")}, replan=False, replans=0) is None
-    )
+    assert planner.check(before, plan_of("done", "done", "doing"), replan=False, replans=0) is None
 
 
 def test_a_third_replan_is_refused() -> None:
-    before = {"title": "t", "steps": steps("done", "blocked", "todo")}
-    again = {"title": "t", "steps": steps("done", "doing", "todo")}
+    before = plan_of("done", "blocked", "todo")
+    again = plan_of("done", "doing", "todo")
     assert planner.check(before, again, replan=True, replans=1) is None
     assert "finish with what you have" in str(planner.check(before, again, replan=True, replans=2))
 
 
 def test_a_step_title_is_masked_as_reply_text_is() -> None:
-    plan, _ = planner.given({"title": "Card 4111 1111 1111 1111", "steps": steps("doing", "todo", "todo")})
+    plan, _ = planner.given(plan_args("doing", "todo", "todo", title="Card 4111 1111 1111 1111"))
     assert plan is not None and "4111" not in plan["title"], plan
 
 
@@ -144,17 +161,15 @@ async def test_the_plan_ticks_itself_each_step_gets_its_own_budget_and_the_done_
     assert result.stop_reason == "final" and len(seen) == 3, (result, len(seen))
     reads = [r for r in result.tool_calls if r.tool == "find_cases"]
     assert [r.status for r in reads] == ["ok", "ok"], reads
-    assert [[s["state"] for s in d["data"]] for d in drawn][:2] == [
+    assert [[s["state"] for s in rows(d)] for d in drawn][:2] == [
         ["running", "pending", "pending"],
         ["done", "running", "pending"],
     ]
-    assert drawn[-1]["hint"]["title"] == "Did 3 steps" and not any("(skipped)" in s["title"] for s in drawn[-1]["data"])
+    assert hint_title(drawn[-1]) == "Did 3 steps" and not any("(skipped)" in str(s["title"]) for s in rows(drawn[-1]))
 
 
 class NeedsSignIn:
-    async def execute(
-        self, tool: str, arguments: dict[str, Any], *, key: str, approval_token: str | None
-    ) -> ToolOutcome:
+    async def execute(self, tool: str, arguments: Json, *, key: str, approval_token: str | None) -> ToolOutcome:
         return ToolOutcome(False, {"error": {"code": "CONNECTION_NOT_LINKED", "message": "Sign in to Salesforce."}})
 
 
@@ -167,9 +182,10 @@ async def test_a_turn_stopped_by_a_sign_in_marks_the_step_blocked() -> None:
     events = [e async for e in run_turn(req, KernelPorts(model=model, tools=NeedsSignIn(), knowledge=NoKnowledge()))]
     last = [e.call for e in events if isinstance(e, ToolOutput) and e.call.tool == "plan"][-1]
     assert last.view is not None
-    assert [s["state"] for s in last.view["part"]["data"]] == ["failed", "pending", "pending"]
-    assert last.view["part"]["data"][0]["title"].endswith("waiting for you")
-    assert planner.from_part(last.view["part"]) is not None
+    part = json_object(last.view["part"])
+    assert [s["state"] for s in rows(part)] == ["failed", "pending", "pending"]
+    assert str(rows(part)[0]["title"]).endswith("waiting for you")
+    assert planner.from_part(part) is not None
 
 
 async def test_an_answer_with_nothing_waiting_finishes_the_plan() -> None:
@@ -180,12 +196,12 @@ async def test_an_answer_with_nothing_waiting_finishes_the_plan() -> None:
     )
     _, events = await run(model, TurnRequest("t1", "r1", SETTINGS, [READ], user_turn="Which loan files?"))
     last = [e.call for e in events if isinstance(e, ToolOutput) and e.call.tool == "plan"][-1]
-    assert last.view is not None and last.view["part"]["hint"]["title"] == "Did 3 steps", last.view
+    assert last.view is not None and hint_title(last.view["part"]) == "Did 3 steps", last.view
 
 
 async def test_a_plan_left_open_goes_on_at_its_blocked_step_in_two_model_calls() -> None:
     # After a sign-in the resumed plan took seven model calls: plan updates in steps of their own around two reads.
-    carried = {"title": "Check the loan files", "steps": steps("done", "blocked", "todo")}
+    carried = plan_args("done", "blocked", "todo", title="Check the loan files")
     model, seen = scripted([ToolCallPart("find_cases", {"q": "renewals"})], "Finished.")
     req = TurnRequest(
         "t2", "r2", SETTINGS, [READ], user_turn="I connected Salesforce. Please go ahead.", carried_plan=carried
@@ -193,8 +209,8 @@ async def test_a_plan_left_open_goes_on_at_its_blocked_step_in_two_model_calls()
     result, drawn = await plans(model, req)
     assert "## Plan in progress: Check the loan files" in seen[0], seen[0]
     assert len(seen) == 2 and [r.status for r in result.tool_calls if r.tool == "find_cases"] == ["ok"]
-    assert [s["state"] for s in drawn[0]["data"]] == ["done", "failed", "pending"]
-    assert drawn[-1]["hint"]["title"] == "Did 3 steps" and not any("(skipped)" in s["title"] for s in drawn[-1]["data"])
+    assert [s["state"] for s in rows(drawn[0])] == ["done", "failed", "pending"]
+    assert hint_title(drawn[-1]) == "Did 3 steps" and not any("(skipped)" in str(s["title"]) for s in rows(drawn[-1]))
 
 
 def test_the_chat_keeps_one_plan_part_on_top_and_hands_an_open_plan_to_the_next_turn() -> None:

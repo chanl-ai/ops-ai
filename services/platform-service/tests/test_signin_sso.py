@@ -15,8 +15,10 @@ import sqlalchemy as sa
 
 from ops_access import CHAT_USER
 from ops_platform.keys import dev_signer
-from ops_platform.store.tables import members, signin_flows, users
+from ops_platform.store.signin import SignInStore
+from ops_platform.store.tables import audit_entries, members, signin_flows, users
 from ops_policy import Ed25519Verifier, verify
+from ops_service_kit.ids import new_id, now_iso
 
 from .conftest import DEMO_PASSWORD, SignInRig
 
@@ -78,18 +80,46 @@ async def test_two_first_sign_ins_at_once_make_one_person(signin: SignInRig) -> 
         assert int((await c.execute(q)).scalar_one()) == 1
 
 
+async def test_two_first_sign_ins_racing_in_the_store_resolve_to_one_new_person_audited_once(
+    signin: SignInRig,
+) -> None:
+    # Two transactions both find nobody and both insert; the loser's unique-index error is caught and it reads the
+    # winner's person, so both answers name one person, one of them as made, and only the winner's rows remain.
+    store = SignInStore(signin.engine)
+    p = await store.provider(signin.tenant, await signin.oidc(f"store.{signin.zone}"))
+    assert p is not None
+    for n in range(4):
+        email = f"racer{n}@store.{signin.zone}"
+        answers = await asyncio.gather(
+            *(
+                store.resolve(p, subject=f"sub-{n}", email=email, name="Racer", at=now_iso(), request_id=new_id("req"))
+                for _ in range(2)
+            )
+        )
+        assert all(a is not None for a in answers)
+        assert len({a.user_id for a in answers if a}) == 1 and sorted(a.created for a in answers if a) == [False, True]
+        person = next(a.user_id for a in answers if a)
+        async with signin.engine.connect() as c:
+            held = sa.select(members.c.id).where(members.c.user_id == person)
+            q = sa.select(audit_entries.c.action, audit_entries.c.target_kind).where(
+                sa.or_(audit_entries.c.target_id == person, audit_entries.c.target_id.in_(held))
+            )
+            assert sorted((str(r[0]), str(r[1])) for r in (await c.execute(q)).all()) == [("member.jit", "member")]
+        assert await _people(signin, email) == 1
+
+
 async def test_an_email_outside_the_providers_domains_makes_nobody(signin: SignInRig) -> None:
     await signin.oidc(f"dom.{signin.zone}")
     # The provider vouches for an address on a domain this provider was not given.
     r = await signin.sign_in_sso(f"someone@dom.{signin.zone}", user=f"ceo@other.{signin.zone}")
-    assert r.query == {"error": "sign_in_refused"} and r.completed is None
+    assert r.query == {"error": "no_access"} and r.completed is None
     assert await _people(signin, f"ceo@other.{signin.zone}") == 0
 
 
 async def test_a_provider_with_no_first_sign_in_team_signs_in_only_people_it_knows(signin: SignInRig) -> None:
     await signin.oidc(f"nojit.{signin.zone}", jit=False)
     unknown = await signin.sign_in_sso(f"stranger@nojit.{signin.zone}")
-    assert unknown.query == {"error": "sign_in_refused"}
+    assert unknown.query == {"error": "no_access"}
     await signin.person(f"member@nojit.{signin.zone}", role="builder")
     known = await signin.sign_in_sso(f"member@nojit.{signin.zone}")
     assert known.completed is not None and known.completed.status_code == 200
@@ -201,3 +231,10 @@ async def test_a_password_session_cannot_start_an_sso_step_up(signin: SignInRig)
     ).json()["data"]["token"]
     r = await signin.public.post("/v1/auth/step-up/sso/start", json={}, headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 401 and r.json()["error"]["code"] == "wrong_method"
+
+
+async def test_oidc_discovery_never_reaches_an_address_inside_the_network(signin: SignInRig) -> None:
+    await signin.oidc(f"inside.{signin.zone}")
+    signin.resolver.answers["idp.test"] = ["10.0.0.7"]
+    r = await signin.public.post("/v1/auth/sso/start", json={"email": f"i@inside.{signin.zone}"})
+    assert r.status_code == 503 and r.json()["error"]["code"] == "sso_unavailable", r.text

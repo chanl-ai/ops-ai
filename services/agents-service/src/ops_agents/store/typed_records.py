@@ -18,14 +18,21 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_service_kit.errors import Conflict, NotFound
+from ops_service_kit.http import Json, Out
 from ops_service_kit.ids import now_iso
+from ops_service_kit.listing import ListParams
 from ops_store import Guarantee
+from ops_store.listing import ListPage, list_page
+from ops_store.rows import one
+from ops_store.rows import rows as read_rows
 from ops_store.team_scope import acting_as, acting_team, team_visible
 
 from .tenancy import current_tenant, tenant_tx
 
 SEED = "seed"
 TEAM = "team"
+# `page` sorts on origin and name joined, which orders by origin first only while both are one length.
+assert len(SEED) == len(TEAM)
 
 
 def head_columns() -> list[sa.Column[Any]]:
@@ -63,6 +70,44 @@ def version_columns() -> list[sa.Column[Any]]:
         sa.Column("published_at", sa.String(32)),
         sa.Column("published_by", sa.String(320)),
     ]
+
+
+class TypeHead(Out):
+    """A type's row: its names, its newest and newest published version, and where a copy started."""
+
+    tenant_id: str
+    team_id: str
+    id: str
+    origin: str
+    name: str
+    description: str
+    version: int
+    published_version: int | None
+    copied_from: Json | None
+    created_at: str
+    created_by: str
+    updated_at: str
+    updated_by: str
+
+
+class TypeVersion(Out):
+    """One saved version of a type; `record` is the team-authored definition document."""
+
+    tenant_id: str
+    team_id: str
+    type_id: str
+    version: int
+    record: Json
+    saved_at: str
+    saved_by: str
+    published_at: str | None
+    published_by: str | None
+
+
+class TypeDetail(TypeHead):
+    """A type with its versions, newest first."""
+
+    versions: list[TypeVersion]
 
 
 class RecordNotFound(NotFound):
@@ -105,20 +150,20 @@ class VersionedRecords:
             async with tenant_tx(self.engine) as c:
                 yield c, team
 
-    def record_of(self, content: dict[str, Any]) -> dict[str, Any]:
+    def record_of(self, content: Json) -> Json:
         return {k: content[k] for k in self.record_keys if k in content}
 
-    async def ensure_seeds(self, seeds: list[dict[str, Any]]) -> None:
+    async def ensure_seeds(self, seeds: list[Json]) -> None:
         """Each seed in the acting team at its file version, published; a seed whose file version is newer than the
         team's opens that version. The team's own types are never touched."""
         at = now_iso()
         async with self._tx() as (c, team):
             q = sa.select(self.head).where(self.head.c.origin == SEED, team_visible(self.head))
-            have = {str(r["id"]): r for r in (await c.execute(q)).mappings()}
+            have = {r.id: r for r in await read_rows(c, q, TypeHead)}
             for s in seeds:
-                v = int(s["version"])
+                v = int(cast(int | str, s["version"]))
                 row = have.get(str(s["id"]))
-                if row is not None and int(row["version"]) >= v:
+                if row is not None and row.version >= v:
                     continue
                 version = {
                     "team_id": team,
@@ -152,19 +197,41 @@ class VersionedRecords:
                     )
                 await c.execute(self.versions.insert().values(**version, published_at=at, published_by=SEED))
 
-    async def rows(self) -> list[dict[str, Any]]:
+    async def rows(self) -> list[TypeHead]:
+        h = self.head.c
         async with self._tx() as (c, _team):
-            q = sa.select(self.head).where(team_visible(self.head)).order_by(self.head.c.origin, self.head.c.name)
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            q = sa.select(self.head).where(team_visible(self.head)).order_by(h.origin, h.name, h.id)
+            return await read_rows(c, q, TypeHead)
 
-    async def _row(self, c: AsyncConnection, type_id: str, *, lock: bool = False) -> dict[str, Any]:
+    async def page(self, params: ListParams) -> tuple[ListPage, list[TypeHead]]:
+        """One page of the team's types on the shared list contract: the seeded ones first, then the team's own, each
+        by name, then by id; `search` matches the name and description, `ids` names types (the search is then not
+        applied). The page, and its rows as types."""
+        h = self.head.c
+        async with self._tx() as (c, team):
+            q = sa.select(self.head).where(h.tenant_id == current_tenant(), h.team_id == team, team_visible(self.head))
+            if params.ids is not None:
+                # The key is (tenant, team, id), so the shared `ids` lookup, which needs a one-column key, is done here.
+                q = q.where(h.id.in_(params.ids))
+                params = params.model_copy(update={"ids": None, "search": None})
+            page = await list_page(
+                c,
+                q,
+                params,
+                search=[h.name, h.description],
+                # Both origins are four letters ("seed", "team"), so origin and name joined sort as origin, then name.
+                default_sort=(h.origin + h.name).asc(),
+            )
+        return page, [TypeHead.model_validate(r) for r in page["data"]]
+
+    async def _row(self, c: AsyncConnection, type_id: str, *, lock: bool = False) -> TypeHead:
         q = sa.select(self.head).where(self.head.c.id == type_id, team_visible(self.head))
-        r = (await c.execute(q.with_for_update() if lock else q)).mappings().first()
+        r = await one(c, q.with_for_update() if lock else q, TypeHead)
         if r is None:
             raise self.not_found(type_id)
-        return dict(r)
+        return r
 
-    async def get(self, type_id: str) -> dict[str, Any]:
+    async def get(self, type_id: str) -> TypeDetail:
         """The type with its versions, newest first."""
         async with self._tx() as (c, _team):
             row = await self._row(c, type_id)
@@ -173,14 +240,14 @@ class VersionedRecords:
                 .where(self.versions.c.type_id == type_id, team_visible(self.versions))
                 .order_by(self.versions.c.version.desc())
             )
-            row["versions"] = [dict(r) for r in (await c.execute(q)).mappings()]
-        return row
+            versions = await read_rows(c, q, TypeVersion)
+        return TypeDetail(**dict(row), versions=versions)
 
-    async def published(self, type_id: str, version: int | None = None) -> tuple[int, dict[str, Any]]:
+    async def published(self, type_id: str, version: int | None = None) -> tuple[int, Json]:
         """(version, record) of a published version: the one named, or the newest when None."""
         async with self._tx() as (c, _team):
             row = await self._row(c, type_id)
-            n = version if version is not None else row["published_version"]
+            n = version if version is not None else row.published_version
             if n is None:
                 raise self.not_found(type_id)
             q = sa.select(self.versions).where(
@@ -189,14 +256,12 @@ class VersionedRecords:
                 self.versions.c.published_at.is_not(None),
                 team_visible(self.versions),
             )
-            v = (await c.execute(q)).mappings().first()
+            v = await one(c, q, TypeVersion)
         if v is None:
             raise self.not_found(type_id, n)
-        return int(n), cast(dict[str, Any], v["record"])
+        return n, v.record
 
-    async def create(
-        self, type_id: str, content: dict[str, Any], *, team_id: str, by: str, copied_from: dict[str, Any] | None
-    ) -> None:
+    async def create(self, type_id: str, content: Json, *, team_id: str, by: str, copied_from: Json | None) -> None:
         at = now_iso()
         try:
             async with self._tx() as (c, team):
@@ -231,14 +296,14 @@ class VersionedRecords:
         except IntegrityError as e:
             raise Conflict(f"A {self.noun} {type_id} exists; choose another id.", code=self.taken_code) from e
 
-    async def save_draft(self, type_id: str, content: dict[str, Any], *, by: str) -> int:
+    async def save_draft(self, type_id: str, content: Json, *, by: str) -> int:
         at = now_iso()
         async with self._tx() as (c, _team):
             # Locked so two saves or publishes at once take turns instead of both reading the same version.
             row = await self._row(c, type_id, lock=True)
-            team = str(row["team_id"])
-            n = int(row["version"])
-            newest_published = row["published_version"] == n
+            team = row.team_id
+            n = row.version
+            newest_published = row.published_version == n
             values = {"record": self.record_of(content), "saved_at": at, "saved_by": by}
             if newest_published:
                 n += 1
@@ -271,11 +336,11 @@ class VersionedRecords:
         async with self._tx() as (c, _team):
             # Locked so two saves or publishes at once take turns instead of both reading the same version.
             row = await self._row(c, type_id, lock=True)
-            if version != row["version"] or row["published_version"] == version:
+            if version != row.version or row.published_version == version:
                 raise Conflict(
-                    f"v{version} is not the newest draft of {type_id} (v{row['version']}).", code="not_newest_draft"
+                    f"v{version} is not the newest draft of {type_id} (v{row.version}).", code="not_newest_draft"
                 )
-            team = str(row["team_id"])
+            team = row.team_id
             await c.execute(
                 self.versions.update()
                 .where(

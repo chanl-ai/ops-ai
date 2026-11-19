@@ -129,3 +129,30 @@ def test_ops_login_keeps_the_session_in_the_profile_and_prints_no_token(
 def test_json_input_holding_a_slash_or_long_text_is_read_as_data_not_a_file_name() -> None:
     body = {"records": [{"fields": {"Description": "Cash is 18% of the portfolio / target 5%. " + "x" * 400}}]}
     assert payload(json.dumps(body, indent=2)) == body
+
+
+def test_tasks_approve_asks_for_the_password_each_time_and_ignores_ops_password(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(r: httpx.Request) -> httpx.Response:
+        seen.append(r)
+        if r.url.path.endswith("/step-up"):
+            return httpx.Response(200, json={"success": True, "data": {"token": "su_1"}})
+        if "stepUpToken" in json.loads(r.content or b"{}"):
+            return httpx.Response(200, json={"success": True, "data": {"decided": "approve"}})
+        return httpx.Response(400, json={"success": False, "error": {"code": "step_up_required", "message": "confirm"}})
+
+    real = OpsAI
+    monkeypatch.setattr(
+        "ops_ai._cli.common.OpsAI", lambda **kw: real(http=httpx.Client(transport=httpx.MockTransport(handler)), **kw)
+    )
+    monkeypatch.setenv("OPS_PASSWORD", "standing-secret")
+    monkeypatch.setenv("OPS_API_KEY", "ok_test")
+    monkeypatch.setenv("OPS_BASE_URL", "https://ops.test")
+    monkeypatch.setattr("getpass.getpass", lambda prompt="": "typed-pw")
+    assert main(["tasks", "approve", "thr_1"]) == 0
+    step_up = next(r for r in seen if r.url.path.endswith("/step-up"))
+    assert json.loads(step_up.content) == {"password": "typed-pw"}
+    assert "approve" in capsys.readouterr().out

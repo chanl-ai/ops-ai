@@ -30,7 +30,7 @@ export interface PickedFile {
 
 /** Where a picked file is checked and its runs started: its own page, since a dialog stays small. */
 export const batchCheckHref = (workflowId: string, file: PickedFile, mode: BatchMode) =>
-  `/workflows/batches/check?${new URLSearchParams({ workflow: workflowId, file: file.fileId, name: file.name, mode })}`;
+  `/build/runs/batches/check?${new URLSearchParams({ workflow: workflowId, file: file.fileId, name: file.name, mode })}`;
 
 /**
  * The Start run dialog's Start from a file tab: only the file. A CSV or Excel file is uploaded to Files and

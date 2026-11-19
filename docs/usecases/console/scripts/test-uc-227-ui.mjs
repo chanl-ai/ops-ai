@@ -4,7 +4,7 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { AGENTS_PORT, DOCUMENTS_PORT, FILES_PORT, PLATFORM_PORT, ROOT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, DOCUMENTS_PORT, FILES_PORT, PLATFORM_PORT, ROOT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const files = `http://127.0.0.1:${FILES_PORT}`;
 const documents = `http://127.0.0.1:${DOCUMENTS_PORT}`;
@@ -17,7 +17,7 @@ const json = async (r) => {
   return body.data;
 };
 // Screenshots for approval; approved screens then move to docs/console/approved/files.
-const SHOTS = process.env.UC227_SHOTS ?? join(ROOT, 'docs/console/proposed/files');
+const SHOTS = evidenceDir('227', 'screens');
 
 const runOf = {};
 

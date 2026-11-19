@@ -1,7 +1,7 @@
 /** Agent lifecycle, chat and test over the generated agents operations. */
 /* Agents talks to raw.agents only, so this file does not import the client. */
 
-import { pageItems } from './transport.js';
+import { eachPage, eachRow, pageItems } from './transport.js';
 
 export const PLANNED = 'This command is planned; the public API for it is not shipped.';
 
@@ -19,13 +19,8 @@ function replyText(data: unknown): string {
 export class Agents {
   constructor(private readonly raw: { agents: any }) {}
 
-  async *list(query: Record<string, unknown> = {}) {
-    let next: Record<string, unknown> | null = {};
-    while (next) {
-      const [items, more] = pageItems(await this.raw.agents.agents_list_agents({ query: { ...query, ...next } }));
-      yield* items;
-      next = more;
-    }
+  list(query: Record<string, unknown> = {}) {
+    return eachPage((page) => this.raw.agents.agents_list_agents({ query: page }), query);
   }
 
   get(id: string) {
@@ -34,6 +29,20 @@ export class Agents {
 
   create(body: Record<string, unknown>) {
     return this.raw.agents.agents_create_agent({ body: body as never });
+  }
+
+  /** The operations an agent may be granted: published ones, as the agent page's picker lists them. */
+  async toolOptions(search?: string): Promise<any[]> {
+    const rows: any[] = [];
+    for await (const row of eachRow((q) => this.raw.agents.agents_tool_options({ query: q as never }), { search, limit: 50 })) rows.push(row);
+    return rows;
+  }
+
+  /** Adds tools (their ids from `toolOptions`) to the agent's draft, keeping the ones it holds. Publish it for the grant to take effect. */
+  async grantTools(id: string, tools: string[]) {
+    const held: string[] = (await this.get(id)).toolIds ?? [];
+    const wanted = [...held, ...tools.filter((t) => !held.includes(t))];
+    return this.raw.agents.agents_update_agent({ path: { agent_id: id }, body: { toolIds: wanted } as never });
   }
 
   validate(definition: Record<string, unknown>) {
@@ -60,7 +69,9 @@ export class Agents {
     return this.raw.agents.agents_create_agent({ body: body as never });
   }
 
-  publish(id: string, note = '', version: number) {
+  async publish(id: string, note = '', version?: number) {
+    // Left out, the version is the draft's current one, as the Python SDK does.
+    version ??= (await this.get(id)).version;
     return this.raw.agents.agents_request_publish({ path: { agent_id: id }, body: { note, version } as never });
   }
 
@@ -71,7 +82,7 @@ export class Agents {
   async chat(id: string, message: string, threadId?: string) {
     let tid = threadId;
     if (!tid) {
-      const created = (await this.raw.agents.threads_create_thread({ body: { graph: id } as never })) as {
+      const created = (await this.raw.agents.threads_create_thread({ body: { graph: id.startsWith('agent:') ? id : `agent:${id}` } as never })) as {
         threadId?: string;
         id?: string;
       };
@@ -89,12 +100,19 @@ export class Agents {
       events.push(stream);
     }
     let reply = '';
+    const toolCalls: Record<string, any>[] = [];
     for (const event of events) {
-      const rec = event && typeof event === 'object' ? (event as { data?: unknown }) : undefined;
-      const text = replyText(rec?.data ?? event);
+      const rec = event && typeof event === 'object' ? (event as { data?: any }) : undefined;
+      const data = rec?.data ?? event;
+      const text = replyText(data);
       if (text) reply = text;
+      const kind = data?.event;
+      const payload = data?.data;
+      const call = payload?.call ?? payload;
+      const name = call?.name ?? call?.tool;
+      if (name && ['tool_call', 'tool_start', 'tool_end'].includes(kind) && !toolCalls.some((c) => (c.name ?? c.tool) === name)) toolCalls.push({ ...call, name });
     }
-    return { threadId: tid, reply, events };
+    return { threadId: tid, reply, text: reply, events, toolCalls };
   }
 
   test(id: string, message: string) {

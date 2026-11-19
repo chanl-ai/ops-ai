@@ -26,7 +26,7 @@ const empty = (v: unknown) => v === null || v === undefined || v === '' || (Arra
 export function PlainValue({ value }: { value: unknown }) {
   if (typeof value === 'string' && FILE_ID.test(value))
     return (
-      <Link href={`/files/${encodeURIComponent(value)}`} className="underline underline-offset-2">
+      <Link href={`/data/files/${encodeURIComponent(value)}`} className="underline underline-offset-2">
         Open the file
       </Link>
     );
@@ -39,7 +39,7 @@ export function PlainValue({ value }: { value: unknown }) {
 function Leaf({ value }: { value: unknown }) {
   if (typeof value === 'string' && RUN_ID.test(value))
     return (
-      <Link href={`/workflows/runs/${encodeURIComponent(value)}`} className="underline underline-offset-2">
+      <Link href={`/build/runs/${encodeURIComponent(value)}`} className="underline underline-offset-2">
         Open the run
       </Link>
     );

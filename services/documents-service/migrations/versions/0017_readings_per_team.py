@@ -21,7 +21,14 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import mssql
 
-from ops_store.schema import TENANT_SCOPED, isolation_ddl, isolation_drop_ddl, mssql_predicates_ddl, team_owned
+from ops_store.schema import (
+    TENANT_SCOPED,
+    isolation_ddl,
+    isolation_drop_ddl,
+    mssql_drop_key_ddl,
+    mssql_predicates_ddl,
+    team_owned,
+)
 
 revision = "documents_0017"
 down_revision = "documents_0016"
@@ -50,11 +57,7 @@ def _column_type(column: sa.Column[Any]) -> str:
 def _drop_primary_key(table: str, dialect: str) -> None:
     if dialect == "mssql":
         # A key made by create_table without a name has a generated name on SQL Server.
-        op.execute(
-            f"DECLARE @n sysname = (SELECT name FROM sys.key_constraints WHERE type = 'PK' "
-            f"AND parent_object_id = OBJECT_ID(N'{table}')); "
-            f"IF @n IS NOT NULL EXEC (N'ALTER TABLE {table} DROP CONSTRAINT ' + QUOTENAME(@n))"
-        )
+        op.execute(mssql_drop_key_ddl(table, "PK"))
     else:
         op.drop_constraint(f"{table}_pkey", table, type_="primary")
 

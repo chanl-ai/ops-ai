@@ -97,6 +97,12 @@ with ExitStack() as stack:
             )
             for who in (priya, wanjiru)
         ]
+        # A new app starts with its reads added; each team adds the two writes it calls, as an admin does from the Tools tab.
+        for who in (priya, wanjiru):
+            added = gw.post(
+                f"/v1/apps/plugin:{ID}/tools", json={"tools": ["fields_post_message", "fields_transfer"]}, headers=who
+            )
+            check("1 the team adds the two write tools (200)", added.status_code == 200, added.text[:200])
         first = [review(gw, priya), review(gw, wanjiru)]
         check(
             "1 both teams turn the fields desk on and each runs 0.1.0 with no update waiting",
@@ -166,8 +172,10 @@ with ExitStack() as stack:
         )  # fmt: skip
 
         # 6. Who uses the changed and removed tools: an agent of team ops granted post_message and transfer.
-        agents_list = (data(ag.get("/v1/agents", params={"pageSize": 200}, headers=priya)) or {}).get("data", [])
-        agent = next((a for a in agents_list if a.get("teamId", "team_ops") == "team_ops"), {})
+        agents_list = (data(ag.get("/v1/agents", params={"teamId": "team_ops", "pageSize": 1}, headers=priya)) or {}).get(
+            "data", []
+        )
+        agent = next(iter(agents_list), {})
         granted = ag.patch(
             f"/v1/agents/{agent.get('id')}",
             json={"toolIds": [*agent.get("toolIds", []), "fields_post_message", "fields_transfer"]},
@@ -196,6 +204,9 @@ with ExitStack() as stack:
             and (data(taken) or {}).get("version") == "0.2.0" and (data(taken) or {}).get("available") is False,
             {"stale": stale.text[:200], "taken": taken.text[:300]},
         )  # fmt: skip
+
+        # The update brings close_case into the catalog; team ops adds it as it adds any tool.
+        gw.post(f"/v1/apps/plugin:{ID}/tools", json={"tools": ["fields_close_case"]}, headers=priya)
 
         # 8. Team ops now runs 0.2.0; team platform is still on 0.1.0.
         new_post = call(gw, "post_message", {"channel": "C1", "text": "Card 1043"})

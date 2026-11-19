@@ -15,6 +15,7 @@ from ops_agent_kernel.ports import KernelPorts, ToolOutcome
 from ops_agent_kernel.types import ToolGrant, TurnRequest
 from ops_agents.activities.gateway import GatewayToolExecutor
 from ops_agents.activities.shaper import shape_part
+from ops_service_kit.narrow import json_object
 from tests.unit.test_kernel import SETTINGS, FixedKnowledge, run
 
 QUERY = ToolGrant("salesforce_query", "Salesforce", "Run a SOQL query", "read", {"type": "object", "properties": {}})
@@ -80,7 +81,7 @@ async def test_rows_a_tool_already_drew_are_not_presented_again() -> None:
     ]
     req = TurnRequest("t1", "th1", SETTINGS, [QUERY], user_turn="status of case 00044818")
     _, result = await run(req, KernelPorts(model=model(steps, seen), tools=Drawn(), knowledge=FixedKnowledge([])))
-    parts = [r.view["part"] for r in result.tool_calls if r.view]
+    parts = [json_object(r.view["part"]) for r in result.tool_calls if r.view]
     assert len(parts) == 1 and parts[0]["shape"] == "rows", parts
     assert "present" in json.dumps(seen[0]) and "above or below" in json.dumps(seen[0]), seen[0]
 

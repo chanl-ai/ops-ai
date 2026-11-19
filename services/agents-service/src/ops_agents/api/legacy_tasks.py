@@ -14,6 +14,9 @@ from pathlib import Path
 from typing import Any, cast
 
 from ops_engine.compiler import resolve
+from ops_engine.store import DefinitionRow
+from ops_service_kit.http import Json, JsonList
+from ops_service_kit.narrow import json_list, json_object
 
 from .deps import Runtime
 from .engine_lifecycle import definitions
@@ -36,62 +39,59 @@ NOT_READ: Any = object()
 
 async def legacy_task(
     rt: Runtime,
-    run: dict[str, Any],
-    payload: dict[str, Any],
-    view: dict[str, Any],
+    run: Json,
+    payload: Json,
+    view: Json,
     *,
     live: Any = NOT_READ,
     reads: TaskReads | None = None,
-) -> dict[str, Any] | None:
+) -> Json | None:
     """The task screen for an untyped review, or None when it is typed or decided by options other than approve and
     reject. `view` is the review as engine_reviews.view built it, whose words the general types reuse; `live` is the
     version now serving the run's workflow (None for none) when a list read it once for all its runs."""
     if payload.get("taskType"):
         return None
     options = {
-        str(cast(dict[str, Any], o).get("name")) if isinstance(o, dict) else str(o)
-        for o in cast(list[Any], payload.get("options") or [])
+        str(o.get("name")) if isinstance(o, dict) else str(o) for o in cast(JsonList, payload.get("options") or [])
     }
     if options - DECIDED_BY:
         return None
     if live is NOT_READ:
-        live = await definitions(rt).current(str(run["workflow_id"]))
+        live = await definitions(rt).serving(str(run["workflow_id"]))
     reads = reads or TaskReads(rt, [run], [str(payload.get("step_id") or "")])
     ref, params = await _from_live_version(run, payload, live, reads) or _from_shape(payload, view)
     return await typed_task(rt, {"taskType": ref, "params": params, "step_id": payload.get("step_id")}, run, reads)
 
 
 async def _from_live_version(
-    run: dict[str, Any], payload: dict[str, Any], live: dict[str, Any] | None, reads: TaskReads
-) -> tuple[dict[str, Any], dict[str, Any]] | None:
-    definition = cast(dict[str, Any], (live or {}).get("definition") or {})
-    nodes = cast(list[dict[str, Any]], definition.get("nodes") or [])
+    run: Json, payload: Json, live: DefinitionRow | None, reads: TaskReads
+) -> tuple[Json, Json] | None:
+    nodes = [json_object(n) for n in json_list(json_object(live.definition if live else None).get("nodes"))]
     node = next((n for n in nodes if n.get("id") == payload.get("node")), None)
-    parameters = cast(dict[str, Any], (node or {}).get("parameters") or {})
+    parameters = cast(Json, (node or {}).get("parameters") or {})
     ref = parameters.get("taskType")
     if node is None or node.get("type") != "ops.flow.humanReview" or not isinstance(ref, dict):
         return None
     steps = await reads.steps(run)
-    outputs = {str(s["node_id"]): s.get("output") for s in steps if s.get("status") == "ok"}
+    outputs = {s.node_id: s.output for s in steps if s.status == "ok"}
     params = resolve(parameters.get("params") or {}, {"input": run.get("input"), "nodes": outputs})
-    return cast(dict[str, Any], ref), cast(dict[str, Any], params)
+    return ref, cast(Json, params)
 
 
-def _from_shape(payload: dict[str, Any], view: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+def _from_shape(payload: Json, view: Json) -> tuple[Json, Json]:
     title = str(view.get("question") or view.get("title") or "")
-    facts = cast(list[dict[str, Any]], view.get("actionFields") or []) or [
-        {"label": e.get("label"), "value": e.get("detail")}
-        for e in cast(list[dict[str, Any]], view.get("evidence") or [])
+    facts: JsonList = cast(JsonList, view.get("actionFields") or []) or [
+        {"label": e.get("label"), "value": e.get("detail")} for e in cast(list[Json], view.get("evidence") or [])
     ]
-    decided = {"onApprove": view["consequence"]} if view.get("consequence") else {}
+    decided: Json = {"onApprove": view["consequence"]} if view.get("consequence") else {}
     if isinstance(read := view.get("read"), dict):
         # A read check by its read (engine_reviews.document_read), wherever the workflow put it in the summary; the
         # console draws the read's fields from the review's own `read`.
-        found = cast(dict[str, Any], read)
-        params = {"title": title, "document": found.get("fileId"), "fields": found.get("schema")}
+        found = read
+        params: Json = {"title": title, "document": found.get("fileId"), "fields": found.get("schema")}
         return {"id": legacy_types()["read"]}, params | decided
     if isinstance(reply := view.get("reply"), dict):
-        sent = cast(dict[str, Any], reply)
+        sent = reply
         params = {
             "title": title,
             "reply": str(sent.get("body") or ""),
@@ -99,5 +99,7 @@ def _from_shape(payload: dict[str, Any], view: dict[str, Any]) -> tuple[dict[str
         }
         return {"id": legacy_types()["reply"]}, params | decided
     if isinstance(payload.get("call"), dict):
-        return {"id": legacy_types()["write"]}, {"title": title, "call": payload["call"], "facts": facts} | decided
-    return {"id": legacy_types()["decision"]}, {"title": title, "facts": facts} | decided
+        params = {"title": title, "call": payload["call"], "facts": facts}
+        return {"id": legacy_types()["write"]}, params | decided
+    params = {"title": title, "facts": facts}
+    return {"id": legacy_types()["decision"]}, params | decided

@@ -2,10 +2,12 @@
 // Dev auto-approve is off, so "major changes only" differs from "never". Settings change on the page as Priya; the
 // publishes go through the agent's publish route as James, the route the agent page's button calls.
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { publishReviewOn } from '../../lib/workflow_ui.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const PRIYA = 'p.shah@harborpine.example';
 const JAMES = 'j.richardson@harborpine.example';
+const RAVI = 'r.menon@harborpine.example';
 const PASSWORD = 'northfield-demo';
 const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: PASSWORD }) })).json()).data.token;
 // Reading policies is the security team's; Sam reads what Priya saved.
@@ -40,8 +42,13 @@ async function setMode(page, area, label) {
 
 await withUiStack(
   async (consoleUrl) => {
-    const P = as(await tokenFor(PRIYA));
-    const J = as(await tokenFor(JAMES));
+    // A new workspace publishes at once; Priya sets the team's agents to "major changes only" through the policies API
+    // first, so the script starts from a mode that differs from "never".
+    await publishReviewOn({ agents: 'major' });
+    let P = as(await tokenFor(PRIYA));
+    let J = as(await tokenFor(JAMES));
+    // A policy change refuses every token issued before it, so the API callers sign in again after each save.
+    const refresh = async () => ((P = as(await tokenFor(PRIYA))), (J = as(await tokenFor(JAMES))));
     const listed = (await call('GET', '/v1/agents', J)).body?.data;
     const rows = Array.isArray(listed) ? listed : listed?.data ?? listed?.items ?? [];
     const agent = rows.find((a) => a.publishedVersion != null && !a.paused) ?? rows[0];
@@ -71,20 +78,22 @@ await withUiStack(
 
     const browser = await chromium.launch();
     try {
-      // Step 1: every member reads the policies (7faf3ddc), so a builder sees the modes with their controls off and no
-      // Save, the default still major for the team; a save as the builder is refused (403).
-      const james = await signIn(browser, consoleUrl, JAMES);
-      await james.page.goto(`${consoleUrl}/settings/policies/publish-reviews`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      const agentsMode = james.page.getByRole('combobox', { name: 'Agents review' });
+      // Step 1: every member reads the policies (7faf3ddc). Changing them needs reviews.manage, which Admin and Builder
+      // hold (roles-and-permissions.md), so a viewer sees the modes with their controls off and no Save, the team's mode
+      // major; a save as the viewer is refused (403).
+      const ravi = await signIn(browser, consoleUrl, RAVI);
+      await ravi.page.goto(`${consoleUrl}/settings/policies/publish-reviews`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      const agentsMode = ravi.page.getByRole('combobox', { name: 'Agents review' });
       await agentsMode.waitFor({ timeout: 60_000 });
       const shownText = (await agentsMode.innerText()).trim();
       const locked = await agentsMode.isDisabled();
-      const saves = await james.page.getByRole('button', { name: 'Save', exact: true }).count();
+      const saves = await ravi.page.getByRole('button', { name: 'Save', exact: true }).count();
       const plat = `http://127.0.0.1:${PLATFORM_PORT}`;
-      const refused = await fetch(`${plat}/v1/policies/publishReview`, { method: 'PUT', headers: J, body: JSON.stringify({ value: { agents: 'never' } }) }).then(async (r) => ({ status: r.status, body: await r.json().catch(() => null) }));
-      check('a builder sees publish reviews locked with no Save, the default still major for the team, and a save as the builder is refused (403)', /Review major changes/.test(shownText) && locked && saves === 0 && refused.status === 403, { shownText, locked, saves, status: refused.status });
+      const refused = await fetch(`${plat}/v1/policies/publishReview`, { method: 'PUT', headers: as(await tokenFor(RAVI)), body: JSON.stringify({ value: { agents: 'never' } }) }).then(async (r) => ({ status: r.status, body: await r.json().catch(() => null) }));
+      check('a viewer sees publish reviews locked with no Save, the team set to major, and a save as the viewer is refused (403)', /Review major changes/.test(shownText) && locked && saves === 0 && refused.status === 403, { shownText, locked, saves, status: refused.status, body: refused.body?.error?.code });
+      const james = await signIn(browser, consoleUrl, JAMES);
 
-      // Step 2: under the default, a minor change publishes at once.
+      // Step 2: under major, a minor change publishes at once.
       const minor = await publish({ role: 'Answers questions for the operations team (uc-114 a)' });
       check('under "major changes only" a role change publishes at once and records policy major, not major', minor.status === 201 && minor.review === 'approved' && minor.record?.policy === 'major' && minor.record?.majorChange === false && minor.record?.reviewRequired === false, minor);
 
@@ -98,6 +107,7 @@ await withUiStack(
       const afterReload = await priya.page.getByRole('combobox', { name: 'Agents review' }).innerText();
       const policyNow = await readPolicy();
       const audit = policyNow === 'never';
+      await refresh();
       check('the admin saves Agents as Publish at once with Save; the page shows what the save returned and the server holds never for the team', toast1 && /Publish at once/.test(afterReload) && audit, { toast1, afterReload, audit });
 
       // Step 4: under Never, a major change publishes at once.
@@ -114,6 +124,7 @@ await withUiStack(
       await priya.page.getByRole('button', { name: 'Save', exact: true }).click();
       await priya.page.getByText('Saved publish reviews').nth(0).waitFor({ timeout: 30_000 }).catch(() => undefined);
       const toast2 = (await readPolicy()) === 'always';
+      await refresh();
       const always = await publish({ role: 'Answers questions for the operations team (uc-114 c)' });
       check('under "always" a role change opens a pending review that records reviewRequired', toast2 && always.status === 201 && always.review === 'pending' && always.record?.reviewRequired === true && always.record?.policy === 'always', { toast2, ...always });
 
@@ -131,7 +142,7 @@ await withUiStack(
       check('under "always" the dialog offers Request publish and promises a review', waitPage.button === 'Request publish' && !waitPage.immediately, waitPage);
       check('publishing from the agent page under "always" says Sent for review with Open review', waitPage.text.startsWith(`Sent ${agent.name} v${waitPage.version} for review`) && /Open review/.test(waitPage.text), waitPage);
 
-      check('no page errors', james.errors.length === 0 && priya.errors.length === 0, [...james.errors, ...priya.errors]);
+      check('no page errors', ravi.errors.length === 0 && james.errors.length === 0 && priya.errors.length === 0, [...ravi.errors, ...james.errors, ...priya.errors]);
     } finally {
       await browser.close();
     }

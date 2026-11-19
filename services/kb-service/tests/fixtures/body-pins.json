@@ -1,0 +1,1180 @@
+{
+  "addDocuments": {
+    "body": {
+      "data": {
+        "files": [
+          {
+            "fileId": "fil_0002",
+            "name": "hardship.pdf"
+          }
+        ],
+        "run": {
+          "counts": {
+            "deleted": 0,
+            "excluded": 0,
+            "failed": 0,
+            "listed": 1,
+            "reading": 0,
+            "skipped": 0,
+            "unchanged": 0,
+            "upserted": 1
+          },
+          "durationSec": "<durationSec>",
+          "errors": [],
+          "id": "<run>",
+          "log": [],
+          "phases": [],
+          "sourceId": "<src>",
+          "startedAt": "<time+00:00>",
+          "status": "success",
+          "trigger": "manual"
+        },
+        "sourceId": "<src>"
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "addFiles": {
+    "body": {
+      "data": [
+        {
+          "fileId": "fil_0001",
+          "name": "rates.pdf"
+        }
+      ],
+      "success": true
+    },
+    "status": 200
+  },
+  "addFilesSnake": {
+    "body": {
+      "data": [
+        {
+          "fileId": "fil_0001",
+          "name": "rates.pdf"
+        }
+      ],
+      "success": true
+    },
+    "status": 200
+  },
+  "addPage": {
+    "body": {
+      "data": {
+        "acl": [],
+        "chunkCount": 1,
+        "collection": "Pages",
+        "digest": "<digest>",
+        "effectiveDate": "<date>",
+        "externalId": "<fil>",
+        "family": "<itm>",
+        "fileId": "<fil>",
+        "freshness": "no_schedule",
+        "id": "<itm>",
+        "metadata": {},
+        "mimeType": "text/markdown",
+        "modifiedAt": "<time+00:00>",
+        "owner": "maya@harborpine.example",
+        "path": "fees.md",
+        "processedAt": "<time+00:00>",
+        "queries30d": 0,
+        "reviewBy": "",
+        "sensitivity": "internal",
+        "sizeBytes": 25,
+        "sourceId": "<src>",
+        "status": "indexed",
+        "tags": [],
+        "title": "Fees",
+        "verified": false,
+        "version": "v1",
+        "versionStatus": "current"
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "aiApproval": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "message": "Choose an AI step (likely questions) before approving it.",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "attach": {
+    "body": {
+      "data": {
+        "access": {
+          "anyApiKey": false,
+          "documentPermissions": "workspace",
+          "mcp": {
+            "enabled": false,
+            "toolName": "search_lending"
+          },
+          "members": {
+            "mode": "all",
+            "principals": []
+          },
+          "publicLink": {
+            "answerStyle": "chat",
+            "enabled": false,
+            "rateLimit": 300,
+            "showSourceLinks": true,
+            "slug": "lending"
+          }
+        },
+        "answer": {
+          "noAnswerMessage": "I could not find that in the knowledge base.",
+          "shape": "answer_with_citations",
+          "withholdUncited": true
+        },
+        "automation": "act",
+        "collections": [],
+        "color": "blue",
+        "createdAt": "<time+00:00>",
+        "description": "",
+        "health": "never",
+        "healthReasons": [
+          "Never indexed"
+        ],
+        "id": "<kb>",
+        "jobs": [],
+        "metadataProfile": {
+          "required": []
+        },
+        "name": "Lending",
+        "owner": "maya@harborpine.example",
+        "precedence": [
+          {
+            "id": "newer_version",
+            "kind": "newer",
+            "label": "A newer version of a document replaces the older one in search",
+            "loser": "Older version",
+            "winner": "Newer version"
+          }
+        ],
+        "protection": null,
+        "retrieval": {
+          "chunkLimit": 8,
+          "filters": {
+            "conditions": [],
+            "match": "all"
+          },
+          "hybridWeight": 0.6,
+          "includeUntagged": true,
+          "meaningThreshold": 0.38,
+          "queryModel": "",
+          "rerank": false,
+          "rewrite": "off",
+          "rewriteInstructions": "",
+          "scopeCollections": [],
+          "scopeSourceIds": [],
+          "searchMode": "hybrid",
+          "tagsExclude": [],
+          "tagsInclude": [],
+          "threshold": 0.5
+        },
+        "slug": "lending",
+        "sourceDefaults": {
+          "childSize": 120,
+          "overlap": 40,
+          "size": 800,
+          "strategies": [
+            "structure",
+            "context_headers"
+          ]
+        },
+        "sources": [
+          {
+            "itemsContributed": 0,
+            "rules": [],
+            "sourceId": "<src>"
+          },
+          {
+            "itemsContributed": 0,
+            "rules": [],
+            "sourceId": "<src>"
+          }
+        ],
+        "stats": {
+          "chunks": 0,
+          "documents": 0,
+          "failures": 0,
+          "medianLatencyMs": "<medianLatencyMs>",
+          "noAnswerRate": 0,
+          "queries7d": 0,
+          "queriesChange7d": 0,
+          "stale": 0
+        },
+        "sync": {
+          "changes": "apply",
+          "notifyOnFailure": true,
+          "removedAtSource": "remove",
+          "staleAfterDays": 365
+        },
+        "templateId": null
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "attachSnake": {
+    "body": {
+      "data": {
+        "access": {
+          "anyApiKey": false,
+          "documentPermissions": "workspace",
+          "mcp": {
+            "enabled": false,
+            "toolName": "search_lending"
+          },
+          "members": {
+            "mode": "all",
+            "principals": []
+          },
+          "publicLink": {
+            "answerStyle": "chat",
+            "enabled": false,
+            "rateLimit": 300,
+            "showSourceLinks": true,
+            "slug": "lending"
+          }
+        },
+        "answer": {
+          "noAnswerMessage": "I could not find that in the knowledge base.",
+          "shape": "answer_with_citations",
+          "withholdUncited": true
+        },
+        "automation": "act",
+        "collections": [],
+        "color": "blue",
+        "createdAt": "<time+00:00>",
+        "description": "",
+        "health": "never",
+        "healthReasons": [
+          "Never indexed"
+        ],
+        "id": "<kb>",
+        "jobs": [],
+        "metadataProfile": {
+          "required": []
+        },
+        "name": "Lending",
+        "owner": "maya@harborpine.example",
+        "precedence": [
+          {
+            "id": "newer_version",
+            "kind": "newer",
+            "label": "A newer version of a document replaces the older one in search",
+            "loser": "Older version",
+            "winner": "Newer version"
+          }
+        ],
+        "protection": null,
+        "retrieval": {
+          "chunkLimit": 8,
+          "filters": {
+            "conditions": [],
+            "match": "all"
+          },
+          "hybridWeight": 0.6,
+          "includeUntagged": true,
+          "meaningThreshold": 0.38,
+          "queryModel": "",
+          "rerank": false,
+          "rewrite": "off",
+          "rewriteInstructions": "",
+          "scopeCollections": [],
+          "scopeSourceIds": [],
+          "searchMode": "hybrid",
+          "tagsExclude": [],
+          "tagsInclude": [],
+          "threshold": 0.5
+        },
+        "slug": "lending",
+        "sourceDefaults": {
+          "childSize": 120,
+          "overlap": 40,
+          "size": 800,
+          "strategies": [
+            "structure",
+            "context_headers"
+          ]
+        },
+        "sources": [
+          {
+            "itemsContributed": 0,
+            "rules": [],
+            "sourceId": "<src>"
+          },
+          {
+            "itemsContributed": 0,
+            "rules": [],
+            "sourceId": "<src>"
+          }
+        ],
+        "stats": {
+          "chunks": 0,
+          "documents": 0,
+          "failures": 0,
+          "medianLatencyMs": "<medianLatencyMs>",
+          "noAnswerRate": 0,
+          "queries7d": 0,
+          "queriesChange7d": 0,
+          "stale": 0
+        },
+        "sync": {
+          "changes": "apply",
+          "notifyOnFailure": true,
+          "removedAtSource": "remove",
+          "staleAfterDays": 365
+        },
+        "templateId": null
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "createBaseTemplate": {
+    "body": {
+      "error": {
+        "code": "provisioner_only",
+        "message": "Only the provisioning service sets a template id or protection on knowledge.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  },
+  "createSource": {
+    "body": {
+      "data": {
+        "aiCeiling": 5.0,
+        "aiStepsWaiting": [],
+        "cleaning": {
+          "duplicates": "flag",
+          "furniture": false,
+          "mainContent": false,
+          "siteRepeats": false
+        },
+        "collection": "",
+        "config": {
+          "fileIds": []
+        },
+        "createdAt": "<time+00:00>",
+        "deletedAtSource": "remove",
+        "health": {
+          "daysFailing": 0,
+          "failedRuns": 0,
+          "state": "never",
+          "tombstoned": 0
+        },
+        "id": "<src>",
+        "ingest": {
+          "approval": {
+            "approvedSteps": [],
+            "decidedAt": null,
+            "decidedBy": null,
+            "requestedBy": null,
+            "status": "not_needed"
+          },
+          "childSize": 120,
+          "columns": [],
+          "model": "bank-standard",
+          "overlap": 40,
+          "preset": "documents",
+          "questionsPerSection": 3,
+          "size": 800,
+          "strategies": [
+            "structure",
+            "context_headers"
+          ]
+        },
+        "itemsFailed": 0,
+        "itemsIndexed": 0,
+        "itemsPending": 0,
+        "kind": "file",
+        "kindLabel": "Files",
+        "metadataMapping": [],
+        "name": "More",
+        "notifyOnFailure": true,
+        "owner": "james@harborpine.example",
+        "parsing": {
+          "ocr": "auto",
+          "tables": true,
+          "vision": false
+        },
+        "permissions": {
+          "mode": "workspace"
+        },
+        "rules": [],
+        "schedule": {
+          "kind": "manual"
+        },
+        "scopeSummary": "0 uploaded files",
+        "sensitivity": "internal",
+        "staleAfterDays": 365,
+        "status": "active",
+        "tags": [],
+        "titleFrom": "heading",
+        "type": "file",
+        "usedByKbIds": [
+          "<kb>"
+        ],
+        "waitingHosts": []
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "createSourceSnake": {
+    "body": {
+      "data": {
+        "aiCeiling": 5.0,
+        "aiStepsWaiting": [],
+        "cleaning": {
+          "duplicates": "flag",
+          "furniture": false,
+          "mainContent": false,
+          "siteRepeats": false
+        },
+        "collection": "",
+        "config": {
+          "fileIds": []
+        },
+        "createdAt": "<time+00:00>",
+        "deletedAtSource": "remove",
+        "health": {
+          "daysFailing": 0,
+          "failedRuns": 0,
+          "state": "never",
+          "tombstoned": 0
+        },
+        "id": "<src>",
+        "ingest": {
+          "approval": {
+            "approvedSteps": [],
+            "decidedAt": null,
+            "decidedBy": null,
+            "requestedBy": null,
+            "status": "not_needed"
+          },
+          "childSize": 120,
+          "columns": [],
+          "model": "bank-standard",
+          "overlap": 40,
+          "preset": "documents",
+          "questionsPerSection": 3,
+          "size": 800,
+          "strategies": [
+            "structure",
+            "context_headers"
+          ]
+        },
+        "itemsFailed": 0,
+        "itemsIndexed": 0,
+        "itemsPending": 0,
+        "kind": "file",
+        "kindLabel": "Files",
+        "metadataMapping": [],
+        "name": "Most",
+        "notifyOnFailure": true,
+        "owner": "james@harborpine.example",
+        "parsing": {
+          "ocr": "auto",
+          "tables": true,
+          "vision": false
+        },
+        "permissions": {
+          "mode": "workspace"
+        },
+        "rules": [],
+        "schedule": {
+          "kind": "manual"
+        },
+        "scopeSummary": "0 uploaded files",
+        "sensitivity": "internal",
+        "staleAfterDays": 365,
+        "status": "active",
+        "tags": [],
+        "titleFrom": "heading",
+        "type": "file",
+        "usedByKbIds": [
+          "<kb>"
+        ],
+        "waitingHosts": []
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "decide": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No FAQ draft or held change chg_missing1.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "editChange": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No FAQ draft or held change chg_missing1.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "event": {
+    "body": {
+      "data": {
+        "items": 0,
+        "key": "evt_1",
+        "name": "reading.failed",
+        "status": "handled"
+      },
+      "success": true
+    },
+    "status": 202
+  },
+  "eventSnake": {
+    "body": {
+      "data": {
+        "items": 0,
+        "key": "evt_2",
+        "name": "reading.failed",
+        "status": "handled"
+      },
+      "success": true
+    },
+    "status": 202
+  },
+  "itemOwner": {
+    "body": {
+      "data": {
+        "acl": [],
+        "chunkCount": 0,
+        "collection": "",
+        "digest": "<digest>",
+        "effectiveDate": "<date>",
+        "error": "The document has no text to index.",
+        "errorClass": "parse",
+        "externalId": "<fil>",
+        "family": "<itm>",
+        "fileId": "<fil>",
+        "freshness": "no_schedule",
+        "id": "<itm>",
+        "metadata": {},
+        "mimeType": "text/markdown",
+        "modifiedAt": "<time+00:00>",
+        "owner": "maya@harborpine.example",
+        "path": "fees.md",
+        "processedAt": "<time+00:00>",
+        "queries30d": 0,
+        "reviewBy": "",
+        "sensitivity": "internal",
+        "sizeBytes": 7,
+        "sourceId": "<src>",
+        "status": "failed",
+        "tags": [],
+        "title": "Fees",
+        "url": "https://x.example/f",
+        "verified": true,
+        "version": "v1",
+        "versionStatus": "current"
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "liftTombstones": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No tombstone for item_missing1.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "patchBase": {
+    "body": {
+      "data": {
+        "access": {
+          "anyApiKey": false,
+          "documentPermissions": "workspace",
+          "mcp": {
+            "enabled": false,
+            "toolName": "search_lending"
+          },
+          "members": {
+            "mode": "all",
+            "principals": []
+          },
+          "publicLink": {
+            "answerStyle": "chat",
+            "enabled": false,
+            "rateLimit": 300,
+            "showSourceLinks": true,
+            "slug": "lending"
+          }
+        },
+        "answer": {
+          "noAnswerMessage": "I could not find that in the knowledge base.",
+          "shape": "answer_with_citations",
+          "withholdUncited": true
+        },
+        "automation": "act",
+        "collections": [],
+        "color": "blue",
+        "createdAt": "<time+00:00>",
+        "description": "",
+        "health": "never",
+        "healthReasons": [
+          "Never indexed"
+        ],
+        "id": "<kb>",
+        "jobs": [],
+        "metadataProfile": {
+          "required": []
+        },
+        "name": "Lending",
+        "owner": "maya@harborpine.example",
+        "precedence": [
+          {
+            "id": "newer_version",
+            "kind": "newer",
+            "label": "A newer version of a document replaces the older one in search",
+            "loser": "Older version",
+            "winner": "Newer version"
+          }
+        ],
+        "protection": null,
+        "retrieval": {
+          "chunkLimit": 8,
+          "filters": {
+            "conditions": [],
+            "match": "all"
+          },
+          "hybridWeight": 0.6,
+          "includeUntagged": true,
+          "meaningThreshold": 0.38,
+          "queryModel": "",
+          "rerank": false,
+          "rewrite": "off",
+          "rewriteInstructions": "",
+          "scopeCollections": [],
+          "scopeSourceIds": [],
+          "searchMode": "hybrid",
+          "tagsExclude": [],
+          "tagsInclude": [],
+          "threshold": 0.5
+        },
+        "slug": "lending",
+        "sourceDefaults": {
+          "childSize": 120,
+          "overlap": 40,
+          "size": 900,
+          "strategies": [
+            "structure",
+            "context_headers"
+          ]
+        },
+        "sources": [
+          {
+            "itemsContributed": 0,
+            "rules": [],
+            "sourceId": "<src>"
+          }
+        ],
+        "stats": {
+          "chunks": 0,
+          "documents": 0,
+          "failures": 0,
+          "medianLatencyMs": "<medianLatencyMs>",
+          "noAnswerRate": 0,
+          "queries7d": 0,
+          "queriesChange7d": 0,
+          "stale": 0
+        },
+        "sync": {
+          "changes": "apply",
+          "notifyOnFailure": true,
+          "removedAtSource": "remove",
+          "staleAfterDays": 365
+        },
+        "templateId": null
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "patchBaseSnake": {
+    "body": {
+      "data": {
+        "access": {
+          "anyApiKey": false,
+          "documentPermissions": "workspace",
+          "mcp": {
+            "enabled": false,
+            "toolName": "search_lending"
+          },
+          "members": {
+            "mode": "all",
+            "principals": []
+          },
+          "publicLink": {
+            "answerStyle": "chat",
+            "enabled": false,
+            "rateLimit": 300,
+            "showSourceLinks": true,
+            "slug": "lending"
+          }
+        },
+        "answer": {
+          "noAnswerMessage": "I could not find that in the knowledge base.",
+          "shape": "answer_with_citations",
+          "withholdUncited": true
+        },
+        "automation": "act",
+        "collections": [],
+        "color": "blue",
+        "createdAt": "<time+00:00>",
+        "description": "",
+        "health": "never",
+        "healthReasons": [
+          "Never indexed"
+        ],
+        "id": "<kb>",
+        "jobs": [],
+        "metadataProfile": {
+          "required": []
+        },
+        "name": "Lending",
+        "owner": "maya@harborpine.example",
+        "precedence": [
+          {
+            "id": "newer_version",
+            "kind": "newer",
+            "label": "A newer version of a document replaces the older one in search",
+            "loser": "Older version",
+            "winner": "Newer version"
+          }
+        ],
+        "protection": null,
+        "retrieval": {
+          "chunkLimit": 8,
+          "filters": {
+            "conditions": [],
+            "match": "all"
+          },
+          "hybridWeight": 0.6,
+          "includeUntagged": true,
+          "meaningThreshold": 0.38,
+          "queryModel": "",
+          "rerank": false,
+          "rewrite": "off",
+          "rewriteInstructions": "",
+          "scopeCollections": [],
+          "scopeSourceIds": [],
+          "searchMode": "hybrid",
+          "tagsExclude": [],
+          "tagsInclude": [],
+          "threshold": 0.5
+        },
+        "slug": "lending",
+        "sourceDefaults": {
+          "childSize": 120,
+          "overlap": 40,
+          "size": 800,
+          "strategies": [
+            "structure",
+            "context_headers"
+          ]
+        },
+        "sources": [
+          {
+            "itemsContributed": 0,
+            "rules": [],
+            "sourceId": "<src>"
+          }
+        ],
+        "stats": {
+          "chunks": 0,
+          "documents": 0,
+          "failures": 0,
+          "medianLatencyMs": "<medianLatencyMs>",
+          "noAnswerRate": 0,
+          "queries7d": 0,
+          "queriesChange7d": 0,
+          "stale": 0
+        },
+        "sync": {
+          "changes": "apply",
+          "notifyOnFailure": true,
+          "removedAtSource": "remove",
+          "staleAfterDays": 365
+        },
+        "templateId": null
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "patchSource": {
+    "body": {
+      "data": {
+        "aiCeiling": 3.0,
+        "aiStepsWaiting": [],
+        "cleaning": {
+          "duplicates": "flag",
+          "furniture": false,
+          "mainContent": false,
+          "siteRepeats": false
+        },
+        "collection": "",
+        "config": {
+          "fileIds": [
+            "fil_0001"
+          ]
+        },
+        "createdAt": "<time+00:00>",
+        "deletedAtSource": "remove",
+        "health": {
+          "daysFailing": 0,
+          "failedRuns": 0,
+          "lastGoodSyncAt": "<time+00:00>",
+          "state": "healthy",
+          "tombstoned": 0
+        },
+        "id": "<src>",
+        "ingest": {
+          "approval": {
+            "approvedSteps": [],
+            "decidedAt": null,
+            "decidedBy": null,
+            "requestedBy": null,
+            "status": "not_needed"
+          },
+          "childSize": 120,
+          "columns": [],
+          "model": "bank-standard",
+          "overlap": 40,
+          "preset": "documents",
+          "questionsPerSection": 3,
+          "size": 400,
+          "strategies": [
+            "structure",
+            "context_headers"
+          ]
+        },
+        "itemsFailed": 0,
+        "itemsIndexed": 1,
+        "itemsPending": 0,
+        "kind": "file",
+        "kindLabel": "Files",
+        "lastRunStatus": "success",
+        "lastSyncAt": "<time+00:00>",
+        "metadataMapping": [],
+        "name": "Policies",
+        "notifyOnFailure": true,
+        "owner": "james@harborpine.example",
+        "parsing": {
+          "ocr": "auto",
+          "tables": true,
+          "vision": false
+        },
+        "permissions": {
+          "mode": "workspace"
+        },
+        "rebuild": null,
+        "rules": [],
+        "schedule": {
+          "kind": "manual"
+        },
+        "scopeSummary": "1 uploaded file",
+        "sensitivity": "internal",
+        "staleAfterDays": 365,
+        "status": "active",
+        "tags": [],
+        "titleFrom": "heading",
+        "type": "file",
+        "usedByKbIds": [
+          "<kb>"
+        ],
+        "waitingHosts": []
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "patchSourceSnake": {
+    "body": {
+      "data": {
+        "aiCeiling": 4.0,
+        "aiStepsWaiting": [],
+        "cleaning": {
+          "duplicates": "flag",
+          "furniture": false,
+          "mainContent": false,
+          "siteRepeats": false
+        },
+        "collection": "",
+        "config": {
+          "fileIds": [
+            "fil_0001"
+          ]
+        },
+        "createdAt": "<time+00:00>",
+        "deletedAtSource": "remove",
+        "health": {
+          "daysFailing": 0,
+          "failedRuns": 0,
+          "lastGoodSyncAt": "<time+00:00>",
+          "state": "healthy",
+          "tombstoned": 0
+        },
+        "id": "<src>",
+        "ingest": {
+          "approval": {
+            "approvedSteps": [],
+            "decidedAt": null,
+            "decidedBy": null,
+            "requestedBy": null,
+            "status": "not_needed"
+          },
+          "childSize": 120,
+          "columns": [],
+          "model": "bank-standard",
+          "overlap": 40,
+          "preset": "documents",
+          "questionsPerSection": 3,
+          "size": 400,
+          "strategies": [
+            "structure",
+            "context_headers"
+          ]
+        },
+        "itemsFailed": 0,
+        "itemsIndexed": 1,
+        "itemsPending": 0,
+        "kind": "file",
+        "kindLabel": "Files",
+        "lastRunStatus": "success",
+        "lastSyncAt": "<time+00:00>",
+        "metadataMapping": [],
+        "name": "Policies",
+        "notifyOnFailure": true,
+        "owner": "james@harborpine.example",
+        "parsing": {
+          "ocr": "auto",
+          "tables": true,
+          "vision": false
+        },
+        "permissions": {
+          "mode": "workspace"
+        },
+        "rebuild": null,
+        "rules": [],
+        "schedule": {
+          "kind": "manual"
+        },
+        "scopeSummary": "1 uploaded file",
+        "sensitivity": "internal",
+        "staleAfterDays": 365,
+        "status": "active",
+        "tags": [],
+        "titleFrom": "heading",
+        "type": "file",
+        "usedByKbIds": [
+          "<kb>"
+        ],
+        "waitingHosts": []
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "preview": {
+    "body": {
+      "error": {
+        "code": "tools_unavailable",
+        "message": "This service reads no tools, so a tool source cannot be made.",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "putItem": {
+    "body": {
+      "data": {
+        "item": {
+          "acl": [],
+          "chunkCount": 0,
+          "collection": "",
+          "digest": "<digest>",
+          "effectiveDate": "<date>",
+          "error": "The document has no text to index.",
+          "errorClass": "parse",
+          "externalId": "<fil>",
+          "family": "<itm>",
+          "fileId": "<fil>",
+          "freshness": "no_schedule",
+          "id": "<itm>",
+          "metadata": {},
+          "mimeType": "text/markdown",
+          "modifiedAt": "<time+00:00>",
+          "owner": "james@harborpine.example",
+          "path": "fees.md",
+          "processedAt": "<time+00:00>",
+          "queries30d": 0,
+          "reviewBy": "",
+          "sensitivity": "internal",
+          "sizeBytes": 7,
+          "sourceId": "<src>",
+          "status": "failed",
+          "tags": [],
+          "title": "Fees",
+          "url": "https://x.example/f",
+          "verified": false,
+          "version": "v1",
+          "versionStatus": "current"
+        },
+        "outcome": "created"
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "queryCollection": {
+    "body": {
+      "data": {
+        "answer": "I could not find that in the knowledge base.",
+        "chunks": [],
+        "citations": [],
+        "cost": {
+          "embeddingTokens": 0
+        },
+        "id": "<qry>",
+        "lanes": {
+          "asked": [
+            "keyword",
+            "meaning"
+          ],
+          "ran": [
+            "keyword"
+          ],
+          "skipped": [
+            {
+              "lane": "meaning",
+              "reason": "no_embedding_model"
+            }
+          ]
+        },
+        "matchers": [],
+        "noAnswer": true,
+        "passages": [],
+        "question": "fee",
+        "retrievalMs": "<retrievalMs>",
+        "shape": "chunks",
+        "synthesisMs": "<synthesisMs>"
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "scopes": {
+    "body": {
+      "error": {
+        "code": "tools_unavailable",
+        "message": "This service reads no tools, so a tool source cannot be made.",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "sync": {
+    "body": {
+      "data": {
+        "counts": {
+          "deleted": 0,
+          "excluded": 0,
+          "failed": 0,
+          "listed": 1,
+          "reading": 0,
+          "skipped": 0,
+          "unchanged": 0,
+          "upserted": 1
+        },
+        "durationSec": "<durationSec>",
+        "errors": [],
+        "id": "<run>",
+        "log": [],
+        "phases": [],
+        "sourceId": "<src>",
+        "startedAt": "<time+00:00>",
+        "status": "success",
+        "trigger": "full"
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "verifyItem": {
+    "body": {
+      "data": {
+        "acl": [],
+        "chunkCount": 0,
+        "collection": "",
+        "digest": "<digest>",
+        "effectiveDate": "<date>",
+        "error": "The document has no text to index.",
+        "errorClass": "parse",
+        "externalId": "<fil>",
+        "family": "<itm>",
+        "fileId": "<fil>",
+        "freshness": "no_schedule",
+        "id": "<itm>",
+        "metadata": {},
+        "mimeType": "text/markdown",
+        "modifiedAt": "<time+00:00>",
+        "owner": "james@harborpine.example",
+        "path": "fees.md",
+        "processedAt": "<time+00:00>",
+        "queries30d": 0,
+        "reviewBy": "",
+        "sensitivity": "internal",
+        "sizeBytes": 7,
+        "sourceId": "<src>",
+        "status": "failed",
+        "tags": [],
+        "title": "Fees",
+        "url": "https://x.example/f",
+        "verified": true,
+        "version": "v1",
+        "versionStatus": "current"
+      },
+      "success": true
+    },
+    "status": 200
+  }
+}

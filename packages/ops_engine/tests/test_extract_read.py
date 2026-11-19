@@ -75,7 +75,7 @@ async def test_the_field_picker_offers_text_and_pages_or_the_proposal() -> None:
     proposed = NodeInstance.model_validate(
         {"id": "read", "type": "ops.ai.extract", "typeVersion": 1, "parameters": {"file": "f", "read": "propose"}}
     )
-    text_ok = (await build(text, EXTRACT, Lookups()))["ok"]  # type: ignore[arg-type]
-    proposed_ok = (await build(proposed, EXTRACT, Lookups()))["ok"]  # type: ignore[arg-type]
+    text_ok: dict[str, Any] = (await build(text, EXTRACT, Lookups()))["ok"]  # type: ignore[arg-type]
+    proposed_ok: dict[str, Any] = (await build(proposed, EXTRACT, Lookups()))["ok"]  # type: ignore[arg-type]
     assert {"text", "pages"} <= set(text_ok.get("properties", {})) and "fields" not in text_ok.get("properties", {})
     assert {"proposal", "fields"} <= set(proposed_ok.get("properties", {})), proposed_ok

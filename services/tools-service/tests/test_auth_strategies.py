@@ -14,7 +14,7 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_tools.auth.tokens import Tokens
-from ops_tools.store.connections import ConnectionStore
+from ops_tools.store.connections import ConnectionStore, NewAccount
 
 from .conftest import credentials
 
@@ -41,7 +41,7 @@ def _system(seen: list[dict[str, str]]) -> httpx.AsyncClient:
 
 async def _connection(store: ConnectionStore, tenant: str) -> str:
     now = datetime.now(UTC)
-    row = {
+    row: NewAccount = {
         "tenant_id": tenant,
         "id": "con_tok",
         "app_id": "con_tok",
@@ -79,7 +79,7 @@ async def test_two_calls_past_the_token_refresh_it_once(engine: AsyncEngine, ten
     await tokens.access(tenant, conn, SETTINGS, None, grant="none", stale_rotation=stale)
     assert [s.get("refresh_token") for s in seen] == ["rt-0", "rt-1"]
     row = await store.token(tenant, conn)
-    assert row is not None and "rt-" not in json.dumps({k: str(v) for k, v in row.items()})
+    assert row is not None and "rt-" not in json.dumps({k: str(v) for k, v in row.model_dump().items()})
 
 
 async def test_a_refresh_after_a_401_replaces_only_the_refused_token(engine: AsyncEngine, tenant: str) -> None:

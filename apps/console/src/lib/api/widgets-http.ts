@@ -9,7 +9,6 @@ type Qs = (p: ListParams) => string;
 
 export function createWidgetsHttp(get: Get, send: Send, qs: Qs): WidgetsApi {
   return {
-    list: () => get('/widgets'),
     get: (id) => get(`/widgets/${id}`),
     page: (p) => get(`/widgets?${qs(p)}`),
     options: (p, granted) => get(`/widgets/options?${[optionsQs(p), ...granted.map((t) => `granted=${encodeURIComponent(t)}`)].filter(Boolean).join('&')}`),

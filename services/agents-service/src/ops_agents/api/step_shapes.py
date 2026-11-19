@@ -4,7 +4,7 @@ tools-service as the caller's team reads them."""
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import cast
 
 import httpx
 
@@ -13,6 +13,7 @@ from ops_engine import default_registry
 from ops_engine.definition import WorkflowDefinition
 from ops_engine.shapes import Ports, Shape, shapes, unknown_fields
 from ops_identity import ServiceCallError, ServiceUnreachable
+from ops_service_kit.http import Json
 
 from .deps import Runtime
 from .engine_documents import type_fields
@@ -25,7 +26,7 @@ class ServiceLookups:
     def __init__(self, rt: Runtime, team: str, documents: DocumentsClient | None) -> None:
         self.rt, self.team, self.documents = rt, team, documents
 
-    async def document_fields(self, type_id: str, version: int | None) -> list[dict[str, Any]]:
+    async def document_fields(self, type_id: str, version: int | None) -> list[Json]:
         # documents-service reads a document type as a team; with none named there is nothing it may answer.
         if self.documents is None or not self.team:
             return []
@@ -51,7 +52,7 @@ def _documents(rt: Runtime) -> DocumentsClient | None:
     return DocumentsClient.from_settings(rt.settings, service="agents", scopes=["documents:view"])
 
 
-async def version_shapes(rt: Runtime, team: str, definition: dict[str, Any]) -> dict[str, Ports]:
+async def version_shapes(rt: Runtime, team: str, definition: Json) -> dict[str, Ports]:
     documents = _documents(rt)
     try:
         d = WorkflowDefinition.model_validate(definition)
@@ -61,7 +62,7 @@ async def version_shapes(rt: Runtime, team: str, definition: dict[str, Any]) -> 
             await documents.aclose()
 
 
-async def field_warnings(rt: Runtime, team: str, d: WorkflowDefinition) -> list[dict[str, Any]]:
+async def field_warnings(rt: Runtime, team: str, d: WorkflowDefinition) -> list[Json]:
     """`unknown_output_field` warnings for a definition being validated or saved."""
     documents = _documents(rt)
     try:

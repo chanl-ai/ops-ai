@@ -23,13 +23,16 @@ from ops_service_kit.credentials import credential_store
 from ops_service_kit.logging import configure_logging, get_logger
 from ops_service_kit.model_calls import ModelCalls
 from ops_service_kit.settings import Settings, require_keys
+from ops_store.background import run_sweep
 from ops_store.database import open_database
+from ops_store.outbox import run_relay
 from ops_store.schema_version import require_current_schema
 
 from .app import create_gateway_app
 from .apps import Apps, apps_router
 from .auth import Authenticator, Tokens
 from .auth.discovery import Discovery
+from .catalog_routes import catalog_router
 from .code_runs import CodeExecutor, code_signer
 from .connections.connect_links import ConnectLinks
 from .connections.keepalive import SignInKeepalive, keep_signed_in
@@ -44,13 +47,14 @@ from .graph_mailbox import cursor_key, graph_clients
 from .header_keys import move_at_start
 from .knowledge_tools import KnowledgeSearch
 from .mailboxes import MailboxSenders, mailboxes_router
+from .mcp_links import mcp_links_router
 from .mock_routes import mocks_router
 from .modules.directory import Directory
 from .modules.policy import CheckBeforeSend, PublishPolicy, RequesterMayDecide, WriteApprovals
 from .modules.review_handoff import keep_handing_over
 from .modules.reviews import Reviews
 from .modules.routes import executions_router, modules_router
-from .modules.seed import load
+from .modules.seed import catalog_titles, load
 from .modules.service import ModuleService
 from .modules.tool_users import AgentsToolUsers
 from .modules.workflows import AgentsWorkflows
@@ -65,14 +69,17 @@ from .secrets.routes import secrets_router
 from .send_check import SendCheck
 from .send_policy_routes import send_policy_router
 from .store import CallLog
+from .store.catalog import ToolCatalog
 from .store.connections import ConnectionStore
 from .store.egress import EgressStore
-from .store.event_relay import keep_relaying
+from .store.mcp_links import McpLinks
 from .store.mocks import MockStore
 from .store.modules import ModuleStore
 from .store.plugin_bindings import PluginBindings
+from .store.relay import KEY as RELAY_KEY
+from .store.relay import tools_relay
 from .store.review_handoffs import ReviewHandoffs
-from .store.secrets import SecretStore
+from .store.secrets import AUDIT_RETENTION, AUDIT_SWEEP, SecretStore
 from .store.send_policies import SendPolicies
 from .store.team_defaults import TeamDefaults
 from .tools import LocalToolRunner
@@ -93,6 +100,11 @@ async def _seed(settings: Settings, seed: dict[str, Any], catalog: list[dict[str
 
 def main() -> None:
     settings = Settings()
+    # agents-service says who uses a tool; files-service and documents-service are read by the file tools.
+    # platform-service holds the team rules every write is decided by: outside dev it must be named, and in dev
+    # without it every write is refused (approval_rules_unavailable).
+    policies = ("platform",) if settings.environment != "dev" else ()
+    settings.require("agents", "documents", "files", *policies, *settings.identity_endpoints)
     require_keys(settings, "review_key", "secrets_key")
     require_current_schema(settings.database_url, MIGRATIONS)
     configure_logging(service="tools-service")
@@ -128,7 +140,7 @@ def main() -> None:
     # A call acting for someone who has not signed in hands back a link to the console page that asks them.
     links = ConnectLinks(connection_store, settings.console_url) if settings.console_url else None
     authenticator = Authenticator(connection_store, secrets, tokens, links)
-    agents_url = settings.agents_url or f"http://127.0.0.1:{settings.port}"
+    agents_url = settings.endpoint("agents").base
 
     # The install's plugins (its plugins folder, OPS_PLUGINS_DIR), read once at start: a failed one is logged
     # (plugin_failed) and left out. With none, the plugin routes are not mounted and calls never reach a plugin.
@@ -149,7 +161,8 @@ def main() -> None:
         http=egress_client(policy, ca_file=ca),
         secrets=secrets,
         workflows=AgentsWorkflows(client("agents", agents_url, ["workflows:view"])),
-        reviews=Reviews(client("agents", agents_url)),
+        # tools:publish: agents-service holds the token sent beside a person's credentials to it with can().
+        reviews=Reviews(client("agents", agents_url, ["tools:publish"])),
         # The team's publish-review mode, read from platform-service on each publish so a change applies at once.
         publish_policy=PublishPolicy(client("platform", settings.platform_url, ["settings:view"]))
         if settings.platform_url
@@ -164,9 +177,14 @@ def main() -> None:
     tokens.plugin_hosts = plugins.connection_hosts if plugins else None
     # The call log names a plugin tool by its manifest title.
     modules.titles = plugins.title_of if plugins else None
+    # The catalogue events title each tool as the grantable list does (`tool_title`), from the same manifests.
+    store.titles = catalog_titles(plugins.title_of if plugins else None)
+    tool_catalog = ToolCatalog(engine)
+    tool_catalog.titles = store.titles
     # A plugin tool's page names the team's own account of the app.
     modules.team_connections = plugins.team_connection if plugins else None
     modules.awaits_sign_in = plugins.awaits_sign_in if plugins else None
+    modules.installed_plugins = (lambda: sorted(plugins.plugins)) if plugins else None
     # send_reply naming a mailbox: the mailbox is read from agents-service as the call's team, its secret is
     # looked up for that team, and its host is dialled at the allow-listed address.
     # Microsoft 365 mailboxes: Graph and its token endpoint, dialled through each tenant's allow-list.
@@ -207,22 +225,27 @@ def main() -> None:
     tool_users = AgentsToolUsers(client("agents", agents_url, ["agents:view"]))
     modules.users = tool_users
     # An app's Resources tab joins the copies agents-service and documents-service keep, read as the caller's team.
-    documents_url = settings.documents_url or f"http://127.0.0.1:{settings.documents_port}"
+    documents_url = settings.endpoint("documents").base
     resource_copies = ServiceCopies(
         client("agents", agents_url, ["agents:view"]),
         client("documents", documents_url, ["documents:view"]),
         client("kb", settings.kb_url, ["knowledge:view"]) if settings.kb_url else None,
     )
     apps = Apps(connection_service, store, plugins, modules, tool_users)
-    # The team's toolWritesNeedApproval and appWritesNeedApproval, read from platform-service on each call so a change
-    # applies at once; the gateway's calls and the connectors' Reviewed marks read the same.
-    write_approvals = (
-        WriteApprovals(client("platform", settings.platform_url, ["settings:view"])) if settings.platform_url else None
+    # The team's appChanges and appChangesByApp, read from platform-service on each call so a change applies at once;
+    # the gateway's calls and the connectors' Reviewed marks read the same. Without platform-service none can be read.
+    write_approvals = WriteApprovals(
+        client("platform", settings.platform_url, ["settings:view"]) if settings.platform_url else None
     )
     apps.write_approvals = write_approvals
+    registry = ToolRegistry(catalog, store, plugins, connection_store)
+    mcp_links = McpLinks(engine)
     app = create_gateway_app(
         opa=OpaClient(httpx.AsyncClient(base_url=settings.opa_url, timeout=5)),
-        registry=ToolRegistry(catalog, store, plugins, connection_store),
+        registry=registry,
+        # Each team's MCP links, served at /mcp/{team}/{link} beside the team's whole address.
+        links=mcp_links,
+        agents_url=agents_url,
         plugins=plugins,
         # A tool page's Real run goes through this gateway's checks.
         modules=modules,
@@ -250,6 +273,10 @@ def main() -> None:
         review_key=settings.review_key.get_secret_value(),
         auth=Auth.from_settings(settings, audience="tools"),
         write_approvals=write_approvals,
+        requester_policy=RequesterMayDecide(
+            client("platform", settings.platform_url, ["settings:view"]) if settings.platform_url else None,
+            dev=settings.dev_policies,
+        ),
         # Check before sending: the team's checkBeforeSend read live, its sending policy here, and the judge on
         # this service's own model key; with no models-service, a team with the setting on has every write wait.
         send_check=SendCheck(
@@ -269,7 +296,15 @@ def main() -> None:
         background=(
             lambda: keep_handing_over(ReviewHandoffs(engine), client("agents", agents_url, ["tools:publish"])),
             # Tool access requests and module reviews start their system workflows through these events.
-            lambda: keep_relaying(engine, client("agents", agents_url, ["events:emit"])),
+            lambda: run_relay(
+                tools_relay(engine, client("agents", agents_url, ["events:emit", "agents:create"])),
+                key=RELAY_KEY,
+                stop=asyncio.Event(),
+            ),
+            # Every hour: secret use and change rows past their age are deleted.
+            lambda: run_sweep(
+                AUDIT_SWEEP, lambda: SecretStore(engine).system_tx(AUDIT_RETENTION), stop=asyncio.Event()
+            ),
             # Once at start: every team behind this release's defaults version is brought up to date.
             lambda: catch_up_at_start(store, TeamDefaults(engine)),
             # Once at start: a tool's sign-in header saved before they were refused moves to its connection.
@@ -298,9 +333,11 @@ def main() -> None:
             executions_router(modules, directory),
             mailboxes_router(settings, secrets, policy, graph),
             egress_router(EgressStore(engine)),
+            catalog_router(tool_catalog),
             expressions_router(),
             secrets_router(secrets, modules=store, credentials=connection_store),
             send_policy_router(SendPolicies(engine), directory),
+            mcp_links_router(mcp_links, registry, directory, settings.tools_public_url),
             mocks_router(MockStore(engine), store, directory),
             *(
                 [
@@ -320,7 +357,7 @@ def main() -> None:
             platform_events_router(
                 {
                     **member_removed_handlers(connection_service.store, credentials),
-                    **team_created_handlers(store, TeamDefaults(engine)),
+                    **team_created_handlers(store, TeamDefaults(engine), plugins),
                 }
             ),
         ),

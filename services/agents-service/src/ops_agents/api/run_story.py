@@ -9,25 +9,29 @@ The run page draws these as they come; it derives nothing."""
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, cast
+from typing import Any, Literal, NotRequired, TypedDict, cast
 
 from ops_agent_kernel.pii import masked
 from ops_engine import default_registry
 from ops_engine.compiler import redacted
-from ops_engine.store import RunStore
+from ops_engine.store import DefinitionRow, RunRow, RunStep, RunStore
 from ops_engine.store.definitions import DefinitionStore
+from ops_service_kit.http import Json, JsonList, JsonValue
+from ops_service_kit.narrow import a_list, an_object, json_list, json_object
 
 from ..store.actor_names import UNNAMED_WORKFLOW
-from ..store.cases import CaseStore
+from ..store.cases import CaseStore, CaseSummary
 from ..store.engine import EngineTransactions
 from ..store.review_assignments import ReviewAssignments
 from . import engine_reviews
-from .actors import actors, started_by_of
+from .actors import NamedActors, actors, started_by_of
 from .deps import Runtime
-from .engine_runs import runs_above
+from .engine_runs import starters_of
 from .file_names import named
-from .review_text import describe_calls, humanize
+from .review_text import describe_calls, humanize, operations
 
 EMAIL_TRIGGER = "ops.trigger.email"
 END = "ops.flow.end"
@@ -46,36 +50,158 @@ _KEEP = frozenset(
 )
 
 
-def steps_view(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+class FileRef(TypedDict):
+    """A file id in a run's input with the name an upload gave beside it (`files_in`)."""
+
+    id: str
+    name: str | None
+
+
+class Decision(TypedDict):
+    """A decided Human Task step (`decisions_in`), keys in reply order; `by` is raw until the caller names it."""
+
+    nodeId: JsonValue
+    iteration: JsonValue
+    reviewId: str
+    action: str
+    reason: str | None
+    by: str | None
+    at: str | None
+
+
+class EmailAttachment(TypedDict):
+    fileId: str
+    name: str
+    type: JsonValue
+    size: JsonValue
+
+
+class EmailSkipped(TypedDict):
+    name: str
+    message: str
+
+
+class EmailBodyFile(TypedDict):
+    fileId: str
+    name: str
+
+
+# The email a run began with (`email_of`), keys in reply order; `from` is a keyword, so the call form names it.
+EmailView = TypedDict(
+    "EmailView",
+    {
+        "from": str,
+        "subject": str,
+        "receivedAt": JsonValue,
+        "body": str,
+        "mailbox": JsonValue,
+        "attachments": list[EmailAttachment],
+        "skipped": list[EmailSkipped],
+        "bodyFile": EmailBodyFile | None,
+    },
+)
+
+
+class StartedEntry(TypedDict):
+    """A run a Start workflow step started (`started_entries`)."""
+
+    nodeId: str
+    index: int
+    runId: str
+    label: JsonValue
+
+
+class Fact(TypedDict):
+    label: str
+    value: str
+
+
+class ChildCase(TypedDict):
+    caseId: str
+    subject: str
+    customer: str | None
+    facts: list[Fact]
+
+
+class ChildTask(TypedDict):
+    reviewId: str
+    title: str
+    open: bool
+    decision: str | None
+    state: str
+
+
+class ChildHead(TypedDict):
+    """A started run's own keys, first in its row (`children_view`)."""
+
+    runId: str
+    nodeId: str
+    index: int
+    workflowName: str
+    stepName: str
+    label: str
+    status: str
+    outcome: str | None
+
+
+class ChildRow(ChildHead):
+    """A run this run's steps started, as people read it: its own keys, then what it is told by, in reply order."""
+
+    ending: str | None
+    cases: list[ChildCase]
+    tasks: list[ChildTask]
+    state: str
+
+
+class ReadEntry(TypedDict):
+    """An Extract from file step that read something (`reads_of`)."""
+
+    nodeId: str
+    name: str
+    read: engine_reviews.ReadView
+
+
+class StoryView(TypedDict):
+    """A run told for people (`story_view`), keys in reply order. The run page lifts `workflowName` out."""
+
+    workflowName: NotRequired[str]
+    email: EmailView | None
+    reads: list[ReadEntry]
+    children: list[ChildRow]
+    childrenMore: int
+    lines: list[Json]
+
+
+def steps_view(rows: list[RunStep]) -> list[Json]:
     """Attempts grouped per node and iteration, in the order the steps started; each step shows its last attempt."""
-    grouped: dict[tuple[str, int], list[dict[str, Any]]] = {}
+    grouped: dict[tuple[str, int], list[RunStep]] = {}
     for r in rows:
-        grouped.setdefault((r["node_id"], r["iteration"]), []).append(r)
-    out: list[dict[str, Any]] = []
+        grouped.setdefault((r.node_id, r.iteration), []).append(r)
+    out: list[Json] = []
     for (node, iteration), attempts in grouped.items():
-        attempts.sort(key=lambda a: a["attempt"])
+        attempts.sort(key=lambda a: a.attempt)
         last = attempts[-1]
         out.append(
             {
                 "nodeId": node,
                 "iteration": iteration,
-                "status": last["status"],
-                "port": last["port"],
-                "input": redacted(last["input"]),
-                "output": redacted(last["output"]),
-                "error": last["error"],
+                "status": last.status,
+                "port": last.port,
+                "input": redacted(last.input),
+                "output": redacted(last.output),
+                "error": last.error,
                 "attempts": [
                     {
-                        "attempt": a["attempt"],
-                        "status": a["status"],
-                        "effects": a["effects"],
-                        "key": a["key"],
-                        "port": a["port"],
-                        "input": redacted(a["input"]),
-                        "output": redacted(a["output"]),
-                        "error": a["error"],
-                        "startedAt": a["started_at"],
-                        "finishedAt": a["finished_at"],
+                        "attempt": a.attempt,
+                        "status": a.status,
+                        "effects": a.effects,
+                        "key": a.key,
+                        "port": a.port,
+                        "input": redacted(a.input),
+                        "output": redacted(a.output),
+                        "error": a.error,
+                        "startedAt": a.started_at,
+                        "finishedAt": a.finished_at,
                     }
                     for a in attempts
                 ],
@@ -84,26 +210,26 @@ def steps_view(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
-def decisions_in(run_id: str, steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def decisions_in(run_id: str, steps: list[Json]) -> list[Decision]:
     """The decided Human Task steps: a step whose output carries the person's `decision`, with when its last attempt
     finished; `by` stays raw for the caller to name."""
-    out: list[dict[str, Any]] = []
+    out: list[Decision] = []
     for s in steps:
-        o = s.get("output")
-        if s.get("status") != "ok" or not isinstance(o, dict):
+        d = s.get("output")
+        if s.get("status") != "ok" or not isinstance(d, dict):
             continue
-        d = cast(dict[str, Any], o)
-        if not isinstance(d.get("decision"), str):
+        decision = d.get("decision")
+        if not isinstance(decision, str):
             continue
-        attempts = cast(list[dict[str, Any]], s.get("attempts") or [])
-        finished = attempts[-1].get("finishedAt") if attempts else None
+        attempts = a_list(s.get("attempts") or [], "a step's attempts")
+        finished: object = an_object(attempts[-1], "a step's attempt").get("finishedAt") if attempts else None
         out.append(
             {
                 "nodeId": s["nodeId"],
                 "iteration": s["iteration"],
                 "reviewId": f"{run_id}:{s['nodeId']}:{s['iteration']}",
-                "action": d["decision"],
-                "reason": d.get("reason") if isinstance(d.get("reason"), str) else None,
+                "action": decision,
+                "reason": reason if isinstance(reason := d.get("reason"), str) else None,
                 "by": str(d["by"]) if d.get("by") else None,
                 "at": finished.isoformat() if isinstance(finished, datetime) else (str(finished) if finished else None),
             }
@@ -114,48 +240,51 @@ def decisions_in(run_id: str, steps: list[dict[str, Any]]) -> list[dict[str, Any
 FILE_ID = re.compile(r"fil_[0-9a-f]{32}")
 
 
-def files_in(value: Any) -> list[dict[str, Any]]:
+def files_in(value: JsonValue) -> list[FileRef]:
     """Every value in the input that is a file id, at any depth, once each and in order, with the name an upload gave
     beside it (`{fileId, name}`)."""
     found: dict[str, str | None] = {}
 
-    def walk(v: Any, name: str | None = None) -> None:
+    def walk(v: JsonValue, name: str | None = None) -> None:
         if isinstance(v, str):
             if FILE_ID.fullmatch(v):
                 found[v] = found.get(v) or name
         elif isinstance(v, dict):
-            d = cast(dict[str, Any], v)
-            named = d.get("name") if isinstance(d.get("name"), str) else None
-            for k, x in d.items():
+            named = given if isinstance(given := v.get("name"), str) else None
+            for k, x in v.items():
                 walk(x, named if k == "fileId" else None)
         elif isinstance(v, list):
-            for x in cast(list[Any], v):
+            for x in v:
                 walk(x)
 
     walk(value)
-    return [{"id": i, "name": n} for i, n in found.items()]
+    return [FileRef(id=i, name=n) for i, n in found.items()]
 
 
-def nodes_of(stored: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
-    definition = cast(dict[str, Any], (stored or {}).get("definition") or {})
-    listed = [cast(dict[str, Any], n) for n in cast(list[Any], definition.get("nodes") or []) if isinstance(n, dict)]
+def nodes_of(stored: DefinitionRow | None) -> dict[str, Json]:
+    return nodes_in(stored.definition if stored else None)
+
+
+def nodes_in(definition: JsonValue) -> dict[str, Json]:
+    """A stored definition's nodes by id; a definition with no node list has none."""
+    listed = [json_object(n) for n in json_list(json_object(definition).get("nodes")) if isinstance(n, dict)]
     return {str(n["id"]): n for n in listed}
 
 
-def executor_of(node: dict[str, Any] | None) -> str | None:
+def executor_of(node: Json | None) -> str | None:
     if node is None:
         return None
-    t = default_registry().find(str(node.get("type")), int(node.get("typeVersion") or 1))
+    t = default_registry().find(str(node.get("type")), int(cast(int, node.get("typeVersion") or 1)))
     return t.executor if t is not None else None
 
 
-def _name(node: dict[str, Any] | None, fallback: str) -> str:
+def _name(node: Json | None, fallback: str) -> str:
     return str((node or {}).get("name") or fallback)
 
 
-def workflow_name(stored: dict[str, Any] | None) -> str:
+def workflow_name(stored: DefinitionRow | None) -> str:
     """A pinned version's name as people read it; a version with none is "a workflow run", never its id."""
-    return str((stored or {}).get("name") or "").strip() or UNNAMED_WORKFLOW
+    return (stored.name if stored else "").strip() or UNNAMED_WORKFLOW
 
 
 def words(value: str) -> str:
@@ -164,16 +293,29 @@ def words(value: str) -> str:
     return text[:1].upper() + text[1:]
 
 
-async def outcome_texts(rt: Runtime, rows: list[dict[str, Any]]) -> dict[str, str]:
+async def outcome_reads(rt: Runtime, rows: list[Json]) -> tuple[dict[str, str], dict[tuple[str, int], DefinitionRow]]:
+    """The reads of `outcome_texts`: the End step of each run that ended and the versions they belong to."""
+    ended = [r for r in rows if r.get("outcome") and r.get("status") in ("succeeded", "failed")]
+    ends = await RunStore(EngineTransactions(rt.db)).ends([str(r["id"]) for r in ended])
+    versions = await DefinitionStore(EngineTransactions(rt.db)).pinned(
+        {(str(r["workflow_id"]), int(cast(int, r["version"]))) for r in ended if str(r["id"]) in ends}
+    )
+    return ends, versions
+
+
+async def outcome_texts(rt: Runtime, rows: list[Json]) -> dict[str, str]:
     """How each run ended, as a sentence, by run id. The outcome itself is the End's key (`not_found`), which read
     bare looks like an error; the sentence names the End the run reached by its name in the workflow ("Finished at
     the Not found end."). A cancelled run's outcome is the reason given, kept as written. Two reads for a whole page:
     the End steps and the versions they belong to."""
-    ended = [r for r in rows if r.get("outcome") and r.get("status") in ("succeeded", "failed")]
-    ends = await RunStore(EngineTransactions(rt.db)).ends([str(r["id"]) for r in ended])
-    versions = await DefinitionStore(EngineTransactions(rt.db)).pinned(
-        {(str(r["workflow_id"]), int(r["version"])) for r in ended if str(r["id"]) in ends}
-    )
+    ends, versions = await outcome_reads(rt, rows)
+    return outcome_sentences(rows, ends, versions)
+
+
+def outcome_sentences(
+    rows: list[Json], ends: dict[str, str], versions: dict[tuple[str, int], DefinitionRow]
+) -> dict[str, str]:
+    """`outcome_texts` from its reads."""
     out: dict[str, str] = {}
     for r in rows:
         if not r.get("outcome"):
@@ -183,8 +325,8 @@ async def outcome_texts(rt: Runtime, rows: list[dict[str, Any]]) -> dict[str, st
                 "Cancelled by the person who started it" if r["outcome"] == "by_user" else str(r["outcome"])
             )
             continue
-        stored = versions.get((str(r["workflow_id"]), int(r["version"]))) or {}
-        nodes = cast(list[dict[str, Any]], cast(dict[str, Any], stored.get("definition") or {}).get("nodes") or [])
+        stored = versions.get((str(r["workflow_id"]), int(cast(int, r["version"]))))
+        nodes = [json_object(n) for n in json_list(json_object(stored.definition if stored else None).get("nodes"))]
         end = ends.get(str(r["id"]))
         name = next((str(n.get("name")) for n in nodes if n.get("id") == end and n.get("name")), None)
         said = name or words(str(r["outcome"]))
@@ -193,32 +335,30 @@ async def outcome_texts(rt: Runtime, rows: list[dict[str, Any]]) -> dict[str, st
     return out
 
 
-def first_text(value: Any) -> str | None:
+def first_text(value: JsonValue) -> str | None:
     """The first text in a value that is not an id, depth first in its own order."""
     if isinstance(value, str):
         return value.strip() or None if not _ID.match(value) else None
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         return None
     if isinstance(value, dict):
-        for v in cast(dict[str, Any], value).values():
+        for v in value.values():
             if (found := first_text(v)) is not None:
                 return found
     if isinstance(value, list):
-        found_all = [t for v in cast(list[Any], value) if (t := first_text(v)) is not None]
+        found_all = [t for v in value if (t := first_text(v)) is not None]
         return ", ".join(found_all) or None
     return None
 
 
-def email_of(run: dict[str, Any], nodes: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
+def email_of(run: Json, nodes: dict[str, Json]) -> EmailView | None:
     """The email a run began with, when its trigger is Email received; None for every other run."""
-    if not any(n.get("type") == EMAIL_TRIGGER for n in nodes.values()) or not isinstance(run.get("input"), dict):
+    given = run.get("input")
+    if not any(n.get("type") == EMAIL_TRIGGER for n in nodes.values()) or not isinstance(given, dict):
         return None
-    given = cast(dict[str, Any], run["input"])
-    attachments = [
-        cast(dict[str, Any], a) for a in cast(list[Any], given.get("attachments") or []) if isinstance(a, dict)
-    ]
-    skipped = [cast(dict[str, Any], a) for a in cast(list[Any], given.get("skipped") or []) if isinstance(a, dict)]
-    body = cast(dict[str, Any], given.get("bodyFile")) if isinstance(given.get("bodyFile"), dict) else None
+    attachments = [a for a in cast(list[JsonValue], given.get("attachments") or []) if isinstance(a, dict)]
+    skipped = [a for a in cast(list[JsonValue], given.get("skipped") or []) if isinstance(a, dict)]
+    body = b if isinstance(b := given.get("bodyFile"), dict) else None
     return {
         "from": str(given.get("from") or ""),
         "subject": str(given.get("subject") or ""),
@@ -242,10 +382,10 @@ def email_of(run: dict[str, Any], nodes: dict[str, dict[str, Any]]) -> dict[str,
     }
 
 
-async def reads_of(
-    rt: Runtime, team: str, steps: list[dict[str, Any]], nodes: dict[str, dict[str, Any]], run_input: Any = None
-) -> list[dict[str, Any]]:
-    """Each Extract from file step that read something, as the read check draws it, the file named by files-service."""
+def read_files(steps: list[Json], nodes: dict[str, Json], run_input: JsonValue = None) -> tuple[list[Json], list[Json]]:
+    """Each Extract from file step that read something, and the files they read as `named` takes them: the name a file
+    arrived with, as the run's input gives it, which files-service (one file per bytes, so its name is the first
+    upload's) only fills in when the input does not name it."""
     found = [
         s
         for s in steps
@@ -254,47 +394,52 @@ async def reads_of(
         and s.get("port") in READ_PORTS
         and engine_reviews.is_read(s.get("output"))
     ]
-    # The name a file arrived with, as the run's input gives it; files-service keeps one file per bytes, so its name is
-    # the first upload's and only fills in a file the input does not name.
     given = {f["id"]: f["name"] for f in files_in(run_input)}
-    wanted = [str(cast(dict[str, Any], s["output"])["fileId"]) for s in found]
-    files = await named(rt, team, [{"id": i, "name": given.get(i)} for i in wanted])
+    wanted = [str(an_object(s["output"], "a read step's output")["fileId"]) for s in found]
+    return found, [{"id": i, "name": given.get(i)} for i in wanted]
+
+
+async def reads_of(
+    rt: Runtime, team: str, steps: list[Json], nodes: dict[str, Json], run_input: JsonValue = None
+) -> list[ReadEntry]:
+    """Each Extract from file step that read something, as the read check draws it, the file named by files-service."""
+    found, wanted = read_files(steps, nodes, run_input)
+    files = await named(rt, team, wanted)
     return [
         {
             "nodeId": str(s["nodeId"]),
             "name": _name(nodes.get(str(s["nodeId"])), str(s["nodeId"])),
-            "read": engine_reviews.read_view(cast(dict[str, Any], s["output"]), f.get("name"), None),
+            "read": engine_reviews.read_view(an_object(s["output"], "a read step's output"), f.get("name"), None),
         }
         for s, f in zip(found, files, strict=True)
     ]
 
 
-def started_entries(steps: list[dict[str, Any]], nodes: dict[str, dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
+def started_entries(steps: list[Json], nodes: dict[str, Json]) -> tuple[list[StartedEntry], int]:
     """The runs the Start workflow steps started, each `{nodeId, index, runId, label}`, the first MAX_CHILDREN per step;
     and how many more there were."""
-    out: list[dict[str, Any]] = []
+    out: list[StartedEntry] = []
     more = 0
     for s in steps:
-        o = s.get("output")
-        if executor_of(nodes.get(str(s["nodeId"]))) != START or not isinstance(o, dict):
+        given = s.get("output")
+        if executor_of(nodes.get(str(s["nodeId"]))) != START or not isinstance(given, dict):
             continue
-        given = cast(dict[str, Any], o)
-        raw = cast(list[Any], given.get("runs") or given.get("children") or [])
-        listed = [cast(dict[str, Any], r) for r in raw if isinstance(r, dict) and cast(dict[str, Any], r).get("runId")]
+        raw = cast(list[JsonValue], given.get("runs") or given.get("children") or [])
+        listed = [r for r in raw if isinstance(r, dict) and r.get("runId")]
         more += max(0, len(listed) - MAX_CHILDREN)
         out += [
-            {
-                "nodeId": str(s["nodeId"]),
-                "index": int(r.get("index", i)),
-                "runId": str(r["runId"]),
-                "label": r.get("label"),
-            }
+            StartedEntry(
+                nodeId=str(s["nodeId"]),
+                index=int(cast(int, r.get("index", i))),
+                runId=str(r["runId"]),
+                label=r.get("label"),
+            )
             for i, r in enumerate(listed[:MAX_CHILDREN])
         ]
     return out, more
 
 
-def _ending(steps: list[dict[str, Any]], nodes: dict[str, dict[str, Any]]) -> tuple[str | None, str | None]:
+def _ending(steps: list[Json], nodes: dict[str, Json]) -> tuple[str | None, str | None]:
     """The End step a run finished on and the last step it ran, by name."""
     ends = [s for s in steps if nodes.get(str(s["nodeId"]), {}).get("type") == END and s.get("status") == "ok"]
     end = _name(nodes.get(str(ends[-1]["nodeId"])), str(ends[-1]["nodeId"])) if ends else None
@@ -303,19 +448,20 @@ def _ending(steps: list[dict[str, Any]], nodes: dict[str, dict[str, Any]]) -> tu
     return end, _name(nodes.get(str(last["nodeId"])), str(last["nodeId"])) if last else None
 
 
-def _option_label(node: dict[str, Any] | None, decision: str) -> str:
-    for o in cast(list[Any], cast(dict[str, Any], (node or {}).get("parameters") or {}).get("options") or []):
-        if isinstance(o, dict) and cast(dict[str, Any], o).get("name") == decision:
-            return str(cast(dict[str, Any], o).get("label") or words(decision))
+def _option_label(node: Json | None, decision: str) -> str:
+    params = an_object((node or {}).get("parameters") or {}, "a step's parameters")
+    for o in cast(list[JsonValue], params.get("options") or []):
+        if isinstance(o, dict) and o.get("name") == decision:
+            return str(o.get("label") or words(decision))
     return words(decision)
 
 
-def decision_label(node: dict[str, Any] | None, decision: str) -> str:
+def decision_label(node: Json | None, decision: str) -> str:
     """A decision as a person reads it: Approved or Rejected, or the chosen option's label."""
     return {"approve": "Approved", "reject": "Rejected"}.get(decision) or _option_label(node, decision)
 
 
-def state_of(child: dict[str, Any], ending: str | None, last: str | None, open_task: bool) -> str:
+def state_of(child: Json, ending: str | None, last: str | None, open_task: bool) -> str:
     """Where a run is now, in words: the End step's name once it finished, or what it waits for."""
     status = str(child["status"])
     if status == "succeeded":
@@ -334,9 +480,9 @@ def state_of(child: dict[str, Any], ending: str | None, last: str | None, open_t
     return "Not started yet" if status == "queued" else "Running"
 
 
-def _facts(fields: dict[str, Any]) -> list[dict[str, str]]:
+def _facts(fields: Json) -> list[Fact]:
     """A case's own fields as labelled text: a list reads as each item's first text that is not an id."""
-    out: list[dict[str, str]] = []
+    out: list[Fact] = []
     for key, value in fields.items():
         text = first_text(value) if isinstance(value, (dict, list)) else (None if value is None else str(value))
         if text:
@@ -344,65 +490,91 @@ def _facts(fields: dict[str, Any]) -> list[dict[str, str]]:
     return out
 
 
-async def children_of(
-    rt: Runtime, run: dict[str, Any], steps: list[dict[str, Any]], nodes: dict[str, dict[str, Any]], *, scope: Any
-) -> tuple[list[dict[str, Any]], int]:
-    """The runs this run's steps started, as rows a person reads, and how many more there were. Every read is one
-    query for all of them: their runs, steps, pinned definitions, cases and who their open tasks wait for."""
+@dataclass(frozen=True)
+class ChildReads:
+    """What the runs a run started are told from, read in one pass: `children_view` words them once `people` is
+    asked."""
+
+    started: list[StartedEntry]
+    more: int
+    found: dict[str, RunRow]
+    steps_by_run: dict[str, list[Json]]
+    pinned: dict[tuple[str, int], DefinitionRow]
+    on_case: dict[str, str]
+    summaries: dict[str, CaseSummary]
+    assigned: dict[str, str]
+    decided: dict[str, list[Decision]]
+    own_nodes: dict[str, Json]
+
+    def raws(self) -> list[str]:
+        """Who the rows name, raw, for one actors() call: each person who decided a step and each assignee."""
+        return [*(d["by"] for ds in self.decided.values() for d in ds if d["by"]), *self.assigned.values()]
+
+
+async def children_reads(rt: Runtime, run: Json, steps: list[Json], nodes: dict[str, Json]) -> ChildReads:
+    """The runs this run's steps started and everything their rows are told from. Every read is one query for all of
+    them: their runs, steps, pinned definitions, cases and who their open tasks wait for."""
     started, more = started_entries(steps, nodes)
     store = RunStore(EngineTransactions(rt.db))
-    found = {str(r["id"]): r for r in await store.many([c["runId"] for c in started])}
+    found = {r.id: r for r in await store.many([c["runId"] for c in started])}
     # A run of another team is never told, whatever started it.
-    started = [c for c in started if c["runId"] in found and found[c["runId"]]["team_id"] == run["team_id"]]
+    started = [c for c in started if c["runId"] in found and found[c["runId"]].team_id == run["team_id"]]
     ids = [c["runId"] for c in started]
     steps_by_run = {rid: steps_view(rows) for rid, rows in (await store.steps_of(ids)).items()}
     pinned = await DefinitionStore(EngineTransactions(rt.db)).pinned(
-        {(str(found[i]["workflow_id"]), int(found[i]["version"])) for i in ids}
+        {(found[i].workflow_id, found[i].version) for i in ids}
     )
     cases = CaseStore(rt.db)
     on_case = await cases.cases_of_runs(ids)
     summaries = await cases.summaries(list(dict.fromkeys(on_case.values())), [str(run["team_id"])])
-    assigned = await ReviewAssignments(rt.db).current() if ids else {}
+    open_reviews = [f"{rid}:{w['node']}:{w.get('iteration', 0)}" for rid in ids if (w := found[rid].waiting)]
+    assigned = await ReviewAssignments(rt.db).current(open_reviews)
     decided = {rid: decisions_in(rid, steps_by_run.get(rid, [])) for rid in ids}
-    people = await actors(
-        rt,
-        [*(d["by"] for ds in decided.values() for d in ds if d["by"]), *assigned.values()],
-    )
-    own_nodes = nodes_of({"definition": {"nodes": list(nodes.values())}})
-    rows: list[dict[str, Any]] = []
+    own_nodes = nodes_in({"nodes": list[JsonValue](nodes.values())})
+    return ChildReads(started, more, found, steps_by_run, pinned, on_case, summaries, assigned, decided, own_nodes)
+
+
+def children_view(reads: ChildReads, people: NamedActors, *, scope: Any) -> tuple[list[ChildRow], int]:
+    """The runs this run's steps started, as rows a person reads, and how many more there were."""
+    started, found, pinned, own_nodes = reads.started, reads.found, reads.pinned, reads.own_nodes
+    steps_by_run, decided, assigned = reads.steps_by_run, reads.decided, reads.assigned
+    on_case, summaries, more = reads.on_case, reads.summaries, reads.more
+    rows: list[ChildRow] = []
     for c in started:
         child = found[c["runId"]]
-        stored = pinned.get((str(child["workflow_id"]), int(child["version"])))
+        stored = pinned.get((child.workflow_id, child.version))
         child_nodes = nodes_of(stored)
         child_steps = steps_by_run.get(c["runId"], [])
         workflow = workflow_name(stored)
-        row: dict[str, Any] = {
+        row: ChildHead = {
             "runId": c["runId"],
             "nodeId": c["nodeId"],
             "index": c["index"],
             "workflowName": workflow,
             "stepName": _name(own_nodes.get(c["nodeId"]), c["nodeId"]),
             "label": str(c["label"] or workflow),
-            "status": child["status"],
-            "outcome": child.get("outcome"),
+            "status": child.status,
+            "outcome": child.outcome,
         }
-        if scope is not None and scope != ("workflow", child["workflow_id"]):
+        # state_of reads a run's status and outcome only.
+        said: Json = {"status": child.status, "outcome": child.outcome}
+        if scope is not None and scope != ("workflow", child.workflow_id):
             # A key scoped to one workflow reads another workflow's runs by status alone.
             rows.append(
-                row
-                | {
+                {
+                    **row,
                     "label": workflow,
                     "ending": None,
                     "cases": [],
                     "tasks": [],
-                    "state": state_of(child, None, None, False),
+                    "state": state_of(said, None, None, False),
                 }
             )
             continue
-        tasks: list[dict[str, Any]] = []
+        tasks: list[ChildTask] = []
         for d in decided[c["runId"]]:
-            node = child_nodes.get(d["nodeId"])
-            title = _name(node, d["nodeId"])
+            node = child_nodes.get(str(d["nodeId"]))
+            title = _name(node, str(d["nodeId"]))
             label = _option_label(node, d["action"])
             by = people.get(d["by"] or "", {}).get("name") or d["by"]
             tasks.append(
@@ -414,11 +586,11 @@ async def children_of(
                     "state": f"{title}: {label}" + (f" by {by}" if by else ""),
                 }
             )
-        waiting = cast(dict[str, Any] | None, child.get("waiting"))
+        waiting = child.waiting
         open_task = bool(waiting) and executor_of(child_nodes.get(str((waiting or {}).get("node")))) == REVIEW
         if waiting and open_task:
             node = child_nodes.get(str(waiting["node"]))
-            payload = cast(dict[str, Any], waiting.get("payload") or {})
+            payload = an_object(waiting.get("payload") or {}, "a waiting step's payload")
             title = str(payload.get("title") or _name(node, str(waiting["node"])))
             review_id = f"{c['runId']}:{waiting['node']}:{waiting.get('iteration', 0)}"
             who = assigned.get(review_id)
@@ -436,65 +608,71 @@ async def children_of(
         ending, last = _ending(child_steps, child_nodes)
         case_id = on_case.get(c["runId"])
         summary = summaries.get(case_id) if case_id else None
-        row |= {
-            "ending": ending if child["status"] == "succeeded" else None,
-            "state": state_of(child, ending, last, open_task),
+        told: ChildRow = {
+            **row,
+            "ending": ending if child.status == "succeeded" else None,
+            "state": state_of(said, ending, last, open_task),
             "cases": [
                 {
                     "caseId": case_id,
-                    "subject": summary["subject"],
-                    "customer": summary["customer"],
-                    "facts": _facts(summary["fields"]),
+                    "subject": summary.subject,
+                    "customer": summary.customer,
+                    "facts": _facts(summary.fields),
                 }
             ]
             if case_id and summary
             else [],
             "tasks": tasks,
         }
-        rows.append(row)
+        rows.append(told)
     return rows, more
 
 
-def masked_story(value: Any, key: str | None = None) -> Any:
-    """The story as people read it with masking on: every text but ids and enum words masked."""
+def masked_story[T](value: T, key: str | None = None) -> T:
+    """The story as people read it with masking on: every text but ids and enum words masked. The shape is kept: the
+    same keys and lists, each text masked in place."""
     if key in _KEEP:
         return value
     if isinstance(value, dict):
-        return {k: masked_story(v, k) for k, v in cast(dict[str, Any], value).items()}
+        return cast(T, {k: masked_story(v, k) for k, v in cast(Json, value).items()})
     if isinstance(value, list):
-        return [masked_story(v) for v in cast(list[Any], value)]
-    return masked(value) if isinstance(value, str) else value
+        return cast(T, [masked_story(v) for v in cast(JsonList, value)])
+    return cast(T, masked(value)) if isinstance(value, str) else value
 
 
 # Where an email came from and arrived (`shapes.EMAIL`): channel metadata, shown with masking on. What the email and
 # its documents say (subject, body, every value read) is content, masked like any other run data.
-CHANNEL_FIELDS = ("from", "mailbox")
+CHANNEL_FIELDS: tuple[Literal["from"], Literal["mailbox"]] = ("from", "mailbox")
 
 
-async def channel_addresses(rt: Runtime, run: dict[str, Any]) -> set[str]:
+async def channel_addresses(rt: Runtime, run: Json) -> set[str]:
     """The sender and mailbox of the email that started this run or, for a run another run started, its family's."""
     store, defs = RunStore(EngineTransactions(rt.db)), DefinitionStore(EngineTransactions(rt.db))
-    for here in [run, *await runs_above(store, run)]:
-        email = email_of(here, nodes_of(await defs.get(str(here["workflow_id"]), here.get("version"))))
+    team = cast(str | None, run.get("team_id"))
+    above: list[Json] = [r.model_dump() for r in await starters_of(store, str(run.get("created_by") or ""), team)]
+    for here in [run, *above]:
+        version = cast(int | None, here.get("version"))
+        email = email_of(here, nodes_of(await defs.row(str(here["workflow_id"]), version)))
         if email is not None:
             return {str(email[k]) for k in CHANNEL_FIELDS if email.get(k)}
     return set()
 
 
-def keep_channel(shown: Any, real: Any, addresses: set[str]) -> Any:
-    """`shown` (masked) with every value that is one of `addresses` put back as it really reads."""
+def keep_channel[T](shown: T, real: object, addresses: set[str]) -> T:
+    """`shown` (masked) with every value that is one of `addresses` put back as it really reads. The shape is kept: a
+    value put back is the text it masked."""
     if not addresses:
         return shown
     if isinstance(real, str):
-        return real if real in addresses else shown
+        return cast(T, real) if real in addresses else shown
     if isinstance(real, dict) and isinstance(shown, dict):
-        r, s = cast(dict[str, Any], real), cast(dict[str, Any], shown)
-        return {k: keep_channel(v, r.get(k), addresses) if k in r else v for k, v in s.items()}
-    if isinstance(real, list) and isinstance(shown, list) and len(cast(list[Any], real)) == len(cast(list[Any], shown)):
-        return [
-            keep_channel(v, x, addresses) for v, x in zip(cast(list[Any], shown), cast(list[Any], real), strict=True)
-        ]
-    return cast(Any, shown)
+        r, s = cast(Json, real), cast(Json, shown)
+        return cast(T, {k: keep_channel(v, r.get(k), addresses) if k in r else v for k, v in s.items()})
+    if isinstance(real, list) and isinstance(shown, list):
+        r_list, s_list = cast(JsonList, real), cast(JsonList, shown)
+        if len(r_list) == len(s_list):
+            return cast(T, [keep_channel(v, x, addresses) for v, x in zip(s_list, r_list, strict=True)])
+    return cast(T, shown)
 
 
 TOOL = "gateway.call"
@@ -505,23 +683,22 @@ REPLY_TOOL, ACK_TOOL = "send_reply", "send_acknowledgement"
 DECIDED = {"approve": "approved", "reject": "rejected"}
 
 
-def _attempt_at(step: dict[str, Any], key: str) -> str | None:
-    attempts = cast(list[dict[str, Any]], step.get("attempts") or [])
-    at = attempts[-1].get(key) if attempts else None
+def _attempt_at(step: Json, key: str) -> str | None:
+    attempts = a_list(step.get("attempts") or [], "a step's attempts")
+    at: object = an_object(attempts[-1], "a step's attempt").get(key) if attempts else None
     return at.isoformat() if isinstance(at, datetime) else (str(at) if at else None)
 
 
-def _line(at: Any, source: str, actor: str, text: str, href: str | None) -> dict[str, Any]:
+def _line(at: JsonValue, source: str, actor: str, text: str, href: str | None) -> Json:
     return {"at": str(at) if at else None, "source": source, "actor": actor, "text": text, "href": href}
 
 
-def tool_calls(steps: list[dict[str, Any]], nodes: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+def tool_calls(steps: list[Json], nodes: dict[str, Json]) -> dict[str, Json]:
     """Each tool step's call, keyed `<nodeId>:<iteration>`, for describe_calls to word once per page."""
-    out: dict[str, dict[str, Any]] = {}
+    out: dict[str, Json] = {}
     for st in steps:
-        given = st.get("input")
-        if executor_of(nodes.get(str(st["nodeId"]))) == TOOL and isinstance(given, dict):
-            g = cast(dict[str, Any], given)
+        g = st.get("input")
+        if executor_of(nodes.get(str(st["nodeId"]))) == TOOL and isinstance(g, dict):
             out[f"{st['nodeId']}:{st['iteration']}"] = {
                 "tool": str(g.get("operation") or ""),
                 "input": g.get("input") or {},
@@ -529,29 +706,32 @@ def tool_calls(steps: list[dict[str, Any]], nodes: dict[str, dict[str, Any]]) ->
     return out
 
 
-def actors_in(run: dict[str, Any], steps: list[dict[str, Any]]) -> list[str]:
+def actors_in(run: Json, steps: list[Json]) -> list[str]:
     """Who a run's lines name, raw, for one actors() call: who started it and each person who decided a step."""
     return [started_by_of(run), *(str(d["by"]) for d in decisions_in(str(run["id"]), steps) if d["by"])]
 
 
-def _read_text(read: dict[str, Any], names: dict[str, str]) -> str:
-    records = cast(
-        list[dict[str, Any]], read.get("records") or ([{"fields": read["fields"]}] if read.get("fields") else [])
-    )
-    fields = [cast(dict[str, Any], f) for r in records for f in cast(dict[str, Any], r.get("fields") or {}).values()]
+def _read_text(read: Json, names: dict[str, str]) -> str:
+    records = a_list(read.get("records") or ([{"fields": read["fields"]}] if read.get("fields") else []), "records")
+    fields = [
+        an_object(f, "a read field")
+        for r in records
+        for f in an_object(an_object(r, "a read record").get("fields") or {}, "a record's fields").values()
+    ]
     check = sum(1 for f in fields if f.get("needsReview"))
     name = names.get(str(read.get("fileId") or "")) or "the document"
     counted = f"{plural(len(records), 'record')}, {plural(len(fields), 'field')}"
     return f"Read {name}: {counted}" + (f", {check} to check" if check else "")
 
 
-def _review_title(run: dict[str, Any], step: dict[str, Any], node: dict[str, Any] | None, fallback: str) -> str:
+def _review_title(run: Json, step: Json, node: Json | None, fallback: str) -> str:
     """A Human Task step's title as it was asked: the resolved title the step journaled or the run waits on, else the
     node's own title when it holds no expression, else the step's name; never an unresolved `{$...}`."""
-    given = cast(dict[str, Any], step.get("input") or {}) if isinstance(step.get("input"), dict) else {}
-    waiting = cast(dict[str, Any], run.get("waiting") or {})
-    payload = cast(dict[str, Any], waiting.get("payload") or {}) if waiting.get("node") == step.get("nodeId") else {}
-    param = cast(dict[str, Any], (node or {}).get("parameters") or {}).get("title")
+    given = json_object(step.get("input"))
+    waiting = an_object(run.get("waiting") or {}, "a run's waiting step")
+    at_step = waiting.get("node") == step.get("nodeId")
+    payload = an_object(waiting.get("payload") or {}, "a waiting step's payload") if at_step else {}
+    param = an_object((node or {}).get("parameters") or {}, "a step's parameters").get("title")
     for t in (given.get("title"), payload.get("title"), param):
         if isinstance(t, str) and t.strip() and "{" not in t:
             return t
@@ -573,7 +753,7 @@ def masked_keeping(text: str, keep: set[str]) -> str:
     return out
 
 
-def masked_lines(told: list[dict[str, Any]], keep: set[str]) -> list[dict[str, Any]]:
+def masked_lines(told: list[Json], keep: set[str]) -> list[Json]:
     """Story lines as people read them with masking on: text and actor masked, the channel addresses kept."""
     return [
         line | {"text": masked_keeping(str(line["text"]), keep), "actor": masked_keeping(str(line["actor"]), keep)}
@@ -586,17 +766,17 @@ def plural(n: int, word: str) -> str:
 
 
 def lines(
-    run: dict[str, Any],
-    steps: list[dict[str, Any]],
-    nodes: dict[str, dict[str, Any]],
+    run: Json,
+    steps: list[Json],
+    nodes: dict[str, Json],
     *,
     workflow: str,
     team: str,
-    calls: dict[str, dict[str, Any]],
-    who: dict[str, dict[str, Any]],
+    calls: dict[str, Json],
+    who: NamedActors,
     started: dict[str, str] | None = None,
     started_names: dict[str, str] | None = None,
-) -> list[dict[str, Any]]:
+) -> list[Json]:
     """What a run did, one plain sentence per line, oldest first: `{at, source, actor, text, href}`. Each step is
     worded by its node's executor, the recognition `story()` uses, never by a node id or a workflow's own words; tool
     calls by `calls` (describe_calls) and people by `who` (actors). `started` is the runs its steps started that the
@@ -604,7 +784,7 @@ def lines(
     counted. The one wording of a run's steps: every page that tells what a run did draws these lines."""
     run_id = str(run["id"])
     page = f"/workflows/runs/{run_id}"
-    out: list[dict[str, Any]] = []
+    out: list[Json] = []
     starter = who.get(started_by_of(run)) or {}
     name = str(starter.get("name") or run.get("created_by") or "")
     email = email_of(run, nodes)
@@ -619,7 +799,7 @@ def lines(
             )
         )
     elif starter.get("kind") == "person":
-        via = cast(dict[str, Any], starter.get("via") or {})
+        via = an_object(starter.get("via") or {}, "how a run was started")
         how = f" from its {via['name']}" if via.get("kind") == "start" else ""
         out.append(_line(run.get("created_at"), "person", name, f"{name} started {workflow}{how}", page))
     elif starter.get("kind") == "key":
@@ -637,7 +817,7 @@ def lines(
         began, finished = _attempt_at(st, "startedAt"), _attempt_at(st, "finishedAt")
         port, output = st.get("port"), st.get("output")
         failed = st.get("status") not in ("ok", "running", "waiting") or port == "error"
-        o = cast(dict[str, Any], output) if isinstance(output, dict) else {}
+        o: Json = output if isinstance(output, dict) else {}
         key = f"{st['nodeId']}:{st['iteration']}"
         if executor == READ and port in READ_PORTS:
             href = f"/files?file={o['fileId']}" if o.get("fileId") else page
@@ -648,9 +828,9 @@ def lines(
                 out.append(_line(finished, "automation", workflow, f"{step_name}: {said[:160]}", page))
         elif executor == TOOL:
             told = calls.get(key) or {}
-            g = cast(dict[str, Any], st.get("input") or {})
+            g = an_object(st.get("input") or {}, "a tool step's input")
             if g.get("operation") in (REPLY_TOOL, ACK_TOOL) and not failed:
-                given = cast(dict[str, Any], g.get("input") or {})
+                given = an_object(g.get("input") or {}, "a reply's input")
                 out.append(
                     _line(
                         finished,
@@ -674,17 +854,20 @@ def lines(
                 verb = DECIDED.get(decision) or f"chose {_option_label(node, decision)}"
                 out.append(_line(finished, "person", person, f"{person} {verb}: {title}", task))
         elif executor == CASE_OPEN and not failed:
-            given = cast(dict[str, Any], st.get("input") or {})
+            given = an_object(st.get("input") or {}, "an Open case step's input")
             href = f"/cases/{o['caseId']}" if o.get("caseId") else None
             out.append(
                 _line(finished, "automation", workflow, f"Opened a case: {given.get('subject') or step_name}", href)
             )
         elif executor == CASE_ADD and not failed:
-            given = cast(dict[str, Any], st.get("input") or {})
-            added = ", ".join(humanize(str(k)).lower() for k in cast(dict[str, Any], given.get("fields") or {}))
+            given = an_object(st.get("input") or {}, "an Add to case step's input")
+            # Each key of the fields set, as the step's input holds them.
+            set_fields = cast(Iterable[JsonValue], given.get("fields") or {})
+            added = ", ".join(humanize(str(k)).lower() for k in set_fields)
             out.append(_line(finished, "automation", workflow, f"Added {added or 'details'} to the case", page))
         elif executor == START and not failed:
-            runs = cast(list[dict[str, Any]], o.get("runs") or o.get("children") or [])
+            listed = a_list(o.get("runs") or o.get("children") or [], "the runs a step started")
+            runs = [an_object(r, "a started run") for r in listed]
             if started is not None:
                 runs = [r | {"label": started[str(r.get("runId"))]} for r in runs if str(r.get("runId")) in started]
             if runs:
@@ -705,22 +888,59 @@ def lines(
         elif node is not None and node.get("type") == END and not failed:
             out.append(_line(finished, "automation", workflow, f"{workflow} finished: {step_name}", page))
     # How the run began comes first; its steps follow in the order they finished.
-    return [out[0], *sorted(out[1:], key=lambda x: x["at"] or "")]
+    return [out[0], *sorted(out[1:], key=lambda x: str(x["at"] or ""))]
 
 
-async def story(
-    rt: Runtime, run: dict[str, Any], steps: list[dict[str, Any]], *, scope: Any, masking: bool
-) -> dict[str, Any]:
-    """The run told for people: `email`, `reads` and `children` (with `childrenMore`), from the version it pinned."""
-    stored = await DefinitionStore(EngineTransactions(rt.db)).get(str(run["workflow_id"]), run.get("version"))
+@dataclass(frozen=True)
+class StoryReads:
+    """A run's story as the database holds it: the version it pinned, the runs it started and its email's addresses."""
+
+    stored: DefinitionRow | None
+    children: ChildReads
+    addresses: set[str]
+
+    def raws(self, run: Json, steps: list[Json]) -> list[str]:
+        """Every actor the story names, raw, for the one actors() call that answers them all."""
+        return [*actors_in(run, steps), *self.children.raws()]
+
+
+async def story_reads(rt: Runtime, run: Json, steps: list[Json]) -> StoryReads:
+    """The reads of `story`, all local: run it in the route's transaction, then ask outside with none open."""
+    version = cast(int | None, run.get("version"))
+    stored = await DefinitionStore(EngineTransactions(rt.db)).row(str(run["workflow_id"]), version)
+    children = await children_reads(rt, run, steps, nodes_of(stored))
+    return StoryReads(stored, children, await channel_addresses(rt, run))
+
+
+async def ask_story(rt: Runtime, run: Json, steps: list[Json], reads: StoryReads) -> None:
+    """Warms what `story` words the run with, so building it asks no other service: the file names and the tool
+    directory (each kept for the request)."""
+    nodes = nodes_of(reads.stored)
+    await named(rt, str(run["team_id"]), read_files(steps, nodes, run.get("input"))[1])
+    if tool_calls(steps, nodes):
+        await operations(rt)
+
+
+async def story_view(
+    rt: Runtime,
+    run: Json,
+    steps: list[Json],
+    reads: StoryReads,
+    *,
+    who: NamedActors,
+    team_name: str,
+    scope: Any,
+    masking: bool,
+) -> StoryView:
+    """The run told for people: `email`, `reads` and `children` (with `childrenMore`), from the version it pinned.
+    `who` names every actor `reads.raws` listed and `team_name` the run's team: both asked before this builds."""
+    stored = reads.stored
     nodes = nodes_of(stored)
-    children, more = await children_of(rt, run, steps, nodes, scope=scope)
-    team = str(run["team_id"])
-    names = getattr(rt, "team_names", None)
-    told = {
+    children, more = children_view(reads.children, who, scope=scope)
+    told: StoryView = {
         "workflowName": workflow_name(stored),
         "email": email_of(run, nodes),
-        "reads": await reads_of(rt, team, steps, nodes, run.get("input")),
+        "reads": await reads_of(rt, str(run["team_id"]), steps, nodes, run.get("input")),
         "children": children,
         "childrenMore": more,
         "lines": lines(
@@ -728,11 +948,21 @@ async def story(
             steps,
             nodes,
             workflow=workflow_name(stored),
-            team=(await names.name(team) if names is not None else None) or team,
+            team=team_name,
             calls=await describe_calls(rt, tool_calls(steps, nodes)),
-            who=await actors(rt, actors_in(run, steps)),
+            who=who,
             started={str(c["runId"]): str(c["label"]) for c in children},
             started_names={str(c["runId"]): str(c["workflowName"]) for c in children},
         ),
     }
     return masked_story(told) if masking else told
+
+
+async def story(rt: Runtime, run: Json, steps: list[Json], *, scope: Any, masking: bool) -> StoryView:
+    """`story_view` after its reads and the names it asks for, for a caller that holds no transaction of its own."""
+    reads = await story_reads(rt, run, steps)
+    names = getattr(rt, "team_names", None)
+    team = str(run["team_id"])
+    team_name = (await names.name(team) if names is not None else None) or team
+    who = await actors(rt, reads.raws(run, steps))
+    return await story_view(rt, run, steps, reads, who=who, team_name=team_name, scope=scope, masking=masking)

@@ -22,6 +22,7 @@ from ops_identity import ActingForPerson
 from ops_plugin_sdk import Plugin
 from ops_plugin_sdk.loader import GROUP, Loaded
 from ops_plugin_sdk.manifest import SIGN_IN_KINDS
+from ops_service_kit.http import Json
 from ops_service_kit.settings import PLUGIN_ENTRY_POINTS, Settings
 from ops_tools.auth.kinds import BY_ID
 from ops_tools.egress import EgressDenied, EgressPolicy
@@ -31,7 +32,7 @@ from ops_tools.graph_mailbox import CursorSeal
 from ops_tools.plugins.executor import PluginExecutor
 from ops_tools.plugins.host import PluginHost
 from ops_tools.registry import Resolved, ToolRegistry
-from ops_tools.store.connections import SHARED, ConnectionStore
+from ops_tools.store.connections import SHARED, ConnectionStore, NewAccount
 from ops_tools.store.egress import EgressStore
 from ops_tools.store.modules import ModuleStore
 from ops_tools.store.plugin_bindings import PluginBindings
@@ -55,7 +56,7 @@ async def bind(engine: AsyncEngine, tenant: str, team: str, instance: str, conn:
     as the plugin's, in the team, holding `instance` as its own instance (the settings an account keeps)."""
     await PluginBindings(engine).put(tenant, team, ID, enabled=on, connection_id=conn, settings={}, by="test")
     store, now = ConnectionStore(engine), datetime.now(UTC)
-    row = {
+    row: NewAccount = {
         "tenant_id": tenant, "id": conn, "app_id": f"plugin:{ID}", "team_id": team, "name": "Desk",
         "auth_kind": "oauth2_auth_code", "sign_in": "team", "team_backup": False, "status": "healthy", "revision": 1,
         "created_by": "test", "created_at": now, "updated_by": "test", "updated_at": now,
@@ -127,7 +128,7 @@ async def test_a_plugins_tools_are_not_grantable_once_plugins_are_switched_off(
     }
     off = ToolRegistry(local_catalog, store, None)
     assert "desk_get_case" not in {t["name"] for t in await off.grantable(tenant)}
-    assert "desk_get_case" not in {t["name"] for t in await off.grantable(tenant, lambda _: True)}
+    assert "desk_get_case" not in {t["name"] for t in await off.grantable(tenant, lambda m, operation=None: True)}
 
 
 async def test_a_locked_field_wins_over_the_team(engine: AsyncEngine, store: ModuleStore, tenant: str) -> None:
@@ -148,7 +149,7 @@ async def test_the_instance_comes_from_the_token_and_only_from_the_systems_hosts
     b = await PluginBindings(engine).get(tenant, "team_a", ID)
     # The instance is the account's own (test_plugin_environments.py); no copy on the binding.
     assert b is not None
-    assert "instance_url" not in b["settings"], b["settings"]
+    assert "instance_url" not in b.settings, b.settings
 
 
 class AllowAll:
@@ -213,7 +214,7 @@ async def test_a_source_sync_reaches_its_own_site_only_once_the_account_lists_it
     ex = plugin_executor(engine, store, seen)
     policy = Listed()
     ex.http.policy = policy  # type: ignore[assignment]
-    args = {"source": {"start": "https://help.northbank.test"}}
+    args: Json = {"source": {"start": "https://help.northbank.test"}}
 
     async def sync() -> Any:
         return await ex.run(
@@ -272,13 +273,28 @@ def test_plugins_load_from_the_install_folder_with_no_switch(
     parts = (store, PluginBindings(engine))
     folder = tmp_path / "plugins"
     folder.mkdir()
-    assert PluginHost.when_on(Settings(plugins_dir=folder), *parts) is None
+    # No built-in plugins either, so the empty folder is all this install has.
+    none = tmp_path / "no-builtin"
+    assert PluginHost.when_on(Settings(plugins_dir=folder, builtin_plugins_dir=none), *parts) is None
     copytree(Path(__file__).parent / "plugin_desk", folder / "plugin_desk", ignore=ignore_patterns("__pycache__"))
     (folder / "broken_desk").mkdir()
     (folder / "broken_desk" / "plugin.yaml").write_text("id: [")
-    on = PluginHost.when_on(Settings(plugins_dir=folder), *parts)
+    on = PluginHost.when_on(Settings(plugins_dir=folder, builtin_plugins_dir=none), *parts)
     assert on is not None and "test.desk" in on.plugins
     assert [(x.name, x.ok) for x in on.loaded] == [("broken_desk", False), ("plugin_desk", True)]
+
+
+def test_a_developer_plugin_path_replaces_the_built_in_copy(tmp_path: Path) -> None:
+    # Use case runs point OPS_PLUGIN_PATHS at the plugins repo; the same plugin also ships built in. Both loading
+    # would refuse the plugin in both places, so the developer's copy wins and the built-in one is left out.
+    source = Path(__file__).parent / "plugin_desk"
+    builtin, dev = tmp_path / "builtin", tmp_path / "dev"
+    copytree(source, builtin / "plugin_desk", ignore=ignore_patterns("__pycache__"))
+    copytree(source, dev / "plugin_desk", ignore=ignore_patterns("__pycache__"))
+    settings = Settings(
+        plugins_dir=tmp_path / "none", builtin_plugins_dir=builtin, plugin_paths=[str(dev / "plugin_desk")]
+    )
+    assert settings.plugin_folders == [str(dev / "plugin_desk")]
 
 
 def test_settings_name_the_plugin_kits_entry_point_group() -> None:

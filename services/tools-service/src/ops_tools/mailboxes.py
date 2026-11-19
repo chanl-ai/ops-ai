@@ -19,14 +19,13 @@ from typing import Annotated, Any, Literal
 import httpx
 from fastapi import APIRouter, Body
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
-from pydantic.alias_generators import to_camel
+from pydantic import Field
 
 from ops_access import can
 from ops_email import GraphSender, ImapMailSource, MailNotConfiguredError, MailSender, ResendSender, SmtpSender
 from ops_identity import CurrentService, ServiceCallError, ServiceClient
 from ops_service_kit.errors import Forbidden, Unprocessable
-from ops_service_kit.http import Envelope, ok
+from ops_service_kit.http import Envelope, In, JsonValue, Out, ok
 from ops_service_kit.logging import get_logger
 from ops_service_kit.settings import Settings
 
@@ -48,11 +47,7 @@ log = get_logger("ops_tools.mailboxes")
 IMAP_DEFAULT_PORT = {True: 993, False: 143}
 
 
-class _In(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
-
-
-class Connection(_In):
+class Connection(In):
     """How to sign in to one mailbox; the password goes by its secret's name only."""
 
     address: str = Field(min_length=3, max_length=320)
@@ -67,7 +62,7 @@ class Connection(_In):
     graph_client_id: str | None = Field(default=None, max_length=64)
 
 
-class ReadIn(_In):
+class ReadIn(In):
     connection: Connection
     folder: str = "inbox"
     # None: the first pass, which takes the cursor at the folder's end and reads nothing (`now`), or reads from the
@@ -76,38 +71,35 @@ class ReadIn(_In):
     now: bool = False
 
 
-class WaitIn(_In):
+class WaitIn(In):
     connection: Connection
     folder: str = "inbox"
     cursor: str
     seconds: float = Field(default=25.0, gt=0, le=600)
 
 
-class TestIn(_In):
+class TestIn(In):
     connection: Connection
     folder: str = "inbox"
 
 
-class _Out(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
-
-
-class PageOut(_Out):
-    items: list[dict[str, Any]]
+class PageOut(Out):
+    # Each message as the mailbox gave it: an IMAP message's raw bytes, or a Microsoft 365 message's own JSON.
+    items: list[dict[str, JsonValue]]
     next_link: str | None
     delta_link: str | None
 
 
-class WaitOut(_Out):
+class WaitOut(Out):
     changed: bool
 
 
-class TestStep(_Out):
+class TestStep(Out):
     title: str
     state: Literal["done", "failed", "skipped"]
 
 
-class TestOut(_Out):
+class TestOut(Out):
     ok: bool
     steps: list[TestStep]
     newest: dict[str, str] | None = None
@@ -248,7 +240,7 @@ def mailboxes_router(
     tokens = GraphTokens(settings.graph_login_url, settings.graph_url)
     cursors = cursor_key(settings.secrets_key.get_secret_value())
 
-    async def graph_source(caller: Any, conn: Connection, folder: str) -> GraphReader:
+    async def graph_source(caller: Any, conn: Connection, folder: str, *, audit: bool) -> GraphReader:
         assert resolver is not None and egress is not None
         if graph is None:
             raise Unprocessable("This tools-service reads no Microsoft 365 mailbox.", code="graph_unavailable")
@@ -261,7 +253,7 @@ def mailboxes_router(
             for host in hosts(settings.graph_login_url, settings.graph_url):
                 await egress.dial_address(tenant, host, 443)
             values = await resolver.lookup(
-                tenant, str(caller.team_id), [secret], tool=f"mailbox:{conn.address}", actor=caller.sub
+                tenant, str(caller.team_id), [secret], tool=f"mailbox:{conn.address}", actor=caller.sub, audit=audit
             )
         except EgressDenied as e:
             raise Forbidden(str(e), code="egress_denied") from e
@@ -271,12 +263,14 @@ def mailboxes_router(
         token = tokens.token(http, tenant, conn.graph_tenant_id, conn.graph_client_id, values[secret])
         return GraphReader(http, token, conn.address, folder, seal=CursorSeal(cursors, tenant, conn.address, folder))
 
-    async def source(caller: Any, conn: Connection, folder: str) -> ImapMailSource | GraphReader:
+    async def source(caller: Any, conn: Connection, folder: str, *, audit: bool) -> ImapMailSource | GraphReader:
+        """The mailbox's reader. `audit` False for the mail listener's polls, which leave one secret use row a day
+        rather than one every few seconds; a person's Test connection is audited each time."""
         if resolver is None or egress is None:
             raise Unprocessable("This tools-service has no secrets or egress policy, so it reads no mailbox.")
         can(caller, "deployments", "run", team=caller.team_id, what=f"the mailbox {conn.address}")
         if conn.provider == "graph":
-            return await graph_source(caller, conn, folder)
+            return await graph_source(caller, conn, folder, audit=audit)
         team = str(caller.team_id)
         host = gmail_host if conn.provider == "gmail" else conn.host
         if not host or not conn.password_secret:
@@ -291,7 +285,9 @@ def mailboxes_router(
         tenant, secret = caller.tenant_id, conn.password_secret
         try:
             address = await egress.dial_address(tenant, host, port)
-            values = await resolver.lookup(tenant, team, [secret], tool=f"mailbox:{conn.address}", actor=caller.sub)
+            values = await resolver.lookup(
+                tenant, team, [secret], tool=f"mailbox:{conn.address}", actor=caller.sub, audit=audit
+            )
         except EgressDenied as e:
             raise Forbidden(str(e), code="egress_denied") from e
         except SecretMissing as e:
@@ -312,8 +308,9 @@ def mailboxes_router(
 
     @r.post("/read", response_model=Envelope[PageOut])
     async def read(body: Annotated[ReadIn, Body()], caller: CurrentService) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """One page of the folder after `cursor`, or with `now` and no cursor, the cursor at its end and no mail."""
-        src = await source(caller, body.connection, body.folder)
+        """One page of the folder after `cursor`, or with `now` and no cursor, the cursor at its end and no mail. Off
+        the request transaction: the mailbox is dialled, and it can take seconds to answer."""
+        src = await source(caller, body.connection, body.folder, audit=False)
         try:
             if body.cursor is None and body.now:
                 return ok(
@@ -328,8 +325,9 @@ def mailboxes_router(
 
     @r.post("/wait", response_model=Envelope[WaitOut])
     async def wait(body: Annotated[WaitIn, Body()], caller: CurrentService) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """True as soon as the folder has mail after `cursor` (IDLE); false after `seconds` with none."""
-        src = await source(caller, body.connection, body.folder)
+        """True as soon as the folder has mail after `cursor` (IDLE); false after `seconds` with none. Off the request
+        transaction: it holds the mailbox open for up to `seconds`."""
+        src = await source(caller, body.connection, body.folder, audit=False)
         try:
             changed = await src.wait(body.cursor, body.seconds)
         except (imaplib.IMAP4.error, OSError, httpx.HTTPError) as e:
@@ -339,7 +337,8 @@ def mailboxes_router(
     @r.post("/test", response_model=Envelope[TestOut])
     async def test(body: Annotated[TestIn, Body()], caller: CurrentService) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Test connection: the secret and host checks, then sign-in and the folder's newest message, read without
-        marking it read. A refused check or failed sign-in is a result (ok false, the reason), not an error."""
+        marking it read. A refused check or failed sign-in is a result (ok false, the reason), not an error. Off the
+        request transaction: the mailbox is dialled."""
         graph_box = body.connection.provider == "graph"
         steps = (
             [
@@ -364,7 +363,7 @@ def mailboxes_router(
             return ok(TestOut(ok=False, steps=marked, error=error).model_dump(by_alias=True))
 
         try:
-            src = await source(caller, body.connection, body.folder)
+            src = await source(caller, body.connection, body.folder, audit=True)
         except (Forbidden, Unprocessable) as e:
             return result(0, e.message)
         if isinstance(src, GraphReader):

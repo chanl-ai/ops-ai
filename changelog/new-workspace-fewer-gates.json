@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-12",
+  "title": "New workspaces skip publish reviews and the address list",
+  "description": "In a workspace created from now on, a publish goes live at once and an app may call any public address until an admin turns either on in Settings. Workspaces created before keep their settings.",
+  "tag": "improved"
+}

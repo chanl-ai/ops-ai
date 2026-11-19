@@ -14,9 +14,11 @@ A schedule is one of:
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta
-from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from pydantic import JsonValue
 
 KINDS = ("manual", "hourly", "daily", "weekly")
 HOURS = (1, 2, 4, 6, 12)
@@ -27,30 +29,58 @@ class InvalidSchedule(ValueError):
     """A schedule a save refuses; the message names what is wrong."""
 
 
-def checked(schedule: Mapping[str, Any]) -> dict[str, Any]:
-    """The schedule as stored, or InvalidSchedule naming its problem."""
+@dataclass(frozen=True)
+class _Rule:
+    """A checked schedule's parts; `checked` writes the ones its kind has, in the stored order."""
+
+    kind: str
+    every: int = 1
+    time: str = "02:00"
+    tz: str = "UTC"
+    day: str = "mon"
+
+
+def _whole(value: JsonValue) -> int:
+    # int() as it reads any value: "2" and 2.0 are 2, "x" raises ValueError and a list or object TypeError.
+    if isinstance(value, int | float | str):
+        return int(value)
+    kind = type(value).__name__
+    raise TypeError(f"int() argument must be a string, a bytes-like object or a real number, not '{kind}'")
+
+
+def _rule(schedule: Mapping[str, JsonValue]) -> _Rule:
     kind = str(schedule.get("kind") or "manual")
     if kind not in KINDS:
         raise InvalidSchedule(f"A schedule is {', '.join(KINDS)}, not {kind}.")
     if kind == "manual":
-        return {"kind": "manual"}
-    out: dict[str, Any] = {"kind": kind}
+        return _Rule(kind)
     if kind == "hourly":
-        every = int(schedule.get("every") or 1)
+        every = _whole(schedule.get("every") or 1)
         if every not in HOURS:
             raise InvalidSchedule(f"Every {every} hours is not offered; choose {', '.join(map(str, HOURS))}.")
-        return {**out, "every": every}
+        return _Rule(kind, every=every)
     at = str(schedule.get("time") or "02:00")
     _clock(at)
-    out["time"] = at
     tz = str(schedule.get("tz") or "UTC")
     _zone(tz)
-    out["tz"] = tz
     if kind == "weekly":
         day = str(schedule.get("day") or "mon").lower()[:3]
         if day not in DAYS:
             raise InvalidSchedule(f"A weekly schedule names a day: {', '.join(DAYS)}.")
-        out["day"] = day
+        return _Rule(kind, time=at, tz=tz, day=day)
+    return _Rule(kind, time=at, tz=tz)
+
+
+def checked(schedule: Mapping[str, JsonValue]) -> dict[str, JsonValue]:
+    """The schedule as stored, or InvalidSchedule naming its problem."""
+    r = _rule(schedule)
+    if r.kind == "manual":
+        return {"kind": "manual"}
+    if r.kind == "hourly":
+        return {"kind": r.kind, "every": r.every}
+    out: dict[str, JsonValue] = {"kind": r.kind, "time": r.time, "tz": r.tz}
+    if r.kind == "weekly":
+        out["day"] = r.day
     return out
 
 
@@ -69,27 +99,27 @@ def _zone(name: str) -> ZoneInfo:
         raise InvalidSchedule(f"{name} is not a time zone.") from e
 
 
-def last_slot(schedule: Mapping[str, Any], now: datetime) -> datetime | None:
+def last_slot(schedule: Mapping[str, JsonValue], now: datetime) -> datetime | None:
     """The most recent time at or before `now` the schedule asked to run; None for manual."""
-    s = checked(schedule)
-    if s["kind"] == "manual":
+    s = _rule(schedule)
+    if s.kind == "manual":
         return None
-    if s["kind"] == "hourly":
-        hours = int(s["every"])
+    if s.kind == "hourly":
+        hours = s.every
         base = now.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
         return base - timedelta(hours=base.hour % hours)
-    zone = _zone(str(s["tz"]))
+    zone = _zone(s.tz)
     local = now.astimezone(zone)
-    slot = datetime.combine(local.date(), _clock(str(s["time"])), tzinfo=zone)
+    slot = datetime.combine(local.date(), _clock(s.time), tzinfo=zone)
     if slot > local:
         slot -= timedelta(days=1)
-    if s["kind"] == "weekly":
-        while DAYS[slot.weekday()] != s["day"]:
+    if s.kind == "weekly":
+        while DAYS[slot.weekday()] != s.day:
             slot -= timedelta(days=1)
     return slot.astimezone(UTC)
 
 
-def due(schedule: Mapping[str, Any], last_run: datetime | None, now: datetime) -> bool:
+def due(schedule: Mapping[str, JsonValue], last_run: datetime | None, now: datetime) -> bool:
     """Whether a run is due: never run (and not manual), or not run since the schedule's latest slot."""
     slot = last_slot(schedule, now)
     if slot is None:
@@ -99,9 +129,9 @@ def due(schedule: Mapping[str, Any], last_run: datetime | None, now: datetime) -
     return last_run < slot
 
 
-def next_run(schedule: Mapping[str, Any], last_run: datetime | None, now: datetime) -> datetime | None:
+def next_run(schedule: Mapping[str, JsonValue], last_run: datetime | None, now: datetime) -> datetime | None:
     """When the next run is due, for a page to show; None for manual."""
-    if checked(schedule)["kind"] == "manual":
+    if _rule(schedule).kind == "manual":
         return None
     if due(schedule, last_run, now):
         return now

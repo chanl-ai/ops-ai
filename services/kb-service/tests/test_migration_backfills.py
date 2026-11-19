@@ -78,16 +78,16 @@ def test_a_long_title_and_section_are_cut_to_the_unit_heading(database_url: str)
                 database_url,
                 # The piece alone is what the copy reads; its item is not.
                 "SET LOCAL session_replication_role = replica",
-                "INSERT INTO kb_chunks (tenant_id, team_id, id, item_id, version, position, title, section, tokens, "
+                "INSERT INTO kb_chunks (tenant_id, team_id, id, item_id, version, position, title, section, tokens, "  # noqa: S608
                 f"text) VALUES ('{TENANT}', 'team_a', 'chk_long', 'itm_x', 1, 0, '{'T' * 400}', '{'S' * 400}', 3, "
                 "'the text')",
             )
         )
         command.upgrade(cfg, "kb_0016")
-        (heading,) = asyncio.run(_sql(database_url, f"SELECT heading FROM kb_units WHERE tenant_id = '{TENANT}'"))[0]
+        (heading,) = asyncio.run(_sql(database_url, f"SELECT heading FROM kb_units WHERE tenant_id = '{TENANT}'"))[0]  # noqa: S608
         assert heading == ("T" * 400 + " " + "S" * 400)[:800]
     finally:
-        asyncio.run(_sql(database_url, f"DELETE FROM kb_chunks WHERE tenant_id = '{TENANT}'"))
+        asyncio.run(_sql(database_url, f"DELETE FROM kb_chunks WHERE tenant_id = '{TENANT}'"))  # noqa: S608
         command.upgrade(cfg, "head")
 
 
@@ -122,14 +122,14 @@ OLD_BALANCED: dict[str, Any] = {
 def _base(kb_id: str, retrieval: dict[str, Any]) -> str:
     text = json.dumps(retrieval).replace("'", "''")
     return (
-        "INSERT INTO kb_bases (tenant_id, id, team_id, name, slug, description, color, owner, collections, retrieval, "
+        "INSERT INTO kb_bases (tenant_id, id, team_id, name, slug, description, color, owner, collections, retrieval, "  # noqa: S608
         f"created_by, created_at) VALUES ('{TENANT}', '{kb_id}', 'team_a', '{kb_id}', '{kb_id}', '', 'gray', 'o@x', "
         f"CAST('[]' AS json), CAST('{text}' AS json), 'o@x', now())"
     )
 
 
 def _modes(url: str) -> dict[str, str]:
-    rows = asyncio.run(_sql(url, f"SELECT id, CAST(retrieval AS TEXT) FROM kb_bases WHERE tenant_id = '{TENANT}'"))
+    rows = asyncio.run(_sql(url, f"SELECT id, CAST(retrieval AS TEXT) FROM kb_bases WHERE tenant_id = '{TENANT}'"))  # noqa: S608
     return {kb_id: json.loads(text)["searchMode"] for kb_id, text in rows}
 
 
@@ -153,5 +153,5 @@ def test_only_bases_still_on_the_old_default_move_to_both_lanes_and_back(databas
         )[0]
         assert text == json.dumps(OLD_BALANCED)
     finally:
-        asyncio.run(_sql(database_url, f"DELETE FROM kb_bases WHERE tenant_id = '{TENANT}'"))
+        asyncio.run(_sql(database_url, f"DELETE FROM kb_bases WHERE tenant_id = '{TENANT}'"))  # noqa: S608
         command.upgrade(cfg, "head")

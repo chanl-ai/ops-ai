@@ -183,7 +183,7 @@ function typedView(r: Review, task: TypedTask, details: KindNode[]): TaskView {
   const regionCases = Array.isArray(regions.cases?.cases) ? (regions.cases!.cases as Data[]).map((c) => ({ caseId: text(c.caseId) || null, subject: text(c.subject) || null })) : [];
   const cases = regionCases.length ? regionCases : (r.reply?.cases ?? []);
   if (cases.length)
-    decide.push({ type: 'entity', title: 'Cases this covers', fields: cases.map((c) => ({ label: c.subject || 'Opening', value: c.caseId ? 'Open case' : 'Opening', href: c.caseId ? `/cases/${encodeURIComponent(c.caseId)}` : undefined })) });
+    decide.push({ type: 'entity', title: 'Cases this covers', fields: cases.map((c) => ({ label: c.subject || 'Opening', value: c.caseId ? 'Open case' : 'Opening', href: c.caseId ? `/work/cases/${encodeURIComponent(c.caseId)}` : undefined })) });
   const history = (Array.isArray(regions.history?.events) ? regions.history!.events : []) as Data[];
   const historyNodes: KindNode[] = history.length
     ? [{ type: 'timeline', title: 'What happened before', events: history.map((e) => ({ at: text(e.at), title: text(e.title) || text(e.text) || text(e.label), detail: text(e.detail) || undefined })) }]

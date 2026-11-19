@@ -101,7 +101,8 @@ url_of() {
 }
 
 # AUTH=platform: the services verify platform-service tokens; the console signs in through platform-service.
-auth_env() { [[ "$AUTH" == platform ]] && echo "env OPS_AUTH_MODE=platform OPS_PLATFORM_URL=http://127.0.0.1:$PLATFORM_PORT OPS_PLATFORM_INTERNAL_PORT=$PLATFORM_INTERNAL_PORT " || true; }
+# Otherwise the fixed dev user, which a service takes only when told to: its own default is platform.
+auth_env() { [[ "$AUTH" == platform ]] && echo "env OPS_AUTH_MODE=platform OPS_PLATFORM_URL=http://127.0.0.1:$PLATFORM_PORT OPS_PLATFORM_INTERNAL_PORT=$PLATFORM_INTERNAL_PORT OPS_PLATFORM_INTERNAL_URL=http://127.0.0.1:$PLATFORM_INTERNAL_PORT " || echo "env OPS_AUTH_MODE=dev "; }
 # The address the browser reaches a service at: this machine's port, or <OPS_PUBLIC_ORIGIN>/api/<name> when the console
 # is served through a proxy on one public address (a cloud box, deploy/fly/Caddyfile routes).
 api_url() { if [[ -n "${OPS_PUBLIC_ORIGIN:-}" ]]; then echo "$OPS_PUBLIC_ORIGIN/api/$1"; else echo "http://localhost:$2"; fi; }
@@ -181,14 +182,16 @@ cmd_of() {
     # Dev mode seeds team_ops (Priya Shah admin, James Richardson builder, Maya Okafor approver) on start. Sign-in:
     # identity providers send people back to platform-service's public URL and on to the console; reset links
     # go out through Mailpit like every other mail the stack sends (read them at http://localhost:$OPS_MAILPIT_HTTP_PORT).
-    platform) echo "env OPS_PLATFORM_PUBLIC_URL=http://localhost:$PLATFORM_PORT OPS_CONSOLE_URL=http://localhost:$CONSOLE_PORT $MAIL_OUT_ENV uv run --directory services/platform-service python -m ops_platform" ;;
+    # OPS_TOOLS_PUBLIC_URL is where a team's MCP address lives, so platform-service issues an assistant's token for it.
+    platform) echo "env OPS_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT OPS_PLATFORM_PUBLIC_URL=http://localhost:$PLATFORM_PORT OPS_TOOLS_PUBLIC_URL=http://localhost:$TOOLS_PORT OPS_CONSOLE_URL=http://localhost:$CONSOLE_PORT $MAIL_OUT_ENV uv run --directory services/platform-service python -m ops_platform" ;;
     # Agents call tools through tools-service's gateway and are seeded with agents granted its operations.
     # services/agents-service/scripts/send_levy_email.py emails the levy notice to levy@ on GreenMail.
     agents) echo "$(auth_env)env $AGENTS_URLS $MAILBOX_ENV uv run --directory services/agents-service python -m ops_agents.api" ;;
     # The fake bank's certificate doubles as the CA tools-service trusts for api.bank.test.
     # A sign-in returns to the console (OPS_CONSOLE_URL); without it tools-service starts none.
     # Its own model key judges writes against a team's sending policy when the team has check before sending on.
-    tools) echo "$(auth_env)env $MAIL_OUT_ENV OPS_CONSOLE_URL=http://localhost:$CONSOLE_PORT OPS_KB_URL=http://127.0.0.1:$KB_PORT OPS_MODELS_URL=http://127.0.0.1:$MODELS_PORT OPS_MODELS_KEY=mk_dev_tools_check $(egress_ca_env) OPS_EGRESS_RESOLVE=$(GM=$GREENMAIL_IMAP MP=$MAILPIT_SMTP FB=$FAKE_BANK_PORT dev_egress_resolve) OPS_RUNNER_URL=http://127.0.0.1:$RUNNER_PORT uv run --directory services/tools-service python -m ops_tools" ;;
+    # Both public addresses: an assistant pasting the MCP address gets a 401 naming platform-service as its sign-in.
+    tools) echo "$(auth_env)env $MAIL_OUT_ENV OPS_PLATFORM_URL=http://127.0.0.1:$PLATFORM_PORT OPS_TOOLS_PUBLIC_URL=http://localhost:$TOOLS_PORT OPS_PLATFORM_PUBLIC_URL=http://localhost:$PLATFORM_PORT OPS_CONSOLE_URL=http://localhost:$CONSOLE_PORT OPS_KB_URL=http://127.0.0.1:$KB_PORT OPS_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT OPS_FILES_URL=http://127.0.0.1:$FILES_PORT OPS_DOCUMENTS_URL=http://127.0.0.1:$DOCUMENTS_PORT OPS_MODELS_URL=http://127.0.0.1:$MODELS_PORT OPS_MODELS_KEY=mk_dev_tools_check $(egress_ca_env) OPS_EGRESS_RESOLVE=$(GM=$GREENMAIL_IMAP MP=$MAILPIT_SMTP FB=$FAKE_BANK_PORT dev_egress_resolve) OPS_RUNNER_URL=http://127.0.0.1:$RUNNER_PORT uv run --directory services/tools-service python -m ops_tools" ;;
     # Code tools' functions: Python on WASM, calling back to tools-service. start fetches its Python build first.
     runner) echo "$(auth_env)env OPS_RUNNER_PORT=$RUNNER_PORT OPS_TOOLS_URL=http://127.0.0.1:$TOOLS_PORT uv run --directory services/runner-service python -m ops_runner" ;;
     # The worker also reads the workflows' mailboxes (Email received) and stores their attachments in files-service.
@@ -200,7 +203,7 @@ cmd_of() {
     apidocs) echo "env OPS_API_DOCS_PORT=$API_DOCS_PORT OPS_PLATFORM_PORT=$PLATFORM_PORT OPS_AGENTS_PORT=$AGENTS_PORT OPS_TOOLS_PORT=$TOOLS_PORT OPS_MODELS_PORT=$MODELS_PORT OPS_KB_PORT=$KB_PORT OPS_FILES_PORT=$FILES_PORT OPS_DOCUMENTS_PORT=$DOCUMENTS_PORT python3 scripts/api_docs.py" ;;
     # Uploads go to files-service; kb-service keeps no file store of its own on the stack.
     # Plugin knowledge sources are read through tools-service's gateway, when the plugins folder holds any.
-    kb) echo "$(auth_env)env OPS_KB_PORT=$KB_PORT OPS_MODELS_URL=http://127.0.0.1:$MODELS_PORT OPS_MODELS_KEY=mk_dev_kb OPS_FILES_URL=http://127.0.0.1:$FILES_PORT OPS_DOCUMENTS_URL=http://127.0.0.1:$DOCUMENTS_PORT OPS_TOOLS_URL=http://127.0.0.1:$TOOLS_PORT uv run --directory services/kb-service python -m ops_kb" ;;
+    kb) echo "$(auth_env)env OPS_KB_PORT=$KB_PORT OPS_MODELS_URL=http://127.0.0.1:$MODELS_PORT OPS_MODELS_KEY=mk_dev_kb OPS_FILES_URL=http://127.0.0.1:$FILES_PORT OPS_DOCUMENTS_URL=http://127.0.0.1:$DOCUMENTS_PORT OPS_TOOLS_URL=http://127.0.0.1:$TOOLS_PORT OPS_TOOLS__TIMEOUT_S=60 OPS_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT uv run --directory services/kb-service python -m ops_kb" ;;
     # Local backend under .data/files, bytes through its proxy routes; scanning off marks files clean (dev only).
     # files-service delivers its service events (file.deleted, file.read_requested) to agents-service.
     files) echo "$(auth_env)env OPS_FILES_PORT=$FILES_PORT OPS_FILES_SCANNING=off OPS_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT uv run --directory services/files-service python -m ops_files" ;;
@@ -667,7 +670,24 @@ health() {
     if nc -z "$pg_host" "$pg_port" 2>/dev/null; then row postgres "$pg_port" "tcp://$pg_host:$pg_port" "ok (tcp)" compose; else row postgres "$pg_port" "tcp://$pg_host:$pg_port" DOWN compose; failed=1; fi
   fi
   [[ -z "$only" ]] && docker_disk
+  rev_warnings "$only"
   return "$failed"
+}
+
+# One line per running service whose recorded start commit is not HEAD. Any commit counts, docs and tests included:
+# a service two commits behind its neighbour answered 500 on routes the neighbour had changed. Informational only; the
+# exit status of health stays what the probes decide.
+rev_warnings() {
+  local svc root rev head
+  head=$(git rev-parse HEAD 2>/dev/null) || return 0
+  for svc in "${CHECKED[@]}"; do
+    [[ -n "$1" && "$1" != "$svc" ]] && continue
+    alive "$svc" || continue
+    read -r root rev <"$(stampfile "$svc")" 2>/dev/null || continue
+    [[ "$rev" == "$head" ]] && continue
+    echo "  WARNING: $svc runs ${rev:0:8}, tree is at ${head:0:8}; restart with make restart SVC=$svc"
+  done
+  return 0
 }
 
 logs() {

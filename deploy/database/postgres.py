@@ -10,6 +10,7 @@ import re
 import secrets
 import shutil
 import subprocess
+import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -33,6 +34,33 @@ _ROLE_STATEMENT = re.compile(r"\b(CREATE|ALTER) ROLE\b|\bGRANT \w+ TO \w+|\bCREA
 EXTENSIONS = ("vector",)
 CREATE_EXTENSIONS = "".join(f"CREATE EXTENSION IF NOT EXISTS {e};\n" for e in EXTENSIONS)
 _ON_TABLE = re.compile(r"ON (?:TABLE|SEQUENCE) public\.(\"?[A-Za-z_][A-Za-z0-9_]*\"?)")
+
+
+def _run_dump(cmd: list[str], env: dict[str, str] | None = None) -> str:
+    """Runs pg_dump and returns its output. A failure carries pg_dump's own message: CalledProcessError prints only the
+    command, and the local command's last argument is the URL with its password, so the command is left out."""
+    done = subprocess.run(cmd, capture_output=True, text=True, check=False, env=env)
+    if done.returncode:
+        raise RuntimeError(f"pg_dump exited {done.returncode}: {done.stderr.strip() or '(no message)'}")
+    return done.stdout
+
+
+def docker_dump_command(url: str, major: int, args: Iterable[str], *, linux: bool) -> list[str]:
+    """pg_dump in the postgres image, reaching a server on this machine's loopback. Docker Desktop maps
+    host.docker.internal to the host's loopback. On Linux that name resolves to the bridge gateway, where a port
+    published as 127.0.0.1:<port> does not listen, so the container shares the host's network and uses the loopback."""
+    parts = urlsplit(libpq(url))
+    host = parts.hostname or "localhost"
+    on_host = host in ("localhost", "127.0.0.1")
+    if on_host and linux:
+        network, target_host = ["--network", "host"], "127.0.0.1"
+    else:
+        network, target_host = (
+            ["--add-host=host.docker.internal:host-gateway"],
+            "host.docker.internal" if on_host else host,
+        )
+    target = urlunsplit((parts.scheme, f"{parts.username}@{target_host}:{parts.port or 5432}", parts.path, "", ""))
+    return ["docker", "run", "--rm", *network, "-e", "PGPASSWORD", f"postgres:{major}-alpine", "pg_dump", *args, target]
 
 
 @dataclass(frozen=True)
@@ -158,17 +186,10 @@ class Postgres:
         if local:
             out = subprocess.run([local, "--version"], capture_output=True, text=True, check=True).stdout
             if int(re.findall(r"(\d+)\.", out)[0]) >= major:
-                return subprocess.run([local, *args, libpq(url)], capture_output=True, text=True, check=True).stdout
+                return _run_dump([local, *args, libpq(url)])
         parts = urlsplit(libpq(url))
-        host = parts.hostname or "localhost"
-        docker_host = "host.docker.internal" if host in ("localhost", "127.0.0.1") else host
-        netloc = f"{parts.username}@{docker_host}:{parts.port or 5432}"
-        target = urlunsplit((parts.scheme, netloc, parts.path, "", ""))
-        # Linux's Docker has no host.docker.internal unless it is mapped to the host's gateway; Docker Desktop has it.
-        cmd = ["docker", "run", "--rm", "--add-host=host.docker.internal:host-gateway", "-e", "PGPASSWORD"]
-        cmd += [f"postgres:{major}-alpine", "pg_dump", *args, target]
-        env = {**os.environ, "PGPASSWORD": parts.password or ""}
-        return subprocess.run(cmd, capture_output=True, text=True, check=True, env=env).stdout
+        cmd = docker_dump_command(url, major, args, linux=sys.platform.startswith("linux"))
+        return _run_dump(cmd, {**os.environ, "PGPASSWORD": parts.password or ""})
 
     def dump_schema(self, url: str) -> Dump:
         # Objects carry no owner: whoever applies the bundle (the migrator) owns them. Grants are kept.
@@ -229,7 +250,7 @@ class Postgres:
                 "AND table_type = 'BASE TABLE' ORDER BY table_name",
             )
         ]
-        return [n for n in names if self.query(url, f'SELECT EXISTS (SELECT 1 FROM public."{n}") AS has')[0]["has"]]
+        return [n for n in names if self.query(url, f'SELECT EXISTS (SELECT 1 FROM public."{n}") AS has')[0]["has"]]  # noqa: S608
 
     def dump_rows(self, url: str, tables: Iterable[str]) -> Dump:
         """The rows a fresh migration writes (version rows, reference rows), as INSERT statements."""
@@ -247,7 +268,7 @@ class Postgres:
                 "AND table_name LIKE 'alembic_version%'",
             )
         ]
-        return {t: [r["version_num"] for r in self.query(url, f'SELECT version_num FROM public."{t}"')] for t in tables}
+        return {t: [r["version_num"] for r in self.query(url, f'SELECT version_num FROM public."{t}"')] for t in tables}  # noqa: S608
 
     def roles(self, url: str, names: Iterable[str]) -> dict[str, dict[str, bool]]:
         wanted = sorted(set(names))
@@ -255,7 +276,8 @@ class Postgres:
             return {}
         listed = ", ".join(f"'{n}'" for n in wanted)
         rows = self.query(
-            url, f"SELECT rolname, rolcanlogin, rolbypassrls, rolinherit FROM pg_roles WHERE rolname IN ({listed})"
+            url,
+            f"SELECT rolname, rolcanlogin, rolbypassrls, rolinherit FROM pg_roles WHERE rolname IN ({listed})",  # noqa: S608
         )
         return {
             r["rolname"]: {"login": r["rolcanlogin"], "bypassrls": r["rolbypassrls"], "inherit": r["rolinherit"]}
@@ -280,11 +302,11 @@ class Postgres:
         """Raises before a step's DDL when the database is not at the revision the step starts from."""
         if expected is None:
             check = (
-                f"to_regclass('public.{version_table}') IS NULL OR NOT EXISTS (SELECT 1 FROM public.{version_table})"
+                f"to_regclass('public.{version_table}') IS NULL OR NOT EXISTS (SELECT 1 FROM public.{version_table})"  # noqa: S608
             )
             want = "no version row"
         else:
-            check = f"EXISTS (SELECT 1 FROM public.{version_table} WHERE version_num = '{expected}')"
+            check = f"EXISTS (SELECT 1 FROM public.{version_table} WHERE version_num = '{expected}')"  # noqa: S608
             want = expected
         return (
             "DO $$ BEGIN\n"

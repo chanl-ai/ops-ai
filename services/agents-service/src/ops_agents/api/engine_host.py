@@ -33,6 +33,7 @@ from ops_engine.store import DefinitionStore, RunStore
 from ops_identity import ServiceCallError
 from ops_policy import input_hash
 from ops_policy.approval import Binding, mint_approval
+from ops_service_kit.http import Json, JsonList
 from ops_service_kit.logging import get_logger
 
 from ..domain.accounts import chosen_accounts
@@ -66,9 +67,9 @@ class ApprovalMinter:
     review_key: str
     ttl_s: int
 
-    async def mint(self, run_id: str, call: dict[str, Any], approval: dict[str, Any]) -> str | None:
+    async def mint(self, run_id: str, call: Json, approval: Json) -> str | None:
         digest = input_hash(call["input"])
-        raw: list[Any] = list(approval.get("approvers") or [])
+        raw = list(cast(JsonList, approval.get("approvers") or []))
         step, approvers = str(call["step"]), [str(a) for a in raw]
         if digest != approval.get("inputHash") or step != approval.get("step") or not approvers:
             return None  # the call is not the one approved
@@ -85,13 +86,13 @@ async def run_workflow(db: AsyncEngine, run_id: str) -> tuple[str, bool]:
     claim): the no-team workflow under a shipped event workflow's id. tools-service lets only the access
     request's handler apply a tool access decision."""
     tx = EngineTransactions(db)
-    run = await RunStore(tx).get(run_id)
+    run = await RunStore(tx).row(run_id)
     if run is None:
         return "", False
-    workflow = str(run["workflow_id"])
-    stored = await DefinitionStore(tx).get(workflow, int(run["version"]))
+    workflow = run.workflow_id
+    stored = await DefinitionStore(tx).row(workflow, run.version)
     handler = workflow in set(handlers(EVENT_WORKFLOWS).values())
-    return workflow, bool(handler and stored is not None and stored.get("team_id") is None)
+    return workflow, bool(handler and stored is not None and stored.team_id is None)
 
 
 class GatewayTools:
@@ -99,7 +100,7 @@ class GatewayTools:
         self.gateway = gateway
         self.minter = minter
 
-    async def mint(self, run_id: str, call: dict[str, Any], approval: dict[str, Any]) -> str | None:
+    async def mint(self, run_id: str, call: Json, approval: Json) -> str | None:
         return await self.minter.mint(run_id, call, approval) if self.minter is not None else None
 
     def _gw(self) -> GatewayClient:
@@ -110,7 +111,7 @@ class GatewayTools:
     async def call(
         self,
         operation: str,
-        input: dict[str, Any],
+        input: Json,
         key: str,
         generation: int | None,
         token: str | None,
@@ -166,7 +167,7 @@ class GatewayTools:
         record the gateway abandons the key, so the call cannot run if it is still in flight. The log keeps no output,
         so a write found done is recorded with its call id."""
         found = await self._gw().abandon(key, operation, thread_of(key))
-        call: dict[str, Any] | None = found.get("call")
+        call = cast(Json | None, found.get("call"))
         if found.get("abandoned") or call is None:
             return None
         outcome = str(call.get("outcome") or "")
@@ -183,11 +184,11 @@ class GatewayTools:
         return None  # no claim: the write never ran
 
 
-def said(output: Any) -> str:
+def said(output: object) -> str:
     """A failed operation's own message, which a run's failure reads (worker._why_failed): it names the app and what to
     do, as "Client desk needs reconnecting" does."""
-    error = cast(dict[str, Any], output).get("error") if isinstance(output, dict) else None
-    message = cast(dict[str, Any], error).get("message") if isinstance(error, dict) else None
+    error = cast(Json, output).get("error") if isinstance(output, dict) else None
+    message = cast(Json, error).get("message") if isinstance(error, dict) else None
     return str(message) if message else "the operation returned an error"
 
 
@@ -197,9 +198,7 @@ class GatewayExpressions:
     def __init__(self, gateway: GatewayClient) -> None:
         self.gateway = gateway
 
-    async def evaluate(
-        self, expressions: dict[str, str], values: dict[str, Any]
-    ) -> tuple[dict[str, Any] | None, str | None]:
+    async def evaluate(self, expressions: dict[str, str], values: Json) -> tuple[Json | None, str | None]:
         return await self.gateway.evaluate(expressions, values)
 
 
@@ -215,11 +214,11 @@ class StarterApprovals:
         self.gateway = gateway
         self.policies = policies
 
-    async def decision(self, run_id: str, node_id: str, payload: dict[str, Any]) -> dict[str, Any] | None:
-        run = await RunStore(EngineTransactions(self.db)).get(run_id)
-        if run is None or not run.get("started_by_approver") or self.gateway is None:
+    async def decision(self, run_id: str, node_id: str, payload: Json) -> Json | None:
+        run = await RunStore(EngineTransactions(self.db)).row(run_id)
+        if run is None or not run.started_by_approver or self.gateway is None:
             return None
-        call = dict(payload["call"])
+        call = dict(cast(Json, payload["call"]))
         tool = str(call["tool"])
         try:
             approval = dict((await self.gateway.tool_policy(tool)).get("approval") or {})
@@ -228,15 +227,15 @@ class StarterApprovals:
             return None
         if stepped or approval.get("stepUp") or int(approval.get("approvers") or 1) > 1:
             return None
-        starter, digest = str(run["created_by"]), input_hash(call["input"])
+        starter, digest = run.created_by, input_hash(call["input"])
         found = await ReviewStore(self.db).approve(
-            run_id, str(call["step"]), starter, digest, distinct=False, team_id=str(run["team_id"])
+            run_id, str(call["step"]), starter, digest, distinct=False, team_id=run.team_id
         )
         if not found:
             return None
         await EventLog(self.db).append(
             thread_id=run_id,
-            team_id=str(run["team_id"]),
+            team_id=run.team_id,
             run_id=run_id,
             type_="decided",
             node=node_id,
@@ -246,7 +245,7 @@ class StarterApprovals:
             "decision": "approved",
             "by": starter,
             "call": call,
-            "approval": {"step": str(call["step"]), "tool": tool, "inputHash": digest, "approvers": found},
+            "approval": {"step": str(call["step"]), "tool": tool, "inputHash": digest, "approvers": [*found]},
         }
 
 
@@ -269,18 +268,18 @@ class RunReviews:
         # Held so a running assist is not collected before it ends.
         self._writing: set[asyncio.Task[None]] = set()
 
-    async def open(self, run_id: str, node_id: str, iteration: int, payload: dict[str, Any]) -> str:
+    async def open(self, run_id: str, node_id: str, iteration: int, payload: Json) -> str:
         if self.assist is not None and self.tx is not None and payload.get("taskType"):
-            run = await RunStore(self.tx).get(run_id)
+            run = await RunStore(self.tx).row(run_id)
             if run is not None:
-                request = await self.assist.start(str(run["team_id"]), payload)
+                request = await self.assist.start(run.team_id, payload)
                 if request is not None:
                     task = asyncio.create_task(self.assist.finish(str(payload["step_id"]), request))
                     self._writing.add(task)
                     task.add_done_callback(self._done)
         return run_id
 
-    async def own_decision(self, run_id: str, node_id: str, payload: dict[str, Any]) -> dict[str, Any] | None:
+    async def own_decision(self, run_id: str, node_id: str, payload: Json) -> Json | None:
         return await self.starters.decision(run_id, node_id, payload) if self.starters is not None else None
 
     def _done(self, task: asyncio.Task[None]) -> None:

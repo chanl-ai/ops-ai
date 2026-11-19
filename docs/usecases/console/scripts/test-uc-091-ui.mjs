@@ -87,9 +87,12 @@ await withUiStack(async (consoleUrl) => {
     // An attached PDF: uploaded to Files as a chat attachment, read for the turn, cited by its page.
     const uploads = [];
     page.on('response', (r) => r.url().includes('/v1/files/uploads') && uploads.push(`${r.request().method()} ${r.status()}`));
-    await page.locator('#chat-attach').setInputFiles(PDF);
-    const ready = await page.getByTestId('chat-attach-items').locator('[data-phase="ready"]').waitFor({ timeout: 30_000 }).then(() => true, () => false);
-    const chip = ready ? 'ready' : await page.getByTestId('chat-attach-items').innerHTML().catch(() => 'no chip');
+    await page.getByTestId('chat-attach').click();
+    await page.getByRole('dialog').locator('input[type="file"]').setInputFiles(PDF);
+    await page.getByRole('dialog').locator('[data-phase="ready"]').first().waitFor({ timeout: 60_000 });
+    await page.getByTestId('add-documents-submit').click();
+    const ready = await page.getByTestId('chat-attached-file').first().waitFor({ timeout: 30_000 }).then(() => true, () => false);
+    const chip = ready ? 'ready' : 'no chip';
     await send('What does a replacement debit card cost?');
     const marker = page.getByRole('button', { name: /^Citation \d+: fee-schedule-v2\.pdf/ }).last();
     const cited = await marker.waitFor({ timeout: 30_000 }).then(() => true, () => false);

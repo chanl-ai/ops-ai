@@ -1,0 +1,1 @@
+# 0 boundaries crossed without a model in packages/ops_email (scripts/check_typed_boundaries.py). A row may only fall.

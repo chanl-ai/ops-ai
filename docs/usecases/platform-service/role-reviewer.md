@@ -8,6 +8,7 @@ Status: current. Id: `uc-218`. Service: `platform-service`, agents-service, cons
 |---|---|
 | PostgreSQL :5477 | `make db-up` |
 | Free use-case ports | the runner picks free ports and its own database |
+| Publish review on for team_ops: a new workspace publishes at once | Priya, `PUT /v1/policies/publishReview` (`publishReviewOn` in `docs/usecases/lib/workflow_ui.mjs` for the ui scripts) |
 
 platform-service runs with the dev seed's own roles (`OPS_SEED_EVERYONE_ADMIN` off) and agents-service verifies its
 tokens. The person checked is never a seeded one: an admin invites them through the product and they accept with a
@@ -17,7 +18,7 @@ password. No model is called.
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | Priya invites a builder and a reviewer (stored `approver`) | Both join team_ops |
+| 1 | Priya invites a builder and a reviewer (stored `approver`); the builder signs in again after the second accept | Both join team_ops; the second accept raises the permission version (D62), so the builder's first token is refused |
 | 2 | The builder asks to publish an agent | The request waits |
 | 3 | The reviewer approves it (ui: from Reviews) | Approved |
 | 4 | The reviewer creates or edits an agent (ui: opens it) | 403 each; the page says View only |

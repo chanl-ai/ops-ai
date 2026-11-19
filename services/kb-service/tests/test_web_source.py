@@ -277,11 +277,11 @@ async def beat(engine: AsyncEngine, tmp_path: Any, web: WebPlugin, tenant: str, 
     service = KnowledgeService(KnowledgeStore(engine), files, HybridRetriever(engine), StaticAgents(), tools=web,  # type: ignore[arg-type]
                                readings=LocalReadings(files))  # fmt: skip
     with isolation.tenant_wide("test: the schedule's pass", tenant_id=tenant):
-        [s] = [s for s in await service.store.sources(tenant) if s["id"] == source_id]
+        [s] = [s for s in await service.store.sources(tenant) if s.id == source_id]
     assert due(service, s, datetime.now(UTC)), "a source waiting for its host is due whatever its schedule"
-    with isolation.scope(tenant, str(s["team_id"])):
+    with isolation.scope(tenant, str(s.team_id)):
         try:
-            await service.scheduled_sync(Who(tenant, "knowledge schedule", str(s["team_id"])), s)
+            await service.scheduled_sync(Who(tenant, "knowledge schedule", str(s.team_id)), s)
         except Conflict as e:
             assert e.code == "host_waiting", e
             return False

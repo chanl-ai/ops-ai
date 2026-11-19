@@ -14,7 +14,7 @@ import { request } from 'node:https';
 import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 
-import { AGENTS_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack, required } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
@@ -40,10 +40,10 @@ const OURS = [
   { after: 'person_get_record', result: 'CONNECTION_NOT_LINKED', text: 'I could not read it: Person desk needs your own account. Connect it from the card above and I will go ahead.' },
   { after: 'person_get_record', result: '"as": ?"(?P<who>[^"]+)"', text: 'Harbor ticket 1042 is open; Person desk answered to {who}.' },
 ];
-const RULES = '.logs/usecase/uc588-model';
+const RULES = evidenceDir('588', 'model');
 const demo = JSON.parse(readFileSync(join(ROOT, 'services/models-service/seed/demo-fake-openai/script.json'), 'utf8'));
-mkdirSync(join(ROOT, RULES), { recursive: true });
-writeFileSync(join(ROOT, RULES, 'script.json'), JSON.stringify({ ...demo, rules: [...OURS, ...demo.rules] }));
+mkdirSync(RULES, { recursive: true });
+writeFileSync(join(RULES, 'script.json'), JSON.stringify({ ...demo, rules: [...OURS, ...demo.rules] }));
 
 /** The fake system, started from its script; resolves with what it printed and stops when the walk ends. */
 async function startFake() {
@@ -127,7 +127,7 @@ try {
       await call(tools, 'POST', `/v1/apps/plugin:test.header-key/accounts/${keyed.data?.connectionId}/test`, priya, { account: 'team' });
       // Each person brings their own key to this one; the team gives none.
       const ownKeyed = await call(tools, 'PUT', '/v1/apps/plugin:test.person-key/team', priya, { enabled: true, signIn: 'person' });
-      const agent = (await call(agents, 'POST', '/v1/agents', priya, { name: 'Ticket desk', role: 'Reads tickets from Person desk' })).data ?? {};
+      const agent = required(await call(agents, 'POST', '/v1/agents', priya, { name: 'Ticket desk', role: 'Reads tickets from Person desk' }), 'create the agent');
       // agents-service keeps the grantable tools for 30 s, so the plugin's operation is offered within that.
       const toolIds = ['person_get_record', 'person_key_get_record'];
       let patched = await call(agents, 'PATCH', `/v1/agents/${agent.id}`, priya, { toolIds });

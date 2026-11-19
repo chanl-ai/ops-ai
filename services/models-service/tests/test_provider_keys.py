@@ -41,7 +41,7 @@ def _provider(seen: list[str | None]) -> httpx.AsyncClient:
     return httpx.AsyncClient(transport=httpx.MockTransport(handle))
 
 
-def _people(tenant: str) -> Any:
+def people(tenant: str) -> Any:
     """A person signed in to `tenant` with the role X-Role names in the team X-Team-Id names (admin of team_security
     is the account admin); a request with a bearer token (a service) is resolved as usual."""
 
@@ -101,7 +101,7 @@ async def _rig(models: Models, in_settings: str | None = None) -> AsyncIterator[
     tenant, key_name = f"t_{uuid4().hex[:8]}", f"OPENAI_{uuid4().hex[:6].upper()}"
     fallback = {key_name: in_settings} if in_settings else {}
     app = create_models_app(models.engine, upstream=_provider(seen), provider_secrets=fallback)
-    app.dependency_overrides[current_principal] = _people(tenant)
+    app.dependency_overrides[current_principal] = people(tenant)
     hooks = {"response": [response_checker(app)]}
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://models", event_hooks=hooks) as client:
@@ -140,7 +140,7 @@ async def test_a_connection_whose_key_is_not_saved_is_refused_without_calling_th
     assert r.json()["error"]["code"] == "provider_key_missing"
     assert rig.key_name in r.json()["error"]["message"]
     assert rig.seen == []
-    assert [c["reason"] for c in await rig.models.calls(rig.key_id)] == ["provider_key_missing"]
+    assert [c["reason"] for c in await rig.models.calls(rig.key_id, rig.tenant)] == ["provider_key_missing"]
 
 
 async def test_a_call_naming_no_account_uses_no_accounts_key(rig: Rig) -> None:
@@ -156,7 +156,7 @@ async def test_a_value_is_never_read_back_nor_stored_in_the_clear(rig: Rig) -> N
     saved = await rig.save("sk-do-not-show")
     listed = await rig.client.get("/v1/provider-keys")
     assert "sk-do-not-show" not in saved.text + listed.text
-    assert [k["name"] for k in listed.json()["data"]] == [rig.key_name]
+    assert [k["name"] for k in listed.json()["data"]["data"]] == [rig.key_name]
     async with rig.models.engine.connect() as c:
         stored = await c.scalar(
             sa.select(provider_keys.c.ciphertext).where(
@@ -175,7 +175,7 @@ async def test_only_an_account_admin_sets_lists_or_deletes_a_key(rig: Rig) -> No
         assert (await rig.client.delete(f"/v1/provider-keys/{rig.key_name}", headers=who)).status_code == 403
     service = await rig.client.put(f"/v1/provider-keys/{rig.key_name}", json={"value": "sk-x"}, headers=SERVICE)
     assert service.status_code in (401, 403), "a service token is not an account admin"
-    assert (await rig.client.get("/v1/provider-keys")).json()["data"] == []
+    assert (await rig.client.get("/v1/provider-keys")).json()["data"]["data"] == []
 
 
 async def test_another_accounts_key_is_not_used_for_this_accounts_call(rig: Rig) -> None:
@@ -209,3 +209,15 @@ def test_outside_dev_a_key_in_settings_stops_start_up() -> None:
     )
     with pytest.raises(SystemExit, match="OPENAI_API_KEY"):
         dev_provider_keys(settings)
+
+
+async def test_an_accounts_keys_are_listed_by_name(rig: Rig) -> None:
+    for name in ("KEY_C", "KEY_A", "KEY_B"):
+        assert (await rig.client.put(f"/v1/provider-keys/{name}", json={"value": "sk-x"})).status_code == 200
+
+    listed = await rig.client.get("/v1/provider-keys")
+
+    assert [k["name"] for k in listed.json()["data"]["data"]] == ["KEY_A", "KEY_B", "KEY_C"]
+    # (tenant_id, name) keys the table, so `ids` names a key by name.
+    picked = await rig.client.get("/v1/provider-keys", params={"ids": "KEY_B", "search": "KEY_A"})
+    assert [k["name"] for k in picked.json()["data"]["data"]] == ["KEY_B"]

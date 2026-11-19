@@ -9,9 +9,11 @@ import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import httpx
+from pydantic import BaseModel, ConfigDict
+
+from ops_service_kit.http import JsonValue
 
 DECISION = "/v1/data/ops/gateway/decision"
 # The id OPA's file watch gives the mounted policy (compose: /policy/gateway.rego); writing under the same id replaces
@@ -47,6 +49,22 @@ class PolicyMismatchError(RuntimeError):
 
 def policy_hash(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
+
+
+class _Result(BaseModel):
+    """OPA's answer to the gateway's decision query."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    allow: bool
+    reasons: list[str]
+
+
+class _Answer(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    # Absent while the policy is not loaded.
+    result: _Result | None = None
 
 
 @dataclass(frozen=True)
@@ -112,7 +130,7 @@ class OpaClient:
         r.raise_for_status()
         return policy_hash(str(r.json()["result"]["raw"]))
 
-    async def decide(self, query: dict[str, Any]) -> Decision:
+    async def decide(self, query: dict[str, JsonValue]) -> Decision:
         decision = await self._decide(query)
         # OPA serves data.ops from the mounted policy folder too, and a file-watch reload of that folder replaces
         # data.ops, dropping the key written at start; every approved write would then read as unsigned. Only when the
@@ -128,11 +146,12 @@ class OpaClient:
             decision = await self._decide(query)
         return decision
 
-    async def _decide(self, query: dict[str, Any]) -> Decision:
+    async def _decide(self, query: dict[str, JsonValue]) -> Decision:
         r = await self.client.post(DECISION, json={"input": query})
         r.raise_for_status()
-        result: dict[str, Any] | None = r.json().get("result")
+        answer = _Answer.model_validate(r.json())
+        result = answer.result
         if result is None:
             # An undefined decision means the policy is not loaded; refuse rather than guess.
             return Decision(False, ["gateway policy is not loaded"])
-        return Decision(bool(result["allow"]), list(result["reasons"]))
+        return Decision(result.allow, result.reasons)

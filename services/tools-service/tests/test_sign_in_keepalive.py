@@ -84,7 +84,7 @@ async def test_a_sign_in_left_unused_is_refreshed_and_a_recent_one_is_not(engine
     assert await keepalive.once() == 2
     assert sorted(system.refreshed) == ["rt-idle", "rt-james"], system.refreshed
     row = await store.token(tenant, idle)
-    assert row is not None and row["rotations"] == 2 and row["refreshed_at"] > datetime.now(UTC) - timedelta(minutes=1)
+    assert row is not None and row.rotations == 2 and row.refreshed_at > datetime.now(UTC) - timedelta(minutes=1)
 
 
 async def test_an_ended_grant_marks_the_account_for_a_reconnect(engine: AsyncEngine, tenant: str) -> None:
@@ -95,10 +95,10 @@ async def test_an_ended_grant_marks_the_account_for_a_reconnect(engine: AsyncEng
     await _held(engine, tokens, tenant, conn, "rt-ended-james", idle=IDLE, person="usr_james")
     assert await keepalive.once() == 0
     account = await store.get(tenant, conn)
-    assert account is not None and account["status"] == "needs_reconnect", account
+    assert account is not None and account.status == "needs_reconnect", account
     assert account_state(account, await store.token(tenant, conn), datetime.now(UTC)) == "refused"
     james = await store.token(tenant, conn, "usr_james")
-    assert james is not None and james["refused_at"] is not None, james
+    assert james is not None and james.refused_at is not None, james
 
 
 async def test_a_passing_fault_leaves_the_account_and_the_pass_goes_on(engine: AsyncEngine, tenant: str) -> None:
@@ -111,9 +111,9 @@ async def test_a_passing_fault_leaves_the_account_and_the_pass_goes_on(engine: A
     assert await keepalive.once() == 1
     assert system.refreshed == ["rt-fine"], system.refreshed
     account = await store.get(tenant, flaky)
-    assert account is not None and account["status"] == "healthy", account
+    assert account is not None and account.status == "healthy", account
     held = await store.token(tenant, flaky)
-    assert held is not None and held["refused_at"] is None, held
+    assert held is not None and held.refused_at is None, held
 
 
 async def test_every_teams_sign_ins_are_kept_in_their_own_team(engine: AsyncEngine, tenant: str) -> None:

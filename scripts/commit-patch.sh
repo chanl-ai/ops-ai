@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Commits a patch, and only it, onto HEAD: for a shared file (a README row, uv.lock, openapi.json, the allowlist) that
 # also holds other builders' unfinished lines, so `make commit FILES=…` would take their lines too. The patch is
-# applied to HEAD in a private index, both repository hooks run on it, and the commit lands only if HEAD has not moved
-# (a compare-and-swap). The working tree is never written: your lines are already in it, and so are everyone else's.
+# applied to HEAD in a private index, both repository hooks run on it, and commits queue on one lock (commit-lock.sh); it lands only
+# if HEAD has not moved (a compare-and-swap, for a plain `git commit` that skips the lock). The working tree is never written: your lines are already in it, and so are everyone else's.
 #   scripts/commit-patch.sh <message-file> <patch-file>
 # Make the patch from your own hunks: `make my-hunks FILE=docs/usecases/README.md > mine.patch`, delete the hunks that
 # are not yours, then `make commit-hunks PATCH=mine.patch MSG='…' CHANGELOG=<topic>`.
@@ -15,7 +15,12 @@ patch=$(cd "$(dirname "$patch")" && pwd)/$(basename "$patch")
 root=$(git rev-parse --show-toplevel)
 git_dir=$(git rev-parse --absolute-git-dir)
 work=$(mktemp -d "${TMPDIR:-/tmp}/commit-patch.XXXXXX")
-trap 'rm -rf "$work"' EXIT
+# One lock for read-HEAD -> hooks -> update-ref: concurrent commits queue instead of losing the swap below.
+# shellcheck source=commit-lock.sh
+. "$(dirname "${BASH_SOURCE[0]}")/commit-lock.sh"
+trap 'commit_lock_release; rm -rf "$work"' EXIT
+trap 'exit 130' INT TERM HUP
+commit_lock_acquire commit-patch || exit 1
 base=$(git -C "$root" rev-parse HEAD)
 export GIT_INDEX_FILE="$work/index"
 git -C "$root" read-tree "$base"

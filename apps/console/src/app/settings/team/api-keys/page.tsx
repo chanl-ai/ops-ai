@@ -21,6 +21,7 @@ import { selectColumn } from '@/components/shared/select-column';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useApiKeys, useCreateApiKey, useRevokeApiKey, useSettingsLookups } from '@/hooks/settings-queries';
+import { useApiKeysAreSample } from '@/hooks/use-preview';
 import { useCreatedRows } from '@/hooks/use-created-rows';
 import { useListParams } from '@/hooks/use-list-params';
 import { useTeam } from '@/hooks/use-team';
@@ -99,6 +100,7 @@ export default function ApiKeysPage() {
   // platform-service lists a team's keys under access.manage, creates them under access.create and revokes them under
   // access.delete; without the first the page says so and asks nothing.
   const may = useNavAllows()(API_KEYS);
+  const keysAreSample = useApiKeysAreSample();
   const canCreate = useCan('access', 'create') === true;
   const canRevoke = useCan('access', 'delete') === true;
   // Across teams, only the keys of teams whose access the person manages, and a new key only in a team they may create in.
@@ -116,7 +118,7 @@ export default function ApiKeysPage() {
 
   return (
     <SettingsPageLayout
-      sample
+      sample={keysAreSample}
       section="API keys"
       description="Keys for systems that start runs or read logs. A key is shown once, when it is created."
       actions={

@@ -16,6 +16,7 @@ from httpx import ASGITransport, AsyncClient
 from langgraph.checkpoint.memory import InMemorySaver
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from ops_agents.activities.agent_limits import wire
 from ops_agents.api.app import create_app
 from ops_agents.api.deps import Runtime
 from ops_agents.store.base import metadata
@@ -74,7 +75,7 @@ def served(app: FastAPI, agent_id: str) -> dict[str, Any]:
     rt: Runtime = app.state.runtime
     agent = rt.catalog.agent(agent_id)
     assert agent is not None and agent.limits is not None
-    return agent.limits.wire()
+    return wire(agent.limits)
 
 
 async def test_a_version_saved_before_limits_gets_the_owners_defaults(tmp_path: Path) -> None:

@@ -60,7 +60,7 @@ export function ActivityPanel({ module, activity, onOpenCall }: { module: ToolMo
         title="Executions"
         description="Who called which operation, how it was allowed, and what happened"
         actions={
-          <Link href={`/tools/calls?q=${encodeURIComponent(module.system)}`} className="text-sm font-medium underline-offset-4 hover:underline">
+          <Link href={`/govern/activity/tool-calls?q=${encodeURIComponent(module.system)}`} className="text-sm font-medium underline-offset-4 hover:underline">
             Open in the tool call log
           </Link>
         }

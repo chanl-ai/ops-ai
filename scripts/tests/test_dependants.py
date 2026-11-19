@@ -9,6 +9,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from dependants import dependants  # pyright: ignore[reportMissingImports]
 
@@ -49,29 +51,34 @@ def plan(tmp_path: Path, *changed: str, depth: str = "", show: str = "1") -> str
     return next(line for line in out.splitlines() if line.startswith(("plan:", "jobs:")))
 
 
-def test_a_package_change_plans_its_dependants_not_the_full_suite(tmp_path: Path) -> None:
-    assert plan(tmp_path, "packages/ops_signin/src/ops_signin/__init__.py") == (
-        "plan: packages [packages/ops_signin] services [platform-service]"
-    )
+SIGNIN, STORE = "packages/ops_signin/src/ops_signin/__init__.py", "packages/ops_store/src/ops_store/__init__.py"
+
+
+@pytest.mark.parametrize(
+    ("changed", "depth", "show", "expected"),
+    [
+        # A package change plans its dependants, not the full suite.
+        (SIGNIN, "", "1", "plan: packages [packages/ops_signin] services [platform-service]"),
+        (
+            "services/tools-service/scripts/reimport_bank_module.py",
+            "direct",
+            "1",
+            "plan: packages [] services [tools-service]",
+        ),
+        # A job list built from a failing substitution started nothing, and the run still ended green.
+        ("services/tools-service/src/ops_tools/app.py", "", "jobs", "jobs: tools-service"),
+        (SIGNIN, "direct", "jobs", "jobs: platform-service ops_signin"),
+        # A package that is no workspace member still runs everything.
+        ("packages/ops_not_a_member/src/x.py", "", "1", "plan: full"),
+    ],
+    ids=["package", "service-only", "jobs", "jobs-direct", "unknown-package"],
+)
+def test_a_change_plans_and_starts_exactly_the_suites_that_depend_on_it(
+    tmp_path: Path, changed: str, depth: str, show: str, expected: str
+) -> None:
+    assert plan(tmp_path, changed, depth=depth, show=show) == expected
 
 
 def test_the_push_depth_plans_only_direct_dependants(tmp_path: Path) -> None:
-    pushed = plan(tmp_path, "packages/ops_store/src/ops_store/__init__.py", depth="direct")
+    pushed = plan(tmp_path, STORE, depth="direct")
     assert "agents-service" in pushed and "runner-service" not in pushed, pushed
-
-
-def test_a_service_only_change_plans_that_service(tmp_path: Path) -> None:
-    assert plan(tmp_path, "services/tools-service/scripts/reimport_bank_module.py", depth="direct") == (
-        "plan: packages [] services [tools-service]"
-    )
-
-
-def test_the_planned_suites_are_the_jobs_that_start(tmp_path: Path) -> None:
-    # A job list built from a failing substitution started nothing, and the run still ended green.
-    assert plan(tmp_path, "services/tools-service/src/ops_tools/app.py", show="jobs") == "jobs: tools-service"
-    pushed = plan(tmp_path, "packages/ops_signin/src/ops_signin/__init__.py", depth="direct", show="jobs")
-    assert pushed == "jobs: platform-service ops_signin"
-
-
-def test_an_unknown_python_package_still_runs_everything(tmp_path: Path) -> None:
-    assert plan(tmp_path, "packages/ops_not_a_member/src/x.py") == "plan: full"

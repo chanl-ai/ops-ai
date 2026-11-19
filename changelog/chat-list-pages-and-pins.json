@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-12",
+  "title": "Your chat list loads in pages",
+  "description": "The chat list in the sidebar and the conversations table now read one page at a time and keep pinned chats first, so a long history opens quickly and no pinned chat is cut off.",
+  "tag": "improved"
+}

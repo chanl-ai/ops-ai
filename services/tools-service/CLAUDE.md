@@ -26,7 +26,7 @@ rules: [root guide](../../CLAUDE.md#folder-guides).
 | `src/ops_tools/plugins/` | Loads every plugin in `OPS_PLUGINS_DIR` (the repo's `plugins/` locally) and runs its tools; apps, templates and knowledge sources from plugins |
 | `src/ops_tools/egress.py`, `egress_routes.py`, `held_hosts.py` | The allow-list; https on 443 to a listed host, address checked at connect |
 | `src/ops_tools/executor.py`, `code_runs.py`, `mcp.py` | HTTP operations, code tools on runner-service, MCP upstreams |
-| `src/ops_tools/store/` | All database code; `store/connections.py:41` names the tenant role `ops_tools_tenant` |
+| `src/ops_tools/store/` | All database code; every class extends `ops_store.Store`, and `store/tenancy.py` names the tenant role `ops_tools_tenant` and the system role `ops_tools_system` (cross-tenant listings, the relay, the audit sweep) |
 | `policy/` | `gateway.rego` and `data.json`, loaded into OPA at start |
 | `seed/tool_modules.json` | The dev registry, loaded in dev |
 | `scripts/fake_bank/` | The fake bank (`api.bank.test`) that `make up` runs as `fakebank` |
@@ -72,7 +72,7 @@ Reference: [make/CLAUDE.md](../../make/CLAUDE.md).
 | Writes need a token | OPA refuses a write without an approval token for exactly this input; a test for a new write path pairs the refusal with the success |
 | Secrets | Written once from a person's request, never read back through any route, scrubbed from upstream answers, every use audited |
 | Accounts | An account's credentials go only to the scheme, host and port of its `baseUrl` (`CONNECTION_HOST_MISMATCH` otherwise) |
-| Plugins | A plugin that fails to load is logged with the reason and the others still load (`plugins/host.py`, `tests/test_plugin_load_failure.py`). There is no `GET /v1/plugins` route, although `plugins/README.md` and [docs/guide/plugins.md](../../docs/guide/plugins.md) name one |
+| Plugins | A plugin that fails to load is logged with the reason and the others still load (`src/ops_tools/plugins/host.py`, `tests/test_plugin_load_failure.py`). There is no `GET /v1/plugins` route, although [docs/guide/plugins.md](../../docs/guide/plugins.md) names one |
 
 ## Known departures
 
@@ -90,3 +90,9 @@ Reference: [make/CLAUDE.md](../../make/CLAUDE.md).
 | [docs/architecture/tool-lifecycle.md](../../docs/architecture/tool-lifecycle.md) | A tool from import to call |
 | [docs/usecases/tools-service/](../../docs/usecases/README.md) | 39 use cases |
 | [openapi.json](openapi.json) | The API; `openapi-untyped.txt` lists the untyped operations still allowed |
+
+## Engineering standards
+
+The rules the code in this folder is held to, each with a real example from this repository and the check that
+enforces it: [layers and ownership](../../docs/architecture/standards/layers.md) (`LY1` to `LY9`), [API contracts and models](../../docs/architecture/standards/api-and-models.md) (`AP1` to `AP7`, `MD1` to `MD4`), [data access](../../docs/architecture/standards/data-access.md) (`DA1` to `DA13`), [tenant isolation and access](../../docs/architecture/standards/tenancy-and-access.md) (`TN1` to `TN5`, `AC1` to `AC5`), [errors, logging and observability](../../docs/architecture/standards/observability.md) (`OB1` to `OB6`). The index of every rule is
+[engineering standards](../../docs/architecture/engineering-standards.md); a review cites the rule id.

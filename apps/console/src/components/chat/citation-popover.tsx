@@ -10,7 +10,7 @@ import type { Citation } from '@/lib/types/chat';
 import { cn } from '@/lib/utils';
 
 /** A passage from a file attached in the conversation opens that file in Files; a knowledge passage opens its item. */
-const fileHref = (c: Citation) => (c.fileId ? `/files/${encodeURIComponent(c.fileId)}` : undefined);
+const fileHref = (c: Citation) => (c.fileId ? `/data/files/${encodeURIComponent(c.fileId)}` : undefined);
 
 const flagWords = (c: Citation) => [c.stale && 'stale', c.connectionRevoked && 'connection revoked'].filter(Boolean).join(', ');
 

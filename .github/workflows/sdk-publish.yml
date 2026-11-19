@@ -1,6 +1,8 @@
 # Publishes the SDKs (sdk/python to PyPI as ops-ai, sdk/typescript to npm as @chanl-ai/ops-ai) when the version in a
-# package's file is not on its registry yet. A release is a commit that raises that version; the release notes name
-# the platform tag it was tested on.
+# package's file is not on its registry yet. It runs on a version tag (vX.Y.Z, made by release-tag.yml when a release or
+# hotfix merges into main; that workflow starts it, since a tag pushed with the workflow token starts nothing itself)
+# and by hand, never on a branch push, so no merge to a branch can publish. A release raises the version on its
+# branch; the release notes name the platform tag it was tested on.
 #
 # Every run is a dry run (build, check, `--dry-run`) until the owner turns publishing on: set the repository variable
 # SDK_PUBLISH to 1 and the secrets NPM_TOKEN (an npm automation token for the @chanl-ai scope) and PYPI_TOKEN.
@@ -13,8 +15,7 @@ name: sdk-publish
 
 on:
   push:
-    branches: [main]
-    paths: ["sdk/**"]
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
   workflow_dispatch:
 
 permissions:

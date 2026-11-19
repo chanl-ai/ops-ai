@@ -45,6 +45,7 @@ from ops_service_kit.settings import Settings
 from ops_store import isolation
 from ops_store.database import Database, open_database
 
+from ..store.agent_registry import AgentRegistry
 from ..store.background import BackgroundJobs, heartbeats
 from ..store.channels import ChannelStore, Deployment
 from ..store.graphs import GraphStore
@@ -55,6 +56,7 @@ from ..store.usage import UsageLedger
 from . import agent_registry, engine_seed, guardrails, skills, workflow_registry
 from .acting_for import CallPeople, acting_for_tokens
 from .agent_calls import AgentCalls
+from .api_key_copy import key_changed_handler
 from .approval_renewal import ApprovalRenewal
 from .apps_line import AppsLine
 from .chat_attachments import ChatAttachmentReader
@@ -64,7 +66,6 @@ from .envelope import install_error_handlers
 from .fencing import ToolsFence
 from .file_names import FilesServiceNames
 from .file_text import ReadingText
-from .key_summaries import PlatformKeySummaries
 from .memory import MemoryReads
 from .memory_retention import PlatformRetention, expire_forever
 from .metering import CountingModels
@@ -92,6 +93,7 @@ from .routers import (
     health,
     model_alias_catalog,
     overview,
+    prompt_variables,
     publish_requests,
     reviews,
     service_events,
@@ -101,6 +103,7 @@ from .routers import (
     workflows,
 )
 from .routers import ai_steps as ai_step_routes
+from .routers import assurance as assurance_routes
 from .routers import case_types as case_type_routes
 from .routers import channels as channel_routes
 from .routers import chat_connectors as chat_connectors_routes
@@ -152,7 +155,7 @@ async def seed_deployments(channels: ChannelStore, path: Path | None) -> None:
     is not checked here: a deployment can name a definition that is published later, and a poll reports the gap."""
     if path is None:
         return
-    rows: list[dict[str, Any]] = json.loads(path.read_text())
+    rows: list[dict[str, Any]] = json.loads(path.read_text())  # noqa: ASYNC240
     for row in rows:
         await channels.put_deployment(
             Deployment(
@@ -174,7 +177,7 @@ async def seed_mailboxes(db: Database, path: Path | None) -> None:
     is connected. A password is a Secrets-page secret by name; the seed sets no secret."""
     if path is None:
         return
-    rows: list[dict[str, Any]] = json.loads(path.read_text())
+    rows: list[dict[str, Any]] = json.loads(path.read_text())  # noqa: ASYNC240
     now = now_iso()
     with isolation.tenant_wide(SEED, tenant_id=LOCAL_TENANT):
         await MailboxStore(db).drop_seeded_except([str(r["id"]) for r in rows])
@@ -336,7 +339,6 @@ def create_app(
             rt.policies = PlatformPolicies(platform)
             rt.team_names = PlatformTeamNames(platform)
             rt.people_names = PlatformPeopleNames(platform)
-            rt.key_summaries = PlatformKeySummaries(platform)
         rt.gateway = gateway_client is not None
         rt.model_aliases = (
             HttpModelAliases(service_client(settings, models_http, "models"))
@@ -413,6 +415,7 @@ def create_app(
                     apps=rt.apps_line,
                     ops=OpsReads(rt),
                     tools=directory,
+                    held_agents=AgentRegistry(db),
                 )
                 rt.graphs = build_graphs(deps, saver)
                 rt.saver = saver
@@ -448,10 +451,10 @@ def create_app(
             # Without a seed directory (outside dev, unless one is named) nothing is seeded; the registries still load
             # and serve what is published.
             seed_dir = settings.seed_dir
-            seeded = await seed_workflows(rt.graph_store, seed_dir) if seed_dir else {}
-            # A seed update opens a publish request, and requests are per tenant while the registries
-            # are not yet: the seed's requests are the dev seed's tenant's, as engine_seed's records are.
+            # Everything seeded (workflows, publish requests, deployments) is the dev seed's tenant's, as
+            # engine_seed's records are; the stores write in the caller's tenant.
             with isolation.tenant_wide(SEED, tenant_id=LOCAL_TENANT):
+                seeded = await seed_workflows(rt.graph_store, seed_dir) if seed_dir else {}
                 await agent_registry.load(rt, load_catalog(seed_dir, settings.agents_seed_file))
                 if seed_dir:
                     await guardrails.load_seed(rt, guardrails.seed_path(seed_dir, settings.agents_seed_file))
@@ -459,10 +462,12 @@ def create_app(
                     await engine_seed.load_seed(rt, engine_seed.seed_path(seed_dir, settings.agents_seed_file))
                 await workflow_registry.load(rt, seed_dir)
                 await workflow_registry.follow_seed(rt, seeded)
+                if rt.channels is not None:
+                    await seed_deployments(rt.channels, settings.deployments_seed_file)
+            # Every tenant's published agents, after the seed above made or moved the local tenant's.
+            await agent_registry.serve_published(rt)
             # Each team's Ops Assistant nobody changed takes the declared one (team defaults).
             await catch_up_assistants(rt)
-            if rt.channels is not None:
-                await seed_deployments(rt.channels, settings.deployments_seed_file)
             await seed_mailboxes(db, settings.mailboxes_seed_file)
             app.state.runtime = rt
             log.info(
@@ -524,6 +529,7 @@ def create_app(
     # Before workflows.router: its /v1/workflows/{workflow_id} would take /v1/workflows/node-types as an id.
     mount(engine_routes.router, "Workflows")
     mount(engine_routes.runs_router, "Workflows")
+    mount(engine_routes.run_start_router, "Workflows")
     # An outside system resumes the step it was handed, by the step's own token; no person's.
     mount(run_resume_routes.router, "Workflows")
     mount(workflows.router, "Workflows")
@@ -535,10 +541,12 @@ def create_app(
     mount(tool_uses_routes.account_router, "Workflows")
     mount(team_usage_routes.router, "Workflows")
     mount(tool_catalog.router, "Agents")
+    mount(assurance_routes.router, "Assurance")
     mount(guardrail_routes.router, "Agents")
     mount(skill_routes.router, "Agents")
     mount(widget_routes.router, "Agents")
     mount(model_alias_catalog.router, "Agents")
+    mount(prompt_variables.router, "Agents")
     mount(publish_requests.router, "Reviews")
     mount(publish_requests.open_router, "Reviews")
     mount(graphs.versions_router, "Graphs")
@@ -559,8 +567,11 @@ def create_app(
     mount(channel_list.router, "Channels")
     mount(channel_list.live_router, "Channels")
     mount(service_events.router, "Workflows")
-    # platform-service's events: a new team gets its Ops Assistant, its default here, before its first chat.
-    mount(platform_events_router(team_created_handlers(lambda: cast(Runtime, app.state.runtime)), tags=()), "Agents")
+    # platform-service's events: a new team gets its Ops Assistant, its default here, before its first chat; a changed
+    # API key updates the copy the Channels list reads.
+    handlers = team_created_handlers(lambda: cast(Runtime, app.state.runtime))
+    handlers |= key_changed_handler(lambda: cast(Runtime, app.state.runtime).db)
+    mount(platform_events_router(handlers, tags=()), "Agents")
     mount(overview.router, "Cases")
     mount(step_up.router, "Auth")
     mount(events.router, "Threads")

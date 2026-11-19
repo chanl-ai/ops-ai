@@ -11,6 +11,7 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_identity.fastapi import DEV_TEAM
+from ops_ingest.reading import READER_VERSION
 from ops_kb.files import KnowledgeFiles
 
 from .conftest import intakes, kb_client
@@ -57,7 +58,7 @@ async def test_furniture_is_left_out_and_turning_it_back_on_reads_nothing_again(
         detail = data(await client.get(f"/v1/items/{item['id']}"))
         [page] = detail["reading"]["pages"]
         assert page["readBy"] == "text" and page["removedChars"] > 40, page
-        assert detail["reading"]["readerVersion"] == "reading-3" and detail["settingsUsed"]["current"] is True
+        assert detail["reading"]["readerVersion"] == READER_VERSION and detail["settingsUsed"]["current"] is True
         reads = len(readings.reads)
         saved = data(
             await client.patch(
@@ -89,6 +90,9 @@ async def test_the_same_text_in_two_sources_of_a_base_answers_once(client: httpx
     }, found
     [older] = data(await client.get(f"/v1/sources/{old['id']}/items"))["data"]
     assert older["duplicateOf"] and "same text" in older["warning"], older
+    copy = {"title": "Telling us late", "sourceName": "Policy pages"}
+    assert older["duplicateCopy"] == copy, older
+    assert data(await client.get(f"/v1/items/{older['id']}"))["duplicateCopy"] == copy
     assert data(await client.get(f"/v1/sources/{old['id']}"))["governance"]["duplicates"] == 1
 
 

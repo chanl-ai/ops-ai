@@ -1,4 +1,5 @@
-"""Acting-for tokens: the proof agents-service hands tools-service that a tool call acts for one person.
+"""Acting-for tokens: the proof one service hands another that a call acts for one person (agents-service to
+tools-service for a tool call, tools-service to agents-service for an MCP operation that makes a record).
 
 agents-service knows whom a chat turn or a run acts for, but a field it writes in a request body is only its word.
 platform-service checks that the person is an active member of the call's team and signs a short token naming them,
@@ -23,9 +24,10 @@ from .store.identity import IdentityStore
 
 ACTING_FOR_KIND = "acting_for"
 ACTING_FOR_TTL_S = 60
-# The services that may ask; each acts for people only through tools-service.
-MINTERS = frozenset({"service:agents"})
-AUDIENCE = "tools"
+# The services that may ask, each with the one service its tokens are for: agents-service's tool calls go to
+# tools-service, and tools-service's MCP operations (install_template) go to agents-service.
+AUDIENCES = {"service:agents": "tools", "service:tools": "agents"}
+MINTERS = frozenset(AUDIENCES)
 
 
 def not_found(what: str, code: str) -> NotFound:
@@ -69,7 +71,7 @@ class ActingFor:
             "kind": ACTING_FOR_KIND,
             "act": {"sub": service},
             "jti": new_id("tok"),
-            "aud": AUDIENCE,
+            "aud": AUDIENCES[service],
         }
         token = mint(claims, self.signer, ttl_s=self.ttl_s, now=now.timestamp())
         expires = (now + timedelta(seconds=self.ttl_s)).isoformat(timespec="milliseconds").replace("+00:00", "Z")

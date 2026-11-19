@@ -11,7 +11,7 @@ import { request } from 'node:https';
 import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 
-import { AGENTS_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack, required } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
@@ -29,10 +29,10 @@ const OURS = [
   {"after": "uc558_update_case", "result": "has not connected their own", "text": "I did not change the case: Salesforce needs your own account for that. Connect it from the card above and I will go ahead."},
   {"after": "uc558_update_case", "text": "The case is now Awaiting documents, changed with your Salesforce account."},
 ];
-const RULES = '.logs/usecase/uc558-model';
+const RULES = evidenceDir('558', 'model');
 const demo = JSON.parse(readFileSync(join(ROOT, 'services/models-service/seed/demo-fake-openai/script.json'), 'utf8'));
-mkdirSync(join(ROOT, RULES), { recursive: true });
-writeFileSync(join(ROOT, RULES, 'script.json'), JSON.stringify({ ...demo, rules: [...OURS, ...demo.rules] }));
+mkdirSync(RULES, { recursive: true });
+writeFileSync(join(RULES, 'script.json'), JSON.stringify({ ...demo, rules: [...OURS, ...demo.rules] }));
 
 /** The fake Salesforce, started from its script; resolves with what it printed and stops when the walk ends. */
 async function startSalesforce() {
@@ -108,30 +108,30 @@ try {
       for (const host of sf.info.hosts) await call(tools, 'POST', '/v1/egress/hosts', sam, { value: host, note: 'uc-558' });
       await call(tools, 'POST', '/v1/egress/ranges', sam, { value: sf.info.range, note: 'uc-558' });
       const made = await call(tools, 'POST', '/v1/apps', priya, { name: 'Salesforce', authKind: 'oauth2_auth_code', signIn: 'person', sandbox: false });
-      const conn = made.data ?? {};
+      const conn = required(made, 'create the Salesforce app');
       const settings = { baseUrl: sf.info.api_base, authorizeUrl: sf.info.authorize_url, tokenUrl: sf.info.token_url, revokeUrl: sf.info.revoke_url, clientId: 'ops-ai-kestrel', scopes: 'openid api refresh_token', testPath: '/services/oauth2/userinfo' };
       const put = await call(tools, 'PATCH', `/v1/apps/${conn.appId}/accounts/${conn.id}`, priya, { revision: conn.revision, settings, secretValues: { clientSecret: 'kestrel-connected-app-secret' } });
       const http = { name: 'uc558_update_case', description: "Update a Salesforce case's status", access: 'write', method: 'PATCH', url: sf.info.case_url, body: '{"Status": {{status}}}' };
-      const mod = (await call(tools, 'POST', '/v1/tool-modules', priya, { name: 'uc558-update-case', displayName: 'Salesforce cases', system: 'Salesforce', type: 'http', endpoint: '', connectionId: conn.id, signIn: 'person', http })).data ?? {};
+      const mod = required(await call(tools, 'POST', '/v1/tool-modules', priya, { name: 'uc558-update-case', displayName: 'Salesforce cases', system: 'Salesforce', type: 'http', endpoint: '', connectionId: conn.id, signIn: 'person', http }), 'create the tool module');
       const op = (mod.operations ?? [])[0] ?? {};
       await call(tools, 'PATCH', `/v1/tool-modules/${mod.id}/operations/${op.id}`, priya, { requiresApproval: false, scopes: ['cases.write'] });
       await call(tools, 'POST', `/v1/tool-modules/${mod.id}/reviews`, priya, { note: 'uc-558' });
       const review = ((await call(tools, 'GET', `/v1/tool-modules/${mod.id}`, priya)).data?.versions ?? []).find((v) => v.status === 'in_review');
       await call(agents, 'POST', `/v1/publish-requests/${review?.reviewId}/decision`, nadia, { decision: 'approved' });
       const published = (await call(tools, 'GET', `/v1/tool-modules/${mod.id}`, priya)).data;
-      const agent = (await call(agents, 'POST', '/v1/agents', priya, { name: 'Claims desk', role: 'Moves claim cases in Salesforce' })).data ?? {};
+      const agent = required(await call(agents, 'POST', '/v1/agents', priya, { name: 'Claims desk', role: 'Moves claim cases in Salesforce' }), 'create the agent');
       // agents-service keeps the grantable tools for 30 s, so the new module's operation is offered within that.
       let patched = await call(agents, 'PATCH', `/v1/agents/${agent.id}`, priya, { toolIds: ['uc558_update_case'] });
       for (let i = 0; i < 40 && patched.status === 400; i++) {
         await new Promise((r) => setTimeout(r, 1000));
         patched = await call(agents, 'PATCH', `/v1/agents/${agent.id}`, priya, { toolIds: ['uc558_update_case'] });
       }
-      const saved = patched.data ?? {};
+      const saved = required(patched, 'give the agent its tool');
       const asked = await call(agents, 'POST', `/v1/agents/${agent.id}/publish-requests`, priya, { version: saved.version, note: 'uc-558' });
       // The team's publish policy may hold a new agent for a review; Maya, an approver in Operations, approves it.
       const maya = as(await tokenFor('m.okafor@harborpine.example'), 'team_ops');
       const live = asked.data?.status === 'pending' ? await call(agents, 'POST', `/v1/publish-requests/${asked.data.id}/decision`, maya, { decision: 'approved' }) : asked;
-      const offered = ((await call(agents, 'GET', '/v1/agents?pageSize=100', james)).data?.data ?? []).some((a) => a.id === agent.id && a.publishedVersion != null);
+      const offered = ((await call(agents, 'GET', `/v1/agents?ids=${encodeURIComponent(agent.id)}`, james)).data?.data ?? []).some((a) => a.id === agent.id && a.publishedVersion != null);
       check(
         'setup: the connection asks each person, its module is published and the agent holds it',
         made.status === 201 && put.status === 200 && published?.status === 'published' && live.status < 300 && offered,
@@ -202,39 +202,39 @@ try {
           check('13 he signs in through the pop-up and the chat goes on: Salesforce records exactly one edit, his', JSON.stringify(await edits()) === JSON.stringify(['handler@kestrel.example']), await edits());
         }, page);
 
-        await step('14 Your connections, from the person menu, lists his Salesforce account', async () => {
+        const card = (id) => page.getByTestId(`connector-${id}`);
+        await step('14 My connectors, from the person menu, lists his Salesforce sign-in', async () => {
           await page.getByTestId('nav-user').click();
           await page.getByTestId('nav-connections').click();
-          await page.waitForURL(/\/integrations\/my-accounts$/, { timeout: 60_000 });
-          const row = page.getByTestId('my-connections');
-          await row.waitFor({ timeout: 60_000 });
+          await page.waitForURL(/\/settings\/account\/connectors$/, { timeout: 60_000 });
+          const row = card(conn.appId);
+          await row.waitFor({ timeout: 30_000 });
           const text = (await row.textContent()) ?? '';
-          await page.screenshot({ path: join(SHOTS, 'your-connections-1280.png') });
-          check('14 Your connections, from the person menu, lists his Salesforce account', /Salesforce/.test(text) && /handler@kestrel\.example/.test(text), text.slice(0, 200));
+          await page.screenshot({ path: join(SHOTS, 'my-connectors-1280.png') });
+          check('14 My connectors, from the person menu, lists his Salesforce sign-in', /Salesforce/.test(text) && /handler@kestrel\.example/.test(text), text.slice(0, 200));
         }, page);
 
-        await step('15 at 375 px the card and Your connections fit the screen', async () => {
+        await step('15 at 375 px the card and My connectors fit the screen', async () => {
           await page.setViewportSize({ width: 375, height: 760 });
           await page.reload({ waitUntil: 'domcontentloaded' });
-          await page.getByTestId('my-connections').waitFor({ timeout: 60_000 }).catch((e) => {
-            throw new Error(`${String(e).split('\n')[0]} answers: ${answers.join(' | ')}`);
-          });
+          await card(conn.appId).waitFor({ timeout: 30_000 });
           const mine = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
-          await page.screenshot({ path: join(SHOTS, 'your-connections-375.png') });
+          await page.screenshot({ path: join(SHOTS, 'my-connectors-375.png') });
           await page.goto(thread, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await page.getByTestId('connection-required').first().waitFor({ timeout: 60_000 });
           const chat = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
           await page.screenshot({ path: join(SHOTS, 'chat-connected-375.png') });
-          check('15 at 375 px the card and Your connections fit the screen', mine && chat, { mine, chat });
+          check('15 at 375 px the card and My connectors fit the screen', mine && chat, { mine, chat });
           await page.setViewportSize({ width: 1280, height: 900 });
         }, page);
 
         await step('16 Disconnect removes his sign-in, and the system is asked to end it', async () => {
-          // The old address opens My accounts; the row stays, offering Connect, as the app still lets him connect his own.
-          await page.goto(`${consoleUrl}/settings/account/connections`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-          await page.getByTestId(`disconnect-${conn.id}`).click();
+          // The card stays and offers Connect again, as the app still lets him connect his own.
+          await page.goto(`${consoleUrl}/settings/account/connectors`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await page.getByTestId(`connector-menu-${conn.appId}`).click();
+          await page.getByTestId(`connector-disconnect-${conn.appId}`).click();
           await page.getByTestId('delete-my-connection-confirm-btn').click();
-          await page.getByTestId(`connect-${conn.id}`).waitFor({ timeout: 60_000 });
+          await page.getByTestId(`connector-action-${conn.appId}`).waitFor({ timeout: 30_000 });
           const left = (await call(tools, 'GET', '/v1/me/accounts', james)).data ?? null;
           check('16 Disconnect removes his sign-in, and the system is asked to end it', Array.isArray(left) && left.length === 0, left);
         }, page);
@@ -243,15 +243,13 @@ try {
         const adminContext = await browser.newContext({ viewport: { width: 1280, height: 900 }, ignoreHTTPSErrors: true });
         await adminContext.route(`https://${LOGIN_HOST}/**`, toFake);
         const admin = await signIn('p.shah@harborpine.example', adminContext);
-        await step('17 Priya reads Everyone signs in on the app’s Settings, turns it off to the team account and back on', async () => {
-          // Who signs in sits on the app page's Settings in the final Apps frames; the old address opens the page.
-          await admin.goto(`${consoleUrl}/tools/connections/${conn.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-          await admin.waitForURL((u) => u.pathname.startsWith('/integrations/apps/'), { timeout: 60_000 });
+        await step('17 Priya reads People can connect their own account on the app’s Settings, turns it off and back on', async () => {
+          await admin.goto(`${consoleUrl}/data/connectors/${encodeURIComponent(conn.appId)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await admin.getByTestId('app-tab-settings').click();
           const everyone = admin.getByTestId('app-everyone');
-          await everyone.waitFor({ timeout: 90_000 });
+          await everyone.waitFor({ timeout: 30_000 });
           const first = await everyone.getAttribute('data-state');
-          const read = async () => (await call(tools, 'GET', `/v1/apps/${conn.appId}/accounts/${conn.id}`, priya)).data ?? {};
+          const read = async () => required(await call(tools, 'GET', `/v1/apps/${conn.appId}/accounts/${conn.id}`, priya), 'read the account');
           const until = async (want) => {
             let now = await read();
             for (let i = 0; i < 20 && now.signIn !== want; i++) await admin.waitForTimeout(500), (now = await read());
@@ -260,27 +258,23 @@ try {
           await everyone.click();
           const off = await until('team');
           await admin.getByTestId('app-everyone').click();
-          const on = await until('person');
-          check('17 Priya reads Everyone signs in on the app’s Settings, turns it off to the team account and back on', first === 'checked' && off.signIn === 'team' && on.signIn === 'person', { first, off: off.signIn, on: on.signIn });
+          // On saves person_or_team: each person's own account first, the team account for runs nobody started.
+          const on = await until('person_or_team');
+          check('17 Priya reads People can connect their own account on the app’s Settings, turns it off and back on', first === 'checked' && off.signIn === 'team' && on.signIn === 'person_or_team', { first, off: off.signIn, on: on.signIn });
         }, admin);
 
-        await step('18 she connects her own account on the app’s page, which the old connection address opens', async () => {
-          await admin.goto(`${consoleUrl}/tools/connections/${conn.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-          await admin.waitForURL((u) => u.pathname.startsWith('/integrations/apps/'), { timeout: 60_000 });
-          const button = admin.getByTestId('app-connect-me');
-          await button.waitFor({ timeout: 90_000 }).catch(async (e) => {
-            // What the page shows instead, so a red run says why.
-            console.log('app page:', admin.url(), ((await admin.locator('main').innerText().catch(() => '')) ?? '').replace(/\s+/g, ' ').slice(0, 600));
-            throw e;
-          });
+        await step('18 she connects her own account from My connectors', async () => {
+          await admin.goto(`${consoleUrl}/settings/account/connectors`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          const button = admin.getByTestId(`connector-action-${conn.appId}`);
+          await button.waitFor({ timeout: 30_000 });
           const [popup] = await Promise.all([admin.waitForEvent('popup', { timeout: 60_000 }), button.click()]);
           await throughPopup(popup, 'lead@kestrel.example');
-          const me = admin.getByTestId('app-connected-as');
-          await me.getByText(/Connected\b.* as /).waitFor({ timeout: 60_000 }).catch(() => {});
-          const text = ((await me.innerText()) ?? '').replace(/\s+/g, ' ');
-          await admin.screenshot({ path: join(SHOTS, 'app-own-account-1280.png') });
+          const mineCard = admin.getByTestId(`connector-signed-in-${conn.appId}`);
+          await mineCard.getByText('lead@kestrel.example').waitFor({ timeout: 30_000 }).catch(() => {});
+          const text = ((await mineCard.innerText()) ?? '').replace(/\s+/g, ' ');
+          await admin.screenshot({ path: join(SHOTS, 'my-connectors-admin-1280.png') });
           const mine = (await call(tools, 'GET', '/v1/me/accounts', priya)).data ?? [];
-          check('18 she connects her own account on the app’s page, which the old connection address opens', /Connected\b.* as lead@kestrel\.example/.test(text) && mine.some((c) => c.account === 'lead@kestrel.example'), { text, mine });
+          check('18 she connects her own account from My connectors', /lead@kestrel\.example/.test(text) && mine.some((c) => c.account === 'lead@kestrel.example'), { text, mine });
         }, admin);
 
         check('no page errors', errors.length === 0, errors.slice(0, 3));

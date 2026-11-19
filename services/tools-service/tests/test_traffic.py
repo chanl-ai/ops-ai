@@ -9,7 +9,8 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_service_kit.ids import new_id
-from ops_tools.store.calls import CallLog
+from ops_store import isolation
+from ops_tools.store.calls import CallLog, CallStats, DayStats, gateway_calls
 
 from .conftest import Api
 
@@ -30,7 +31,7 @@ async def logged(
     outcome: str,
     latency: int,
     at: datetime,
-    tenant: str = "local",
+    tenant: str | None = "local",
     thread: str | None = None,
     team: str | None = TEAM,
 ) -> str:
@@ -52,7 +53,13 @@ async def logged(
         "module_id": module_id,
         "latency_ms": latency,
     }
-    await log.record(**row)
+    if tenant is None:
+        # A row from before the tenant column: no request writes one now, so the database owner does.
+        async with log.engine.begin() as c:
+            await c.execute(gateway_calls.insert().values(effect=False, effect_scope=f"row:{row['id']}", **row))
+    else:
+        with isolation.tenant_wide("TESTS", tenant_id=tenant):
+            await log.record(**row)
     return str(row["id"])
 
 
@@ -67,13 +74,14 @@ async def test_traffic_counts_calls_that_ran_in_the_window(engine: AsyncEngine) 
     await logged(log, mod, "fast", outcome="ok", latency=5000, at=NOW - timedelta(hours=25))
     await logged(log, other, "fast", outcome="ok", latency=10, at=NOW - timedelta(hours=1))
 
-    t = await log.traffic([mod], iso(NOW - timedelta(days=1)), tenant_id="local", team_ids=[TEAM])
+    with isolation.tenant_wide("TESTS", tenant_id="local"):
+        t = await log.traffic([mod], iso(NOW - timedelta(days=1)), tenant_id="local", team_ids=[TEAM])
 
-    assert t[(mod, "fast")] == {"calls": 4, "errors": 0, "p95Ms": 38}
-    assert t[(mod, "slow")] == {"calls": 1, "errors": 1, "p95Ms": 900}
+    assert t[(mod, "fast")] == CallStats(calls=4, errors=0, p95_ms=38)
+    assert t[(mod, "slow")] == CallStats(calls=1, errors=1, p95_ms=900)
     # The module's p95 is over all five calls, not the larger of its operations' p95s.
-    assert t[(mod, None)]["calls"] == 5 and t[(mod, None)]["errors"] == 1
-    assert 38 < t[(mod, None)]["p95Ms"] < 900
+    assert t[(mod, None)].calls == 5 and t[(mod, None)].errors == 1
+    assert 38 < t[(mod, None)].p95_ms < 900
     assert all(k[0] == mod for k in t)
 
 
@@ -85,11 +93,12 @@ async def test_daily_groups_by_utc_day(engine: AsyncEngine) -> None:
     await logged(log, mod, "op", outcome="ok", latency=10, at=NOW - timedelta(days=3))
     await logged(log, mod, "op", outcome="ok", latency=10, at=NOW - timedelta(days=20))
 
-    days = await log.daily(mod, (NOW - timedelta(days=13)).date().isoformat(), tenant_id="local", team_ids=[TEAM])
+    with isolation.tenant_wide("TESTS", tenant_id="local"):
+        days = await log.daily(mod, (NOW - timedelta(days=13)).date().isoformat(), tenant_id="local", team_ids=[TEAM])
 
     assert days == {
-        "2026-10-12": {"count": 2, "errors": 1, "p95Ms": 10},
-        "2026-10-09": {"count": 1, "errors": 0, "p95Ms": 10},
+        "2026-10-12": DayStats(count=2, errors=1, p95_ms=10),
+        "2026-10-09": DayStats(count=1, errors=0, p95_ms=10),
     }
 
 
@@ -144,8 +153,9 @@ async def test_traffic_counts_only_the_tenants_calls_even_on_the_same_module_id(
     mod = new_id("mod")
     await logged(log, mod, "op", outcome="ok", latency=10, at=NOW, tenant="tenant_a")
     await logged(log, mod, "op", outcome="error", latency=900, at=NOW, tenant="tenant_b")
-    t = await log.traffic([mod], iso(NOW - timedelta(days=1)), tenant_id="tenant_a", team_ids=[TEAM])
-    assert t[(mod, "op")] == {"calls": 1, "errors": 0, "p95Ms": 10}
+    with isolation.tenant_wide("TESTS", tenant_id="tenant_a"):
+        t = await log.traffic([mod], iso(NOW - timedelta(days=1)), tenant_id="tenant_a", team_ids=[TEAM])
+    assert t[(mod, "op")] == CallStats(calls=1, errors=0, p95_ms=10)
 
 
 async def test_the_activity_days_count_only_the_tenants_calls(engine: AsyncEngine) -> None:
@@ -153,8 +163,9 @@ async def test_the_activity_days_count_only_the_tenants_calls(engine: AsyncEngin
     mod = new_id("mod")
     await logged(log, mod, "op", outcome="ok", latency=10, at=NOW, tenant="tenant_a")
     await logged(log, mod, "op", outcome="ok", latency=10, at=NOW, tenant="tenant_b")
-    days = await log.daily(mod, (NOW - timedelta(days=1)).date().isoformat(), tenant_id="tenant_a", team_ids=[TEAM])
-    assert days == {"2026-10-12": {"count": 1, "errors": 0, "p95Ms": 10}}
+    with isolation.tenant_wide("TESTS", tenant_id="tenant_a"):
+        days = await log.daily(mod, (NOW - timedelta(days=1)).date().isoformat(), tenant_id="tenant_a", team_ids=[TEAM])
+    assert days == {"2026-10-12": DayStats(count=1, errors=0, p95_ms=10)}
 
 
 async def test_the_thread_filter_shows_only_the_tenants_calls_on_that_thread(engine: AsyncEngine) -> None:
@@ -162,9 +173,11 @@ async def test_the_thread_filter_shows_only_the_tenants_calls_on_that_thread(eng
     thread = new_id("gth")
     mine = await logged(log, None, "op", outcome="ok", latency=1, at=NOW, tenant="tenant_a", thread=thread)
     await logged(log, None, "op", outcome="ok", latency=1, at=NOW, tenant="tenant_b", thread=thread)
-    rows, total = await log.search(thread_id=thread, tenant_id="tenant_a", team_ids=[TEAM])
-    assert total == 1 and [r["id"] for r in rows] == [mine]
-    assert [r["id"] for r in await log.for_thread(thread, tenant_id="tenant_a")] == [mine]
+    with isolation.tenant_wide("TESTS", tenant_id="tenant_a"):
+        rows, total = await log.search(thread_id=thread, tenant_id="tenant_a", team_ids=[TEAM])
+    assert total == 1 and [r.id for r in rows] == [mine]
+    with isolation.tenant_wide("TESTS", tenant_id="tenant_a"):
+        assert [r.id for r in await log.for_thread(thread, tenant_id="tenant_a")] == [mine]
 
 
 async def test_traffic_counts_only_the_teams_calls_on_a_shared_module(engine: AsyncEngine) -> None:
@@ -172,16 +185,18 @@ async def test_traffic_counts_only_the_teams_calls_on_a_shared_module(engine: As
     mod = new_id("mod")
     await logged(log, mod, "op", outcome="ok", latency=10, at=NOW, tenant="tenant_a")
     await logged(log, mod, "op", outcome="error", latency=900, at=NOW, tenant="tenant_a", team="team_other")
-    t = await log.traffic([mod], iso(NOW - timedelta(days=1)), tenant_id="tenant_a", team_ids=[TEAM])
-    assert t[(mod, "op")] == {"calls": 1, "errors": 0, "p95Ms": 10}
+    with isolation.tenant_wide("TESTS", tenant_id="tenant_a"):
+        t = await log.traffic([mod], iso(NOW - timedelta(days=1)), tenant_id="tenant_a", team_ids=[TEAM])
+    assert t[(mod, "op")] == CallStats(calls=1, errors=0, p95_ms=10)
 
 
 async def test_a_call_with_no_tenant_is_read_by_nobody(engine: AsyncEngine) -> None:
     """A row older than the tenant column, on no known module: excluded from every read rather than shown to all."""
     log = CallLog(engine)
     thread = new_id("gth")
-    await logged(log, None, "op", outcome="ok", latency=1, at=NOW, tenant=None, thread=thread)  # type: ignore[arg-type]
-    rows, total = await log.search(thread_id=thread, tenant_id="local", team_ids=[TEAM])
+    await logged(log, None, "op", outcome="ok", latency=1, at=NOW, tenant=None, thread=thread)
+    with isolation.tenant_wide("TESTS", tenant_id="local"):
+        rows, total = await log.search(thread_id=thread, tenant_id="local", team_ids=[TEAM])
     assert (rows, total) == ([], 0)
 
 

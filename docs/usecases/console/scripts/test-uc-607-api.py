@@ -11,7 +11,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 from apps_walk import account_path, app_path, apps_stack, target
-from usecase_harness import check, data, finish, until
+from usecase_harness import check, data, every_page, finish, until
 
 APP = "plugin:test.header-key"
 
@@ -24,18 +24,19 @@ def ids(rows: object) -> list[str]:
 with apps_stack({"OPS_CONSOLE_URL": "https://console.acme.test"}) as w:
     # 20. One list of apps: the plugins and the apps a person added. A built-in app has its own menu.
     listed = w.kept(w.gw.get("/v1/apps", headers=w.who["admin"]))
-    kinds = [r.get("kind") for r in data(listed) or []] if listed.status_code == 200 else []
+    cards = every_page(w.gw, "/v1/apps", headers=w.who["admin"]) if listed.status_code == 200 else []
+    kinds = [r.get("kind") for r in cards]
     check(
-        "20 GET /v1/apps lists the team's apps in one call, the test plugins among them and no built-in app",
-        listed.status_code == 200 and APP in ids(data(listed)) and "builtin" not in kinds,
+        "20 GET /v1/apps lists the team's apps a page at a time, the test plugins among them and no built-in app",
+        listed.status_code == 200 and APP in ids(cards) and "builtin" not in kinds,
         (listed.status_code, kinds),
     )
 
     # 21. A key saved at turn-on is not a sign-in: the app reads Connected only once its test has passed.
     def status() -> str | None:
-        r = w.kept(w.gw.get("/v1/apps", headers=w.who["admin"]))
+        r = w.kept(w.gw.get("/v1/apps", params={"ids": APP}, headers=w.who["admin"]))
         # The card's state says Connected; its status is the account record's own word.
-        return next((c.get("state") for c in data(r) or [] if c.get("id") == APP), None)
+        return next((c.get("state") for c in (data(r) or {}).get("data") or [] if c.get("id") == APP), None)
 
     account = w.turn_on("admin", "test.header-key", credentials={"key": w.m["secrets"]["key"]})
     before = status()
@@ -74,13 +75,13 @@ with apps_stack({"OPS_CONSOLE_URL": "https://console.acme.test"}) as w:
     body = {"name": "uc607-rates", "displayName": "uc607 rates", "system": "uc607 rates", "http": tool}
     made = w.kept(w.gw.post("/v1/tool-modules", json=body, headers=w.who["admin"]))
     own = str(((data(made) or {}).get("connection") or {}).get("id") or "") if made.status_code == 201 else ""
-    after = w.kept(w.gw.get("/v1/apps", headers=w.who["admin"]))
-    shown = [(r.get("id"), r.get("kind")) for r in data(after) or []]
+    after = every_page(w.gw, "/v1/apps", headers=w.who["admin"])
+    shown = [(r.get("id"), r.get("kind")) for r in after]
     pages = [w.kept(w.gw.get(app_path(a), headers=w.who["admin"])).status_code for a in (own, "builtin:files")]
     check(
         "28 the tool's own connection and the built-in apps are not listed, and both pages still answer",
         bool(own)
-        and own not in ids(data(after))
+        and own not in ids(after)
         and not [k for _, k in shown if k in ("builtin", "module")]
         and pages == [200, 200],
         {"made": made.status_code, "own": own, "shown": shown, "pages": pages},

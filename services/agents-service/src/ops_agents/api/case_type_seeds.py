@@ -6,8 +6,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
+from ops_service_kit.http import Json
 from ops_store.team_scope import acting_team
 
 from ..case_fields import specs_of
@@ -22,9 +23,9 @@ SEED_FILE = Path(__file__).resolve().parents[3] / "seed" / "case_types.json"
 _seeded: set[tuple[int, str, str | None]] = set()
 
 
-def seeds() -> list[dict[str, Any]]:
+def seeds() -> list[Json]:
     """The general case types every tenant reads, each checked as a team's would be."""
-    out = cast(list[dict[str, Any]], json.loads(SEED_FILE.read_text()))
+    out = cast(list[Json], json.loads(SEED_FILE.read_text()))
     for s in out:
         specs_of(s["fields"])
     return out
@@ -40,5 +41,5 @@ async def seeded_case_types(db: AsyncEngine, team: str | None = None) -> CaseTyp
     return store
 
 
-async def case_type_store(rt: Runtime) -> CaseTypeStore:
-    return await seeded_case_types(rt.db)
+async def case_type_store(rt: Runtime, team: str | None = None) -> CaseTypeStore:
+    return await seeded_case_types(rt.db, team)

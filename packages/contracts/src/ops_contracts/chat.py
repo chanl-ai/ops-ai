@@ -9,7 +9,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 from pydantic.alias_generators import to_camel
 
 
@@ -133,6 +133,9 @@ class ApprovalWidget(WidgetBase):
     waiting_on: str | None = None
     # Whether the person reading the thread may decide it now, by the decision route's checks.
     can_decide: bool | None = None
+    # The app asks before changes: the person who asked answers it themselves, with Allow, Deny and Allow for this
+    # chat, instead of a reviewer approving it.
+    ask_first: bool | None = None
 
 
 class FormWidgetField(WireModel):
@@ -175,6 +178,8 @@ ChatWidget = Annotated[
 class ApproveAction(WireModel):
     type: Literal["approve"]
     step_up_token: str | None = None
+    # "Allow for this chat" on an app that asks before changes: later writes of that app in this chat run unasked.
+    for_chat: bool | None = None
 
 
 class RejectAction(WireModel):
@@ -224,7 +229,7 @@ class WidgetPart(WireModel):
     hint: WidgetHint | None = None
     # JSON Schema for a `form` part's fields (lib/types/widgets.ts).
     schema_: Any | None = Field(default=None, alias="schema")
-    layout: dict[str, Any] | None = None
+    layout: dict[str, JsonValue] | None = None
     template: WidgetTemplateRef | None = None
     # The generic kind the layout is (ops_agent_kernel.kinds) when the agent showed one with `present {kind}`.
     kind: str | None = None
@@ -247,7 +252,7 @@ class ToolCall(WireModel):
     # The call's action in words ("Look up accounts"), as review_text.call_label words it; people read this, not `name`.
     label: str | None = None
     server: str
-    input: dict[str, Any]
+    input: dict[str, JsonValue]
     output: Any = None
     status: Literal["running", "success", "failed"]
     duration_ms: int
@@ -271,6 +276,13 @@ class LoadedSkill(WireModel):
     version: int
     # The words that matched its use-when line; "Always on" for always-on skills.
     matched: str
+    # The part of a skill with parts that ran, by its slug; absent for a whole skill.
+    part: str | None = None
+    # How it entered the reply: picked from the / menu, carried from the reply before, loaded by the model on a
+    # match, or always on. Absent on replies written before picks existed.
+    how: Literal["picked", "carried", "loaded", "always"] | None = None
+    # The inputs a picked part was filled with, kept so the next reply carries the same text.
+    inputs: dict[str, str] | None = None
 
 
 class BudgetPause(WireModel):
@@ -332,8 +344,8 @@ class ChatOverrides(WireModel):
     tools_off: list[str] | None = None
     knowledge_base_ids: list[str] | None = None
     budget_usd: float | None = None
-    output_schema: dict[str, Any] | None = None
-    variables: dict[str, Any] | None = None
+    output_schema: dict[str, JsonValue] | None = None
+    variables: dict[str, JsonValue] | None = None
     # Widgets narrow only: switch pinned ones off, switch composing off, lower the per-answer cap.
     widgets_off: list[str] | None = None
     compose_off: bool | None = None
@@ -365,8 +377,8 @@ class EffectiveSettings(WireModel):
     tools_off: list[str] = Field(default_factory=list[str])
     knowledge_base_ids: list[str]
     budget_usd: float | None = None
-    output_schema: dict[str, Any] | None = None
-    variables: dict[str, Any] | None = None
+    output_schema: dict[str, JsonValue] | None = None
+    variables: dict[str, JsonValue] | None = None
     widgets_off: list[str] = Field(default_factory=list[str])
     compose_off: bool = False
     widgets_per_turn: int | None = None
@@ -425,7 +437,7 @@ class ChatMessage(WireModel):
     attachments: list[ChatAttachment] | None = None
     citations: list[Citation] | None = None
     # RetrievalTrace is owned by the knowledge service; the Runtime has no retrieval trace to send yet.
-    trace: dict[str, Any] | None = None
+    trace: dict[str, JsonValue] | None = None
     tool_calls: list[ToolCall] | None = None
     widgets: list[ChatWidget] | None = None
     # Shaped tool results, drawn by the console's widget registry; kept with the message so a reload shows them.
@@ -499,7 +511,7 @@ class ChatThreadInput(WireModel):
     title: str | None = None
     # Apply to every message in the thread. Raw, so agents-service's overrides.parse refuses an unknown or mistyped
     # field with 422 naming it, like a value outside the limits.
-    overrides: dict[str, Any] | None = None
+    overrides: dict[str, JsonValue] | None = None
     attachments: list[ChatAttachment] | None = None
     # Ask to test the agent: each message runs its newest version, draft included. Granted only to a caller
     # who may test the agent; the mark is stored by the server and never changes after.
@@ -554,11 +566,22 @@ class BulkResult(WireModel):
     skipped: list[BulkSkip]
 
 
+class SkillPick(WireModel):
+    """A skill picked from the / menu for this one reply: a published skill of the team, one of its parts when it has
+    parts, and the values of its inputs."""
+
+    skill_id: str = Field(min_length=1, max_length=120)
+    part: str | None = Field(default=None, max_length=64)
+    inputs: dict[str, str] = Field(default_factory=dict[str, str], max_length=20)
+
+
 class SendInput(WireModel):
     content: str
+    # A skill picked for this reply; needs skills: view in the team.
+    skill: SkillPick | None = None
     attachments: list[ChatAttachment] | None = None
     # This message only; may narrow the thread's overrides. Raw, checked by overrides.parse (see ChatThreadInput).
-    overrides: dict[str, Any] | None = None
+    overrides: dict[str, JsonValue] | None = None
     regenerate: str | None = None
     edit: str | None = None
 

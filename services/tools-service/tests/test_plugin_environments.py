@@ -68,8 +68,8 @@ async def test_a_sandbox_account_keeps_its_own_app_and_the_live_account_keeps_it
     live = await connections.store.get(tenant, live_id)
     sandbox = await connections.store.get(tenant, sandbox_id)
     assert live is not None and sandbox is not None
-    assert sandbox["sandbox"] and sandbox["settings"]["clientId"] == "uat-app", "the sandbox's app never reached it"
-    assert not live["sandbox"] and live["settings"]["clientId"] == "prod-app", "the sandbox's app replaced the live one"
+    assert sandbox.sandbox and sandbox.settings["clientId"] == "uat-app", "the sandbox's app never reached it"
+    assert not live.sandbox and live.settings["clientId"] == "prod-app", "the sandbox's app replaced the live one"
     card = (await client.get(f"/v1/apps/{APP}", headers=admin)).json()["data"]["card"]
     assert (card["connectionId"], card["sandboxId"]) == (live_id, sandbox_id), card
     for answer in (on.text, made.text):
@@ -96,7 +96,8 @@ async def test_a_sandbox_sign_in_leaves_the_live_accounts_instance_and_hosts_apa
     await host.on_token(tenant, live_id, {"instance_url": LIVE})
     await host.on_token(tenant, sandbox_id, {"instance_url": UAT})
     live = await connections.store.get(tenant, live_id)
-    assert live is not None and live["plugin_settings"]["instance_url"] == LIVE, "the sandbox sign-in overwrote it"
+    held = live.plugin_settings if live is not None else None
+    assert held is not None and held["instance_url"] == LIVE, "the sandbox sign-in overwrote it"
     module = await ModuleStore(engine).get(tenant, module_id_of(desk.manifest))
     assert module is not None
     production = await host.for_call(tenant, TEAM, module, "live")
@@ -110,8 +111,8 @@ async def test_a_sandbox_sign_in_leaves_the_live_accounts_instance_and_hosts_apa
 
 async def test_a_plugin_answers_with_its_card_details(rig: Rig, tenant: str) -> None:  # noqa: F811
     client, _, _ = rig
-    listed = await client.get("/v1/apps", headers=team_admin(tenant))
-    card = next(c for c in listed.json()["data"] if c["id"] == APP)
+    listed = await client.get("/v1/apps", params={"ids": APP}, headers=team_admin(tenant))
+    card = next(c for c in listed.json()["data"]["data"] if c["id"] == APP)
     shown = {k: card[k] for k in ("logo", "category", "description", "docsUrl")}
     assert shown == {
         "logo": "https://desk.test/logo.svg",

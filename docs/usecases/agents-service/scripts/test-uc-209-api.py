@@ -13,7 +13,7 @@ import uuid
 from typing import Any
 
 import httpx
-from usecase_harness import check, finish
+from usecase_harness import check, every_page, finish
 
 PLATFORM = f"http://127.0.0.1:{os.environ.get('OPS_PLATFORM_PORT', '8710')}"
 AGENTS = f"http://127.0.0.1:{os.environ.get('OPS_AGENTS_PORT', '8700')}"
@@ -73,7 +73,7 @@ api = httpx.Client(base_url=AGENTS, timeout=60, headers=james)
 
 
 def runs(workflow: str) -> list[dict[str, Any]]:
-    return list(api.get("/v1/runs", params={"workflowId": workflow, "pageSize": 100}).json()["data"]["data"])
+    return every_page(api, "/v1/runs", workflowId=workflow, pageSize=50)
 
 
 def settled(run_id: str) -> dict[str, Any]:

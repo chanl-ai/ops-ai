@@ -18,13 +18,13 @@ other folder (onion order, one stack, calling the API as a person, tests, commit
 | The console on the live stack | `make up` from the root serves it at http://localhost:3016 with every area on the services; `make -C ../.. logs SVC=console FOLLOW=0` prints its log |
 | The console on the mock alone | `pnpm dev` (:3016) or `pnpm dev:runtime` (:3017, chat on the agents service); not while `make up` holds the port |
 | Type-check | `pnpm typecheck` |
-| Standards check | `pnpm check:standards` (`scripts/check-standards.mjs`; `--write-baseline` locks in a drop it reports) |
+| Standards check | `pnpm check:standards` (`scripts/check-standards.mjs`; `--write-baseline` locks in a drop it reports; rule 23 holds page sizes above 50, browser-side sums and counts, and `fetch(` outside `lib/api` to `scripts/data-baseline.json`) |
 | Unit tests | `pnpm test` (`node --test 'src/**/*.test.ts'`, beside the code they test under `src/lib/`) |
 | All of the above, plus the embed app's type-check | `pnpm verify` |
 | Production build | `pnpm build` |
 | Make verbs | `make help`: `install`, `run`, `lint`, `typecheck`, `verify`, `stop`, `logs`, `health`, `clean`. `make test` prints "no tests yet" and runs nothing; use `pnpm test` |
 
-The console type-checks against the TypeScript SDK's build in `sdk/typescript/dist/`, made by `pnpm install`. After a
+The console type-checks against the TypeScript SDK's build (the SDK's `dist` folder), made by `pnpm install`. After a
 route change regenerates the SDK (`make openapi`), rebuild it with `pnpm --filter @chanl-ai/ops-ai build` (or
 `make sdk-verify`, which builds it as part of its test); until then `tsc` reports fields the services already return as
 missing (TS2339).
@@ -104,6 +104,7 @@ A `feat` or `fix` that changes this folder needs a What's new entry ([Commits](.
 | Bulk change | `BulkConfirmDialog` / `BulkFieldDialog` + `toastBulk` (skipped items named by reason) + `useSticky` | silent partial success |
 | Record page | `RecordLayout` / `AttributeCard` / `FieldRow`, or a settings form with a right rail | bespoke grids |
 | Field | `FormField` (label, "(optional)", hint, inline error, `aria-invalid`) | placeholder-as-label |
+| Any form | One zod schema (shared with the API types where one exists) + `react-hook-form` with `zodResolver`, rendered through the shadcn `Form` parts and `FormField`; validate on blur and submit, show server errors on the field they belong to, disable submit while saving, keep unsaved changes guarded | `useState` per field, hand-written validation, `<form onSubmit>` reading inputs directly |
 | Upload a file | `FileUpload` (`components/shared/file-upload.tsx`): presigned upload through the Files API, progress, scan state, limits from Settings → Storage; pass the `fileId` on | `<input type="file">` with your own request, `FormData`, `fetch` PUT of a `File` (`check-standards` rule 13) |
 
 `components/ui/*` are shadcn primitives adapted from the shared component library: do not edit them; wrap them in
@@ -134,3 +135,9 @@ buttons say the action, placeholders start with "e.g." and never look like real 
 1. `pnpm verify` passes.
 2. Every changed route returns 200 and renders in Chrome without console errors.
 3. An independent reviewer (a person or a fresh coding agent, in a browser, this file and `docs/console/page-plan.md` as the standard) has exercised the change, and its blockers and majors are fixed.
+
+## Engineering standards
+
+The rules the code in this folder is held to, each with a real example from this repository and the check that
+enforces it: [console, SDKs and CLI](../../docs/architecture/standards/console-and-sdk.md) (`UI1` to `UI7`), [configuration](../../docs/architecture/standards/configuration.md) (`CF1` to `CF6`), [tenant isolation and access](../../docs/architecture/standards/tenancy-and-access.md) (`TN1` to `TN5`, `AC1` to `AC5`). The index of every rule is
+[engineering standards](../../docs/architecture/engineering-standards.md); a review cites the rule id.

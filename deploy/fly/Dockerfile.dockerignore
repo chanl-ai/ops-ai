@@ -11,6 +11,7 @@
 !apps/embed/package.json
 !packages
 !services
+!builtin-plugins
 !deploy
 !sdk/typescript
 !sdk/python

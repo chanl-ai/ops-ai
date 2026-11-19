@@ -218,7 +218,7 @@ export function DeploymentsTable({
         fixedWorkflowId={workflowId}
         initialChannel={createChannel}
         // Outside the Deployments page (a workflow's Deployments tab) MCP still hands off to the MCP tab, while the install serves it.
-        onChooseMcp={onChooseMcp ?? (mcpOn ? () => router.push('/channels/mcp') : undefined)}
+        onChooseMcp={onChooseMcp ?? (mcpOn ? () => router.push('/build/channels/mcp') : undefined)}
         isPending={create.isPending}
         onSubmit={async (input) => {
           const d = await create.mutateAsync(input);

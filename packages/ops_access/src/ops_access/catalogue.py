@@ -23,6 +23,9 @@ AREAS = (
     "skills",
     "guardrails",
     "widgets",
+    # Saved test cases and their runs on agents, skills and workflows, and the Evals page that reads them: every team
+    # role but chat user reads; `run` (save cases, run them) is the builders' and admins'.
+    "evals",
     "knowledge",
     "tools",
     "secrets_egress",
@@ -45,6 +48,9 @@ AREAS = (
     # The team's activity log of tool calls: who called which tool, as whom, and what came back (tools-service
     # GET /v1/executions). It names people, so viewers do not read it; reviewers, builders and admins do.
     "activity",
+    # The calls made through the team's MCP links (a link's Calls tab, tools-service GET /v1/executions?link=): every
+    # member reads the calls they made themselves (`own`); builders and admins read everyone's.
+    "mcp",
     # The team's webhooks (endpoint addresses and delivery history) and its usage and cost: team-admin data, held by
     # admins only by default.
     "webhooks",
@@ -86,7 +92,7 @@ def _all(area: str, *actions: str) -> list[Grant]:
 _READS: list[Grant] = [
     (area, "view", "all")
     for area in AREAS
-    if area not in ("settings", "audit", "activity", "webhooks", "usage", "chat", "memory", "workspace")
+    if area not in ("settings", "audit", "activity", "mcp", "webhooks", "usage", "chat", "memory", "workspace")
 ]
 _DEFINITIONS = ("agents", "workflows", "skills", "guardrails", "widgets", "tools")
 # Decided by a reviewer or admin of the reviewing team; a module access approval by an approver or admin of the
@@ -101,6 +107,7 @@ _MEMBER: list[Grant] = [
     ("chat", "run", "all"),
     ("chat", "view", "own"),
     ("memory", "edit", "own"),
+    ("mcp", "view", "own"),
     ("skills", "delete", "own"),
     ("guardrails", "delete", "own"),
     ("cases", "manage", "own"),
@@ -108,9 +115,9 @@ _MEMBER: list[Grant] = [
     *_all("cases", "create", "edit"),
 ]
 # Builders do everything in their team except people and access, the workspace's settings, and the team's webhooks and
-# usage, which stay team-admin data (D59):
-# connections, secrets and auth configs included. What agents remember about a person stays that person's to edit.
-_NOT_BUILDERS = ("access", "settings", "workspace", "webhooks", "usage")
+# usage, which stay team-admin data (D59): connections, secrets and auth configs included, which builders read
+# (`_READS`) and admins change. What agents remember about a person stays that person's to edit.
+_NOT_BUILDERS = ("access", "settings", "workspace", "webhooks", "usage", "connections", "secrets_egress")
 _BUILDS: list[Grant] = [
     (area, action, "own" if (area, action) == ("memory", "edit") else "all")
     for area in AREAS
@@ -182,8 +189,8 @@ SECURITY_ADMIN = BuiltinRole(
     ),
 )
 # A person who only chats. It chats with the agents published to its team and sees only its
-# own threads. It is granted on its own, or as the membership role `chat_user` that a first SSO sign-in gives a person
-# new to the workspace; no invite or role change can set that membership role.
+# own threads. It is granted on its own, or as the membership role `chat_user`, given like any other membership role:
+# by a first SSO sign-in, an invite or a role change (`INVITE_ROLES`).
 CHAT_USER = BuiltinRole(
     "chat_user",
     "Chat user",
@@ -209,6 +216,11 @@ MEMBER_ROLE_TO_BUILTIN = {
     "viewer": "viewer",
     "chat_user": "chat_user",
 }
+# The membership roles an invite or a role change may give: every stored value, Chat user among them.
+INVITE_ROLES = tuple(MEMBER_ROLE_TO_BUILTIN)
+# The membership roles by rank, lowest first. Where two rules give one person different roles in a team (sign-in group
+# rules), the higher one wins; Reviewer (`approver`) outranks Builder, and admin is the highest.
+MEMBER_ROLES_BY_RANK = ("chat_user", "viewer", "builder", "approver", "admin")
 
 
 def builtin_roles_for(member_role: str, *, security_team: bool) -> tuple[str, ...]:

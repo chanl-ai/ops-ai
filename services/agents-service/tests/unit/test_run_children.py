@@ -9,16 +9,37 @@ import pytest
 
 from ops_agents.api.routers.engine import started_runs
 from ops_agents.api.run_story import decisions_in, files_in
+from ops_engine.store import RunRow
+from ops_service_kit.http import Json
+
+
+def _run(run_id: str, status: str, outcome: str | None) -> RunRow:
+    at = "2026-10-19T12:00:00+00:00"
+    return RunRow(
+        id=run_id,
+        tenant_id="t",
+        team_id="team",
+        workflow_id="levy_case",
+        version=1,
+        digest="d",
+        run_key=run_id,
+        mode="live",
+        status=status,
+        outcome=outcome,
+        created_by="p.shah@harborpine.example",
+        created_at=at,
+        updated_at=at,
+    )
 
 
 class _Runs:
-    def __init__(self, rows: list[dict[str, Any]]) -> None:
+    def __init__(self, rows: list[RunRow]) -> None:
         self.rows = rows
         self.asked: list[list[str]] = []
 
-    async def many(self, run_ids: list[str]) -> list[dict[str, Any]]:
+    async def many(self, run_ids: list[str]) -> list[RunRow]:
         self.asked.append(run_ids)
-        return [r for r in self.rows if r["id"] in run_ids]
+        return [r for r in self.rows if r.id in run_ids]
 
 
 STEPS: list[dict[str, Any]] = [
@@ -42,8 +63,8 @@ STEPS: list[dict[str, Any]] = [
 async def test_each_started_run_is_listed_in_item_order_with_its_status_in_one_read() -> None:
     store = _Runs(
         [
-            {"id": "wfrun_b", "status": "waiting", "outcome": None},
-            {"id": "wfrun_a", "status": "succeeded", "outcome": "saved"},
+            _run("wfrun_b", "waiting", None),
+            _run("wfrun_a", "succeeded", "saved"),
         ]
     )
     got = await started_runs(store, STEPS)  # type: ignore[arg-type]
@@ -57,7 +78,7 @@ async def test_each_started_run_is_listed_in_item_order_with_its_status_in_one_r
 
 def test_files_in_finds_each_file_id_once_at_any_depth_and_nothing_else() -> None:
     a, b = "fil_" + "a" * 32, "fil_" + "b" * 32
-    given = {
+    given: Json = {
         "documentFileId": a,
         "files": [{"fileId": b, "name": "TEST012.pdf"}],
         "again": [a],

@@ -7,7 +7,6 @@ import { SecretDialog } from '@/components/settings/secret-dialog';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { ChoiceCards } from '@/components/shared/setting/choice-cards';
-import { Combobox } from '@/components/shared/setting/pickers';
 import { StepList } from '@/components/shared/step-list';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -15,7 +14,8 @@ import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { useTestMailbox } from '@/hooks/channels-queries';
-import { useSecrets } from '@/hooks/secrets-queries';
+import { SearchSelect } from '@/components/shared/search-select';
+import { secretOptions } from '@/hooks/options-queries';
 import type { MailProvider, Mailbox, MailboxInput, MailboxTest, ReplySender } from '@/lib/types/channels';
 
 /** The connect form's providers. */
@@ -109,14 +109,12 @@ export function toInput(v: MailboxForm): MailboxInput {
 
 /** A secret named by reference: pick one from the Secrets list or add one; the value is never typed here. */
 function SecretPicker({ id, value, onChange }: { id: string; value: string | null; onChange: (name: string) => void }) {
-  const secrets = useSecrets();
   const [adding, setAdding] = React.useState(false);
-  // The current team's secrets only: a mailbox of this team reads its own team's secret.
-  const options = (secrets.data ?? []).map((s) => ({ value: s.name, label: s.name }));
   return (
     <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
       <div className="min-w-0 flex-1">
-        <Combobox id={id} options={options} value={value} onChange={onChange} noun="secrets" placeholder={secrets.isLoading ? 'Loading secrets…' : 'Choose a secret'} />
+        {/* The current team's secrets only: a mailbox of this team reads its own team's secret. */}
+        <SearchSelect source={secretOptions} value={value ? { id: value, label: value } : null} onChange={(name) => onChange(name)} placeholder="Choose a secret" searchPlaceholder="Search secrets" emptyText="No secret found." id={id} testId={id} className="w-full" />
       </div>
       <Button type="button" variant="outline" onClick={() => setAdding(true)} data-testid={`${id}-add`}>
         <KeyRound className="size-4" /> Add secret

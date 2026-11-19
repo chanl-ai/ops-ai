@@ -5,35 +5,37 @@ digest) reads with that version until the workflow is saved again, whatever vers
 from __future__ import annotations
 
 import copy
-from typing import Any, cast
+from typing import cast
+
+from ops_service_kit.http import Json
 
 EXTRACT = "ops.ai.extract"
 
 
-def _steps(wire: dict[str, Any]) -> list[dict[str, Any]]:
-    nodes = cast(list[dict[str, Any]], wire.get("nodes") or [])
+def _steps(wire: Json) -> list[Json]:
+    nodes = cast(list[Json], wire.get("nodes") or [])
     return [n for n in nodes if n.get("type") == EXTRACT and isinstance(n.get("parameters"), dict)]
 
 
-def unpinned(wire: dict[str, Any]) -> set[str]:
+def unpinned(wire: Json) -> set[str]:
     """The ids of the document types steps name without a version."""
     out: set[str] = set()
     for n in _steps(wire):
-        doc_type = cast(dict[str, Any], n["parameters"]).get("documentType")
-        if isinstance(doc_type, dict) and cast(dict[str, Any], doc_type).get("version") is None:
-            type_id = str(cast(dict[str, Any], doc_type)["id"])
+        doc_type = cast(Json, n["parameters"]).get("documentType")
+        if isinstance(doc_type, dict) and doc_type.get("version") is None:
+            type_id = str(doc_type["id"])
             if not type_id.startswith("$."):  # a path names the run's type, never a saved one to pin
                 out.add(type_id)
     return out
 
 
-def pinned(wire: dict[str, Any], versions: dict[str, int]) -> dict[str, Any]:
+def pinned(wire: Json, versions: dict[str, int]) -> Json:
     """A copy of the definition with each unpinned document type given its version from `versions`."""
     out = copy.deepcopy(wire)
     for n in _steps(out):
-        doc_type = cast(dict[str, Any], n["parameters"]).get("documentType")
+        doc_type = cast(Json, n["parameters"]).get("documentType")
         if isinstance(doc_type, dict):
-            ref = cast(dict[str, Any], doc_type)
+            ref = doc_type
             if ref.get("version") is None and str(ref["id"]) in versions:
                 ref["version"] = versions[str(ref["id"])]
     return out

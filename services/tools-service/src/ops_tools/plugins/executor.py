@@ -26,25 +26,38 @@ import httpx
 
 from ops_agent_kernel.ports import ToolOutcome
 from ops_identity import ActingForPerson
-from ops_plugin_sdk import BadInput, Context, NeedsReconnect, Plugin, PluginError, RateLimited, Response, TooLarge
+from ops_plugin_sdk import (
+    BadInput,
+    Context,
+    NeedsReconnect,
+    Plugin,
+    PluginError,
+    RateLimited,
+    Refused,
+    Response,
+    TooLarge,
+)
 from ops_plugin_sdk import EgressDenied as PluginEgressDenied
 from ops_plugin_sdk import paging as paged
+from ops_plugin_sdk.answers import answer_error
 from ops_plugin_sdk.formats import InputRefused
 from ops_plugin_sdk.knowledge import source_hosts as knowledge_source_hosts
 from ops_plugin_sdk.knowledge import source_of
 from ops_plugin_sdk.manifest import Tool
+from ops_service_kit.http import Json
 
 from ..auth import AuthFailed, Prepared
 from ..egress import EgressDenied, for_tenant
 from ..executor import Trial, scrubbed_values
 from ..graph_mailbox import CursorRefused, CursorSeal
 from ..secrets import scrub
+from ..store.modules import Module, Operation
 
 if TYPE_CHECKING:
     from ..executor import HttpExecutor
     from .host import PluginHost
 
-OURS = "ours"
+OURS, UPSTREAM = "ours", "upstream"
 DEADLINE_S = 30.0
 # The most one plugin request's answer may hold: read as it streams in and refused past this, so a huge or endless
 # answer never fills the gateway's memory. 25 MB holds any page, document or listing a source fetches.
@@ -52,7 +65,7 @@ MAX_RESPONSE_BYTES = 25 * 1024 * 1024
 
 
 def _failure(code: str, message: str, status: int | None = None, side: str | None = None) -> ToolOutcome:
-    error: dict[str, Any] = {"code": code, "message": message}
+    error: Json = {"code": code, "message": message}
     if status is not None:
         error["status"] = status
     if side is not None:
@@ -80,14 +93,14 @@ class PluginExecutor:
         self.http = http
         self.cursor_key = cursor_key
 
-    def _seal(self, module: Mapping[str, Any], tool: str) -> CursorSeal:
+    def _seal(self, module: Module, tool: str) -> CursorSeal:
         return CursorSeal(self.cursor_key, str(module["tenant_id"]), str(module.get("connection_id") or ""), tool)
 
     async def run(
         self,
-        module: dict[str, Any],
-        op: dict[str, Any],
-        args: dict[str, Any],
+        module: Module,
+        op: Operation,
+        args: Json,
         *,
         actor: str,
         environment: str,
@@ -107,7 +120,7 @@ class PluginExecutor:
         values = args.get("source")
         sites: list[str] = []
         if source is not None and isinstance(values, dict):
-            sites = knowledge_source_hosts(source, cast(dict[str, Any], values))
+            sites = knowledge_source_hosts(source, cast(Json, values))
         # The team's version of the tool, so a query or paged tool runs as the team's version declared it.
         tool = self.host.tool_for(module, plugin, name)
         if tool is not None and tool.request is not None:
@@ -131,9 +144,9 @@ class PluginExecutor:
         plugin: Plugin,
         tool: Tool,
         *,
-        module: dict[str, Any],
-        op: dict[str, Any],
-        args: dict[str, Any],
+        module: Module,
+        op: Operation,
+        args: Json,
         prepared: Prepared | None,
         sites: Sequence[str] = (),
     ) -> ToolOutcome:
@@ -144,6 +157,7 @@ class PluginExecutor:
         allowed = list(module.get("egress_hosts") or [])
         reachable = {*allowed, *sites}
         plugin_headers = {h["key"]: h["value"] for h in cast(list[dict[str, str]], op.get("headers") or [])}
+        rule = op.get("error_when")
         loop = asyncio.get_running_loop()
         policy = self.http.policy
         client = self.http.client
@@ -181,6 +195,14 @@ class PluginExecutor:
             finally:
                 await r.aclose()
             text = content.decode(r.encoding or "utf-8", errors="replace")
+            if rule is not None and r.status_code < 400:
+                # Parsed only for a plugin that declares error_when, so a page or file it fetches costs nothing more.
+                try:
+                    refused = answer_error(json.loads(text), rule)
+                except ValueError:
+                    refused = None
+                if refused is not None:
+                    raise refused
             return Response(r.status_code, text, dict(r.headers), content)
 
         def send(
@@ -220,6 +242,9 @@ class PluginExecutor:
             return _failure("RATE_LIMITED", str(e), 429)
         except BadInput as e:
             return _failure("INVALID_INPUT", str(e), 422, OURS)
+        except Refused as e:
+            # The system's own answer said the call failed (error_when), so the failure is on its side.
+            return _failure(e.code, str(e), side=UPSTREAM)
         except PluginError as e:
             return _failure(e.code, str(e))
         except httpx.HTTPError as e:
@@ -227,7 +252,7 @@ class PluginExecutor:
         except Exception as e:  # the plugin's own bug: reported as its failure, never as the gateway's
             return _failure("PLUGIN_FAILED", f"{plugin.manifest.id} {name} failed: {type(e).__name__}: {e}")
         if seal is not None and isinstance(output, dict):
-            page = cast(dict[str, Any], output)
+            page = cast(Json, output)
             if page.get("next_cursor"):
                 output = {**page, "next_cursor": seal.close(str(page["next_cursor"]))}
         return ToolOutcome(True, output)
@@ -235,9 +260,9 @@ class PluginExecutor:
     async def _data(
         self,
         tool: Tool,
-        module: dict[str, Any],
-        op: dict[str, Any],
-        args: dict[str, Any],
+        module: Module,
+        op: Operation,
+        args: Json,
         *,
         actor: str,
         environment: str,
@@ -249,16 +274,16 @@ class PluginExecutor:
         paging = req.paging
         seal = self._seal(module, op["name"])
         given = dict(args)
-        state: dict[str, Any] | None = None
+        state: Json | None = None
         # A paged tool's cursor is the platform's, sealed here, even where the manifest declares it as an input.
         cursor = given.pop("cursor", None) if paging is not None else None
         if cursor:
             try:
-                state = cast(dict[str, Any], json.loads(seal.open(str(cursor))))
+                state = cast(Json, json.loads(seal.open(str(cursor))))
             except (CursorRefused, ValueError) as e:
                 return _failure("INVALID_INPUT", str(e), 422, OURS)
             # Every page after the first reads the query the first page was asked with, whatever this call says.
-            given = dict(state.get("args") or {})
+            given = dict(cast(Json, state.get("args") or {}))
         # A first page needs the tool's required inputs; a next page reads them from its cursor.
         missing = [n for n, f in tool.input.items() if f.required and n != "cursor" and given.get(n) in (None, "")]
         if state is None and missing:
@@ -267,18 +292,17 @@ class PluginExecutor:
             sent = paged.arguments(tool, given, state)
         except InputRefused as e:
             return _failure("INVALID_INPUT", str(e), 422, OURS)
-        target, call = module, op
+        target: Module = module
+        call: Operation = op
         if state is not None and paging is not None and paging.rule in paged.FOLLOWS_LINK:
-            followed = paged.follow(str(module["endpoint"]), str(state.get("link") or ""))
+            followed = paged.follow(str(module.get("endpoint")), str(state.get("link") or ""))
             if followed is None:
                 return _failure("INVALID_INPUT", "This cursor holds no page address this plugin can follow.", 422, OURS)
-            target, call = (
-                {**module, "endpoint": followed[0]},
-                {**op, "method": "GET", "path": followed[1], "body": None},
-            )
+            target = {**module, "endpoint": followed[0]}
+            call = {**op, "method": "GET", "path": followed[1], "body": None}
             sent = {}
         asked = dict(sent)
-        found: dict[str, Any] = {}
+        found: Json = {}
 
         def on_answer(answer: Any, headers: Mapping[str, str]) -> Any:
             shown, nxt = paged.next_page(paging, answer, asked, headers)

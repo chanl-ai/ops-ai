@@ -1,16 +1,18 @@
 import type { OpsApi } from './contract';
 import { DEFAULT_USER_ID, DEMO_PASSWORD, DEMO_TOTP, USERS } from './mock/auth/seed';
 import { createCasesOnlyHttp, createChatOnlyHttp, createHttpApi, createKnowledgeOnlyHttp, createRegistryOnlyHttp,
-  createRegistryToolsDirectory, createRegistryToolsList, createToolsOnlyHttp } from './http';
+  createRegistryPromptVariables, createRegistryToolsDirectory, createRegistryToolsList, createToolsOnlyHttp } from './http';
 import { createMockApi } from './mock';
+import { withServedAgents } from './mock/evals';
 import { createMockAuthProvider } from './mock/auth';
 import { createNoNotifications } from './notifications-none';
+import { recordMockReads } from './sample-reads';
 import type { AuthProvider } from '@/lib/auth/provider';
 import { createFirebaseProvider } from '@/lib/auth/providers/firebase';
 import { createOidcProvider } from '@/lib/auth/providers/oidc';
 import { createPlatformProvider } from '@/lib/auth/providers/platform';
 import { createPlatformAccessHttp } from './platform-access-http';
-import { createPlatformPoliciesHttp, createPlatformSignInProvidersHttp, createPlatformTeamsHttp, createPlatformWorkspaceTeamsHttp } from './platform-http';
+import { createPlatformApiKeysHttp, createPlatformOAuthHttp, createPlatformPoliciesHttp, createPlatformSignInProvidersHttp, createPlatformTeamsHttp, createPlatformWorkspaceTeamsHttp } from './platform-http';
 import { createDocumentsHttp, createExtractionsHttp, createLayoutsHttp } from './documents-http';
 import { createFilesServiceHttp } from './files-service-http';
 import { createModelsHttp } from './models-http';
@@ -48,7 +50,8 @@ const onRealService = Boolean(chatUrl || casesUrl || registryUrl || toolsUrl || 
  * NEXT_PUBLIC_OPS_EMBED_URL for the embed app that serves the chat loader in snippets.
  */
 function createApi(): OpsApi {
-  let api = baseUrl ? createHttpApi(baseUrl) : createMockApi();
+  const mock = baseUrl ? null : createMockApi();
+  let api = mock ?? createHttpApi(baseUrl!);
   if (chatUrl) api = { ...api, chat: createChatOnlyHttp(chatUrl) };
   if (casesUrl) {
     const { runs, run, runState, startRun, startable, reviews } = createCasesOnlyHttp(casesUrl);
@@ -56,10 +59,15 @@ function createApi(): OpsApi {
   }
   // The tool list is the registry's directory; tool writes have no route there and stay on the mock (createRegistryToolsList).
   if (registryUrl) api = { ...api, ...createRegistryOnlyHttp(registryUrl), tools: { ...api.tools, list: createRegistryToolsList(registryUrl), ...createRegistryToolsDirectory(registryUrl) } };
+  // The instruction placeholders a run can fill come from agents-service; generation and lint stay on the mock.
+  if (registryUrl) api = { ...api, prompts: { ...api.prompts, variables: createRegistryPromptVariables(registryUrl) } };
+  // Evals stay sample data; their stand-ins for the registry's agents take each agent's name and versions from it.
+  if (registryUrl && !baseUrl) {
+    const agents = api.agents;
+    api = { ...api, evals: withServedAgents(api.evals, (aid) => agents.get(aid)) };
+  }
   // The chat loader and the iframe it opens are served by the embed app.
   if (embedUrl) api = { ...api, widgetDeployments: { ...api.widgetDeployments, scriptUrl: () => `${embedUrl.replace(/\/$/, '')}/embed/v1.js` } };
-  // A link form's page is the embed app's too.
-  if (embedUrl) api = { ...api, forms: { ...api.forms, pageUrl: (form) => `${embedUrl.replace(/\/$/, '')}${form.url}` } };
   if (toolsUrl) {
     // Activity (the tool-call log) is the gateway's own executions log; the audit log stays where it was.
     const { toolCalls, ...tools } = createToolsOnlyHttp(toolsUrl);
@@ -73,7 +81,7 @@ function createApi(): OpsApi {
   if (!baseUrl && onRealService) api = { ...api, notifications: createNoNotifications() };
   // Signed in through platform-service, the team switcher lists the person's own teams from it.
   if (onPlatform) {
-    api = { ...api, teams: createPlatformTeamsHttp(platformUrl!), workspacePolicies: createPlatformPoliciesHttp(platformUrl!), workspaceTeams: createPlatformWorkspaceTeamsHttp(platformUrl!), signInProviders: createPlatformSignInProvidersHttp(platformUrl!) };
+    api = { ...api, teams: createPlatformTeamsHttp(platformUrl!), workspacePolicies: createPlatformPoliciesHttp(platformUrl!), workspaceTeams: createPlatformWorkspaceTeamsHttp(platformUrl!), signInProviders: createPlatformSignInProvidersHttp(platformUrl!), oauth: createPlatformOAuthHttp(platformUrl!) };
     // Members, invitations and the audit log are platform-service's; accepting signs the person in there.
     const access = createPlatformAccessHttp(
       platformUrl!,
@@ -83,8 +91,12 @@ function createApi(): OpsApi {
       },
       (email) => authProvider.signInOptions(email),
     );
-    api = { ...api, settings: { ...api.settings, members: access.members }, invites: access.invites, governance: { ...api.governance, audit: access.audit } };
+    // The team's API keys are platform-service's, the one issuer of every key.
+    api = { ...api, settings: { ...api.settings, members: access.members, apiKeys: createPlatformApiKeysHttp(platformUrl!) }, invites: access.invites, governance: { ...api.governance, audit: access.audit } };
   }
+  // Beside real services, every read still answered by the mock is recorded with the page it was made on, so the
+  // page says it shows sample data even when the table below calls its prefix served (lib/api/sample-reads.ts).
+  if (mock && onRealService) api = recordMockReads(api, mock);
   return api;
 }
 export const api: OpsApi = createApi();
@@ -97,73 +109,87 @@ export const api: OpsApi = createApi();
  * HTTP. A new page belongs in this table with the URL that serves it, or it reads as real.
  */
 const AREAS: { prefix: string; served: boolean }[] = [
-  { prefix: '/agents', served: Boolean(registryUrl) },
-  { prefix: '/workflows', served: Boolean(registryUrl) },
+  { prefix: '/build/agents', served: Boolean(registryUrl) },
+  { prefix: '/build/workflows', served: Boolean(registryUrl) },
   // A members-only hosted form reads agents-service's /v1/forms/{slug}/members.
   { prefix: '/forms', served: Boolean(registryUrl) },
   // The run list (moved from Cases) reads the runs service.
-  { prefix: '/workflows/runs', served: Boolean(casesUrl) },
+  { prefix: '/build/runs', served: Boolean(casesUrl) },
   // Cases are agents-service's /v1/cases.
-  { prefix: '/cases', served: Boolean(registryUrl) },
-  { prefix: '/channels', served: Boolean(registryUrl) },
-  { prefix: '/skills', served: Boolean(registryUrl) },
-  { prefix: '/guardrails', served: Boolean(registryUrl) },
-  { prefix: '/widgets', served: Boolean(registryUrl) },
+  { prefix: '/work/cases', served: Boolean(registryUrl) },
+  { prefix: '/build/channels', served: Boolean(registryUrl) },
+  // MCP links are tools-service's /v1/mcp-links.
+  { prefix: '/build/channels/mcp', served: Boolean(toolsUrl) },
+  { prefix: '/build/skills', served: Boolean(registryUrl) },
+  { prefix: '/build/guardrails', served: Boolean(registryUrl) },
+  { prefix: '/build/widgets', served: Boolean(registryUrl) },
   // Activity is agents-service's one list (/v1/activity).
-  { prefix: '/activity', served: Boolean(registryUrl) },
+  { prefix: '/govern/activity', served: Boolean(registryUrl) },
   // Background processes are agents-service's /v1/background.
-  { prefix: '/logs/background', served: Boolean(registryUrl) },
-  { prefix: '/tools', served: Boolean(toolsUrl) },
+  { prefix: '/govern/activity/background', served: Boolean(registryUrl) },
+  { prefix: '/data/tools', served: Boolean(toolsUrl) },
   { prefix: '/settings/egress', served: Boolean(toolsUrl) },
   { prefix: '/settings/security/egress', served: Boolean(toolsUrl) },
   { prefix: '/settings/secrets', served: Boolean(toolsUrl) },
-  { prefix: '/integrations/credentials', served: Boolean(toolsUrl) },
-  { prefix: '/knowledge', served: Boolean(knowledgeUrl) },
+  { prefix: '/data/secrets', served: Boolean(toolsUrl) },
+  { prefix: '/data/knowledge', served: Boolean(knowledgeUrl) },
   // A source's page sits under Connections but its data and settings are kb-service's.
-  { prefix: '/integrations/sources', served: Boolean(knowledgeUrl) },
+  { prefix: '/data/sources', served: Boolean(knowledgeUrl) },
   { prefix: '/chat', served: Boolean(chatUrl) },
-  { prefix: '/reviews', served: Boolean(casesUrl) },
+  { prefix: '/work/tasks', served: Boolean(casesUrl) },
   // Gate policies are not part of the cases service's routes: they stay on the mock while the queue is real.
   { prefix: '/settings/policies/gates', served: false },
   { prefix: '/settings/storage', served: Boolean(filesUrl) },
   { prefix: '/settings/workspace/storage', served: Boolean(filesUrl) },
   { prefix: '/settings/workspace/storage', served: Boolean(filesUrl) },
   { prefix: '/settings/workspace/model-providers', served: Boolean(modelsUrl) },
-  { prefix: '/files', served: Boolean(filesUrl) },
-  { prefix: '/document-types', served: Boolean(documentsUrl) },
-  { prefix: '/access', served: onPlatform },
+  { prefix: '/data/files', served: Boolean(filesUrl) },
+  { prefix: '/data/document-types', served: Boolean(documentsUrl) },
+  { prefix: '/govern/access', served: onPlatform },
   // Tool access lists tools-service's grants.
-  { prefix: '/access/tool-access', served: Boolean(toolsUrl) },
-  { prefix: '/logs/audit', served: onPlatform },
+  { prefix: '/govern/access/tool-access', served: Boolean(toolsUrl) },
+  { prefix: '/govern/activity/audit', served: onPlatform },
+  // My account is GET /v1/me on platform-service; its security and connections pages are still sample data.
+  { prefix: '/settings/account', served: onPlatform },
+  { prefix: '/settings/account/security', served: false },
+  { prefix: '/settings/account/connections', served: false },
   { prefix: '/settings/account/memory', served: Boolean(chatUrl) },
   // A person's own sign-ins, a connection's sign-in setting and the sign-in pages are tools-service's.
-  { prefix: '/integrations/my-accounts', served: Boolean(toolsUrl) },
+  { prefix: '/settings/account/connectors', served: Boolean(toolsUrl) },
   { prefix: '/connections', served: Boolean(toolsUrl) },
   { prefix: '/settings/members', served: onPlatform },
   { prefix: '/settings/policies', served: onPlatform },
+  { prefix: '/govern/policies', served: onPlatform },
   { prefix: '/settings/security/sign-in', served: onPlatform },
   // The home page's counts are agents-service's /v1/overview; matched exactly, so it marks no other page.
   { prefix: '/', served: Boolean(registryUrl) },
   // No service owns these yet.
   { prefix: '/deployments', served: false },
-  { prefix: '/assurance', served: false },
-  { prefix: '/model-risk', served: false },
-  { prefix: '/integrations', served: false },
+  // Evals are agents-service's /v1/assurance; the agent page's own Evals tab is still sample data.
+  { prefix: '/govern/evals', served: Boolean(registryUrl) },
+  { prefix: '/govern/models', served: false },
+  { prefix: '/data/connectors', served: false },
   { prefix: '/sources', served: false },
   { prefix: '/connect', served: false },
-  { prefix: '/wiki', served: false },
+  { prefix: '/data/wiki', served: false },
   { prefix: '/prompt-blocks', served: false },
   { prefix: '/account', served: false },
   { prefix: '/settings', served: false },
 ];
+/** The team's API keys are platform-service's; without it the keys page draws sample ones and says so. */
+export const apiKeysOnService = onPlatform || Boolean(baseUrl);
 /** Workspace policies are platform-service's; without it the page draws sample ones and says so. */
 export const policiesOnService = onPlatform || Boolean(baseUrl);
+/** Agent evals have no service yet: beside real services the Evals tab draws sample cases and runs and says so. */
+export const evalsArePreview = !baseUrl && onRealService;
 /** Sources and their settings are kb-service's once its URL (or the all-HTTP URL) is set; otherwise the mock's. */
 export const knowledgeOnService = Boolean(knowledgeUrl || baseUrl);
 /** Files on files-service, which does not set retention or export evidence yet; the Files page hides those actions. */
 export const filesOnService = Boolean(filesUrl) && !baseUrl;
 /** A signed form link opens on the embed app; without its origin Share as a form is members-only. */
 export const publicFormPage = Boolean(embedUrl);
+/** The embed app's origin, where a link form's page is served; undefined when the install has none. */
+export const embedPageOrigin = embedUrl?.replace(/\/$/, '');
 /** What's new and Coming next as the build read them (next.config.ts); lib/changelog.ts parses them. */
 export const changelogSource = process.env.OPS_CHANGELOG ?? '[]';
 export const roadmapSource = process.env.OPS_ROADMAP ?? '[]';
@@ -181,7 +207,7 @@ export function isPreviewPath(pathname: string): boolean {
   if (baseUrl || !onRealService) return false;
   // The Connections catalog and each app's page read tools-service; a connection's older pages under it
   // stay sample data until they move.
-  if (pathname === '/integrations' || pathname.startsWith('/integrations/apps/')) return false;
+  if (pathname === '/data/connectors' || pathname.startsWith('/data/connectors/')) return false;
   const under = (prefix: string) => (prefix === '/' ? pathname === '/' : pathname === prefix || pathname.startsWith(`${prefix}/`));
   const area = AREAS.filter((a) => under(a.prefix)).sort((x, y) => y.prefix.length - x.prefix.length)[0];
   return !!area && !area.served;
@@ -250,3 +276,6 @@ export const serviceUrls = {
  * reference; scripts/changelog-check.mjs keeps the same names. Empty: a shipped feature has no switch.
  */
 export const releaseSwitches: Readonly<Record<string, boolean>> = {};
+
+/** A demo's accent colour from .env (OPS_BRAND_PRIMARY, OPS_BRAND_PRIMARY_DARK), read when the console starts. */
+export const brandColours = { light: process.env.OPS_BRAND_PRIMARY, dark: process.env.OPS_BRAND_PRIMARY_DARK };

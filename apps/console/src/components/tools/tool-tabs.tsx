@@ -6,7 +6,7 @@ import { TOOL_CALL_LOG } from '@/lib/nav';
 
 /** A tool's page tabs: General (its call and Mock or Real) and, with the call log's cell, Logs (its calls). */
 export function ToolTabs({ moduleId, operation }: { moduleId: string; operation: string }) {
-  const base = `/tools/${encodeURIComponent(moduleId)}/operations/${encodeURIComponent(operation)}`;
+  const base = `/data/tools/${encodeURIComponent(moduleId)}/operations/${encodeURIComponent(operation)}`;
   const logs = useNavAllows()(TOOL_CALL_LOG) === true;
   return (
     <RouteTabs

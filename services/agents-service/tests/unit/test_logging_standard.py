@@ -1,27 +1,21 @@
-"""Rule 6b of check_standards, by failure mode: a second log setup (basicConfig, uvicorn's own handlers) prints lines
-a collector cannot parse, and a value in an event name makes every line a different event."""
+"""Rule 6b of ops_service_kit.standards, by failure mode: a second log setup (basicConfig, uvicorn's own handlers)
+prints lines a collector cannot parse, and a value in an event name makes every line a different event."""
 
 from __future__ import annotations
 
 import ast
-import sys
 from pathlib import Path
-from typing import Any
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
-import check_standards  # pyright: ignore[reportMissingImports]
+from ops_service_kit import standards
 
-standards: Any = check_standards
 ROOT: Path = standards.ROOT
 SERVICE_FILE = ROOT / "services" / "x-service" / "src" / "ops_x" / "__main__.py"
 
 
 def findings(source: str, path: Path = SERVICE_FILE) -> list[str]:
-    out: list[str] = []
-    standards.check_logging(path, ast.parse(source), out)
-    return out
+    return standards.check_logging(path, ast.parse(source))
 
 
 @pytest.mark.parametrize(

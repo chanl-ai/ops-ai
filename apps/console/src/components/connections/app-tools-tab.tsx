@@ -15,6 +15,8 @@ import { selectColumn } from '@/components/shared/select-column';
 import { toolColumns } from '@/components/tools/tools-table';
 import { type AppPage, useAddTools, useRemoveTool } from '@/hooks/systems-queries';
 
+import { AskBeforeChanges } from './ask-before-changes';
+
 type AppTool = AppPage['tools'][number];
 type Row = AppTool & { id: string; access: 'read' | 'write' | 'workflow'; usedBy: { agents: { id: string; name: string }[]; workflows: { id: string; name: string }[] } | null };
 
@@ -89,8 +91,9 @@ export function ToolsTab({ app }: { app: AppPage }) {
   return (
     <div className="flex flex-col gap-3" data-testid="app-tools">
       <p className="text-sm text-muted-foreground">
-        {`What ${app.card.name} offers. Added tools are the ones agents and workflows in this team can pick. New apps start with their read tools added. ${added} of ${app.tools.length} added.`}
+        {`What ${app.card.name} offers. Added tools are the ones agents and workflows in this team can pick. New apps start with every tool added. ${added} of ${app.tools.length} added.`}
       </p>
+      <AskBeforeChanges appId={app.card.id} appName={app.card.name} />
       {asked.length > 0 && (
         <Alert data-testid="app-tool-asked">
           <AlertTitle>{`${asked.join(', ')} ${asked.length === 1 ? 'needs a permission' : 'need permissions'} the team account has not granted`}</AlertTitle>

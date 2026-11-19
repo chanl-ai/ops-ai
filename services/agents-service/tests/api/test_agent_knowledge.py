@@ -32,7 +32,7 @@ async def test_a_value_already_held_is_kept(tmp_path: Path) -> None:
         # As the start-up seed saves: in the dev tenant, which a request sets from its token.
         with tenant_scope(LOCAL_TENANT):
             row = await reg.row(AGENT)
-            spec = dict((await reg.version(AGENT, int(row["version"])))["spec"])
+            spec = dict((await reg.version(AGENT, row.version)).spec)
             await reg.save(AGENT, {**spec, "collections": ["kb_gone"]}, by="seed")
         kept = await c.patch(f"/v1/agents/{AGENT}", json={"collections": ["kb_gone", "kb_people"]})
         assert kept.status_code == 200, kept.text

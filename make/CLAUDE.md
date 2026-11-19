@@ -74,10 +74,17 @@ run records and knowledge pages have no delete route, so they stay. Code: `sdk/p
 | Fragment | Targets |
 |---|---|
 | `dev.mk` | `up`, `down`, `restart`, `health`, `logs`, `ports`, `sample-team`, `sample-teams` (the first teams: Wealth, Lending, Risk), `demo`, `demo-walk`, `demo-model`, `demo-salesforce*`, `runner-wasm`, `reset-db` |
-| `python.mk` | `test`, `python-install`, `python-verify`, `sbom` |
+| `checks.mk` | `checks` (the one list of checks; `STAGED=1` for those a staged path can change), `checks-list`; a check is a name in `CHECKS` with its `check-run.<name>` command and `check-paths.<name>` pattern |
+| `python.mk` | `test` (T= honoured by every service), `test-impacted` (BASE=, PLAN=1), `agent-guard`, `python-install`, `python-verify`, `sbom` |
 | `git.mk` | `commit`, `commit-hunks`, `my-hunks`, `whats-mine`, `unstage`, `git-rules`, `review` ([Commits](../CLAUDE.md#commits)) |
 | `usecase.mk` | `usecase-test`, `usecase-report`, `usecase-list`, `usecase-show`, `usecase-coverage`, `usecase-new`, `usecase-reset`, `usecase-runner-test` |
-| `sdk.mk`, `docs.mk` | `openapi`, `sdk`, `sdk-verify`, `sdk-check`; `docs-verify` |
-| `db.mk`, `db-scripts.mk` | `db-up`, `db-down`, `db-shell`, `db-sweep`, `migrate`, `migration`; the DBA scripts ([deploy/CLAUDE.md](../deploy/CLAUDE.md)) |
-| `release.mk`, `staging.mk`, `deps.mk`, `setup.mk`, `experiments.mk` | Releases, staging, dependency locks and mirrors, machine setup, agents-service experiments |
+| `sdk.mk`, `docs.mk` | `openapi`, `sdk`, `sdk-verify`, `sdk-check`; `docs-verify`, `docs-guides-check` |
+| `db.mk`, `db-scripts.mk` | `db-up`, `db-down`, `db-shell`, `db-sweep`, `migrate`, `migration`; the DBA scripts ([deploy/CLAUDE.md](../deploy/CLAUDE.md)); `mssql-remote-*`, the shared SQL Server on Fly for tests from a Mac |
+| `release.mk` (`release-cut`, `release-pr`, `release-back-merge`, `hotfix-cut`: [docs/deploy/release.md](../docs/deploy/release.md)), `staging.mk`, `deps.mk`, `setup.mk`, `experiments.mk` | Releases, staging, dependency locks and mirrors, machine setup, agents-service experiments |
 | `services.mk` | The generated `<verb>-<svc>` pass-throughs, for example `test-tools` runs `make -C services/tools-service test` |
+
+## Engineering standards
+
+The rules the code in this folder is held to, each with a real example from this repository and the check that
+enforces it: [delivery, deploy and upgrade](../docs/architecture/standards/delivery.md) (`DL1` to `DL9`), [tests](../docs/architecture/standards/testing.md) (`TS1` to `TS8`). The index of every rule is
+[engineering standards](../docs/architecture/engineering-standards.md); a review cites the rule id.

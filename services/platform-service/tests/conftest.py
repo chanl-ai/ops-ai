@@ -1,4 +1,6 @@
-"""platform-service on the compose PostgreSQL (`make db-up`), migrated by its own chain, each test on fresh tenants."""
+"""platform-service on the compose PostgreSQL (`make db-up`), migrated by its own chain, each test on fresh tenants,
+and on a scratch SQL Server database holding the chain's golden DDL when OPS_MSSQL_SERVER and MSSQL_SA_PASSWORD are set
+(ops_store.testing). The files in BOTH_DATABASES run on both; the rest run on PostgreSQL alone."""
 
 from __future__ import annotations
 
@@ -7,7 +9,8 @@ import html
 import os
 import re
 import secrets
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncGenerator, AsyncIterator, Iterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -15,11 +18,12 @@ from urllib.parse import urlencode
 
 import httpx
 import pytest
+import sqlalchemy as sa
 from alembic import command
 from alembic.config import Config
 from fastapi import FastAPI
 from pydantic import SecretStr
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
 
 from ops_email import MemorySender
 from ops_identity import ServiceAuth, mint_service_token
@@ -28,16 +32,28 @@ from ops_platform.keys import dev_signer
 from ops_platform.signin_options import SignInOptions
 from ops_platform.store.identity import IdentityStore
 from ops_platform.store.roles import ensure_builtin_roles, mirror_membership
-from ops_platform.store.tables import api_keys, members, role_assignments, teams, tenants, users
+from ops_platform.store.tables import (
+    api_keys,
+    members,
+    oauth_address_counts,
+    role_assignments,
+    teams,
+    tenants,
+    users,
+)
+from ops_platform.store.tenancy import SESSION_LOOKUP, TenantDb
 from ops_policy import Ed25519Signer
 from ops_service_kit.contract import response_checker
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.public_address import PublicFetch
 from ops_service_kit.settings import Settings
 from ops_service_kit.testapps import released_apps
-from ops_service_kit.testdb import isolate_from_stack, refusal
+from ops_service_kit.testdb import isolate_from_stack, refusal, unanswered_endpoints, use_worker_database
 from ops_signin.dns import TxtResolver
 from ops_signin.fake_idp import FakeDns, self_signed
 from ops_signin.fake_idp import create_app as create_idp
+from ops_store.dialect import dialect_of
+from ops_store.testing import DATABASES, NO_SQL_SERVER, postgresql_only, sql_server_schema
 
 ROOT = Path(__file__).parents[1]
 DEMO_PASSWORD = "demo-password-for-tests"
@@ -53,21 +69,105 @@ SERVICE_TOKEN = mint_service_token(CALLER, service="agents", audience="platform"
 SERVICE = {"Authorization": f"Bearer {SERVICE_TOKEN}"}
 
 
+# The test files that run on SQL Server too; the store-mssql job in .github/workflows/ci.yml runs the same list.
+BOTH_DATABASES = frozenset(
+    {
+        "test_store_both_databases.py",
+        "test_lookup_exposure.py",
+        "test_migrations.py",
+        "test_rls.py",
+        "test_policies.py",
+        "test_access_check.py",
+        "test_acting_for.py",
+        "test_api_key_target.py",
+        "test_audit_events.py",
+        "test_bootstrap.py",
+        "test_boundary.py",
+        "test_cors.py",
+        "test_custom_roles.py",
+        "test_dev_sign_in.py",
+        "test_flags.py",
+        "test_identity_seam.py",
+        "test_introspect.py",
+        "test_member_options.py",
+        "test_reply_pins.py",
+        "test_saml_security.py",
+        "test_seed.py",
+        "test_team_names.py",
+        "test_tenancy_mode.py",
+        "test_workspace_admin.py",
+        "test_body_name_pins.py",
+        "test_signin_lockout.py",
+        "test_signin_password.py",
+        "test_auth.py",
+        "test_holders.py",
+        "test_signin_secrets.py",
+        "test_api_keys.py",
+        "test_step_up.py",
+    }
+)
+
+
 def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line("markers", "postgresql_only(why): runs on PostgreSQL only, for the reason given")
+    use_worker_database()
     isolate_from_stack()
+    # The app asks agents-service what a team still runs; a test that needs an answer passes its own `usage`, and the
+    # rest get an address nothing answers on.
+    unanswered_endpoints("agents")
     # Before any fixture or migration: the test database only, never the live one (ops_service_kit.testdb).
     if (why := refusal(Settings().database_url, os.environ.get("OPS_TEST_DATABASE_URL"))) is not None:
         pytest.exit(why, returncode=4)
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    for item in items:
+        if item.path.name not in BOTH_DATABASES and item.get_closest_marker("postgresql_only") is None:
+            item.add_marker(pytest.mark.postgresql_only("not in BOTH_DATABASES"))
+    keep, dropped = postgresql_only(items)
+    if dropped:
+        config.hook.pytest_deselected(items=[i for i in items if i not in keep])
+        items[:] = keep
+        terminal = config.pluginmanager.get_plugin("terminalreporter")
+        for nodeid, why in dropped:
+            if terminal is not None and why != "not in BOTH_DATABASES":
+                terminal.write_line(f"postgresql only: {nodeid}: {why}")
 
 
 def alembic_config() -> Config:
     return Config(str(ROOT / "alembic.ini"))
 
 
+@pytest.fixture(scope="session", params=DATABASES)
+def database_url(request: pytest.FixtureRequest) -> Iterator[str]:
+    """The chain on PostgreSQL, and a scratch SQL Server database holding its golden DDL when OPS_MSSQL_SERVER and
+    MSSQL_SA_PASSWORD are set (ops_store.testing); a file outside BOTH_DATABASES gets the PostgreSQL case only."""
+    if request.param == "postgresql":
+        command.upgrade(alembic_config(), "head")
+        yield Settings().database_url
+        return
+    with sql_server_schema("platform", os.environ.get("OPS_MSSQL_SERVER"), os.environ.get("MSSQL_SA_PASSWORD")) as url:
+        if url is None:
+            pytest.skip(NO_SQL_SERVER)
+        yield url
+
+
 @pytest.fixture(scope="session")
-def database_url() -> str:
-    command.upgrade(alembic_config(), "head")
-    return Settings().database_url
+def store_url(database_url: str) -> str:
+    return database_url
+
+
+@asynccontextmanager
+async def seed_tx(engine: AsyncEngine, tenant: str) -> AsyncGenerator[AsyncConnection]:
+    """A transaction that writes a test's own rows of `tenant` past the row policies. PostgreSQL's test login owns the
+    tables, which row security does not filter; SQL Server applies its security policies to every user, the
+    administrator too, so there the rows are written in the tenant they carry (tools-service's `setup_tx`)."""
+    if engine.dialect.name != "mssql":
+        async with engine.begin() as c:
+            yield c
+        return
+    async with TenantDb(engine).tenant_tx(tenant) as c:
+        yield c
 
 
 @pytest.fixture
@@ -105,7 +205,7 @@ class Platform:
         user = new_id("usr")
         address = email or f"{user}@bank.test"
         p = Person(tenant, user, address)
-        async with self.engine.begin() as c:
+        async with seed_tx(self.engine, tenant) as c:
             if tenant_id is None:
                 await c.execute(
                     tenants.insert().values(
@@ -164,7 +264,7 @@ class Platform:
     async def api_key(self, p: Person, *, scopes: tuple[str, ...] = ("read",), **state: str) -> str:
         """A key bound to the person's first team; returns the full `ok_<id>.<secret>` text."""
         key_id, secret = new_id("key"), new_id("sec")
-        async with self.engine.begin() as c:
+        async with seed_tx(self.engine, p.tenant_id) as c:
             await c.execute(
                 api_keys.insert().values(
                     id=key_id,
@@ -207,13 +307,45 @@ async def platform(engine: AsyncEngine, database_url: str) -> AsyncIterator[Plat
     await store.close()
 
 
+# The database user platform-service's login maps to on SQL Server (grants.sql); the rig connects as the administrator.
+RUNTIME = "ops_platform_runtime"
+
+
+@asynccontextmanager
+async def as_tenant_role(db: TenantDb, tenant: str | None) -> AsyncGenerator[AsyncConnection]:
+    """A transaction as the tenant role, in `tenant` or (None) in no tenant, as the lookups run: `ops_platform_tenant`
+    on PostgreSQL (tenant_tx sets it), the runtime user on SQL Server, impersonated and reverted here."""
+    async with db.tenant_tx(tenant) if tenant else db.system_tx(SESSION_LOOKUP) as c:
+        mssql = dialect_of(c) == "mssql"
+        if mssql:
+            await c.execute(sa.text(f"EXECUTE AS USER = N'{RUNTIME}'"))
+        yield c
+        if mssql:
+            await c.execute(sa.text("REVERT"))
+
+
 # ── Sign-in providers: the public app with a fake identity provider, a mail sender that keeps what it sends,
 # and one tenant whose Security team admin configures its providers ──
 
 IDP = "http://idp.test"
 CONSOLE = "http://console.test"
 PUBLIC_URL = "http://platform"
+# tools-service's public base, as a proxy serves both services under one origin on different paths.
+MCP_URL = "http://ops.test/api/tools"
 OIDC_SECRET = "bank-oidc"
+# The address the rig's resolver gives the fake identity provider's host: public, so provider fetches pass the guard
+# the way a real provider's would. A test swaps the resolver's answer to show the guard refusing.
+IDP_ADDRESS = "93.184.216.34"
+
+
+@dataclass
+class RigResolver:
+    answers: dict[str, list[str]] = field(default_factory=lambda: {"idp.test": [IDP_ADDRESS]})
+
+    async def resolve(self, host: str, port: int) -> list[str]:
+        return self.answers.get(host, [])
+
+
 # The SAML service provider's key pair every rig's platform-service holds.
 SP_KEY, SP_CERT = self_signed("sp")
 
@@ -239,6 +371,9 @@ class SignInRig:
     ops_team: str
     admin: dict[str, str]
     app: FastAPI
+    resolver: RigResolver
+    # The engine the app's own stores use (`engine` is the superuser's, for setting rows up).
+    app_engine: AsyncEngine
     # A domain of this run's own: email domains are unique across tenants, and the test database outlives a run.
     zone: str = field(default_factory=lambda: f"{secrets.token_hex(4)}.bank.test")
 
@@ -247,7 +382,7 @@ class SignInRig:
         now = now_iso()
         tenant = tenant or self.tenant
         user, team = new_id("usr"), new_id("team")
-        async with self.engine.begin() as c:
+        async with seed_tx(self.engine, tenant) as c:
             await c.execute(
                 users.insert().values(
                     id=user, tenant_id=tenant, email=email, name=email, status="active", created_at=now
@@ -274,7 +409,7 @@ class SignInRig:
         """Headers of an admin of the Security team who holds no role in every team: settings.manage, but not a
         workspace admin."""
         user, now = new_id("usr"), now_iso()
-        async with self.engine.begin() as c:
+        async with seed_tx(self.engine, self.tenant) as c:
             await c.execute(
                 users.insert().values(
                     id=user, tenant_id=self.tenant, email=email, name="S", status="active", created_at=now
@@ -359,15 +494,21 @@ class SignInRig:
             back = httpx.URL(at_idp.headers["location"])
             r = await self.public.get(back.path, params=dict(back.params))
         else:
-            form = dict(re.findall(r'name="(\w+)" value="([^"]*)"', at_idp.text))
-            form = {k: html.unescape(v) for k, v in form.items()}
-            r = await self.public.post(
-                "/v1/auth/saml/acs",
-                content=urlencode(form),
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
-            )
+            r = await self.post_form(at_idp.text)
         assert r.status_code == 303, r.text
         return r.headers["location"]
+
+    async def post_form(self, page: str, *, to: str | None = None) -> httpx.Response:
+        """Posts the identity provider's auto-submit form to platform-service, at the consumer URL the form names
+        (or `to`), as the browser would."""
+        form = {k: html.unescape(v) for k, v in re.findall(r'name="(\w+)" value="([^"]*)"', page)}
+        action = re.search(r'action="([^"]*)"', page)
+        assert action is not None, page[:200]
+        return await self.public.post(
+            to or httpx.URL(html.unescape(action.group(1))).path,
+            content=urlencode(form),
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
 
     async def sign_in_sso(self, email: str, *, user: str | None = None, stale: bool = False) -> Round:
         r = await self.public.post("/v1/auth/sso/start", json={"email": email})
@@ -390,18 +531,22 @@ async def signin(engine: AsyncEngine, database_url: str) -> AsyncIterator[SignIn
     mail = MemorySender()
     fake_dns = FakeDns()
     dns_port, stop_dns = fake_dns.serve()
+    resolver = RigResolver()
     options = SignInOptions(
         password_iterations=1_000,
         password_min_length=12,
         flow_ttl_s=600,
         reset_ttl_s=3600,
+        http_timeout_s=15.0,
         public_url=PUBLIC_URL,
         console_url=CONSOLE,
+        mcp_url=MCP_URL,
         mail=mail,
         transport=httpx.ASGITransport(app=create_idp(IDP, fake_dns)),
         dns=TxtResolver([f"127.0.0.1:{dns_port}"], timeout_s=2),
         saml_sp_key=SecretStr(SP_KEY),
         saml_sp_certificate=SP_CERT,
+        fetch=PublicFetch(resolver=resolver, require_https=False),
     )
     public = create_public_app(
         store,
@@ -412,7 +557,10 @@ async def signin(engine: AsyncEngine, database_url: str) -> AsyncIterator[SignIn
     )
     now = now_iso()
     admin_email = f"{new_id('sec')}@bank.test"
-    async with engine.begin() as c:
+    async with seed_tx(engine, tenant) as c:
+        # Registrations and sign-in starts are counted per caller in the database, which the session's tests share;
+        # each rig starts with no caller counted, so one test's requests never use up another's minute.
+        await c.execute(oauth_address_counts.delete())
         await c.execute(
             tenants.insert().values(
                 id=tenant, name=tenant, status="active", allowed_domains=[], created_at=now, security_team_id=security
@@ -457,12 +605,13 @@ async def signin(engine: AsyncEngine, database_url: str) -> AsyncIterator[SignIn
         httpx.AsyncClient(transport=options.transport, base_url=IDP) as idp,
     ):
         r = await pub.post("/v1/auth/sign-in", json={"email": admin_email, "password": DEMO_PASSWORD})
+        assert r.status_code == 200, r.text
         token = r.json()["data"]["token"]
         headers = {"Authorization": f"Bearer {token}", "X-Team-Id": security}
         # The client secret the OIDC providers name, saved by the workspace's Security admin.
         saved = await pub.put(f"/v1/settings/sign-in/secrets/{OIDC_SECRET}", json={"value": "s3cret"}, headers=headers)
         assert saved.status_code == 200, saved.text
-        yield SignInRig(pub, idp, mail, engine, tenant, security, ops, headers, public)
+        yield SignInRig(pub, idp, mail, engine, tenant, security, ops, headers, public, resolver, store.db.engine)
     stop_dns.set()
     await store.close()
 

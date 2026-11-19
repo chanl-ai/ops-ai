@@ -1,0 +1,3 @@
+# 2 boundaries crossed without a model in services/files-service (scripts/check_typed_boundaries.py). A row may only fall.
+1 body files_put_content
+1 body files_write_file

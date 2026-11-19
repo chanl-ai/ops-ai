@@ -8,6 +8,7 @@
  * account method left without `account` acts on the app's default account.
  */
 import type { Raw, Resource } from './client.js';
+import { everyPage } from './transport.js';
 
 type Obj = Record<string, any>;
 const PLUGIN = 'plugin:';
@@ -30,17 +31,96 @@ function accountOf(page: Obj): string {
   return String(page.connection.id);
 }
 
-const call = (raw: Raw, service: 'tools' | 'agents' | 'documents' | 'kb', id: string, args: Obj = {}): Promise<any> =>
+const call = (raw: Raw, service: 'tools' | 'agents' | 'documents' | 'kb' | 'platform', id: string, args: Obj = {}): Promise<any> =>
   (raw[service] as unknown as Record<string, (a: Obj) => Promise<any>>)[id]!(args);
 
 const at = (app: string, account: string) => ({ app_id: app, account_id: account });
 
+function picked(found: Obj, names?: string[]): Obj[] {
+  const ops = (found.operations ?? []) as Obj[];
+  if (!names) return ops;
+  const missing = names.filter((n) => !ops.some((o) => o.name === n));
+  // A typo would otherwise import less than the builder ticked.
+  if (missing.length) throw new TypeError(`the document has no operation named ${missing.join(', ')}`);
+  return ops.filter((o) => names.includes(o.name));
+}
+
+const sourceOf = (specUrl: string, connectionId?: string) => ({ kind: 'openapi', specUrl, ...(connectionId ? { connectionId } : {}) });
+
+/** The team's secrets (Settings > Secrets). A value goes in and is never read back: no answer carries it. */
+export class Secrets {
+  constructor(private readonly raw: Raw) {}
+
+  /** Every secret, page after page; `search` keeps those whose name has the text, `ids` names the ones wanted. */
+  list({ search, ids }: { search?: string; ids?: string[] } = {}): Promise<Obj[]> {
+    return everyPage((query) => call(this.raw, 'tools', 'secrets_list_secrets', { query }), { search, ids });
+  }
+
+  /** Stores a secret as the team's; `teams` also shares it with other teams of the caller. */
+  create(name: string, value: string, { teams }: { teams?: string[] } = {}): Promise<Obj> {
+    return call(this.raw, 'tools', 'secrets_create_secret', { body: { name, value, ...(teams?.length ? { teams } : {}) } });
+  }
+
+  rotate(name: string, value: string): Promise<Obj> {
+    return call(this.raw, 'tools', 'secrets_rotate_secret', { path: { name }, body: { value } });
+  }
+
+  rename(name: string, newName: string): Promise<Obj> {
+    return call(this.raw, 'tools', 'secrets_rename_secret', { path: { name }, body: { name: newName } });
+  }
+
+  delete(name: string): Promise<unknown> {
+    return call(this.raw, 'tools', 'secrets_delete_secret', { path: { name } });
+  }
+}
+
+/** The hosts and address ranges tools may reach (Settings > Egress); only a Security admin changes them. */
+export class Egress {
+  constructor(private readonly raw: Raw) {}
+
+  list(): Promise<Obj> {
+    return call(this.raw, 'tools', 'egress_allow_list');
+  }
+
+  allowHost(host: string, note = ''): Promise<Obj> {
+    return call(this.raw, 'tools', 'egress_add_host', { body: { value: host, note } });
+  }
+
+  allowRange(cidr: string, note = ''): Promise<Obj> {
+    return call(this.raw, 'tools', 'egress_add_range', { body: { value: cidr, note } });
+  }
+
+  removeHost(host: string): Promise<Obj> {
+    return call(this.raw, 'tools', 'egress_remove_host', { body: { value: host } });
+  }
+
+  removeRange(cidr: string): Promise<Obj> {
+    return call(this.raw, 'tools', 'egress_remove_range', { body: { value: cidr } });
+  }
+}
+
+/** The team's settings a Security admin changes (Settings > Policies), such as `toolWritesNeedApproval`. They belong to the team the client acts in. */
+export class Policies {
+  constructor(private readonly raw: Raw) {}
+
+  get(key: string): Promise<Obj> {
+    return call(this.raw, 'platform', 'policies_get_policy', { path: { key } });
+  }
+
+  set(key: string, value: unknown): Promise<Obj> {
+    return call(this.raw, 'platform', 'policies_set_policy', { path: { key }, body: { value } });
+  }
+}
+
 export class Apps {
   constructor(private readonly raw: Raw) {}
 
-  /** The Apps page's cards; `connected` keeps only the connected ones (true) or only the rest (false). */
-  async list({ connected: only }: { connected?: boolean } = {}): Promise<Obj[]> {
-    const cards = (await call(this.raw, 'tools', 'apps_list_apps')) as Obj[];
+  /**
+   * The Apps page's cards, page after page; `connected` keeps only the connected ones (true) or only the rest (false),
+   * `search` matches the name and category, `ids` names the cards wanted.
+   */
+  async list({ connected: only, search, ids }: { connected?: boolean; search?: string; ids?: string[] } = {}): Promise<Obj[]> {
+    const cards = await everyPage((query) => call(this.raw, 'tools', 'apps_list_apps', { query }), { search, ids });
     return cards.filter((c) => only === undefined || connected(c) === only);
   }
 
@@ -194,6 +274,29 @@ export class Connectors {
     if (!target) throw new TypeError(`${connector.name} has no account of yours to disconnect`);
     await call(this.raw, 'tools', 'apps_disconnect', { path: { account_id: target } });
   }
+
+  /** Starts a sign-in and returns where to send the browser (`authorizeUrl`). Pass `link`, the connect link a call for
+   * the caller was answered with, or `app` to sign in from the connector itself. */
+  async connect(app?: string, { link, account, team = false }: { link?: string; account?: string; team?: boolean } = {}): Promise<Obj> {
+    if (link) return call(this.raw, 'tools', 'apps_open_connect_link', { body: { link } });
+    if (!app) throw new TypeError('connect needs an app or a connect link');
+    const connector = await this.get(app);
+    const target = account ?? (connector.primaryAccountId as string | null | undefined) ?? connector.appId;
+    return call(this.raw, 'tools', 'apps_start_sign_in', {
+      path: { app_id: connector.appId, account_id: target },
+      body: { account: team ? 'team' : 'self' },
+    });
+  }
+
+  /** Finishes the sign-in the browser came back from, with the `state` and `code` in the address it returned to. */
+  finish(state: string, code?: string, { error }: { error?: string } = {}): Promise<Obj> {
+    return call(this.raw, 'tools', 'apps_finish_sign_in', { body: { state, ...(code ? { code } : {}), ...(error ? { error } : {}) } });
+  }
+
+  /** The caller's own accounts on every app. */
+  accounts(): Promise<Obj[]> {
+    return call(this.raw, 'tools', 'apps_my_accounts');
+  }
 }
 
 /** What belongs to the caller themselves. */
@@ -231,6 +334,50 @@ export class Tools {
     }
     if (!module) throw new TypeError(`no tool named ${tool} on ${app}`);
     // Left out, a Real run is a test run: the app's sandbox account when it has one.
+    const body: Obj = { mode: real ? 'real' : 'mock', input, ...(environment ? { environment } : {}) };
+    return call(this.raw, 'tools', 'tool_modules_run_tool', { path: { module_id: module, operation: tool }, body });
+  }
+
+  /** An empty tool module for the team's builders to import operations into. */
+  createModule(name: string, displayName: string, { type = 'openapi' }: { type?: string } = {}): Promise<Obj> {
+    return call(this.raw, 'tools', 'tool_modules_create_blank_module', { body: { name, displayName, type } });
+  }
+
+  /** Reads an OpenAPI document and lists the operations it would bring, each with the access its method gives it. Nothing is saved. */
+  discover(specUrl: string, { connectionId }: { connectionId?: string } = {}): Promise<Obj> {
+    return call(this.raw, 'tools', 'tool_modules_discover', { body: sourceOf(specUrl, connectionId) });
+  }
+
+  /** Imports the ticked operations (all when `operations` is left out) of an OpenAPI document into a module's draft. */
+  async importOpenapi(module: string, specUrl: string, operations?: string[], { connectionId }: { connectionId?: string } = {}): Promise<Obj> {
+    const source = sourceOf(specUrl, connectionId);
+    const found = await call(this.raw, 'tools', 'tool_modules_discover', { body: source });
+    return call(this.raw, 'tools', 'tool_modules_import_operations', { path: { module_id: module }, body: { source, operations: picked(found, operations) } });
+  }
+
+  /** Asks the Security team to review the module's draft. */
+  requestReview(module: string, note = ''): Promise<Obj> {
+    return call(this.raw, 'tools', 'tool_modules_request_review', { path: { module_id: module }, body: { note } });
+  }
+
+  /** The id of the security review a module detail (from `requestReview` or `get`) waits on. Security does not see the owner's module, so the owner passes this id on. */
+  reviewOf(module: Obj): string {
+    const waiting = ((module.versions ?? []) as Obj[]).find((v) => v.status === 'in_review' && v.reviewId);
+    if (!waiting) throw new TypeError('this tool module has no version waiting on a security review; request one first');
+    return String(waiting.reviewId);
+  }
+
+  /** The Security team's answer to a module's review; `approved` publishes the module. */
+  decideReview(review: string, decision = 'approved', { reason }: { reason?: string } = {}): Promise<Obj> {
+    return call(this.raw, 'agents', 'reviews_decide_publish_request', { path: { request_id: review }, body: { decision, ...(reason ? { reason } : {}) } });
+  }
+
+  publishVersion(module: string, note = ''): Promise<Obj> {
+    return call(this.raw, 'tools', 'tool_modules_publish_version', { path: { module_id: module }, body: { note } });
+  }
+
+  /** `run` for a module that is not an app: the test panel's call on the module itself. */
+  runModule(module: string, tool: string, input: Obj = {}, { real = false, environment }: { real?: boolean; environment?: string } = {}): Promise<Obj> {
     const body: Obj = { mode: real ? 'real' : 'mock', input, ...(environment ? { environment } : {}) };
     return call(this.raw, 'tools', 'tool_modules_run_tool', { path: { module_id: module, operation: tool }, body });
   }

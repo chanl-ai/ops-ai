@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-11",
+  "title": "Assistants can run your tools over MCP",
+  "description": "An assistant connected to your team's MCP address, such as Claude or Cursor, now gets the real result when it calls a read tool, instead of an Internal server error. The call runs in the team named in the address, never another team's.",
+  "tag": "fix"
+}

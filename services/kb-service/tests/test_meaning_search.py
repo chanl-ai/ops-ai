@@ -6,6 +6,7 @@ source taken out of a base is still found by its vectors."""
 
 from __future__ import annotations
 
+import asyncio
 import os
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
@@ -23,7 +24,7 @@ from ops_kb.retrieval import Search
 from ops_kb.schedule import WITHDRAWN_KEPT
 from ops_kb.search import HybridRetriever
 from ops_kb.store import KnowledgeStore
-from ops_kb.store.vectors import PgVectorStore
+from ops_kb.store.vectors import PgVectorStore, VectorHit
 from ops_store import isolation
 from ops_store.dialect import vector_index_ddl
 
@@ -72,7 +73,9 @@ class Stack:
 
 @pytest.fixture
 async def stack(engine: AsyncEngine, tenant: str, tmp_path: Path) -> AsyncIterator[Stack]:
-    if not await PgVectorStore(engine).ready():
+    with isolation.tenant_wide("test: whether the database has pgvector", tenant_id=tenant):
+        has_vectors = await PgVectorStore(engine).ready()
+    if not has_vectors:
         # CI runs pgvector, so there a missing vector table is a failure; a local server on the old image is skipped
         # with the way to move it.
         if os.environ.get("CI"):
@@ -171,7 +174,7 @@ async def test_a_changed_document_keeps_the_ids_and_vectors_of_its_unchanged_pie
 
     async def pieces() -> dict[str, str]:
         with isolation.tenant_wide("test: the item's live pieces", tenant_id=tenant):
-            return {str(c["id"]): str(c["text"]) for c in await store.chunks(tenant, item["id"])}
+            return {c.id: c.text for c in await store.chunks(tenant, item["id"])}
 
     before = await pieces()
     embedded = stack.embedder.texts
@@ -239,7 +242,7 @@ async def test_a_meaning_lane_with_no_candidate_says_so_instead_of_ran(engine: A
         async def coverage(self, *_: Any, **__: Any) -> tuple[int, int]:
             return 3, 3
 
-        async def nearest(self, *_: Any, **__: Any) -> list[dict[str, Any]]:
+        async def nearest(self, *_: Any, **__: Any) -> list[VectorHit]:
             return []
 
     retriever = HybridRetriever(engine, ConceptEmbedder())
@@ -256,3 +259,26 @@ async def test_off_postgresql_the_keyword_lane_says_it_was_skipped(tmp_path: Pat
     finally:
         await other.dispose()
     assert found.ran == [] and found.skipped == {"keyword": "no_full_text"}
+
+
+@pytest.fixture
+def short_search_wait(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPS_KB_SEARCH_WAIT_S", "0.5")
+
+
+async def test_a_slow_embedding_model_skips_the_meaning_lane_at_the_search_wait(
+    short_search_wait: None, stack: Stack, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The question's embedding is bound by the search's wait, not the models endpoint's 120 s: past it the meaning
+    lane is skipped as when the model is down, and the keyword lane answers."""
+    _, kb = await stack.base()
+    embed = stack.embedder.embed
+
+    async def slow(texts: list[str], *, tenant: str) -> tuple[list[list[float]], int]:
+        await asyncio.sleep(60)
+        return await embed(texts, tenant=tenant)
+
+    monkeypatch.setattr(stack.embedder, "embed", slow)
+    found = await asyncio.wait_for(stack.search(kb["id"], "early repayment charge on my loan"), 5)
+    assert found["lanes"]["skipped"] == [{"lane": "meaning", "reason": "embedding_unavailable: timeout"}], found
+    assert sections(found)[:1] == ["Early repayment"]

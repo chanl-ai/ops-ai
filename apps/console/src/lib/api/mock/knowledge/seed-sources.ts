@@ -8,6 +8,13 @@ const defaultParsing: Source["parsing"] = { ocr: "off", tables: true, vision: fa
 const fileCleaning: Source["cleaning"] = { furniture: false, mainContent: false, siteRepeats: false, duplicates: "flag" }
 const webCleaning: Source["cleaning"] = { furniture: true, mainContent: true, siteRepeats: true, duplicates: "flag" }
 
+/** An app source's `config` as kb-service answers it: the plugin and source it reads, its connection, and the values it was set up with. */
+const toolConfig = (plugin: string, source: string, connectionId: string | null, values: Record<string, unknown>, site: boolean | null = null): Source["config"] => ({
+  connectionId, getTool: null, listTool: null, paused: null, plugin, site, source, title: null, values,
+})
+/** A file source's `config`: the ids of the files it reads. */
+const fileConfig = (fileIds: string[] = []): Source["config"] => ({ fileIds })
+
 const RATE_COLUMNS: TableColumn[] = [
   { name: "Product", role: "searchable", key: true },
   { name: "Band", role: "searchable" },
@@ -36,6 +43,7 @@ const ingest = (preset: IngestSettings["preset"], strategies: IngestStrategy[], 
 const seedRows: Omit<Source, "kindLabel" | "aiStepsWaiting" | "waitingHosts">[] = [
   {
     id: "src_hr_sharepoint",
+    aiCeiling: 5,
     type: "sharepoint",
     kind: "tool",
     cleaning: fileCleaning,
@@ -43,7 +51,7 @@ const seedRows: Omit<Source, "kindLabel" | "aiStepsWaiting" | "waitingHosts">[] 
     connectionId: "int_sharepoint",
     connectionLabel: "harborpine.sharepoint.com (app-only)",
     scopeSummary: "Site: Financial Crime Operations · Documents/Policies, Documents/Forms",
-    config: { site: "Financial Crime Operations", libraries: ["Documents/Policies", "Documents/Forms"], includeOffice: true, includePdf: true, auth: "app-only" },
+    config: toolConfig("sharepoint", "documents", "int_sharepoint", { site: "Financial Crime Operations", libraries: ["Documents/Policies", "Documents/Forms"], includeOffice: true, includePdf: true, auth: "app-only" }),
     parsing: { ...defaultParsing, ocr: "auto" },
     ingest: ingest("policy_manual", ["structure", "context_headers", "parent_child"]),
     rules: [{ id: "r1", kind: "exclude", field: "path", value: "**/Archive/**" }],
@@ -76,6 +84,7 @@ const seedRows: Omit<Source, "kindLabel" | "aiStepsWaiting" | "waitingHosts">[] 
   },
   {
     id: "src_eng_confluence",
+    aiCeiling: 5,
     type: "confluence",
     kind: "tool",
     cleaning: fileCleaning,
@@ -83,7 +92,7 @@ const seedRows: Omit<Source, "kindLabel" | "aiStepsWaiting" | "waitingHosts">[] 
     connectionId: "int_confluence",
     connectionLabel: "harborpine.atlassian.net",
     scopeSummary: "Spaces: FRAUD, PAY, OPS · attachments included",
-    config: { site: "harborpine.atlassian.net", spaces: ["FRAUD", "PAY", "OPS"], includeAttachments: true },
+    config: toolConfig("confluence", "pages", "int_confluence", { site: "harborpine.atlassian.net", spaces: ["FRAUD", "PAY", "OPS"], includeAttachments: true }),
     parsing: defaultParsing,
     ingest: ingest("custom", ["structure", "context_headers"]),
     rules: [{ id: "r2", kind: "exclude", field: "title", value: "Meeting notes" }],
@@ -115,6 +124,7 @@ const seedRows: Omit<Source, "kindLabel" | "aiStepsWaiting" | "waitingHosts">[] 
   },
   {
     id: "src_github_docs",
+    aiCeiling: 5,
     type: "github",
     kind: "tool",
     cleaning: fileCleaning,
@@ -122,7 +132,7 @@ const seedRows: Omit<Source, "kindLabel" | "aiStepsWaiting" | "waitingHosts">[] 
     connectionId: "int_github",
     connectionLabel: "GitHub app · harborpine-bank",
     scopeSummary: "harborpine-bank/model-risk-docs · main · docs/**, **/*.md",
-    config: { installation: "harborpine-bank", repos: ["harborpine-bank/model-risk-docs"], branch: "main", globs: ["docs/**", "**/*.md"] },
+    config: toolConfig("github", "files", "int_github", { installation: "harborpine-bank", repos: ["harborpine-bank/model-risk-docs"], branch: "main", globs: ["docs/**", "**/*.md"] }),
     parsing: defaultParsing,
     ingest: ingest("custom", ["structure"]),
     rules: [{ id: "r3", kind: "exclude", field: "path", value: "docs/archive/**" }],
@@ -154,12 +164,13 @@ const seedRows: Omit<Source, "kindLabel" | "aiStepsWaiting" | "waitingHosts">[] 
   },
   {
     id: "src_contracts",
+    aiCeiling: 5,
     type: "file",
     kind: "file",
     cleaning: fileCleaning,
     name: "Dispute rights guides",
     scopeSummary: "12 files from Files/Cards/Disputes",
-    config: { folderId: "f_contracts" },
+    config: fileConfig(),
     parsing: { ...defaultParsing, ocr: "auto" },
     ingest: ingest("policy_manual", ["structure", "context_headers", "parent_child"]),
     rules: [],
@@ -189,12 +200,13 @@ const seedRows: Omit<Source, "kindLabel" | "aiStepsWaiting" | "waitingHosts">[] 
   },
   {
     id: "src_pricing_crawl",
+    aiCeiling: 5,
     type: "crawl",
     kind: "web",
     cleaning: webCleaning,
     name: "Pricing site",
     scopeSummary: "https://www.harborpine.example/sitemap-pricing.xml · depth 3 · 200 pages max",
-    config: { startUrl: "https://www.harborpine.example/sitemap-pricing.xml", depth: 3, maxPages: 200, sameDomain: true, include: ["/pricing/**", "/fees/**"], exclude: ["/pricing/archive/**"], respectRobots: true },
+    config: toolConfig("web", "site", null, { startUrl: "https://www.harborpine.example/sitemap-pricing.xml", depth: 3, maxPages: 200, sameDomain: true, include: ["/pricing/**", "/fees/**"], exclude: ["/pricing/archive/**"], respectRobots: true }, true),
     parsing: { ...defaultParsing, tables: true },
     ingest: ingest("custom", ["clean", "structure"], { size: 400 }),
     rules: [],
@@ -226,12 +238,13 @@ const seedRows: Omit<Source, "kindLabel" | "aiStepsWaiting" | "waitingHosts">[] 
   },
   {
     id: "src_lending_policies",
+    aiCeiling: 5,
     type: "file",
     kind: "file",
     cleaning: fileCleaning,
     name: "Lending policies and fee schedules",
     scopeSummary: "9 files from Files/Lending",
-    config: { folderId: "f_lending" },
+    config: fileConfig(),
     parsing: { ...defaultParsing, tables: true },
     ingest: ingest("custom", ["structure", "context_headers", "table_rows"], { columns: RATE_COLUMNS }),
     rules: [],
@@ -262,12 +275,13 @@ const seedRows: Omit<Source, "kindLabel" | "aiStepsWaiting" | "waitingHosts">[] 
   },
   {
     id: "src_branch_faq",
+    aiCeiling: 5,
     type: "text",
     kind: "file",
     cleaning: fileCleaning,
     name: "Branch FAQ",
     scopeSummary: "Pasted Markdown · 1 document · 2,140 words",
-    config: { format: "markdown" },
+    config: fileConfig(),
     parsing: defaultParsing,
     ingest: ingest("help_centre", ["structure", "faq"], {}, ["faq"]),
     rules: [],
@@ -294,6 +308,7 @@ const seedRows: Omit<Source, "kindLabel" | "aiStepsWaiting" | "waitingHosts">[] 
   },
   {
     id: "src_zendesk_draft",
+    aiCeiling: 5,
     type: "zendesk",
     kind: "tool",
     cleaning: fileCleaning,
@@ -301,7 +316,7 @@ const seedRows: Omit<Source, "kindLabel" | "aiStepsWaiting" | "waitingHosts">[] 
     connectionId: "int_zendesk",
     connectionLabel: "harborpine.zendesk.com",
     scopeSummary: "Categories: Accounts, Cards · en-ca · published only",
-    config: { subdomain: "harborpine", categories: ["Accounts", "Cards"], locales: ["en-ca"], publishedOnly: true },
+    config: toolConfig("zendesk", "articles", "int_zendesk", { subdomain: "harborpine", categories: ["Accounts", "Cards"], locales: ["en-ca"], publishedOnly: true }),
     parsing: defaultParsing,
     ingest: { ...ingest("help_centre", ["clean", "structure", "faq"]), approval: { status: "pending", approvedSteps: [], requestedBy: "Customer Care" } },
     rules: [],
@@ -325,6 +340,7 @@ const seedRows: Omit<Source, "kindLabel" | "aiStepsWaiting" | "waitingHosts">[] 
   },
   {
     id: "src_notion_product",
+    aiCeiling: 5,
     type: "notion",
     kind: "tool",
     cleaning: fileCleaning,
@@ -332,7 +348,7 @@ const seedRows: Omit<Source, "kindLabel" | "aiStepsWaiting" | "waitingHosts">[] 
     connectionId: "int_notion",
     connectionLabel: "Harbor & Pine Product (Notion)",
     scopeSummary: "Pages: Product wiki, Roadmap · child pages included",
-    config: { pages: ["Product wiki", "Roadmap"], includeChildren: true },
+    config: toolConfig("notion", "pages", "int_notion", { pages: ["Product wiki", "Roadmap"], includeChildren: true }),
     parsing: defaultParsing,
     ingest: ingest("custom", ["topic"], {}, ["topic"]),
     rules: [],
@@ -460,6 +476,7 @@ function mk(
     processedAt: src.lastSyncAt ?? daysAgo(1),
     sizeBytes: Math.floor(20_000 + rnd() * 2_400_000),
     status: "indexed",
+    freshness: stale ? "stale" : "fresh",
     chunkCount: 4 + Math.floor(rnd() * 40),
     tags: [...src.tags],
     metadata: {},

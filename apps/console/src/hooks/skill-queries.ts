@@ -3,8 +3,10 @@
 import * as React from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
+import type { OpsAI } from '@chanl-ai/ops-ai';
 import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
+import { sdk } from '@/lib/api/ops-sdk';
 import type { ListParams } from '@/lib/types/query';
 import type {
   GeneratedSkill,
@@ -19,6 +21,7 @@ import type {
   SkillTestCaseInput,
   SkillView,
 } from '@/lib/types/skills';
+import { useDebounced } from './use-debounced';
 import { useTeamQuery } from './team-query';
 
 /** Every skill key starts with 'skills'; an agent's skills sit under the agent key so attaching refreshes the agent. */
@@ -30,10 +33,40 @@ export const sk = {
   importPreview: (fileId: string) => ['skills', 'import', fileId] as const,
   agent: (agentId: string) => ['agent', agentId, 'skills'] as const,
   candidates: (scope: unknown) => ['skills', 'candidates', scope] as const,
+  chatMenu: (agentId: string) => ['skills', 'chat-menu', agentId] as const,
 };
 
-export const useSkills = (p: ListParams<SkillFilters> & { view: SkillView }) => usePagedQuery({ queryKey: sk.list(p), queryFn: () => api.skills.list(p) });
+/** A row of the skills grid, as `GET /v1/skills` answers it. */
+export type SkillRow = Awaited<ReturnType<OpsAI['raw']['agents']['agents_list_skills']>>['data'][number];
+
+/** One page of skills; the view, filters, search, sort and paging go to the route. */
+export const useSkills = (p: ListParams<SkillFilters> & { view: SkillView }) =>
+  usePagedQuery({
+    queryKey: sk.list(p),
+    queryFn: () => {
+      const f = p.filters ?? {};
+      const some = (v?: string[]) => (v?.length ? v : undefined);
+      return sdk((ops) =>
+        ops.raw.agents.agents_list_skills({
+          query: { view: p.view, page: p.page, pageSize: p.pageSize, search: p.search || undefined, sortBy: p.sortBy, sortOrder: p.sortOrder, status: some(f.status), ownerTeam: some(f.ownerTeam), origin: some(f.origin), loading: some(f.loading) },
+        }),
+      );
+    },
+  });
 export const useSkill = (id: string) => useTeamQuery({ queryKey: sk.one(id), queryFn: () => api.skills.get(id) });
+/** The most skills the chat's / menu shows at once; a longer list narrows as the person types. */
+export const CHAT_MENU_PAGE = 50;
+/** The chat's / menu for one agent, searched on the server as the person types; fetched only once the menu opens. */
+export const useChatMenuSkills = (agentId: string | undefined, enabled: boolean, search = '') => {
+  const debounced = useDebounced(search.trim(), 200);
+  return usePagedQuery({
+    queryKey: [...sk.chatMenu(agentId ?? ''), debounced],
+    queryFn: () => sdk((ops) => ops.raw.agents.agents_list_skills({ query: { view: 'published', usableBy: 'agent', agentId: agentId!, pageSize: CHAT_MENU_PAGE, search: debounced || undefined } })),
+    enabled: enabled && !!agentId,
+    staleTime: 30_000,
+    retry: false,
+  });
+};
 export const useSkillOptions = () => useTeamQuery({ queryKey: sk.options, queryFn: api.skills.options, staleTime: 60_000 });
 export const useSkillGenerateOptions = (enabled: boolean) => useTeamQuery({ queryKey: sk.generateOptions, queryFn: api.skills.generateOptions, enabled, staleTime: 30_000 });
 export const useSkillImportPreview = (fileId: string | undefined) => useTeamQuery({ queryKey: sk.importPreview(fileId ?? ''), queryFn: () => api.skills.previewImport(fileId!), enabled: !!fileId, retry: false });

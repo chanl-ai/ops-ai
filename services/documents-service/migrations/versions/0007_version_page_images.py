@@ -20,3 +20,7 @@ depends_on = None
 
 def upgrade() -> None:
     op.add_column("document_type_versions", sa.Column("page_images", sa.Boolean(), nullable=True))
+
+
+def downgrade() -> None:
+    op.drop_column("document_type_versions", "page_images")

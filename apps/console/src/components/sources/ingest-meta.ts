@@ -13,4 +13,4 @@ export const STRATEGY_LABEL: Record<IngestStrategy, string> = {
   clean: 'Cleaning',
 };
 
-export const PRESET_LABEL: Record<IngestPresetId, string> = { policy_manual: 'Policy manual', help_centre: 'Help centre', rate_table: 'Rate table', email_templates: 'Email templates', custom: 'Custom' };
+export const PRESET_LABEL: Record<IngestPresetId, string> = { documents: 'Documents', policy_manual: 'Policy manual', help_centre: 'Help centre', rate_table: 'Rate table', email_templates: 'Email templates', custom: 'Custom' };

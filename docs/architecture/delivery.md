@@ -25,7 +25,7 @@ scripted model.
 | Identity | Proven: uc-021, uc-023, uc-025, uc-026 (sign in, refresh, sign out; members and roles; every write audited; anonymous and foreign tokens refused; another service verifies tokens from JWKS). agents-service and tools-service resolve callers through `ops_identity` |
 | Tool registry and gateway | Proven: uc-010, uc-011; a module goes draft, review, published; every call runs through the registry and is logged with its verified caller |
 | Import, secrets, egress policy | Proven: uc-012, uc-013; import from OpenAPI and MCP with drift; a secret never comes back; a host off the allow-list is refused at connect time |
-| Agents and workflows from the console | Proven: uc-018, uc-019 (api and ui); draft, validate, test, publish with a second person; the requester is refused and a reject needs a reason |
+| Agents and workflows from the console | Proven: uc-018, uc-019 (api and ui); draft, validate, test, publish with a second person; the requester is refused while `requesterMayDecide` is off, and a reject needs a reason |
 | Chat with a workflow | Proven: uc-020 (api and ui); the reply names the waiting child and a reviewer approves its step |
 | Completions through models-service | Proven: uc-028; an agent runs on the alias its publisher chose, refusals carry codes, replay by task |
 | An approval outlives its token | Proven: uc-027 |
@@ -74,7 +74,7 @@ Ordered by how much the answer could change the design.
 
 | Decision | Options | Default until decided |
 |---|---|---|
-| May a chat user approve their own drafted write? (overview open question 18) | Never; for non-money write classes a published policy names; per risk tier | `OPS_ALLOW_SELF_APPROVAL_IN_CHAT` is true, so a chat user may approve their own drafted write; workflow reviews refuse the requester, and a money call through the gateway needs two distinct approvers |
+| May a chat user approve their own drafted write? (overview open question 18) | Never; for non-money write classes a published policy names; per risk tier | `requesterMayDecide` is off by default, so the person who asked does not decide (403 `own_request`) unless the team turns it on (register row E51); workflow reviews refuse the requester, and a money call through the gateway needs two distinct approvers |
 | Graph runtime: the open-source LangGraph library or LangGraph's hosted Agent Server | Library with our leases, sweeper, timers and event log; Agent Server as a paid product | The open-source library with our own durability code; Agent Server stays an option for later |
 | A generated SDK for TypeScript and Python over the one API | Build it now, so the console and CLI speak through it; or later | Not started; the console calls the API directly |
 | Deploy an agent's wrapper from the console | Now, pointing the console's Deploy flow at `/v1/deployments`; or after the first workflow ships | Not started |

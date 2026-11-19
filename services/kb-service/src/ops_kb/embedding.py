@@ -17,7 +17,7 @@ from ops_service_kit.model_calls import ModelCallError, ModelCalls
 from ops_store import background, isolation
 
 from .store import KnowledgeStore
-from .store.vectors import PgVectorStore
+from .store.vectors import PgVectorStore, UnitVector
 
 log = get_logger(__name__)
 
@@ -78,7 +78,10 @@ async def embed_pending(vectors: PgVectorStore, embedder: Embedder, tenant: str,
         if not units:
             break
         found, _ = await embedder.embed([unit_text(u["heading"], u["text"]) for u in units], tenant=tenant)
-        rows = [{**u, "unit_id": u["id"], "vector": v} for u, v in zip(units, found, strict=True)]
+        rows = [
+            UnitVector(unit_id=u["id"], chunk_id=u["chunk_id"], item_id=u["item_id"], vector=v)
+            for u, v in zip(units, found, strict=True)
+        ]
         await vectors.put(tenant, rows, model=embedder.model, width=embedder.width)
         done += len(units)
     return done

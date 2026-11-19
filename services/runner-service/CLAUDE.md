@@ -37,7 +37,8 @@ From this folder (`make help` lists every target):
 | Its tests (real guests on the pinned build; no database) | `make test`, or from the root `make test PKG=services/runner-service` |
 | One test file | `PYTEST_ADDOPTS=tests/test_app.py make test`: this Makefile ignores `T=` |
 | Lint, types | `make lint`, `make typecheck` |
-| Everything | `make verify` (lint, typecheck, test; there is no OpenAPI document or gate) |
+| Everything | `make verify` (lint, typecheck, test and the OpenAPI gate) |
+| The committed contract | `make openapi-check`; `make openapi` rewrites `openapi.json` after a route change |
 | Logs and health | from the root: `make logs SVC=runner FOLLOW=0`, `make health` |
 
 `make api` cannot reach this service: its route answers service tokens only, and `scripts/api_as.py` has no address
@@ -59,5 +60,11 @@ for it (`SVC=runner` fails with a traceback). Exercise it through a code tool in
 | [docs/services/runner-service/overview.md](../../docs/services/runner-service/overview.md) | Purpose, runtime, route, deploy targets, settings, walls and their tests |
 | [docs/architecture/service-map.md](../../docs/architecture/service-map.md) | Where it sits |
 
-There is no `docs/usecases/runner-service/` folder; the end-to-end check of a code tool is uc-531, registered under
+Use cases: none of its own; the end-to-end check of a code tool is uc-531, registered under
 tools-service (`make usecase-test UC=uc-531`).
+
+## Engineering standards
+
+The rules the code in this folder is held to, each with a real example from this repository and the check that
+enforces it: [layers and ownership](../../docs/architecture/standards/layers.md) (`LY1` to `LY9`), [API contracts and models](../../docs/architecture/standards/api-and-models.md) (`AP1` to `AP7`, `MD1` to `MD4`), [data access](../../docs/architecture/standards/data-access.md) (`DA1` to `DA13`), [tenant isolation and access](../../docs/architecture/standards/tenancy-and-access.md) (`TN1` to `TN5`, `AC1` to `AC5`), [errors, logging and observability](../../docs/architecture/standards/observability.md) (`OB1` to `OB6`). The index of every rule is
+[engineering standards](../../docs/architecture/engineering-standards.md); a review cites the rule id.

@@ -94,7 +94,7 @@ class RunTeamRules:
     policies: PolicySource | None
 
     async def rules(self, run_id: str | None) -> StepRules:
-        run = await RunStore(EngineTransactions(self.db)).get(run_id) if run_id is not None else None
+        run = await RunStore(EngineTransactions(self.db)).row(run_id) if run_id is not None else None
         if run is None:
             return StepRules(False, True)
-        return await team_rules(self.policies, str(run["team_id"]))
+        return await team_rules(self.policies, run.team_id)

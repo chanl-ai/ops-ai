@@ -23,6 +23,9 @@ export async function allowBank(bank) {
   await send('POST', '/v1/egress/ranges', sam, { value: bank.range, note: 'connection use case' });
 }
 
+/** Sign-in kinds whose team account is a stored secret, connected only by a passing test. */
+const KEY_KINDS = new Set(['api_key', 'basic', 'bearer', 'oauth2_client_credentials']);
+
 /** An account's address under its app. */
 export const accountPath = (account) => `/v1/apps/${encodeURIComponent(account.appId)}/accounts/${encodeURIComponent(account.id)}`;
 
@@ -45,6 +48,13 @@ export async function connection(headers, name, kind, accounts, at) {
   const made = await send('POST', '/v1/apps', headers, { name, authKind: kind, signIn: 'team', sandbox: onlySandbox });
   if (made.status !== 201) throw new Error(`creating ${name}: ${made.status}`);
   const first = await keys(headers, made.data, onlySandbox ? accounts.sandbox : accounts.live, at, name);
+  // A key account reads Not signed in, with no Test now on its row, until a test of it has passed (records.py
+  // account_state), so its first test runs here as the api layer runs it. A wrong key's first test fails and the row
+  // keeps no Test now.
+  if (KEY_KINDS.has(kind)) {
+    const tested = await send('POST', `${accountPath(first)}/test`, headers, { account: 'team' });
+    if (tested.status !== 200) throw new Error(`testing ${name}: ${tested.status}`);
+  }
   if (onlySandbox || !accounts.sandbox) return first;
   const added = await send('POST', `/v1/apps/${encodeURIComponent(first.id)}/accounts`, headers, { name: `${name} sandbox`, sandbox: true });
   if (added.status !== 201) throw new Error(`adding ${name}'s sandbox account: ${added.status}`);
@@ -61,8 +71,13 @@ export async function testTeamAccount(page, consoleUrl, account, { own = false }
   const menu = page.locator(own ? '[data-testid^="account-menu-"][data-mine="true"]' : '[data-testid^="account-menu-"][data-default="true"]').first();
   await menu.waitFor({ timeout: 90_000 });
   await menu.click();
+  const item = page.getByRole('menuitem', { name: 'Test now' });
+  if (!(await item.waitFor({ timeout: 10_000 }).then(() => true, () => false))) {
+    const state = ((await page.locator('[data-testid^="account-state-"]').first().innerText().catch(() => '')) ?? '').trim();
+    return { status: null, said: `no Test now on the row (${state})`, page: ((await page.locator('main').innerText().catch(() => '')) ?? '').replace(/\s+/g, ' ') };
+  }
   const answered = page.waitForResponse((r) => r.request().method() === 'POST' && /\/accounts\/[^/]+\/test$/.test(r.url()), { timeout: 60_000 }).catch(() => undefined);
-  await page.getByRole('menuitem', { name: 'Test now' }).click();
+  await item.click();
   const res = await answered;
   const health = res ? ((await res.json().catch(() => ({}))).data?.health ?? {}) : {};
   const toast = page.locator('[data-sonner-toast]').last();

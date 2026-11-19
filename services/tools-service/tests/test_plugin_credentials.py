@@ -30,7 +30,7 @@ from ops_tools.modules.directory import Directory
 from ops_tools.modules.seed import load
 from ops_tools.plugins.host import PluginHost
 from ops_tools.secrets import SecretResolver
-from ops_tools.store.connections import ConnectionStore, app_credentials, connections
+from ops_tools.store.connections import Account, ConnectionStore, NewAccount, app_credentials, connections
 from ops_tools.store.modules import ModuleStore
 from ops_tools.store.plugin_bindings import PluginBindings
 from ops_tools.store.secrets import SecretStore
@@ -90,10 +90,10 @@ def account_admin(tenant: str) -> dict[str, str]:
     return person(tenant, "Sam Adeyemi", {"team_security": "admin"})
 
 
-async def _account(connections: ConnectionService, tenant: str, connection_id: str) -> dict[str, Any]:
+async def _account(connections: ConnectionService, tenant: str, connection_id: str) -> Account:
     conn = await connections.store.get(tenant, connection_id)
     assert conn is not None
-    return dict(conn)
+    return conn
 
 
 async def test_a_team_with_no_app_of_its_own_signs_in_with_the_platforms(rig: Rig, tenant: str) -> None:
@@ -102,8 +102,8 @@ async def test_a_team_with_no_app_of_its_own_signs_in_with_the_platforms(rig: Ri
     assert on.status_code == 200, on.text
     conn_id = on.json()["data"]["connectionId"]
     conn = await _account(connections, tenant, conn_id)
-    assert conn["settings"]["clientId"] == "platform-client-id" and conn["platform_app"] == ID
-    assert not conn.get("secrets"), conn  # no copy of the platform's secret in the team
+    assert conn.settings["clientId"] == "platform-client-id" and conn.platform_app == ID
+    assert not conn.secrets, conn  # no copy of the platform's secret in the team
     proof = await connections._client_proof(_caller(tenant), conn, "sign-in Desk")  # pyright: ignore[reportPrivateUsage]
     assert proof.secret == SECRET
 
@@ -117,8 +117,8 @@ async def test_a_teams_own_app_wins_over_the_platforms(rig: Rig, tenant: str) ->
     on = await client.put(f"/v1/apps/{APP}/team", json=own, headers=team_admin(tenant))
     assert on.status_code == 200, on.text
     conn = await _account(connections, tenant, on.json()["data"]["connectionId"])
-    assert conn["settings"]["clientId"] == "team-client-id" and conn["platform_app"] is None
-    assert "clientSecret" in (conn.get("secrets") or {})
+    assert conn.settings["clientId"] == "team-client-id" and conn.platform_app is None
+    assert "clientSecret" in (conn.secrets or {})
 
 
 async def test_edit_keys_on_a_platform_app_connection_keeps_the_platforms_app(rig: Rig, tenant: str) -> None:
@@ -144,8 +144,8 @@ async def test_ops_ais_secret_is_set_only_by_the_install_and_no_read_shows_it(ri
     client, _, _ = rig
     gone = await client.put(f"/v1/apps/{APP}/app-secret", json={"clientSecret": "other"}, headers=account_admin(tenant))
     assert gone.status_code in (404, 405), "Ops AI's secret is the install's; no route sets it"
-    listed = await client.get("/v1/apps", headers=team_admin(tenant))
-    view = next(c for c in listed.json()["data"] if c["id"] == APP)
+    listed = await client.get("/v1/apps", params={"ids": APP}, headers=team_admin(tenant))
+    view = next(c for c in listed.json()["data"]["data"] if c["id"] == APP)
     assert view["managedClient"] is True and view["plugin"]["platformApp"] is True, view
     on = await client.put(f"/v1/apps/{APP}/team", json={"enabled": True}, headers=team_admin(tenant))
     conn_id = on.json()["data"]["connectionId"]
@@ -227,7 +227,7 @@ async def test_a_call_on_ops_ais_app_reads_its_secret_from_the_install_not_a_tea
     store = ConnectionStore(engine, INSTALL)
     vault = credentials()
     now = datetime.now(UTC)
-    row = {
+    row: NewAccount = {
         "tenant_id": tenant, "id": "con_desk", "app_id": APP, "team_id": TEAM, "name": "Desk",
         "auth_kind": "oauth2_auth_code", "sign_in": "team", "team_backup": False, "status": "healthy", "revision": 1,
         "created_by": "t", "created_at": now, "updated_by": "t", "updated_at": now,

@@ -42,6 +42,13 @@ type-checks this app as well.
 
 | Topic | Doc |
 |---|---|
+| The design: widget, session and channel | [docs/architecture/embedded-chat.md](../../docs/architecture/embedded-chat.md), [chat widgets](../../docs/architecture/chat-widgets.md) |
 | Putting the chat on a bank page | [docs/console/embedding-the-chat.md](../../docs/console/embedding-the-chat.md) |
 | Hosted forms in workflows | [docs/guide/workflows.md](../../docs/guide/workflows.md) |
 | The widget routes | `services/agents-service/src/ops_agents/api/routers/widget.py`; they are mounted with `include_in_schema=False` (`services/agents-service/src/ops_agents/api/app.py:495`), so `openapi.json` does not list them |
+
+## Engineering standards
+
+The rules the code in this folder is held to, each with a real example from this repository and the check that
+enforces it: [console, SDKs and CLI](../../docs/architecture/standards/console-and-sdk.md) (`UI1` to `UI7`), [configuration](../../docs/architecture/standards/configuration.md) (`CF1` to `CF6`). The index of every rule is
+[engineering standards](../../docs/architecture/engineering-standards.md); a review cites the rule id.

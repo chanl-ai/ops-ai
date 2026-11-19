@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ops_tools.connections.records import CONNECTED, REVOKED, account_state
 from ops_tools.modules.seed import blank
+from ops_tools.store.connections import Account
 from ops_tools.store.modules import ModuleStore
 
 from .fake_upstream import HOST
@@ -137,10 +138,10 @@ async def test_a_blank_modules_first_tool_makes_the_connection_its_address_lives
 
 def test_an_app_that_needs_no_sign_in_reads_connected_until_revoked() -> None:
     now = datetime.now(UTC)
-    open_app: dict[str, Any] = {"auth_kind": "none", "status": "draft"}
+    open_app = Account.model_construct(auth_kind="none", status="draft", health=None)
     assert account_state(open_app, None, now) == CONNECTED
-    assert account_state({**open_app, "status": REVOKED}, None, now) == REVOKED
-    assert account_state({**open_app, "auth_kind": "api_key"}, None, now) != CONNECTED
+    assert account_state(open_app.model_copy(update={"status": REVOKED}), None, now) == REVOKED
+    assert account_state(open_app.model_copy(update={"auth_kind": "api_key"}), None, now) != CONNECTED
 
 
 async def test_the_migration_moves_each_custom_modules_address_onto_a_connection_and_back() -> None:

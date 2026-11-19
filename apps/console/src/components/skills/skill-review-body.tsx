@@ -96,7 +96,7 @@ export function SkillPublishBody({ review }: { review: Review }) {
       )}
       <p className="text-xs text-muted-foreground">
         Approving publishes v{p.toVersion}. No agent moves to it until its owner moves the pin.{' '}
-        <Link href={`/skills/${p.skillId}?tab=versions`} className="underline underline-offset-2">
+        <Link href={`/build/skills/${p.skillId}?tab=versions`} className="underline underline-offset-2">
           Open the skill’s versions
         </Link>
       </p>

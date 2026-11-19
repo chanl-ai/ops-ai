@@ -12,7 +12,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useDocumentTypes } from '@/hooks/document-type-queries';
+import { SearchSelect } from '@/components/shared/search-select';
+import { documentTypeOptions, useDocumentType, useDocumentTypes } from '@/hooks/document-type-queries';
+import type { OptionSource } from '@/hooks/options-queries';
 import { type ReadResult, useStartExtraction } from '@/hooks/extraction-queries';
 import { cn } from '@/lib/utils';
 
@@ -29,6 +31,16 @@ const READ_OUTCOME: Record<string, string> = {
 // Detect classifies the file over the team's types and reads it with the one found (documents-service).
 const DETECT = '__detect';
 
+/** The types the picker offers: Detect first, then the team's types as the person searches (the service searches and pages). */
+const typeChoices: OptionSource = {
+  key: 'extract-type-options',
+  fetch: async (p) => {
+    const page = await documentTypeOptions.fetch(p);
+    const first = !p.ids && !p.search && !p.cursor;
+    return first ? { ...page, data: [{ id: DETECT, label: 'Detect the type', hint: null }, ...page.data] } : page;
+  },
+};
+
 /** How the file is read: with a document type (or Detect), as its full text, or with fields the model proposes. */
 type ReadMode = 'fields' | 'text' | 'propose';
 const MODES: { mode: ReadMode; label: string; sub: string; testId: string }[] = [
@@ -39,7 +51,8 @@ const MODES: { mode: ReadMode; label: string; sub: string; testId: string }[] = 
 
 /** Reads a file with a document type and version (screen 3 of the documents design). */
 export function ExtractDialog({ open, onOpenChange, fileId, fileName, onDone, onFullText }: { open: boolean; onOpenChange: (open: boolean) => void; fileId: string; fileName: string; onDone: (run: ReadResult) => void; /** Full text starts no read: the page shows the file's Text tab, its first `pages` pages when given. */ onFullText?: (pages?: number) => void }) {
-  const types = useDocumentTypes();
+  // Two rows say whether the team has none or exactly one; the picker reads the types as the person searches.
+  const types = useDocumentTypes({ page: 1, pageSize: 2 });
   const start = useStartExtraction();
   const router = useRouter();
   const [typeId, setTypeId] = React.useState('');
@@ -50,9 +63,11 @@ export function ExtractDialog({ open, onOpenChange, fileId, fileName, onDone, on
   const [maxPages, setMaxPages] = React.useState('');
   // One key per opening: a double click or a retry after a dropped answer reads the same extraction.
   const key = React.useMemo(() => (open ? crypto.randomUUID() : ''), [open]);
-  const items = types.data?.items ?? [];
-  const chosen = items.find((t) => t.id === typeId);
+  const only = types.data?.pagination.total === 1 ? types.data.data[0] : undefined;
   const detect = typeId === DETECT;
+  // The chosen type's latest version is read by id, so a type beyond any first page is as available as the first.
+  const chosenType = useDocumentType(detect ? '' : typeId);
+  const chosen = chosenType.data;
   const byType = mode === 'fields';
   const pagesLimit = maxPages.trim() ? Number(maxPages) : undefined;
   const pagesError = pagesLimit !== undefined && (!Number.isInteger(pagesLimit) || pagesLimit < 1) ? 'A whole number of pages, 1 or more.' : undefined;
@@ -61,8 +76,8 @@ export function ExtractDialog({ open, onOpenChange, fileId, fileName, onDone, on
     if (!open) return;
     setError(null);
     setVersion('latest');
-    if (!typeId && items.length === 1) setTypeId(items[0].id);
-  }, [open, items, typeId]);
+    if (!typeId && only) setTypeId(only.id);
+  }, [open, only, typeId]);
 
   const submit = async () => {
     if (!byType && mode === 'text') {
@@ -83,7 +98,7 @@ export function ExtractDialog({ open, onOpenChange, fileId, fileName, onDone, on
       if (run.status === 'failed' || run.status === 'cancelled') return setError(`The read stopped (${run.status}). Open run ${run.runId} for the step that failed.`);
       const said = READ_OUTCOME[run.status === 'waiting' || run.status === 'reading' ? run.status : (run.outcome ?? '')] ?? `Finished with outcome ${run.outcome ?? 'none'}`;
       // Top centre: the default corner sits over the fields the read just filled.
-      toast.success(`Read ${fileName}`, { position: 'top-center', description: said, action: { label: 'Open run', onClick: () => router.push(`/workflows/runs/${encodeURIComponent(run.runId)}`) } });
+      toast.success(`Read ${fileName}`, { position: 'top-center', description: said, action: { label: 'Open run', onClick: () => router.push(`/build/runs/${encodeURIComponent(run.runId)}`) } });
       onOpenChange(false);
       onDone(run);
     } catch (e) {
@@ -154,22 +169,18 @@ export function ExtractDialog({ open, onOpenChange, fileId, fileName, onDone, on
           </>
         )}
         {byType && (
-        <FormField id="extract-type" label="Document type" hint={items.length === 0 && !types.isPending ? 'No document types yet: add one under Document types.' : undefined}>
-          <Select value={typeId} onValueChange={(v) => (setTypeId(v), setVersion('latest'))}>
-            <SelectTrigger id="extract-type" className="w-full" data-testid="extract-type">
-              <SelectValue placeholder={types.isPending ? 'Loading…' : 'Choose a type'} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={DETECT} data-testid="extract-detect">
-                Detect the type
-              </SelectItem>
-              {items.map((t) => (
-                <SelectItem key={t.id} value={t.id}>
-                  {t.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <FormField id="extract-type" label="Document type" hint={types.data?.pagination.total === 0 ? 'No document types yet: add one under Document types.' : undefined}>
+          <SearchSelect
+            source={typeChoices}
+            value={typeId ? { id: typeId, label: detect ? 'Detect the type' : (chosen?.name ?? typeId) } : null}
+            onChange={(id) => (setTypeId(id), setVersion('latest'))}
+            placeholder={types.isPending ? 'Loading…' : 'Choose a type'}
+            searchPlaceholder="Search document types…"
+            emptyText="No document type matches."
+            id="extract-type"
+            testId="extract-type"
+            className="w-full"
+          />
         </FormField>
         )}
         {/* Detect picks the type, and reads with that type's latest version, so there is no version to choose. */}

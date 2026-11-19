@@ -12,7 +12,6 @@ import asyncio
 import signal
 from contextlib import AbstractContextManager, AsyncExitStack
 from pathlib import Path
-from typing import Any
 
 import httpx
 
@@ -22,7 +21,7 @@ from ops_documents_client import DocumentsClient
 from ops_email import MailSource
 from ops_engine import default_registry
 from ops_engine.ports import EnginePorts, Faults
-from ops_engine.store import DefinitionStore, RunStore
+from ops_engine.store import DefinitionStore, RunRow, RunStore
 from ops_engine.worker import Worker, WorkerHost
 from ops_files_client import FilesClient
 from ops_service_kit.logging import configure_logging, get_logger
@@ -31,6 +30,7 @@ from ops_store import background, isolation
 from ops_store.isolation import Isolation
 from ops_store.schema_version import require_current_schema
 
+from ..store.api_key_copies import RESYNC_KEY as KEY_RESYNC_KEY
 from ..store.background import BackgroundJobs, heartbeats
 from ..store.cases import CaseStore
 from ..store.engine import AsyncEngine, EngineTransactions, connect
@@ -39,8 +39,10 @@ from ..store.graphs import GraphStore
 from ..store.leases import Leases
 from ..store.mailboxes import MailboxRow
 from ..store.tenancy import ENGINE_PASS
+from ..store.tool_copies import RESYNC_KEY
 from .acting_for import CallPeople, acting_for_tokens
 from .ai_steps_gate import RunTeamRules
+from .api_key_copy import keep_in_step as keep_keys_in_step
 from .app import instance_owner, required_client, service_client
 from .batches import start_forever as start_batches_forever
 from .email_trigger import EmailTriggers
@@ -67,6 +69,7 @@ from .review_sla import PlatformReviewSla
 from .service_events import reminders
 from .sweeper import reconcile_forever
 from .task_type_seeds import StoredTaskTypes
+from .tool_catalog_copy import keep_in_step
 
 # This service's own migration chain: it starts only on a database that records the chain's head.
 MIGRATIONS = Path(__file__).resolve().parents[3] / "migrations"
@@ -93,12 +96,13 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
         if settings.kb_url:
             kb_http = httpx.AsyncClient(base_url=settings.kb_url, timeout=10)
             stack.push_async_callback(kb_http.aclose)
+        tools = required_client(settings, http, "tools", timeout=30) if http is not None else None
         # Agent steps run kernel turns here; with no model configured they fail with that reason.
         agents = kernel_agents(
             settings,
             db,
             gateway=gateway,
-            tools=required_client(settings, http, "tools", timeout=30) if http is not None else None,
+            tools=tools,
             kb=required_client(settings, kb_http, "kb") if kb_http is not None else None,
         )
         saver = await stack.enter_async_context(open_checkpointer(settings.database_url))
@@ -149,6 +153,7 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
             ports.hooks = KillAfterNode(settings.engine_fault_kill_after_node)
         # The workspace's review deadline, for a review step that expires and sets none (reviewSlaHours).
         review_sla = None
+        platform_http: httpx.AsyncClient | None = None
         if settings.platform_url:
             platform_http = await stack.enter_async_context(
                 httpx.AsyncClient(base_url=settings.platform_url, timeout=10)
@@ -175,9 +180,9 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
             remind=reminders(db),
             resume_link=lambda run, waiting, seconds: resume_link(
                 settings.review_key.get_secret_value(),
-                tenant=str(run["tenant_id"]),
-                team=str(run["team_id"]),
-                run_id=str(run["id"]),
+                tenant=run.tenant_id,
+                team=run.team_id,
+                run_id=run.id,
                 waiting=waiting,
                 seconds=seconds,
             ),
@@ -192,6 +197,22 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
         # Batches: each tick starts up to 50 of every tenant's pending rows, each in its own tenant and team.
         starting = asyncio.create_task(start_batches_forever(db, stop))
         stack.push_async_callback(lambda: asyncio.wait_for(starting, None))
+        # The API key copy's resync reads platform-service's keys as this service (settings:view).
+        key_reader = service_client(settings, platform_http, "platform") if platform_http is not None else None
+        if tools is not None or key_reader is not None:
+            await stack.enter_async_context(background.supervisor())
+        if tools is not None:
+            # The tool catalogue copy's resync: a pass at start, then hourly, on the lifespan's supervisor.
+            await background.start(
+                keep_in_step(db, tools, stop=stop, beats=heartbeats(db)), key=RESYNC_KEY, store=heartbeats(db)
+            )
+        if key_reader is not None:
+            # The API key copy's resync: a pass at start, then every minute.
+            await background.start(
+                keep_keys_in_step(db, key_reader, stop=stop, beats=heartbeats(db)),
+                key=KEY_RESYNC_KEY,
+                store=heartbeats(db),
+            )
         listener = email_listener(settings, db, owner, stack)
         if listener is not None:
             listening = asyncio.create_task(keep_mail_listening(listener, stop, settings.email_poll_seconds))
@@ -215,11 +236,11 @@ def engine_pass(tenant_id: str) -> AbstractContextManager[Isolation]:
     return isolation.tenant_wide(ENGINE_PASS, tenant_id=tenant_id)
 
 
-def enter_run(run: dict[str, Any]) -> None:
+def enter_run(run: RunRow) -> None:
     """The run's team for its pass, so a tool call's service token names it as a person's request would. Each pass is
     its own task, so the team set here is that run's alone; a run with no team stays tenant-wide."""
-    if team := run.get("team_id"):
-        isolation.enter(isolation.tenant(), str(team), kind="worker")
+    if team := run.team_id:
+        isolation.enter(isolation.tenant(), team, kind="worker")
 
 
 async def keep_mail_listening(listener: EmailTriggers, stop: asyncio.Event, every_s: float) -> None:
@@ -264,6 +285,7 @@ def email_listener(settings: Settings, db: AsyncEngine, owner: str, stack: Async
 def main() -> None:
     configure_logging(service="agents-worker")
     settings = Settings()
+    settings.require(*settings.identity_endpoints)
     require_keys(settings, "review_key")
     require_current_schema(settings.database_url, MIGRATIONS)
 

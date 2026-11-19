@@ -118,6 +118,7 @@ async def stack(engine: AsyncEngine, gateway: Gateway) -> AsyncIterator[tuple[ht
                         dev_service_signer(),
                         "agents",
                         "tools",
+                        ["tools:view"],
                         tenant=lambda: "local",
                         team=current_team,
                     )
@@ -172,7 +173,7 @@ async def test_a_write_with_no_decision_behind_it_is_refused(
     assert note_step(run)["port"] == "refused", note_step(run)
     assert run["outcome"] == "refused"
     logged = await gateway.log.for_thread(run_id, tenant_id="local")
-    assert [(r["decision"], r["outcome"]) for r in logged] == [("deny", "refused")], logged
+    assert [(r.decision, r.outcome) for r in logged] == [("deny", "refused")], logged
 
 
 async def test_the_decision_mints_the_token_for_the_edited_call_and_the_write_runs(
@@ -198,8 +199,8 @@ async def test_the_decision_mints_the_token_for_the_edited_call_and_the_write_ru
     step = note_step(done)
     assert (done["outcome"], step["port"]) == ("noted", "ok"), step
     logged = await gateway.log.for_thread(run_id, tenant_id="local")
-    assert [(r["decision"], r["outcome"]) for r in logged] == [("allow", "ok")], logged
-    assert logged[0]["approval_token_id"] and logged[0]["step"] == f"{run_id}:note:1:1"
+    assert [(r.decision, r.outcome) for r in logged] == [("allow", "ok")], logged
+    assert logged[0].approval_token_id and logged[0].step == f"{run_id}:note:1:1"
     # The token reached the gateway and nowhere else: not the journal, the run detail, its events or the queue.
     detail = (await client.get(f"/v1/runs/{run_id}")).text
     events = (await client.get(f"/v1/runs/{run_id}/events?follow=false")).text

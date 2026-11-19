@@ -1,0 +1,4 @@
+# 37 boundaries crossed without a model in services/kb-service (scripts/check_typed_boundaries.py). A row may only fall.
+3 task services/kb-service/src/ops_kb/app.py
+32 dict-any services/kb-service/src/ops_kb/service.py
+2 task services/kb-service/src/ops_kb/service.py

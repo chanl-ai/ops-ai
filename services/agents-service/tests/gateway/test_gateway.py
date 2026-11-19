@@ -130,11 +130,11 @@ async def test_every_call_is_logged_with_its_decision(gateway: Gateway) -> None:
     token = gateway.token("request_document", DOC, step="s12", approvers=["dana@bank.test"])
     await gateway.call("request_document", DOC, step="s12", token=token)
     rows = await gateway.log.for_thread(gateway.thread, tenant_id="local")
-    assert [(r["decision"], r["outcome"], r["reasons"]) for r in rows] == [
+    assert [(r.decision, r.outcome, r.reasons) for r in rows] == [
         ("deny", "refused", ["write needs an approval token"]),
         ("allow", "ok", []),
     ]
-    assert rows[1]["approvers"] == ["dana@bank.test"]
+    assert rows[1].approvers == ["dana@bank.test"]
 
 
 async def test_same_approved_write_twice_runs_once(gateway: Gateway) -> None:
@@ -144,7 +144,7 @@ async def test_same_approved_write_twice_runs_once(gateway: Gateway) -> None:
     assert again["output"] == first["output"]
     assert again["replayOf"] == first["callId"]
     rows = await gateway.log.for_thread(gateway.thread, tenant_id="local")
-    assert [(r["outcome"], r["effect"]) for r in rows] == [("ok", True), ("replayed", False)]
+    assert [(r.outcome, r.effect) for r in rows] == [("ok", True), ("replayed", False)]
 
 
 async def test_a_call_without_a_service_token_is_refused_before_policy(gateway: Gateway) -> None:

@@ -272,7 +272,19 @@ export const toolsOperations = {
     "path": "/v1/apps",
     "pathParams": [],
     "query": [
-      "include"
+      "include",
+      "view",
+      "appState",
+      "category",
+      "kind",
+      "accountId",
+      "hasAccount",
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -458,7 +470,9 @@ export const toolsOperations = {
       "page",
       "pageSize",
       "search",
-      "templateId"
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -498,13 +512,23 @@ export const toolsOperations = {
     "path": "/v1/executions",
     "pathParams": [],
     "query": [
-      "page",
-      "pageSize",
       "tool",
       "moduleId",
       "thread",
       "decision",
-      "key"
+      "key",
+      "call",
+      "link",
+      "since",
+      "until",
+      "result",
+      "assistant",
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -532,6 +556,65 @@ export const toolsOperations = {
     "method": "GET",
     "path": "/health/background",
     "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "mcp_links_create_mcp_link": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/mcp-links",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "mcp_links_delete_mcp_link": {
+    "body": null,
+    "headers": [],
+    "method": "DELETE",
+    "path": "/v1/mcp-links/{link_id}",
+    "pathParams": [
+      "link_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "mcp_links_get_mcp_link": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/mcp-links/{link_id}",
+    "pathParams": [
+      "link_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "mcp_links_list_mcp_links": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/mcp-links",
+    "pathParams": [],
+    "query": [
+      "teamId",
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
+    ],
+    "stream": false
+  },
+  "mcp_links_pause_mcp_link": {
+    "body": "json",
+    "headers": [],
+    "method": "PATCH",
+    "path": "/v1/mcp-links/{link_id}",
+    "pathParams": [
+      "link_id"
+    ],
     "query": [],
     "stream": false
   },
@@ -586,11 +669,14 @@ export const toolsOperations = {
     "path": "/v1/secrets",
     "pathParams": [],
     "query": [
+      "teamId",
+      "readOnly",
       "page",
       "pageSize",
       "search",
-      "templateId",
-      "teamId"
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -787,9 +873,12 @@ export const toolsOperations = {
     "pathParams": [],
     "query": [
       "view",
-      "search",
       "page",
-      "pageSize"
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -803,7 +892,13 @@ export const toolsOperations = {
       "op_id"
     ],
     "query": [
-      "environment"
+      "environment",
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -814,16 +909,17 @@ export const toolsOperations = {
     "path": "/v1/tool-modules",
     "pathParams": [],
     "query": [
-      "page",
-      "pageSize",
       "view",
-      "search",
-      "sortBy",
-      "sortOrder",
       "type",
       "access",
       "approvalState",
-      "templateId"
+      "templateId",
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },

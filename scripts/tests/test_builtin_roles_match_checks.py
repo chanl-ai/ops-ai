@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -25,7 +26,9 @@ from ops_access import (
     SECURITY_TEAM_ACTIONS,
     Access,
     Assignment,
+    Grids,
     Scope,
+    active,
     builtin_roles_for,
     can,
     scope_in,
@@ -42,6 +45,7 @@ from ops_files.app import who as files_who
 from ops_identity import Principal
 from ops_kb.app import who as kb_who
 from ops_kb.service import KnowledgeService
+from ops_kb.store.knowledge import BaseRow
 from ops_platform.store.members import Actor
 from ops_platform.store.roles import Holdings
 from ops_platform.teams import Members
@@ -49,7 +53,7 @@ from ops_service_kit.errors import Forbidden
 from ops_tools.callers import security_admin
 from ops_tools.connections.service import connection_rights
 from ops_tools.modules.directory import Team
-from ops_tools.modules.service import Caller
+from ops_tools.modules.service import Caller, link_calls_of
 from ops_tools.modules.service import _can as tools_can  # pyright: ignore[reportPrivateUsage]
 from ops_tools.secrets.routes import may_write_secret
 
@@ -184,8 +188,13 @@ class _Bases:
     def __init__(self, team: str, owner: str) -> None:
         self.team, self.owner = team, owner
 
-    async def base(self, tenant_id: str, kb_id: str) -> dict[str, Any]:
-        return {"id": kb_id, "team_id": self.team, "owner": self.owner, "name": "Policies"}
+    async def base(self, tenant_id: str, kb_id: str) -> BaseRow:
+        at = datetime(2026, 1, 1, tzinfo=UTC)
+        return BaseRow(
+            id=kb_id, team_id=self.team, name="Policies", slug="policies", description="", color="blue",
+            owner=self.owner, collections=[], retrieval={}, settings=None, created_by=self.owner, created_at=at,
+            last_refreshed_at=None, template_id=None, protection=None, documents_source_id=None, revision=0,
+        )  # fmt: skip
 
 
 def kb_system_edit(p: Principal) -> Scope | None:
@@ -214,8 +223,6 @@ def tools_caller(p: Principal) -> Caller:
         tenant_id=p.tenant_id,
         name=p.name,
         team=Team(id=str(p.team_id), name="Ops", owner_groups=(), scope="owned"),
-        roles=dict(p.roles),
-        team_role=p.role,
         verified=True,
         principal=p,
     )
@@ -226,6 +233,15 @@ def tools_step(area: str, action: str) -> Verdict:
         return yes(passes(lambda: tools_can(tools_caller(p), area, action, what="modules")))
 
     return verdict
+
+
+def tools_mcp_calls(p: Principal) -> Scope | None:
+    """A link's Calls tab reads with mcp.view (modules/service.py `executions`, link given)."""
+    try:
+        mine = link_calls_of(tools_caller(p))
+    except Forbidden:
+        return None
+    return "all" if mine is None else "own"
 
 
 def tools_system_edit(p: Principal) -> Scope | None:
@@ -300,6 +316,29 @@ class _Roles:
     async def grids(self, tenant_id: str, role_ids: list[str]) -> dict[str, list[Any]]:
         return {}
 
+    async def live(self, tenant_id: str, user_id: str, *, team: str | None = None) -> tuple[Principal, Access]:
+        """RoleStore.live from the fake's holdings: the person as `can` sees them, with no token."""
+        held = await self.holdings(tenant_id, user_id)
+        live = active(held.assignments, NOW)
+        version = await self.version(tenant_id)
+        p = Principal(
+            kind="person",
+            sub=user_id,
+            email="",
+            name="",
+            roles={},
+            scopes=[],
+            tenant_id=tenant_id,
+            team_id=team,
+            team_ids=list(held.teams),
+            access={t: [a.role_id for a in live if a.team_id == t] for t in {a.team_id for a in live}},
+            permission_version=version,
+            auth_method="session",
+        )
+        access = Access(security_team=SECURITY, grids=Grids(fetch=lambda t, _v, ids: self.grids(t, ids)))
+        await access.grids.load(tenant_id, version, [*{a.role_id for a in live}, *(r.id for r in BUILTIN_ROLES)])
+        return p, access
+
 
 def platform_admin(area: str, action: str) -> Verdict:
     def verdict(p: Principal) -> Scope | None:
@@ -334,7 +373,7 @@ TODAY: dict[tuple[str, str], Verdict] = {
     **{
         (area, "view"): open_to_members
         for area in AREAS
-        if area not in ("settings", "audit", "activity", "webhooks", "usage", "chat", "memory", "workspace")
+        if area not in ("settings", "audit", "activity", "mcp", "webhooks", "usage", "chat", "memory", "workspace")
     },
     ("chat", "view"): chat_owner,
     ("memory", "edit"): memory_editor,
@@ -387,6 +426,8 @@ TODAY: dict[tuple[str, str], Verdict] = {
     ("audit", "view"): platform_admin("audit", "view"),
     # tools-service's call log (GET /v1/executions).
     ("activity", "view"): tools_step("activity", "view"),
+    # A link's calls (GET /v1/executions?link=): one's own, or everyone's.
+    ("mcp", "view"): tools_mcp_calls,
 }
 
 CELLS = [(area, action) for area in AREAS for action in ACTIONS]

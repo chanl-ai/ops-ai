@@ -52,7 +52,7 @@ RULES = AGENTS_DIR / "tests" / "fixtures" / "levy-extraction-fake-openai"
 NOTICE: dict[str, Any] = json.loads((AGENTS_DIR / "tests" / "fixtures" / "mailbox" / "levy_notice.json").read_text())
 SEED = {w["id"]: w for w in json.loads((AGENTS_DIR / "seed" / "engine_workflows.json").read_text())}
 sys.path.insert(0, str(AGENTS_DIR / "scripts"))
-from send_levy_email import message  # noqa: E402
+from send_levy_email import message
 
 RUN = uuid.uuid4().hex[:8]
 MAILBOX = f"levy-{RUN}@harborpine.example"
@@ -227,6 +227,7 @@ def main() -> None:
         # After the services on reserved ports: the bank's own port is the OS's next free one.
         core_bank() as bank,
         tools(
+            approval_rules=True,
             settings=bank["settings"]
             | {
                 "OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}",

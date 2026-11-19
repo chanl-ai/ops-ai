@@ -1,0 +1,6 @@
+# Who may approve a raised baseline row or a new access exception line, one sha256 a line: the hash of the maintainer's
+# lower-case GitHub login (python3 -c "import hashlib;print(hashlib.sha256(b'<login>').hexdigest())"), since the
+# repository is public and names no person. The approval is an approving review on the pull request by a listed
+# maintainer, or a pull request authored by one (GitHub refuses self-approval), read from GitHub by
+# scripts/check_review_approval.py in CI's maintainer-review job; no commit message approves anything. The list that counts is the one at the pull request's base. Editing this file is itself a rise.
+802b1d90cdaab230e1867251feef6b21516e4d68ead9f7e9c9a84c9f961e208b

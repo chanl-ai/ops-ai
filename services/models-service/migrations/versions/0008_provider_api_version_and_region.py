@@ -23,3 +23,9 @@ def upgrade() -> None:
     op.add_column("provider_connections", sa.Column("api_version", sa.String(32)))
     op.add_column("provider_connections", sa.Column("region", sa.String(64)))
     op.add_column("provider_connections", sa.Column("observed_region", sa.String(64)))
+
+
+def downgrade() -> None:
+    # The three columns are nullable with no default, so SQL Server holds no default constraint to drop first.
+    for column in ("observed_region", "region", "api_version"):
+        op.drop_column("provider_connections", column)

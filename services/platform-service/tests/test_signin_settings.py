@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import sqlalchemy as sa
 
-from ops_platform.store.tables import teams
+from ops_platform.store.tables import signin_providers, teams
 from ops_service_kit.ids import new_id, now_iso
 
 from .conftest import DEMO_PASSWORD, IDP, OIDC_SECRET, SignInRig
@@ -71,6 +71,7 @@ async def test_new_people_go_only_to_a_team_the_author_may_add_people_to(signin:
     ).status_code == 200
     r = await signin.configure("sip_b", _oidc(f"b.{signin.zone}", jit={"team": signin.ops_team, "role": "admin"}))
     assert r.status_code == 400 and r.json()["error"]["code"] == "jit_role"
+    assert r.json()["error"]["message"] == "A first sign-in may give chat_user, viewer, builder, approver.", r.text
 
 
 async def test_a_domain_another_workspace_uses_is_refused(signin: SignInRig) -> None:
@@ -129,3 +130,38 @@ async def test_a_saml_provider_needs_a_real_certificate(signin: SignInRig) -> No
     }
     r = await signin.configure("sip_f", body)
     assert r.status_code == 400 and r.json()["error"]["code"] == "certificate"
+
+
+async def _store_config(rig: SignInRig, provider: str, **keys: object) -> None:
+    """Writes keys into a provider's stored config by hand, as a row from an older release might hold them."""
+    async with rig.engine.begin() as c:
+        row = (await c.execute(sa.select(signin_providers.c.config).where(signin_providers.c.id == provider))).one()
+        await c.execute(
+            signin_providers.update().where(signin_providers.c.id == provider).values(config={**row[0], **keys})
+        )
+
+
+async def test_an_admin_sees_and_saves_over_a_provider_whose_stored_config_has_a_wrong_type(
+    signin: SignInRig,
+) -> None:
+    domain = f"oddrow.{signin.zone}"
+    provider = await signin.saml(domain)
+    await _store_config(signin, provider, tiles="false", signRequests=1)
+    listed = await signin.public.get("/v1/settings/sign-in/providers", headers=signin.admin)
+    assert listed.status_code == 200, listed.text
+    assert provider in [p["id"] for p in listed.json()["data"]]
+    cert = (await signin.idp.get("/saml/bank/certificate")).text
+    saml = {"idpEntityId": f"{IDP}/saml/bank", "ssoUrl": f"{IDP}/saml/bank/sso", "certificate": cert}
+    body = {"kind": "saml", "label": "Bank SAML", "domains": [domain], "saml": saml}
+    saved = await signin.configure(provider, body)
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["data"]["saml"]["tiles"] is True
+
+
+async def test_a_sign_in_through_a_wrong_typed_stored_setting_is_refused(signin: SignInRig) -> None:
+    await signin.oidc(f"oddscope.{signin.zone}")
+    provider = (await signin.public.get("/v1/settings/sign-in/providers", headers=signin.admin)).json()["data"]
+    [oidc] = [p["id"] for p in provider if f"oddscope.{signin.zone}" in p["domains"]]
+    await _store_config(signin, oidc, scopes="openid email")
+    start = await signin.public.post("/v1/auth/sso/start", json={"email": f"o@oddscope.{signin.zone}"})
+    assert start.status_code == 503 and start.json()["error"]["code"] == "sso_not_configured", start.text

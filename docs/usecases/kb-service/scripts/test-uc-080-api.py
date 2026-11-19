@@ -14,7 +14,7 @@ from PIL import Image
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Flowable, PageBreak, Paragraph, SimpleDocTemplate
-from usecase_harness import KB_PORT, agents, check, data, finish, kb, put_in_files, sse, until
+from usecase_harness import KB_PORT, agents, check, data, every_page, finish, kb, put_in_files, sse, until
 
 # The team kb-service's dev caller makes the base in (team_ops): a chat sees only its own team's bases.
 TEAM = {"X-Team-Id": "team_ops"}
@@ -94,7 +94,7 @@ def main() -> None:
         for name, body in (("hardship.pdf", HARDSHIP), ("rates.pdf", RATES), ("scan.pdf", scanned())):
             upload(k, src["id"], name, body)
         run = data(k.post(f"/v1/sources/{src['id']}/sync"))
-        items = {i["path"]: i for i in data(k.get(f"/v1/sources/{src['id']}/items"))["data"]}
+        items = {i["path"]: i for i in every_page(k, f"/v1/sources/{src['id']}/items")}
         check(
             "sync indexes the two text PDFs with their pages",
             items["hardship.pdf"]["status"] == "indexed"
@@ -105,7 +105,7 @@ def main() -> None:
         # A scan is read in the background; its item is settled when documents-service reports the reading's end.
         scan = until(
             lambda: next(
-                (i for i in data(k.get(f"/v1/sources/{src['id']}/items"))["data"]
+                (i for i in every_page(k, f"/v1/sources/{src['id']}/items")
                  if i["path"] == "scan.pdf" and i["status"] != "processing"),
                 None,
             )

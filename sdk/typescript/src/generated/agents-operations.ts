@@ -269,7 +269,9 @@ export const agentsOperations = {
     "method": "GET",
     "path": "/v1/knowledge-usage",
     "pathParams": [],
-    "query": [],
+    "query": [
+      "ids"
+    ],
     "stream": false
   },
   "agents_list_agents": {
@@ -279,12 +281,14 @@ export const agentsOperations = {
     "path": "/v1/agents",
     "pathParams": [],
     "query": [
+      "availability",
+      "teamId",
       "page",
       "pageSize",
       "search",
       "sortBy",
       "sortOrder",
-      "templateId"
+      "ids"
     ],
     "stream": false
   },
@@ -297,7 +301,10 @@ export const agentsOperations = {
     "query": [
       "page",
       "pageSize",
-      "search"
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -310,6 +317,15 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "agents_list_prompt_variables": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/prompts/variables",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
   "agents_list_skills": {
     "body": null,
     "headers": [],
@@ -318,9 +334,19 @@ export const agentsOperations = {
     "pathParams": [],
     "query": [
       "view",
+      "usableBy",
+      "agentId",
+      "status",
+      "ownerTeam",
+      "origin",
+      "loading",
+      "knowledgeBases",
       "page",
       "pageSize",
-      "search"
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -368,7 +394,10 @@ export const agentsOperations = {
     "query": [
       "page",
       "pageSize",
-      "search"
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -396,6 +425,17 @@ export const agentsOperations = {
     "query": [
       "limit"
     ],
+    "stream": false
+  },
+  "agents_render_skill": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/skills/{skill_id}/render",
+    "pathParams": [
+      "skill_id"
+    ],
+    "query": [],
     "stream": false
   },
   "agents_request_guardrail_publish": {
@@ -539,7 +579,8 @@ export const agentsOperations = {
       "search",
       "cursor",
       "limit",
-      "ids"
+      "ids",
+      "agents"
     ],
     "stream": false
   },
@@ -578,6 +619,96 @@ export const agentsOperations = {
       "ids",
       "granted"
     ],
+    "stream": false
+  },
+  "assurance_agent_cases": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/agents/{agent_id}/eval-cases",
+    "pathParams": [
+      "agent_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "assurance_list_gates": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/assurance/gates",
+    "pathParams": [],
+    "query": [
+      "page",
+      "pageSize",
+      "search",
+      "tier",
+      "result"
+    ],
+    "stream": false
+  },
+  "assurance_list_runs": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/assurance/runs",
+    "pathParams": [],
+    "query": [
+      "page",
+      "pageSize",
+      "search",
+      "kind",
+      "trigger"
+    ],
+    "stream": false
+  },
+  "assurance_list_suites": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/assurance/suites",
+    "pathParams": [],
+    "query": [
+      "page",
+      "pageSize",
+      "search",
+      "kind",
+      "tier",
+      "result"
+    ],
+    "stream": false
+  },
+  "assurance_save_agent_cases": {
+    "body": "json",
+    "headers": [],
+    "method": "PUT",
+    "path": "/v1/agents/{agent_id}/eval-cases",
+    "pathParams": [
+      "agent_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "assurance_save_skill_cases": {
+    "body": "json",
+    "headers": [],
+    "method": "PUT",
+    "path": "/v1/skills/{skill_id}/eval-cases",
+    "pathParams": [
+      "skill_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "assurance_skill_cases": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/skills/{skill_id}/eval-cases",
+    "pathParams": [
+      "skill_id"
+    ],
+    "query": [],
     "stream": false
   },
   "auth_sso_step_up": {
@@ -741,7 +872,14 @@ export const agentsOperations = {
     "method": "GET",
     "path": "/v1/case-types",
     "pathParams": [],
-    "query": [],
+    "query": [
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
+    ],
     "stream": false
   },
   "cases_list_cases": {
@@ -756,9 +894,12 @@ export const agentsOperations = {
       "assignee",
       "customerId",
       "overdue",
-      "search",
       "page",
-      "pageSize"
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -1077,7 +1218,14 @@ export const agentsOperations = {
     "pathParams": [
       "workflow_id"
     ],
-    "query": [],
+    "query": [
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
+    ],
     "stream": false
   },
   "graphs_list_graphs": {
@@ -1208,11 +1356,25 @@ export const agentsOperations = {
   },
   "resources_copy_resource": {
     "body": "json",
-    "headers": [],
+    "headers": [
+      "x-acting-for"
+    ],
     "method": "POST",
     "path": "/v1/resources/{resource}/copies",
     "pathParams": [
       "resource"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "resources_detach_copy": {
+    "body": null,
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/resources/{resource}/copies/{copy}/detach",
+    "pathParams": [
+      "resource",
+      "copy"
     ],
     "query": [],
     "stream": false
@@ -1405,7 +1567,14 @@ export const agentsOperations = {
     "method": "GET",
     "path": "/v1/task-types",
     "pathParams": [],
-    "query": [],
+    "query": [
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
+    ],
     "stream": false
   },
   "reviews_open_egress_host_request": {
@@ -1513,7 +1682,13 @@ export const agentsOperations = {
     "path": "/v1/threads",
     "pathParams": [],
     "query": [
-      "graph"
+      "graph",
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -1806,11 +1981,13 @@ export const agentsOperations = {
     "path": "/v1/workflows/definitions",
     "pathParams": [],
     "query": [
+      "status",
       "page",
       "pageSize",
       "search",
       "sortBy",
-      "sortOrder"
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -1833,10 +2010,13 @@ export const agentsOperations = {
     "pathParams": [],
     "query": [
       "workflowId",
-      "workflow_id",
       "status",
       "page",
-      "pageSize"
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -1850,7 +2030,8 @@ export const agentsOperations = {
     ],
     "query": [
       "page",
-      "pageSize"
+      "pageSize",
+      "status"
     ],
     "stream": false
   },
@@ -1877,6 +2058,7 @@ export const agentsOperations = {
       "search",
       "sortBy",
       "sortOrder",
+      "status",
       "startable",
       "takesFiles",
       "engine"
@@ -2068,7 +2250,9 @@ export const agentsOperations = {
   },
   "workflows_start_engine_run": {
     "body": "json",
-    "headers": [],
+    "headers": [
+      "x-acting-for"
+    ],
     "method": "POST",
     "path": "/v1/runs",
     "pathParams": [],

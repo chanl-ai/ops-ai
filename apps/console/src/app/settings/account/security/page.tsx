@@ -4,7 +4,7 @@ import * as React from 'react';
 import { Copy, LogOut, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { MfaDevicesTable, SessionsTable } from '@/components/account/account-tables';
+import { ConnectedAssistantsTable, MfaDevicesTable, SessionsTable } from '@/components/account/account-tables';
 import { PageLayout } from '@/components/page-layout';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FormField } from '@/components/shared/form-field';
@@ -17,7 +17,9 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAccountProfile, useAccountSessions, useChangePassword, useMfaDevices, useRegenerateRecoveryCodes, useRemoveMfaDevice, useRevokeOtherSessions, useRevokeSession } from '@/hooks/account-queries';
 import { useReauthenticate, useSession } from '@/hooks/auth-queries';
+import { useConnectedAssistants, useDisconnectAssistant } from '@/hooks/oauth-queries';
 import type { AccountSession, MfaDevice } from '@/lib/types/account';
+import type { ConnectedAssistant } from '@/lib/types/oauth';
 
 const MIN = 12;
 const ALL = { page: 1, pageSize: 50 };
@@ -33,6 +35,9 @@ export default function AccountSecurityPage() {
   const removeDevice = useRemoveMfaDevice();
   const revoke = useRevokeSession();
   const revokeOthers = useRevokeOtherSessions();
+  const assistants = useConnectedAssistants();
+  const disconnect = useDisconnectAssistant();
+  const [assistantBusy, setAssistantBusy] = React.useState<string | null>(null);
   const { session } = useSession();
   // Enrolled password accounts confirm the change with their authenticator code too, as at sign-in.
   const needsCode = session?.authMethod === 'password' && !!session.mfaEnrolled;
@@ -61,6 +66,10 @@ export default function AccountSecurityPage() {
   const onRevoke = (s: AccountSession) => {
     setBusyId(s.id);
     revoke.mutate(s.id, { onSuccess: () => toast.success(`Signed out ${s.device}`), onError: (e) => toast.error('Couldn’t sign it out', { description: e.message }), onSettled: () => setBusyId(null) });
+  };
+  const onDisconnect = (a: ConnectedAssistant) => {
+    setAssistantBusy(a.id);
+    disconnect.mutate(a.id, { onSuccess: () => toast.success(`Disconnected ${a.clientName}`), onError: (e) => toast.error('Couldn’t disconnect it', { description: e.message }), onSettled: () => setAssistantBusy(null) });
   };
   const onRemove = (d: MfaDevice) => removeDevice.mutate(d.id, { onSuccess: () => toast.success(`Removed ${d.label}`), onError: (e) => toast.error('Couldn’t remove it', { description: e.message }) });
 
@@ -125,6 +134,16 @@ export default function AccountSecurityPage() {
             </div>
           </SettingsSection>
           </SampleData>
+          <SettingsSection title="Connected assistants" description="Claude, Cursor, VS Code or ChatGPT, signed in as you at a team’s MCP address. Disconnect one and it stops working.">
+            {/* A first answer that failed shows the error with Retry at once, not a skeleton while the retries run. */}
+            {!assistants.data && (assistants.isError || assistants.failureCount > 0) ? (
+              <QueryError what="your connected assistants" onRetry={() => assistants.refetch()} error={assistants.error ?? assistants.failureReason} retrying={assistants.isFetching} />
+            ) : assistants.isPending ? (
+              <Skeleton className="h-32 w-full" />
+            ) : (
+              <ConnectedAssistantsTable assistants={assistants.data ?? []} onDisconnect={onDisconnect} busyId={assistantBusy} />
+            )}
+          </SettingsSection>
         </div>
       )}
 

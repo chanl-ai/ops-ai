@@ -70,8 +70,9 @@ Run from the repo root; `make help` lists them with their arguments.
 | `make release-package TAG=<ref>` | `release/package.sh`: images, bundle, tarball, checksums in `dist/` | Slow; builds every image |
 | `make release-proof PACKAGE=…` | `release/proof.sh`: installs a tarball alone and walks it | Slow |
 | `make install-proof` | `release/install_proof.sh`: a fresh clone through `./install.sh` on GHCR images | Slow; pulls images |
-| `make release-tag` | `scripts/release-tag.sh`; `DRY=1` prints the tag name only | Pushes a tag without `DRY=1` |
+| `make release-tag` | `scripts/release-tag.sh`: tags a release or hotfix merge `vX.Y.Z`; `DRY=1` prints the tag name only | Pushes a tag without `DRY=1` |
 | `make stg-deploy`, `stg-rollback`, `stg-health` | `fly/stg_deploy.sh` on the app named by `STG_APP` in your staging config | Changes a live Fly app |
+| `make stg-deploy-ci REF=` | `fly/stg_deploy_ci.sh`: starts `.github/workflows/deploy-staging.yml` on GitHub and watches it | Changes a live Fly app |
 | `make uc-sql-server` | `fly/mssql/run-usecases.sh` on a SQL Server test machine | Starts paid machines |
 | `make qa-mirror`, `mirror-down` | `mirror-test/lane.sh` | Yes; its own compose project, slow |
 
@@ -126,3 +127,9 @@ Edit the generator, regenerate, and commit both; never hand-edit a generated fil
 | Shared dev host | [docs/deploy/devhost.md](../docs/deploy/devhost.md) |
 | Mailbox demo | [docs/deploy/demo-mailbox.md](../docs/deploy/demo-mailbox.md) |
 | Docs site hosting | [docs/deploy/docs-site.md](../docs/deploy/docs-site.md) |
+
+## Engineering standards
+
+The rules the code in this folder is held to, each with a real example from this repository and the check that
+enforces it: [delivery, deploy and upgrade](../docs/architecture/standards/delivery.md) (`DL1` to `DL9`), [data access](../docs/architecture/standards/data-access.md) (`DA1` to `DA13`). The index of every rule is
+[engineering standards](../docs/architecture/engineering-standards.md); a review cites the rule id.

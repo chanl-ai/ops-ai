@@ -1,10 +1,24 @@
 #!/usr/bin/env node
 // Enforces the grep-provable rules in CLAUDE.md. Exits 1 with file:line for every violation.
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 const root = new URL('..', import.meta.url).pathname;
 const src = join(root, 'src');
+
+// One read in a try/catch: a check for the file followed by a read is a race, and a missing file is an answer here.
+function readOrNull(path) {
+  try {
+    return readFileSync(path, 'utf8');
+  } catch (err) {
+    if (err.code === 'ENOENT') return null;
+    throw err;
+  }
+}
+function readJson(path, missing = {}) {
+  const text = readOrNull(path);
+  return text === null ? missing : JSON.parse(text);
+}
 
 function walk(dir) {
   return readdirSync(dir).flatMap((name) => {
@@ -32,7 +46,7 @@ const classesAround = (text, index) => {
 };
 const isRail = (text, m) => /(^|\s)shrink-0(\s|$)/.test(classesAround(text, m.index));
 const baselinePath = join(root, 'scripts/palette-baseline.json');
-const baseline = existsSync(baselinePath) ? JSON.parse(readFileSync(baselinePath, 'utf8')) : {};
+const baseline = readJson(baselinePath);
 const counts = {};
 // Rule 18: an identifier drawn as JSX text (`{step.nodeId}`, `{c.operation}`, `{error.tool}`), or the operation badge.
 const SELF_WORDED = /(?<![=\w$])\{\s*[\w.?]+\.(?:nodeId|operation|tool)\s*\}|<OperationBadge\b/g;
@@ -154,16 +168,18 @@ for (const f of files) {
   //     add is a create, add, invite or import hook, a dialog named for one (the hook may live in the dialog), or an
   //     onAdded, onCreated or onSaved prop. A list that opens the new item's own page instead is listed with its reason.
   const OPENS_THE_NEW_ITEM = {
-    'src/app/agents/page.tsx': 'opens the new agent',
-    'src/app/skills/page.tsx': 'opens the new skill',
-    'src/app/tools/custom/page.tsx': 'opens the new module',
-    'src/app/guardrails/page.tsx': 'opens the new guardrail',
-    'src/app/knowledge/page.tsx': 'opens the new knowledge base',
-    'src/app/widgets/page.tsx': 'opens the new widget',
+    'src/app/build/agents/page.tsx': 'opens the new agent',
+    'src/app/build/skills/page.tsx': 'opens the new skill',
+    'src/app/data/tools/custom/page.tsx': 'opens the new module',
+    'src/app/build/guardrails/page.tsx': 'opens the new guardrail',
+    'src/app/data/knowledge/page.tsx': 'opens the new knowledge base',
+    'src/app/build/widgets/page.tsx': 'opens the new widget',
+    'src/app/data/document-types/page.tsx': 'opens the new document type',
+    'src/app/govern/access/roles/page.tsx': 'opens the new role',
     // Not yet: the invite answers with links, not the invited members' rows (platform-service), so there is no row to show.
     'src/components/access/members-panel.tsx': 'invite returns links, not member rows',
     // Not yet: an upload returns ids, and a file is listed once it has been scanned, so there is no row to show.
-    'src/app/files/page.tsx': 'upload returns ids; a file is listed once scanned',
+    'src/app/data/files/page.tsx': 'upload returns ids; a file is listed once scanned',
   };
   const adds = [...text.matchAll(/\buse(?:Create|Add|Invite|Import)(?!Param\b)[A-Z]\w*\(|<\w*(?:Add|Create|New|Invite|Import)\w*Dialog\b|\bon(?:Added|Created|Saved)=/g)];
   if (adds.length && /<DataTableWithViews\b/.test(text) && /\buseListParams[<(]/.test(text) && !/\bcreated=\{/.test(text) && !(f.rel in OPENS_THE_NEW_ITEM))
@@ -199,7 +215,10 @@ function importedSource(f, name) {
   const spec = m[1];
   const base = spec.startsWith('@/') ? join(src, spec.slice(2)) : spec.startsWith('.') ? join(f.abs, '..', spec) : null;
   if (!base) return null;
-  for (const candidate of [`${base}.tsx`, `${base}.ts`, join(base, 'index.tsx')]) if (existsSync(candidate)) return { abs: candidate, text: readFileSync(candidate, 'utf8') };
+  for (const candidate of [`${base}.tsx`, `${base}.ts`, join(base, 'index.tsx')]) {
+    const text = readOrNull(candidate);
+    if (text !== null) return { abs: candidate, text };
+  }
   return null;
 }
 const reachesLayout = (f, depth = 0) =>
@@ -258,7 +277,7 @@ const REUSE = {
   },
 };
 const reusePath = join(root, 'scripts/reuse-baseline.json');
-const reuseBaseline = existsSync(reusePath) ? JSON.parse(readFileSync(reusePath, 'utf8')) : {};
+const reuseBaseline = readJson(reusePath);
 const reuseNow = Object.fromEntries(Object.keys(REUSE).map((k) => [k, []]));
 for (const f of files) {
   if (f.rel.endsWith('.test.ts')) continue;
@@ -270,7 +289,103 @@ for (const f of files) {
     if (!(reuseBaseline[key] ?? []).includes(f.rel)) report(f, at, rule.what);
   }
 }
+// 23. Lists are asked for the way the screen shows them (docs/architecture/standards/console-and-sdk.md UI1, and
+//     data-access.md DA5). Three shapes do the server's work in the browser, each held per file to its count in
+//     data-baseline.json: a file may lower its count, never raise it, and a file not listed may have none.
+//     `--write-baseline` records a drop.
+//       pageSize   a page size above 50, which loads a table to show part of it; only the options hooks, which page
+//                  as a picker scrolls, are outside the rule
+//       aggregate  `.reduce(` or `.filter(...).length` in a page or component: a sum or a count the API returns
+//       fetch      `fetch(` outside lib/api, which skips the contract, the team header and the error envelope
+// `pageSize: 200`, `pageSize: BIG` where the same file says `const BIG = 200`, and `pageSize: PAGE_ALL` imported from
+// elsewhere (a constant held in another file is read as over the limit, since this file cannot show its value). A
+// lower-case name is read when the file assigns it a number or arithmetic on numbers; one passed along as a parameter,
+// state or a call's result says nothing about its size, so this reads the literal form only.
+function pageSizeHits(text) {
+  // A name assigned a number or arithmetic on numbers (`const size = 100 * 2`, `let n = 500`) stands for its value.
+  const known = new Map();
+  for (const m of text.matchAll(/\b(?:const|let)\s+([A-Za-z_$][\w$]*)\s*(?::\s*number\s*)?=\s*([\d\s*+\-/()._]+?)\s*[;,\n]/g)) {
+    if (!/\d/.test(m[2])) continue;
+    try {
+      const value = Number(Function(`"use strict"; return (${m[2].replace(/_/g, '')});`)());
+      if (Number.isFinite(value)) known.set(m[1], value);
+    } catch {
+      // not arithmetic (an arrow function's parameters, say): the name stays unknown
+    }
+  }
+  return [...text.matchAll(/\bpageSize\s*[:=]\s*([A-Za-z_$][\w$]*|\d+)\b(?!\s*[.(\[])/g)].filter((m) => {
+    const v = m[1];
+    if (/^\d+$/.test(v)) return Number(v) > 50;
+    if (known.has(v)) return known.get(v) > 50;
+    return /^[A-Z][A-Z0-9_]*$/.test(v);
+  });
+}
+const DATA = {
+  pageSize: {
+    what: 'a page size above 50 (ask for the page the screen shows; a picker pages through hooks/options-queries.ts)',
+    reads: (rel) => rel !== 'src/hooks/options-queries.ts' && !rel.startsWith('src/lib/api/mock/'),
+    hits: pageSizeHits,
+  },
+  aggregate: {
+    what: 'a sum or count worked out in the browser (the API returns it: a facet, a count or a field on the row)',
+    reads: (rel) => /^src\/(app|components)\//.test(rel) && !rel.startsWith('src/components/ui/'),
+    hits: (text) => [...text.matchAll(/\.reduce\(|\.filter\((?:[^()]|\([^()]*\))*\)\.length\b/g)],
+  },
+  fetch: {
+    what: 'fetch( outside lib/api (call the API contract through a hook)',
+    reads: (rel) => !rel.startsWith('src/lib/api/'),
+    hits: (text) => [...text.matchAll(/(?<![\w.$])fetch\s*\(/g)],
+  },
+};
+if (process.argv.includes('--self-test')) {
+  // Each plant is one way a page size above 50 gets past a digits-only reading; the last three must stay clean.
+  const plants = [
+    ['useRows({ pageSize: 200 })', 1],
+    ['const BIG = 200;\nuseRows({ pageSize: BIG })', 1],
+    ['useRows({ pageSize: PAGE_ALL })', 1],
+    ['const SMALL = 20;\nuseRows({ pageSize: SMALL })', 0],
+    ['useRows({ pageSize: params.pageSize })', 0],
+    ['useRows({ pageSize: 25 })', 0],
+    ['const size = 100 * 2;\nuseRows({ pageSize: size })', 1],
+    ['let size = 500;\nuseRows({ pageSize: size })', 1],
+    ['const rows: number = 4 * 5;\nuseRows({ pageSize: rows })', 0],
+  ];
+  const failed = plants.filter(([text, want]) => pageSizeHits(text).length !== want);
+  for (const [text, want] of failed) console.error(`self-test: ${JSON.stringify(text)} should give ${want} hit(s)`);
+  console.log(failed.length ? 'check-standards self-test: FAILED' : `check-standards self-test: ${plants.length} plants behave`);
+  process.exit(failed.length ? 1 : 0);
+}
+const dataPath = join(root, 'scripts/data-baseline.json');
+const dataBaseline = readJson(dataPath);
+const dataNow = Object.fromEntries(Object.keys(DATA).map((k) => [k, {}]));
+for (const f of files) {
+  if (/\.test\.tsx?$/.test(f.rel)) continue;
+  for (const [key, rule] of Object.entries(DATA)) {
+    if (!rule.reads(f.rel)) continue;
+    const hits = rule.hits(f.text);
+    if (hits.length) dataNow[key][f.rel] = hits.length;
+    const allowed = dataBaseline[key]?.[f.rel] ?? 0;
+    if (hits.length > allowed) report(f, hits[allowed].index, `${rule.what}: ${hits.length} here, ${allowed} allowed`);
+    else if (hits.length < allowed) notes.push(`${f.rel}: ${key} ${hits.length} of ${allowed} allowed; run with --write-baseline to lock the drop in`);
+  }
+}
 const reuseWrite = process.argv.includes('--write-baseline');
+if (reuseWrite) {
+  // Lowered only: a count never rises and a file is never added once the baseline exists.
+  const first = readJson(dataPath, null) === null;
+  const kept = Object.fromEntries(
+    Object.keys(DATA).map((k) => [
+      k,
+      Object.fromEntries(
+        Object.entries(dataNow[k])
+          .map(([rel, n]) => [rel, first ? n : Math.min(n, dataBaseline[k]?.[rel] ?? 0)])
+          .filter(([, n]) => n > 0)
+          .sort(),
+      ),
+    ]),
+  );
+  writeFileSync(dataPath, JSON.stringify(kept, null, 2) + '\n');
+}
 for (const [key, listed] of Object.entries(reuseBaseline))
   for (const rel of listed)
     if (!reuseNow[key]?.includes(rel) && !reuseWrite) violations.push(`${rel}: listed under ${key} in reuse-baseline.json but no longer breaks it; take it off (run with --write-baseline)`);

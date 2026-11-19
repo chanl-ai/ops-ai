@@ -23,11 +23,10 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useStorageCredentials } from '@/hooks/file-queries';
-import { useDeleteSecret, useRenameSecret, useSecretsPage } from '@/hooks/secrets-queries';
+import { type SecretMeta, useDeleteSecret, useRenameSecret, useSecretsPage } from '@/hooks/secrets-queries';
 import { useCreatedRows } from '@/hooks/use-created-rows';
 import { useListParams } from '@/hooks/use-list-params';
 import { relativeTime, shortDate } from '@/lib/format';
-import type { SecretMeta } from '@/lib/types/secrets';
 import { useCan } from '@/hooks/me-queries';
 import { serverPagination } from '@/components/shared/server-pagination';
 
@@ -58,28 +57,28 @@ function columns(canEdit: boolean, onRotate: (s: SecretMeta) => void, onRename: 
     },
     {
       id: 'usedBy',
-      accessorFn: (s) => s.usedBy.length + (s.authConfig ? 1 : 0),
+      accessorFn: (s) => (s.usedBy ?? []).length + (s.authConfig ? 1 : 0),
       header: ({ column }) => <DataTableColumnHeader column={column} title="Used by" />,
       cell: ({ row }) =>
-        row.original.usedBy.length ? (
+        (row.original.usedBy ?? []).length ? (
           <StopRowClick align="start">
             <div className="flex min-w-48 flex-wrap gap-1" data-testid={`secret-users-${row.original.name}`}>
-              {row.original.usedBy.slice(0, USED_BY_SHOWN).map((u) => (
+              {(row.original.usedBy ?? []).slice(0, USED_BY_SHOWN).map((u) => (
                 <Badge key={`${u.moduleId}:${u.operation}`} variant="outline" asChild className="font-mono font-normal">
-                  <Link href={`/tools/${u.moduleId}/operations/${encodeURIComponent(u.operation)}`} title={`${u.moduleName}${u.staged ? ', staged edit' : ''}`}>
+                  <Link href={`/data/tools/${u.moduleId}/operations/${encodeURIComponent(u.operation)}`} title={`${u.moduleName}${u.staged ? ', staged edit' : ''}`}>
                     {u.operation}
                     {u.staged && <span className="font-sans text-warning-text">staged</span>}
                   </Link>
                 </Badge>
               ))}
-              {row.original.usedBy.length > USED_BY_SHOWN && (
+              {(row.original.usedBy ?? []).length > USED_BY_SHOWN && (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <button type="button" className="rounded-sm text-xs text-muted-foreground underline-offset-4 hover:underline" data-testid={`secret-users-more-${row.original.name}`}>
-                      and {row.original.usedBy.length - USED_BY_SHOWN} more
+                      and {(row.original.usedBy ?? []).length - USED_BY_SHOWN} more
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent className="max-w-xs break-words font-mono">{row.original.usedBy.slice(USED_BY_SHOWN).map((u) => u.operation).join(', ')}</TooltipContent>
+                  <TooltipContent className="max-w-xs break-words font-mono">{(row.original.usedBy ?? []).slice(USED_BY_SHOWN).map((u) => u.operation).join(', ')}</TooltipContent>
                 </Tooltip>
               )}
             </div>
@@ -88,8 +87,17 @@ function columns(canEdit: boolean, onRotate: (s: SecretMeta) => void, onRename: 
           // Held by its auth config, which signs in with it: changed there, never here.
           <StopRowClick align="start">
             <Badge variant="outline" asChild className="font-normal" data-testid={`secret-auth-config-${row.original.name}`}>
-              <Link href={`/integrations/credentials/${encodeURIComponent(row.original.authConfig.id)}`} title="Change it on this auth config">
+              <Link href={`/data/secrets/${encodeURIComponent(row.original.authConfig.id)}`} title="Change it on this auth config">
                 Auth config · {row.original.authConfig.name}
+              </Link>
+            </Badge>
+          </StopRowClick>
+        ) : row.original.connectionId ? (
+          // One of an account's own secrets (a key, a token): changed on the account, never here.
+          <StopRowClick align="start">
+            <Badge variant="outline" asChild className="font-normal" data-testid={`secret-account-${row.original.name}`}>
+              <Link href={`/data/tools/connections/${encodeURIComponent(row.original.connectionId)}`} title="Change it on this account">
+                Account{row.original.label ? ` · ${row.original.label}` : ''}
               </Link>
             </Badge>
           </StopRowClick>
@@ -125,7 +133,7 @@ function columns(canEdit: boolean, onRotate: (s: SecretMeta) => void, onRename: 
                 icon: Pencil,
                 onClick: (r) => onRename(r.original),
                 // Operations name it as {{NAME}}, so tools-service refuses renaming one they read (409), as a delete.
-                disabledReason: row.original.usedBy.length ? `Read by ${row.original.usedBy.map((u) => u.operation).join(', ')}` : undefined,
+                disabledReason: (row.original.usedBy ?? []).length ? `Read by ${(row.original.usedBy ?? []).map((u) => u.operation).join(', ')}` : undefined,
               },
               {
                 label: 'Delete',
@@ -133,7 +141,7 @@ function columns(canEdit: boolean, onRotate: (s: SecretMeta) => void, onRename: 
                 variant: 'destructive',
                 onClick: (r) => onDelete(r.original),
                 // tools-service refuses it too (409); saying why here saves the round trip.
-                disabledReason: row.original.usedBy.length ? `Read by ${row.original.usedBy.map((u) => u.operation).join(', ')}` : undefined,
+                disabledReason: (row.original.usedBy ?? []).length ? `Read by ${(row.original.usedBy ?? []).map((u) => u.operation).join(', ')}` : undefined,
               },
             ]}
           />

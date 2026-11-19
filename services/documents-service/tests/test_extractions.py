@@ -7,11 +7,13 @@ routes."""
 
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 from typing import Any
 
 import httpx
+import pytest
 import sqlalchemy as sa
 from reportlab.lib.pagesizes import LETTER
 from reportlab.pdfgen.canvas import Canvas
@@ -21,9 +23,11 @@ from ops_documents import extraction
 from ops_documents.extraction import ModelsService
 from ops_documents.store.extractions import service_outbox
 from ops_extract.floor import FloorUnreadError
+from ops_files_client import FilesRefused
 from ops_identity import dev_service_signer, mint_service_token
+from ops_store import background
 
-from .conftest import OPS, Make
+from .conftest import OPS, Make, tenant_outbox
 
 NOTICE = b"Invoice INV-2207\nAmount due: 1,250.00 CAD\nCustomer: Marcus Bell\n"
 FIELDS = [
@@ -105,7 +109,7 @@ async def test_a_queued_extraction_runs_again_after_a_restart(make: Make, monkey
     assert body["status"] == "done" and body["fields"]["amount"]["value"] == 1250.0, body
 
 
-def _stopped(row: Any) -> None:
+async def _stopped(row: Any) -> None:
     return None
 
 
@@ -148,6 +152,25 @@ async def test_a_retry_with_the_same_key_is_the_same_extraction_and_a_failed_one
         same = (await extract(c, fid, headers=key)).json()["data"]
     assert failed["status"] == "failed" and (again["id"], again["status"]) == (failed["id"], "done"), again
     assert same["id"] == failed["id"] and len(models.calls) == 2, models.calls
+
+
+async def test_a_retry_after_files_service_failed_mid_request_runs_again_at_once(make: Make, monkeypatch: Any) -> None:
+    """The row is saved before the bytes are read; files-service failing then leaves the row failed, so a retry with
+    the same key reads the file now rather than answering queued until the process restarts."""
+    s = make(Models(), Floor())
+    async with s.client as c:
+        fid = await s.stored(NOTICE)
+        key = {**OPS, "Idempotency-Key": "run_1:read:files-down"}
+
+        async def down(*args: Any) -> bytes:
+            raise FilesRefused(503, "unavailable", "files-service is down")
+
+        monkeypatch.setattr(s.extractor.files, "read", down)
+        first = await extract(c, fid, headers=key)
+        monkeypatch.undo()
+        again = await extract(c, fid, headers=key)
+    assert first.status_code >= 500, first.text
+    assert again.status_code == 200 and again.json()["data"]["status"] == "done", again.text
 
 
 async def test_only_a_service_purges_and_only_a_deleted_files_reads_of_its_team(
@@ -254,15 +277,14 @@ async def test_every_end_of_a_read_reports_extraction_finished_once_with_its_out
             "data"
         ]
         await failing.extractor.drain()
-    async with engine.connect() as conn:
-        o = service_outbox
-        q = sa.select(o.c.event_key, o.c.team_id, o.c.payload).where(
-            o.c.tenant_id == s.tenant, o.c.name == "extraction.finished"
-        )
-        rows = {r.event_key: r for r in (await conn.execute(q)).all()}
+    o = service_outbox
+    q = sa.select(o.c.event_key, o.c.team_id, o.c.payload).where(
+        o.c.tenant_id == s.tenant, o.c.name == "extraction.finished"
+    )
+    rows = {r["event_key"]: r for r in await tenant_outbox(engine, s.tenant, q)}
     assert set(rows) == {done["id"], failed["id"]}, rows
-    assert rows[done["id"]].payload["status"] == "done" and rows[done["id"]].payload["fileId"] == done["fileId"], rows
-    assert rows[failed["id"]].payload["status"] == "failed", rows
+    assert rows[done["id"]]["payload"]["status"] == "done" and rows[done["id"]]["payload"]["fileId"] == done["fileId"]
+    assert rows[failed["id"]]["payload"]["status"] == "failed", rows
 
 
 class _DownModels(Models):
@@ -270,3 +292,80 @@ class _DownModels(Models):
 
     async def structured(self, *args: Any, **kwargs: Any) -> Any:
         raise RuntimeError("model down")
+
+
+class _HeldModels(Models):
+    """A model call that waits until released, so the read can be cut off while the model is being asked."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.asked, self.release = asyncio.Event(), asyncio.Event()
+
+    async def structured(self, *args: Any, **kwargs: Any) -> Any:
+        self.asked.set()
+        await self.release.wait()
+        return await super().structured(*args, **kwargs)
+
+
+async def test_a_read_cancelled_during_the_model_call_runs_again_on_a_retry_with_the_same_key(make: Make) -> None:
+    """The request is cancelled while the model is asked: the row is not left running (a retry would answer 202 until
+    a restart), and the cancel still reaches the caller."""
+    models = _HeldModels()
+    s = make(models, Floor())
+    async with s.client as c:
+        fid = await s.stored(NOTICE)
+        key = {**OPS, "Idempotency-Key": "run_1:read:cancelled"}
+        cut = asyncio.create_task(extract(c, fid, headers=key))
+        await models.asked.wait()
+        cut.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await cut
+        models.release.set()
+        again = await extract(c, fid, headers=key)
+    assert again.status_code == 200 and again.json()["data"]["status"] == "done", again.text
+
+
+@pytest.mark.lifespan_supervisor
+async def test_a_queued_read_cut_off_at_shutdown_during_the_model_call_finishes_after_a_restart(
+    make: Make, monkeypatch: Any
+) -> None:
+    """Shutdown cancels a queued read mid model call: drain returns, and the row stays pending, so the restart reads
+    it."""
+    monkeypatch.setattr(extraction, "SYNC_BYTES", 10)  # every file is large: queued, run as a task
+    models = _HeldModels()
+    first = make(models, Floor())
+    async with first.client as c, first.app.router.lifespan_context(first.app):
+        queued = (await extract(c, await first.stored(NOTICE))).json()["data"]
+        await models.asked.wait()
+    await asyncio.wait_for(first.extractor.drain(), 5)
+    restarted = make(Models(), Floor())
+    restarted.files.files, restarted.files.blobs = first.files.files, first.files.blobs
+    async with restarted.client as c, restarted.app.router.lifespan_context(restarted.app):
+        await restarted.extractor.drain()
+        body = (await c.get(f"/v1/documents/extractions/{queued['id']}", headers=OPS)).json()["data"]
+    assert body["status"] == "done", body
+
+
+async def test_a_queued_read_whose_task_cannot_start_is_settled_and_drain_returns(make: Make, monkeypatch: Any) -> None:
+    """The background task is refused: drain still returns (it waited forever on a read that never started), and the
+    row is failed, so a retry with the same key queues it again rather than answering 202 with nothing running."""
+    monkeypatch.setattr(extraction, "SYNC_BYTES", 10)  # every file is large: queued, run as a task
+    s = make(Models(), Floor())
+    real_start = background.start
+
+    async def refused(coro: Any, *, key: str, **kwargs: Any) -> None:
+        coro.close()
+        raise OSError("the task could not start")
+
+    async with s.client as c:
+        fid = await s.stored(NOTICE)
+        key = {**OPS, "Idempotency-Key": "run_1:read:unstarted"}
+        monkeypatch.setattr(background, "start", refused)
+        first = await extract(c, fid, headers=key)
+        await asyncio.wait_for(s.extractor.drain(), 5)
+        monkeypatch.setattr(background, "start", real_start)
+        again = (await extract(c, fid, headers=key)).json()["data"]
+        await s.extractor.drain()
+        body = (await c.get(f"/v1/documents/extractions/{again['id']}", headers=OPS)).json()["data"]
+    assert first.status_code >= 500, first.text
+    assert again["status"] == "queued" and body["status"] == "done", (again, body)

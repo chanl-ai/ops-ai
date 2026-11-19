@@ -1,9 +1,10 @@
-"""Who reads another person's chat under the workspace's chatThreadsOwnerOnly policy, through the chat route:
-on (the default), a role whose grid reads every chat still reads only its own; off, the grid decides. The role is a
-custom one holding chat.view at `all`, as admins will once the grid gives them that cell."""
+"""Who reads another person's chat under the workspace's chatThreadsOwnerOnly policy, through the chat route and the
+graph thread and event routes: on (the default), a role whose grid reads every chat still reads only its own; off, the
+grid decides. The role is a custom one holding chat.view at `all`, as admins will once the grid gives them that cell."""
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable
 from typing import Any
 
@@ -15,7 +16,10 @@ from ops_policy import mint
 from tests.api.test_action_roles import VIEWER
 from tests.api.test_memory import chat
 from tests.api.test_team_default_agent import Stack, stack  # noqa: F401  # pyright: ignore[reportUnusedImport]
-from tests.engine.test_lifecycle_rights import PLATFORM, TENANT
+from tests.engine.test_lifecycle_rights import BUILDER, PLATFORM, TENANT, person
+
+# Vera's teammate in team_ops, holding the same role.
+TEAMMATE = person("otto", "team_ops", "viewer")
 
 
 def reader(policies: dict[str, Any] | None) -> dict[str, str]:
@@ -93,3 +97,53 @@ async def test_a_link_opened_in_another_of_the_readers_teams_finds_the_conversat
     }, own.text
     other = await c.get(f"/chat/threads/{thread}", headers=in_two_teams("otto"))
     assert other.status_code == 200 and other.json()["data"] == {"id": thread, "readable": False}, other.text
+
+
+async def chat_with_a_run(c: Any) -> tuple[str, str]:
+    """Vera's chat with one finished turn, and that turn's run id."""
+    thread = await chat(c, VIEWER)
+    turn = await c.post(
+        f"/v1/chat/threads/{thread}/messages",
+        json={"content": "Hello"},
+        headers={**VIEWER, "Accept": "text/event-stream"},
+    )
+    assert turn.status_code == 200, turn.text
+    runs = await c.get(f"/v1/threads/{thread}/runs", headers=VIEWER)
+    assert runs.status_code == 200 and runs.json()["data"], runs.text
+    return thread, runs.json()["data"][0]["runId"]
+
+
+@pytest.mark.parametrize("part", ["/state", "/runs", "/runs/{run}/events?follow=false"])
+async def test_a_teammate_reads_no_part_of_a_chat_through_the_thread_routes(stack: Stack, part: str) -> None:  # noqa: F811
+    c, _ = stack
+    thread, run = await chat_with_a_run(c)
+    url = f"/v1/threads/{thread}" + part.format(run=run)
+    assert (await c.get(url, headers=VIEWER)).status_code == 200
+    refused = await c.get(url, headers=TEAMMATE)
+    assert refused.status_code == 404, refused.text
+    # With the policy off a reader of every chat reads it: the grid decides, as on the chat route.
+    assert (await c.get(url, headers=reader({"chatThreadsOwnerOnly": False}))).status_code == 200
+
+
+async def test_a_teammate_lists_and_streams_no_chat_but_still_the_teams_workflows(stack: Stack) -> None:  # noqa: F811
+    c, _ = stack
+    thread, _ = await chat_with_a_run(c)
+    made = await c.post("/v1/threads", json={"graph": "complex_workflow", "metadata": {}}, headers=BUILDER)
+    assert made.status_code == 201, made.text
+    workflow = made.json()["data"]["threadId"]
+
+    def listed(r: Any) -> set[str]:
+        assert r.status_code == 200, r.text
+        return {t["threadId"] for t in r.json()["data"]["data"]}
+
+    assert {thread, workflow} <= listed(await c.get("/v1/threads", headers=VIEWER))
+    seen = listed(await c.get("/v1/threads", headers=TEAMMATE))
+    assert workflow in seen and thread not in seen
+    assert (await c.get(f"/v1/threads/{workflow}/state", headers=TEAMMATE)).status_code == 200
+
+    def streamed(r: Any) -> set[str]:
+        assert r.status_code == 200, r.text
+        return {json.loads(line[5:])["threadId"] for line in r.text.splitlines() if line.startswith("data:")}
+
+    assert thread in streamed(await c.get("/v1/events?follow=false", headers=VIEWER))
+    assert thread not in streamed(await c.get("/v1/events?follow=false", headers=TEAMMATE))

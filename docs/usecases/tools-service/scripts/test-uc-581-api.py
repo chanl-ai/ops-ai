@@ -13,6 +13,8 @@ from uuid import uuid4
 
 import httpx
 from fake_salesforce import ACCOUNT_ID, LIST_VIEW_ID, salesforce
+from steps import required
+from usecase_harness import PLUGINS_REPO
 from usecase_harness import (
     PLATFORM_INTERNAL_PORT,
     PLATFORM_PORT,
@@ -25,7 +27,6 @@ from usecase_harness import (
     signed_in,
     tools,
 )
-from usecase_harness import ROOT as REPO
 
 PLUGIN = "opsai.salesforce"
 AUTH = {
@@ -33,7 +34,7 @@ AUTH = {
     "OPS_PLATFORM_URL": f"http://127.0.0.1:{PLATFORM_PORT}",
     "OPS_PLATFORM_INTERNAL_PORT": str(PLATFORM_INTERNAL_PORT),
 }
-SALESFORCE = REPO.parent / "ops-ai-plugins/plugins/salesforce/src/ops_plugin_salesforce"
+SALESFORCE = PLUGINS_REPO / "plugins/salesforce/src/ops_plugin_salesforce"
 PLUGINS = {"OPS_PLUGINS": "true", "OPS_PLUGIN_PATHS": json.dumps([str(SALESFORCE)])}
 OPEN = ["5003000000E1aaaAAA", "5003000000E2bbbAAA", "5003000000E4dddAAA"]
 DELETED = "5003000000E3cccAAA"
@@ -90,7 +91,7 @@ with ExitStack() as stack:
     # The org's company address, one of the places the Salesforce plugin signs in, held by the auth config.
     login = sf["login_url"]
     own = {"app": f"plugin:{PLUGIN}", "clientId": "ops-ai-acme", "clientSecret": "s3", "settings": {"login_url": login}}
-    credential = (data(gw.post("/v1/app-credentials", json=own, headers=priya)) or {}).get("id")
+    credential = (required(gw.post("/v1/app-credentials", json=own, headers=priya), "/v1/app-credentials")).get("id")
     team_on = {"enabled": True, "credentialId": credential}
     turned = gw.put(f"/v1/apps/plugin:{PLUGIN}/team", json=team_on, headers=priya)
     connection_id = str((data(turned) or {}).get("connectionId") or "con_missing")

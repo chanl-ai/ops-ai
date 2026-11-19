@@ -72,7 +72,7 @@ export const PAGINATION_DEFAULTS = {
   PAGE_SIZE: 10,
 
   /** Available page size options */
-  PAGE_SIZE_OPTIONS: [10, 20, 30, 50, 100] as const,
+  PAGE_SIZE_OPTIONS: [10, 20, 30, 50] as const,
 
   /** Prefix for localStorage keys */
   STORAGE_KEY_PREFIX: 'ops-ai-pagination-',

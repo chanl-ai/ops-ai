@@ -7,7 +7,6 @@ from typing import ClassVar
 
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_service_kit.ids import now_iso
 from ops_store import Guarantee
@@ -15,7 +14,7 @@ from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.team_scope import any_team, team_visible
 
 from .base import metadata
-from .tenancy import ASSISTANT_TEAMS, current_tenant, system_tx, tenant_tx
+from .tenancy import ASSISTANT_TEAMS, RuntimeStore, current_tenant
 
 team_default_agents = sa.Table(
     "team_default_agents",
@@ -29,16 +28,13 @@ team_default_agents = sa.Table(
 )
 
 
-class TeamDefaults:
+class TeamDefaults(RuntimeStore):
     # One row per team, replaced whole: the last admin to pick a default wins, so no write depends on what was read.
     requires: ClassVar[frozenset[Guarantee]] = frozenset()
 
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
-
     async def agent(self, team_id: str) -> str | None:
         """The team's default agent id, or None before one is set."""
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             q = sa.select(team_default_agents.c.agent_id).where(
                 team_default_agents.c.team_id == team_id, team_visible(team_default_agents)
             )
@@ -47,10 +43,10 @@ class TeamDefaults:
     async def set_agent(self, team_id: str, agent_id: str, *, by: str) -> None:
         values = {"agent_id": agent_id, "updated_by": by, "updated_at": now_iso()}
         try:
-            async with tenant_tx(self.engine) as c:
+            async with self.tx() as c, self.attempt(c):
                 await c.execute(team_default_agents.insert().values(team_id=team_id, **values))
         except IntegrityError:
-            async with tenant_tx(self.engine) as c:
+            async with self.tx() as c:
                 await c.execute(
                     team_default_agents.update()
                     .where(
@@ -65,7 +61,7 @@ class TeamDefaults:
         the start-up catch-up of the teams' Ops Assistants starts before it knows a tenant, then works each
         under its own."""
         t = team_default_agents
-        async with system_tx(self.engine, ASSISTANT_TEAMS) as c:
+        async with self.system_tx(ASSISTANT_TEAMS) as c:
             q = sa.select(t.c.tenant_id, t.c.team_id, t.c.agent_id).where(
                 t.c.agent_id.like(f"{prefix}%"), any_team(t, "the start-up catch-up reads only default agent ids")
             )

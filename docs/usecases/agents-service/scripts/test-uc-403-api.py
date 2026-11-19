@@ -12,6 +12,7 @@ from contextlib import ExitStack
 from typing import Any
 
 import httpx
+from steps import required
 from usecase_harness import AGENTS_PORT, TOOLS_PORT, agents, check, data, engine_worker, finish, tools, until
 
 OPS = {"X-Team-Id": "team_ops"}
@@ -83,7 +84,7 @@ def run_of(api: httpx.Client, run_id: str) -> dict[str, Any]:
 
 def started(api: httpx.Client, workflow: str, payload: dict[str, Any]) -> str:
     return str(
-        (data(api.post("/v1/runs", json={"workflowId": workflow, "input": payload}, headers=OPS)) or {})["runId"]
+        (required(api.post("/v1/runs", json={"workflowId": workflow, "input": payload}, headers=OPS), "/v1/runs"))["runId"]
     )
 
 

@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- files-service, stamped at files_0014
+-- files-service, stamped at files_0016
 CREATE TABLE files (
 	id VARCHAR(64) NOT NULL, 
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -39,9 +39,23 @@ CREATE TABLE files (
 GO
 CREATE INDEX ix_files_delete_after ON files (tenant_id, delete_after);
 GO
-CREATE INDEX ix_files_read_as ON files (tenant_id, team, read_as);
+CREATE INDEX ix_files_name ON files (tenant_id, name);
+GO
+CREATE INDEX ix_files_purpose ON files (tenant_id, purpose);
+GO
+CREATE INDEX ix_files_read_as ON files (tenant_id, read_as, team);
+GO
+CREATE INDEX ix_files_read_path ON files (tenant_id, read_path);
+GO
+CREATE INDEX ix_files_scan_status ON files (tenant_id, scan_status);
+GO
+CREATE INDEX ix_files_sensitivity ON files (tenant_id, sensitivity);
+GO
+CREATE INDEX ix_files_size ON files (tenant_id, size);
 GO
 CREATE INDEX ix_files_team_status ON files (tenant_id, team, status, uploaded_at);
+GO
+CREATE INDEX ix_files_uploaded_at ON files (tenant_id, uploaded_at);
 GO
 CREATE TABLE files_outbox (
 	id VARCHAR(64) NOT NULL, 
@@ -264,5 +278,5 @@ CREATE TABLE alembic_version_files (
     CONSTRAINT alembic_version_files_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_files (version_num) VALUES ('files_0014');
+INSERT INTO alembic_version_files (version_num) VALUES ('files_0016');
 GO

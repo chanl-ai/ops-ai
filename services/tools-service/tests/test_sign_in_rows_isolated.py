@@ -7,8 +7,8 @@ the database user the tests connect as bypasses row security."""
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Any
 
+import pytest
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -16,6 +16,8 @@ from ops_store import isolation
 from ops_store.schema import isolation_kind
 from ops_tools.store.connections import (
     ConnectionStore,
+    NewAccount,
+    TokenWrite,
     connect_links,
     connection_tokens,
     oauth_states,
@@ -27,11 +29,17 @@ PERSON = "usr_maya"
 SIGN_IN_TABLES = (connection_tokens, oauth_states, connect_links)
 
 
+@pytest.fixture
+def engine(both_engine: AsyncEngine) -> AsyncEngine:
+    """This file's tests run on PostgreSQL and SQL Server (conftest.database_url)."""
+    return both_engine
+
+
 async def _signed_in(engine: AsyncEngine, tenant: str, team: str = TEAM_A) -> tuple[ConnectionStore, str]:
     """A team's account holding a person's token, a sign-in in progress and a connect link."""
     store, now = ConnectionStore(engine), datetime.now(UTC)
     con = f"con_{team}"
-    row = {
+    row: NewAccount = {
         "tenant_id": tenant,
         "id": con,
         "app_id": con,
@@ -50,7 +58,7 @@ async def _signed_in(engine: AsyncEngine, tenant: str, team: str = TEAM_A) -> tu
     with isolation.scope(tenant, team):
         assert await store.create(row, actor="t", at=now)
         await store.change(tenant, con, 1, {"settings": {"baseUrl": "https://x"}, "secrets": {}}, actor="t", at=now)
-        token: dict[str, Any] = {"access_ct": "sealed", "scopes": [], "rotations": 0, "refreshed_at": now}
+        token: TokenWrite = {"access_ct": "sealed", "scopes": [], "rotations": 0, "refreshed_at": now}
         assert await store.put_token(tenant, con, token, expected_rotations=None, person=PERSON)
         await store.add_state(
             {
@@ -92,7 +100,8 @@ async def test_another_team_finds_no_sign_in_through_the_store(engine: AsyncEngi
         now = datetime.now(UTC)
         assert await store.take_state(tenant, f"s_{TEAM_A}", connection_id=con, person=PERSON, now=now) is None
     with isolation.scope(tenant, TEAM_A):
-        assert (await store.token(tenant, con, PERSON) or {}).get("access_ct") == "sealed"
+        held = await store.token(tenant, con, PERSON)
+        assert held is not None and held.access_ct == "sealed"
 
 
 async def test_the_database_alone_hides_and_guards_them(engine: AsyncEngine, tenant: str) -> None:
@@ -103,10 +112,11 @@ async def test_the_database_alone_hides_and_guards_them(engine: AsyncEngine, ten
         async with isolation.isolated_tx(engine, role=ROLE) as c:
             for t in SIGN_IN_TABLES:
                 # Only the tenant is named: the team must come from the policy.
-                seen = await c.execute(sa.text(f"SELECT count(*) FROM {t.name} WHERE tenant_id = :t"), {"t": tenant})
+                seen = await c.execute(sa.text(f"SELECT count(*) FROM {t.name} WHERE tenant_id = :t"), {"t": tenant})  # noqa: S608
                 assert seen.scalar_one() == 0, f"team B read {t.name}"
                 changed = await c.execute(
-                    sa.text(f"UPDATE {t.name} SET team_id = team_id WHERE tenant_id = :t"), {"t": tenant}
+                    sa.text(f"UPDATE {t.name} SET team_id = team_id WHERE tenant_id = :t"),  # noqa: S608
+                    {"t": tenant},
                 )
                 assert changed.rowcount == 0, f"team B changed {t.name}"
     with isolation.scope(tenant, TEAM_A):
@@ -119,10 +129,12 @@ async def test_the_database_alone_hides_and_guards_them(engine: AsyncEngine, ten
 
 async def test_each_new_row_carries_its_connections_team(engine: AsyncEngine, tenant: str) -> None:
     await _signed_in(engine, tenant)
-    async with engine.connect() as c:
-        for t in (connection_tokens, oauth_states):
-            teams = (await c.execute(sa.select(t.c.team_id).where(t.c.tenant_id == tenant))).scalars().all()
-            assert teams and set(teams) == {TEAM_A}, (t.name, teams)
+    # Read across the tenant's teams, so a row written in another team is seen and fails the check.
+    with isolation.tenant_wide("TESTS", tenant_id=tenant):
+        async with isolation.isolated_tx(engine, role=ROLE) as c:
+            for t in (connection_tokens, oauth_states):
+                teams = (await c.execute(sa.select(t.c.team_id).where(t.c.tenant_id == tenant))).scalars().all()
+                assert teams and set(teams) == {TEAM_A}, (t.name, teams)
 
 
 async def test_a_moved_connection_takes_its_rows(engine: AsyncEngine, tenant: str) -> None:
@@ -131,6 +143,6 @@ async def test_a_moved_connection_takes_its_rows(engine: AsyncEngine, tenant: st
     with isolation.tenant_wide("TESTS", tenant_id=tenant):
         await store.change(tenant, con, 2, {"team_id": TEAM_B}, actor="dev seed", at=now)
     with isolation.scope(tenant, TEAM_B):
-        found: dict[str, Any] = await store.token(tenant, con, PERSON) or {}
-        assert found.get("access_ct") == "sealed"
-        assert [p["person_id"] for p in await store.people(tenant, con)] == [PERSON]
+        found = await store.token(tenant, con, PERSON)
+        assert found is not None and found.access_ct == "sealed"
+        assert [p.person_id for p in await store.people(tenant, con)] == [PERSON]

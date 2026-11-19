@@ -78,15 +78,57 @@ class BackgroundProcessOut(TypedDict, closed=True):
     waiting: int | None
 
 
+class BreakGlassOut(TypedDict, closed=True):
+    addedAt: str
+    addedBy: str
+    email: str
+    lastUsedAt: str | None
+    userId: str
+
+
 class CellIn(TypedDict, closed=True):
     action: str
     area: str
     scope: NotRequired[Literal["all", "own"]]
 
 
+class CertificateOut(TypedDict, closed=True):
+    addedAt: str
+    fingerprint: str
+    notAfter: str
+    notBefore: str
+    source: Literal["metadata", "upload", "manual"]
+    state: Literal["current", "expiring", "expired"]
+
+
 class CheckRefusal(TypedDict, closed=True):
     code: str
     reason: str
+
+
+class ConsentClient(TypedDict, closed=True):
+    id: str
+    name: str
+    nameIsSelfReported: bool
+
+
+class ConsentDecided(TypedDict, closed=True):
+    redirectTo: str
+
+
+class ConsentIn(TypedDict, closed=True):
+    clientId: str
+    codeChallenge: str
+    codeChallengeMethod: str
+    decision: Literal["allow", "deny"]
+    redirectUri: str
+    resource: str
+    state: NotRequired[str | None]
+
+
+class ConsentTeam(TypedDict, closed=True):
+    id: str
+    name: str
 
 
 Id: TypeAlias = str
@@ -98,6 +140,16 @@ class DeleteIn(TypedDict, closed=True):
 
 class EnvelopeAuditEventOut(TypedDict, closed=True):
     data: AuditEventOut
+    success: Literal[True]
+
+
+class EnvelopeConsentDecided(TypedDict, closed=True):
+    data: ConsentDecided
+    success: Literal[True]
+
+
+class EnvelopeListBreakGlassOut(TypedDict, closed=True):
+    data: list[BreakGlassOut]
     success: Literal[True]
 
 
@@ -121,12 +173,24 @@ class ErrorEnvelope(TypedDict, closed=True):
 
 class FlagOut(TypedDict, closed=True):
     description: str
-    name: Literal["mcp_gateway", "tool_search", "plugin_updates"]
+    name: Literal["mcp_gateway", "tool_search", "plugin_updates", "area_tabs"]
     on: bool
 
 
 class ForgotIn(TypedDict, closed=True):
     email: str
+
+
+class GrantOut(TypedDict, closed=True):
+    clientId: str
+    clientName: str
+    createdAt: str
+    expiresAt: str
+    id: str
+    lastUsedAt: str | None
+    resource: str
+    teamId: str
+    teamName: str
 
 
 class GrantingRole(TypedDict, closed=True):
@@ -154,11 +218,13 @@ class GroupRuleOut(TypedDict, closed=True):
 
 class GroupSettings(TypedDict, closed=True):
     map: list[GroupRule]
+    onMissing: NotRequired[Literal["keep", "remove"] | None]
     source: NotRequired[str | None]
 
 
 class GroupSettingsOut(TypedDict, closed=True):
     map: list[GroupRuleOut]
+    onMissing: Literal["keep", "remove"]
     source: str | None
 
 
@@ -230,13 +296,13 @@ class Jwks(TypedDict, closed=True):
 
 class KeyTarget(TypedDict, closed=True):
     id: str
-    kind: Literal["agent", "workflow"]
+    kind: Literal["agent", "workflow", "mcp_link"]
     version: NotRequired[int | None]
 
 
 class KeyTargetIn(TypedDict, closed=True):
     id: str
-    kind: Literal["agent", "workflow"]
+    kind: Literal["agent", "workflow", "mcp_link"]
     version: NotRequired[int | None]
 
 
@@ -263,6 +329,28 @@ class MemberOut(TypedDict, closed=True):
     teamId: str
     userId: NotRequired[str | None]
     workspaceRoles: NotRequired[list[str]]
+
+
+class MetadataCertificateOut(TypedDict, closed=True):
+    fingerprint: str
+    notAfter: str
+    notBefore: str
+
+
+class MetadataIn(TypedDict, closed=True):
+    url: NotRequired[str | None]
+    xml: NotRequired[str | None]
+
+
+class MetadataOut(TypedDict, closed=True):
+    certificates: list[MetadataCertificateOut]
+    idpEntityId: str
+    ssoUrl: str
+
+
+class OAuthErrorOut(TypedDict, closed=True):
+    error: str
+    error_description: str
 
 
 Scope: TypeAlias = str
@@ -338,7 +426,17 @@ class PolicyOut(TypedDict, closed=True):
     default: bool | int | float | str | dict[str, Any] | list[str] | None
     effect: str
     key: str
-    kind: Literal["bool", "floor", "days", "hours", "publish_modes", "names", "choice"]
+    kind: Literal[
+        "bool",
+        "floor",
+        "days",
+        "hours",
+        "publish_modes",
+        "names",
+        "choice",
+        "app_changes",
+        "app_changes_by_app",
+    ]
     note: NotRequired[str | None]
     title: str
     value: bool | int | float | str | dict[str, Any] | list[str] | None
@@ -442,24 +540,39 @@ class RoleRef(TypedDict, closed=True):
     name: str
 
 
+Certificate: TypeAlias = str
+
+
 class SamlSettings(TypedDict, closed=True):
-    certificate: str
+    certificate: NotRequired[str | None]
+    certificates: NotRequired[list[Certificate] | None]
     emailAttribute: NotRequired[str | None]
     idpEntityId: str
+    metadataUrl: NotRequired[str | None]
     nameAttribute: NotRequired[str | None]
     requireEncryption: NotRequired[bool]
     signRequests: NotRequired[bool]
     ssoUrl: str
+    tiles: NotRequired[bool]
 
 
 class SamlSettingsOut(TypedDict, closed=True):
-    certificate: str
+    acsUrl: str | None
+    certificate: str | None
+    certificates: list[CertificateOut]
     emailAttribute: str | None
     idpEntityId: str
+    metadataError: str | None
+    metadataReadAt: str | None
+    metadataUrl: str | None
     nameAttribute: str | None
     requireEncryption: bool
+    signOnUrl: str | None
     signRequests: bool
+    spEntityId: str | None
+    spMetadataUrl: str | None
     ssoUrl: str
+    tiles: bool
 
 
 class SignIn(TypedDict, closed=True):
@@ -479,6 +592,20 @@ class SignInSecretOut(TypedDict, closed=True):
     version: int
 
 
+class SignInTestOut(TypedDict, closed=True):
+    email: NotRequired[str | None]
+    groups: NotRequired[list[str] | None]
+    name: NotRequired[str | None]
+    reason: NotRequired[str | None]
+    state: Literal["waiting", "ok", "refused"]
+    subject: NotRequired[str | None]
+
+
+class SignInTestStartOut(TypedDict, closed=True):
+    flowId: str
+    redirectUrl: str
+
+
 class Skip(TypedDict, closed=True):
     id: str
     reason: str
@@ -495,8 +622,9 @@ class SsoOption(TypedDict, closed=True):
 
 
 class SsoStartIn(TypedDict, closed=True):
-    email: str
+    email: NotRequired[str | None]
     next: NotRequired[str | None]
+    provider: NotRequired[str | None]
 
 
 class SsoStarted(TypedDict, closed=True):
@@ -653,6 +781,7 @@ class ApiKeySummary(TypedDict, closed=True):
     lastUsedAt: str | None
     name: str
     prefix: str
+    revision: int
     status: Literal["active", "revoked", "disabled"]
     target: KeyTarget | None
     teamId: str
@@ -679,6 +808,14 @@ class BackgroundHealthOut(TypedDict, closed=True):
 class BulkOut(TypedDict, closed=True):
     skipped: list[Skip]
     updated: list[str]
+
+
+class ConsentOut(TypedDict, closed=True):
+    client: ConsentClient
+    connectionHours: int
+    redirectHost: str
+    resource: str
+    team: ConsentTeam
 
 
 class DomainCheckOut(TypedDict, closed=True):
@@ -715,8 +852,18 @@ class EnvelopeBulkOut(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeConsentOut(TypedDict, closed=True):
+    data: ConsentOut
+    success: Literal[True]
+
+
 class EnvelopeInvitePreview(TypedDict, closed=True):
     data: InvitePreview
+    success: Literal[True]
+
+
+class EnvelopeMetadataOut(TypedDict, closed=True):
+    data: MetadataOut
     success: Literal[True]
 
 
@@ -752,6 +899,16 @@ class EnvelopeRoleGrantOut(TypedDict, closed=True):
 
 class EnvelopeSignInSecretOut(TypedDict, closed=True):
     data: SignInSecretOut
+    success: Literal[True]
+
+
+class EnvelopeSignInTestOut(TypedDict, closed=True):
+    data: SignInTestOut
+    success: Literal[True]
+
+
+class EnvelopeSignInTestStartOut(TypedDict, closed=True):
+    data: SignInTestStartOut
     success: Literal[True]
 
 
@@ -795,13 +952,13 @@ class EnvelopeWorkspaceTeamsOut(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeListApiKeyOut(TypedDict, closed=True):
-    data: list[ApiKeyOut]
+class EnvelopeListApiKeySummary(TypedDict, closed=True):
+    data: list[ApiKeySummary]
     success: Literal[True]
 
 
-class EnvelopeListApiKeySummary(TypedDict, closed=True):
-    data: list[ApiKeySummary]
+class EnvelopeListGrantOut(TypedDict, closed=True):
+    data: list[GrantOut]
     success: Literal[True]
 
 
@@ -812,21 +969,6 @@ class EnvelopeListPersonName(TypedDict, closed=True):
 
 class EnvelopeListPolicyOut(TypedDict, closed=True):
     data: list[PolicyOut]
-    success: Literal[True]
-
-
-class EnvelopeListRoleGrantOut(TypedDict, closed=True):
-    data: list[RoleGrantOut]
-    success: Literal[True]
-
-
-class EnvelopeListRoleHolderOut(TypedDict, closed=True):
-    data: list[RoleHolderOut]
-    success: Literal[True]
-
-
-class EnvelopeListRoleOut(TypedDict, closed=True):
-    data: list[RoleOut]
     success: Literal[True]
 
 
@@ -862,8 +1004,32 @@ class KeyRef(TypedDict, closed=True):
     target: KeyTarget | None
 
 
+class ListResultApiKeyOut(TypedDict, closed=True):
+    data: list[ApiKeyOut]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
 class ListResultMemberOut(TypedDict, closed=True):
     data: list[MemberOut]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
+class ListResultRoleGrantOut(TypedDict, closed=True):
+    data: list[RoleGrantOut]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
+class ListResultRoleHolderOut(TypedDict, closed=True):
+    data: list[RoleHolderOut]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
+class ListResultRoleOut(TypedDict, closed=True):
+    data: list[RoleOut]
     facets: dict[str, dict[str, int]]
     pagination: Pagination
 
@@ -872,17 +1038,6 @@ class ListResultWorkspaceTeamOut(TypedDict, closed=True):
     data: list[WorkspaceTeamOut]
     facets: dict[str, dict[str, int]]
     pagination: Pagination
-
-
-class Me(TypedDict, closed=True):
-    flags: list[FlagOut]
-    policies: dict[str, Any]
-    securityTeamId: str | None
-    teams: list[MeTeam]
-    tenantId: str
-    tenantName: str | None
-    user: MeUser
-    workspace: WorkspaceStateOut
 
 
 class OptionsOut(TypedDict, closed=True):
@@ -962,18 +1117,33 @@ class EnvelopeInviteBulkOut(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeListResultApiKeyOut(TypedDict, closed=True):
+    data: ListResultApiKeyOut
+    success: Literal[True]
+
+
 class EnvelopeListResultMemberOut(TypedDict, closed=True):
     data: ListResultMemberOut
     success: Literal[True]
 
 
-class EnvelopeListResultWorkspaceTeamOut(TypedDict, closed=True):
-    data: ListResultWorkspaceTeamOut
+class EnvelopeListResultRoleGrantOut(TypedDict, closed=True):
+    data: ListResultRoleGrantOut
     success: Literal[True]
 
 
-class EnvelopeMe(TypedDict, closed=True):
-    data: Me
+class EnvelopeListResultRoleHolderOut(TypedDict, closed=True):
+    data: ListResultRoleHolderOut
+    success: Literal[True]
+
+
+class EnvelopeListResultRoleOut(TypedDict, closed=True):
+    data: ListResultRoleOut
+    success: Literal[True]
+
+
+class EnvelopeListResultWorkspaceTeamOut(TypedDict, closed=True):
+    data: ListResultWorkspaceTeamOut
     success: Literal[True]
 
 
@@ -1013,4 +1183,21 @@ class PermissionsOut(TypedDict, closed=True):
 
 class EnvelopePermissionsOut(TypedDict, closed=True):
     data: PermissionsOut
+    success: Literal[True]
+
+
+class Me(TypedDict, closed=True):
+    flags: list[FlagOut]
+    permissions: PermissionsOut
+    policies: dict[str, Any]
+    securityTeamId: str | None
+    teams: list[MeTeam]
+    tenantId: str
+    tenantName: str | None
+    user: MeUser
+    workspace: WorkspaceStateOut
+
+
+class EnvelopeMe(TypedDict, closed=True):
+    data: Me
     success: Literal[True]

@@ -11,6 +11,7 @@ from typing import Any
 from ops_identity import dev_service_signer, mint_service_token
 from ops_identity.testing import TEST_TOKEN_TTL_S
 from ops_policy import mint
+from ops_service_kit.http import Json
 
 from .test_app_accounts import (
     ID,
@@ -27,9 +28,9 @@ JAMES = ("James Richardson", {"team_platform": "builder"})
 
 
 async def card(w: World, tenant: str, who: dict[str, str] | None = None) -> dict[str, Any]:
-    r = await w.client.get("/v1/apps", headers=who or admin(tenant))
+    r = await w.client.get("/v1/apps", params={"ids": APP}, headers=who or admin(tenant))
     assert r.status_code == 200, r.text
-    return next(c for c in r.json()["data"] if c["id"] == APP)
+    return next(c for c in r.json()["data"]["data"] if c["id"] == APP)
 
 
 def state(c: dict[str, Any]) -> tuple[str, str | None]:
@@ -69,7 +70,11 @@ async def test_a_team_account_needs_its_sign_in_then_is_connected(world: World, 
 async def test_a_signed_in_account_whose_test_failed_says_why(world: World, tenant: str) -> None:  # noqa: F811
     conn = await connected(world, tenant)
     await signed(world, tenant, conn, "https://acme.my.desk.test")
-    failed = {"status": "failed", "message": "acme.my.desk.test answered 403.", "at": datetime.now(UTC).isoformat()}
+    failed: Json = {
+        "status": "failed",
+        "message": "acme.my.desk.test answered 403.",
+        "at": datetime.now(UTC).isoformat(),
+    }
     await world.store.set_token_test(tenant, conn, "", failed)
     assert state(await card(world, tenant)) == ("test_failed", "acme.my.desk.test answered 403.")
 
@@ -79,7 +84,7 @@ async def test_on_an_app_each_person_signs_in_to_the_card_is_the_callers_own(wor
     conn = await connected(world, tenant)
     row = await world.store.get(tenant, conn)
     assert row is not None
-    await world.store.change(tenant, conn, int(row["revision"]), {"sign_in": "person"}, actor="t", at=datetime.now(UTC))
+    await world.store.change(tenant, conn, int(row.revision), {"sign_in": "person"}, actor="t", at=datetime.now(UTC))
     await signed(world, tenant, conn, "https://acme.my.desk.test", person_id="usr_james")
     james = person(tenant, *JAMES)
     assert (await card(world, tenant, james))["appState"] == "connected"
@@ -115,7 +120,7 @@ async def test_a_service_asking_for_a_person_reads_that_persons_own_sign_in(worl
     conn = await connected(world, tenant)
     row = await world.store.get(tenant, conn)
     assert row is not None
-    await world.store.change(tenant, conn, int(row["revision"]), {"sign_in": "person"}, actor="t", at=datetime.now(UTC))
+    await world.store.change(tenant, conn, int(row.revision), {"sign_in": "person"}, actor="t", at=datetime.now(UTC))
     await signed(world, tenant, conn, "https://acme.my.desk.test", person_id="usr_james")
     james = await card(world, tenant, acting_for(tenant, "usr_james"))
     maya = await card(world, tenant, acting_for(tenant, "usr_maya"))
@@ -134,7 +139,7 @@ async def test_with_the_team_account_as_backup_a_persons_card_is_their_own_and_a
     row = await world.store.get(tenant, conn)
     assert row is not None
     await world.store.change(
-        tenant, conn, int(row["revision"]), {"sign_in": "person_or_team"}, actor="t", at=datetime.now(UTC)
+        tenant, conn, int(row.revision), {"sign_in": "person_or_team"}, actor="t", at=datetime.now(UTC)
     )
     await signed(world, tenant, conn, "https://acme.my.desk.test")
     assert state(await card(world, tenant)) == ("needs_sign_in", "Connect your own account.")

@@ -3,7 +3,10 @@ agents.view in their team, or a service holding `agents:view` for the team its t
 
 An agent uses a tool its newest or published version grants (`toolIds`, operation names). A workflow uses it when it
 runs such an agent (the agent's "used in", `used_in_all`, v1 and v2 alike) or a published v1 workflow's tool step names
-it, or a v2 workflow's tool node does. Only the team's own agents and workflows are read: no team sees another's."""
+it, or a v2 workflow's tool node does. Only the team's own agents and workflows are read: no team sees another's.
+
+Every route here reads only this service's rows, so each answers in the request transaction (`Tx`): one connection, and
+one moment for the agents, workflows and versions it joins."""
 
 from __future__ import annotations
 
@@ -14,10 +17,12 @@ from fastapi.responses import JSONResponse
 
 from ops_access import can
 from ops_identity import CurrentTenantCaller
+from ops_identity.fastapi import Tx
+from ops_service_kit import narrow
 from ops_service_kit.http import Envelope, Out
 
+from ...store.pin_users import PinUsers
 from ..account_names import account_uses_in
-from ..agent_registry import registry as agent_registry
 from ..child_runs import team_workflows
 from ..deps import Runtime, runtime
 from ..envelope import ok
@@ -49,21 +54,18 @@ async def tool_uses(rt: Runtime, team_id: str | None, tools: list[str]) -> dict[
             out[tool].append(use)
 
     wanted = set(tools)
-    reg = agent_registry(rt)
     holders: dict[str, set[str]] = {}
-    for row in await reg.rows():
-        if row["team_id"] != team_id:
-            continue
-        name, held = str(row["slug"]), set[str]()
-        for n in sorted({row["version"], row["published_version"]} - {None}):
-            spec: dict[str, Any] = (await reg.version(row["id"], int(n)))["spec"]
-            granted = cast(list[Any], spec.get("toolIds") or [])
-            held |= {str(t) for t in granted} & wanted
-            name = str(spec.get("name") or name)
-        for t in sorted(held):
-            add(t, {"kind": "agent", "id": str(row["id"]), "name": name})
+    names: dict[str, str] = {}
+    # The team's agents' newest and published versions in one query, by agent then version: the newest name wins.
+    for v in await PinUsers(rt.db).held_versions(team_id):
+        granted = v.spec.get("toolIds")
+        held = {str(t) for t in granted} & wanted if isinstance(granted, list) else set[str]()
+        names[v.agent_id] = str(v.spec.get("name") or names.get(v.agent_id) or v.slug)
         if held:
-            holders[str(row["id"])] = held
+            holders.setdefault(v.agent_id, set()).update(held)
+    for agent_id, held in sorted(holders.items()):
+        for t in sorted(held):
+            add(t, {"kind": "agent", "id": agent_id, "name": names[agent_id]})
     if holders:
         runs = await used_in_all(rt)
         for agent_id, held in holders.items():
@@ -73,13 +75,14 @@ async def tool_uses(rt: Runtime, team_id: str | None, tools: list[str]) -> dict[
                         add(t, {"kind": "workflow", "id": str(use["workflowId"]), "name": str(use["workflowName"])})
     if rt.graph_store is not None:
         for w in await workflow_registry(rt).rows():
-            if w.get("team_id") != team_id or w["status"] == "deleted" or w["published_version"] is None:
+            if w.team_id != team_id or w.status == "deleted" or w.published_version is None:
                 continue
-            v = await rt.graph_store.version(w["id"], int(w["published_version"]))
-            for node in list(dict((v or {}).get("definition") or {}).get("nodes") or []):
-                tool = str(dict(node.get("config") or {}).get("tool") or "")
+            v = await rt.graph_store.version(w.id, w.published_version)
+            for item in narrow.entries((v.definition if v else {}).get("nodes")):
+                node = narrow.an_object(item, "workflow node")
+                tool = str(narrow.an_object(node.get("config") or {}, "node config").get("tool") or "")
                 if node.get("kind") == "tool" and tool in wanted:
-                    add(tool, {"kind": "workflow", "id": str(w["id"]), "name": str(w["name"])})
+                    add(tool, {"kind": "workflow", "id": w.id, "name": w.name})
     # A v2 workflow (the runner's) calls a tool from a tool node; its newest version counts, draft or live, so turning
     # an app off warns about a workflow before its next publish breaks, not after.
     for d in await team_workflows(rt):
@@ -89,12 +92,13 @@ async def tool_uses(rt: Runtime, team_id: str | None, tools: list[str]) -> dict[
             tool = str(dict(node.get("parameters") or {}).get("operation") or "")
             if node.get("type") == "ops.action.tool" and tool in wanted:
                 add(tool, {"kind": "workflow", "id": str(d["workflow_id"]), "name": str(d["name"])})
-    return out
+    # Agents then workflows, each by id: the registry reads are unordered, so an updated row would otherwise move.
+    return {t: sorted(uses, key=lambda u: (u["kind"], u["id"])) for t, uses in out.items()}
 
 
 @router.get("", response_model=Envelope[dict[str, list[ToolUser]]])
 async def list_tool_uses(
-    rt: Rt, caller: CurrentTenantCaller, tools: Annotated[str, Query(min_length=1, max_length=8000)]
+    rt: Rt, caller: CurrentTenantCaller, _: Tx, tools: Annotated[str, Query(min_length=1, max_length=8000)]
 ) -> JSONResponse:
     """`tools` is a comma-separated list of tool names (operation names); each comes back with its users."""
     team = None if caller.kind == "service" else caller.team_id
@@ -121,7 +125,7 @@ async def document_type_uses(rt: Runtime, types: list[str]) -> dict[str, list[di
 
 @document_type_router.get("", response_model=Envelope[dict[str, list[ToolUser]]])
 async def list_document_type_uses(
-    rt: Rt, caller: CurrentTenantCaller, types: Annotated[str, Query(min_length=1, max_length=8000)]
+    rt: Rt, caller: CurrentTenantCaller, _: Tx, types: Annotated[str, Query(min_length=1, max_length=8000)]
 ) -> JSONResponse:
     """`types` is a comma-separated list of document type ids; each comes back with the workflows that read it. A
     person with workflows.view in their team, or a service holding `workflows:view` for the team its token names."""
@@ -144,6 +148,7 @@ class AccountUsers(Out):
 async def list_account_uses(
     rt: Rt,
     caller: CurrentTenantCaller,
+    _: Tx,
     app: Annotated[str, Query(min_length=1, max_length=120)],
     name: Annotated[str, Query(min_length=1, max_length=200)],
 ) -> JSONResponse:

@@ -1,6 +1,6 @@
 # Builds every Ops AI image for linux/amd64 and linux/arm64 and pushes it to ghcr.io/chanl-ai/ops-ai/<image>, tagged
-# with the version and latest. Runs on a version tag (v0.1.0 publishes 0.1.0) or by hand with a version; the date tags
-# every merge gets (release-tag.yml) do not start it.
+# with the version and latest. Runs on a version tag (v0.1.0 publishes 0.1.0), which release-tag.yml starts it on when a
+# release or hotfix merges into main, or by hand with a version.
 # The build is deploy/release/images.sh, the same script the release package and install.sh --build use.
 #
 # After the push, each image by digest gets a CycloneDX SBOM, a Trivy scan that fails the run on a critical finding
@@ -13,7 +13,7 @@ name: release-images
 
 on:
   push:
-    # Version tags only (v0.1.0): the date tag every merge gets (release-tag.yml, v2026-10-23.1) builds no images.
+    # Version tags only (v0.1.0), the same tag release-tag.yml makes.
     tags: ["v[0-9]+.[0-9]+.[0-9]+"]
   workflow_dispatch:
     inputs:

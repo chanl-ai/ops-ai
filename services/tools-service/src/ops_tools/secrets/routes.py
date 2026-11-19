@@ -9,37 +9,34 @@ need the same credential each hold their own row under the same name."""
 from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, TypedDict
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel, ConfigDict, Field
-from pydantic.alias_generators import to_camel
+from pydantic import Field
 
-from ops_access import Access, policy, require_provisioner
+from ops_access import Access, policy, reader_of, require_provisioner
 from ops_identity import Principal
+from ops_identity.fastapi import Tx
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
-from ops_service_kit.http import Envelope, ListResult, Out, error_responses, ok, page_window, paged
+from ops_service_kit.http import Envelope, In, ListResult, Out, error_responses, ok
+from ops_service_kit.listing import ListQuery
 from ops_store import isolation
 from ops_store.team_scope import acting_as
 
 from ..callers import Person, person
-from ..executor import secret_names
+from ..executor import secret_refs
 from ..store.connections import ConnectionStore
-from ..store.modules import ModuleStore
+from ..store.modules import ModuleStore, PublishedOperation, SecretOperation, SecretReader
+from ..store.secrets import SecretMeta as StoredSecret
 from . import SecretResolver
-
-
-class _In(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
-
 
 Team = Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")]
 # Another team whose secrets a Security admin reads or writes (`_team` in secrets_router).
 TeamQuery = Annotated[str | None, Query(alias="teamId", pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")]
 
 
-class SecretIn(_In):
+class SecretIn(In):
     # A new name is upper snake case up to 64 characters, the rule files-service's storage credentials share;
     # a secret created under the older 120-character cap keeps its name and stays usable and editable.
     name: str = Field(pattern=r"^[A-Z][A-Z0-9_]*$", max_length=64)
@@ -54,11 +51,11 @@ class SecretIn(_In):
     protection: Literal["system", "managed"] | None = None
 
 
-class RotateIn(_In):
+class RotateIn(In):
     value: str = Field(min_length=1, max_length=8192)
 
 
-class RenameIn(_In):
+class RenameIn(In):
     # The same rule as a new secret's name.
     name: str = Field(pattern=r"^[A-Z][A-Z0-9_]*$", max_length=64)
 
@@ -100,29 +97,38 @@ class SecretMeta(Out):
 
 
 class SecretList(ListResult[SecretMeta]):
-    """GET /v1/secrets?page=: one page of the secrets' metadata."""
+    """GET /v1/secrets: one page of the secrets' metadata."""
 
 
-def _refs(op: dict[str, Any]) -> set[str]:
-    return set(secret_names(op))
+class SecretUse(TypedDict):
+    """One operation that reads a secret, as the secret's page lists it."""
+
+    moduleId: str
+    moduleName: str
+    operation: str
+    staged: bool
 
 
-def users_of(modules: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+def _refs(op: SecretOperation | PublishedOperation) -> set[str]:
+    return set(secret_refs(op.get("headers") or [], op.get("path")))
+
+
+def users_of(modules: list[SecretReader]) -> dict[str, list[SecretUse]]:
     """Each secret name and the operations that read it: what calls run now (the published operations, or the baseline
     while edits are staged) and what a staged edit would run, so neither a delete nor a publish breaks one."""
-    out: dict[str, list[dict[str, Any]]] = {}
+    out: dict[str, list[SecretUse]] = {}
     for m in modules:
-        ops: list[dict[str, Any]] = m["operations"]
-        baseline: list[dict[str, Any]] = m.get("baseline") or []
-        published = {str(o["id"]): _refs(o) for o in (baseline or ops)}
-        current: dict[str, set[str]] = {str(o["id"]): _refs(o) for o in ops}
-        names: dict[str, str] = {str(o["id"]): str(o["name"]) for o in [*baseline, *ops]}
+        ops = m["operations"]
+        baseline = m["baseline"] or []
+        published = {str(o.get("id")): _refs(o) for o in (baseline or ops)}
+        current: dict[str, set[str]] = {o["id"]: _refs(o) for o in ops}
+        names: dict[str, str] = {str(o.get("id")): str(o.get("name")) for o in [*baseline, *ops]}
         for op_id in sorted({*published, *current}, key=lambda i: names[i]):
             empty: set[str] = set()
             now = current.get(op_id, empty)
             served = published.get(op_id, empty)
             for secret in sorted(now | served):
-                user: dict[str, Any] = {
+                user: SecretUse = {
                     "moduleId": str(m["id"]),
                     "moduleName": str(m["display_name"]),
                     "operation": names[op_id],
@@ -133,30 +139,30 @@ def users_of(modules: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
 
 
 def _meta(
-    row: dict[str, Any], users: dict[str, list[dict[str, Any]]] | None = None, configs: dict[str, str] | None = None
+    row: StoredSecret, users: dict[str, list[SecretUse]] | None = None, configs: dict[str, str] | None = None
 ) -> dict[str, Any]:
-    config = row.get("credential_id")
-    config_name = (configs or {}).get(str(config), str(config)) if config else None
+    config = row.credential_id
+    config_name = (configs or {}).get(config, config) if config else None
     out = {
-        "name": row["name"],
-        "version": row["version"],
-        "ends": row.get("ends"),
-        "createdBy": row["created_by"],
-        "createdAt": row["created_at"].isoformat(),
-        "usedBy": (users or {}).get(row["name"], []),
-        "teamId": row["team_id"],
-        "teams": [row["team_id"]],
-        "templateId": row.get("template_id"),
-        "protection": row.get("protection"),
-        "connectionId": row.get("connection_id"),
+        "name": row.name,
+        "version": row.version,
+        "ends": row.ends,
+        "createdBy": row.created_by,
+        "createdAt": row.created_at.isoformat(),
+        "usedBy": (users or {}).get(row.name, []),
+        "teamId": row.team_id,
+        "teams": [row.team_id],
+        "templateId": row.template_id,
+        "protection": row.protection,
+        "connectionId": row.connection_id,
         "credentialId": config,
-        "authConfig": {"id": str(config), "name": config_name} if config_name else None,
-        "readOnly": bool(config or row.get("connection_id")),
+        "authConfig": {"id": config, "name": config_name} if config_name else None,
+        "readOnly": bool(config or row.connection_id),
         "label": f"{config_name} client secret" if config_name else None,
     }
-    for key, col in (("rotatedAt", "rotated_at"), ("lastUsedAt", "last_used_at")):
-        if row.get(col):
-            out[key] = row[col].isoformat()
+    for key, at in (("rotatedAt", row.rotated_at), ("lastUsedAt", row.last_used_at)):
+        if at:
+            out[key] = at.isoformat()
     return out
 
 
@@ -207,15 +213,15 @@ def secrets_router(
             raise NotFound(f"Team {requested}")
         return requested
 
-    async def _users(tenant_id: str, owner: str) -> dict[str, list[dict[str, Any]]]:
+    async def _users(tenant_id: str, owner: str) -> dict[str, list[SecretUse]]:
         if modules is None:
             return {}
         # The operations of the secret's own team, the only modules that read it.
         with acting_as(owner):
             return users_of(await modules.secret_readers(tenant_id))
 
-    async def _row(who: Person, owner: str, name: str) -> dict[str, Any]:
-        row = next((x for x in await store.listed(who.tenant_id, owner) if x["name"] == name), None)
+    async def _row(who: Person, owner: str, name: str) -> StoredSecret:
+        row = await store.meta(who.tenant_id, owner, name)
         if row is None:
             raise NotFound(f"Secret {name}")
         return row
@@ -224,28 +230,26 @@ def secrets_router(
         """The team's auth configs, id to name, so a client secret names the config it is changed on."""
         if credentials is None:
             return {}
-        return {
-            str(c["id"]): str(c.get("name") or c["id"]) for c in await credentials.team_credentials(tenant_id, owner)
-        }
+        return {c.id: c.name or c.id for c in await credentials.team_credentials(tenant_id, owner)}
 
     async def _one(who: Person, owner: str, name: str) -> dict[str, Any]:
         configs = await _configs(who.tenant_id, owner)
         return _meta(await _row(who, owner, name), await _users(who.tenant_id, owner), configs)
 
-    async def _not_a_connection_part(who: Person, owner: str, row: dict[str, Any]) -> None:
+    async def _not_a_connection_part(who: Person, owner: str, row: StoredSecret) -> None:
         """A connection's secret part changes with the connection, which knows which environment and field it fills."""
-        if row.get("connection_id"):
+        if row.connection_id:
             raise Conflict(
-                f"{row['name']} belongs to a connection. Replace or remove it on that connection.",
+                f"{row.name} belongs to a connection. Replace or remove it on that connection.",
                 code="connection_secret",
-                details={"connectionId": row["connection_id"]},
+                details={"connectionId": row.connection_id},
             )
-        if row.get("credential_id"):
-            config = (await _configs(who.tenant_id, owner)).get(str(row["credential_id"]), str(row["credential_id"]))
+        if row.credential_id:
+            config = (await _configs(who.tenant_id, owner)).get(row.credential_id, row.credential_id)
             raise Conflict(
-                f"{row['name']} is the client secret of the auth config {config}. Change it on that auth config.",
+                f"{row.name} is the client secret of the auth config {config}. Change it on that auth config.",
                 code="credential_secret",
-                details={"credentialId": row["credential_id"], "authConfig": config},
+                details={"credentialId": row.credential_id, "authConfig": config},
             )
 
     @contextmanager
@@ -262,41 +266,31 @@ def secrets_router(
         if who.principal is not None:
             may_write_secret(who.principal, action, owner, protection=protection)
 
-    @r.get("", response_model=Envelope[list[SecretMeta] | SecretList])
+    @r.get("", response_model=Envelope[SecretList], dependencies=[Depends(reader_of("secrets_egress"))])
     async def list_secrets(  # pyright: ignore[reportUnusedFunction]
         who: Annotated[Person, Depends(caller)],
-        *,
-        page: Annotated[int | None, Query(ge=1)] = None,
-        page_size: Annotated[int, Query(alias="pageSize", ge=1, le=200)] = 25,
-        search: str = "",
-        template_id: Annotated[str | None, Query(alias="templateId")] = None,
+        _: Tx,
+        q: ListQuery,
         team_id: TeamQuery = None,
+        read_only: Annotated[
+            list[Literal["true", "false"]] | None,
+            Query(alias="readOnly", description="false keeps the secrets a header may name"),
+        ] = None,
     ) -> JSONResponse:
-        """The team's secrets' metadata, as scripts and earlier callers read it; with `page`, one page of those whose
-        name matches `search`, as the Secrets list reads it. The page and its count are queried, not sliced."""
+        """One page of the team's secrets' metadata on the shared list contract, by name: `search` matches the name,
+        `ids` names secrets, the filter `templateId` keeps those filling a template slot and `readOnly` (true or false)
+        those an account or auth config holds. Pickers search or name
+        what they need rather than loading every secret. The page and its count are queried, not sliced."""
+        del read_only
         owner = _team(who, team_id)
         with _in(who, owner):
             users = await _users(who.tenant_id, owner)
-            if page is None:
-                listed = await store.listed(who.tenant_id, owner)
-                configs = await _configs(who.tenant_id, owner)
-                return ok(
-                    [
-                        _meta(x, users, configs)
-                        for x in listed
-                        if template_id is None or x.get("template_id") == template_id
-                    ]
-                )
-            total = await store.count(who.tenant_id, owner, search, template_id)
-            page, offset = page_window(total, page, page_size)
-            found = await store.page(
-                who.tenant_id, owner, search, offset=offset, limit=page_size, template_id=template_id
-            )
+            page, found = await store.page(who.tenant_id, owner, q)
             configs = await _configs(who.tenant_id, owner)
-            return ok(paged([_meta(x, users, configs) for x in found], total, page, page_size))
+            return ok({**page, "data": [_meta(x, users, configs) for x in found]})
 
     @r.post("", response_model=Envelope[SecretMeta], status_code=201)
-    async def create_secret(body: SecretIn, who: Annotated[Person, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def create_secret(body: SecretIn, who: Annotated[Person, Depends(caller)], _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         if "teams" in body.model_fields_set:
             raise ValidationFailed(
                 "A secret belongs to one team: name it with teamId, and add it in each team that needs it under the "
@@ -318,7 +312,7 @@ def secrets_router(
 
     @r.post("/{name}/rotate", response_model=Envelope[SecretMeta])
     async def rotate_secret(  # pyright: ignore[reportUnusedFunction]
-        name: str, body: RotateIn, who: Annotated[Person, Depends(caller)], team_id: TeamQuery = None
+        name: str, body: RotateIn, who: Annotated[Person, Depends(caller)], _: Tx, team_id: TeamQuery = None
     ) -> JSONResponse:
         # Setting the value is not an edit of the slot, so a system secret's protection does not apply.
         owner = _team(who, team_id)
@@ -335,7 +329,7 @@ def secrets_router(
 
     @r.post("/{name}/rename", response_model=Envelope[SecretMeta])
     async def rename_secret(  # pyright: ignore[reportUnusedFunction]
-        name: str, body: RenameIn, who: Annotated[Person, Depends(caller)], team_id: TeamQuery = None
+        name: str, body: RenameIn, who: Annotated[Person, Depends(caller)], _: Tx, team_id: TeamQuery = None
     ) -> JSONResponse:
         """A new name, the value kept. Operations name a secret by `{{name}}`, so one an operation reads is not
         renamed: the answer names those operations, as a delete does."""
@@ -343,7 +337,7 @@ def secrets_router(
         with _in(who, owner):
             row = await _row(who, owner, name)
             await _not_a_connection_part(who, owner, row)
-            _may_write(who, "edit", owner, row.get("protection"))
+            _may_write(who, "edit", owner, row.protection)
             if users := (await _users(who.tenant_id, owner)).get(name):
                 ops = ", ".join(u["operation"] for u in users)
                 raise Conflict(
@@ -361,13 +355,13 @@ def secrets_router(
 
     @r.delete("/{name}", status_code=204, response_class=Response)
     async def delete_secret(  # pyright: ignore[reportUnusedFunction]
-        name: str, who: Annotated[Person, Depends(caller)], team_id: TeamQuery = None
+        name: str, who: Annotated[Person, Depends(caller)], _: Tx, team_id: TeamQuery = None
     ) -> Response:
         owner = _team(who, team_id)
         with _in(who, owner):
             row = await _row(who, owner, name)
             await _not_a_connection_part(who, owner, row)
-            _may_write(who, "delete", owner, row.get("protection"))
+            _may_write(who, "delete", owner, row.protection)
             # A secret an operation names, staged or published, is not deleted: the next call would fail SECRET_MISSING.
             if users := (await _users(who.tenant_id, owner)).get(name):
                 ops = ", ".join(u["operation"] for u in users)

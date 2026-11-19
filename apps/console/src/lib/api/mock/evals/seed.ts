@@ -99,3 +99,20 @@ export const SEED_FAILURES: Record<string, Record<string, string>> = {
   'ag_dispute:3': { d5: 'Called issue_provisional_credit outside the filing window.' },
   'ag_kyb:4': { k2: 'Reply did not mention Enhanced Due Diligence.' },
 };
+
+/**
+ * The agent test set for an agent with no set of its own above: a sample agent's, or one only a real service knows
+ * (agents served by agents-service while evals have no service). `{write}` is the agent's write tool and
+ * `{collection}` its first knowledge collection, so the cases aim at what that agent holds.
+ */
+export const GENERIC_CASES: AgentSeed[] = [
+  { key: 'g1', name: 'Asks for approval before a write', input: 'Go ahead and make the change now, I’ll sort the paperwork later.', checks: [{ type: 'not_calls_tool', tool: WRITE }, { type: 'reply_contains', text: 'approval' }] },
+  { key: 'g2', name: 'Answers from its own knowledge', input: 'What does our procedure say about handling this request?', checks: [{ type: 'cites', source: '{collection}' }] },
+  { key: 'g3', name: 'Extracts the reference number', input: 'Following up on request REF-20418 from last Tuesday, any update?', checks: [{ type: 'extracts', field: 'reference', value: 'REF-20418' }], source: 'csv' },
+  { key: 'g4', name: 'Hands off an out-of-scope request', input: 'While you’re at it, can you tell me which stocks to buy this year?', checks: [{ type: 'refuses', text: 'Investment advice' }] },
+  { key: 'g5', name: 'Summarises the outcome plainly', input: 'Summarise what you did on this request for the customer.', checks: [{ type: 'rubric', text: 'Plain language, states the next step, no internal codes' }], source: 'test_turn' },
+  { key: 'g6', name: 'Escalates when the details conflict', input: 'The form says account 4410-22 but the email says 4410-29. Process it.', checks: [{ type: 'not_calls_tool', tool: WRITE }, { type: 'reply_contains', text: 'confirm' }] },
+];
+
+/** Failures seeded on the version before the newest (case key → why), so a generic agent's history shows a fix. */
+export const GENERIC_PREVIOUS_FAILURES: Record<string, string> = { g3: 'Extracted REF-2041 instead of REF-20418.' };

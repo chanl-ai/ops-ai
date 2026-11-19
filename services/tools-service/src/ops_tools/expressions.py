@@ -19,6 +19,8 @@ from typing import Any, cast
 from jinja2 import TemplateError, Undefined
 from jinja2.exceptions import SecurityError, TemplateSyntaxError, UndefinedError
 
+from ops_service_kit.http import JsonValue
+
 from .transform import MAX_RENDERED, bounded_environment, watch
 
 MAX_FORMULAS = 50
@@ -101,10 +103,10 @@ def _why(name: str, e: BaseException) -> str:
     return f"{name}: the formula failed: {type(e).__name__}."
 
 
-def _child(conn: Connection, formulas: list[tuple[str, str]], values: dict[str, Any]) -> None:
+def _child(conn: Connection, formulas: list[tuple[str, str]], values: dict[str, JsonValue]) -> None:
     """Runs in the evaluation process: sends ("ok", {name: value}) or ("error", why)."""
     scope = dict(values)
-    out: dict[str, Any] = {}
+    out: dict[str, JsonValue] = {}
     name = ""
     try:
         for name, formula in formulas:
@@ -130,7 +132,9 @@ def _child(conn: Connection, formulas: list[tuple[str, str]], values: dict[str, 
         conn.close()
 
 
-async def evaluate(formulas: dict[str, str], values: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
+async def evaluate(
+    formulas: dict[str, str], values: dict[str, JsonValue]
+) -> tuple[dict[str, JsonValue] | None, str | None]:
     """Each formula's value, by name, and None; or None and why one failed. `values` must already be resolved."""
     if len(formulas) > MAX_FORMULAS:
         return None, f"A step has at most {MAX_FORMULAS} formulas."

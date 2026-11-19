@@ -28,7 +28,7 @@ ops = OpsAI(api_key="ok_...", base_url="https://ops.example.com", team="team_cla
 | API key | `api_key` | `OPS_API_KEY` |
 | Team the calls act in | `team` | `OPS_TEAM` |
 
-Arguments win over the environment, which wins over the profile the `opsai` CLI saves. On a local stack with no proxy,
+Arguments win over the environment, which wins over the profile the `opsai` CLI saves (`OpsAI(profile="builder")` names another). On a local stack with no proxy,
 pass `services={"agents": "http://127.0.0.1:8700", ...}` to reach each service on its own port.
 
 ## Run a workflow and decide its task
@@ -53,11 +53,26 @@ print(run["status"], run.get("outcome"))
 | `threads` | `list`, `get` (the thread's state), `create` |
 | `teams` | `list` |
 | `runs` | `list`, `get`, `start`, `wait`, `stream`, `cancel` |
-| `tasks` | `list`, `get`, `decide` |
+| `tasks` | `list`, `get`, `decide`, `approve(task, decision=, password=)` (a held chat write is the chat's thread id; it asks the approver to confirm first) |
 | `knowledge.search(body)`, `upload(name, content, mime=, purpose=)` | Search knowledge bases; upload a file |
 | `raw.<service>.<operation>()` | Every other public operation, by its name in the API reference |
 
-`list` walks every page. Each call returns the response's data as a dictionary typed from the API reference.
+`list` walks every page, 50 rows at a time, so a loop over it sees every row. Each call returns the response's data as a dictionary typed from the API reference.
+
+## Paging and filters
+
+Every list takes the shared query: `page`, `page_size` (at most 50), `search`, `sort_by`, `sort_order` (`asc` or
+`desc`), `ids` and the list's own filters, which take a list of values. The nouns' `list` passes them on and follows
+every page. A `raw` operation returns one page as a dictionary with `data`, `pagination` and `facets`; read
+`pagination["hasNext"]` to go on. The query and the reply are described in [Lists and errors](../architecture/api.md#lists-and-errors).
+
+```python
+page = ops.raw.agents.agents_list_agents(page=1, page_size=20, sort_by="name", sort_order="asc", search="claims")
+for agent in page["data"]:
+    print(agent["name"])
+if page["pagination"]["hasNext"]:
+    more = ops.raw.agents.agents_list_agents(page=2, page_size=20, sort_by="name", sort_order="asc", search="claims")
+```
 
 The Apps area uses the words on the Apps page. An app is named by its id there (`plugin:<id>`, `builtin:<name>`, or a
 custom app's connection id); an account is a connection id.
@@ -68,15 +83,81 @@ custom app's connection id); an account is a connection id.
 | `credentials` | `set(app, client_id=, client_secret=)` (the team's own client), `test(app)` and `finish(app, state=, code=)` (Test with my account) |
 | `accounts` | `connect(account)`, `test(account)`, `make_default(account)`, `mine()`, `set_key(account, key)`, `remove(account)` |
 | `tools` | `list(app)`, `run(app, tool, input, real=)` (Mock reaches nothing; Real is the gateway's call); with no app, `list` and `get` are the tool modules' |
+| `tools` (modules) | `discover(spec_url)`, `import_openapi(module, spec_url, operations=)`, `request_review(module)`, `review_of(detail)` and `decide_review(review, decision)` (Security's answer; `approved` publishes), `create_module(name, display_name)`, `publish_version(module)`, `run_module(module, tool, input, real=)` |
+| `secrets` | `list()`, `create(name, value)`, `rotate(name, value)`, `rename(name, new_name)`, `delete(name)`; no answer carries a value |
+| `policies` | `get(key)`, `set(key, value)`: the team's policies a Security admin changes, such as `toolWritesNeedApproval` (use `with_team` to act in another team) |
+| `egress` | `list()`, `allow_host(host)`, `allow_range(cidr)`, `remove_host`, `remove_range`; Security admins only |
+| `agents` | `tool_options(search)` (what may be granted), `grant_tools(id, tool_ids)` (kept beside the ones it holds) |
 | `resources` | `list(app)`, `add(resource)` (a copy in the team) |
 | `usage` | `list(**filters)`: this team's tool calls |
 
+## Knowledge, templates and connectors
+
+| Attribute | Verbs |
+|---|---|
+| `knowledge` | `add_base(name, owner=)`, `add_source(name, kb_ids, type="push")`, `add_page(kb_id, title, text)` (the same title saves a new version), `push(source_id, name, title=, text=)` (the same name and text again answers `unchanged`) |
+| `templates` | `list(kind=, source=)`, `install(template, kind=, **fields)`: the team's own copy of a template |
+| `me.connectors` | `list()`, `connect(app, link=, account=, team=)` (returns `authorizeUrl`), `finish(state, code, error=)`, `accounts()`, `disconnect(app, account=)` |
+
+```python
+base = ops.knowledge.add_base("Branch procedures", owner="branch.ops@harborpine.example")
+source = ops.knowledge.add_source("Policies", [base["id"]])
+ops.knowledge.push(source["id"], "fees/overdraft", title="Overdraft fees", text="Fees are waived on the first day.")
+
+made = ops.templates.install("plugin:opsai.starters:doc-coauthoring")  # made["created"] is True the first time
+
+start = ops.me.connectors.connect("Person desk")  # open start["authorizeUrl"] in a browser
+ops.me.connectors.finish(state, code)             # the state and code in the address the browser returned to
+```
+
+## The command line
+
+`opsai` ships with the Python package and uses the same saved sign-in as `OpsAI(profile=...)`. Add `--json` after the
+verb for machine output.
+
+| Command | What it does |
+|---|---|
+| `opsai agents list [--search]`, `opsai skills list [--search] [--id ID]`, `opsai guardrails list`, `opsai widgets list`, `opsai kb bases\|sources [--search]`, `kb documents KB [--search]`, `kb items SOURCE [--search]` | List every page of a resource; `--id` (repeatable) names exact rows |
+| `opsai kb create NAME [--owner]`, `set KB [--rerank on\|off] [--query-model] [--rewrite]`, `delete KB` | Make, tune and retire a knowledge base |
+| `opsai kb add-source NAME --kb KB [--plugin P --source S --value NAME=ID]`, `scopes --plugin P --source S` | Add a source; list what its picker offers |
+| `opsai kb push SOURCE --name N --title T --text TEXT` | Put one item into a push source |
+| `opsai kb add-file KB [PATH...] [--file-id ID]` | Upload files, or take ones already in Files, and sync them |
+| `opsai templates list [--kind] [--source]`, `install REF [--kind] [--fields]` | See the offered templates; add one as the team's copy |
+| `opsai secrets list [--search]\|create NAME\|rotate NAME\|rename NAME NEW\|delete NAME` | The team's secrets; the value comes from `--value` or standard input |
+| `opsai policies get\|set KEY [VALUE]` | The team's policies |
+| `opsai egress list\|allow-host H\|allow-range R\|remove-host H\|remove-range R` | Hosts and ranges tools may reach |
+| `opsai tools discover SPEC`, `import MODULE SPEC [--operation N]`, `request-review MODULE`, `create NAME --display-name N`, `decide-review REVIEW [--decision]`, `publish MODULE`, `run --module MODULE TOOL` | Take an OpenAPI document to a published module |
+| `opsai agents tool-options [--search]`, `grant-tools ID TOOL...`; `opsai tasks approve TASK [--password-stdin]` | Grant tools to an agent; approve a held write (asks for your password, without echo, when the write asks you to confirm it is you) |
+| `opsai connectors list`, `connect APP [--link] [--account]`, `finish --state S --code C`, `accounts`, `disconnect APP` | Your own sign-ins on apps |
+
+```bash
+SOURCE=$(opsai kb add-source Policies --kb "$BRANCH" --json | jq -r .id)
+opsai kb push "$SOURCE" --name fees/overdraft --title "Overdraft fees" --text "Fees are waived on the first day."
+opsai kb add-file "$BRANCH" --file-id "$SHEET" --file-id "$MANUAL"
+opsai templates install plugin:opsai.starters:doc-coauthoring
+opsai connectors connect "Person desk"
+```
+
+Moving from 0.1.0: see [Upgrading to 1.0.0](upgrading.md).
+
 ## Errors
 
-A refused call raises a subclass of `OpsError` with `status`, `code`, `message` and `request_id`: `BadRequest` (400,
+A refused call raises a subclass of `OpsError` with `status`, `code`, `message`, `request_id` and `details`: `BadRequest` (400,
 422), `Unauthorized` (401), `Forbidden` (403), `NotFound` (404), `Conflict` (409), `RateLimited` (429) and
-`ServerError` (5xx). Reads are retried twice on 429 and 5xx; a write is retried only when its route takes an
-idempotency key and the call sends one.
+`ServerError` (5xx). The fields come from the API's one error body, described in [Lists and errors](../architecture/api.md#lists-and-errors). Branch on `code`, and quote
+`request_id` when asking for help.
+
+```python
+from ops_ai import NotFound
+
+try:
+    ops.agents.get("agt_missing")
+except NotFound as e:
+    print(e.status, e.code, e.request_id)
+```
+
+Reads are retried twice on 429 and 5xx; a write is retried only when its route takes an idempotency key and the call
+sends one.
 
 ## Asynchronous use
 

@@ -304,7 +304,7 @@ export function createAssuranceMock(deps: AssuranceDeps) {
 
   const stats = (s: AssuranceSuite[], g: AssuranceGate[], j: AssuranceJudge[]): AssuranceStats => {
     const low = j[0];
-    return { failingSuites: s.filter((x) => x.failing).length, gatesBlocked: g.filter((x) => x.blocked).length, liveUnsealed: liveUnsealed(), lowestJudge: low ? { name: low.name, agreement: low.agreement } : null };
+    return { failingSuites: s.filter((x) => x.failing).length, gatesBlocked: g.filter((x) => x.blocked).length, liveUntested: s.filter((x) => x.passRate === null || x.failing).length, notRun: s.filter((x) => x.passRate === null).length, liveUnsealed: liveUnsealed(), lowestJudge: low ? { name: low.name, agreement: low.agreement } : null };
   };
 
   const OPTS = {
@@ -329,7 +329,7 @@ export function createAssuranceMock(deps: AssuranceDeps) {
         const result = list(rows[tab] as never[], p, OPTS[tab] as never, m);
         return {
           ...result,
-          stats: empty ? { failingSuites: 0, gatesBlocked: 0, liveUnsealed: 0, lowestJudge: null } : stats(s, g, j),
+          stats: empty ? { failingSuites: 0, gatesBlocked: 0, liveUntested: 0, notRun: 0, liveUnsealed: 0, lowestJudge: null } : stats(s, g, j),
           tabCounts: empty ? { suites: 0, runs: 0, gates: 0, evidence: 0, judges: 0 } : { suites: s.length, runs: r.length, gates: g.length, evidence: e.length, judges: j.length },
         } as never;
       }),

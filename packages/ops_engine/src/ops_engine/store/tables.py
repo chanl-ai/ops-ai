@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import sqlalchemy as sa
 
+from ops_store.listing import LISTED
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 
 metadata = sa.MetaData()
@@ -21,10 +22,10 @@ engine_definitions = sa.Table(
     sa.Column("workflow_id", sa.String(64), primary_key=True),
     sa.Column("version", sa.Integer, primary_key=True),
     sa.Column("digest", sa.String(64), nullable=False),
-    sa.Column("name", sa.String(200), nullable=False),
+    sa.Column("name", sa.String(200), nullable=False, info=LISTED),
     # The definition as JSON, schemaVersion 2; YAML given on create is parsed before it is stored.
     sa.Column("definition", sa.JSON, nullable=False),
-    sa.Column("created_at", sa.String(32), nullable=False),
+    sa.Column("created_at", sa.String(32), nullable=False, info=LISTED),
     sa.Column("created_by", sa.String(200), nullable=False),
     # The team that owns the workflow; null for one the seed or a service published, which every team sees.
     sa.Column("team_id", sa.String(64)),
@@ -35,8 +36,21 @@ engine_definitions = sa.Table(
     # its versions and runs kept; restoring clears it.
     sa.Column("archived_at", sa.String(32)),
     sa.Column("archived_by", sa.String(200)),
+    # What the Workflows list reads of the definition (`node_types.list_columns`), written with the version since it
+    # needs the node type registry, so the list searches, filters and pages in SQL (agents 0115).
+    sa.Column("description", sa.Text, nullable=False),
+    sa.Column("trigger", sa.Text, nullable=False),
+    sa.Column("startable", sa.Boolean, nullable=False),
+    sa.Column("takes_files", sa.Boolean, nullable=False),
+    # The mailbox its Email received trigger names (`definitions.watched_mailbox`), so the Channels list joins a
+    # mailbox to the live workflows that read it in SQL (agents 0118).
+    sa.Column("mailbox", sa.String(320)),
     # One version per definition: publishing the same definition again returns its version.
     sa.UniqueConstraint("tenant_id", "workflow_id", "digest", name="uq_engine_definitions_digest"),
+    # The v2 workflows list, one team's page by name or update time (agents 0112).
+    sa.Index("ix_engine_definitions_team_name", "tenant_id", "team_id", "name"),
+    sa.Index("ix_engine_definitions_team_created", "tenant_id", "team_id", "created_at"),
+    sa.Index("ix_engine_definitions_mailbox", "tenant_id", "mailbox"),
     info=TENANT_SCOPED,
 )
 
@@ -61,14 +75,15 @@ engine_runs = sa.Table(
     # workflow index let the planner read a tenant's runs and sort them instead of the team's index in order.
     sa.Column("tenant_id", sa.String(64), nullable=False),
     sa.Column("team_id", sa.String(64), nullable=False),
-    sa.Column("workflow_id", sa.String(64), nullable=False),
+    # The runs list filters and counts by it (ix_engine_runs_workflow_created).
+    sa.Column("workflow_id", sa.String(64), nullable=False, info=LISTED),
     sa.Column("version", sa.Integer, nullable=False),
     sa.Column("digest", sa.String(64), nullable=False),
     # The caller's key for what started the run; a repeated key returns the first run.
     sa.Column("run_key", sa.String(200), nullable=False),
     sa.Column("mode", sa.String(8), nullable=False),
     # queued, running, waiting, stuck (nothing behind it), succeeded, failed, cancelled
-    sa.Column("status", sa.String(16), nullable=False),
+    sa.Column("status", sa.String(16), nullable=False, info=LISTED),
     sa.Column("input", sa.JSON),
     sa.Column("outcome", sa.String(64)),
     sa.Column("output", sa.JSON),

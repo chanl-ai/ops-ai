@@ -9,12 +9,11 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
-from ops_service_kit.http import Envelope
+from ops_service_kit.http import Envelope, Out
 
 from ...store.base import ping
 from ..deps import Runtime, runtime
 from ..envelope import error_body, ok
-from ..schemas import Out
 
 router = APIRouter()
 

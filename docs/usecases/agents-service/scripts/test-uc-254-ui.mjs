@@ -5,41 +5,41 @@
 // its facts, offers the type's actions in order with their consequences, and she declines it with a reason the caller
 // reads back. Platform sign-in, no model call.
 import { check, chromium, consoleSignIn, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
-import { JAMES, PASSWORD, PRIYA, agents, as, until } from '../../lib/workflow_ui.mjs';
+import { PASSWORD, PEOPLE, signInAs } from '@ops-ai/usecase-runner/steps';
+import { until } from '../../lib/workflow_ui.mjs';
 
+const { james: JAMES, priya: PRIYA } = PEOPLE;
 const TAG = Math.random().toString(36).slice(2, 6);
 const TYPE = `vendor_bank_change_${TAG}`;
 const FACTS = [{ label: 'Vendor', value: 'Acme Supplies' }, { label: 'New account', value: '****4410' }];
 const V1_QUESTION = 'Change the bank account for Acme Supplies to ****4410?';
 const REASON = `Call the vendor first ${TAG}`;
 
-const call = async (method, path, headers, body) => {
-  const r = await fetch(`${agents}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-  return { status: r.status, data: (await r.json().catch(() => ({}))).data };
-};
-
 await withUiStack(
   async (consoleUrl, stack) => {
-    const J = await as(JAMES);
+    const james = (await signInAs(JAMES)).raw.agents;
     await stack.startWorker();
-    const seed = (await call('GET', '/v1/task-types/write_approval', J)).data?.versions?.[0]?.record;
-    const made = await call('POST', '/v1/task-types', J, {
-      id: TYPE,
-      copyOf: { id: 'write_approval' },
-      name: `Vendor bank change ${TAG}`,
-      params: { ...seed.params, properties: { ...seed.params.properties, vendor: { type: 'string' }, account: { type: 'string' } }, required: ['vendor', 'account', 'call'] },
-      regions: [{ region: 'header', bind: { title: 'Change the bank account for {vendor} to {account}?' } }, ...seed.regions.slice(1)],
+    const seed = (await james.reviews_get_task_type({ path: { type_id: 'write_approval' } })).versions[0].record;
+    // The SDK throws on any refusal, so a create that fails stops the script here as setup, not as a later FAIL.
+    const made = await james.reviews_create_task_type({
+      body: {
+        id: TYPE,
+        copyOf: { id: 'write_approval' },
+        name: `Vendor bank change ${TAG}`,
+        params: { ...seed.params, properties: { ...seed.params.properties, vendor: { type: 'string' }, account: { type: 'string' } }, required: ['vendor', 'account', 'call'] },
+        regions: [{ region: 'header', bind: { title: 'Change the bank account for {vendor} to {account}?' } }, ...seed.regions.slice(1)],
+      },
     });
-    const published = await call('POST', `/v1/task-types/${TYPE}/publish`, J, { version: 1 });
-    const posted = await call('POST', '/v1/tasks', J, { type: TYPE, params: { vendor: 'Acme Supplies', account: '****4410', facts: FACTS } });
-    const task = posted.data ?? {};
-    const v2 = (await call('GET', `/v1/task-types/${TYPE}`, J)).data?.versions?.[0]?.record ?? {};
-    await call('PUT', `/v1/task-types/${TYPE}/draft`, J, { ...v2, regions: [{ region: 'header', bind: { title: 'New bank details for {vendor}' } }, ...(v2.regions ?? []).slice(1)] });
-    const moved = await call('POST', `/v1/task-types/${TYPE}/publish`, J, { version: 2 });
+    await james.reviews_publish_task_type({ path: { type_id: TYPE }, body: { version: 1 } });
+    const task = await james.reviews_create_task({ body: { type: TYPE, params: { vendor: 'Acme Supplies', account: '****4410', facts: FACTS } } });
+    const v2 = (await james.reviews_get_task_type({ path: { type_id: TYPE } })).versions[0].record;
+    await james.reviews_save_task_type({ path: { type_id: TYPE }, body: { ...v2, regions: [{ region: 'header', bind: { title: 'New bank details for {vendor}' } }, ...(v2.regions ?? []).slice(1)] } });
+    await james.reviews_publish_task_type({ path: { type_id: TYPE }, body: { version: 2 } });
+    const moved = (await james.reviews_get_task_type({ path: { type_id: TYPE } })).versions.some((v) => v.version === 2);
     check(
       '1 James copies and publishes the type, a task opens on v1, and the type moves on to v2',
-      made.status === 201 && published.status === 200 && posted.status === 201 && task.version === 1 && moved.status === 200,
-      { made: made.status, published: published.status, posted: posted.status, version: task.version, moved: moved.status },
+      Boolean(made) && task.version === 1 && moved,
+      { task: task.version, moved },
     );
 
     const browser = await chromium.launch();
@@ -74,8 +74,8 @@ await withUiStack(
       await panel.getByTestId('decide').click();
       const status = await sent;
       const state = await until(async () => {
-        const r = await call('GET', `/v1/tasks/${task.id}`, J);
-        return r.status === 200 && r.data?.action ? r.data : undefined;
+        const r = await james.reviews_get_task({ path: { task_id: task.id } });
+        return r.action ? r : undefined;
       }, 30);
       check(
         '4 Priya declines it with a reason, and the caller reads the action, reason and decider',

@@ -7,11 +7,17 @@ from __future__ import annotations
 from contextlib import ExitStack
 
 from connection_calls import allow_bank, at, bank_control, call, clean, connection, module
-from usecase_harness import AGENTS_PORT, TOOLS_PORT, agents, check, core_bank, data, finish, tools
+from usecase_harness import AGENTS_PORT, TOOLS_PORT, agents, as_role, check, core_bank, data, finish, platform, tools
 
 with ExitStack() as stack:
     bank = stack.enter_context(core_bank())
-    gw = stack.enter_context(tools({**bank["settings"], "OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}"}))
+    # The run's platform-service, which tools() then reads approval rules and the new-host policy from.
+    people, _internal = stack.enter_context(platform())
+    # A new workspace takes any public host (egressNewHosts any_public); Security turns asking on for this story, so
+    # a token address nobody listed is refused rather than looked up.
+    asking = people.put("/v1/policies/egressNewHosts", json={"value": "ask_security"}, headers=as_role(people, "security"))
+    check("setup: Security sets new addresses to ask Security first", asking.status_code == 200, asking.text[:200])
+    gw = stack.enter_context(tools({**bank["settings"], "OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}"}, approval_rules=True))
     stack.enter_context(agents(gateway_url=f"http://127.0.0.1:{TOOLS_PORT}"))
     BANK_BASE = f"https://{bank['host']}"  # the stand-in's address, which its credentials are bound to
     clean(gw, "uc393")

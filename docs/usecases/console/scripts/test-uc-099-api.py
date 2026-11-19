@@ -6,13 +6,22 @@ must answer 403 `role_required`. James's own writes are the control that the bod
 
 from __future__ import annotations
 
-import os
 import tempfile
 from pathlib import Path
 from typing import Any
 
 import httpx
-from usecase_harness import PLATFORM_INTERNAL_PORT, PLATFORM_PORT, agents, check, data, finish, kb, platform
+from usecase_harness import (
+    PLATFORM_INTERNAL_PORT,
+    PLATFORM_PORT,
+    agents,
+    check,
+    data,
+    finish,
+    kb,
+    platform,
+    put_in_files,
+)
 
 PASSWORD = "northfield-demo"
 JAMES = "j.richardson@harborpine.example"
@@ -36,7 +45,7 @@ DEFINITION = {
     ],
     "connections": [{"from": {"node": "start", "port": "payload"}, "to": {"node": "done", "port": "in"}}],
 }
-SOURCE = {"type": "file", "name": "Branch PDFs 099", "collection": "Branch", "fileIds": ["file_1"]}
+SOURCE: dict[str, Any] = {"type": "file", "name": "Branch PDFs 099", "collection": "Branch"}
 
 
 def sign_in(api: httpx.Client, email: str) -> dict[str, str]:
@@ -55,12 +64,13 @@ def made(r: httpx.Response, what: str) -> Any:
 
 with platform() as (api, _), tempfile.TemporaryDirectory(prefix="usecase-kb-") as files:
     # kb-service and agents-service verify platform-service's tokens, as the console's stack does under AUTH=platform.
-    os.environ |= {
+    # Passed to each service: the harness drops an inherited OPS_PLATFORM_URL, so os.environ cannot carry it.
+    auth = {
         "OPS_AUTH_MODE": "platform",
         "OPS_PLATFORM_URL": f"http://127.0.0.1:{PLATFORM_PORT}",
         "OPS_PLATFORM_INTERNAL_PORT": str(PLATFORM_INTERNAL_PORT),
     }
-    with kb(Path(files)) as know, agents(kb_url=str(know.base_url).rstrip("/")) as svc:
+    with kb(Path(files), env=auth) as know, agents(kb_url=str(know.base_url).rstrip("/"), env=auth) as svc:
         james, ravi, maya = sign_in(api, JAMES), sign_in(api, RAVI), sign_in(api, MAYA)
         me = data(api.get("/v1/me", headers=ravi))
         roles = {t["id"]: t["role"] for t in me.get("teams") or []}
@@ -82,6 +92,9 @@ with platform() as (api, _), tempfile.TemporaryDirectory(prefix="usecase-kb-") a
             know.post("/v1/knowledge-bases", json={"name": "Branch manual 099", "owner": JAMES}, headers=james),
             "create a knowledge base",
         )
+        # kb-service checks each file is in the team's Files, so the source names one James uploaded.
+        pdf = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"
+        SOURCE["fileIds"] = [put_in_files(know.files_url, "branch-099.pdf", pdf, headers={"X-Team-Id": "team_ops"})]
         made(know.post("/v1/sources", json=SOURCE, headers=james), "create a source")
 
         writes: list[tuple[str, httpx.Client, str, str, dict[str, Any] | None]] = [

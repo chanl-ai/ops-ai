@@ -1,5 +1,6 @@
-"""A team's secrets are its own (one team per secret), by failure mode: a builder
-refused a secret for their own team's tools, a builder reading or writing another team's secret, a caller still
+"""A team's secrets are its own (one team per secret), by failure mode: a team admin
+refused a secret for their own team's tools, or a builder allowed to change one (D59: builders read them), a builder
+reading or writing another team's secret, a caller still
 limiting a secret to several teams, a builder changing the egress list, and the `securityTeamAddsSecrets` policy not
 moving those writes back to the Security team."""
 
@@ -16,7 +17,7 @@ from .test_provisioned_records import tools  # noqa: F401  # pyright: ignore[rep
 from .test_review_decisions import PLATFORM
 
 
-def builder(tenant: str, team: str, policies: dict[str, Any] | None = None) -> dict[str, str]:
+def builder(tenant: str, team: str, policies: dict[str, Any] | None = None, role: str = "builder") -> dict[str, str]:
     claims = {
         "sub": "usr_jordan",
         "email": "jordan@bank.example",
@@ -26,7 +27,7 @@ def builder(tenant: str, team: str, policies: dict[str, Any] | None = None) -> d
         "aud": ["tools"],
         "tenant_id": tenant,
         "team_ids": [team],
-        "roles": {team: "builder"},
+        "roles": {team: role},
         "auth_method": "session",
         **({"policies": policies} if policies else {}),
     }
@@ -37,16 +38,20 @@ def _secret(name: str, team: str | None = None) -> dict[str, Any]:
     return {"name": name, "value": "k1", **({"teamId": team} if team else {})}
 
 
-async def test_a_builder_adds_rotates_and_removes_their_own_teams_secret(
+async def test_a_team_admin_adds_rotates_and_removes_their_own_teams_secret_and_a_builder_reads_it(
     tools: tuple[httpx.AsyncClient, dict[str, dict[str, str]]],  # noqa: F811
     tenant: str,
 ) -> None:
     c, _ = tools
-    me = builder(tenant, "team_platform")
+    me = builder(tenant, "team_platform", role="admin")
+    refused = await c.post("/v1/secrets", json=_secret("PLATFORM_KEY"), headers=builder(tenant, "team_platform"))
+    assert refused.status_code == 403, refused.text
     made = await c.post("/v1/secrets", json=_secret("PLATFORM_KEY"), headers=me)
     assert made.status_code == 201 and made.json()["data"]["teamId"] == "team_platform", made.text
     rotated = await c.post("/v1/secrets/PLATFORM_KEY/rotate", json={"value": "k2"}, headers=me)
     assert rotated.status_code == 200 and rotated.json()["data"]["version"] == 2, rotated.text
+    listed = await c.get("/v1/secrets", headers=builder(tenant, "team_platform"))
+    assert listed.status_code == 200 and "PLATFORM_KEY" in listed.text, listed.text
     assert (await c.delete("/v1/secrets/PLATFORM_KEY", headers=me)).status_code == 204
 
 
@@ -76,10 +81,10 @@ async def test_two_teams_hold_the_same_name_and_a_caller_naming_several_teams_is
         made = await c.post("/v1/secrets", json=_secret("LEDGER_API_KEY", team), headers=people["sam"])
         assert made.status_code == 201, made.text
     mine = await c.post(
-        "/v1/secrets/LEDGER_API_KEY/rotate", json={"value": "k2"}, headers=builder(tenant, "team_fraud")
+        "/v1/secrets/LEDGER_API_KEY/rotate", json={"value": "k2"}, headers=builder(tenant, "team_fraud", role="admin")
     )
     assert mine.json()["data"]["version"] == 2, mine.text
-    theirs = (await c.get("/v1/secrets", headers=builder(tenant, "team_platform"))).json()["data"]
+    theirs = (await c.get("/v1/secrets", headers=builder(tenant, "team_platform"))).json()["data"]["data"]
     assert [(s["name"], s["version"]) for s in theirs if s["name"] == "LEDGER_API_KEY"] == [("LEDGER_API_KEY", 1)]
     several = {"name": "SHARED_KEY", "value": "k1", "teams": ["team_platform", "team_fraud"]}
     refused = await c.post("/v1/secrets", json=several, headers=people["sam"])

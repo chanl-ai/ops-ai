@@ -48,6 +48,8 @@ from .policies import policy
 
 BUILTIN_GRIDS: dict[str, tuple[Grant, ...]] = {r.id: r.grants for r in BUILTIN_ROLES}
 BUILTIN_NAMES = {r.id: r.name for r in BUILTIN_ROLES}
+# The role whose `*` (workspace) assignment may decide a review that names any role.
+ADMIN_ROLE = "admin"
 _CELLS = frozenset((a, x) for a in AREAS for x in ACTIONS)
 
 # An API key is a bank system acting for one team: it starts live runs and cancels the runs it
@@ -151,6 +153,8 @@ class Access:
         code: str = "role_required",
         protection: str | None = None,
         speaking_of: str | None = None,
+        role: str | None = None,
+        in_team: bool = False,
     ) -> Scope:
         """Returns the scope the caller holds, or raises 403. `team` is the team that owns the record (None: the team
         the request acts in, for a create); `owner` is the record's owner or creator (email), for `own` scope.
@@ -160,7 +164,11 @@ class Access:
         deleting a `system` record also needs `<area>.manage`, which the grid gives admins and not builders; the
         provisioning service needs only its scopes, and its next run puts back the fields the template owns.
         `speaking_of` names the person when someone else asks on their behalf (an admin's Check access): a refusal then
-        says "Maya asked for this" instead of "You asked for this"."""
+        says "Maya asked for this" instead of "You asked for this". `role` is a role id the caller must also hold in
+        the team (a review that names its reviewer): a membership name maps to it as `roles_in` reads it, and an `*`
+        assignment counts in every team. A workspace Admin (an `*` Admin assignment) may decide for any named role; a
+        team Admin holds only the roles the team gives them, so a review naming a compliance group waits for it.
+        `in_team` holds a Security cell in the team instead, for a per-team setting a team's Admin changes."""
         you, your, own = (speaking_of, f"{speaking_of}'s", "their") if speaking_of else ("You", "Your", "your")
         if (area, action) not in _CELLS:
             raise ValueError(f"{area}.{action} is not in the catalogue")
@@ -181,15 +189,16 @@ class Access:
             return "all"
         if p.kind == "api_key":
             return _key(p, area, action, team=team, owner=owner, what=what)
-        held_in = self.security_team_of(p) if (area, action) in SECURITY_TEAM_ACTIONS else team or p.team_id
-        if held_in is None and (area, action) in SECURITY_TEAM_ACTIONS:
+        security = (area, action) in SECURITY_TEAM_ACTIONS and not in_team
+        held_in = self.security_team_of(p) if security else team or p.team_id
+        if held_in is None and security:
             raise Forbidden(
                 f"This workspace names no Security team, so nobody may {action} {what}. A workspace admin names it.",
                 code="no_security_team",
             )
         if held_in is None:
             raise Forbidden("Choose a team with the X-Team-Id header.", code="team_required")
-        if (area, action) not in SECURITY_TEAM_ACTIONS and not from_any_team:
+        if not security and not from_any_team:
             _same_team(p, held_in, action, what)
         scope = self.scope(p, area, action, held_in)
         if scope is None:
@@ -211,6 +220,15 @@ class Access:
                 code="role_required",
                 details={"teamId": held_in, "area": area, "action": action, "scope": "own"},
             )
+        if role is not None:
+            held = self.roles_in(p, held_in)
+            if role not in held and ADMIN_ROLE not in (p.access or {}).get(ANY_TEAM, ()):
+                named = BUILTIN_NAMES.get(role, role)
+                raise Forbidden(
+                    f"{what} waits for a {named} of {held_in}; {your.lower()} roles there do not include it.",
+                    code="role_required",
+                    details={"teamId": held_in, "area": area, "action": action, "role": role, "roles": held},
+                )
         return scope
 
     def _workspace_grids(self, p: Principal) -> dict[str, tuple[Grant, ...]]:
@@ -309,6 +327,8 @@ def can(
     from_any_team: bool = False,
     code: str = "role_required",
     protection: str | None = None,
+    role: str | None = None,
+    in_team: bool = False,
 ) -> Scope:
     """`Access.can` with built-in grids and the Security team the token names."""
     return DEFAULT.can(
@@ -323,6 +343,8 @@ def can(
         from_any_team=from_any_team,
         code=code,
         protection=protection,
+        role=role,
+        in_team=in_team,
     )
 
 

@@ -76,7 +76,7 @@ async def test_each_childs_end_wakes_its_waiting_parent_once(engine: AsyncEngine
         for child in (a, b, a):
             run = await store.get(child)
             assert run is not None
-            await store.settle_parents(run)
+            await store.settle_parents(run["id"], run["created_by"])
         found = await wakes(tx, parent)
         pauses = await woken_pauses(tx, parent)
     assert found == [f"children:{parent}:{a}:succeeded", f"children:{parent}:{b}:succeeded"], found
@@ -93,7 +93,7 @@ async def test_a_parent_waiting_on_a_person_is_not_woken_by_a_child(engine: Asyn
         await store.update(a, status="succeeded")
         run = await store.get(a)
         assert run is not None
-        await store.settle_parents(run)
+        await store.settle_parents(run["id"], run["created_by"])
         assert await wakes(tx, parent) == []
 
 

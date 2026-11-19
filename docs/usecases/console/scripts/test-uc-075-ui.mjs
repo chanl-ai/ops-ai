@@ -45,18 +45,19 @@ await withUiStack(
       await page.goto(`${consoleUrl}/knowledge`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await page.getByRole('button', { name: 'New knowledge base' }).first().click();
       await page.getByLabel('Name').fill(KB);
-      const owner = await page.getByLabel('Owner').inputValue();
+      // The dialog asks for no owner when the signed-in person is the default one; what it sends is checked.
       const made = armed(page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith('/v1/knowledge-bases'), { timeout: 60_000 }));
       await page.getByTestId('kb-create').click();
       const createdRes = await made;
       const sentOwner = createdRes ? JSON.parse(createdRes.request().postData() ?? '{}').owner : undefined;
-      check('a new knowledge base is created on kb-service with its owner, the signed-in person', createdRes?.status() === 201 && owner === JAMES && sentOwner === JAMES, { status: createdRes?.status(), owner, sentOwner });
+      check('a new knowledge base is created on kb-service with its owner, the signed-in person', createdRes?.status() === 201 && sentOwner === JAMES, { status: createdRes?.status(), sentOwner });
       await page.waitForURL(/\/knowledge\/[^/?]+/, { timeout: 60_000 });
-      const kbId = new URL(page.url()).pathname.split('/')[2];
+      const kbId = new URL(page.url()).pathname.split('/').pop();
 
       // Add source: Files, the PDF uploaded to files-service, then Create and sync, which makes the source with the file
       // by id, attaches it to the base and starts its first sync.
       await page.getByTestId('kb-add-source').click();
+      await page.getByTestId('kb-add-apps').click();
       const add = page.getByTestId('add-source-wizard');
       await add.getByTestId('add-source-kind-file').click({ timeout: 60_000 });
       await add.getByTestId('add-source-next').click();
@@ -74,7 +75,7 @@ await withUiStack(
       const sentFiles = created ? JSON.parse(created.request().postData() ?? '{}').fileIds : undefined;
       // The toast's View source opens the source; its Items tab shows the file as the sync reads it.
       const viewed = await page.locator('[data-sonner-toast]').getByRole('button', { name: 'View source' }).click({ timeout: 30_000 }).then(
-        () => page.waitForURL(/\/integrations\/sources\/[^/?]+/, { timeout: 60_000 }).then(() => true, () => false),
+        () => page.waitForURL(/\/data\/sources\/[^/?]+/, { timeout: 60_000 }).then(() => true, () => false),
         () => false,
       );
       const sourceUrl = `${consoleUrl}/integrations/sources/${source?.id}?tab=items`;

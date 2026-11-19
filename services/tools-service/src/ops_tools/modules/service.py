@@ -12,21 +12,22 @@ operations to a workflow's agent (agents-service owns grants).
 
 from __future__ import annotations
 
-import copy
 import json
 import re
 import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import Any, Literal, NotRequired, TypedDict, cast
 from urllib.parse import urlsplit
 
 import httpx
 import yaml
+from pydantic import JsonValue
 
-from ops_access import Access, require_provisioner
+from ops_access import ANY_TEAM, Access, require_provisioner
 from ops_identity import Principal
+from ops_service_kit import narrow
 from ops_service_kit.errors import (
     ApiError,
     Conflict,
@@ -36,45 +37,439 @@ from ops_service_kit.errors import (
     Unprocessable,
     ValidationFailed,
 )
-from ops_service_kit.http import paged
+from ops_service_kit.http import Json
 from ops_service_kit.ids import new_id
+from ops_service_kit.listing import ListParams
+from ops_store import isolation
+from ops_store.listing import ListPage
 
 from .. import mcp, transform
 from ..auth import Authenticator, AuthFailed, may_use
-from ..connections.records import auth_of, connection_base, module_auth, ref_of, sign_in_of, status_of
+from ..connections.records import (
+    ConnectionView,
+    auth_of,
+    connection_base,
+    module_auth,
+    ref_of,
+    sign_in_of,
+    status_of,
+)
 from ..egress import EgressDenied, EgressPolicy, egress_client, for_tenant
 from ..environments import TEST
-from ..executor import Trial, masked, secret_names
+from ..executor import ConsoleRan, ConsoleRefused, Trial, masked, secret_names
 from ..held_hosts import HostHeld, refused
 from ..limits import amount_refusal
 from ..mocks import MockAnswers
 from ..registry import approval_policy
 from ..secrets import SecretResolver, scrub
-from ..store.calls import CallLog
-from ..store.connections import ConnectionStore
+from ..store.calls import CallLog, CallStats, DayStats, GatewayCall
+from ..store.connections import Account, ConnectionStore
 from ..store.mocks import MockStore
-from ..store.modules import CALL_SHAPE, REVIEWED, Aggregate, HostNotAllowedError, ModuleStore, StaleModuleError
+from ..store.module_list import ModuleList, Window
+from ..store.modules import (
+    APPROVAL,
+    REVIEWED,
+    Aggregate,
+    Approval,
+    Binding,
+    Change,
+    CodeSettings,
+    Header,
+    HostNotAllowedError,
+    InputField,
+    Module,
+    ModuleColumns,
+    ModuleGrants,
+    ModuleRef,
+    ModuleStore,
+    Operation,
+    PinnedBy,
+    Reachability,
+    ServiceEvent,
+    StaleModuleError,
+    StoredOperation,
+    TitleOf,
+    Version,
+    grant_views,
+    operation_defaults,
+    restored_operation,
+    version_defaults,
+)
+from ..store.modules import (
+    published as published_operations,
+)
 from . import openapi
-from .directory import Directory, Team
-from .executions import call_row
-from .policy import PublishPolicy, RequesterMayDecide, ToolsMode
-from .review_events import ACCESS_REQUESTED, access_event
+from .directory import Directory, Team, owns_module
+from .discovered import Discovered, DiscoveredOperation, PublicDiscovered, PublicOperation
+from .executions import CallRowJson, DayJson, ModuleActivityJson, call_row
+from .policy import PublishPolicy, RequesterMayDecide, ToolsMode, WriteApprovals, own_request_refusal, tool_mode
+from .review_events import ACCESS_REQUESTED, access_event, policy_changed_event
 from .reviews import ReviewOpener
+from .schemas import (
+    ApprovalRequestIn,
+    BlankModuleIn,
+    CodeOperationIn,
+    CodeSettingsIn,
+    DiscoveredOperationIn,
+    HttpOperationIn,
+    ImportOperationsIn,
+    ModuleDetailsPatchIn,
+    ModuleIn,
+    ModuleSourceIn,
+    ModuleTestIn,
+    OperationPatchIn,
+    SchemaFieldIn,
+)
 from .seed import blank, kind_of, major_of, open_connection, tool_title
 from .tool_users import ToolUsers
 from .workflows import StaticWorkflows, WorkflowDirectory
 
-Traffic = dict[tuple[str, str | None], dict[str, Any]]
-NO_TRAFFIC: dict[str, Any] = {"calls": 0, "errors": 0, "p95Ms": 0}
+Traffic = dict[tuple[str, str | None], CallStats]
+NO_TRAFFIC = CallStats(calls=0, errors=0, p95_ms=0)
+NO_CALLS = DayStats(count=0, errors=0, p95_ms=0)
 
 
-def _rates(t: dict[str, Any]) -> dict[str, Any]:
-    return {"calls24h": t["calls"], "errorRate": t["errors"] / t["calls"] if t["calls"] else 0, "p95Ms": t["p95Ms"]}
+class Rates(TypedDict):
+    calls24h: int
+    errorRate: float
+    p95Ms: int
+
+
+def _rates(t: CallStats) -> Rates:
+    return {"calls24h": t.calls, "errorRate": t.errors / t.calls if t.calls else 0, "p95Ms": t.p95_ms}
+
+
+class Skip(TypedDict):
+    id: str
+    reason: str
+
+
+class BulkOutcome(TypedDict):
+    """What a bulk change did: the ids it changed and each one it left, with why."""
+
+    updated: list[str]
+    skipped: list[Skip]
+
+
+class CallShape(TypedDict, total=False):
+    """The call-shape fields of an operation an edit sets: a key is present only when the edit sent it."""
+
+    method: str | None
+    path: str | None
+    headers: list[Header] | None
+    body: str | None
+    body_encoding: str | None
+    response_transform: str | None
+    timeout_ms: int | None
+
+
+class TestDraft(TypedDict, total=False):
+    """The workbench's unsaved transform and mock: a key is present only when the caller sent it, and `None` sent
+    means no transform or the default mock."""
+
+    response_transform: str | None
+    stub: JsonValue
+
+
+class TestRun(TypedDict):
+    """One test of an operation. The optional keys are the ones the caller sent."""
+
+    operation: str
+    context_id: str
+    target: Literal["stub", "sandbox"]
+    input: dict[str, JsonValue]
+    simulate_approval: NotRequired[bool]
+    confirmed: NotRequired[bool]
+    draft: NotRequired[TestDraft | None]
+    secret_values: NotRequired[dict[str, str] | None]
+    environment: NotRequired[str | None]
+
+
+def test_run(body: ModuleTestIn) -> TestRun:
+    """A test request as `ModuleService.test` reads it: only the keys the caller sent, and in a draft only the keys it
+    sent, so a draft that leaves the mock out uses the operation's own."""
+    run: TestRun = {
+        "operation": body.operation,
+        "context_id": body.context_id,
+        "target": body.target,
+        "input": body.input,
+    }
+    sent = body.model_fields_set
+    if "simulate_approval" in sent:
+        run["simulate_approval"] = body.simulate_approval
+    if "confirmed" in sent:
+        run["confirmed"] = body.confirmed
+    if "secret_values" in sent:
+        run["secret_values"] = body.secret_values
+    if "environment" in sent:
+        run["environment"] = body.environment
+    if "draft" in sent:
+        draft: TestDraft | None = None
+        if body.draft is not None:
+            draft = {}
+            if "response_transform" in body.draft.model_fields_set:
+                draft["response_transform"] = body.draft.response_transform
+            if "stub" in body.draft.model_fields_set:
+                draft["stub"] = body.draft.stub
+        run["draft"] = draft
+    return run
+
+
+class BoundValue(TypedDict):
+    arg: str
+    value: JsonValue
+    source: str
+
+
+class InvalidInput(TypedDict):
+    field: str
+    message: str
+
+
+class TestLog(TypedDict):
+    atMs: float
+    message: str
+
+
+class TestResult(TypedDict, total=False):
+    """A test's answer as the console reads it. A refused one carries the reason; an allowed one the answer, and a
+    sandbox run the call it made. Keys are set in the order below."""
+
+    decision: Literal["allow", "deny", "invalid"]
+    denyReason: str
+    denyMessage: str
+    status: int
+    latencyMs: int
+    bound: list[BoundValue]
+    wouldPause: bool
+    invalid: list[InvalidInput]
+    output: JsonValue
+    masked: list[str]
+    callId: str
+    testApprovalToken: str
+    mockId: str
+    reachedHost: str | None
+    stubbed: bool
+    rawResponse: JsonValue
+    transformError: str
+    request: Json
+    log: list[TestLog]
+
+
+class WorkflowRef(TypedDict):
+    id: str
+    name: str
+
+
+class PendingReview(TypedDict):
+    id: str | None
+    version: str
+    requestedBy: str
+    requestedAt: str | None
+
+
+class ModuleRow(TypedDict):
+    """A module as the list shows it (and the detail begins). `nextExpiry`, `connectionId`, `unsetSecrets` and
+    `canEdit` are set only when the module has one, the list asks for secrets, or the caller is a list's reader."""
+
+    id: str
+    name: str
+    displayName: str
+    system: str
+    description: str
+    type: str
+    status: str
+    version: str
+    major: int
+    ownerTeam: str
+    endpoint: str | None
+    operationCount: int
+    accessClasses: list[str]
+    approvalState: str
+    pendingApprovals: int
+    workflows: list[WorkflowRef]
+    calls24h: int
+    errorRate: float
+    p95Ms: int
+    reachable: bool
+    drift: bool
+    connection: ConnectionView | None
+    signIn: str
+    updatedAt: str | None
+    nextExpiry: NotRequired[str | None]
+    # Set after the fields above, in this order.
+    pendingReview: NotRequired[PendingReview | None]
+    connectionId: NotRequired[str]
+    templateId: NotRequired[str | None]
+    protection: NotRequired[str | None]
+    unsetSecrets: NotRequired[int]
+    canEdit: NotRequired[bool]
+
+
+class RunContext(TypedDict):
+    """Who a test run acts as: the module owner, who needs no workflow approval, and the values bound fields take."""
+
+    id: str
+    label: str
+    workflowId: str
+    workflowName: str
+    caseId: str
+    bindings: dict[str, JsonValue]
+
+
+class ApprovalCore(TypedDict):
+    id: str
+    workflowId: str
+    workflowName: str
+    environment: str
+    major: int
+    operations: list[str]
+    requestedBy: str
+    justification: str
+    status: str
+
+
+class ApprovalView(ApprovalCore, total=False):
+    """A workflow's approval as the API shows it; a field with no value is left out, so a key present is not null."""
+
+    constraints: str | None
+    requestedAt: str | None
+    decidedBy: str | None
+    decidedAt: str | None
+    expiresAt: str | None
+    reason: str | None
+    reviewId: str | None
+    deciderTeam: str | None
+
+
+class ModuleListStats(TypedDict):
+    """The totals over every module the team sees, as the list's header shows them."""
+
+    modules: int
+    operations: int
+    calls24h: int
+    errorRate: float
+    expiringApprovals: int
+    expiringModules: int
+
+
+class ModuleListTotals(TypedDict):
+    stats: ModuleListStats
+    viewCounts: dict[str, int]
+
+
+class ModulePage(ListPage[ModuleRow], ModuleListTotals):
+    """A page of modules with the totals and each view's count beside it."""
+
+
+class GrantRow(ApprovalView):
+    """One row of the grants page: the approval and the module it is on."""
+
+    moduleId: str
+    moduleName: str
+
+
+class VersionView(TypedDict, total=False):
+    """A published version as the API shows it; a field with no value is left out."""
+
+    version: str
+    major: int
+    status: str
+    publishedAt: str | None
+    publishedBy: str
+    note: str
+    changes: list[Change]
+    pinnedBy: list[PinnedBy]
+    reachability: list[Reachability]
+    reviewId: str | None
+    requestedAt: str | None
+    reviewer: str | None
+    finding: str | None
+    reviewRequired: bool | None
+    policy: str | None
+
+
+class Rights(TypedDict):
+    canEdit: bool
+    canDelete: bool
+    canPublish: bool
+
+
+class ModuleDetail(ModuleRow):
+    """A module's page: its row, settings, operations, approvals and versions, and what the caller may do with it."""
+
+    ownerContacts: list[str]
+    auth: Json
+    timeoutMs: int
+    egressHosts: list[str]
+    dataClassification: str
+    operations: list[OperationView]
+    pendingChanges: list[Change]
+    approvals: list[ApprovalView]
+    versions: list[VersionView]
+    runContexts: list[RunContext]
+    canDelete: NotRequired[bool]
+    canPublish: NotRequired[bool]
+
+
+class SecretSetting(TypedDict):
+    name: str
+    set: bool
+    available: bool
+
+
+class AnswerView(TypedDict, total=False):
+    answer: str
+    answerSource: str
+    answerRole: str | None
+    waits: bool
+
+
+class OperationView(AnswerView):
+    """An operation as the tool page shows it; a write also carries its approval answer for the team in view."""
+
+    id: str
+    toolId: str
+    name: str
+    description: str
+    access: str
+    enabled: bool
+    input: list[InputField]
+    maskedOutput: list[str]
+    binding: Binding | None
+    rateLimitPerMin: int
+    requiresApproval: bool | None
+    approvalMode: str | None
+    reviewerRole: str | None
+    approvers: int
+    approverTeam: str | None
+    stepUp: bool
+    idempotent: bool
+    needsPerson: bool
+    scopes: list[str]
+    calls24h: int
+    errorRate: float
+    p95Ms: int
+    approvedWorkflows: int
+    method: NotRequired[str]
+    path: NotRequired[str]
+    executor: NotRequired[str]
+    code: NotRequired[CodeSettings]
+    headers: NotRequired[list[Header]]
+    signInHeader: NotRequired[str | None]
+    body: NotRequired[str]
+    bodyEncoding: NotRequired[str]
+    responseTransform: NotRequired[str]
+    timeoutMs: NotRequired[int]
+    amountMax: NotRequired[float]
+    secrets: NotRequired[list[SecretSetting]]
+    stub: NotRequired[JsonValue]
 
 
 # Short enough that an approval granted for 30 days (the test default) is not expiring the day it is granted.
 EXPIRING = timedelta(days=7)
 GRANT_VIEWS = ("active", "expiring", "requested", "expired", "ended", "all")
+MODULE_VIEWS = ("all", "needs_approval", "expiring", "expired", "failing", "security_review")
 FAILING_RATE = 0.02
 ACCESS_ORDER = ("read", "write")
 WRITES = {"write"}
@@ -111,6 +506,10 @@ DENY_TEXT = {
 }
 
 
+# A team's write approval levels as `WriteApprovals.levels` answers them: (team level, per-app levels).
+Levels = tuple[Json | None, Json]
+
+
 class NotYetAvailable(ApiError):
     status = 501
     code = "not_implemented"
@@ -129,16 +528,14 @@ MAX_STUB_BYTES = 64_000
 
 @dataclass(frozen=True)
 class Caller:
-    """Who is asking and in which team, from ops_identity's principal. `roles` maps team id to role; `verified` is
-    False only for the dev-header principal, which carries no roles, so role rules apply to anyone with a token."""
+    """Who is asking and in which team, from ops_identity's principal; what they may do is `can` on `principal`.
+    `verified` is False only for the dev-header principal, which carries no roles, so role rules apply to anyone with
+    a token."""
 
     tenant_id: str
     name: str
     team: Team
-    roles: dict[str, str] = field(default_factory=dict[str, str])
     verified: bool = False
-    # The caller's role in the team the request acts in (the token's team, before any fallback to an all-scope team).
-    team_role: str | None = None
     # The verified principal, which `ops_access.can` decides on; None for a caller made in code (the seed).
     principal: Principal | None = None
     # The identity headers the caller sent, lower-cased, passed through when tools-service asks agents-service on their
@@ -164,6 +561,39 @@ def _can(
     Access().can(who.principal, area, action, what=what, code=code, protection=protection, requested_by=requested_by)
 
 
+def decides_security_reviews(who: Caller) -> bool:
+    """Whether the caller acts in the workspace's Security team and may decide its reviews there: they read every
+    team's module waiting on its security review, and change none of it (writes still need the module's team)."""
+    p = who.principal
+    if p is None:
+        return False
+    access = Access()
+    security = access.security_team_of(p)
+    return (
+        security is not None
+        and who.team.id == security
+        and access.may(p, "reviews", "decide", team=security, from_any_team=True, what="security reviews")
+    )
+
+
+def link_calls_of(who: Caller) -> str | None:
+    """mcp.view, for a link's calls: None reads everyone's, a subject reads only the calls that caller made."""
+    if who.principal is None:
+        return None
+    scope = Access().can(who.principal, "mcp", "view", what="the link's calls")
+    return who.principal.sub if scope == "own" else None
+
+
+def reads_teamless_calls(who: Caller) -> bool:
+    """Whether the caller reads the calls logged with no team (a tool call that named none, refused): activity.view
+    held in every team (`*`), as the account's own audit entries are read in platform-service. A team's own reader,
+    a service token and an API key read their team's calls only."""
+    p = who.principal
+    return p is not None and Access().may(
+        p, "activity", "view", team=ANY_TEAM, from_any_team=True, what="the calls that named no team"
+    )
+
+
 def _not_a_plugin(m: Aggregate) -> None:
     """A plugin's module changes only with its installed package: no route edits, publishes, deletes or asks
     access for it, whoever asks, admins included."""
@@ -174,10 +604,19 @@ def _not_a_plugin(m: Aggregate) -> None:
         )
 
 
-def _provisioned(who: Caller, i: dict[str, Any]) -> dict[str, Any]:
+class _Provisioned(TypedDict, total=False):
+    template_id: str | None
+    protection: str | None
+
+
+def _provisioned(who: Caller, i: ModuleIn | BlankModuleIn | ModuleDetailsPatchIn) -> _Provisioned:
     """The template fields a create or patch carries, refused with `provisioner_only` unless the caller is a
     service token holding `tools:provision`: a person setting them could take a template's slot or lock others out."""
-    fields = {k: i[k] for k in ("template_id", "protection") if i.get(k) is not None}
+    fields: _Provisioned = {}
+    if i.template_id is not None:
+        fields["template_id"] = i.template_id
+    if i.protection is not None:
+        fields["protection"] = i.protection
     if fields and who.principal is not None:
         require_provisioner(who.principal, "tools")
     return fields
@@ -187,42 +626,74 @@ def _iso(value: datetime | None) -> str | None:
     return value.isoformat() if value else None
 
 
-def _code_settings(c: dict[str, Any]) -> dict[str, Any]:
-    """A code operation's settings as stored and sent to runner-service, from CodeSettingsIn's dump."""
-    limits = cast(dict[str, Any], c.get("limits") or {})
+def _provision(m: Module, fields: _Provisioned) -> None:
+    if "template_id" in fields:
+        m["template_id"] = fields["template_id"]
+    if "protection" in fields:
+        m["protection"] = fields["protection"]
+
+
+def _code_settings(c: CodeSettingsIn) -> CodeSettings:
+    """A code operation's settings as stored and sent to runner-service."""
     return {
-        "source": c["source"],
-        "entry": c.get("entry") or "main",
-        "bindings": list(dict.fromkeys(c.get("bindings") or [])),
-        "secrets": list(dict.fromkeys(c.get("secrets") or [])),
-        "limits": {
-            "memoryMb": limits.get("memory_mb", 256),
-            "timeS": limits.get("time_s", 10),
-            "calls": limits.get("calls", 20),
-        },
+        "source": c.source,
+        "entry": c.entry or "main",
+        "bindings": list(dict.fromkeys(c.bindings or [])),
+        "secrets": list(dict.fromkeys(c.secrets or [])),
+        "limits": {"memoryMb": c.limits.memory_mb, "timeS": c.limits.time_s, "calls": c.limits.calls},
     }
 
 
-def _kind_of(i: dict[str, Any]) -> str:
+def _kind_of(i: ModuleIn) -> str:
     """A new module's kind: as given, else what its first operations are (the kind follows the executor)."""
-    if i.get("type"):
-        return str(i["type"])
-    if i.get("function"):
+    if i.type:
+        return str(i.type)
+    if i.function:
         return "code"
-    source = cast(dict[str, Any] | None, i.get("source"))
-    return str(source["kind"]) if source else "http"
+    return str(i.source.kind) if i.source else "http"
 
 
-def _code_operation(f: dict[str, Any]) -> dict[str, Any]:
-    """A new code operation from CodeOperationIn's dump."""
+def _input_field(f: SchemaFieldIn) -> InputField:
+    """A field as a request sends it: every key, an unset one as null."""
     return {
-        "name": f["name"],
-        "description": f["description"],
-        "access": f["access"],
+        "name": f.name,
+        "type": f.type,
+        "required": f.required,
+        "description": f.description,
+        "format": f.format,
+        "enum": f.enum,
+        "example": f.example,
+        "default": f.default,
+    }
+
+
+def _picked(o: DiscoveredOperationIn) -> DiscoveredOperation:
+    """An operation a caller listed in full, as a source describes one."""
+    return {
+        "name": o.name,
+        "description": o.description,
+        "access": o.access,
+        "method": o.method,
+        "path": o.path,
+        "group": o.group,
+        "input": [_input_field(f) for f in o.input],
+        "headers": [],
+    }
+
+
+def _code_operation(f: CodeOperationIn) -> DiscoveredOperation:
+    """A new code operation."""
+    return {
+        "name": f.name,
+        "description": f.description,
+        "access": f.access,
+        "method": None,
+        "path": None,
         "group": "functions",
-        "input": f["input"],
+        "input": [_input_field(x) for x in f.input],
+        "headers": [],
         "executor": "code",
-        "code": _code_settings(f["code"]),
+        "code": _code_settings(f.code),
     }
 
 
@@ -237,11 +708,11 @@ def _not_allowed(host: str) -> Unprocessable:
     )
 
 
-def _sample_field(name: str) -> dict[str, Any]:
+def _sample_field(name: str) -> InputField:
     return {"name": name, "type": "string", "required": True}
 
 
-def _workflow_names(mods: list[Aggregate]) -> dict[str, str]:
+def _workflow_names(mods: Sequence[ModuleGrants]) -> dict[str, str]:
     """Each workflow's name as its approvals recorded it from agents-service, for the call log."""
     return {a["workflow_id"]: a["workflow_name"] for m in mods for a in m["approvals"]}
 
@@ -250,7 +721,7 @@ def _plain(value: Any) -> Any:
     return json.loads(json.dumps(value, default=str))
 
 
-def _reviewed(op: dict[str, Any], key: str) -> Any:
+def _reviewed(op: Operation | StoredOperation, key: str) -> Any:
     """The part of a reviewed field Security reviews. For the input that is each field's name, type, whether it is
     required, its allowed values and its default (a default is sent for the agent on reads, so it changes what a call
     does); a description or example changes nothing a call sends."""
@@ -258,18 +729,26 @@ def _reviewed(op: dict[str, Any], key: str) -> Any:
         return _plain(op.get(key))
     return sorted(
         (f["name"], f["type"], bool(f.get("required")), list(f.get("enum") or []), json.dumps(f.get("default")))
-        for f in cast(list[dict[str, Any]], op.get("input") or [])
+        for f in op.get("input") or []
     )
+
+
+_MODE_WORDS: dict[str | None, str] = {
+    None: "follows the app",
+    "none": "runs without asking",
+    "person": "asks the person",
+    "reviewer": "asks a reviewer",
+}
 
 
 def _differs_from_published(m: Aggregate) -> bool:
     """Whether the operations about to go live differ from the published ones (the baseline) in anything Security
     reviews. Publish decides major from this, never from the edit history alone, so a change reaches calls without
     review by no route: an edit, an import, or a declined version's edits left in place."""
-    baseline = cast(list[dict[str, Any]] | None, m.get("baseline"))
+    baseline = m["baseline"]
     if baseline is None:
         return False
-    published = {o["id"]: o for o in baseline}
+    published = {o.get("id"): o for o in published_operations(baseline)}
     for o in m["operations"]:
         before = published.get(o["id"])
         if before is None:
@@ -277,11 +756,6 @@ def _differs_from_published(m: Aggregate) -> bool:
         if any(_reviewed(o, k) != _reviewed(before, k) for k in REVIEWED if k in before):
             return True
     return False
-
-
-def _given(source: dict[str, Any]) -> dict[str, Any]:
-    """A source's fields the caller set; an unset connection leaves the module's in place."""
-    return {k: v for k, v in source.items() if v is not None}
 
 
 def _refuse_during_review(m: Aggregate, what: str) -> None:
@@ -300,33 +774,39 @@ def refuse(problems: list[str]) -> None:
         raise ValidationFailed(f"{len(problems)} problems: " + " ".join(problems), details={"problems": problems})
 
 
-def sign_in_fits(module_sign_in: str, conn: dict[str, Any]) -> None:
+def sign_in_fits(module_sign_in: str, conn: Account) -> None:
     """A module takes only a connection whose sign-in it supports: `team` a team connection, `person` one each
     person signs in to (the team backup included), `person_or_team` any; refused when the connection is chosen."""
     module_sign_in = sign_in_of(module_sign_in)
-    given = str(conn.get("sign_in") or "team")
+    given = str(conn.sign_in or "team")
     if module_sign_in == "person_or_team" or (module_sign_in == "team") == (given == "team"):
         return
     want = "the team's account" if module_sign_in == "team" else "each person's own account"
     raise ValidationFailed(
-        f"This module signs in with {want}, and {conn['name']} does not. Pick another connection.",
+        f"This module signs in with {want}, and {conn.name} does not. Pick another connection.",
         code="sign_in_mismatch",
     )
 
 
 class ModuleService:
     # A plugin tool's display name, set once the plugin host is up (`PluginHost.title_of`); other modules have none.
-    titles: Callable[[Mapping[str, Any], str], str | None] | None = None
+    titles: TitleOf | None = None
     # agents-service's agents and workflows that use each tool, which name the call log's agent and workflow ids.
     users: ToolUsers | None = None
     # The team's connection for a plugin's module (`PluginHost.team_connection`), set once the plugin host is up.
     team_connections: Callable[[str, str, Aggregate], Awaitable[str | None]] | None = None
     # Whether a plugin tool's address waits for its account's sign-in (`PluginHost.awaits_sign_in`), set once the
     # plugin host is up: the account then holds the sign-in host, which is not the tool's address.
-    awaits_sign_in: Callable[[Aggregate, dict[str, Any]], bool] | None = None
+    awaits_sign_in: Callable[[Aggregate, Account], bool] | None = None
+    # The installed plugins' ids, whose team bindings sign a plugin's module in for the list's reachable column.
+    installed_plugins: Callable[[], list[str]] | None = None
     # A tool page's Real run (`GatewayCalls.console_run`), set by create_gateway_app: Real goes through the gateway's
     # checks, never a path of its own.
-    real_runs: Callable[..., Awaitable[dict[str, Any]]] | None = None
+    real_runs: Callable[..., Awaitable[ConsoleRan | ConsoleRefused]] | None = None
+    # The gateway's own reader of the team's approval settings, set by create_gateway_app: a test run waits exactly
+    # when the same call from chat would. Left as is, the settings cannot be read and every write without its own
+    # answer waits.
+    approvals: WriteApprovals = WriteApprovals()
 
     def __init__(
         self,
@@ -365,6 +845,8 @@ class ModuleService:
         self.requester_policy = requester_policy
         # The tenant's connections, in this service's own database.
         self.connections = ConnectionStore(store.engine)
+        # The Tools list, chosen and paged in SQL.
+        self.listing = ModuleList(store.engine)
         # The operations' mock answers, which Try it's test answer reads as a test run does.
         self.mocks = MockAnswers(MockStore(store.engine))
         # Signs the test console's real reads in through the module's connection, in the test environment; without it
@@ -373,21 +855,24 @@ class ModuleService:
 
     # ── Derived views ─────────────────────────────────────────────────────
 
-    def _approval_status(self, a: dict[str, Any]) -> str:
+    def _approval_status(self, a: Approval) -> str:
         expired = a["status"] == "approved" and a["expires_at"] is not None and a["expires_at"] < self.clock()
         return "expired" if expired else a["status"]
 
-    def _approvals(self, m: Aggregate) -> list[dict[str, Any]]:
-        return [{**a, "status": self._approval_status(a)} for a in m["approvals"]]
+    def _approvals(self, m: Aggregate) -> list[Approval]:
+        return [self._with_status(a) for a in m["approvals"]]
+
+    @staticmethod
+    def _deprecated(v: Version) -> Version:
+        return {**v, "status": "deprecated"}
+
+    def _with_status(self, a: Approval) -> Approval:
+        return {**a, "status": self._approval_status(a)}
 
     def _owners(self, m: Aggregate) -> list[str | None]:
         """The module's owner group and those of the teams owning the workflows it is approved for, as each approval
         recorded them when it was requested (the workflow's team comes from agents-service)."""
         return self.dir.owners(m)
-
-    def _workflow_groups(self, a: dict[str, Any]) -> list[str | None]:
-        team = self.dir.team_by_id(a.get("workflow_team_id"))
-        return list(team.owner_groups) if team else []
 
     def _since(self, delta: timedelta) -> str:
         """`delta` before now, in the call log's created_at format, so the two compare as text."""
@@ -412,7 +897,7 @@ class ModuleService:
         if self.secrets is None:
             return {}
         owners = sorted({str(m["team_id"]) for m in mods if m["team_id"]})
-        return {team: {str(r["name"]) for r in await self.secrets.store.listed(tenant_id, team)} for team in owners}
+        return {team: {r.name for r in await self.secrets.store.listed(tenant_id, team)} for team in owners}
 
     async def _as_team_sees(self, tenant_id: str, team_id: str, mods: list[Aggregate]) -> list[Aggregate]:
         """The modules with a plugin's module showing the team's own connection: the gateway signs a plugin
@@ -428,7 +913,7 @@ class ModuleService:
                 out.append(m)
         return out
 
-    async def _connections_of(self, tenant_id: str, mods: list[Aggregate]) -> dict[str, dict[str, Any]]:
+    async def _connections_of(self, tenant_id: str, mods: list[Aggregate]) -> dict[str, Account]:
         return await self.connections.by_ids(
             tenant_id, sorted({str(m["connection_id"]) for m in mods if m["connection_id"]})
         )
@@ -438,8 +923,8 @@ class ModuleService:
         m: Aggregate,
         traffic: Traffic,
         have: dict[str | None, set[str]] | None = None,
-        conns: dict[str, dict[str, Any]] | None = None,
-    ) -> dict[str, Any]:
+        conns: dict[str, Account] | None = None,
+    ) -> ModuleRow:
         now = self.clock()
         conn = (conns or {}).get(m["connection_id"] or "")
         ops = m["operations"]
@@ -461,10 +946,12 @@ class ModuleService:
             state = "expiring"
         else:
             state = "approved"
-        workflows = {a["workflow_id"]: {"id": a["workflow_id"], "name": a["workflow_name"]} for a in active}
+        workflows: dict[str, WorkflowRef] = {
+            a["workflow_id"]: {"id": a["workflow_id"], "name": a["workflow_name"]} for a in active
+        }
         status = status_of(conn, now) if conn else ""
         waiting = conn is not None and self.awaits_sign_in is not None and self.awaits_sign_in(m, conn)
-        row: dict[str, Any] = {
+        row: ModuleRow = {
             "id": m["id"],
             "name": m["name"],
             "displayName": m["display_name"],
@@ -510,61 +997,30 @@ class ModuleService:
             row["unsetSecrets"] = len(needed - have.get(m["team_id"], set()))
         return row
 
-    def _in_view(self, r: dict[str, Any], view: str) -> bool:
-        now = self.clock()
-        if view == "all":
-            return True
-        if view == "needs_approval":
-            return r["approvalState"] in ("needs_approval", "draft")
-        if view == "expired":
-            return r["approvalState"] == "expired"
-        if view == "security_review":
-            return r.get("pendingReview") is not None
-        if view == "expiring":
-            nxt = r.get("nextExpiry")
-            return r["approvalState"] != "expired" and nxt is not None and datetime.fromisoformat(nxt) - now < EXPIRING
-        return r["errorRate"] >= FAILING_RATE or not r["reachable"]
-
-    def _run_contexts(self, m: Aggregate, team: Team) -> list[dict[str, Any]]:
-        """The module owner first, which needs no workflow approval, so the run panel's default is a try
-        the owner can always make; then one context per workflow this module is approved for or asked for, with no
-        case: the builder types the bound values, which the panel marks as a sample. Only the caller's team's
-        workflows: running as another team's workflow would borrow its approval."""
-        seen: dict[str, dict[str, Any]] = {}
-        for a in m["approvals"]:
-            ours = a.get("workflow_team_id") == team.id or self.dir.sees(team, self._workflow_groups(a))
-            if a["workflow_id"] not in seen and ours:
-                seen[a["workflow_id"]] = a
-        owner: dict[str, Any] = {
-            "id": OWNER_CONTEXT,
-            "label": "Owner, no case",
-            "workflowId": "",
-            "workflowName": "",
-            "caseId": SAMPLE_CASE,
-            "bindings": {},
-        }
-        return [owner] + [
+    def _run_contexts(self) -> list[RunContext]:
+        """The module owner only, who needs no workflow approval. The test panel's Run as lists it alone: a
+        workflow's context ran with typed sample values rather than a case, so it proved nothing a real run would."""
+        return [
             {
-                "id": w,
-                "label": f"{a['workflow_name']} · sample values",
-                "workflowId": w,
-                "workflowName": a["workflow_name"],
+                "id": OWNER_CONTEXT,
+                "label": "Owner, no case",
+                "workflowId": "",
+                "workflowName": "",
                 "caseId": SAMPLE_CASE,
                 "bindings": {},
             }
-            for w, a in seen.items()
         ]
 
     def _operation(
         self,
         m: Aggregate,
-        o: dict[str, Any],
-        approvals: list[dict[str, Any]],
-        t: dict[str, Any],
+        o: Operation,
+        approvals: list[Approval],
+        t: CallStats,
         have: dict[str | None, set[str]] | None = None,
-    ) -> dict[str, Any]:
+    ) -> OperationView:
         policy = approval_policy(m, o)
-        out: dict[str, Any] = {
+        out: OperationView = {
             "id": o["id"],
             "toolId": o["tool_id"],
             "name": o["name"],
@@ -576,6 +1032,8 @@ class ModuleService:
             "binding": o["binding"],
             "rateLimitPerMin": o["rate_limit_per_min"],
             "requiresApproval": o["requires_approval"],
+            "approvalMode": o.get("approval_mode"),
+            "reviewerRole": o.get("reviewer_role"),
             "approvers": policy["approvers"],
             "approverTeam": policy["approver_team"],
             "stepUp": policy["step_up"],
@@ -591,11 +1049,12 @@ class ModuleService:
             if o[col] is not None:
                 out[key] = o[col]
         out["executor"] = o["executor"]
-        if o.get("code"):
-            out["code"] = o["code"]
+        code = o.get("code")
+        if code:
+            out["code"] = code
         out["headers"] = o.get("headers") or []
         # A tool saved before sign-in headers were refused still sends one; its page asks to move it to the app.
-        held = cast(list[dict[str, str]], out["headers"])
+        held = o.get("headers") or []
         out["signInHeader"] = next(
             (h["key"] for h in held if CREDENTIAL_HEADER.match(h["key"].strip()) and h["value"].strip()), None
         )
@@ -619,21 +1078,36 @@ class ModuleService:
         out["stub"] = o.get("stub")
         return out
 
-    def _rights(self, who: Caller, m: Aggregate) -> dict[str, bool]:
+    def _rights(self, who: Caller, m: Aggregate) -> Rights:
         """What the caller may do with this module, by the check each write route runs: `can` for the action
         with the module's protection, so the console's buttons and the routes never disagree."""
-        out: dict[str, bool] = {}
-        for action in ("edit", "delete", "publish"):
-            try:
-                _can(who, "tools", action, what="it", protection=m.get("protection"))
-            except Forbidden:
-                out[f"can{action.capitalize()}"] = False
-            else:
-                out[f"can{action.capitalize()}"] = True
-        return out
+        return {
+            "canEdit": self._may(who, m, "edit"),
+            "canDelete": self._may(who, m, "delete"),
+            "canPublish": self._may(who, m, "publish"),
+        }
 
-    async def _detail(self, m: Aggregate, team: Team, who: Caller | None = None) -> dict[str, Any]:
-        """`who` is the person asking; their rights on the module ride along. A service applying a decision has none."""
+    def _may(self, who: Caller, m: Aggregate, action: str) -> bool:
+        """One of `_rights`' flags: the module is the caller's team's and `can` allows the action on it. Reads only
+        the module, so a list's page sets it on each row without a statement."""
+        if not self._team_owns(who, m):
+            return False
+        try:
+            _can(who, "tools", action, what="it", protection=m.get("protection"))
+        except Forbidden:
+            return False
+        return True
+
+    async def _levels(self, tenant_id: str, team: Team) -> Levels:
+        """The team's write approval levels from platform-service. A route on the request transaction reads them before
+        its first store call, so no connection is held while platform-service answers."""
+        return await self.approvals.levels(tenant_id, team.id)
+
+    async def _detail(
+        self, m: Aggregate, team: Team, who: Caller | None = None, *, levels: Levels | None = None
+    ) -> ModuleDetail:
+        """`who` is the person asking; their rights on the module ride along. A service applying a decision has none.
+        Without `levels` they are asked of platform-service here, after the module's reads."""
         m = (await self._as_team_sees(str(m["tenant_id"]), team.id, [m]))[0]
         traffic = await self._traffic(str(m["tenant_id"]), self._call_teams(who) if who else [team.id], [m])
         have = await self._secret_names(str(m["tenant_id"]), [m])
@@ -643,29 +1117,78 @@ class ModuleService:
             key=lambda a: (STATUS_ORDER[a["status"]], _iso(a["expires_at"]) or "9"),
         )
         auth = auth_of(m["auth"])
-        return {
+        detail: ModuleDetail = {
             **self._row(m, traffic, have, await self._connections_of(str(m["tenant_id"]), [m])),
             "ownerContacts": m["owner_contacts"],
             "auth": auth,
             "timeoutMs": m["timeout_ms"],
             "egressHosts": m["egress_hosts"],
             "dataClassification": m["data_classification"],
-            "operations": [
-                self._operation(m, o, approvals, traffic.get((m["id"], o["name"]), NO_TRAFFIC), have)
-                for o in m["operations"]
-            ],
+            "operations": await self._with_answers(
+                m,
+                team,
+                [
+                    self._operation(m, o, approvals, traffic.get((m["id"], o["name"]), NO_TRAFFIC), have)
+                    for o in m["operations"]
+                ],
+                levels,
+            ),
             "pendingChanges": m["pending"],
             "approvals": [self._approval_out(a) for a in ordered],
             "versions": [self._version_out(v) for v in reversed(m["versions"])],
-            "runContexts": self._run_contexts(m, team),
-            **(self._rights(who, m) if who is not None else {}),
+            "runContexts": self._run_contexts(),
         }
+        if who is not None:
+            rights = self._rights(who, m)
+            detail["canEdit"], detail["canDelete"], detail["canPublish"] = (
+                rights["canEdit"],
+                rights["canDelete"],
+                rights["canPublish"],
+            )
+        return detail
+
+    async def _with_answers(
+        self, m: Aggregate, team: Team, shown: list[OperationView], levels: Levels | None = None
+    ) -> list[OperationView]:
+        """Each write's answer for the team in view (waits, who answers, which level), from the resolver the gateway
+        runs, so the tool page and the operations table never apply the rule themselves."""
+        tenant = str(m["tenant_id"])
+        levels = levels or await self.approvals.levels(tenant, team.id)
+        by_name = {str(o["name"]): o for o in m["operations"]}
+        out: list[OperationView] = []
+        for row in shown:
+            o = by_name[str(row["name"])]
+            if o["access"] not in WRITES:
+                out.append(row)
+                continue
+            ans = await self.approvals.answer(
+                tenant,
+                team.id,
+                m,
+                access=o["access"],
+                setting=tool_mode(o),
+                reviewer_role=o.get("reviewer_role"),
+                approvers=approval_policy(m, o)["approvers"],
+                levels=levels,
+                test_account=bool(m.get("sandbox")),
+                tool=str(o["name"]),
+            )
+            out.append(
+                {
+                    **row,
+                    "answer": ans["answer"],
+                    "answerSource": ans["source"],
+                    "answerRole": ans["reviewerRole"],
+                    "waits": ans["waits"],
+                }
+            )
+        return out
 
     @staticmethod
-    def _drop_none(d: dict[str, Any]) -> dict[str, Any]:
-        return {k: v for k, v in d.items() if v is not None}
+    def _drop_none[V: Mapping[str, object]](d: V) -> V:
+        return cast(V, {k: v for k, v in d.items() if v is not None})
 
-    def _approval_out(self, a: dict[str, Any]) -> dict[str, Any]:
+    def _approval_out(self, a: Approval) -> ApprovalView:
         return self._drop_none(
             {
                 "id": a["id"],
@@ -689,7 +1212,7 @@ class ModuleService:
             }
         )
 
-    def _version_out(self, v: dict[str, Any]) -> dict[str, Any]:
+    def _version_out(self, v: Version) -> VersionView:
         return self._drop_none(
             {
                 "version": v["version"],
@@ -718,14 +1241,27 @@ class ModuleService:
             raise NotFound("Module")
         return m
 
-    def _sees(self, who: Caller, m: Aggregate) -> bool:
+    def _sees(self, who: Caller, m: ModuleGrants) -> bool:
         """The caller's team reads the module: its own, a workspace-level one, or one approved for its workflows. Only
         the dev header caller acting in one of the dev seed's all-scope teams reads every team's."""
         return self.dir.sees_module(who.team, m) or (not who.verified and who.team.scope == "all")
 
-    async def _changeable(self, who: Caller, module_id: str, action: str = "edit") -> Aggregate:
-        """The module, when the caller may change it: a `system` module is the provisioner's alone."""
+    async def _owned(self, who: Caller, module_id: str) -> Aggregate:
+        """The module, when the caller's team owns it (or it is workspace-level); 404 otherwise, as for one it cannot
+        see. A team that reads a module through its workflow's grant uses it and changes nothing of it."""
         m = await self._find(who, module_id)
+        if not self._team_owns(who, m):
+            raise NotFound("Module")
+        return m
+
+    @staticmethod
+    def _team_owns(who: Caller, m: Aggregate) -> bool:
+        """The one team check every module write, test and run shares, and the detail's can* flags with them."""
+        return owns_module(who.team, m.get("team_id"), verified=who.verified)
+
+    async def _changeable(self, who: Caller, module_id: str, action: str = "edit") -> Aggregate:
+        """The module, when the caller may change it: its team's, and a `system` module is the provisioner's alone."""
+        m = await self._owned(who, module_id)
         _not_a_plugin(m)
         _can(
             who,
@@ -736,7 +1272,7 @@ class ModuleService:
         )
         return m
 
-    async def _save(self, m: Aggregate, *, touch: bool = True, events: Sequence[dict[str, Any]] = ()) -> Aggregate:
+    async def _save(self, m: Aggregate, *, touch: bool = True, events: Sequence[ServiceEvent] = ()) -> Aggregate:
         """`events` are service events written in the same transaction."""
         if touch:
             m["updated_at"] = self.clock()
@@ -755,132 +1291,84 @@ class ModuleService:
 
     # ── Reads ─────────────────────────────────────────────────────────────
 
-    def _grant_views(self, a: dict[str, Any], now: datetime) -> set[str]:
-        """The Access tab's views an approval is in: approved is active (and expiring within a week), requested waits,
-        an approval past its end is expired, and a rejected or revoked one has ended."""
-        status, views = a["status"], {"all"}
-        if status == "approved":
-            views.add("active")
-            if a["expires_at"] is not None and a["expires_at"] - now < EXPIRING:
-                views.add("expiring")
-        elif status == "requested":
-            views.add("requested")
-        elif status == "expired":
-            views.add("expired")
-        elif status in ("rejected", "revoked"):
-            views.add("ended")
-        return views
+    async def grants(self, who: Caller, q: ListParams) -> ListPage[GrantRow]:
+        """Every workflow's access to the modules the caller's team sees, newest request first, one page of the view
+        `q` names (`all` when none), searched by workflow, module or requester; `facets.view` counts each view."""
+        view = (q.filters.get("view") or ["all"])[-1]
+        if view not in GRANT_VIEWS:
+            raise ValidationFailed(f"There is no view {view!r}: ask for one of {', '.join(GRANT_VIEWS)}.")
+        views = grant_views(self.clock(), EXPIRING)
+        page, counts = await self.store.grants(who.tenant_id, q, view=views[view], views=views)
+        granted: list[GrantRow] = [
+            {
+                **self._approval_out(self._with_status(APPROVAL.validate_python(r))),
+                "moduleId": r["module_id"],
+                "moduleName": r["module_name"],
+            }
+            for r in page["data"]
+        ]
+        return {**page, "data": granted, "facets": {"view": counts}}
 
-    async def grants(self, who: Caller, *, view: str, search: str | None, page: int, page_size: int) -> dict[str, Any]:
-        """Every workflow's access to the modules the caller's team sees, newest request first, one page of `view`,
-        searched by workflow, module or requester; `facets.view` counts each view."""
-        now = self.clock()
-        mods = [m for m in await self.store.all(who.tenant_id) if self._sees(who, m)]
-        rows = [(a, m) for m in mods for a in self._approvals(m)]
-        views = {id(a): self._grant_views(a, now) for a, _ in rows}
-        counts = {v: sum(1 for a, _ in rows if v in views[id(a)]) for v in GRANT_VIEWS}
-        q = (search or "").lower()
-
-        def matches(a: dict[str, Any], m: Aggregate) -> bool:
-            said = f"{a['workflow_name']} {a['workflow_id']} {m['display_name']} {m['name']} {a['requested_by']}"
-            return not q or q in said.lower()
-
-        picked = [(a, m) for a, m in rows if view in views[id(a)] and matches(a, m)]
-        picked.sort(key=lambda x: (x[0]["requested_at"], x[0]["id"]), reverse=True)
-        out = [{**self._approval_out(a), "moduleId": m["id"], "moduleName": m["display_name"]} for a, m in picked]
-        listed = paged(out[(page - 1) * page_size : page * page_size], len(out), page, page_size)
-        return listed | {"facets": {"view": counts}}
-
-    async def list(
-        self,
-        who: Caller,
-        *,
-        page: int,
-        page_size: int,
-        view: str,
-        search: str | None,
-        filters: dict[str, list[str]],
-        sort_by: str | None,
-        sort_order: str | None,
-    ) -> dict[str, Any]:
-        now = self.clock()
-        mods = [m for m in await self.store.all(who.tenant_id) if self._sees(who, m)]
-        mods = await self._as_team_sees(who.tenant_id, who.team.id, mods)
-        traffic = await self._traffic(who.tenant_id, self._call_teams(who), mods)
+    async def list(self, who: Caller, q: ListParams) -> ModulePage:
+        """One page of the modules the caller's team sees, in the view `q` names (`all` when none), with each view's
+        count, the facets and the totals of every module seen: chosen, counted and paged in SQL
+        (store/module_list.py), then the page's modules read in full."""
+        view = (q.filters.get("view") or ["all"])[-1]
+        if view not in MODULE_VIEWS:
+            raise ValidationFailed(f"There is no view {view!r}: ask for one of {', '.join(MODULE_VIEWS)}.")
+        teams = self._call_teams(who)
+        window = Window(
+            now=self.clock(),
+            expiring=EXPIRING,
+            failing_rate=FAILING_RATE,
+            since=self._since(timedelta(days=1)),
+            call_teams=teams,
+            plugins=self.installed_plugins() if self.installed_plugins is not None else [],
+        )
+        every = not who.verified and who.team.scope == "all"  # as `_sees`: the dev caller in an all-scope team
+        reviews = view == "security_review" and decides_security_reviews(who)
+        page, totals = await self.listing.page(
+            who.tenant_id,
+            who.team.id,
+            q,
+            view=view,
+            w=window,
+            seen_by=None if every else who.team.id,
+            # Security's queue only: its other views stay its own team's modules.
+            reviews=reviews,
+        )
+        # A plugin's module shows the team's own account (`_as_team_sees`), read with the page.
+        signs_in = {str(r["id"]): r["connection_id"] for r in page["data"]}
+        chosen = await self.store.chosen(who.tenant_id, list(signs_in), reviews=reviews)
+        mods: list[Aggregate] = [{**m, "connection_id": signs_in[m["id"]]} for m in chosen]
+        traffic = await self._traffic(who.tenant_id, teams, mods)
         have = await self._secret_names(who.tenant_id, mods)
         conns = await self._connections_of(who.tenant_id, mods)
-        rows = [self._row(m, traffic, have, conns) for m in mods]
-        counts = {"all": len(rows)} | {
-            v: sum(1 for r in rows if self._in_view(r, v))
-            for v in ("needs_approval", "expiring", "expired", "failing", "security_review")
-        }
-
-        def values(r: dict[str, Any], key: str) -> list[str]:
-            return list(r["accessClasses"]) if key == "access" else [str(r.get(key))]
-
-        q = (search or "").lower()
-        searched = [
-            r
-            for r in rows
-            if self._in_view(r, view)
-            and (
-                not q
-                or q in f"{r['displayName']} {r['name']} {r['system']} {r['description']} {r['ownerTeam']}".lower()
-            )
-        ]
-        active = {k: v for k, v in filters.items() if v}
-
-        def match(r: dict[str, Any], skip: str | None = None) -> bool:
-            return all(k == skip or any(x in v for x in values(r, k)) for k, v in active.items())
-
-        filtered = [r for r in searched if match(r)]
-        # Each facet counts rows under every other active filter, so its options show what selecting them would yield.
-        facets: dict[str, dict[str, int]] = {}
-        for key in ("type", "access", "approvalState"):
-            facet: dict[str, int] = {}
-            for r in (x for x in searched if match(x, key)):
-                for val in values(r, key):
-                    facet[val] = facet.get(val, 0) + 1
-            facets[key] = facet
-        if sort_by in ("displayName", "name", "calls24h", "errorRate", "updatedAt", "operationCount", "ownerTeam"):
-            filtered.sort(key=lambda r: r[sort_by], reverse=sort_order == "desc")
-        total = len(filtered)
-        total_pages = max(1, -(-total // page_size))
-        page = min(page, total_pages)
-        calls = sum(r["calls24h"] for r in rows)
-        errors = sum(r["calls24h"] * r["errorRate"] for r in rows)
-        expiring_approvals = sum(
-            1
-            for m in mods
-            for a in self._approvals(m)
-            if a["status"] == "approved" and a["expires_at"] is not None and a["expires_at"] - now < EXPIRING
-        )
+        calls, errors = totals["calls"], totals["errors"]
         return {
-            "data": filtered[(page - 1) * page_size : page * page_size],
-            "pagination": {
-                "page": page,
-                "pageSize": page_size,
-                "total": total,
-                "totalPages": total_pages,
-                "hasNext": page < total_pages,
-                "hasPrev": page > 1,
-            },
-            "facets": facets,
+            **page,
+            # The detail's canEdit rule, so a row of another team's module offers no edit its routes would refuse.
+            "data": [{**self._row(m, traffic, have, conns), "canEdit": self._may(who, m, "edit")} for m in mods],
             "stats": {
-                "modules": len(rows),
-                "operations": sum(r["operationCount"] for r in rows),
+                "modules": totals["all"],
+                "operations": totals["operations"],
                 "calls24h": calls,
                 "errorRate": errors / calls if calls else 0,
-                "expiringApprovals": expiring_approvals,
-                "expiringModules": counts["expiring"],
+                "expiringApprovals": totals["expiring_approvals"],
+                "expiringModules": totals["expiring"],
             },
-            "viewCounts": counts,
+            "viewCounts": {v: totals[v] for v in MODULE_VIEWS},
         }
 
-    async def get(self, who: Caller, module_id: str) -> dict[str, Any]:
-        return await self._detail(await self._find(who, module_id), who.team, who)
+    async def get(self, who: Caller, module_id: str) -> ModuleDetail:
+        levels = await self._levels(who.tenant_id, who.team)
+        reviews = decides_security_reviews(who)
+        found = await self.store.get(who.tenant_id, module_id, reviews=reviews) if reviews else None
+        # A module waiting on Security's review opens for its reviewer, read only; every other read is the team's.
+        m = found if found is not None and not self._sees(who, found) else await self._find(who, module_id)
+        return await self._detail(m, who.team, who, levels=levels)
 
-    async def activity(self, who: Caller, module_id: str) -> dict[str, Any]:
+    async def activity(self, who: Caller, module_id: str) -> ModuleActivityJson:
         """Calls per UTC day over the last 14 days from the call log, days without calls at zero, and the latest calls
         with their callers: the call log's view of one module, so read under activity.view as the log is."""
         _can(who, "activity", "view", what="the tool-call log")
@@ -891,7 +1379,7 @@ class ModuleService:
             m["id"], first.isoformat(), tenant_id=who.tenant_id, team_ids=self._call_teams(who)
         )
         days = [
-            {"date": d, **logged.get(d, {"count": 0, "errors": 0, "p95Ms": 0})}
+            DayJson(date=d, **logged.get(d, NO_CALLS).model_dump(by_alias=True))
             for d in ((first + timedelta(days=i)).isoformat() for i in range(14))
         ]
         since = self._since(timedelta(days=1))
@@ -903,66 +1391,83 @@ class ModuleService:
         return {
             "days": days,
             "denied24h": denied,
-            "recent": [call_row(r, _workflow_names([m]), m, self._title(m, r["tool"])) for r in recent],
+            "recent": [call_row(r, _workflow_names([m]), m, self._title(m, r.tool)) for r in recent],
         }
 
-    def _title(self, module: dict[str, Any] | None, tool: str) -> str | None:
+    def _title(self, module: ModuleColumns | None, tool: str) -> str | None:
         return tool_title(module, tool, self.titles) if module is not None else None
 
     async def executions(
         self,
         who: Caller,
+        params: ListParams,
         *,
-        page: int,
-        page_size: int,
-        tool: str | None,
-        module_ids: list[str] | None,
-        thread_id: str | None,
-        decision: str | None,
+        counted: bool = True,
+        tool: str | None = None,
+        module_ids: list[str] | None = None,
+        thread_id: str | None = None,
+        decision: str | None = None,
         key: str | None = None,
-    ) -> dict[str, Any]:
+        call_id: str | None = None,
+        link_id: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
+    ) -> ListPage[CallRowJson]:
         """Every call made in the caller's team, newest first, on the modules that team sees. `key` finds the calls
-        sent under one idempotency key: how a workflow run reconciles a write after a crash. The log names who called
-        what, so it is read under activity.view."""
-        _can(who, "activity", "view", what="the tool-call log")
-        mods = {m["id"]: m for m in await self.store.all(who.tenant_id) if self._sees(who, m)}
-        scope = None if not who.verified and who.team.scope == "all" else list(mods)
-        if module_ids is not None:
-            scope = [m for m in module_ids if scope is None or m in scope]
-        if key is not None:
-            # A lookup by key shows a claim as it stands: one still running past its expiry reads as lost.
-            await self.calls.expire_running(tenant_id=who.tenant_id, key=key)
-        rows, total = await self.calls.search(
-            tenant_id=who.tenant_id,
-            team_ids=self._call_teams(who),
-            tools=[tool] if tool else None,
-            module_ids=scope,
-            thread_id=thread_id,
-            decision=decision,
-            key=key,
-            offset=(page - 1) * page_size,
-            limit=page_size,
-        )
-        pages = max(1, -(-total // page_size))
+        sent under one idempotency key: how a workflow run reconciles a write after a crash. `call_id` lists that one
+        call, so a chat's Open call link shows the call it was made from. The log names who called what, so it is read
+        under activity.view. A link's calls are read under mcp.view instead, so a member with `own` sees only the calls
+        they made through it."""
+        mine = link_calls_of(who) if link_id is not None else None
+        if link_id is None:
+            _can(who, "activity", "view", what="the tool-call log")
+        # One transaction for the reads; the agents and workflows are named by agents-service after it ends.
+        async with isolation.request_transaction():
+            mods = {m["id"]: m for m in await self.store.seen(who.tenant_id) if self._sees(who, m)}
+            scope = None if not who.verified and who.team.scope == "all" else list(mods)
+            if module_ids is not None:
+                scope = [m for m in module_ids if scope is None or m in scope]
+            if link_id is not None:
+                # A link's calls are the team's own already, and a workflow started through one has no module.
+                scope = None
+            if key is not None:
+                # A lookup by key shows a claim as it stands: one still running past its expiry reads as lost.
+                await self.calls.expire_running(tenant_id=who.tenant_id, key=key)
+            page = await self.calls.listed(
+                params,
+                counted=counted,
+                tenant_id=who.tenant_id,
+                team_ids=self._call_teams(who),
+                # The link's calls are its team's; the other reads add the calls that named no team for an
+                # every-team reader.
+                teamless=link_id is None and reads_teamless_calls(who),
+                tools=[tool] if tool else None,
+                module_ids=scope,
+                # A refused call on a tool no module holds is the team's audit evidence too; a moduleId filter asks
+                # for those modules' calls only.
+                moduleless=module_ids is None,
+                thread_id=thread_id,
+                decision=decision,
+                key=key,
+                call_id=call_id,
+                link_id=link_id,
+                sub=mine,
+                since=since,
+                until=until,
+            )
+            rows = [GatewayCall.model_validate(r) for r in page["data"]]
+            # Only the modules the page's rows name are read, as rows.
+            shown = await self.store.headers(
+                who.tenant_id, sorted({r.module_id for r in rows if r.module_id is not None and r.module_id in mods})
+            )
         names = _workflow_names(list(mods.values()))
         listed = [
-            call_row(r, names, mods.get(r["module_id"] or ""), self._title(mods.get(r["module_id"] or ""), r["tool"]))
+            call_row(r, names, shown.get(r.module_id or ""), self._title(shown.get(r.module_id or ""), r.tool))
             for r in rows
         ]
-        return {
-            "data": await self._named(who, listed),
-            "pagination": {
-                "page": page,
-                "pageSize": page_size,
-                "total": total,
-                "totalPages": pages,
-                "hasNext": page < pages,
-                "hasPrev": page > 1,
-            },
-            "facets": {},
-        }
+        return {**page, "data": await self._named(who, listed)}
 
-    async def _named(self, who: Caller, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    async def _named(self, who: Caller, rows: list[CallRowJson]) -> list[CallRowJson]:
         """The rows with each agent and workflow named as agents-service names them, read once for the tools on the
         page. Unanswered, the rows keep the ids they hold: the log still lists every call."""
         if self.users is None or not rows:
@@ -979,23 +1484,30 @@ class ModuleService:
                 r["workflowName"] = named.get(("workflow", r["workflowId"]), r["workflowName"])
         return rows
 
-    async def execution(self, who: Caller, call_id: str) -> dict[str, Any]:
+    async def execution(self, who: Caller, call_id: str) -> CallRowJson:
         """One call from the gateway's log, so an Activity row opens to its call. The same scope as the list: another
         team's call, or one on a module the caller's team does not see, is not found, never a different answer."""
         _can(who, "activity", "view", what="the tool-call log")
-        row = await self.calls.get(call_id, tenant_id=who.tenant_id, team_ids=self._call_teams(who))
-        if row is None:
-            raise NotFound("Call")
-        mods = {m["id"]: m for m in await self.store.all(who.tenant_id) if self._sees(who, m)}
-        if (who.verified or who.team.scope != "all") and row["module_id"] not in mods:
-            raise NotFound("Call")
-        module = mods.get(row["module_id"] or "")
-        return call_row(row, _workflow_names(list(mods.values())), module, self._title(module, row["tool"]))
+        async with isolation.request_transaction():
+            row = await self.calls.get(
+                call_id, tenant_id=who.tenant_id, team_ids=self._call_teams(who), teamless=reads_teamless_calls(who)
+            )
+            if row is None:
+                raise NotFound("Call")
+            mods = {m["id"]: m for m in await self.store.seen(who.tenant_id) if self._sees(who, m)}
+            if (who.verified or who.team.scope != "all") and row.module_id is not None and row.module_id not in mods:
+                raise NotFound("Call")
+            module = (
+                await self.store.headers(
+                    who.tenant_id, [row.module_id] if row.module_id is not None and row.module_id in mods else []
+                )
+            ).get(row.module_id or "")
+        return call_row(row, _workflow_names(list(mods.values())), module, self._title(module, row.tool))
 
     # ── Creating modules ──────────────────────────────────────────────────
 
     @staticmethod
-    def _checked_headers(headers: list[dict[str, str]], problems: list[str]) -> list[dict[str, str]]:
+    def _checked_headers(headers: Sequence[Header], problems: list[str]) -> list[Header]:
         """A sign-in header is refused whatever it holds, a {{NAME}} reference too: every custom module is on a
         connection, which signs every call in, so the key has one home. Used by add and edit alike; each
         refusal joins `problems`."""
@@ -1029,7 +1541,7 @@ class ModuleService:
         return base, url[len(base) :] or "/"
 
     @classmethod
-    def _encoding_problem(cls, body: str | None, encoding: str | None, headers: list[dict[str, str]]) -> str | None:
+    def _encoding_problem(cls, body: str | None, encoding: str | None, headers: Sequence[Header]) -> str | None:
         """Why this body cannot be sent in its encoding, or None. JSON and form set Content-Type themselves, so
         a header naming another would contradict them; raw sends the text as typed, so it needs that header."""
         enc = encoding or "json"
@@ -1045,7 +1557,7 @@ class ModuleService:
             fields: object = json.loads(body) if body else {}
         except json.JSONDecodeError:
             fields = None
-        if not isinstance(fields, dict) or not all(isinstance(v, str) for v in cast(dict[str, Any], fields).values()):
+        if not isinstance(fields, dict) or not all(isinstance(v, str) for v in cast(Json, fields).values()):
             return "A form body is a set of fields, each a name and a text value such as {{email}}."
         return None
 
@@ -1067,42 +1579,43 @@ class ModuleService:
                 return f"Leave {{{{{name}}}}} out of quotes in the body: it is filled in as JSON, quotes included."
         return None
 
-    def _http_operation(self, h: dict[str, Any], endpoint: str = "") -> tuple[dict[str, Any], str]:
+    def _http_operation(self, h: HttpOperationIn, endpoint: str = "") -> tuple[DiscoveredOperation, str]:
         """One hand-built HTTP operation as a discovered one, and the base it calls. Every problem is found before
         any is reported, so one save lists them all."""
         problems: list[str] = []
-        headers = self._checked_headers(h.get("headers") or [], problems)
-        if not OPERATION_NAME.match(h["name"]):
+        headers = self._checked_headers([{"key": x.key, "value": x.value} for x in h.headers], problems)
+        if not OPERATION_NAME.match(h.name):
             problems.append("Name the operation in lower case letters, digits and underscores.")
         origin, path = "", "/"
         try:
-            origin, path = self._split_url(h["url"], endpoint)
+            origin, path = self._split_url(h.url, endpoint)
         except ValidationFailed as e:
             problems.append(e.message)
-        if problem := self._encoding_problem(h.get("body"), h.get("body_encoding"), headers):
+        if problem := self._encoding_problem(h.body, h.body_encoding, headers):
             problems.append(problem)
         refuse(problems)
-        names = [*URL_VAR.findall(h["url"]), *BODY_VAR.findall(h.get("body") or "")]
-        op = {
-            "name": h["name"],
-            "description": h["description"],
-            "access": h["access"],
-            "method": h["method"],
+        names = [*URL_VAR.findall(h.url), *BODY_VAR.findall(h.body or "")]
+        op: DiscoveredOperation = {
+            "name": h.name,
+            "description": h.description,
+            "access": h.access,
+            "method": h.method,
             "path": path,
             "group": "operations",
             "input": [_sample_field(n) for n in dict.fromkeys(names)],
             "headers": headers,
-            "body": h.get("body"),
-            "body_encoding": h.get("body_encoding"),
+            "body": h.body,
+            "body_encoding": h.body_encoding,
         }
         return op, origin
 
     @staticmethod
-    def _added(o: dict[str, Any], *, major: bool) -> dict[str, Any]:
+    def _added(o: Operation | DiscoveredOperation, *, major: bool) -> Change:
         return {"operation": o["name"], "kind": "added", "detail": f"New {o['access']} operation", "major": major}
 
-    def _new_op(self, module_id: str, index: int, o: dict[str, Any]) -> dict[str, Any]:
+    def _new_op(self, module_id: str, index: int, o: DiscoveredOperation) -> Operation:
         return {
+            **operation_defaults(),
             "id": f"{module_id}_op{index}",
             "tool_id": new_id("tl"),
             "name": o["name"],
@@ -1121,9 +1634,8 @@ class ModuleService:
             "masked_output": [],
             "binding": None,
             "rate_limit_per_min": 60,
-            # Approvals are off by default: a new write runs until its tool's switch or a team
-            # policy turns approval on.
-            "requires_approval": False,
+            # Not set unless someone sets it: the team default then decides, and a later change of it reaches the tool.
+            "requires_approval": o.get("requires_approval"),
             "amount_max": None,
             # The source's example response when it gives one, so a stubbed call answers like the system.
             "stub": o.get("stub") if o.get("stub") is not None else {"ok": True},
@@ -1132,7 +1644,7 @@ class ModuleService:
             "code": o.get("code"),
         }
 
-    async def _names_free(self, who: Caller, ops: list[dict[str, Any]]) -> None:
+    async def _names_free(self, who: Caller, ops: Sequence[DiscoveredOperation]) -> None:
         taken = await self.store.names_taken(who.tenant_id, [o["name"] for o in ops], who.team.id)
         if taken:
             name = sorted(taken)[0]
@@ -1141,52 +1653,52 @@ class ModuleService:
     async def _name_free(self, who: Caller, name: str) -> bool:
         return name not in await self.store.names(who.tenant_id, who.team.id)
 
-    async def create(self, who: Caller, i: dict[str, Any]) -> dict[str, Any]:
+    async def create(self, who: Caller, i: ModuleIn) -> ModuleDetail:
         _can(who, "tools", "create", what="tools")
         template = _provisioned(who, i)
-        base = _kebab(i["name"])
+        base = _kebab(i.name)
         if not base:
             raise ValidationFailed("Name the module.")
         name = base
-        if i.get("unique_name"):
+        if i.unique_name:
             n = 2
             while not await self._name_free(who, name):
                 name, n = f"{base}-{n}", n + 1
         if not await self._name_free(who, name):
             raise Conflict(f"A module named {name} already exists.")
-        if not i["display_name"].strip():
+        if not i.display_name.strip():
             raise ValidationFailed("Give the module a display name.")
-        conn = await self._usable_connection(who, i.get("connection_id"), i.get("sign_in"))
-        ops_in: list[dict[str, Any]] = list(i.get("operations") or [])
+        conn = await self._usable_connection(who, i.connection_id, i.sign_in)
+        ops_in: list[DiscoveredOperation] = [_picked(o) for o in i.operations or []]
         kind = _kind_of(i)
         if kind == "code":
             # A code module's functions run on runner-service: no endpoint and no egress host of its own.
-            if not i.get("function"):
+            if not i.function:
                 raise ValidationFailed("Write the module's first function.")
-            ops_in = [_code_operation(i["function"])]
-        endpoint: str = i["endpoint"]
-        if i.get("source") and ops_in:
+            ops_in = [_code_operation(i.function)]
+        endpoint: str = i.endpoint
+        if i.source and ops_in:
             # An MCP server behind sign-in lists its tools only with the connection's token.
-            found = await self._discover(who, {"connection_id": i.get("connection_id"), **_given(i["source"])})
+            found = await self._discover(who, i.source, i.connection_id)
             ops_in = self._chosen(found, ops_in)
             endpoint = found["endpoint"]
-        if i.get("http") and conn is not None:
+        if i.http and conn is not None:
             # A custom app's base address and key live on its connection only: one beside it is refused.
             if endpoint:
                 raise ValidationFailed(
-                    f"The base address comes from the {conn['name']} connection; leave the module's endpoint empty."
+                    f"The base address comes from the {conn.name} connection; leave the module's endpoint empty."
                 )
-            op, endpoint = self._http_operation(i["http"], connection_base(conn))
+            op, endpoint = self._http_operation(i.http, connection_base(conn))
             ops_in = [op]
-        elif i.get("http"):
-            op, endpoint = self._http_operation(i["http"])
+        elif i.http:
+            op, endpoint = self._http_operation(i.http)
             ops_in = [op]
         if not ops_in:
             raise ValidationFailed("Choose at least one operation to expose.")
         await self._names_free(who, ops_in)
-        await self.hold_unless_listed(who, urlsplit(endpoint).hostname, conn["name"] if conn else i["display_name"])
+        await self.hold_unless_listed(who, urlsplit(endpoint).hostname, conn.name if conn else i.display_name)
         if conn is None and kind != "code":
-            conn = await self._open_connection(who, i["display_name"], endpoint)
+            conn = await self._open_connection(who, i.display_name, endpoint)
         elif conn is not None and endpoint:
             await self._address_on(who, conn, endpoint)
         module_id = new_id("mod")
@@ -1203,15 +1715,15 @@ class ModuleService:
                 owner=owner,
                 me=who.name,
                 at=now,
-                input={"displayName": i["display_name"], "name": name, "type": kind},
+                input={"displayName": i.display_name, "name": name, "type": kind},
             ),
-            "system": i["system"].strip() or i["display_name"].strip(),
-            "description": f"{i['system'].strip() or i['display_name'].strip()} operations behind the data gateway.",
+            "system": i.system.strip() or i.display_name.strip(),
+            "description": f"{i.system.strip() or i.display_name.strip()} operations behind the data gateway.",
             "auth": module_auth(conn),
             "egress_hosts": [host] if host else [],
-            "catalog_id": conn.get("catalog_id") if conn else None,
-            "connection_id": conn["id"] if conn else None,
-            "sign_in": sign_in_of(i.get("sign_in")),
+            "catalog_id": conn.catalog_id if conn else None,
+            "connection_id": conn.id if conn else None,
+            "sign_in": sign_in_of(i.sign_in),
             "version": version,
             "operations": [self._new_op(module_id, n + 1, o) for n, o in enumerate(ops_in)],
         }
@@ -1225,12 +1737,10 @@ class ModuleService:
                 "reachability": [{"environment": "test", "ok": True, "checkedAt": now.isoformat()}],
             }
         ]
-        m.update(template)
+        _provision(m, template)
         return await self._detail(await self._create(m), who.team, who)
 
-    async def _usable_connection(
-        self, who: Caller, connection_id: str | None, sign_in: str | None
-    ) -> dict[str, Any] | None:
+    async def _usable_connection(self, who: Caller, connection_id: str | None, sign_in: str | None) -> Account | None:
         """The connection a new module signs in through: optional, and when one is named it must exist, be live, be
         the team's and fit the module's sign-in."""
         if connection_id is None:
@@ -1239,9 +1749,9 @@ class ModuleService:
         if conn is None:
             raise ValidationFailed("That connection no longer exists. Pick another one, or none.")
         if status_of(conn, self.clock()) == "revoked":
-            raise Conflict(f"{conn['name']} is revoked. Reconnect it in Connections or pick another connection.")
+            raise Conflict(f"{conn.name} is revoked. Reconnect it in Connections or pick another connection.")
         if not may_use(conn, who.team.id):
-            raise ValidationFailed(f"{conn['name']} is not available to this team. Pick another one, or none.")
+            raise ValidationFailed(f"{conn.name} is not available to this team. Pick another one, or none.")
         sign_in_fits(sign_in_of(sign_in), conn)
         return conn
 
@@ -1251,17 +1761,20 @@ class ModuleService:
 
     async def hold_unless_listed(self, who: Caller, host: str | None, app: str) -> None:
         """An app's address on a host the tenant has not listed, decided by the account's egressNewHosts policy before
-        anything is saved. Under `any_public` the host passes as it is. A caller who may manage the egress list, or
-        any builder under `builders`, lists it in their own name, audited. Under `block` it is refused. Otherwise it
-        asks the Security team: HostHeld with the task's run key while it waits, its reason once refused.
+        anything is saved. A host the call-time check passes (`EgressPolicy.host_passes`: any public name under
+        `any_public`), a caller who may manage the egress list, or any builder under `builders`, lists it in the
+        caller's name, audited: a module's hosts are rows of the list (the store's foreign key), so a host that passes
+        unlisted would still be refused on save. Under `block` it is refused. Otherwise it asks the Security team:
+        HostHeld with the task's run key while it waits, its reason once refused.
         Without Reviews or an egress policy the call-time check refuses the host."""
         if not host or self.egress is None or self.reviews is None:
             return
-        if await self.egress.host_passes(who.tenant_id, host):
+        if await self.egress.store.host_allowed(who.tenant_id, host):
             return
+        passes = await self.egress.host_passes(who.tenant_id, host)
         mode = await self.egress.new_hosts.mode(who.tenant_id) if self.egress.new_hosts else "ask_security"
         manages = who.principal is not None and self._manages_egress(who)
-        if manages or (mode == "builders" and who.principal is not None):
+        if passes or manages or (mode == "builders" and who.principal is not None):
             note = f"Listed when {app} first named it"
             await self.egress.store.add(who.tenant_id, "host", host, actor=who.name, note=note, at=self.clock())
             return
@@ -1285,7 +1798,7 @@ class ModuleService:
             return False
         return True
 
-    async def _open_connection(self, who: Caller, name: str, base: str, team_id: str | None = None) -> dict[str, Any]:
+    async def _open_connection(self, who: Caller, name: str, base: str, team_id: str | None = None) -> Account:
         """The account a custom module with none of its own keeps its address on: no sign-in, so a call reads
         it as it reads any app's. Empty until the first tool names one."""
         now = self.clock()
@@ -1299,32 +1812,32 @@ class ModuleService:
         assert made is not None
         return made
 
-    async def _address_on(self, who: Caller, conn: dict[str, Any], address: str) -> None:
+    async def _address_on(self, who: Caller, conn: Account, address: str) -> None:
         """A discovered address (an imported spec's server, an MCP server) onto the module's chosen connection: set
         where it names none, refused where it names another system."""
         held = connection_base(conn)
         if not held:
-            await self.connections.set_base(who.tenant_id, conn["id"], address, actor=who.name, at=self.clock())
+            await self.connections.set_base(who.tenant_id, conn.id, address, actor=who.name, at=self.clock())
         elif held.rstrip("/") != address.rstrip("/"):
             # One connection holds one address: a second system, or another path on the same host, is its own app.
-            raise ValidationFailed(f"{conn['name']} serves {held}; this source is {address}. Pick its own connection.")
+            raise ValidationFailed(f"{conn.name} serves {held}; this source is {address}. Pick its own connection.")
 
     async def _address(self, tenant_id: str, m: Aggregate) -> str:
-        conn = await self.connections.get(tenant_id, m["connection_id"]) if m.get("connection_id") else None
+        conn = await self.connections.get(tenant_id, cid) if (cid := m["connection_id"]) else None
         return connection_base(conn) if conn else ""
 
-    async def create_blank(self, who: Caller, i: dict[str, Any]) -> dict[str, Any]:
+    async def create_blank(self, who: Caller, i: BlankModuleIn) -> ModuleDetail:
         _can(who, "tools", "create", what="tools")
         template = _provisioned(who, i)
-        name = _kebab(i["name"])
-        if not i["display_name"].strip():
+        name = _kebab(i.name)
+        if not i.display_name.strip():
             raise ValidationFailed("Give the module a display name.")
         if not name:
             raise ValidationFailed("Give the module a name, e.g. servicenow.")
         if not await self._name_free(who, name):
             raise Conflict(f"A module named {name} already exists.")
         owner = self.dir.owner_group(who.team) or "Platform"
-        conn = await self._usable_connection(who, i.get("connection_id"), None)
+        conn = await self._usable_connection(who, i.connection_id, None)
         m = blank(
             module_id=new_id("mod"),
             tenant_id=who.tenant_id,
@@ -1332,43 +1845,44 @@ class ModuleService:
             owner=owner,
             me=who.name,
             at=self.clock(),
-            input={**i, "displayName": i["display_name"], "name": name},
+            input={"displayName": i.display_name, "name": name, "description": i.description or ""},
         )
         if conn is not None:
             # A custom app's tools are paths on its connection's base address: it is the module's only one.
             base = connection_base(conn)
             host = urlsplit(base).hostname
-            await self.hold_unless_listed(who, host, conn["name"])
+            await self.hold_unless_listed(who, host, conn.name)
             m.update(
-                connection_id=conn["id"],
+                connection_id=conn.id,
                 auth=module_auth(conn),
-                catalog_id=conn.get("catalog_id"),
+                catalog_id=conn.catalog_id,
                 egress_hosts=[host] if host else [],
             )
-        m.update(template)
+        _provision(m, template)
         return await self._detail(await self._create(m), who.team, who)
 
     # ── Editing ───────────────────────────────────────────────────────────
 
-    async def update_details(self, who: Caller, module_id: str, patch: dict[str, Any]) -> dict[str, Any]:
+    async def update_details(self, who: Caller, module_id: str, patch: ModuleDetailsPatchIn) -> ModuleDetail:
         _can(who, "tools", "edit", what="tools")
+        levels = await self._levels(who.tenant_id, who.team)
         m = await self._changeable(who, module_id)
-        if patch.get("display_name") is not None:
-            if not patch["display_name"].strip():
+        if patch.display_name is not None:
+            if not patch.display_name.strip():
                 raise ValidationFailed("Give the module a display name.")
-            m["display_name"] = patch["display_name"].strip()
-        if patch.get("description") is not None:
-            m["description"] = patch["description"].strip()
-        if patch.get("sign_in") is not None:
-            conn = await self.connections.get(who.tenant_id, m["connection_id"]) if m["connection_id"] else None
+            m["display_name"] = patch.display_name.strip()
+        if patch.description is not None:
+            m["description"] = patch.description.strip()
+        if patch.sign_in is not None:
+            conn = await self.connections.get(who.tenant_id, cid) if (cid := m["connection_id"]) else None
             if conn is not None:
-                sign_in_fits(str(patch["sign_in"]), conn)
-            m["sign_in"] = sign_in_of(patch["sign_in"])
-        m.update(_provisioned(who, patch))
-        return await self._detail(await self._save(m), who.team, who)
+                sign_in_fits(str(patch.sign_in), conn)
+            m["sign_in"] = sign_in_of(patch.sign_in)
+        _provision(m, _provisioned(who, patch))
+        return await self._detail(await self._save(m), who.team, who, levels=levels)
 
-    def _stage(self, m: Aggregate, changes: list[dict[str, Any]]) -> None:
-        pending: list[dict[str, Any]] = list(m["pending"])
+    def _stage(self, m: Aggregate, changes: list[Change]) -> None:
+        pending: list[Change] = list(m["pending"])
         for c in changes:
             i = next(
                 (n for n, p in enumerate(pending) if p["operation"] == c["operation"] and p["kind"] == c["kind"]), -1
@@ -1389,7 +1903,7 @@ class ModuleService:
         if m["baseline"] is None and ever_published:
             m["baseline"] = json.loads(json.dumps(m["operations"], default=str))
 
-    async def _append(self, who: Caller, m: Aggregate, ops_in: list[dict[str, Any]]) -> None:
+    async def _append(self, who: Caller, m: Aggregate, ops_in: list[DiscoveredOperation]) -> None:
         """Appends operations. A draft takes them straight into its first version; a published module stages them."""
         _refuse_during_review(m, "add operations")
         for o in ops_in:
@@ -1408,27 +1922,28 @@ class ModuleService:
         else:
             self._stage(m, changes)
 
-    async def add_operation(self, who: Caller, module_id: str, h: dict[str, Any]) -> dict[str, Any]:
+    async def add_operation(self, who: Caller, module_id: str, h: HttpOperationIn) -> ModuleDetail:
         _can(who, "tools", "edit", what="tools")
         m = await self._changeable(who, module_id)
-        conn = await self.connections.get(who.tenant_id, m["connection_id"]) if m.get("connection_id") else None
+        conn = await self.connections.get(who.tenant_id, cid) if (cid := m["connection_id"]) else None
         op, origin = self._http_operation(h, connection_base(conn) if conn else "")
-        await self.hold_unless_listed(who, urlsplit(origin).hostname, conn["name"] if conn else m["display_name"])
+        await self.hold_unless_listed(who, urlsplit(origin).hostname, conn.name if conn else m["display_name"])
         if conn is None:
             # A blank module's first tool with an address makes the connection that address lives on, so a
             # code module never gets an empty app.
             conn = await self._open_connection(who, m["display_name"], origin, m["team_id"])
-            m.update(connection_id=conn["id"], auth=module_auth(conn))
+            m.update(connection_id=conn.id, auth=module_auth(conn))
         elif not connection_base(conn):
-            await self.connections.set_base(who.tenant_id, conn["id"], origin, actor=who.name, at=self.clock())
+            await self.connections.set_base(who.tenant_id, conn.id, origin, actor=who.name, at=self.clock())
         host = urlsplit(origin).hostname
         if host and host not in m["egress_hosts"]:
             m["egress_hosts"] = [*m["egress_hosts"], host]
         await self._append(who, m, [op])
         return await self._detail(await self._save(m), who.team, who)
 
-    async def set_connection(self, who: Caller, module_id: str, connection_id: str | None) -> dict[str, Any]:
+    async def set_connection(self, who: Caller, module_id: str, connection_id: str | None) -> ModuleDetail:
         _can(who, "tools", "edit", what="tools")
+        levels = await self._levels(who.tenant_id, who.team)
         m = await self._changeable(who, module_id)
         if connection_id is None:
             if m["status"] != "draft":
@@ -1441,12 +1956,12 @@ class ModuleService:
             if conn is None:
                 raise ValidationFailed("That connection no longer exists. Pick another one.")
             if status_of(conn, self.clock()) == "revoked":
-                raise Conflict(f"{conn['name']} is revoked. Reconnect it in Connections or pick another one.")
+                raise Conflict(f"{conn.name} is revoked. Reconnect it in Connections or pick another one.")
             if not may_use(conn, m["team_id"]):
-                raise ValidationFailed(f"{conn['name']} is not available to this module's team. Pick another one.")
+                raise ValidationFailed(f"{conn.name} is not available to this module's team. Pick another one.")
             sign_in_fits(sign_in_of(m.get("sign_in")), conn)
-            m.update(connection_id=conn["id"], catalog_id=conn.get("catalog_id"), auth=module_auth(conn))
-        return await self._detail(await self._save(m), who.team, who)
+            m.update(connection_id=conn.id, catalog_id=conn.catalog_id, auth=module_auth(conn))
+        return await self._detail(await self._save(m), who.team, who, levels=levels)
 
     def _holders(self, m: Aggregate) -> list[str]:
         return list(dict.fromkeys(a["workflow_name"] for a in self._approvals(m) if a["status"] == "approved"))
@@ -1460,12 +1975,12 @@ class ModuleService:
             raise Conflict(f"{', '.join(holders)} {verb} for this module. Revoke {them} first.")
         await self.store.delete(who.tenant_id, module_id)
 
-    async def bulk_remove(self, who: Caller, ids: list[str]) -> dict[str, Any]:
+    async def bulk_remove(self, who: Caller, ids: list[str]) -> BulkOutcome:
         _can(who, "tools", "delete", what="tools")
-        out: dict[str, Any] = {"updated": [], "skipped": []}
+        out: BulkOutcome = {"updated": [], "skipped": []}
         for module_id in ids:
             m = await self.store.get(who.tenant_id, module_id)
-            if m is None or not self._sees(who, m):
+            if m is None or not self._sees(who, m) or not self._team_owns(who, m):
                 out["skipped"].append({"id": module_id, "reason": "Not found"})
                 continue
             try:
@@ -1491,37 +2006,60 @@ class ModuleService:
         return out
 
     async def update_operation(
-        self, who: Caller, module_id: str, op_id: str, patch: dict[str, Any], fields: set[str]
-    ) -> dict[str, Any]:
+        self, who: Caller, module_id: str, op_id: str, patch: OperationPatchIn, fields: set[str]
+    ) -> ModuleDetail:
         """`fields` names the keys the caller sent, so `binding: null` (remove it) differs from leaving it out."""
         _can(who, "tools", "edit", what="tools")
+        levels = await self._levels(who.tenant_id, who.team)
         m = await self._changeable(who, module_id)
         o = next((x for x in m["operations"] if x["id"] == op_id), None)
         if o is None:
             raise NotFound("Operation")
         _refuse_during_review(m, "edit operations")
-        two = int(o.get("approvers") or 1) > 1 and patch.get("approvers") != 1
-        if patch.get("requires_approval") is False and two:
+        # Read through the dump: the attribute is deprecated, and reading it warns on every edit.
+        flag = patch.model_dump(include={"requires_approval"})["requires_approval"]
+        two = int(o.get("approvers") or 1) > 1 and patch.approvers != 1
+        if flag is False and two:
             raise Unprocessable("An operation two people approve always needs a person's approval.")
-        rate = patch.get("rate_limit_per_min")
+        if flag is not None and "approval_mode" not in fields and (patch.access or o["access"]) == "write":
+            # The older flag still arrives from callers; the resolver reads only approval_mode, so it is stored as that:
+            # true asks a reviewer, false hands the answer back to the app and team.
+            patch = patch.model_copy(update={"approval_mode": "reviewer" if flag else None})
+            fields = fields | {"approval_mode"}
+        mode = patch.approval_mode if "approval_mode" in fields else o.get("approval_mode")
+        if mode is not None and (patch.access or o["access"]) != "write":
+            raise Unprocessable("Only a write has an approval mode; a read never waits.")
+        if mode in ("none", "person") and int(patch.approvers or o.get("approvers") or 1) > 1:
+            raise Unprocessable("An operation two people approve always asks a reviewer.")
+        rate = patch.rate_limit_per_min
         if rate is not None and not 1 <= rate <= 10_000:
             raise ValidationFailed("Set a rate limit between 1 and 10,000 calls a minute.")
-        amount = patch.get("amount_max")
+        amount = patch.amount_max
         if amount is not None and (o["access"] != "write" or amount <= 0):
             raise ValidationFailed("Only write operations take an amount limit, and it must be above zero.")
         if amount is not None and not any(f["name"] == "amount" for f in o["input"]):
             # The gateway reads the limit from the `amount` input; on an operation without one it could never hold.
             raise Unprocessable(f"{o['name']} has no amount input, so an amount limit would have nothing to check.")
-        approvers = patch.get("approvers")
+        approvers = patch.approvers
         if approvers is not None and approvers not in (1, 2):
             raise ValidationFailed("A write is approved by one person or by two different people.")
-        team = patch.get("approver_team")
+        team = patch.approver_team
         # The directory is the console seed. A platform team the token names (the demo team) is not in that
         # list; the caller naming their own team is enough (a record belongs to the acting team).
         if team is not None and self.dir.team_by_id(team) is None and team != who.team.id:
             raise Unprocessable(f"{team} is not a team in this workspace.")
-        binding = patch.get("binding")
-        new_input = self._field_list(patch["input"]) if "input" in fields and patch.get("input") is not None else None
+        # Stored as the console sends it (bindTo), like the seeded bindings.
+        binding: Binding | None = (
+            {
+                "arg": patch.binding.arg,
+                "bindTo": patch.binding.bind_to,
+                "mode": patch.binding.mode,
+                "required": patch.binding.required,
+            }
+            if patch.binding is not None
+            else None
+        )
+        new_input = self._field_list(patch.input) if "input" in fields and patch.input is not None else None
         names = {f["name"] for f in (new_input if new_input is not None else o["input"])}
         if binding and binding["arg"] not in names:
             raise ValidationFailed(f"{binding['arg']} is not an input of {o['name']}.")
@@ -1536,9 +2074,10 @@ class ModuleService:
                 body=shape.get("body", o.get("body")) if "body" in shape else o.get("body"),
                 binding=binding if "binding" in fields else o["binding"],
             )
-        access = patch.get("access")
+        access = patch.access
+        answer_before = o.get("approval_mode")
         self._take_baseline(m)
-        changes: list[dict[str, Any]] = self._shape_changes(o, shape)
+        changes: list[Change] = self._shape_changes(o, shape)
         name = o["name"]
         if new_input is not None:
             changes.extend(self._input_changes(o, new_input))
@@ -1549,12 +2088,12 @@ class ModuleService:
             detail = f"Access {o['access']} → {access}"
             changes.append({"operation": name, "kind": "access_widened", "detail": detail, "major": True})
             o["access"] = access
-            # A read never waits; a write keeps its own switch, off unless someone turned it on.
-            if access == "read":
-                o["requires_approval"] = False
+            # A read never waits; a read made a write has no approval setting of its own yet, so the team default
+            # decides. A requiresApproval in the same patch applies after this.
+            o["requires_approval"] = None if access == "write" else False
             if access == "read":
                 o["amount_max"] = None
-        if patch.get("enabled") is not None and patch["enabled"] != o["enabled"]:
+        if patch.enabled is not None and patch.enabled != o["enabled"]:
             # Hiding an operation a workflow is approved for breaks that workflow, so it is a major change.
             users = list(
                 dict.fromkeys(
@@ -1563,7 +2102,7 @@ class ModuleService:
                     if a["status"] == "approved" and name in a["operations"]
                 )
             )
-            if patch["enabled"]:
+            if patch.enabled:
                 changes.append({"operation": name, "kind": "added", "detail": "Exposed to workflows", "major": True})
             elif users:
                 verb = "calls" if len(users) == 1 else "call"
@@ -1572,12 +2111,29 @@ class ModuleService:
             else:
                 detail = "Hidden from workflows; no workflow is approved for it"
                 changes.append({"operation": name, "kind": "removed", "detail": detail, "major": False})
-            o["enabled"] = patch["enabled"]
-        if patch.get("requires_approval") is not None and patch["requires_approval"] != o["requires_approval"]:
-            on = patch["requires_approval"]
-            detail = "Every call waits for an approval" if on else "Calls no longer wait for a person"
-            changes.append({"operation": name, "kind": "settings", "detail": detail, "major": not on})
-            o["requires_approval"] = on
+            o["enabled"] = patch.enabled
+        flag_changed = flag is not None and flag != o.get("requires_approval")
+        if flag is not None:
+            # Kept as sent for older readers; the approval_mode change below is what is logged and enforced.
+            o["requires_approval"] = flag
+        if "approval_mode" in fields and mode != o.get("approval_mode"):
+            before_mode = o.get("approval_mode")
+            # Asking less than the app and team do, or handing the answer back to them, widens what runs unattended:
+            # Security reviews it. Asking a reviewer is stricter and publishes as a minor change.
+            detail = f"Approval {_MODE_WORDS[before_mode]} → {_MODE_WORDS[mode]}"
+            changes.append({"operation": name, "kind": "settings", "detail": detail, "major": mode != "reviewer"})
+            o["approval_mode"] = mode
+        elif flag_changed:
+            # The stored flag moved but the answer did not (a tool already following its app, told false): still an
+            # edit, so a script that re-sends it is not refused as "Nothing changed". No effect on calls, so minor.
+            detail = f"Approval {_MODE_WORDS[o.get('approval_mode')]}"
+            changes.append({"operation": name, "kind": "settings", "detail": detail, "major": False})
+        if "reviewer_role" in fields and patch.reviewer_role != o.get("reviewer_role"):
+            role = patch.reviewer_role
+            anyone = "anyone who can approve"
+            detail = f"Reviewer role {o.get('reviewer_role') or anyone} → {role or anyone}"
+            changes.append({"operation": name, "kind": "settings", "detail": detail, "major": role is None})
+            o["reviewer_role"] = role
         if rate is not None and rate != o["rate_limit_per_min"]:
             detail = f"Rate limit {o['rate_limit_per_min']} → {rate} a minute"
             changes.append({"operation": name, "kind": "settings", "detail": detail, "major": False})
@@ -1593,9 +2149,9 @@ class ModuleService:
             detail = f"Approvers {o.get('approvers') or 1} → {approvers}"
             changes.append({"operation": name, "kind": "settings", "detail": detail, "major": approvers < 2})
             o["approvers"] = approvers
-            if approvers > 1 and not o["requires_approval"]:
-                # Asking for two approvers turns the tool's approval on: approvals are off by default,
-                # and a write two people approve always waits for them.
+            if approvers > 1 and o.get("approval_mode") != "reviewer":
+                # Asking for two approvers makes the tool ask a reviewer: a write two people approve always waits for
+                # them, even one switched to run at once.
                 changes.append(
                     {
                         "operation": name,
@@ -1605,32 +2161,33 @@ class ModuleService:
                     }
                 )
                 o["requires_approval"] = True
+                o["approval_mode"] = "reviewer"
         if team is not None and team != o.get("approver_team"):
             detail = f"Approved by {team}"
             changes.append({"operation": name, "kind": "settings", "detail": detail, "major": True})
             o["approver_team"] = team
         # Part of the approval policy, which Security reviews either way (publish compares it with the baseline).
-        step_up = patch.get("step_up")
+        step_up = patch.step_up
         if step_up is not None and step_up != bool(o.get("step_up")):
             detail = "Approving asks for a step-up" if step_up else "Approving no longer asks for a step-up"
             changes.append({"operation": name, "kind": "settings", "detail": detail, "major": True})
             o["step_up"] = step_up
         # Off lets a run with nobody behind it sign in with the team's backup account, so Security reviews it.
-        needs_person = patch.get("needs_person")
+        needs_person = patch.needs_person
         if needs_person is not None and needs_person != bool(o.get("needs_person")):
             detail = "Signs in as a person only" if needs_person else "No longer signs in as a person only"
             changes.append({"operation": name, "kind": "settings", "detail": detail, "major": not needs_person})
             o["needs_person"] = needs_person
         # Not reviewed: a scope only asks the person for more consent, and the system decides what a token may do.
-        scopes = patch.get("scopes")
+        scopes = patch.scopes
         if scopes is not None and list(dict.fromkeys(scopes)) != list(o.get("scopes") or []):
             scopes = list(dict.fromkeys(scopes))
             detail = f"Needs the scopes {', '.join(scopes)}" if scopes else "Needs no scopes beyond the connection's"
             changes.append({"operation": name, "kind": "settings", "detail": detail, "major": False})
             o["scopes"] = scopes
-        if patch.get("description") is not None and patch["description"].strip() != o["description"]:
+        if patch.description is not None and patch.description.strip() != o["description"]:
             changes.append({"operation": name, "kind": "settings", "detail": "Description edited", "major": False})
-            o["description"] = patch["description"].strip()
+            o["description"] = patch.description.strip()
         if "binding" in fields and binding != o["binding"]:
             old = o["binding"]
             widened = not binding or (
@@ -1651,8 +2208,7 @@ class ModuleService:
         # Writes the operation's example mock under its old name, while the console still sends it; removed in D3c/D3d,
         # when the console writes the example through the mock routes.
         if "stub" in fields:
-            stub = patch.get("stub")
-            stub = {"ok": True} if stub is None else stub
+            stub: JsonValue = {"ok": True} if patch.stub is None else patch.stub
             if len(json.dumps(stub)) > MAX_STUB_BYTES:
                 raise ValidationFailed(f"Keep the mock response under {MAX_STUB_BYTES // 1000} KB.")
             if stub != o.get("stub"):
@@ -1661,51 +2217,75 @@ class ModuleService:
                     {"operation": name, "kind": "settings", "detail": "Mock response edited", "major": False}
                 )
                 o["stub"] = stub
-        if "code" in fields and patch.get("code") is not None:
-            changes.extend(self._code_changes(o, _code_settings(patch["code"])))
+        if "code" in fields and patch.code is not None:
+            changes.extend(self._code_changes(o, _code_settings(patch.code)))
         if not changes:
             raise ValidationFailed("Nothing changed.")
+        answer_changed = o.get("approval_mode") != answer_before
         self._stage(m, changes)
-        return await self._detail(await self._save(m), who.team, who)
+        # A tool's own answer reaches agents' kept tool lists only when told: one event with the save.
+        told = (
+            [policy_changed_event(m, o, who.team.id, who.principal.email if who.principal else None)]
+            if answer_changed
+            else []
+        )
+        return await self._detail(await self._save(m, events=told), who.team, who, levels=levels)
 
     @staticmethod
-    def _code_changes(o: dict[str, Any], code: dict[str, Any]) -> list[dict[str, Any]]:
+    def _code_changes(o: Operation, code: CodeSettings) -> list[Change]:
         """Applies a code operation's new settings. A tool or secret it did not have widens what the function reaches,
         so Security reviews it; an edit to the source or the limits alone is minor."""
         if o["executor"] != "code":
             raise ValidationFailed(f"{o['name']} is not a code operation.")
-        before = cast(dict[str, Any], o.get("code") or {})
+        before = o.get("code")
         if code == before:
             return []
         added = [
-            *(set(code["bindings"]) - set(before.get("bindings") or [])),
-            *(set(code["secrets"]) - set(before.get("secrets") or [])),
+            *(set(code["bindings"]) - set((before.get("bindings") or []) if before else [])),
+            *(set(code["secrets"]) - set((before.get("secrets") or []) if before else [])),
         ]
         detail = f"May now use {', '.join(sorted(added))}" if added else "Function edited"
         o["code"] = code
         kind = "binding_changed" if added else "settings"
         return [{"operation": o["name"], "kind": kind, "detail": detail, "major": bool(added)}]
 
-    async def add_function(self, who: Caller, module_id: str, f: dict[str, Any]) -> dict[str, Any]:
+    async def add_function(self, who: Caller, module_id: str, f: CodeOperationIn) -> ModuleDetail:
         """Adds a function to a code module."""
         _can(who, "tools", "edit", what="tools")
+        levels = await self._levels(who.tenant_id, who.team)
         m = await self._changeable(who, module_id)
         if kind_of(m) != "code" or m["connection_id"]:
             raise ValidationFailed(f"{m['display_name']} is not a code module; add its operations from its system.")
         await self._append(who, m, [_code_operation(f)])
-        return await self._detail(await self._save(m), who.team, who)
+        return await self._detail(await self._save(m), who.team, who, levels=levels)
 
     def _checked_shape(
-        self, m: Aggregate, o: dict[str, Any], patch: dict[str, Any], fields: set[str], base: str
-    ) -> dict[str, Any]:
+        self, m: Aggregate, o: Operation, patch: OperationPatchIn, fields: set[str], base: str
+    ) -> CallShape:
         """The call-shape fields this patch sets, validated as add validates them; nothing is applied here."""
-        sent = {k: patch.get(k) for k in CALL_SHAPE if k in fields}
+        sent: CallShape = {}
+        if "method" in fields:
+            sent["method"] = patch.method
+        if "path" in fields:
+            sent["path"] = patch.path
+        if "headers" in fields:
+            sent["headers"] = (
+                None if patch.headers is None else [{"key": h.key, "value": h.value} for h in patch.headers]
+            )
+        if "body" in fields:
+            sent["body"] = patch.body
+        if "body_encoding" in fields:
+            sent["body_encoding"] = patch.body_encoding
+        if "response_transform" in fields:
+            sent["response_transform"] = patch.response_transform
+        if "timeout_ms" in fields:
+            sent["timeout_ms"] = patch.timeout_ms
         if not sent:
             return {}
         if o["executor"] != "http":
             raise ValidationFailed(f"{o['name']} is not an HTTP operation; its call comes from its server or seed.")
         for k in ("method", "path", "headers"):
-            if k in sent and sent[k] is None:
+            if k in sent and sent.get(k) is None:
                 raise ValidationFailed(f"An HTTP operation keeps a {k}.")
         # Every problem is found before any is reported, so one save lists them all.
         problems: list[str] = []
@@ -1721,13 +2301,13 @@ class ModuleService:
                 except ValidationFailed as e:
                     problems.append(e.message)
         if "headers" in sent:
-            sent["headers"] = self._checked_headers(cast(list[dict[str, str]], sent["headers"]), problems)
+            sent["headers"] = self._checked_headers(sent["headers"] or [], problems)
         if "body" in sent:
             sent["body"] = (sent["body"] or "").strip() or None
-        if {"body", "body_encoding", "headers"} & sent.keys():
+        if "body" in sent or "body_encoding" in sent or "headers" in sent:
             body, encoding = sent.get("body", o.get("body")), sent.get("body_encoding", o.get("body_encoding"))
-            headers = cast(list[dict[str, str]], sent["headers"] if "headers" in sent else o.get("headers") or [])
-            if problem := self._encoding_problem(body, encoding, headers):
+            headers = sent["headers"] if "headers" in sent else o.get("headers") or []
+            if problem := self._encoding_problem(body, encoding, headers or []):
                 problems.append(problem)
         if "response_transform" in sent:
             sent["response_transform"] = (sent["response_transform"] or "").strip() or None
@@ -1737,16 +2317,31 @@ class ModuleService:
         if limit is not None and not 1_000 <= limit <= 120_000:
             problems.append("Set a timeout between 1 and 120 seconds (1000 to 120000 ms).")
         refuse(problems)
-        return {k: v for k, v in sent.items() if v != o.get(k)}
+        changed: CallShape = {}
+        if "method" in sent and sent["method"] != o.get("method"):
+            changed["method"] = sent["method"]
+        if "path" in sent and sent["path"] != o.get("path"):
+            changed["path"] = sent["path"]
+        if "headers" in sent and sent["headers"] != o.get("headers"):
+            changed["headers"] = sent["headers"]
+        if "body" in sent and sent["body"] != o.get("body"):
+            changed["body"] = sent["body"]
+        if "body_encoding" in sent and sent["body_encoding"] != o.get("body_encoding"):
+            changed["body_encoding"] = sent["body_encoding"]
+        if "response_transform" in sent and sent["response_transform"] != o.get("response_transform"):
+            changed["response_transform"] = sent["response_transform"]
+        if "timeout_ms" in sent and sent["timeout_ms"] != o.get("timeout_ms"):
+            changed["timeout_ms"] = sent["timeout_ms"]
+        return changed
 
     @staticmethod
-    def _shape_changes(o: dict[str, Any], shape: dict[str, Any]) -> list[dict[str, Any]]:
+    def _shape_changes(o: Operation, shape: CallShape) -> list[Change]:
         """Applies a validated call-shape edit to `o` and says what changed. A new method, path or body changes the
         contract a workflow was approved against, so it is major; headers, the transform and the timeout are minor."""
         if not shape:
             return []
         name = o["name"]
-        out: list[dict[str, Any]] = []
+        out: list[Change] = []
         contract = [k for k in ("method", "path", "body", "body_encoding") if k in shape]
         if contract:
             before = f"{o['method']} {o['path']}"
@@ -1765,7 +2360,20 @@ class ModuleService:
             minor.append(f"Timeout {limit / 1000:g} s" if limit else "Timeout back to the module's")
         if minor:
             out.append({"operation": name, "kind": "settings", "detail": "; ".join(minor), "major": False})
-        o.update(shape)
+        if "method" in shape:
+            o["method"] = shape["method"]
+        if "path" in shape:
+            o["path"] = shape["path"]
+        if "headers" in shape:
+            o["headers"] = shape["headers"] or []
+        if "body" in shape:
+            o["body"] = shape["body"]
+        if "body_encoding" in shape:
+            o["body_encoding"] = shape["body_encoding"]
+        if "response_transform" in shape:
+            o["response_transform"] = shape["response_transform"]
+        if "timeout_ms" in shape:
+            o["timeout_ms"] = shape["timeout_ms"]
         # A placeholder the new path or body names becomes an input; fields nothing names stay, and the console warns.
         named = [*URL_VAR.findall(o["path"] or ""), *BODY_VAR.findall(o.get("body") or "")]
         have = {f["name"] for f in o["input"]}
@@ -1773,29 +2381,32 @@ class ModuleService:
         return out
 
     @staticmethod
-    def _field_list(fields: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _field_list(fields: Sequence[SchemaFieldIn]) -> list[InputField]:
         """The input fields as stored: trimmed text, and unset optional parts left out."""
-        out: list[dict[str, Any]] = []
+        out: list[InputField] = []
         for f in fields:
-            row: dict[str, Any] = {"name": str(f["name"]).strip(), "type": f["type"], "required": bool(f["required"])}
-            for k in ("description", "format", "example"):
-                if f.get(k) not in (None, ""):
-                    row[k] = str(f[k]).strip()
-            if f.get("enum"):
-                row["enum"] = [str(v).strip() for v in f["enum"]]
-            if f.get("default") is not None:
-                row["default"] = f["default"]
+            row: InputField = {"name": str(f.name).strip(), "type": f.type, "required": bool(f.required)}
+            if f.description not in (None, ""):
+                row["description"] = str(f.description).strip()
+            if f.format not in (None, ""):
+                row["format"] = str(f.format).strip()
+            if f.example not in (None, ""):
+                row["example"] = str(f.example).strip()
+            if f.enum:
+                row["enum"] = [str(v).strip() for v in f.enum]
+            if f.default is not None:
+                row["default"] = f.default
             out.append(row)
         return out
 
     @staticmethod
     def _check_input(
-        o: dict[str, Any],
-        fields: list[dict[str, Any]],
+        o: Operation,
+        fields: list[InputField],
         *,
         path: str | None,
         body: str | None,
-        binding: dict[str, Any] | None,
+        binding: Binding | None,
     ) -> None:
         """Refuses an input schema the call could not use, naming the field (details.field `input.<name>`)."""
 
@@ -1844,7 +2455,7 @@ class ModuleService:
             raise refuse("amount", "The amount limit reads the amount input; remove the limit before removing it.")
 
     @staticmethod
-    def _input_changes(o: dict[str, Any], fields: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _input_changes(o: Operation, fields: list[InputField]) -> list[Change]:
         """What an input edit changes for the agent. A field it must now send, a field taken away, a type change or a
         changed list of allowed values or a changed default changes the contract callers were approved against, so it is
         major; a new optional field without a default, a field made optional, a description or example is minor."""
@@ -1873,7 +2484,7 @@ class ModuleService:
             if any(old.get(k) != f.get(k) for k in ("description", "format", "example")):
                 minor.append(f"{n} edited")
         major.extend(f"{n} removed" for n in before if n not in after)
-        out: list[dict[str, Any]] = []
+        out: list[Change] = []
         if major:
             out.append({"operation": name, "kind": "schema_changed", "detail": "; ".join(major), "major": True})
         elif minor:
@@ -1882,9 +2493,9 @@ class ModuleService:
             out.append({"operation": name, "kind": "schema_changed", "detail": "Fields reordered", "major": False})
         return out
 
-    async def publish(self, who: Caller, module_id: str, note: str) -> dict[str, Any]:
+    async def publish(self, who: Caller, module_id: str, note: str) -> ModuleDetail:
         _can(who, "tools", "publish", what="tools")
-        m = await self._find(who, module_id)
+        m = await self._owned(who, module_id)
         _not_a_plugin(m)
         reviewed_change = _differs_from_published(m)
         if not m["pending"] and not reviewed_change:
@@ -1896,7 +2507,9 @@ class ModuleService:
         # "always" sends every version to a review; "major" and "never" send a major one only, since every major
         # change to a tool module touches what it calls, how a write is approved, or where it reaches.
         mode = (
-            await self.publish_policy.mode(who.tenant_id, m["team_id"]) if self.publish_policy else ToolsMode("major")
+            await self.publish_policy.mode(who.tenant_id, m["team_id"] or "")
+            if self.publish_policy
+            else ToolsMode("major")
         )
         waits = major or mode.mode == "always"
         if not m["pending"]:
@@ -1908,10 +2521,11 @@ class ModuleService:
         version = f"{a + 1}.0.0" if major else f"{a}.{b + 1}.0"
         now = self.clock()
         if not waits:
-            m["versions"] = [{**v, "status": "deprecated"} if v["status"] == "published" else v for v in m["versions"]]
+            m["versions"] = [self._deprecated(v) if v["status"] == "published" else v for v in m["versions"]]
         m["versions"] = [
             *m["versions"],
             {
+                **version_defaults(),
                 "id": f"{m['id']}_v{version}",
                 "version": version,
                 "major": major_of(version),
@@ -1928,9 +2542,7 @@ class ModuleService:
         ]
         if waits:
             # A major change is the Security team's to decide; a minor one waiting under "always" is the module's team.
-            review_id = await self._open_review(
-                who, m, version, cast(list[dict[str, Any]], m["versions"][-1]["changes"]), note, security=major
-            )
+            review_id = await self._open_review(who, m, version, m["versions"][-1]["changes"], note, security=major)
             m["versions"][-1].update(review_id=review_id, requested_at=now)
         # A major version waits for Security: until it approves, calls keep the published call shape and approval policy
         # (the baseline), so a loosened policy or a new path does not run in the meantime.
@@ -1942,7 +2554,7 @@ class ModuleService:
         who: Caller,
         m: Aggregate,
         version: str,
-        changes: list[dict[str, Any]],
+        changes: list[Change],
         note: str,
         *,
         security: bool = True,
@@ -1963,18 +2575,20 @@ class ModuleService:
             security=security,
         )
 
-    async def discard(self, who: Caller, module_id: str) -> dict[str, Any]:
+    async def discard(self, who: Caller, module_id: str) -> ModuleDetail:
         _can(who, "tools", "edit", what="tools")
+        levels = await self._levels(who.tenant_id, who.team)
         m = await self._changeable(who, module_id)
         _refuse_during_review(m, "discard changes")
         if m["baseline"] is None:
             raise ValidationFailed("There are no changes to discard.")
-        m.update(operations=copy.deepcopy(m["baseline"]), pending=[], baseline=None)
-        return await self._detail(await self._save(m), who.team, who)
+        restored = [restored_operation(o) for o in published_operations(m["baseline"])]
+        m.update(operations=restored, pending=[], baseline=None)
+        return await self._detail(await self._save(m), who.team, who, levels=levels)
 
-    async def request_review(self, who: Caller, module_id: str, note: str) -> dict[str, Any]:
+    async def request_review(self, who: Caller, module_id: str, note: str) -> ModuleDetail:
         _can(who, "tools", "publish", what="tools")
-        m = await self._find(who, module_id)
+        m = await self._owned(who, module_id)
         _not_a_plugin(m)
         if any(v["status"] == "in_review" for v in m["versions"]):
             raise Conflict("A security review is already open for this module.")
@@ -1985,9 +2599,16 @@ class ModuleService:
         review_id = await self._open_review(who, m, m["version"], changes, note)
         if m["status"] == "draft":
             m["status"] = "in_review"
-        reviewed = {"review_id": review_id, "requested_at": self.clock(), "finding": None, "reviewer": None}
         status = "in_review" if last["status"] == "draft" else last["status"]
-        m["versions"] = [*m["versions"][:-1], {**last, **reviewed, "status": status}]
+        reviewed: Version = {
+            **last,
+            "review_id": review_id,
+            "requested_at": self.clock(),
+            "finding": None,
+            "reviewer": None,
+            "status": status,
+        }
+        m["versions"] = [*m["versions"][:-1], reviewed]
         return await self._detail(await self._save(m), who.team, who)
 
     async def apply_decision(
@@ -2000,12 +2621,13 @@ class ModuleService:
         decision: str,
         reason: str | None,
         by: str | None,
-    ) -> dict[str, Any]:
+    ) -> ModuleDetail:
         """A decision made in Reviews, sent by agents-service, which already held it to the review rules: not
         the requester, not the saver, Security for a security change, a reason for a no. Approving the module's
         current version publishes it and clears drift, since the reviewed tool list is the one now held; a no sends a
         module never published back to draft, and withdraws the declined version of a published one. Applying the same
         decision twice changes nothing."""
+        levels = await self._levels(tenant_id, self.dir.everyone)
         m = await self.store.get_any(tenant_id, module_id)
         if m is None:
             raise NotFound("Module")
@@ -2013,7 +2635,7 @@ class ModuleService:
         if v is None:
             raise NotFound("Review")
         if v["status"] != "in_review":
-            return await self._detail(m, self.dir.everyone)
+            return await self._detail(m, self.dir.everyone, levels=levels)
         now = self.clock()
         v.update(reviewer=by, finding=None if decision == "approved" else (reason or "").strip() or None)
         current = version == m["version"]
@@ -2032,17 +2654,17 @@ class ModuleService:
                 v["status"] = "draft"
             else:
                 v["status"] = "revoked"
-        return await self._detail(await self._save(m), self.dir.everyone)
+        return await self._detail(await self._save(m), self.dir.everyone, levels=levels)
 
     # ── Workflow approvals ────────────────────────────────────────────────
 
-    async def request_approval(self, who: Caller, module_id: str, i: dict[str, Any]) -> dict[str, Any]:
+    async def request_approval(self, who: Caller, module_id: str, i: ApprovalRequestIn) -> ApprovalView:
         _can(who, "tools", "edit", what="tools")
         m = await self._find(who, module_id)
         _not_a_plugin(m)
         if m["status"] == "draft":
             raise Conflict("Submit the module for security review before workflows can request it.")
-        wf = (await self.workflows.all(who.tenant_id)).get(i["workflow_id"])
+        wf = (await self.workflows.all(who.tenant_id)).get(i.workflow_id)
         if wf is None:
             raise ValidationFailed("Choose a workflow.")
         if not wf.team_id:
@@ -2050,11 +2672,11 @@ class ModuleService:
             raise Unprocessable(f"{wf.name} belongs to no team, so no team can be granted access for it.")
         # The workflow's platform team, which the dev seed need not hold: the grant is for that team id.
         owner = self.dir.team(wf.team_id)
-        if not i["operations"]:
+        if not i.operations:
             raise ValidationFailed("Choose at least one operation.")
         # The default policy: the module's team decides, unless an operation asked for names its own approving team.
         decider = next(
-            (o["approver_team"] for o in m["operations"] if o["name"] in i["operations"] and o.get("approver_team")),
+            (o["approver_team"] for o in m["operations"] if o["name"] in i.operations and o.get("approver_team")),
             m["team_id"],
         )
         if decider is None:
@@ -2064,35 +2686,35 @@ class ModuleService:
                 f"{m['display_name']} belongs to no team: every team's workflows may already use it, so there is "
                 "nothing to request."
             )
-        production = i["environment"] == "production"
+        production = i.environment == "production"
         most = 365 if production else 90
-        if not 1 <= i["expires_in_days"] <= most:
+        if not 1 <= i.expires_in_days <= most:
             raise ValidationFailed(f"{'Production' if production else 'Test'} approvals last at most {most} days.")
-        if len(i["justification"].strip()) < 10:
+        if len(i.justification.strip()) < 10:
             raise ValidationFailed("Explain why the workflow needs these operations.")
         name = wf.name
-        if any(a["workflow_id"] == i["workflow_id"] and a["status"] == "requested" for a in self._approvals(m)):
+        if any(a["workflow_id"] == i.workflow_id and a["status"] == "requested" for a in self._approvals(m)):
             raise Conflict(f"{name} already has an open request for this module.")
         now = self.clock()
         approval_id = new_id("apr")
-        a: dict[str, Any] = {
+        a: Approval = {
             "id": approval_id,
-            "workflow_id": i["workflow_id"],
+            "workflow_id": i.workflow_id,
             "workflow_name": name,
             "workflow_team_id": owner.id,
-            "environment": i["environment"],
+            "environment": i.environment,
             "major": major_of(m["version"]),
-            "operations": i["operations"],
+            "operations": i.operations,
             "constraints": None,
             "requested_by": who.name,
             # Who asked, as the token names them: the requester rule compares it, never the display name.
             "requested_by_email": who.principal.email if who.principal else None,
-            "justification": i["justification"].strip(),
+            "justification": i.justification.strip(),
             "requested_at": now,
             "decided_by": None,
             "decided_at": None,
             "status": "requested",
-            "expires_at": now + timedelta(days=i["expires_in_days"]),
+            "expires_at": now + timedelta(days=i.expires_in_days),
             "reason": None,
             # Decided in Human Tasks by `decider`; who in that team may decide is can(reviews.decide), as for
             # any review.
@@ -2115,7 +2737,7 @@ class ModuleService:
         by: str | None,
         team_id: str | None = None,
         deciders: Sequence[str] = (),
-    ) -> dict[str, Any]:
+    ) -> ApprovalView:
         """A tool access review's decision from Human Tasks, applied to the module's approval: approved grants
         it, anything else ends the request. Applying the same decision again changes nothing; a request already ended
         another way (revoked, or decided otherwise) is refused, so a late approval never revives a revoked grant."""
@@ -2128,13 +2750,22 @@ class ModuleService:
         if team_id is not None and a.get("decider_team") not in (None, team_id):
             # The system workflow runs in the deciding team; a run in another team decides nothing here.
             raise Forbidden("This request is decided by another team.", code="team_forbidden")
-        asker = str(a.get("requested_by_email") or "").lower()
-        if asker and asker in {str(d).lower() for d in (*deciders, by or "")}:
-            # Separation of duties follows the tenant's requesterMayDecide, as every other decision does: the
-            # asker decides their own request only while it is on.
-            allowed = self.requester_policy is not None and await self.requester_policy.allowed(tenant_id)
-            if not allowed:
-                raise Forbidden("The person who asked for this access cannot decide it.", code="requester_decides")
+        asker = str(a.get("requested_by_email") or "")
+        if asker and asker.casefold() in {str(d).casefold() for d in (*deciders, by or "")}:
+            # Separation of duties through can(requested_by=), with requesterMayDecide read now rather than from a
+            # token: the asker decides their own request only while it is on.
+            may_decide = self.requester_policy is not None and await self.requester_policy.allowed(tenant_id)
+            refused = own_request_refusal(
+                Access(),
+                tenant_id,
+                asker,
+                (*deciders, by),
+                may_decide=may_decide,
+                team_id=a.get("decider_team"),
+                what="this access",
+            )
+            if refused is not None:
+                raise refused
         status = "approved" if decision == "approved" else "rejected"
         if a["status"] == status:
             return self._approval_out(a)
@@ -2146,8 +2777,8 @@ class ModuleService:
 
     async def decide_approval(
         self, who: Caller, module_id: str, approval_id: str, decision: str, reason: str | None
-    ) -> dict[str, Any]:
-        m = await self._find(who, module_id)
+    ) -> ApprovalView:
+        m = await self._owned(who, module_id)
         a = next((x for x in m["approvals"] if x["id"] == approval_id), None)
         if a is None:
             raise NotFound("Approval")
@@ -2169,12 +2800,12 @@ class ModuleService:
         await self._save(m, touch=False)
         return self._approval_out(a)
 
-    async def revoke_approvals(self, who: Caller, module_id: str, ids: list[str], reason: str) -> dict[str, Any]:
+    async def revoke_approvals(self, who: Caller, module_id: str, ids: list[str], reason: str) -> BulkOutcome:
         _can(who, "tools", "decide", what="tool approvals")
-        m = await self._find(who, module_id)
+        m = await self._owned(who, module_id)
         if not reason.strip():
             raise ValidationFailed("Give a reason.")
-        out: dict[str, Any] = {"updated": [], "skipped": []}
+        out: BulkOutcome = {"updated": [], "skipped": []}
         for approval_id in ids:
             a = next((x for x in m["approvals"] if x["id"] == approval_id), None)
             if a is None:
@@ -2194,7 +2825,7 @@ class ModuleService:
 
     # ── Test console ──────────────────────────────────────────────────────
 
-    async def test(self, who: Caller, module_id: str, i: dict[str, Any]) -> dict[str, Any]:
+    async def test(self, who: Caller, module_id: str, i: TestRun) -> TestResult:
         """What the gateway would decide for this call in this run context, and the answer when it allows. On the
         sandbox target, the console's Real, the call is a gateway call: the same approval, limits, egress,
         account choice and call log as an agent's, in the environment the person picked; on the stub target, Mock,
@@ -2207,18 +2838,20 @@ class ModuleService:
             # A key's tools.run is for the gateway's call path over MCP; the test console is a person's page.
             raise Forbidden("An API key runs tools over MCP, not the test console.", code="role_required")
         _can(who, "tools", "run", what="tools")
-        m = await self._find(who, module_id)
+        # Trying a tool is its owners' authoring page: a team holding only a workflow's grant calls it through the
+        # gateway's /v1/calls, never through the owner context here.
+        m = await self._owned(who, module_id)
         o = next((x for x in m["operations"] if x["name"] == i["operation"]), None)
         if o is None:
             raise NotFound("Operation")
         owner = i["context_id"] == OWNER_CONTEXT
-        ctx = None if owner else next((c for c in self._run_contexts(m, who.team) if c["id"] == i["context_id"]), None)
+        ctx = None if owner else next((c for c in self._run_contexts() if c["id"] == i["context_id"]), None)
         if ctx is None and not owner:
             raise ValidationFailed("Choose a run context.")
         call_id = new_id("test")
         sandbox = i["target"] == "sandbox"
 
-        def deny(reason: str) -> dict[str, Any]:
+        def deny(reason: str) -> TestResult:
             return {
                 "decision": "deny",
                 "denyReason": reason,
@@ -2243,11 +2876,11 @@ class ModuleService:
                 return deny("approval_expired" if any(a["status"] == "expired" for a in mine) else "no_approval")
             if not any(o["name"] in a["operations"] for a in active):
                 return deny("operation_not_approved")
-        args = dict(i["input"])
-        bound: list[dict[str, Any]] = []
+        args: Json = dict(i["input"])
+        bound: list[BoundValue] = []
         b = o["binding"]
         if b:
-            value = (ctx or {}).get("bindings", {}).get(b["bindTo"]) if ctx else None
+            value = ctx["bindings"].get(b["bindTo"]) if ctx else None
             source = b["bindTo"]
             if not value and (ctx is None or ctx["caseId"] == SAMPLE_CASE):
                 # The owner, or a sample context, has no case: the value typed stands in for it, marked as a sample.
@@ -2270,26 +2903,41 @@ class ModuleService:
                 "bound": bound,
                 "wouldPause": False,
                 "invalid": [{"field": f, "message": "Required."} for f in missing],
-                "output": {"error": "invalid_input", "missing": missing},
+                "output": {"error": "invalid_input", "missing": [*missing]},
                 "masked": [],
                 "callId": call_id,
             }
         if amount_refusal(o, args) is not None:  # the gateway's own check (ops_tools.limits)
             return deny("constraint")
-        would_pause = o["access"] in WRITES and o["requires_approval"]
+        would_pause = o["access"] in WRITES and bool(
+            (
+                await self.approvals.answer(
+                    who.tenant_id,
+                    who.team.id,
+                    m,
+                    access=o["access"],
+                    setting=tool_mode(o),
+                    reviewer_role=o.get("reviewer_role"),
+                    approvers=approval_policy(m, o)["approvers"],
+                    test_account=bool(m.get("sandbox")),
+                    channel="test",
+                    tool=o["name"],
+                )
+            )["waits"]
+        )
         # A real write in a workflow's context needs a real approval; simulate_approval stands in for one on Mock only.
         if would_pause and sandbox and ctx is not None:
             return deny("approval_token_missing")
         # The workbench's draft transform and mock run in place of the operation's for this test only: nothing
         # is staged, so what agents get changes only through staging and publishing.
-        draft: dict[str, Any] = i.get("draft") or {}
+        draft: TestDraft = i.get("draft") or {}
         if "stub" in draft and len(json.dumps(draft["stub"])) > MAX_STUB_BYTES:
             raise ValidationFailed(f"Keep the mock response under {MAX_STUB_BYTES // 1000} KB.")
         template = draft["response_transform"] if "response_transform" in draft else o.get("response_transform")
-        mock = draft["stub"] if "stub" in draft and draft["stub"] is not None else o["stub"]
+        mock = draft["stub"] if "stub" in draft and draft["stub"] is not None else o.get("stub")
         trial = Trial()
         trial.note("Input checked against the operation's schema")
-        out: dict[str, Any] = {
+        out: TestResult = {
             "decision": "allow",
             "status": 200,
             "latencyMs": 0,
@@ -2318,6 +2966,7 @@ class ModuleService:
                     secret_values=i.get("secret_values"),
                     trial=trial,
                     environment=str(i.get("environment") or TEST),
+                    confirmed=bool(i.get("confirmed")),
                 )
             )
         elif answer is not None:
@@ -2350,14 +2999,15 @@ class ModuleService:
     async def _real_call(
         self,
         who: Caller,
-        module: dict[str, Any],
-        op: dict[str, Any],
-        args: dict[str, Any],
+        module: Module,
+        op: Operation,
+        args: Json,
         *,
         secret_values: dict[str, str] | None,
         trial: Trial,
         environment: str,
-    ) -> dict[str, Any]:
+        confirmed: bool = False,
+    ) -> TestResult:
         """The Real run, as one gateway call: the gateway decides it as it decides an agent's call (approval,
         limits, egress, the team's account) in the environment the person chose, and logs it under them. `trial` comes
         back with the request as sent, secrets hidden; `secret_values` stand in for unset secrets for this call only.
@@ -2373,8 +3023,9 @@ class ModuleService:
             act=f"console:{who.name}",
             trial=trial,
             secret_values=secret_values,
+            confirmed=confirmed,
         )
-        result: dict[str, Any] = {
+        result: TestResult = {
             "callId": ran["callId"],
             "latencyMs": round((time.perf_counter() - started) * 1000),
             "reachedHost": urlsplit(await self._address(str(module["tenant_id"]), module)).hostname,
@@ -2382,18 +3033,26 @@ class ModuleService:
         }
         if "code" in ran:
             message = "; ".join(ran["reasons"])
-            return result | {
+            code = ran["code"]
+            if code == "gateway_refused" and any("needs an approval token" in r for r in ran["reasons"]):
+                # A live-account test run waiting for the person's yes reads as a missing approval, like a workflow's.
+                code = "approval_token_missing"
+            return {
+                **result,
                 "decision": "deny",
-                "denyReason": ran["code"],
+                "denyReason": code,
                 "denyMessage": message,
                 "status": ran["status"],
                 "output": {"error": ran["code"], "message": message},
             }
         result["output"] = ran["output"]
         if not ran["ok"]:
-            error = cast(dict[str, Any], cast(dict[str, Any], ran["output"]).get("error") or {})
+            answer = narrow.an_object(ran["output"], "A failed call's answer")
+            error = narrow.an_object(answer.get("error") or {}, "A failed call's error")
             # The upstream's own status when it answered; otherwise the gateway's, by whether the call timed out.
-            result["status"] = error.get("status") or (504 if "TIMEOUT" in str(error.get("code")) else 502)
+            result["status"] = narrow.field(error, "status", int) or (
+                504 if "TIMEOUT" in str(error.get("code")) else 502
+            )
         return result
 
     # ── Not in this card ──────────────────────────────────────────────────
@@ -2405,7 +3064,7 @@ class ModuleService:
         if conn is None:
             raise ValidationFailed("That connection no longer exists. Pick another one.")
         if status_of(conn, self.clock()) == "revoked":
-            raise Conflict(f"{conn['name']} is revoked. Reconnect it in Connections first.")
+            raise Conflict(f"{conn.name} is revoked. Reconnect it in Connections first.")
 
     async def _fetch(self, who: Caller, url: str) -> bytes:
         """GETs `url` through the egress policy: https to a listed host, connected only at a checked address."""
@@ -2424,23 +3083,25 @@ class ModuleService:
             raise Unprocessable(f"The document from {host} is larger than {MAX_SPEC_BYTES // 1_000_000} MB.")
         return res.content
 
-    async def _discover(self, who: Caller, source: dict[str, Any]) -> dict[str, Any]:
-        await self._connection_ok(who.tenant_id, source.get("connection_id"))
-        if source["kind"] == "openapi":
-            if not source.get("spec_url"):
-                if source.get("file_id") or source.get("file_name"):
+    async def _discover(self, who: Caller, source: ModuleSourceIn, module_connection: str | None = None) -> Discovered:
+        """`source`, read now. Its own connection is used when it names one, else `module_connection`, the module's."""
+        connection_id = source.connection_id if source.connection_id is not None else module_connection
+        await self._connection_ok(who.tenant_id, connection_id)
+        if source.kind == "openapi":
+            if not source.spec_url:
+                if source.file_id or source.file_name:
                     raise NotYetAvailable("Importing an uploaded document is not available yet; give its URL.")
                 raise ValidationFailed("Add the spec as a URL.")
-            raw = await self._fetch(who, source["spec_url"])
+            raw = await self._fetch(who, source.spec_url)
             try:
                 text = raw.decode()
-                spec: Any = json.loads(text) if text.lstrip().startswith("{") else yaml.safe_load(text)
-                return openapi.discover(spec, source["spec_url"])
+                spec: JsonValue = json.loads(text) if text.lstrip().startswith("{") else yaml.safe_load(text)
+                return openapi.discover(spec, source.spec_url)
             except (UnicodeDecodeError, ValueError, yaml.YAMLError) as e:
                 raise ValidationFailed(f"The document could not be read: {e}"[:300]) from e
-        if not source.get("url"):
+        if not source.url:
             raise ValidationFailed("Enter the MCP server's https address.")
-        return await self._discover_mcp(who, source["url"], source.get("connection_id"))
+        return await self._discover_mcp(who, source.url, connection_id)
 
     async def _signed_in_headers(self, who: Caller, connection_id: str | None, url: str) -> tuple[dict[str, str], Any]:
         """A discovery's sign-in through the named connection, in the test environment: its headers and its
@@ -2448,10 +3109,15 @@ class ModuleService:
         if not connection_id or self.auth is None:
             return {}, None
         conn = await self.connections.get(who.tenant_id, connection_id)
-        if conn is not None and conn["auth_kind"] == "none":
+        if conn is not None and conn.auth_kind == "none":
             # A module's own open connection holds only its address: there is nothing to sign in with.
             return {}, None
-        probe = {"tenant_id": who.tenant_id, "connection_id": connection_id, "team_id": who.team.id, "endpoint": url}
+        probe: ModuleRef = {
+            "tenant_id": who.tenant_id,
+            "connection_id": connection_id,
+            "team_id": who.team.id,
+            "endpoint": url,
+        }
         try:
             prepared = await self.auth.prepare(probe, TEST, tool="discovery", actor=who.name)
         except AuthFailed as e:
@@ -2460,7 +3126,7 @@ class ModuleService:
             ) from e
         return (prepared.headers, prepared.certificate) if prepared else ({}, None)
 
-    async def _discover_mcp(self, who: Caller, url: str, connection_id: str | None = None) -> dict[str, Any]:
+    async def _discover_mcp(self, who: Caller, url: str, connection_id: str | None = None) -> Discovered:
         if self.egress is None or self.http is None:
             raise NotYetAvailable("This service has no egress policy, so it reaches no MCP server.")
         headers, certificate = await self._signed_in_headers(who, connection_id, url)
@@ -2482,20 +3148,28 @@ class ModuleService:
         return mcp.discovered(tools, url, server)
 
     @staticmethod
-    def _public(result: dict[str, Any]) -> dict[str, Any]:
+    def _public(result: Discovered) -> PublicDiscovered:
         """The console's DiscoveryResult: an operation's headers stay on the service until import."""
-        ops = [
-            {k: v for k, v in o.items() if k not in ("headers", "stub", "output_shape", "response_schema")}
+        ops: list[PublicOperation] = [
+            {
+                "name": o["name"],
+                "description": o["description"],
+                "access": o["access"],
+                "method": o["method"],
+                "path": o["path"],
+                "group": o["group"],
+                "input": o["input"],
+            }
             for o in result["operations"]
         ]
         return {**result, "operations": ops}
 
-    async def discover(self, who: Caller, source: dict[str, Any]) -> dict[str, Any]:
+    async def discover(self, who: Caller, source: ModuleSourceIn) -> PublicDiscovered:
         _can(who, "tools", "create", what="tools")
         return self._public(await self._discover(who, source))
 
     @staticmethod
-    def _chosen(found: dict[str, Any], chosen: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _chosen(found: Discovered, chosen: Sequence[DiscoveredOperation]) -> list[DiscoveredOperation]:
         """The caller's picks as the source describes them: name and the confirmed access class from the caller,
         everything else from the source. A name the source does not list is refused."""
         listed = {o["name"]: o for o in found["operations"]}
@@ -2505,15 +3179,15 @@ class ModuleService:
         executor = "mcp" if found["type"] == "mcp" else "http"
         return [{**listed[o["name"]], "access": o["access"], "executor": executor} for o in chosen]
 
-    async def import_operations(self, who: Caller, module_id: str, i: dict[str, Any]) -> dict[str, Any]:
+    async def import_operations(self, who: Caller, module_id: str, i: ImportOperationsIn) -> ModuleDetail:
         """Appends the chosen operations as the source describes them now; the caller picks which, and confirms each
         one's access class, but never supplies their method, path, inputs or headers."""
         _can(who, "tools", "create", what="tools")
         m = await self._changeable(who, module_id)
-        chosen: list[dict[str, Any]] = i["operations"]
+        chosen = [_picked(o) for o in i.operations]
         if not chosen:
             raise ValidationFailed("Choose at least one operation to import.")
-        found = await self._discover(who, {"connection_id": m["connection_id"], **_given(i["source"])})
+        found = await self._discover(who, i.source, m["connection_id"])
         fresh = [o for o in self._chosen(found, chosen) if not any(x["name"] == o["name"] for x in m["operations"])]
         if not fresh:
             raise Conflict("Every chosen operation is already in this module.")
@@ -2522,7 +3196,7 @@ class ModuleService:
             raise Conflict(f"This module calls {held}; the source serves {found['endpoint']}.")
         if m["connection_id"] is None:
             conn = await self._open_connection(who, m["display_name"], found["endpoint"], m["team_id"])
-            m.update(connection_id=conn["id"], auth=module_auth(conn))
+            m.update(connection_id=conn.id, auth=module_auth(conn))
         elif not held:
             conn = await self.connections.get(who.tenant_id, m["connection_id"])
             if conn is not None:

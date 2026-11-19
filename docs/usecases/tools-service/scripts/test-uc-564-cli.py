@@ -19,6 +19,7 @@ from typing import Any
 from uuid import uuid4
 
 from apps_walk import apps_stack, ops_cli, target
+from usecase_harness import PLUGINS_REPO
 from usecase_harness import (
     LOG_DIR,
     PLATFORM_INTERNAL_PORT,
@@ -27,6 +28,7 @@ from usecase_harness import (
     bearer,
     check,
     data,
+    every_page,
     finish,
     platform,
     service_headers,
@@ -35,7 +37,7 @@ from usecase_harness import (
 )
 
 ROOT = Path(__file__).resolve().parents[4]
-PLUGIN = ROOT.parent / "ops-ai-plugins" / "plugins" / "salesforce"
+PLUGIN = PLUGINS_REPO / "plugins" / "salesforce"
 # Two plugins only this use case installs: one whose tool reaches an unlisted host, one whose manifest is broken.
 # Written to a temporary folder for the run, as tools-service reads plugin folders from OPS_PLUGIN_PATHS.
 FIXTURE_FILES = {
@@ -195,7 +197,7 @@ with ExitStack() as stack:
     tenant = str((session.get("principal") or {}).get("tenantId") or "")
     # The workspace allows the host, so only the plugin's own list stands between its code and that host.
     gw.post("/v1/egress/hosts", json={"value": "elsewhere.example", "note": "uc-564"}, headers=sam)
-    cards = data(gw.get("/v1/apps", headers=priya)) or []
+    cards = every_page(gw, "/v1/apps", headers=priya)
     loaded = sorted(str(c["pluginId"]) for c in cards if c.get("kind") == "plugin")
     with TOOLS_LOG.open("rb") as fh:
         fh.seek(LOG_FROM)
@@ -215,7 +217,8 @@ with ExitStack() as stack:
         {"loaded": loaded, "failed": failed, "on": on.text[:200], "reached": str(reached)[:300]},
     )
 
-# 29. An install with no plugin (an empty plugins folder, no developer paths) loads none and serves no plugin route.
+# 29. An install with no plugin (empty plugins and built-in folders, no developer paths) loads none and serves no plugin
+# route.
 with ExitStack() as stack:
     api, _ = stack.enter_context(platform())
     empty = stack.enter_context(tempfile.TemporaryDirectory(prefix="uc564-no-plugins-"))
@@ -224,6 +227,8 @@ with ExitStack() as stack:
             {
                 **AUTH,
                 "OPS_PLUGINS_DIR": empty,
+                # Ops AI's own plugins load from builtin-plugins/ on every install unless this names another folder.
+                "OPS_BUILTIN_PLUGINS_DIR": empty,
                 "OPS_PLUGIN_PATHS": "[]",
                 "OPS_CONSOLE_URL": "https://console.acme.test",
             }
@@ -241,7 +246,7 @@ with ExitStack() as stack:
         "29 with no plugin installed, none loads, no plugin app is listed, its routes answer 404 and no plugin tool "
         "can be granted",
         listed.status_code == 200
-        and not [c for c in data(listed) or [] if c.get("kind") == "plugin"]
+        and not [c for c in every_page(gw, "/v1/apps", headers=priya) if c.get("kind") == "plugin"]
         and team_on.status_code == 404
         and bool(names)
         and not any(n.startswith(("salesforce_", "reach_")) for n in names),
@@ -257,13 +262,12 @@ with apps_stack() as w:
     given.write_text(json.dumps({"id": "rec-1042"}))
     listed_code, listed = ops_cli("builder", "tools", "list", "--app", app)
     sent = len(w.m["fake"].state()["calls"])
-    mock_code, mocked = ops_cli(
-        "builder", "tools", "run", app, "header_key_get_record", "--mock", "--input", str(given)
-    )
+    # `tools run` is a Mock run unless --real is given.
+    mock_code, mocked = ops_cli("builder", "tools", "run", app, "header_key_get_record", "--input", str(given))
     after_mock = len(w.m["fake"].state()["calls"])
     real_code, real = ops_cli("builder", "tools", "run", app, "header_key_get_record", "--real", "--input", str(given))
     check(
-        "44 `opsai tools list --app` lists the tool, `opsai tools run --mock` reaches nothing, and `--real` reads the "
+        "44 `opsai tools list --app` lists the tool, `opsai tools run` (Mock by default) reaches nothing, and `--real` reads the "
         "record with the team's account",
         account != "con_missing"
         and listed_code == 0

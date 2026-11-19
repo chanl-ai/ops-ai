@@ -10,7 +10,7 @@ const files = `http://127.0.0.1:${FILES_PORT}`;
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const JAMES = 'j.richardson@harborpine.example';
 const MAYA = 'm.okafor@harborpine.example';
-const SHOTS = evidenceDir('335', 'screens');
+const SHOTS = evidenceDir('331', 'screens');
 const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'northfield-demo' }) })).json()).data.token;
 const data = async (r) => {
   const body = await r.json().catch(() => ({}));
@@ -79,7 +79,7 @@ await withUiStack(
         await page.getByTestId('extract-type').click();
         const first = (await page.getByRole('option').first().innerText()).trim();
         const enabled = (await page.getByRole('option').first().getAttribute('aria-disabled')) !== 'true';
-        await page.getByTestId('extract-detect').click();
+        await page.getByTestId('extract-type-option-__detect').click();
         const versionShown = await page.getByTestId('extract-version').count();
         if (file === invoice) {
           // Screen evidence: the dialog with Detect chosen, at 1280 and 400.

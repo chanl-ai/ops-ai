@@ -15,6 +15,8 @@ from uuid import uuid4
 import httpx
 from apps_layer import run_path
 from fake_salesforce import LIST_VIEW_ID, salesforce
+from steps import required
+from usecase_harness import PLUGINS_REPO
 from usecase_harness import (
     PLATFORM_INTERNAL_PORT,
     PLATFORM_PORT,
@@ -29,7 +31,6 @@ from usecase_harness import (
     tools,
     until,
 )
-from usecase_harness import ROOT as REPO
 
 PLUGIN = "opsai.salesforce"
 AUTH = {
@@ -40,7 +41,7 @@ AUTH = {
 CLIENT_SECRET = "acme-connected-app-secret"
 PLATFORM_CLIENT = "ops-ai-platform"
 PLATFORM_SECRET = "ops-ai-platform-app-secret"
-SALESFORCE = REPO.parent / "ops-ai-plugins/plugins/salesforce/src/ops_plugin_salesforce"
+SALESFORCE = PLUGINS_REPO / "plugins/salesforce/src/ops_plugin_salesforce"
 PLUGINS = {"OPS_PLUGINS": "true", "OPS_PLUGIN_PATHS": json.dumps([str(SALESFORCE)])}
 # Ops AI's own OAuth app for Salesforce: the install's, from its config, as a deployment sets it.
 INSTALL_CLIENT = {"OPS_PLUGIN_CLIENTS": json.dumps({PLUGIN: {"id": PLATFORM_CLIENT, "secret": PLATFORM_SECRET}})}
@@ -90,7 +91,8 @@ def account(connection_id: str) -> str:
 
 def card(gw: httpx.Client, who: dict[str, str]) -> dict[str, Any]:
     """The Salesforce card on the team's Apps grid."""
-    return next((c for c in data(gw.get("/v1/apps", headers=who)) or [] if c.get("id") == f"plugin:{PLUGIN}"), {})
+    listed = data(gw.get("/v1/apps", params={"ids": f"plugin:{PLUGIN}"}, headers=who)) or {}
+    return next((c for c in listed.get("data") or [] if c.get("id") == f"plugin:{PLUGIN}"), {})
 
 
 def sign_in_team(gw: httpx.Client, sf: dict[str, Any], who: dict[str, str], connection_id: str) -> httpx.Response:
@@ -147,8 +149,8 @@ with ExitStack() as stack:
     # The org's company address, one of the places the Salesforce plugin signs in.
     login = sf["login_url"]
     own = {"app": f"plugin:{PLUGIN}", "clientId": "ops-ai-acme", "clientSecret": CLIENT_SECRET}
-    credential = (data(gw.post("/v1/app-credentials", json=own, headers=priya)) or {}).get("id")
-    team_on = {"enabled": True, "settings": {"login_url": login}, "credentialId": credential}
+    credential = (required(gw.post("/v1/app-credentials", json=own, headers=priya), "/v1/app-credentials")).get("id")
+    team_on = {"enabled": True, "signIn": "team", "settings": {"login_url": login}, "credentialId": credential}
     # A viewer: builders manage apps since D59.
     viewer = bearer(signed_in(api, "r.menon@harborpine.example"), "team_ops")
     refused = gw.put(f"/v1/apps/plugin:{PLUGIN}/team", json=team_on, headers=viewer)
@@ -221,7 +223,7 @@ with ExitStack() as stack:
     # 7. The OAuth client secret is kept as a reference: no answer about the connection or the plugin shows it.
     shown = (
         gw.get(account(connection_id), headers=priya).text
-        + gw.get("/v1/apps", headers=priya).text
+        + gw.get("/v1/apps", params={"ids": f"plugin:{PLUGIN}"}, headers=priya).text
         + gw.get(f"/v1/apps/plugin:{PLUGIN}", headers=priya).text
     )
     check("7 the client secret is never shown back", bool(shown) and CLIENT_SECRET not in shown)
@@ -326,9 +328,9 @@ with ExitStack() as stack:
     james = bearer(signed_in(api, "j.richardson@harborpine.example"), "team_ops")
     wanjiru = bearer(signed_in(api, "w.kamau@harborpine.example"), "team_platform")
     maya = bearer(signed_in(api, "m.okafor@harborpine.example"), "team_ops")
-    helper = data(chat.post("/v1/agents", json={"name": "Case desk", "role": "Finds cases"}, headers=james)) or {}
+    helper = required(chat.post("/v1/agents", json={"name": "Case desk", "role": "Finds cases"}, headers=james), "/v1/agents")
     first = (
-        data(chat.patch(f"/v1/agents/{helper.get('id')}", json={"instructions": "Find cases."}, headers=james)) or {}
+required(chat.patch(f"/v1/agents/{helper.get('id')}", json={"instructions": "Find cases."}, headers=james), "set the helper's instructions")
     )
     waiting = chat.post(
         f"/v1/agents/{helper.get('id')}/publish-requests", json={"version": first.get("version")}, headers=james
@@ -347,7 +349,7 @@ with ExitStack() as stack:
             headers=maya,
         )
     old = data(chat.get(f"/v1/publish-requests/{(data(waiting) or {}).get('id')}", headers=maya)) or {}
-    thread = data(chat.post("/chat/threads", json={"agentId": helper.get("id"), "kbIds": []}, headers=james)) or {}
+    thread = required(chat.post("/chat/threads", json={"agentId": helper.get("id"), "kbIds": []}, headers=james), "/chat/threads")
     turn = chat.post(
         f"/chat/threads/{thread.get('id')}/messages",
         json={"content": f'call salesforce_query {{"q": "{QUERY}"}}'},
@@ -401,8 +403,8 @@ with ExitStack() as stack:
     # 24. Ops AI's own OAuth app is the install's: the card says the install's app signs teams in, no route sets its
     # secret, and no answer carries the secret.
     by_admin = gw.put(f"/v1/apps/plugin:{PLUGIN}/app-secret", json={"clientSecret": "other"}, headers=sam)
-    listed = gw.get("/v1/apps", headers=priya)
-    view = next((c for c in data(listed) or [] if c.get("id") == f"plugin:{PLUGIN}"), {})
+    listed = gw.get("/v1/apps", params={"ids": f"plugin:{PLUGIN}"}, headers=priya)
+    view = next((c for c in (data(listed) or {}).get("data") or [] if c.get("id") == f"plugin:{PLUGIN}"), {})
     check(
         "24 Ops AI's own OAuth app comes from the install config; no route sets its secret",
         by_admin.status_code in (404, 405)
@@ -450,10 +452,10 @@ with ExitStack() as stack:
 
     # 28. No answer shows the platform's secret, to either team or to the platform admin.
     reads = [
-        gw.get("/v1/apps", headers=sam),
+        gw.get("/v1/apps", params={"ids": f"plugin:{PLUGIN}"}, headers=sam),
         gw.get(f"/v1/apps/plugin:{PLUGIN}", headers=wanjiru),
         gw.get(account(other_id), headers=wanjiru),
-        gw.get("/v1/apps", headers=wanjiru),
+        gw.get("/v1/apps", params={"ids": f"plugin:{PLUGIN}"}, headers=wanjiru),
     ]
     check(
         "28 the platform's secret is never shown back",

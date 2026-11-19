@@ -26,6 +26,7 @@ import { ToolCallCard } from './tool-call-card';
 import { AccountChoiceCard, AppOffCard, ConnectionRequiredCard, accountChoice, appOffForTeam, connectionRequired } from './connection-required-card';
 import { MemorySuggestion } from '@/components/memory/memory-suggestion';
 import { rememberedLine } from '@/components/memory/remembered-line';
+import { SkillChip } from '@/components/chat/skill-menu';
 import { Suggestion, Suggestions } from '@/components/ai-elements/suggestion';
 import { LayoutWidget } from './widget-layout';
 import { WidgetView } from './widget-view';
@@ -34,7 +35,8 @@ import { wasNotRun } from '@/lib/tool-calls';
 
 const FEEDBACK_REASONS = ['Wrong answer', 'Missing from the knowledge base', 'Cited the wrong document', 'Tool returned the wrong data', 'Not what I asked'];
 
-export function UserMessage({ message, onEdit, disabled }: { message: ChatMessage; onEdit?: (text: string) => void; disabled?: boolean }) {
+/** `skill` names the skill picked from the / menu for this message, shown as its token before the text. */
+export function UserMessage({ message, onEdit, disabled, skill }: { message: ChatMessage; onEdit?: (text: string) => void; disabled?: boolean; skill?: string }) {
   const [editing, setEditing] = React.useState(false);
   const [draft, setDraft] = React.useState(message.content);
   if (editing)
@@ -71,7 +73,7 @@ export function UserMessage({ message, onEdit, disabled }: { message: ChatMessag
   return (
     <div className="flex flex-col items-end gap-1">
       {message.attachments?.map((a) => (
-        <Link key={a.fileId} href={`/files/${encodeURIComponent(a.fileId)}`} className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-muted-foreground underline-offset-2 hover:underline" data-testid="chat-message-attachment">
+        <Link key={a.fileId} href={`/data/files/${encodeURIComponent(a.fileId)}`} className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-muted-foreground underline-offset-2 hover:underline" data-testid="chat-message-attachment">
           <Paperclip className="size-3" /> {a.name} · {bytes(a.size)}
         </Link>
       ))}
@@ -93,6 +95,11 @@ export function UserMessage({ message, onEdit, disabled }: { message: ChatMessag
           )
         }
       >
+        {skill && (
+          <span className="mb-1 block">
+            <SkillChip label={skill} />
+          </span>
+        )}
         {message.content}
       </ChatBubble>
     </div>
@@ -279,6 +286,12 @@ export function AssistantMessage({
           <AlertTitle>The answer stopped part-way</AlertTitle>
           <AlertDescription className="space-y-2">
             <p data-testid="reply-error">{refusal?.text ?? message.error}</p>
+            {refusal?.code && (
+              <details className="text-xs text-muted-foreground">
+                <summary className="cursor-pointer">Details</summary>
+                <span data-testid="reply-error-code">Code: {refusal.code}</span>
+              </details>
+            )}
             <div className="flex flex-wrap gap-2">
               {refusal?.fixAt && (
                 <Button size="sm" variant="outline" className="border-destructive/40 text-foreground" asChild>

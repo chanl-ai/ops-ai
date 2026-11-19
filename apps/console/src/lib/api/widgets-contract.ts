@@ -7,8 +7,6 @@ import type { WidgetTemplate, WidgetTemplateInput } from '@/lib/types/widgets';
  * library cannot be edited (409).
  */
 export interface WidgetsApi {
-  /** Every template's latest version: published ones from the library, plus drafts and reviews on a backend that authors. */
-  list(): Promise<WidgetTemplate[]>;
   /** One template's latest version; 404 when the id names none. */
   get(widgetId: string): Promise<WidgetTemplate>;
   /** One page of those whose name matches the search: the seeded library's first, then the team's, by name. */

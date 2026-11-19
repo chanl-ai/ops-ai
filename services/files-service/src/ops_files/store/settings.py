@@ -8,18 +8,19 @@ names the version it was made from and is refused when another save got there fi
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
 
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_files.store.files import ROLE, files, metadata
+from ops_service_kit.http import Out
 from ops_store import isolation
+from ops_store.rows import one, rows
 from ops_store.schema import TENANT_SCOPED
+from ops_store.store import Store
 from ops_store.team_scope import any_team
 
 # Why the storage settings check reads every team's files: a target any team's files are stored on stays.
@@ -73,13 +74,12 @@ class StaleVersionError(Exception):
 @dataclass(frozen=True)
 class SavedSettings:
     version: int
-    document: dict[str, Any]
+    document: str
     updated_by: str
     updated_at: datetime
 
 
-@dataclass(frozen=True)
-class CredentialRow:
+class CredentialRow(Out):
     name: str
     kind: str
     sealed: str
@@ -87,57 +87,70 @@ class CredentialRow:
     set_at: datetime
 
 
-class SettingsStore:
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
+class SettingsRow(Out):
+    """The saved document as stored: JSON text, kept whole in `SavedSettings.document`."""
+
+    version: int
+    document: str
+    updated_by: str
+    updated_at: datetime
+
+
+class SettingsStore(Store):
+    role = ROLE
 
     async def get(self) -> SavedSettings | None:
-        tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-            row = (
-                (await c.execute(sa.select(storage_settings).where(storage_settings.c.tenant_id == tenant)))
-                .mappings()
-                .first()
-            )
+        t = storage_settings
+        q = sa.select(t.c.version, t.c.document, t.c.updated_by, t.c.updated_at).where(
+            t.c.tenant_id == isolation.tenant()
+        )
+        async with self.tx() as c:
+            row = await one(c, q, SettingsRow)
         if row is None:
             return None
-        return SavedSettings(row["version"], json.loads(row["document"]), row["updated_by"], row["updated_at"])
+        return SavedSettings(row.version, row.document, row.updated_by, row.updated_at)
 
-    async def save(
-        self, *, base_version: int, document: dict[str, Any], by: str, at: datetime, detail: str
-    ) -> SavedSettings:
+    async def save(self, *, base_version: int, document: str, by: str, at: datetime, detail: str) -> SavedSettings:
         """Writes version `base_version + 1`; `base_version` 0 is the first save. Refused when it is not current."""
         tenant = isolation.tenant()
-        text = json.dumps(document, sort_keys=True)
-        try:
-            async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-                if base_version == 0:
-                    exists = (
+        async with self.tx() as c:
+            try:
+                async with self.attempt(c):
+                    if base_version == 0:
+                        exists = (
+                            await c.execute(
+                                sa.select(storage_settings.c.version).where(storage_settings.c.tenant_id == tenant)
+                            )
+                        ).first()
+                        if exists is not None:
+                            raise StaleVersionError(f"version {exists[0]} is saved; reload and save again")
                         await c.execute(
-                            sa.select(storage_settings.c.version).where(storage_settings.c.tenant_id == tenant)
+                            storage_settings.insert().values(
+                                tenant_id=tenant, version=1, document=document, updated_by=by, updated_at=at
+                            )
                         )
-                    ).first()
-                    if exists is not None:
-                        raise StaleVersionError(f"version {exists[0]} is saved; reload and save again")
-                    await c.execute(
-                        storage_settings.insert().values(
-                            tenant_id=tenant, version=1, document=text, updated_by=by, updated_at=at
+                    else:
+                        done = await c.execute(
+                            storage_settings.update()
+                            .where(storage_settings.c.tenant_id == tenant, storage_settings.c.version == base_version)
+                            .values(version=base_version + 1, document=document, updated_by=by, updated_at=at)
                         )
+                        if done.rowcount != 1:
+                            raise StaleVersionError(
+                                f"version {base_version} is no longer current; reload and save again"
+                            )
+                    await self._audit(
+                        c,
+                        tenant,
+                        action="settings_saved",
+                        subject=f"v{base_version + 1}",
+                        detail=detail,
+                        actor=by,
+                        at=at,
                     )
-                else:
-                    done = await c.execute(
-                        storage_settings.update()
-                        .where(storage_settings.c.tenant_id == tenant, storage_settings.c.version == base_version)
-                        .values(version=base_version + 1, document=text, updated_by=by, updated_at=at)
-                    )
-                    if done.rowcount != 1:
-                        raise StaleVersionError(f"version {base_version} is no longer current; reload and save again")
-                await self._audit(
-                    c, tenant, action="settings_saved", subject=f"v{base_version + 1}", detail=detail, actor=by, at=at
-                )
-        except IntegrityError as e:
-            # Two first saves at once: the second insert meets the first's row (the tenant is the key).
-            raise StaleVersionError("another save got there first; reload and save again") from e
+            except IntegrityError as e:
+                # Two first saves at once: the second insert meets the first's row (the tenant is the key).
+                raise StaleVersionError("another save got there first; reload and save again") from e
         return SavedSettings(base_version + 1, document, by, at)
 
     async def locations_in_use(self) -> set[tuple[str, str]]:
@@ -145,23 +158,20 @@ class SettingsStore:
         on one."""
         with isolation.tenant_wide(STORAGE_TARGETS):
             tenant = isolation.tenant()
-            where = (files.c.tenant_id == tenant, any_team(files, "a target any team's files are on stays"))
+            where = (files.c.tenant_id == tenant, any_team(files, STORAGE_TARGETS))
             q = sa.select(files.c.storage_backend, files.c.storage_container).where(*where).distinct()
-            async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+            async with self.tx() as c:
                 return {(str(r[0]), str(r[1])) for r in await c.execute(q)}
 
     async def credentials(self) -> list[CredentialRow]:
-        tenant = isolation.tenant()
+        t = storage_credentials
         q = (
-            sa.select(storage_credentials)
-            .where(storage_credentials.c.tenant_id == tenant)
-            .order_by(storage_credentials.c.name)
+            sa.select(t.c.name, t.c.kind, t.c.sealed, t.c.set_by, t.c.set_at)
+            .where(t.c.tenant_id == isolation.tenant())
+            .order_by(t.c.name)
         )
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-            return [
-                CredentialRow(r["name"], r["kind"], r["sealed"], r["set_by"], r["set_at"])
-                for r in (await c.execute(q)).mappings()
-            ]
+        async with self.tx() as c:
+            return await rows(c, q, CredentialRow)
 
     async def credential(self, name: str) -> CredentialRow | None:
         return next((r for r in await self.credentials() if r.name == name), None)
@@ -169,7 +179,7 @@ class SettingsStore:
     async def put_credential(self, name: str, *, kind: str, sealed: str, by: str, at: datetime) -> None:
         """Sets or replaces a credential: delete then insert in one transaction, so no dialect's upsert is needed."""
         tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             where = (storage_credentials.c.tenant_id == tenant) & (storage_credentials.c.name == name)
             replaced = (await c.execute(storage_credentials.delete().where(where))).rowcount
             await c.execute(
@@ -190,7 +200,7 @@ class SettingsStore:
 
     async def delete_credential(self, name: str, *, by: str, at: datetime) -> bool:
         tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             where = (storage_credentials.c.tenant_id == tenant) & (storage_credentials.c.name == name)
             gone = (await c.execute(storage_credentials.delete().where(where))).rowcount == 1
             if gone:
@@ -204,16 +214,6 @@ class SettingsStore:
                     at=at,
                 )
         return gone
-
-    async def audit(self) -> list[dict[str, Any]]:
-        tenant = isolation.tenant()
-        q = (
-            sa.select(storage_settings_audit)
-            .where(storage_settings_audit.c.tenant_id == tenant)
-            .order_by(storage_settings_audit.c.id)
-        )
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
 
     @staticmethod
     async def _audit(

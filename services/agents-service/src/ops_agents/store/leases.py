@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from contextlib import suppress
+from contextlib import AbstractAsyncContextManager, suppress
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
@@ -27,8 +27,10 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from ops_checkpointer import LeaseSupersededError
 from ops_store import Guarantee
 from ops_store.dialect import db_epoch, insert_ignore, lock_key, locked
+from ops_store.schema import system
 
 from .base import metadata
+from .tenancy import THREAD_LEASES, RuntimeStore
 
 thread_leases = sa.Table(
     "thread_leases",
@@ -42,6 +44,10 @@ thread_leases = sa.Table(
     sa.Column("generation", sa.BigInteger(), nullable=False, server_default="1"),
     # Set when the owner finished and let go; an unreleased row past expiry is a crashed owner.
     sa.Column("released_at", sa.Float()),
+    info=system(
+        "a lease is taken and swept by thread id before its tenant is known (the sweeper claims across tenants); it "
+        "holds ids, an owner name and times, none of a tenant's content"
+    ),
 )
 
 
@@ -94,18 +100,21 @@ async def thread_lock(conn: AsyncConnection, thread_id: str) -> None:
     await lock_key(conn, thread_id)
 
 
-class Leases:
+class Leases(RuntimeStore):
     # The takeover is conditional on the expiry under the thread's lock (CAS), expiry is read from the database's clock
     # (CLOCK), and taking a lease serialises with deliveries on that lock (LOCK).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS, Guarantee.CLOCK, Guarantee.LOCK})
 
     def __init__(self, engine: AsyncEngine, owner: str, ttl: float, *, on_takeover: TakeoverHook | None = None) -> None:
-        self.engine = engine
+        super().__init__(engine)
         self.owner = owner
         self.ttl = ttl
         # Called after an acquire that took over a lease its owner never released (a crash or a stall, not a finished
         # run), with the new generation, before the caller resumes the thread (E2c). It must not raise.
         self.on_takeover = on_takeover
+
+    def _tx(self) -> AbstractAsyncContextManager[AsyncConnection]:
+        return self.install_tx(THREAD_LEASES, tables=(thread_leases,))
 
     def _held(self, thread_id: str) -> Any:
         age = (db_now(self.engine) - thread_leases.c.acquired_at).label("age")
@@ -115,7 +124,7 @@ class Leases:
         """Takes the lease and returns its generation, or raises LeaseHeldError with the live holder. Taking over an
         expired or released lease is how a dead owner's lease is reclaimed; either way the generation goes up."""
         now = db_now(self.engine)
-        values: dict[str, Any] = {
+        values = {
             "owner": self.owner,
             "run_id": run_id,
             "acquired_at": now,
@@ -125,7 +134,8 @@ class Leases:
         }
         this = thread_leases.c.thread_id == thread_id
         generation, took_over = 0, False
-        async with self.engine.begin() as c:
+        # The thread lock is held in the same transaction as the lease's write, so both end together.
+        async with self._tx() as c:
             await thread_lock(c, thread_id)
             # Each write below is conditional in one statement, so it settles a race by itself where the thread lock
             # takes none (SQLite): the insert does nothing when another made the row, the takeover changes nothing
@@ -158,7 +168,7 @@ class Leases:
     async def heartbeat(self, thread_id: str, run_id: str) -> bool:
         """Renews the lease; False when another owner has taken it (this run must stop writing)."""
         now = db_now(self.engine)
-        async with self.engine.begin() as c:
+        async with self._tx() as c:
             res = await c.execute(
                 thread_leases.update()
                 .where(thread_leases.c.thread_id == thread_id, thread_leases.c.run_id == run_id)
@@ -168,7 +178,7 @@ class Leases:
 
     async def release(self, thread_id: str, run_id: str) -> None:
         """Lets go of the lease but keeps the row, so the next acquire continues the generation count."""
-        async with self.engine.begin() as c:
+        async with self._tx() as c:
             await c.execute(
                 thread_leases.update()
                 .where(thread_leases.c.thread_id == thread_id, thread_leases.c.run_id == run_id)
@@ -181,13 +191,13 @@ class Leases:
         q = sa.select(thread_leases, age).where(
             thread_leases.c.expires_at < db_now(self.engine), thread_leases.c.released_at.is_(None)
         )
-        async with self.engine.connect() as c:
+        async with self._tx() as c:
             return [LeaseInfo(**dict(r)) for r in (await c.execute(q)).mappings()]
 
     async def held(self, thread_id: str) -> LeaseInfo | None:
         """The unreleased lease on a thread, live or crashed; None when nobody holds it."""
         q = self._held(thread_id).where(thread_leases.c.released_at.is_(None))
-        async with self.engine.connect() as c:
+        async with self._tx() as c:
             row = (await c.execute(q)).mappings().first()
         return LeaseInfo(**dict(row)) if row else None
 
@@ -196,7 +206,7 @@ class Leases:
         q = sa.select(thread_leases.c.generation).where(
             thread_leases.c.thread_id == thread_id, thread_leases.c.run_id == run_id
         )
-        async with self.engine.connect() as c:
+        async with self._tx() as c:
             row = (await c.execute(q)).first()
         return int(row.generation) if row else None
 

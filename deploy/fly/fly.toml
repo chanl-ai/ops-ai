@@ -27,6 +27,7 @@ kill_timeout = 30
   OPS_AUTH_MODE = "platform"
   OPS_ENABLED_SERVICES = "all"
   OPS_PLATFORM_URL = "http://127.0.0.1:8710"
+  OPS_PLATFORM_INTERNAL_URL = "http://127.0.0.1:8711"
   OPS_GATEWAY_URL = "http://127.0.0.1:8720"
   OPS_TOOLS_URL = "http://127.0.0.1:8720"
   OPS_AGENTS_URL = "http://127.0.0.1:8700"
@@ -45,6 +46,8 @@ kill_timeout = 30
   OPS_KB_FILES_DIR = "/data/kb-files"
   # files-service builds upload and download URLs on its public base.
   OPS_FILES_PUBLIC_URL = "https://<your-app>.fly.dev/api/files"
+  # A team's MCP address is <this>/mcp/<team>; an assistant's token is issued for that address.
+  OPS_TOOLS_PUBLIC_URL = "https://<your-app>.fly.dev/api/tools"
   # No scanner runs here: the inline test engine marks clean files clean; `hook` would leave every upload pending.
   OPS_FILES_SCANNING = "eicar"
   # Scanned pages are read by OCR (Tesseract is in the image) for knowledge sources, chat attachments and read_file;

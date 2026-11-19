@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+
+from .store.knowledge import ItemFetched, SourceRow
 
 
 @dataclass(frozen=True)
@@ -13,11 +14,11 @@ class Origin:
 
     path: str
     title: str | None = None
-    extra: dict[str, Any] = field(default_factory=dict[str, Any])
+    extra: ItemFetched = field(default_factory=ItemFetched)
     # The ids the source system lets see this version, kept on the version.
     allowed: list[str] | None = None
 
 
-def source_team(s: dict[str, Any]) -> str:
+def source_team(s: SourceRow) -> str:
     """The files-service team a source's files are stored under: the team that created the source."""
-    return str(s["team_id"] or "team_ops")
+    return s.team_id or "team_ops"

@@ -47,3 +47,9 @@ No tests in this folder; they live in agents-service and need PostgreSQL, which 
 - [docs/architecture/decisions/fencing-and-timers.md](../../docs/architecture/decisions/fencing-and-timers.md): leases and fencing
 - [docs/architecture/decisions/durable-execution-runtime.md](../../docs/architecture/decisions/durable-execution-runtime.md)
 - [docs/architecture/decisions/database-support.md](../../docs/architecture/decisions/database-support.md)
+
+## Engineering standards
+
+The rules the code in this folder is held to, each with a real example from this repository and the check that
+enforces it: [data access](../../docs/architecture/standards/data-access.md) (`DA1` to `DA13`), [tenant isolation and access](../../docs/architecture/standards/tenancy-and-access.md) (`TN1` to `TN5`, `AC1` to `AC5`). The index of every rule is
+[engineering standards](../../docs/architecture/engineering-standards.md); a review cites the rule id.

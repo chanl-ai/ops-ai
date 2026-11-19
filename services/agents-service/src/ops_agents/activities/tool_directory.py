@@ -13,8 +13,9 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Protocol, cast
+from typing import Any, Protocol, TypedDict, cast
 
+from ops_access import tool_waits
 from ops_agent_kernel.types import Access, ToolGrant
 from ops_identity import (
     ACTING_FOR_HEADER,
@@ -25,6 +26,7 @@ from ops_identity import (
     segment,
 )
 from ops_service_kit.errors import ApiError
+from ops_service_kit.http import Json
 
 from ..store.tenancy import current_team, current_tenant
 from .catalog import Catalog
@@ -51,6 +53,14 @@ class OperationRef:
     step_up: bool = False
     # What people see in place of the name: a plugin tool's manifest title; None for any other tool.
     title: str | None = None
+    # The team has a test account of the app, so a test turn's write changes nothing real and never asks.
+    test_account: bool = False
+    # False for a tool the team turned off in its app's catalog (ToolsOperations.off_operations).
+    added: bool = True
+    # Who answers a write that waits, from tools-service's one resolver: "person" (the asker confirms in the chat) or
+    # "reviewer" (someone holding `reviewer_role`). A row that names none is the person.
+    answer: str = "person"
+    reviewer_role: str | None = None
 
     def grant(self) -> ToolGrant:
         return ToolGrant(
@@ -72,16 +82,26 @@ class ToolDirectory(Protocol):
 async def grants_for(directory: ToolDirectory, names: list[str]) -> list[ToolGrant]:
     """Grants for the tool names an agent holds that the registry still offers; `workflow:` names are offered by the
     workflow runner, and a name the registry no longer has (hidden, unpublished, drifted) is not handed to the model."""
-    wanted = [n for n in names if not n.startswith(("workflow:", "agent:"))]
+    # One grant per name: the model's toolset refuses two tools of one name, so a repeated grant fails the turn.
+    wanted = [n for n in dict.fromkeys(names) if not n.startswith(("workflow:", "agent:"))]
     if not wanted:
         return []
     by_name = {o.name: o for o in await directory.operations()}
+    # A tool the team turned off in its app's catalog still reaches the run, so a call to it is refused with the fix
+    # (gateway TOOL_NOT_ADDED, drawn as a card) instead of the agent not knowing the tool exists.
+    off = {o.name: o for o in await off_operations(directory)}
     # A name the kept list lacks may be a tool published since it was read (the agent was granted it and published
     # moments ago): ask tools-service once more before leaving it out of the turn.
     if any(n not in by_name for n in wanted) and (forget := getattr(directory, "forget", None)) is not None:
         forget()
         by_name = {o.name: o for o in await directory.operations()}
-    return [by_name[n].grant() for n in wanted if n in by_name]
+    return [(by_name.get(n) or off[n]).grant() for n in wanted if n in by_name or n in off]
+
+
+async def off_operations(directory: ToolDirectory) -> list[OperationRef]:
+    """The operations the team turned off in its app's catalog, for a directory that keeps them; none otherwise."""
+    listed = getattr(directory, "off_operations", None)
+    return list(await listed()) if listed is not None else []
 
 
 class ToolsOperations:
@@ -90,10 +110,19 @@ class ToolsOperations:
         self.tools = tools
         self.ttl_s = ttl_s
         self.clock = clock
-        # Per tenant and team: a team's toolWritesNeedApproval changes which of its writes wait (tools-service).
+        # Per tenant and team: a team's appChanges and appChangesByApp change which of its writes wait (tools-service).
         self._cache: dict[tuple[str, str | None], tuple[float, list[OperationRef]]] = {}
 
     async def operations(self) -> list[OperationRef]:
+        """The operations agents may be granted and offered: those the team has added."""
+        return [o for o in await self._listed() if o.added]
+
+    async def off_operations(self) -> list[OperationRef]:
+        """The operations the team turned off in its app's catalog: never offered, only handed to a run that holds
+        one, so its call is refused with the fix."""
+        return [o for o in await self._listed() if not o.added]
+
+    async def _listed(self) -> list[OperationRef]:
         key = (current_tenant(), current_team())
         hit = self._cache.get(key)
         if hit is not None and self.clock() - hit[0] < self.ttl_s:
@@ -117,6 +146,10 @@ class ToolsOperations:
                 output_shape=o.get("outputShape"),
                 step_up=bool(o.get("stepUp")) or int(o.get("approvers") or 1) > 1,
                 title=o.get("title"),
+                test_account=bool(o.get("testAccount")),
+                added=o.get("added") is not False,
+                answer=str(o.get("answer") or "person"),
+                reviewer_role=o.get("reviewerRole"),
             )
             for o in rows
         ]
@@ -125,7 +158,11 @@ class ToolsOperations:
 
     def forget(self) -> None:
         """Drops the current tenant and team's kept list, so the next read asks again (a tool offered moments ago)."""
-        self._cache.pop((current_tenant(), current_team()), None)
+        self.forget_for(current_tenant(), current_team())
+
+    def forget_for(self, tenant: str, team: str | None) -> None:
+        """Drops one team's kept list, for a change heard from platform-service (the team's approval answers)."""
+        self._cache.pop((tenant, team), None)
 
 
 class CatalogTools:
@@ -142,7 +179,7 @@ class CatalogTools:
                 description=t.description,
                 access=t.access,
                 input_schema=t.input_schema,
-                requires_approval=t.access == "write" and t.requires_approval is not False,
+                requires_approval=tool_waits(t.access, t.approval_mode),
                 module_id=None,
                 module_name=t.server,
                 approvers=t.approvers,
@@ -153,17 +190,28 @@ class CatalogTools:
 
 
 class AppStates(Protocol):
-    async def cards(self, person: str | None, team: str | None) -> list[dict[str, Any]]:
+    async def cards(self, person: str | None, team: str | None) -> list[Json]:
         """`team`'s apps as tools-service lists them, each card's state read for `person` (an email) when given."""
         ...
 
     async def accounts(
         self, person: str | None, team: str | None, app_id: str, *, usable: bool = False, name: str | None = None
-    ) -> list[dict[str, Any]]:
+    ) -> list[Json]:
         """The accounts of `app_id` a call may name (`GET /v1/apps/{app}/accounts`): with `usable`, the team's live
         accounts a step or an agent names; with `person`, also that person's own; with `name`, the one so named. The
         names are compared there, never here."""
         ...
+
+
+# The largest page tools-service's lists answer (OPS_PAGE_SIZE_MAX).
+APP_PAGE = 50
+# One card of tools-service's Apps list, as `GET /v1/apps` answers it.
+AppCard = Json
+
+
+class _CardPage(TypedDict):
+    data: list[AppCard]
+    pagination: dict[str, int | bool]
 
 
 class ToolsApps:
@@ -175,22 +223,31 @@ class ToolsApps:
         self.tools = tools
         self.people = people
 
-    async def cards(self, person: str | None, team: str | None) -> list[dict[str, Any]]:
+    async def cards(self, person: str | None, team: str | None) -> list[AppCard]:
         team = team or current_team()
         if not team:
             return []
         headers: dict[str, str] = {}
         if person and self.people is not None:
             headers[ACTING_FOR_HEADER] = await self.people.token(tenant_id=current_tenant(), email=person, team_id=team)
+        rows: list[AppCard] = []
+        page = 1
         try:
-            rows = await self.tools.get("/v1/apps", params={"include": "builtin"}, headers=headers, team=team)
+            # Every page: each tool set is matched to its app, and the list holds a page of the cards at a time.
+            while True:
+                params = {"include": "builtin", "page": page, "pageSize": APP_PAGE}
+                body = cast(_CardPage, await self.tools.get("/v1/apps", params=params, headers=headers, team=team))
+                rows += body["data"]
+                if not body["pagination"]["hasNext"]:
+                    break
+                page += 1
         except (ServiceCallError, ServiceUnreachable) as e:
             raise ToolsUnavailable("The tools service cannot be reached, so the tools' apps are unknown.") from e
-        return cast(list[dict[str, Any]], rows)
+        return rows
 
     async def accounts(
         self, person: str | None, team: str | None, app_id: str, *, usable: bool = False, name: str | None = None
-    ) -> list[dict[str, Any]]:
+    ) -> list[Json]:
         team = team or current_team()
         if not team:
             return []
@@ -210,4 +267,4 @@ class ToolsApps:
             raise ToolsUnavailable("The tools service cannot be reached, so the app's accounts are unknown.") from e
         except ServiceUnreachable as e:
             raise ToolsUnavailable("The tools service cannot be reached, so the app's accounts are unknown.") from e
-        return cast(list[dict[str, Any]], rows)
+        return cast(list[Json], rows)

@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.tenancy import tenant_scope
 from ops_engine.journal import StepRow, StepStatus
-from ops_engine.store import DefinitionStore, RunStore
+from ops_engine.store import DefinitionStore, DefinitionSummary, RunStore
 from ops_engine.store.steps import SqlJournal
 from ops_engine.store.tables import engine_runs
 
@@ -54,8 +54,8 @@ async def run_with(
     return rid
 
 
-async def listed(tx: EngineTransactions, wf: str, team: str) -> dict[str, Any]:
-    [row] = [d for d in await DefinitionStore(tx).summaries(CUTOFF, team=team) if d["workflow_id"] == wf]
+async def listed(tx: EngineTransactions, wf: str, team: str) -> DefinitionSummary:
+    [row] = [d for d in await DefinitionStore(tx).summaries(CUTOFF, team=team) if d.workflow_id == wf]
     return row
 
 
@@ -75,7 +75,7 @@ async def test_the_list_counts_runs_that_opened_a_task_and_open_tasks(engine: As
         await run_with(tx, wf, "team_cards", node_type=None)
         await run_with(tx, wf, "team_cards", node_type="ops.flow.humanReview", step="ok", created=OLD)  # outside 24h
         row = await listed(tx, wf, "team_cards")
-        assert (row["recent"], row["reviewed"], row["open_reviews"]) == (4, 2, 1)
+        assert (row.recent, row.reviewed, row.open_reviews) == (4, 2, 1)
 
 
 async def test_another_teams_runs_never_count(engine: AsyncEngine) -> None:
@@ -84,6 +84,6 @@ async def test_another_teams_runs_never_count(engine: AsyncEngine) -> None:
         await publish(tx, mine, "team_cards")
         await publish(tx, theirs, "team_lending")
         await run_with(tx, theirs, "team_lending", node_type="ops.flow.humanReview", step="waiting", status="waiting")
-        seen = {d["workflow_id"]: d for d in await DefinitionStore(tx).summaries(CUTOFF, team="team_cards")}
+        seen = {d.workflow_id: d for d in await DefinitionStore(tx).summaries(CUTOFF, team="team_cards")}
         assert theirs not in seen
-        assert (seen[mine]["reviewed"], seen[mine]["open_reviews"]) == (0, 0)
+        assert (seen[mine].reviewed, seen[mine].open_reviews) == (0, 0)

@@ -33,7 +33,7 @@ await withUiStack(
       await page.getByRole('button', { name: /^Sign in/ }).first().click();
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
 
-      await page.goto(`${consoleUrl}/cases`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await page.goto(`${consoleUrl}/work/cases`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       const row = (c) => page.getByRole('row').filter({ hasText: c.id });
       await row(due).waitFor({ timeout: 120_000 });
       const state = async (c, which) => row(c).getByTestId(`case-${which}`).getAttribute('data-state');
@@ -54,20 +54,22 @@ await withUiStack(
       const overdueRows = { late: await row(late).count(), due: await row(due).count(), paused: await row(paused).count() };
       check('2 the Overdue view asks the server for overdue cases and shows only the late one', sent.includes('overdue=true') && overdueRows.late === 1 && overdueRows.due === 0 && overdueRows.paused === 0, { sent, overdueRows });
 
-      await page.goto(`${consoleUrl}/cases/${late.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await page.getByTestId('case-timeline').waitFor({ timeout: 120_000 });
-      await page.getByTestId('case-priority').click();
-      await page.getByRole('option', { name: 'High' }).click();
-      await page.getByTestId('case-event').filter({ hasText: 'Changed the priority from Urgent to High' }).waitFor({ timeout: 30_000 });
-      await page.getByLabel('Add a note').fill(`Called Alex ${TAG}`);
+      // Priority is set from the Change status menu and a note from the Add note dialog; both show in the case's Activity.
+      await page.goto(`${consoleUrl}/work/cases/${late.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await page.getByTestId('case-feed').waitFor({ timeout: 120_000 });
+      await page.getByTestId('case-change-status').click();
+      await page.getByTestId('case-priority-high').click();
+      await page.getByTestId('case-priority-badge').filter({ hasText: 'High' }).waitFor({ timeout: 30_000 });
+      await page.getByTestId('case-add-note-open').click();
+      await page.getByRole('dialog').getByLabel('Note', { exact: true }).fill(`Called Alex ${TAG}`);
       await page.getByTestId('case-add-note').click();
-      await page.getByTestId('case-event').filter({ hasText: `Called Alex ${TAG}` }).waitFor({ timeout: 30_000 });
+      await page.getByTestId('case-feed-line').filter({ hasText: `Called Alex ${TAG}` }).waitFor({ timeout: 30_000 });
       const server = await json(await fetch(`${agents}/v1/cases/${late.id}`, { headers: J }));
-      check('3 a priority change and a note each land on the case’s timeline, on the page and the server', server.priority === 'high' && server.events.some((e) => e.kind === 'note' && e.detail.text === `Called Alex ${TAG}`) && server.events.some((e) => e.kind === 'field' && e.detail.field === 'priority'), { priority: server.priority, kinds: server.events.map((e) => e.kind) });
+      check('3 a priority change and one note each land on the case’s activity, on the page and the server', server.priority === 'high' && server.events.filter((e) => e.kind === 'note' && e.detail.text === `Called Alex ${TAG}`).length === 1 && server.events.some((e) => e.kind === 'field' && e.detail.field === 'priority'), { priority: server.priority, kinds: server.events.map((e) => e.kind) });
 
       await page.goto(`${consoleUrl}/cases?run=run_${TAG}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await page.waitForURL((u) => u.pathname === '/workflows/runs' && u.searchParams.get('run') === `run_${TAG}`, { timeout: 60_000 });
-      check('4 an old run link on Cases lands on Workflows › Runs', new URL(page.url()).pathname === '/workflows/runs', page.url());
+      await page.waitForURL((u) => u.pathname === '/build/runs' && u.searchParams.get('run') === `run_${TAG}`, { timeout: 60_000 }).catch(() => undefined);
+      check('4 an old run link on Cases lands on Workflows › Runs', new URL(page.url()).pathname === '/build/runs' && new URL(page.url()).searchParams.get('run') === `run_${TAG}`, page.url());
 
       // Workflows › Runs opens on the canvas workflows' runs (paged /v1/runs): a run started through the API is listed
       // with the status the server gives it, the Status filter counts it, and its row opens the run.
@@ -77,7 +79,10 @@ await withUiStack(
       const started = await json(await fetch(`${agents}/v1/runs`, { method: 'POST', headers: J, body: JSON.stringify({ workflowId: wid, mode: 'test', input: {} }) }));
       // Settled first, so the status the page shows and the one read back are the same.
       for (let i = 0; i < 60 && ['queued', 'running'].includes((await json(await fetch(`${agents}/v1/runs/${started.runId}`, { headers: J }))).status); i++) await new Promise((r) => setTimeout(r, 1_000));
-      await page.goto(`${consoleUrl}/workflows/runs`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      // Runs is a tab on the Workflows page.
+      await page.goto(`${consoleUrl}/build/workflows`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await page.getByTestId('section-tab-build-runs').click({ timeout: 60_000 });
+      await page.waitForURL((u) => u.pathname === '/build/runs', { timeout: 60_000 });
       const runRow = page.getByTestId(`runner-run-row-${started.runId}`);
       const listed = await runRow.waitFor({ timeout: 60_000 }).then(() => true, () => false);
       const runNow = await json(await fetch(`${agents}/v1/runs/${started.runId}`, { headers: J }));
@@ -85,10 +90,10 @@ await withUiStack(
       // One list of the current engine's runs: no engine tabs.
       const engineTabs = await page.locator('[data-testid^=runs-kind-]').count();
       if (listed) await runRow.click();
-      const opened = listed ? await page.waitForURL(`**/workflows/runs/${started.runId}`, { timeout: 60_000 }).then(() => true, () => false) : false;
+      const opened = listed ? await page.waitForURL(`**/build/runs/${started.runId}`, { timeout: 60_000 }).then(() => true, () => false) : false;
       check('5 Workflows › Runs lists a workflow’s run with its status in one list, and the row opens it', listed && shownStatus === runNow.status.replace(/_/g, ' ') && engineTabs === 0 && opened, { runId: started.runId, listed, shownStatus, serverStatus: runNow.status, engineTabs, opened });
       // The search box asks the server (Cases is paged there) and finds a case by its subject.
-      await page.goto(`${consoleUrl}/cases`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await page.goto(`${consoleUrl}/work/cases`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await page.getByRole('row').filter({ hasText: due.id }).waitFor({ timeout: 60_000 });
       const searched = page.waitForRequest((r) => r.url().includes('/v1/cases?') && /search=Disputed/.test(r.url()), { timeout: 30_000 });
       await page.getByPlaceholder(/Search/).first().fill(`Disputed wire ${TAG}`);
@@ -97,14 +102,13 @@ await withUiStack(
       const found = await page.locator('tbody tr').allInnerTexts();
       check('7 the case search goes to the server and finds only the matching case', searchAsked && found.length === 1 && found[0].includes('Disputed wire'), { searchAsked, found: found.map((t) => t.slice(0, 60)) });
 
-      // The Overview's counts are the server's (GET /v1/overview), not sample data: the three cases above count.
-      const counts = await json(await fetch(`${agents}/v1/overview`, { headers: J }));
-      await page.goto(`${consoleUrl}/`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      const casesCard = page.getByTestId('overview-cases');
-      await casesCard.waitFor({ timeout: 60_000 });
-      const shownCases = Number((await casesCard.innerText()).match(/Needs a person\s+(\d+)/)?.[1]);
-      const shownReviews = Number((await page.getByTestId('overview-reviews').innerText()).match(/Waiting on review\s+(\d+)/)?.[1]);
-      check('6 the Overview counts are the server’s: cases needing a person and reviews waiting', counts.cases.open >= 2 && shownCases === counts.cases.open && shownReviews === counts.openReviews, { server: counts.cases, openReviews: counts.openReviews, shownCases, shownReviews });
+      // The Overview's counts are the server's (GET /v1/overview), not sample data: the late case above is due.
+      const { counts } = await json(await fetch(`${agents}/v1/overview`, { headers: J }));
+      await page.goto(`${consoleUrl}/overview`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await page.getByTestId('overview-cases-count').waitFor({ timeout: 60_000 });
+      const shownCases = Number(await page.getByTestId('overview-cases-count').innerText());
+      const shownTasks = Number(await page.getByTestId('overview-tasks-count').innerText());
+      check('6 the Overview counts are the server’s: cases due and Human Tasks waiting', counts.casesDue >= 1 && shownCases === counts.casesDue && shownTasks === counts.waitingForMe, { server: counts, shownCases, shownTasks });
       check('no page errors', errors.length === 0, errors.slice(0, 3));
     } finally {
       await browser.close();

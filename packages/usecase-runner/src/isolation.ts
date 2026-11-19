@@ -7,6 +7,8 @@ import { join } from 'node:path';
 
 export const PORT_VARS = ['OPS_USECASE_AGENTS_PORT', 'OPS_USECASE_TOOLS_PORT', 'OPS_USECASE_MODELS_PORT', 'OPS_USECASE_CONSOLE_PORT', 'OPS_USECASE_PLATFORM_PORT', 'OPS_USECASE_PLATFORM_INTERNAL_PORT', 'OPS_USECASE_KB_PORT', 'OPS_USECASE_FAKE_OPENAI_PORT', 'OPS_USECASE_FILES_PORT', 'OPS_USECASE_DOCUMENTS_PORT', 'OPS_USECASE_EMBED_PORT', 'OPS_USECASE_IDP_PORT', 'OPS_USECASE_RUNNER_PORT'] as const;
 export const DB_VAR = 'OPS_USECASE_DB';
+/** A deployed host's origin: the api scripts call it instead of starting a stack of their own. */
+export const BASE_URL_VAR = 'OPS_USECASE_BASE_URL';
 
 /** The URL of database `db` by make/env.mk's rule: the devcontainer's side container (OPS_INFRA=external,
  * `postgres:5432`), or this machine's compose PostgreSQL on OPS_PG_PORT. */
@@ -38,6 +40,8 @@ export interface RunResources {
 /** The child environment with every unset OPS_USECASE_* filled with this run's own value. */
 export async function isolate(env: NodeJS.ProcessEnv): Promise<RunResources> {
   const out: NodeJS.ProcessEnv = { ...env };
+  // Nothing starts on this machine, so there is no port to choose and no database to make or drop.
+  if (env[BASE_URL_VAR]) return { env: out };
   const taken = new Set<number>([...STACK_DEFAULTS, ...STACK_VARS.map((k) => Number(env[k])).filter(Number.isInteger)]);
   for (const k of PORT_VARS) if (env[k]) taken.add(Number(env[k]));
   for (const k of PORT_VARS) {

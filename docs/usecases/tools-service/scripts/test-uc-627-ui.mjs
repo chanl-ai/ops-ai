@@ -1,8 +1,7 @@
 // uc-627 A team connects Salesforce at its company address, ui layer: docs/usecases/tools-service/salesforce-org-address.md.
 // Priya adds an auth config holding the org's My Domain from the console's own form, connects Salesforce with it
 // against the fake Salesforce, sees the account Connected with its org address, and runs a SOQL query from the tool's
-// Test. Security allows the fake's private range only. Screenshots go to OPS_USECASE_SHOTS when set (the evidence
-// folder otherwise), at 1280 and 390.
+// Test. Security allows the fake's private range only. Screenshots go to the evidence folder, at 1280 and 390.
 import { spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { createInterface } from 'node:readline';
@@ -16,8 +15,8 @@ const tools = `http://127.0.0.1:${TOOLS_PORT}`;
 const platform = `http://127.0.0.1:${PLATFORM_PORT}`;
 const PASSWORD = 'northfield-demo';
 const PRIYA = 'p.shah@harborpine.example';
-const SHOTS = process.env.OPS_USECASE_SHOTS || evidenceDir('627', 'uc');
-const SALESFORCE = process.env.OPS_SALESFORCE_PLUGIN || join(ROOT, '..', 'ops-ai-plugins/plugins/salesforce/src/ops_plugin_salesforce');
+const SHOTS = evidenceDir('627', 'uc');
+const SALESFORCE = process.env.OPS_SALESFORCE_PLUGIN || join(process.env.OPS_PLUGINS_REPO || join(ROOT, '..', 'ops-ai-plugins'), 'plugins/salesforce/src/ops_plugin_salesforce');
 const LIB = join(ROOT, 'docs/usecases/lib');
 const APP = 'plugin:opsai.salesforce';
 const CONFIG = 'Kestrel org';
@@ -139,6 +138,8 @@ try {
           const shown = ((await win.getByTestId('connect-window-config-place').innerText({ timeout: 30_000 })) ?? '').replace(/\s+/g, ' ');
           const asked = await win.getByTestId('connect-window-place-login_url').count();
           await shot(page, '3-connect-window', 1280);
+          // The window offers who signs in and defaults to each person; this use case connects the team's own login.
+          await win.locator('#who-shared').click();
           // Turn on saves the team's setting with the config; signing in is the saved state's Connect.
           const popup = await openSignIn(page);
           await popup.locator('input[name=username]').waitFor({ timeout: 60_000 });

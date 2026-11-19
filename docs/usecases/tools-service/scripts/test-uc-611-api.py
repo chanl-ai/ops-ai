@@ -16,7 +16,7 @@ OUTSIDER = {"X-Dev-User": "Priya Shah", "X-Team-Id": "team_cards"}
 
 with ExitStack() as stack:
     bank = stack.enter_context(core_bank())
-    gw = stack.enter_context(tools({**bank["settings"], "OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}"}))
+    gw = stack.enter_context(tools({**bank["settings"], "OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}"}, approval_rules=True))
     stack.enter_context(agents(gateway_url=f"http://127.0.0.1:{TOOLS_PORT}"))
     base = f"https://{bank['host']}"
     clean(gw, "uc611")

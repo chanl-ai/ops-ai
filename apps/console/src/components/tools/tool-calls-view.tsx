@@ -101,11 +101,11 @@ const columns: ColumnDef<Row>[] = [
     cell: ({ row }) => (
       <StopRowClick align="start">
         <div className="flex flex-col font-mono text-xs whitespace-nowrap">
-          <Link href={`/workflows/${row.original.workflowId}?tab=runs`} className={link}>
+          <Link href={`/build/workflows/${row.original.workflowId}?tab=runs`} className={link}>
             {row.original.runId}
           </Link>
           {row.original.caseId && (
-            <Link href={`/cases/${row.original.caseId}`} className={`${link} text-muted-foreground`}>
+            <Link href={`/work/cases/${row.original.caseId}`} className={`${link} text-muted-foreground`}>
               {row.original.caseId}
             </Link>
           )}

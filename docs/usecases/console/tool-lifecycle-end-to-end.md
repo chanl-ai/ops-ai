@@ -44,3 +44,7 @@ calls a real model provider.
 
 Each pending step fails today for the reason named in its check. Step 7's reply "Here is what I found." comes only
 after a tool result; without the grant the scripted model answers "I could not find that.".
+
+## Setup state
+
+Passing on 2026-11-12. Setup uses the shared steps. Since 2026-11-11 a test run of a live write asks the person (`testRunsAsk`), so step 5 first turns that off for the team; the Activity tab step reads the call by its words, and the approvals switch is changed by Sam acting in team_ops.

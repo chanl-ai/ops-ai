@@ -5,15 +5,20 @@ the upload component cannot read."""
 
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
+import pytest
 import sqlalchemy as sa
+from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_files.store import AsyncEngine
 from ops_files.store.files import files as files_table
 from ops_identity import dev_service_signer, mint_service_token
+from ops_store import isolation
 
 from .test_api import (  # pyright: ignore[reportPrivateUsage]
     OPS,
@@ -44,6 +49,15 @@ async def _reference(c: httpx.AsyncClient, tenant: str, file_id: str) -> None:
     assert r.status_code == 200, r.text
 
 
+@asynccontextmanager
+async def _setup(engine: AsyncEngine, tenant: str) -> AsyncGenerator[AsyncConnection]:
+    """Writes a test's own rows in the tenant's scope. SQL Server applies its row policies to every user, so an update
+    outside the tenant's session context matches no rows and the test reads unchanged files."""
+    with isolation.tenant_wide("test: set up the tenant's own files", tenant_id=tenant):
+        async with isolation.isolated_tx(engine) as conn:
+            yield conn
+
+
 def _list(c: httpx.AsyncClient, **params: Any) -> Any:
     return c.get("/v1/files", params={"page": 1, "pageSize": 2, **params}, headers=OPS)
 
@@ -60,7 +74,7 @@ async def test_views_counts_search_and_date_run_in_the_query(
         assert _data(await c.post("/v1/files/legal-hold", json=hold, headers=OPS))["updated"] == [ids[1]]
         # Two files are old enough to count as unreferenced: one is used, so only the other is.
         old = datetime.now(UTC) - timedelta(days=40)
-        async with engine.begin() as conn:
+        async with _setup(engine, tenant) as conn:
             await conn.execute(sa.update(files_table).where(files_table.c.id.in_(ids[:3:2])).values(uploaded_at=old))
 
         page = _data(await _list(c))
@@ -121,11 +135,12 @@ async def test_wildcards_in_the_search_match_only_themselves(client: Client) -> 
 async def test_email_texts_are_left_out_of_the_list_until_asked_for(
     client: Client,  # noqa: F811
     engine: AsyncEngine,
+    tenant: str,
 ) -> None:
     async with client() as c:
         notice = await _stored(c, "notice.pdf")
         body = await _stored(c, "Notice of levy.txt", b"Please hold the funds listed in the notice.\n")
-        async with engine.begin() as conn:
+        async with _setup(engine, tenant) as conn:
             await conn.execute(sa.update(files_table).where(files_table.c.id == body).values(purpose="email_body"))
         listed = _data(await _list(c, pageSize=25))
         assert [f["id"] for f in listed["data"]] == [notice] and listed["viewCounts"]["all"] == 1, listed
@@ -133,3 +148,73 @@ async def test_email_texts_are_left_out_of_the_list_until_asked_for(
         asked = _data(await _list(c, pageSize=25, purpose="email_body"))
         assert [f["id"] for f in asked["data"]] == [body]
         assert (await c.get(f"/v1/files/{body}", headers=OPS)).status_code == 200, "a run or case still opens it"
+
+
+async def test_the_list_takes_the_shared_list_contract(client: Client) -> None:  # noqa: F811
+    """sortBy and sortOrder order the page in the query, ids answers exactly those rows whatever the search says, and
+    a page size above the install's maximum is answered at the maximum."""
+    async with client() as c:
+        ids = [await _stored(c, n, PDF + bytes([60 + i])) for i, n in enumerate(("b.pdf", "c.pdf", "a.pdf"))]
+        by_name = _data(await _list(c, pageSize=3, sortBy="name", sortOrder="asc"))
+        assert [f["name"] for f in by_name["data"]] == ["a.pdf", "b.pdf", "c.pdf"]
+        picked = _data(await _list(c, ids=[ids[0], ids[2]], search="nothing matches this"))
+        assert sorted(f["id"] for f in picked["data"]) == sorted([ids[0], ids[2]])
+        capped = _data(await _list(c, pageSize=500))
+        assert capped["pagination"]["pageSize"] == 50
+
+
+async def test_files_uploaded_at_the_same_moment_page_without_repeats_or_gaps(
+    client: Client,  # noqa: F811
+    engine: AsyncEngine,
+    tenant: str,
+) -> None:
+    """A batch import stores many files in one second; the order ends with the id, so each page holds the next ones."""
+    async with client() as c:
+        ids = [await _stored(c, f"import-{i}.pdf", PDF + bytes([i])) for i in range(5)]
+        same = datetime(2026, 11, 2, 9, 30, tzinfo=UTC)
+        async with _setup(engine, tenant) as conn:
+            await conn.execute(sa.update(files_table).where(files_table.c.id.in_(ids)).values(uploaded_at=same))
+        for order in ("desc", "asc"):
+            seen = [
+                row["id"]
+                for page in (1, 2, 3)
+                for row in _data(await _list(c, page=page, sortBy="uploadedAt", sortOrder=order))["data"]
+            ]
+            assert seen == sorted(ids, reverse=order == "desc"), order
+
+
+@pytest.mark.parametrize(
+    ("sort_by", "column", "low", "high"),
+    [
+        ("size", "size", 100, 300),
+        ("scan", "scan_status", "clean", "infected"),
+        ("purpose", "purpose", "chat_attachment", "knowledge_source"),
+    ],
+)
+async def test_the_list_sorts_by_size_scan_and_purpose_in_the_query(
+    client: Client,  # noqa: F811
+    engine: AsyncEngine,
+    tenant: str,
+    *,
+    sort_by: str,
+    column: str,
+    low: object,
+    high: object,
+) -> None:
+    """The Files table sorts these columns on the server: each order runs over every page, and rows with the same
+    value stay newest first, so a page never repeats or skips one."""
+    async with client() as c:
+        ids = [await _stored(c, f"sorted-{i}.pdf", PDF + bytes([90 + i])) for i in range(3)]
+        start = datetime(2026, 11, 2, 9, 0, tzinfo=UTC)
+        async with _setup(engine, tenant) as conn:
+            for i, value in enumerate((high, low, high)):
+                at = start + timedelta(minutes=i)
+                stmt = sa.update(files_table).where(files_table.c.id == ids[i])
+                await conn.execute(stmt.values({column: value, "uploaded_at": at}))
+        for order, expected in (("asc", [ids[1], ids[2], ids[0]]), ("desc", [ids[2], ids[0], ids[1]])):
+            seen = [
+                row["id"]
+                for page in (1, 2)
+                for row in _data(await _list(c, page=page, sortBy=sort_by, sortOrder=order))["data"]
+            ]
+            assert seen == expected, (sort_by, order)

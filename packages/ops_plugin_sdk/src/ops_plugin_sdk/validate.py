@@ -401,6 +401,8 @@ def check(manifest: Manifest, root: Path) -> list[Problem]:
     for kind in manifest.connection.kinds:
         if kind not in SIGN_IN_KINDS:
             out.append(Problem("connection.kinds", f"unknown sign-in kind {kind}; one of {', '.join(SIGN_IN_KINDS)}"))
+    if manifest.error_when is not None and steps(manifest.error_when) is None:
+        out.append(Problem("error_when", f"{manifest.error_when} is not a path such as error or errors[0].message"))
     c = manifest.connection
     if "api_key" in c.kinds and c.api_key is None:
         out.append(Problem("connection.api_key", "an api_key plugin says how its key is sent: placement and name"))

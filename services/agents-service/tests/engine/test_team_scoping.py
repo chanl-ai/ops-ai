@@ -40,7 +40,7 @@ async def test_another_teams_workflow_and_run_are_not_found(engine: AsyncEngine)
         rid = f"wfrun_{uuid4().hex[:10]}"
         row: dict[str, Any] = {"id": rid, "team_id": "team_cards", "workflow_id": wf, "version": 1, "digest": "d" * 64}
         await RunStore(tx).create(row | {"run_key": rid, "mode": "live", "input": {}, "created_by": "a"})
-        assert wf not in [d["workflow_id"] for d in await store.summaries(team="team_lending")]
+        assert wf not in [d.workflow_id for d in await store.summaries(team="team_lending")]
         assert await store.get(wf, team="team_lending") is None
         assert await store.delete_draft(wf, team="team_lending") == "missing"
         assert await store.get(wf, team="team_cards") is not None
@@ -48,7 +48,7 @@ async def test_another_teams_workflow_and_run_are_not_found(engine: AsyncEngine)
         with isolation.scope(current_tenant(), "team_lending"), pytest.raises(NotFound):
             await visible_run(rt, rid)
         with isolation.scope(current_tenant(), "team_cards"):
-            assert (await visible_run(rt, rid))["id"] == rid
+            assert (await visible_run(rt, rid)).id == rid
 
 
 async def test_another_teams_review_cannot_be_read_or_decided(engine: AsyncEngine) -> None:
@@ -64,7 +64,8 @@ async def test_another_teams_review_cannot_be_read_or_decided(engine: AsyncEngin
         payload = {"node": "review", "step_id": f"{rid}:review:1", "iteration": 1}
         waiting = {"node": "review", "iteration": 1, "interruptId": "i", "payload": payload}
         await RunStore(tx).update(rid, status="waiting", waiting=waiting)
-        rt: Any = SimpleNamespace(db=engine, settings=SimpleNamespace(lease_ttl_seconds=6.0))
+        settings = SimpleNamespace(lease_ttl_seconds=6.0, review_list_rows_per_source=1000)
+        rt: Any = SimpleNamespace(db=engine, settings=settings)
         with isolation.scope(current_tenant(), "team_lending"):
             with pytest.raises(NotFound):
                 await engine_reviews.get(rt, rid)
@@ -81,5 +82,5 @@ async def test_another_team_cannot_publish_over_a_workflow_id(engine: AsyncEngin
         await store.publish(wf, name="A", definition={}, digest="a" * 64, now="n", by="a", team="team_cards")
         with pytest.raises(WorkflowOwnedError):
             await store.publish(wf, name="B", definition={}, digest="b" * 64, now="n", by="b", team="team_lending")
-        mine = [d for d in await store.summaries(team="team_cards") if d["workflow_id"] == wf]
-        assert [(d["name"], d["version"]) for d in mine] == [("A", 1)]
+        mine = [d for d in await store.summaries(team="team_cards") if d.workflow_id == wf]
+        assert [(d.name, d.version) for d in mine] == [("A", 1)]

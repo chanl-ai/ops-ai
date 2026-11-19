@@ -36,6 +36,7 @@ from ops_agents.graphs.sla import review_loop
 from ops_agents.store.leases import Leases
 from ops_checkpointer import LeaseSupersededError
 from ops_policy import input_hash
+from ops_service_kit import narrow
 from ops_service_kit.ids import new_id
 from ops_service_kit.settings import Settings
 from tests.conftest import FakeGraphModels, fixture_knowledge, scripted, scripted_stream, sse_events
@@ -160,9 +161,7 @@ class Adapter:
         return str(r.json()["data"]["token"])
 
     async def effects(self, tid: str) -> list[tuple[str, str, str]]:
-        return [
-            (r["tool"], r["decision"], r["outcome"]) for r in await self.gateway.log.for_thread(tid, tenant_id="local")
-        ]
+        return [(r.tool, r.decision, r.outcome) for r in await self.gateway.log.for_thread(tid, tenant_id="local")]
 
     async def publish(self, name: str, **human: Any) -> httpx.Response:
         definition = {
@@ -259,7 +258,8 @@ async def test_an_edit_after_approval_voids_the_old_token(adapter: Adapter) -> N
     assert store is not None
     assert await store.start_run(run_id, tid, "input", "2026-10-10T00:00:00Z", {"edit": True}, generation=generation)
     edited = [e async for e in execute(adapter.rt, row, graph, graph_input=None, run_id=run_id, kind="input")]
-    assert edited[-1]["data"]["status"] == "interrupted", edited[-2:]
+    end = narrow.an_object(edited[-1]["data"], "the end event's data")
+    assert end["status"] == "interrupted", edited[-2:]
     # The token minted before the edit cannot be used: a review is resumed only by decide, which mints from the
     # input the thread is waiting on now.
     stale = await adapter.http.post(
@@ -269,8 +269,8 @@ async def test_an_edit_after_approval_voids_the_old_token(adapter: Adapter) -> N
     edited_call = (await adapter.state(tid))["interrupt"]["payload"]["call"]
     assert (await adapter.decide(tid))["status"] == "approved"
     rows = await adapter.gateway.log.for_thread(tid, tenant_id="local")
-    assert [(r["tool"], r["decision"], r["outcome"]) for r in rows] == [("send_reply", "allow", "ok")]
-    assert rows[0]["input_hash"] == input_hash(edited_call["input"])
+    assert [(r.tool, r.decision, r.outcome) for r in rows] == [("send_reply", "allow", "ok")]
+    assert rows[0].input_hash == input_hash(edited_call["input"])
 
 
 # 7. SLA timeout approves.
@@ -332,12 +332,15 @@ async def wire_waiting(a: Adapter) -> str:
     return tid
 
 
+# Neither approver started the run: the run acts for the dev caller, and the gateway refuses an approval the person a
+# call acts for gave themselves while requesterMayDecide is off, its default.
+FIRST = "kim@harborpine.example"
 SECOND = "lee@harborpine.example"
 
 
 async def first_approval(a: Adapter, tid: str) -> None:
     """The first of a money step's two approvers; the thread stays paused for the second."""
-    assert (await a.decide(tid, step_up=await a.step_up()))["status"] == "in_review"
+    assert (await a.decide(tid, step_up=await a.step_up(FIRST), as_user=FIRST))["status"] == "in_review"
 
 
 async def second_approval(a: Adapter, tid: str) -> dict[str, Any]:
@@ -356,7 +359,7 @@ async def test_an_agent_interrupt_survives_a_restart_and_resumes_the_same_call(g
         await second_approval(a, tid)
         assert (await a.last_run(tid))["status"] == "done"
         rows = await a.gateway.log.for_thread(tid, tenant_id="local")
-        assert [(r["tool"], r["step"], r["outcome"]) for r in rows] == [("place_wire_hold", pending_key, "ok")]
+        assert [(r.tool, r.step, r.outcome) for r in rows] == [("place_wire_hold", pending_key, "ok")]
         assert a.model.calls - before == 1  # only the closing answer; the approved call is not asked for again
 
 
@@ -416,7 +419,7 @@ def route_skipped(runs: list[dict[str, Any]]) -> list[str]:
 async def journal(a: Adapter, tid: str) -> list[dict[str, Any]]:
     store = a.rt.graph_store
     assert store is not None
-    return await store.runs(tid)
+    return [r.model_dump() for r in await store.runs(tid)]
 
 
 async def test_routing_a_waiting_thread_to_people_raises_the_manual_step(adapter: Adapter) -> None:

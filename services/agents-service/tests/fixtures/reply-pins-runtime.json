@@ -1,0 +1,1208 @@
+{
+  "chat.agents": {
+    "body": {
+      "data": [
+        {
+          "defaultKbIds": [
+            "kb_people",
+            "kb_eng"
+          ],
+          "id": "ag_fraud",
+          "kbs": [
+            {
+              "id": "kb_people",
+              "name": "Fraud & payments"
+            },
+            {
+              "id": "kb_eng",
+              "name": "Compliance"
+            }
+          ],
+          "model": "default",
+          "name": "Wire Fraud Sentinel",
+          "role": "Scores outbound wires and places holds",
+          "suggestions": [
+            "What is the daily wire limit for a personal account?",
+            "What is our new-payee wire hold rule?",
+            "Place a 24-hour hold on wire W-88213, the payee was added this morning"
+          ],
+          "version": 7
+        },
+        {
+          "defaultKbIds": [
+            "kb_legal"
+          ],
+          "id": "ag_dispute",
+          "kbs": [
+            {
+              "id": "kb_legal",
+              "name": "Cards & disputes"
+            }
+          ],
+          "model": "default",
+          "name": "Card Dispute Resolver",
+          "role": "Investigates and drafts card dispute outcomes",
+          "suggestions": [
+            "When do we owe a provisional credit on a dispute?",
+            "Look up Priya Natarajan",
+            "Ask Priya Natarajan for the merchant receipt for her disputed charge"
+          ],
+          "version": 4
+        },
+        {
+          "defaultKbIds": [
+            "kb_support"
+          ],
+          "id": "ag_branch",
+          "kbs": [
+            {
+              "id": "kb_support",
+              "name": "Retail banking"
+            }
+          ],
+          "model": "default",
+          "name": "Branch Concierge",
+          "role": "Books appointments and answers product questions",
+          "suggestions": [
+            "What is the wire cut-off time at the Halifax branch?",
+            "What is the refund window for an annual card fee?",
+            "Ask Daniel Okoye to send a proof of address"
+          ],
+          "version": 3
+        }
+      ],
+      "success": true
+    },
+    "status": 200
+  },
+  "chat.createRefused": {
+    "body": {
+      "error": {
+        "code": "unprocessable",
+        "message": "Knowledge base kb_x does not exist or you cannot read it.",
+        "requestId": "<req>",
+        "status": 422
+      },
+      "success": false
+    },
+    "status": 422
+  },
+  "chat.createThread": {
+    "body": {
+      "data": {
+        "agentId": "ag_fraud",
+        "agentName": "Wire Fraud Sentinel",
+        "agentVersion": 7,
+        "archived": false,
+        "createdAt": "<timeZ>",
+        "id": "<th>",
+        "kbIds": [
+          "kb_people"
+        ],
+        "kbNames": [
+          "Fraud & payments"
+        ],
+        "lastMessageAt": "<timeZ>",
+        "messageCount": 0,
+        "messages": [],
+        "owner": "James Richardson",
+        "pinned": false,
+        "test": false,
+        "title": "New chat"
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "chat.missing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Conversation was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "chat.stream": {
+    "contentType": "text/event-stream",
+    "frames": [
+      {
+        "messageId": "<m>",
+        "type": "start",
+        "userMessage": {
+          "at": "<timeZ>",
+          "content": "What is the daily wire limit for a personal account?",
+          "id": "<m>",
+          "role": "user"
+        }
+      },
+      {
+        "phase": "thinking",
+        "type": "status"
+      },
+      {
+        "phase": "retrieving",
+        "type": "status"
+      },
+      {
+        "phase": "writing",
+        "type": "status"
+      },
+      {
+        "delta": "The daily ",
+        "type": "text"
+      },
+      {
+        "delta": "wire ",
+        "type": "text"
+      },
+      {
+        "delta": "limit ",
+        "type": "text"
+      },
+      {
+        "delta": "for a ",
+        "type": "text"
+      },
+      {
+        "delta": "personal account is $25,000 online [1].",
+        "type": "text"
+      },
+      {
+        "citations": [
+          {
+            "documentId": "doc_wire_limits",
+            "n": 1,
+            "section": "4.2 Daily limits",
+            "snippet": "The daily wire limit for a personal account is $25,000 when sent through online or mobile banking and $100,000 when sent in branch with two pieces of ID. Business accounts have a daily wire limit of $250,000. Limits reset at midnight Eastern time and apply across all of a custome",
+            "title": "Wire Transfer Policy",
+            "version": "v6"
+          }
+        ],
+        "type": "citations"
+      },
+      {
+        "message": {
+          "agentId": "ag_fraud",
+          "agentName": "Wire Fraud Sentinel",
+          "at": "<timeZ>",
+          "citations": [
+            {
+              "documentId": "doc_wire_limits",
+              "n": 1,
+              "section": "4.2 Daily limits",
+              "snippet": "The daily wire limit for a personal account is $25,000 when sent through online or mobile banking and $100,000 when sent in branch with two pieces of ID. Business accounts have a daily wire limit of $250,000. Limits reset at midnight Eastern time and apply across all of a custome",
+              "title": "Wire Transfer Policy",
+              "version": "v6"
+            }
+          ],
+          "content": "The daily wire limit for a personal account is $25,000 online [1].",
+          "id": "<m>",
+          "model": "function:scripted:scripted_stream",
+          "role": "assistant",
+          "settings": {
+            "addedInstructions": [],
+            "composeOff": false,
+            "knowledgeBaseIds": [
+              "kb_people"
+            ],
+            "model": "default",
+            "sources": {
+              "knowledgeBaseIds": "started",
+              "model": "agent"
+            },
+            "toolsOff": [],
+            "widgetsOff": []
+          }
+        },
+        "type": "done"
+      }
+    ],
+    "status": 200
+  },
+  "chat.thread": {
+    "body": {
+      "data": {
+        "agentId": "ag_fraud",
+        "agentName": "Wire Fraud Sentinel",
+        "agentVersion": 7,
+        "archived": false,
+        "createdAt": "<timeZ>",
+        "id": "<th>",
+        "kbIds": [
+          "kb_people"
+        ],
+        "kbNames": [
+          "Fraud & payments"
+        ],
+        "lastMessageAt": "<timeZ>",
+        "messageCount": 2,
+        "messages": [
+          {
+            "at": "<timeZ>",
+            "content": "What is the daily wire limit for a personal account?",
+            "id": "<m>",
+            "role": "user"
+          },
+          {
+            "agentId": "ag_fraud",
+            "agentName": "Wire Fraud Sentinel",
+            "at": "<timeZ>",
+            "citations": [
+              {
+                "documentId": "doc_wire_limits",
+                "n": 1,
+                "section": "4.2 Daily limits",
+                "snippet": "The daily wire limit for a personal account is $25,000 when sent through online or mobile banking and $100,000 when sent in branch with two pieces of ID. Business accounts have a daily wire limit of $250,000. Limits reset at midnight Eastern time and apply across all of a custome",
+                "title": "Wire Transfer Policy",
+                "version": "v6"
+              }
+            ],
+            "content": "The daily wire limit for a personal account is $25,000 online [1].",
+            "id": "<m>",
+            "model": "function:scripted:scripted_stream",
+            "role": "assistant",
+            "settings": {
+              "addedInstructions": [],
+              "composeOff": false,
+              "knowledgeBaseIds": [
+                "kb_people"
+              ],
+              "model": "default",
+              "sources": {
+                "knowledgeBaseIds": "started",
+                "model": "agent"
+              },
+              "toolsOff": [],
+              "widgetsOff": []
+            },
+            "usage": {
+              "calls": 1,
+              "cost": "0.00",
+              "inputTokens": 50,
+              "outputTokens": 20,
+              "seconds": "<seconds>"
+            }
+          }
+        ],
+        "owner": "James Richardson",
+        "pinned": false,
+        "test": false,
+        "title": "What is the daily wire limit for a personal acc\u2026"
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "chat.threads": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "agentId": "ag_fraud",
+            "agentName": "Wire Fraud Sentinel",
+            "agentVersion": 7,
+            "archived": false,
+            "citations": 1,
+            "createdAt": "<timeZ>",
+            "id": "<th>",
+            "kbIds": [
+              "kb_people"
+            ],
+            "kbNames": [
+              "Fraud & payments"
+            ],
+            "lastMessageAt": "<timeZ>",
+            "messageCount": 2,
+            "owner": "James Richardson",
+            "pinned": false,
+            "preview": "The daily wire limit for a personal account is $25,000 online [1].",
+            "test": false,
+            "title": "What is the daily wire limit for a personal acc\u2026",
+            "widgets": 0
+          }
+        ],
+        "facets": {
+          "agentId": {
+            "ag_fraud": 1
+          },
+          "kbIds": {
+            "kb_people": 1
+          },
+          "state": {
+            "active": 1
+          }
+        },
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 5,
+          "total": 1,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "events.waiting": {
+    "frames": [
+      {
+        "at": "<timeZ>",
+        "data": {
+          "generation": 1,
+          "graph": "agent_wrapper",
+          "kind": "input"
+        },
+        "id": "<evt>",
+        "node": null,
+        "runId": "<run>",
+        "seq": 2,
+        "threadId": "<th>",
+        "type": "started"
+      },
+      {
+        "at": "<timeZ>",
+        "data": {
+          "status": "done"
+        },
+        "id": "<evt>",
+        "node": null,
+        "runId": "<run>",
+        "seq": 16,
+        "threadId": "<th>",
+        "type": "finished"
+      },
+      {
+        "at": "<timeZ>",
+        "data": {
+          "generation": 1,
+          "graph": "wire_hold_review",
+          "kind": "input"
+        },
+        "id": "<evt>",
+        "node": null,
+        "runId": "<run>",
+        "seq": 1,
+        "threadId": "<gth>",
+        "type": "started"
+      },
+      {
+        "at": "<timeZ>",
+        "data": {
+          "id": "<hex>",
+          "payload": {
+            "call": {
+              "input": {
+                "body": "Here is what the policy says [1].",
+                "subject": "Re: Hold the wire",
+                "to": "ops@bank.example"
+              },
+              "step": "REV-DBDF00:reply",
+              "tool": "send_reply"
+            },
+            "draft": "Here is what the policy says [1].",
+            "kind": "review",
+            "node": "review",
+            "review_id": "<REV>",
+            "score": null
+          }
+        },
+        "id": "<evt>",
+        "node": null,
+        "runId": "<run>",
+        "seq": 14,
+        "threadId": "<gth>",
+        "type": "waiting_review"
+      },
+      {
+        "at": "<timeZ>",
+        "data": {
+          "generation": 1,
+          "graph": "wire_hold_review",
+          "kind": "input"
+        },
+        "id": "<evt>",
+        "node": null,
+        "runId": "<run>",
+        "seq": 1,
+        "threadId": "<gth>",
+        "type": "started"
+      },
+      {
+        "at": "<timeZ>",
+        "data": {
+          "id": "<hex>",
+          "payload": {
+            "call": {
+              "input": {
+                "body": "Here is what the policy says [1].",
+                "subject": "Re: Release the wire",
+                "to": "ops@bank.example"
+              },
+              "step": "REV-4E5C6E:reply",
+              "tool": "send_reply"
+            },
+            "draft": "Here is what the policy says [1].",
+            "kind": "review",
+            "node": "review",
+            "review_id": "<REV>",
+            "score": null
+          }
+        },
+        "id": "<evt>",
+        "node": null,
+        "runId": "<run>",
+        "seq": 14,
+        "threadId": "<gth>",
+        "type": "waiting_review"
+      }
+    ],
+    "status": 200
+  },
+  "overview": {
+    "body": {
+      "data": {
+        "cases": {
+          "awaitingApproval": 0,
+          "breaching": 0,
+          "open": 0
+        },
+        "casesDue": [],
+        "counts": {
+          "casesDue": 0,
+          "runsInFlight": 0,
+          "waitingForMe": 0
+        },
+        "openReviews": 0,
+        "overdueReviews": 0,
+        "runsInFlight": [],
+        "urgentReviews": [],
+        "waitingForMe": []
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "overview.waiting": {
+    "body": {
+      "data": {
+        "cases": {
+          "awaitingApproval": 0,
+          "breaching": 0,
+          "open": 0
+        },
+        "casesDue": [],
+        "counts": {
+          "casesDue": 0,
+          "runsInFlight": 0,
+          "waitingForMe": 0
+        },
+        "openReviews": 2,
+        "overdueReviews": 0,
+        "runsInFlight": [],
+        "urgentReviews": [
+          {
+            "actionFields": [
+              {
+                "label": "To",
+                "value": "ops@bank.example"
+              },
+              {
+                "label": "Subject",
+                "value": "Re: Release the wire"
+              },
+              {
+                "label": "Body",
+                "value": "Here is what the policy says [1]."
+              }
+            ],
+            "actionTool": "send_reply",
+            "agentSlug": "wire_hold_review",
+            "amount": null,
+            "approvals": [],
+            "assignee": null,
+            "calls": null,
+            "confidence": 0.0,
+            "consequence": "Send reply: to ops@bank.example, subject Re: Release the wire, body Here is what the policy says [1].",
+            "createdAt": "<timeZ>",
+            "currency": "USD",
+            "customer": "",
+            "decidingTeam": {
+              "id": "team_ops",
+              "name": null
+            },
+            "error": null,
+            "evidence": [
+              {
+                "detail": "{'to': 'ops@bank.example', 'subject': 'Re: Release the wire', 'body': 'Here is what the policy says [1].'}",
+                "kind": "tool",
+                "label": "send_reply"
+              }
+            ],
+            "id": "<gth>",
+            "kind": "approval",
+            "options": null,
+            "optionsError": null,
+            "origin": {
+              "kind": "workflow"
+            },
+            "policy": {
+              "condition": "Every outgoing reply",
+              "fourEyes": false,
+              "id": "wire_hold_review:review",
+              "name": "Human review",
+              "onTimeout": "Per workflow",
+              "reviewers": "Reviewers",
+              "sla": "Per workflow"
+            },
+            "proposal": "Here is what the policy says [1].",
+            "reasoning": [],
+            "risk": "medium",
+            "slaMinutes": null,
+            "status": "pending",
+            "stepUp": false,
+            "title": "Review Wire hold review",
+            "workflowId": "wire_hold_review",
+            "workflowName": "Wire hold review"
+          },
+          {
+            "actionFields": [
+              {
+                "label": "To",
+                "value": "ops@bank.example"
+              },
+              {
+                "label": "Subject",
+                "value": "Re: Hold the wire"
+              },
+              {
+                "label": "Body",
+                "value": "Here is what the policy says [1]."
+              }
+            ],
+            "actionTool": "send_reply",
+            "agentSlug": "wire_hold_review",
+            "amount": null,
+            "approvals": [],
+            "assignee": null,
+            "calls": null,
+            "confidence": 0.0,
+            "consequence": "Send reply: to ops@bank.example, subject Re: Hold the wire, body Here is what the policy says [1].",
+            "createdAt": "<timeZ>",
+            "currency": "USD",
+            "customer": "",
+            "decidingTeam": {
+              "id": "team_ops",
+              "name": null
+            },
+            "error": null,
+            "evidence": [
+              {
+                "detail": "{'to': 'ops@bank.example', 'subject': 'Re: Hold the wire', 'body': 'Here is what the policy says [1].'}",
+                "kind": "tool",
+                "label": "send_reply"
+              }
+            ],
+            "id": "<gth>",
+            "kind": "approval",
+            "options": null,
+            "optionsError": null,
+            "origin": {
+              "kind": "workflow"
+            },
+            "policy": {
+              "condition": "Every outgoing reply",
+              "fourEyes": false,
+              "id": "wire_hold_review:review",
+              "name": "Human review",
+              "onTimeout": "Per workflow",
+              "reviewers": "Reviewers",
+              "sla": "Per workflow"
+            },
+            "proposal": "Here is what the policy says [1].",
+            "reasoning": [],
+            "risk": "medium",
+            "slaMinutes": null,
+            "status": "pending",
+            "stepUp": false,
+            "title": "Review Wire hold review",
+            "workflowId": "wire_hold_review",
+            "workflowName": "Wire hold review"
+          }
+        ],
+        "waitingForMe": []
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "reviews.list": {
+    "body": {
+      "data": {
+        "data": [],
+        "facets": {
+          "agentSlug": {},
+          "kind": {},
+          "risk": {},
+          "status": {},
+          "workflowId": {}
+        },
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 25,
+          "total": 0,
+          "totalPages": 1
+        },
+        "stats": {
+          "approvedAsProposedRate": 0,
+          "decidedToday": 0,
+          "medianDecisionMinutes": 0,
+          "medianDecisionTrendMinutes": 0,
+          "unassigned": 0
+        },
+        "viewCounts": {
+          "mine": 0,
+          "open": 0,
+          "overdue": 0,
+          "resolved": 0
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "reviews.missing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Review was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "reviews.waiting": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "actionFields": [
+              {
+                "label": "To",
+                "value": "ops@bank.example"
+              },
+              {
+                "label": "Subject",
+                "value": "Re: Release the wire"
+              },
+              {
+                "label": "Body",
+                "value": "Here is what the policy says [1]."
+              }
+            ],
+            "actionTool": "send_reply",
+            "agentSlug": "wire_hold_review",
+            "amount": null,
+            "approvals": [],
+            "assignee": null,
+            "calls": null,
+            "canDecide": true,
+            "confidence": 0.0,
+            "consequence": "Send reply: to ops@bank.example, subject Re: Release the wire, body Here is what the policy says [1].",
+            "createdAt": "<timeZ>",
+            "currency": "USD",
+            "customer": "",
+            "decidingTeam": {
+              "id": "team_ops",
+              "name": null
+            },
+            "error": null,
+            "evidence": [
+              {
+                "detail": "{'to': 'ops@bank.example', 'subject': 'Re: Release the wire', 'body': 'Here is what the policy says [1].'}",
+                "kind": "tool",
+                "label": "send_reply"
+              }
+            ],
+            "id": "<gth>",
+            "kind": "approval",
+            "options": null,
+            "optionsError": null,
+            "origin": {
+              "kind": "workflow"
+            },
+            "policy": {
+              "condition": "Every outgoing reply",
+              "fourEyes": false,
+              "id": "wire_hold_review:review",
+              "name": "Human review",
+              "onTimeout": "Per workflow",
+              "reviewers": "Reviewers",
+              "sla": "Per workflow"
+            },
+            "proposal": "Here is what the policy says [1].",
+            "reasoning": [],
+            "risk": "medium",
+            "slaMinutes": null,
+            "status": "pending",
+            "stepUp": false,
+            "title": "Review Wire hold review",
+            "workflowId": "wire_hold_review",
+            "workflowName": "Wire hold review"
+          },
+          {
+            "actionFields": [
+              {
+                "label": "To",
+                "value": "ops@bank.example"
+              },
+              {
+                "label": "Subject",
+                "value": "Re: Hold the wire"
+              },
+              {
+                "label": "Body",
+                "value": "Here is what the policy says [1]."
+              }
+            ],
+            "actionTool": "send_reply",
+            "agentSlug": "wire_hold_review",
+            "amount": null,
+            "approvals": [],
+            "assignee": null,
+            "calls": null,
+            "canDecide": true,
+            "confidence": 0.0,
+            "consequence": "Send reply: to ops@bank.example, subject Re: Hold the wire, body Here is what the policy says [1].",
+            "createdAt": "<timeZ>",
+            "currency": "USD",
+            "customer": "",
+            "decidingTeam": {
+              "id": "team_ops",
+              "name": null
+            },
+            "error": null,
+            "evidence": [
+              {
+                "detail": "{'to': 'ops@bank.example', 'subject': 'Re: Hold the wire', 'body': 'Here is what the policy says [1].'}",
+                "kind": "tool",
+                "label": "send_reply"
+              }
+            ],
+            "id": "<gth>",
+            "kind": "approval",
+            "options": null,
+            "optionsError": null,
+            "origin": {
+              "kind": "workflow"
+            },
+            "policy": {
+              "condition": "Every outgoing reply",
+              "fourEyes": false,
+              "id": "wire_hold_review:review",
+              "name": "Human review",
+              "onTimeout": "Per workflow",
+              "reviewers": "Reviewers",
+              "sla": "Per workflow"
+            },
+            "proposal": "Here is what the policy says [1].",
+            "reasoning": [],
+            "risk": "medium",
+            "slaMinutes": null,
+            "status": "pending",
+            "stepUp": false,
+            "title": "Review Wire hold review",
+            "workflowId": "wire_hold_review",
+            "workflowName": "Wire hold review"
+          }
+        ],
+        "facets": {
+          "agentSlug": {
+            "wire_hold_review": 2
+          },
+          "kind": {
+            "approval": 2
+          },
+          "risk": {
+            "medium": 2
+          },
+          "status": {
+            "pending": 2
+          },
+          "workflowId": {
+            "wire_hold_review": 2
+          }
+        },
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 25,
+          "total": 2,
+          "totalPages": 1
+        },
+        "stats": {
+          "approvedAsProposedRate": 0,
+          "decidedToday": 0,
+          "medianDecisionMinutes": 0,
+          "medianDecisionTrendMinutes": 0,
+          "unassigned": 2
+        },
+        "viewCounts": {
+          "mine": 0,
+          "open": 2,
+          "overdue": 0,
+          "resolved": 0
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "reviews.waitingOne": {
+    "body": {
+      "data": {
+        "actionFields": [
+          {
+            "label": "To",
+            "value": "ops@bank.example"
+          },
+          {
+            "label": "Subject",
+            "value": "Re: Release the wire"
+          },
+          {
+            "label": "Body",
+            "value": "Here is what the policy says [1]."
+          }
+        ],
+        "actionTool": "send_reply",
+        "agentSlug": "wire_hold_review",
+        "amount": null,
+        "approvals": [],
+        "assignee": null,
+        "calls": null,
+        "canDecide": true,
+        "confidence": 0.0,
+        "consequence": "Send reply: to ops@bank.example, subject Re: Release the wire, body Here is what the policy says [1].",
+        "createdAt": "<timeZ>",
+        "currency": "USD",
+        "customer": "",
+        "decidingTeam": {
+          "id": "team_ops",
+          "name": null
+        },
+        "error": null,
+        "evidence": [
+          {
+            "detail": "{'to': 'ops@bank.example', 'subject': 'Re: Release the wire', 'body': 'Here is what the policy says [1].'}",
+            "kind": "tool",
+            "label": "send_reply"
+          }
+        ],
+        "id": "<gth>",
+        "kind": "approval",
+        "options": null,
+        "optionsError": null,
+        "origin": {
+          "kind": "workflow"
+        },
+        "policy": {
+          "condition": "Every outgoing reply",
+          "fourEyes": false,
+          "id": "wire_hold_review:review",
+          "name": "Human review",
+          "onTimeout": "Per workflow",
+          "reviewers": "Reviewers",
+          "sla": "Per workflow"
+        },
+        "proposal": "Here is what the policy says [1].",
+        "reasoning": [],
+        "risk": "medium",
+        "slaMinutes": null,
+        "status": "pending",
+        "stepUp": false,
+        "title": "Review Wire hold review",
+        "workflowId": "wire_hold_review",
+        "workflowName": "Wire hold review"
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "runs.list": {
+    "body": {
+      "data": {
+        "data": [],
+        "facets": {
+          "status": {},
+          "workflowId": {}
+        },
+        "labels": {
+          "workflowId": {}
+        },
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 3,
+          "total": 0,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "runs.missing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Run was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "runs.waiting": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "actionsApproved": 0,
+            "actionsPending": 1,
+            "assignee": null,
+            "caseId": null,
+            "children": null,
+            "durationMs": "<durationMs>",
+            "id": "<gth>",
+            "parentThreadId": null,
+            "queue": "Reviews",
+            "reviewId": "<gth>",
+            "slaDueAt": null,
+            "slaMinutes": null,
+            "startedAt": "<timeZ>",
+            "state": "waiting",
+            "status": "waiting_review",
+            "steps": [
+              {
+                "durationMs": "<durationMs>",
+                "kind": "trigger",
+                "label": "Started",
+                "nodeId": "trigger",
+                "status": "done"
+              },
+              {
+                "durationMs": "<durationMs>",
+                "kind": "tool",
+                "label": "T",
+                "nodeId": "t",
+                "status": "done"
+              },
+              {
+                "durationMs": "<durationMs>",
+                "kind": "tool",
+                "label": "Assess",
+                "nodeId": "assess",
+                "status": "done"
+              },
+              {
+                "durationMs": "<durationMs>",
+                "kind": "tool",
+                "label": "Review",
+                "nodeId": "review",
+                "status": "waiting"
+              }
+            ],
+            "subject": "Release the wire",
+            "trigger": "From ops@bank.example",
+            "version": 1,
+            "waitingOn": "Reviewers",
+            "workflowId": "wire_hold_review",
+            "workflowName": "Wire hold review"
+          },
+          {
+            "actionsApproved": 0,
+            "actionsPending": 1,
+            "assignee": null,
+            "caseId": null,
+            "children": null,
+            "durationMs": "<durationMs>",
+            "id": "<gth>",
+            "parentThreadId": null,
+            "queue": "Reviews",
+            "reviewId": "<gth>",
+            "slaDueAt": null,
+            "slaMinutes": null,
+            "startedAt": "<timeZ>",
+            "state": "waiting",
+            "status": "waiting_review",
+            "steps": [
+              {
+                "durationMs": "<durationMs>",
+                "kind": "trigger",
+                "label": "Started",
+                "nodeId": "trigger",
+                "status": "done"
+              },
+              {
+                "durationMs": "<durationMs>",
+                "kind": "tool",
+                "label": "T",
+                "nodeId": "t",
+                "status": "done"
+              },
+              {
+                "durationMs": "<durationMs>",
+                "kind": "tool",
+                "label": "Assess",
+                "nodeId": "assess",
+                "status": "done"
+              },
+              {
+                "durationMs": "<durationMs>",
+                "kind": "tool",
+                "label": "Review",
+                "nodeId": "review",
+                "status": "waiting"
+              }
+            ],
+            "subject": "Hold the wire",
+            "trigger": "From ops@bank.example",
+            "version": 1,
+            "waitingOn": "Reviewers",
+            "workflowId": "wire_hold_review",
+            "workflowName": "Wire hold review"
+          }
+        ],
+        "facets": {
+          "queue": {
+            "Reviews": 2
+          },
+          "state": {
+            "waiting": 2
+          },
+          "workflowId": {
+            "wire_hold_review": 2
+          }
+        },
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 25,
+          "total": 2,
+          "totalPages": 1
+        },
+        "viewCounts": {
+          "done_today": 1,
+          "needs_person": 2,
+          "open": 2,
+          "past_sla": 0
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "threads.create": {
+    "body": {
+      "data": {
+        "created": true,
+        "digest": "<hex>",
+        "graph": "dispute_email",
+        "threadId": "<gth>",
+        "version": 1
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "threads.list": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "createdAt": "<timeZ>",
+            "graph": "dispute_email",
+            "metadata": {
+              "ownerEmail": "j.richardson@harborpine.example",
+              "startedBy": "j.richardson@harborpine.example"
+            },
+            "status": "idle",
+            "threadId": "<gth>",
+            "updatedAt": "<timeZ>",
+            "version": 1
+          },
+          {
+            "createdAt": "<timeZ>",
+            "graph": "agent_wrapper",
+            "metadata": {
+              "agentId": "ag_fraud",
+              "agentName": "Wire Fraud Sentinel",
+              "agentVersion": 7,
+              "archived": false,
+              "budgetAllotment": {
+                "maxCalls": 200,
+                "maxCost": "5.0"
+              },
+              "chat": true,
+              "hidden": false,
+              "kbIds": [
+                "kb_people"
+              ],
+              "kbNames": [
+                "Fraud & payments"
+              ],
+              "lastMessageAt": "<timeZ>",
+              "messageCount": 2,
+              "owner": "James Richardson",
+              "ownerEmail": "j.richardson@harborpine.example",
+              "pinned": false,
+              "preview": "The daily wire limit for a personal account is $25,000 online [1].",
+              "title": "What is the daily wire limit for a personal acc\u2026"
+            },
+            "status": "idle",
+            "threadId": "<th>",
+            "updatedAt": "<timeZ>",
+            "version": null
+          }
+        ],
+        "facets": {},
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 3,
+          "total": 2,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "threads.missingState": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Thread was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  }
+}

@@ -11,12 +11,16 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_agents.graphs.metering import CallSite
 from ops_metering import MICRO, Budget, Exhausted, PriceTable, Totals, Usage, cost, exhausted
+from ops_service_kit.http import Out
 from ops_service_kit.ids import now_iso
 from ops_store import Guarantee
-from ops_store.dialect import upsert
+from ops_store.dialect import db_now, upsert
+from ops_store.rows import one
+from ops_store.schema import TENANT_SCOPED, system
 
 from .base import metadata
-from .model_calls import ModelCall, ModelCallLedger
+from .model_calls import UNATTRIBUTED, ModelCall, ModelCallLedger
+from .tenancy import RuntimeStore, current_tenant
 
 thread_budgets = sa.Table(
     "thread_budgets",
@@ -26,7 +30,34 @@ thread_budgets = sa.Table(
     sa.Column("max_tokens", sa.BigInteger()),
     sa.Column("max_cost_micros", sa.BigInteger()),
     sa.Column("updated_at", sa.String(40), nullable=False),
+    # The thread's tenant, set from the request's or loop's context, never from a body (migration 0104).
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant),
+    info=TENANT_SCOPED,
 )
+
+# The budgets of gone threads with no tenant to hold them to (0104), kept beside model_call_records_unattributed.
+thread_budgets_unattributed = sa.Table(
+    "thread_budgets_unattributed",
+    metadata,
+    sa.Column("thread_id", sa.String(64), primary_key=True),
+    sa.Column("max_calls", sa.Integer()),
+    sa.Column("max_tokens", sa.BigInteger()),
+    sa.Column("max_cost_micros", sa.BigInteger()),
+    sa.Column("updated_at", sa.String(40), nullable=False),
+    sa.Column("moved_at", sa.DateTime(timezone=True), nullable=False, server_default=db_now()),
+    info=system(UNATTRIBUTED),
+)
+
+
+class BudgetOut(Out):
+    """A thread's stored limits; None is no limit on that measure."""
+
+    max_calls: int | None
+    max_tokens: int | None
+    max_cost_micros: int | None
+
+
+_t = thread_budgets.c
 
 
 def _micros(amount: Decimal) -> int:
@@ -37,14 +68,14 @@ def _amount(micros: int | None) -> Decimal:
     return Decimal(micros or 0) * MICRO
 
 
-class UsageLedger:
+class UsageLedger(RuntimeStore):
     # A budget check and the usage it admits are read and written in one transaction (TRANSACTION).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION})
 
     """The agents service's `Meter`: records usage rows and checks a thread's budget against their sum."""
 
     def __init__(self, engine: AsyncEngine, prices: PriceTable) -> None:
-        self.engine = engine
+        super().__init__(engine)
         self.prices = prices
         self.calls = ModelCallLedger(engine)
 
@@ -92,29 +123,24 @@ class UsageLedger:
         return await self.calls.sums(thread_id, by_run=True)
 
     async def budget(self, thread_id: str) -> Budget | None:
-        async with self.engine.connect() as c:
-            row = (
-                (await c.execute(thread_budgets.select().where(thread_budgets.c.thread_id == thread_id)))
-                .mappings()
-                .first()
-            )
+        q = sa.select(_t.max_calls, _t.max_tokens, _t.max_cost_micros).where(_t.thread_id == thread_id)
+        async with self.tx() as c:
+            row = await one(c, q, BudgetOut)
         if row is None:
             return None
-        return Budget(
-            row["max_calls"],
-            row["max_tokens"],
-            _amount(row["max_cost_micros"]) if row["max_cost_micros"] is not None else None,
-        )
+        cap = _amount(row.max_cost_micros) if row.max_cost_micros is not None else None
+        return Budget(row.max_calls, row.max_tokens, cap)
 
     async def set_budget(self, thread_id: str, budget: Budget) -> None:
-        values: dict[str, Any] = {
+        values = {
             "thread_id": thread_id,
             "max_calls": budget.max_calls,
             "max_tokens": budget.max_tokens,
             "max_cost_micros": _micros(budget.max_cost) if budget.max_cost is not None else None,
             "updated_at": now_iso(),
+            "tenant_id": current_tenant(),
         }
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             await c.execute(upsert(c, thread_budgets, values, keys=["thread_id"]))
 
     async def update_budget(self, thread_id: str, budget: Budget) -> None:

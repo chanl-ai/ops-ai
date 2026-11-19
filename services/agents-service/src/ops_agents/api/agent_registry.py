@@ -11,21 +11,28 @@ the team's publish policy (api/publish_policy.py).
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import Literal, NotRequired, Required, TypedDict, cast
 
 from ops_access import can
 from ops_agent_kernel.layout import required_tools
 from ops_agents.activities.agent_limits import limits_of
+from ops_agents.activities.agent_limits import wire as wire_limits
 from ops_agents.activities.catalog import AgentDefinition, Catalog, Fragment, GuardrailRule, SkillPinRule, WidgetPinRule
 from ops_service_kit.errors import Conflict, NotFound, Unprocessable
+from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.logging import get_logger
+from ops_store import isolation
 
 from ..store.agent_registry import (
     AgentRegistry,
+    AgentRow,
+    AgentVersionRow,
+    PublishRequestRow,
 )
 from ..store.graphs import GraphStore
+from ..store.tenancy import SERVE_PUBLISHED
 from .auth import Principal, caller_of
 from .deps import Runtime
 from .review_text import requester
@@ -35,8 +42,93 @@ from .review_text import requester
 log = get_logger("ops_agents.agent_registry")
 SEED_TEAM = "team_ops"
 
+
+class AgentCaps(TypedDict, total=False):
+    """A version's `guardrails`: the caps a turn and a conversation run under."""
+
+    redactPii: bool
+    maxToolCallsPerTurn: int | None
+    maxModelCallsPerTurn: int | None
+    maxModelCallsPerConversation: int | None
+    maxCostPerConversation: float | None
+    whenUnsure: str
+    blockedTopics: list[str]
+
+
+class AgentMemory(TypedDict):
+    enabled: bool
+    kinds: list[str]
+
+
+class AgentWidgets(TypedDict, total=False):
+    compose: bool
+    perTurn: int | None
+
+
+class GuardrailPin(TypedDict, total=False):
+    """A spec's `guardrailPins` entry: the pinned guardrail version, as resolved when the version was saved."""
+
+    guardrailId: Required[str]
+    version: Required[int]
+    name: Required[str]
+    topics: Required[list[str]]
+    enabled: bool
+
+
+class WidgetPin(TypedDict, total=False):
+    widgetId: Required[str]
+    version: Required[int]
+    name: Required[str]
+    tree: JsonValue
+
+
+class SkillPin(TypedDict):
+    """A spec's `skillPins` entry: what an agent version keeps of a pinned skill version (`skills.snapshot`), so the
+    runtime serves it with no lookup. `refusal` and `parts` only when the skill version has them."""
+
+    skillId: str
+    version: int
+    name: str
+    slug: str
+    useWhen: str
+    loading: str
+    instructions: str
+    guardrails: list[str]
+    refusal: NotRequired[str]
+    toolIds: list[str]
+    knowledgeBases: list[str]
+    tokens: int
+    parts: NotRequired[list[Json]]
+    attachedBy: str
+    attachedAt: str
+
+
+class AgentSpec(TypedDict, total=False):
+    """An agent version's stored `spec`, as this module reads it. A view of the stored document (cast, never
+    rebuilt), so a version saved before a key existed reads exactly as it did."""
+
+    name: Required[str]
+    role: Required[str]
+    model: Required[str]
+    channels: list[str]
+    instructions: str
+    fragments: list[Json]
+    toolIds: list[str]
+    collections: list[str]
+    allTeamKnowledgeBases: bool
+    accounts: dict[str, str]
+    suggestions: list[str]
+    guardrails: AgentCaps
+    guardrailPins: list[GuardrailPin]
+    skillPins: list[SkillPin]
+    widgetPins: list[WidgetPin]
+    widgets: AgentWidgets
+    memory: AgentMemory
+    skillMenu: Literal["team", "attached", "off"]
+
+
 # A new agent's caps are empty (no cap): a real agent can need many calls. Seeds set low ones.
-GUARDRAILS: dict[str, Any] = {
+GUARDRAILS: Json = {
     "redactPii": True,
     "maxToolCallsPerTurn": None,
     "maxModelCallsPerTurn": 50,
@@ -57,7 +149,7 @@ PLATFORM_CONVERSATION_COST = 5.0
 # What the runtime acts on, so the agent page offers only these. Chat is the one channel an agent talks
 # on; of the guardrail settings the tool-call and model-call caps reach a turn (definition_of), topics are blocked
 # through pinned guardrails; eval-runs score a dataset on the newest version.
-CONTROLS: dict[str, Any] = {
+CONTROLS: Json = {
     "channels": ["chat"],
     "guardrails": [
         # Masks personal data in what a turn shows and returns.
@@ -71,7 +163,7 @@ CONTROLS: dict[str, Any] = {
 }
 
 
-def spec_from_seed(a: AgentDefinition, model: str) -> dict[str, Any]:
+def spec_from_seed(a: AgentDefinition, model: str) -> Json:
     """A seeded agent's spec. Its instruction fragments are kept, so publishing it unchanged serves the same prompt."""
     return {
         "name": a.name,
@@ -94,68 +186,77 @@ def spec_from_seed(a: AgentDefinition, model: str) -> dict[str, Any]:
     }
 
 
-def _cap(spec: dict[str, Any], key: str, legacy: int | None) -> int | None:
+CapKey = Literal["maxToolCallsPerTurn", "maxModelCallsPerTurn", "maxModelCallsPerConversation"]
+
+
+def _cap(spec: AgentSpec, key: CapKey, legacy: int | None) -> int | None:
     """A per-turn cap from the version: a number, or None for no cap; `legacy` when the version predates the key."""
-    caps = cast(dict[str, Any], spec.get("guardrails") or {})
+    caps = spec.get("guardrails") or {}
     if key not in caps:
         return legacy
-    return None if caps[key] is None else int(caps[key])
+    if not isinstance(cast(object, caps), dict):
+        # A version whose `guardrails` is not an object fails as indexing it always has.
+        raise TypeError(f"guardrails is not an object: {caps!r}")
+    value = caps.get(key)
+    return None if value is None else int(value)
 
 
-def memory_of(spec: dict[str, Any]) -> dict[str, Any]:
+def memory_of(spec: Json) -> AgentMemory:
     """The agent's memory setting: on with every kind unless the spec says otherwise."""
-    return {"enabled": True, "kinds": ["fact", "preference", "episode"], **(spec.get("memory") or {})}
+    held = cast(AgentSpec, spec).get("memory") or {}
+    return cast(AgentMemory, {"enabled": True, "kinds": ["fact", "preference", "episode"], **held})
 
 
-def definition_of(agent_id: str, version: int, spec: dict[str, Any]) -> AgentDefinition:
+def definition_of(agent_id: str, version: int, spec: Json) -> AgentDefinition:
     """The catalogue definition the runtime serves for one version."""
-    text: str = spec.get("instructions") or ""
-    raw: list[dict[str, Any]] = spec.get("fragments") or []
+    s = cast(AgentSpec, spec)
+    text = s.get("instructions") or ""
+    raw = s.get("fragments") or []
     fragments = [Fragment.model_validate(f) for f in raw]
     if not fragments or "\n\n".join(f.text for f in fragments) != text:
-        fragments = [Fragment(text=text or f"You are {spec['name']}. {spec['role']}")]
-    widget_settings = cast(dict[str, Any], spec.get("widgets") or {})
-    caps = cast(dict[str, Any], spec.get("guardrails") or {})
+        fragments = [Fragment(text=text or f"You are {s['name']}. {s['role']}")]
+    widget_settings = s.get("widgets") or {}
+    caps = s.get("guardrails") or {}
     return AgentDefinition(
         id=agent_id,
-        name=spec["name"],
-        role=spec["role"],
+        name=s["name"],
+        role=s["role"],
         version=version,
         instructions=fragments,
-        tools=list(spec.get("toolIds") or []),
-        default_kb_ids=list(spec.get("collections") or []),
-        all_team_knowledge=bool(spec.get("allTeamKnowledgeBases")),
-        accounts={str(k): str(v) for k, v in dict(spec.get("accounts") or {}).items()},
-        suggestions=list(spec.get("suggestions") or []),
-        max_tool_calls=_cap(spec, "maxToolCallsPerTurn", None),
-        max_model_calls=_cap(spec, "maxModelCallsPerTurn", LEGACY_MODEL_CALLS) or PLATFORM_MODEL_CALLS,
-        max_conversation_calls=_cap(spec, "maxModelCallsPerConversation", None) or PLATFORM_CONVERSATION_CALLS,
+        tools=list(s.get("toolIds") or []),
+        default_kb_ids=list(s.get("collections") or []),
+        all_team_knowledge=bool(s.get("allTeamKnowledgeBases")),
+        accounts={str(k): str(v) for k, v in dict(s.get("accounts") or {}).items()},
+        suggestions=list(s.get("suggestions") or []),
+        max_tool_calls=_cap(s, "maxToolCallsPerTurn", None),
+        max_model_calls=_cap(s, "maxModelCallsPerTurn", LEGACY_MODEL_CALLS) or PLATFORM_MODEL_CALLS,
+        max_conversation_calls=_cap(s, "maxModelCallsPerConversation", None) or PLATFORM_CONVERSATION_CALLS,
         max_conversation_cost=float(caps.get("maxCostPerConversation") or PLATFORM_CONVERSATION_COST),
         redact_pii=bool(caps.get("redactPii", True)),
-        guardrails=[GuardrailRule.model_validate(p) for p in cast(list[Any], spec.get("guardrailPins") or [])],
-        skills=[SkillPinRule.model_validate(p) for p in cast(list[Any], spec.get("skillPins") or [])],
-        model_alias=spec.get("model") or None,
+        guardrails=[GuardrailRule.model_validate(p) for p in s.get("guardrailPins") or []],
+        skills=[SkillPinRule.model_validate(p) for p in s.get("skillPins") or []],
+        model_alias=s.get("model") or None,
         limits=limits_of(spec),
-        widgets=[WidgetPinRule.model_validate(p) for p in cast(list[Any], spec.get("widgetPins") or [])],
+        widgets=[WidgetPinRule.model_validate(p) for p in s.get("widgetPins") or []],
         compose=bool(widget_settings.get("compose", False)),
-        widgets_per_turn=cast(int | None, widget_settings.get("perTurn")),
+        widgets_per_turn=widget_settings.get("perTurn"),
         memory_enabled=bool(memory_of(spec)["enabled"]),
         memory_kinds=tuple(memory_of(spec)["kinds"]),
+        skill_menu=s.get("skillMenu") or "team",
     )
 
 
-def agent_review_body(
-    agent_id: str, spec: dict[str, Any], row: dict[str, Any], v: dict[str, Any], *, note: str, by: str
-) -> dict[str, Any]:
+def agent_review_body(agent_id: str, spec: Json, row: AgentRow, v: AgentVersionRow, *, note: str, by: str) -> Json:
     """The body of an `agent_publish` review for version `v`."""
+    s = cast(AgentSpec, spec)
     return {
         "agentId": agent_id,
-        "agentName": spec["name"],
-        "version": v["version"],
-        "fromVersion": row["published_version"],
+        "agentName": s["name"],
+        "version": v.version,
+        "fromVersion": row.published_version,
         "note": note,
         "requestedBy": by,
-        "savedBy": v["saved_by"],
+        "savedBy": v.saved_by,
         "tier": "low",
         "tierReason": "No live workflow pins it",
         "approvalsNeeded": 1,
@@ -163,9 +264,9 @@ def agent_review_body(
         "published": None,
         "failing": 0,
         "blockers": [],
-        "changes": v["changes"],
+        "changes": v.changes,
         # The reviewer approves what callers may change along with the agent itself.
-        "limits": limits_of(spec).wire(),
+        "limits": wire_limits(limits_of(spec)),
         # And sees each pinned guardrail with its switch: one off is not checked once this version is live.
         "guardrailPins": [
             {
@@ -174,7 +275,7 @@ def agent_review_body(
                 "name": p["name"],
                 "enabled": p.get("enabled", True),
             }
-            for p in cast(list[dict[str, Any]], spec.get("guardrailPins") or [])
+            for p in s.get("guardrailPins") or []
         ],
     }
 
@@ -185,7 +286,7 @@ SEED_BY = "seed"
 async def seed_agent_version(
     rt: Runtime,
     agent_id: str,
-    change: Callable[[dict[str, Any]], Awaitable[dict[str, Any]]],
+    change: Callable[[Json], Awaitable[Json]],
     note: str,
     *,
     by: str = SEED_BY,
@@ -196,25 +297,25 @@ async def seed_agent_version(
     platform for a team's Ops Assistant."""
     reg = registry(rt)
     row = await reg.row(agent_id)
-    if row["published_version"] is None:
+    if row.published_version is None:
         return
-    newest = await reg.version(agent_id, int(row["version"]))
-    if row["version"] != row["published_version"] and newest["saved_by"] != by:
-        log.info("seed_agent_change_deferred", agent=agent_id, note=note, draft_saved_by=newest["saved_by"])
+    newest = await reg.version(agent_id, row.version)
+    if row.version != row.published_version and newest.saved_by != by:
+        log.info("seed_agent_change_deferred", agent=agent_id, note=note, draft_saved_by=newest.saved_by)
         return
-    if any(r["status"] == "pending" for r in await reg.requests("agent", agent_id)):
+    if any(r.status == "pending" for r in await reg.requests("agent", agent_id)):
         log.info("seed_agent_change_deferred", agent=agent_id, note=note, reason="review open")
         return
-    live = dict((await reg.version(agent_id, int(row["published_version"])))["spec"])
+    live = dict((await reg.version(agent_id, row.published_version)).spec)
     spec = await change(dict(live))
     n = await reg.save(agent_id, spec, by=by, note=note)
     # A seed's change follows the team's policy like a person's publish.
     from .publish_policy import decide  # noqa: PLC0415 - publish_policy imports this module's callers' layer
 
-    decision = await decide(rt, area="agents", team_id=row["team_id"], old=live, new=spec)
+    decision = await decide(rt, area="agents", team_id=row.team_id, old=live, new=spec)
     if not decision.review_required:
         await reg.publish(agent_id, n, by=by, review_id="seed")
-        if not row["paused"]:
+        if not row.paused:
             go_live(rt, agent_id, n, spec)
         return
     v = await reg.version(agent_id, n)
@@ -232,7 +333,7 @@ def registry(rt: Runtime) -> AgentRegistry:
     return AgentRegistry(rt.db)
 
 
-def go_live(rt: Runtime, agent_id: str, version: int, spec: dict[str, Any]) -> None:
+def go_live(rt: Runtime, agent_id: str, version: int, spec: Json) -> None:
     """Serves `version`: its definition in the catalogue and the agent's own graph under `agent:<id>`."""
     rt.catalog.put_agent(definition_of(agent_id, version, spec))
     if rt.agent_graph is not None:
@@ -245,9 +346,27 @@ def take_down(rt: Runtime, agent_id: str) -> None:
     rt.catalog.drop_agent(agent_id)
 
 
+async def live_agent(rt: Runtime, agent_id: str) -> AgentDefinition | None:
+    """The live agent `agent_id` when the caller's tenant holds it; None when it is not live or the tenant holds none,
+    for a route that takes the id from the caller's own records (a thread, the team's default)."""
+    if agent_id not in await registry(rt).tenant_owners({agent_id}):
+        return None
+    return rt.catalog.agent(agent_id)
+
+
+async def in_flight_agent(rt: Runtime, agent_id: str) -> AgentDefinition | None:
+    """`live_agent`, or the definition a turn under way started on after the agent was paused (it may finish)."""
+    if agent_id not in await registry(rt).tenant_owners({agent_id}):
+        return None
+    return rt.catalog.agent_in_flight(agent_id)
+
+
 async def pinned_definition(rt: Runtime, agent_id: str, version: int) -> AgentDefinition | None:
     """The agent at a published version a deployment pins, from the registry store, kept in the catalogue so the
-    chat graph serves it; None when that version was never published."""
+    chat graph serves it; None when that version was never published or the caller's tenant holds no such agent (the
+    catalogue holds every tenant's)."""
+    if agent_id not in await registry(rt).tenant_owners({agent_id}):
+        return None
     if (known := rt.catalog.agent_at(agent_id, version)) is not None:
         return known
     spec = await registry(rt).published_spec(agent_id, version)
@@ -260,13 +379,15 @@ async def pinned_definition(rt: Runtime, agent_id: str, version: int) -> AgentDe
 
 async def refuse_new_turns(rt: Runtime, agent_id: str) -> None:
     """Raises 409 `agent_paused` when the agent is paused; new conversations, messages and turns wait for a resume."""
+    if agent_id not in await registry(rt).tenant_owners({agent_id}):
+        return  # another tenant's agent: the caller's route answers NotFound, never its name or state
     if rt.catalog.agent(agent_id) is not None:
         return
     try:
         row = await registry(rt).row(agent_id)
     except NotFound:
         return
-    if row["paused"]:
+    if row.paused:
         name = rt.catalog.agent_in_flight(agent_id)
         label = name.name if name else agent_id
         raise Conflict(
@@ -288,27 +409,27 @@ SEED_FIELDS = (
 )
 
 
-async def follow_seed(rt: Runtime, a: AgentDefinition, row: dict[str, Any]) -> None:
+async def follow_seed(rt: Runtime, a: AgentDefinition, row: AgentRow) -> None:
     """A seeded agent whose published version the seed still owns (saved by the seed) takes the seed file's change as
     a new version, so editing the seed reaches a database seeded before it. Once a person has published a version the
     agent is theirs and the seed leaves it alone."""
-    if row["published_version"] is None:
+    if row.published_version is None:
         return
     reg = registry(rt)
-    published = await reg.version(a.id, int(row["published_version"]))
-    if published["saved_by"] != SEED_BY:
+    published = await reg.version(a.id, row.published_version)
+    if published.saved_by != SEED_BY:
         return
     want = {k: v for k, v in spec_from_seed(a, rt.settings.model_alias).items() if k in SEED_FIELDS}
-    spec = cast(dict[str, Any], published["spec"])
+    spec = published.spec
     if all(spec.get(k) == v for k, v in want.items()):
         return
 
-    async def change(s: dict[str, Any]) -> dict[str, Any]:
+    async def change(s: Json) -> Json:
         return {
             **s,
             **want,
             "guardrails": {
-                **(s.get("guardrails") or GUARDRAILS),
+                **cast(Json, s.get("guardrails") or GUARDRAILS),
                 "maxToolCallsPerTurn": a.max_tool_calls,
                 "maxModelCallsPerTurn": a.max_model_calls,
             },
@@ -318,33 +439,54 @@ async def follow_seed(rt: Runtime, a: AgentDefinition, row: dict[str, Any]) -> N
 
 
 async def load(rt: Runtime, seed: Catalog) -> None:
-    """At start: seeds a row for each catalogue agent that has none, brings a seeded agent the seed still owns up to
-    its seed file (`follow_seed`; one a person has published is left alone), then serves exactly the published,
-    unpaused versions, so a seeded agent that was paused or deleted stays that way across a restart."""
+    """At start, inside the seed's tenant: seeds a row for each catalogue agent that has none and brings a seeded agent
+    the seed still owns up to its seed file (`follow_seed`; one a person has published is left alone). A seed id or
+    slug already held outside the seed's tenant is skipped with a warning, and the service starts without it. Serving
+    is `serve_published`, for every tenant."""
     reg = registry(rt)
-    have = {r["id"]: r for r in await reg.rows()}
+    have = {r.id: r for r in await reg.rows()}
     for a in list(seed.agents):
         if a.id not in have:
             spec = spec_from_seed(a, rt.settings.model_alias)
-            await reg.create(spec, by="seed", team_id=SEED_TEAM, agent_id=a.id, version=a.version, published=True)
+            if not await reg.create_if_absent(spec, by=SEED_BY, team_id=SEED_TEAM, agent_id=a.id, version=a.version):
+                log.warning("seed_agent_held_elsewhere", agent=a.id)
         else:
             await follow_seed(rt, a, have[a.id])
-    rows = {r["id"]: r for r in await reg.rows()}
+
+
+async def serve_published(rt: Runtime) -> None:
+    """At start: serves exactly every tenant's published, unpaused versions, so an agent that was paused or deleted
+    stays that way across a restart. One read past the tenant finds the pointers, then each tenant's specs are read
+    under its own; a failure in one tenant is logged and the others are served."""
+    reg = registry(rt)
+    wanted: dict[str, set[tuple[str, int]]] = {}
+    for tenant_id, aid, published, paused in await reg.published_pointers():
+        if published is not None and not paused:
+            wanted.setdefault(tenant_id, set()).add((aid, published))
+    served = {aid for keys in wanted.values() for aid, _ in keys}
     for a in list(rt.catalog.agents):
-        if a.id not in rows:
+        if a.id not in served:
             take_down(rt, a.id)
-    for aid, r in rows.items():
-        if r["published_version"] is None or r["paused"]:
-            take_down(rt, aid)
+    for tenant_id, keys in wanted.items():
+        try:
+            with isolation.tenant_wide(SERVE_PUBLISHED, tenant_id=tenant_id):
+                specs = await reg.published_specs(keys)
+        except Exception as e:  # one tenant's failure must not stop the others, nor the service's start
+            log.warning("serve_published_failed", tenant=tenant_id, error=type(e).__name__)
             continue
-        v = await reg.version(aid, int(r["published_version"]))
-        go_live(rt, aid, int(r["published_version"]), v["spec"])
+        for (aid, n), spec in specs.items():
+            go_live(rt, aid, n, spec)
+
+
+def a_day_ago() -> str:
+    """The start of an agent's `tasks24h` window, as thread times are written."""
+    return (datetime.now(UTC) - timedelta(days=1)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 async def tasks_24h(rt: Runtime) -> dict[str, int]:
     """Threads started in the last day, by agent id: chats (`agent_wrapper` threads naming the agent in their meta) and
     threads on the agent's own graph."""
-    since = (datetime.now(UTC) - timedelta(days=1)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    since = a_day_ago()
     out: dict[str, int] = {}
     for graph, meta in await GraphStore(rt.db).agent_threads_since(since):
         if meta.get("test"):
@@ -355,132 +497,248 @@ async def tasks_24h(rt: Runtime) -> dict[str, int]:
     return out
 
 
-def version_state(row: dict[str, Any], v: int, pending: dict[str, Any] | None, rejected: set[int]) -> str:
+def version_state(row: AgentRow, v: int, pending: PublishRequestRow | None, rejected: set[int]) -> str:
     if v in rejected:
         return "rejected"
-    if pending is not None and pending["version"] == v:
+    if pending is not None and pending.version == v:
         return "in_review"
-    pub = row["published_version"]
+    pub = row.published_version
     if v == pub:
         return "published"
     if pub is not None and v < pub:
         return "superseded"
-    return "superseded" if v < row["version"] else "draft"
+    return "superseded" if v < row.version else "draft"
 
 
-def agent_view(row: dict[str, Any], spec: dict[str, Any], tasks: int) -> dict[str, Any]:
+class WorkflowUse(TypedDict):
+    """A workflow that runs an agent: `own` marks the agent's own one-step workflow."""
+
+    workflowId: str
+    workflowName: str
+    pinnedVersion: int
+    status: str
+    own: NotRequired[bool]
+
+
+class GuardrailPinView(TypedDict):
+    guardrailId: str
+    version: int
+    name: str
+    topics: list[str]
+    enabled: bool
+
+
+class WidgetPinView(TypedDict):
+    widgetId: str
+    version: int
+    name: str
+    requiresTools: list[str]
+
+
+class AgentView(TypedDict):
+    """An agent's reply, in its keys' order. The row's own columns stay as the row holds them; the agents route adds
+    the keys marked not required, and fills `usedIn` and `workflowIds`."""
+
+    id: JsonValue
+    name: str
+    slug: JsonValue
+    role: str
+    instructions: str
+    model: str
+    channels: list[str]
+    toolIds: list[str]
+    collections: list[str]
+    allTeamKnowledgeBases: bool
+    skillMenu: str
+    accounts: dict[str, str]
+    teamId: JsonValue
+    paused: bool
+    availability: str
+    version: JsonValue
+    publishedVersion: JsonValue
+    updatedAt: JsonValue
+    tasks24h: int
+    autoResolvedRate: int
+    workflowIds: list[str]
+    guardrails: AgentCaps | Json
+    guardrailPins: list[GuardrailPinView]
+    wrapperWorkflowId: NotRequired[str]
+    limits: Json
+    widgetPins: list[WidgetPinView]
+    widgets: Json
+    memory: AgentMemory
+    controls: Json
+    usedIn: list[WorkflowUse]
+    staleToolIds: NotRequired[list[str]]
+    templateId: NotRequired[JsonValue]
+    protection: NotRequired[JsonValue]
+
+
+def agent_view(row: Mapping[str, JsonValue], spec: Json, tasks: int) -> AgentView:
+    """An agent's reply; the agents route adds keys of its own (`staleToolIds`, `usedIn`) to it."""
+    s = cast(AgentSpec, spec)
     published = row["published_version"]
     availability = "paused" if row["paused"] else "published" if published is not None else "not_published"
-    return {
-        "id": row["id"],
-        "name": spec["name"],
-        "slug": row["slug"],
-        "role": spec["role"],
-        "instructions": spec.get("instructions") or "",
-        "model": spec["model"],
-        "channels": spec.get("channels") or [],
-        "toolIds": spec.get("toolIds") or [],
-        "collections": spec.get("collections") or [],
-        "allTeamKnowledgeBases": bool(spec.get("allTeamKnowledgeBases")),
-        "accounts": dict(spec.get("accounts") or {}),
-        # The owning team comes from the creator's token; the console names it from its teams list.
-        "teamId": row["team_id"],
-        "paused": bool(row["paused"]),
-        "availability": availability,
-        "version": row["version"],
-        "publishedVersion": published,
-        "updatedAt": row["updated_at"],
-        "tasks24h": tasks,
-        # Needs resolution outcomes per thread, which no table records yet.
-        "autoResolvedRate": 0,
-        "workflowIds": [],
-        "guardrails": spec.get("guardrails") or GUARDRAILS,
-        "guardrailPins": [
-            {
-                "guardrailId": p["guardrailId"],
-                "version": p["version"],
-                "name": p["name"],
-                "topics": p["topics"],
-                "enabled": bool(p.get("enabled", True)),
-            }
-            for p in cast(list[dict[str, Any]], spec.get("guardrailPins") or [])
-        ],
-        **({"wrapperWorkflowId": f"agent:{row['id']}"} if published is not None else {}),
-        "limits": limits_of(spec).wire(),
-        "widgetPins": [
-            {
-                "widgetId": p["widgetId"],
-                "version": p["version"],
-                "name": p["name"],
-                "requiresTools": required_tools(p.get("tree")),
-            }
-            for p in cast(list[dict[str, Any]], spec.get("widgetPins") or [])
-        ],
-        "widgets": {"compose": False, "perTurn": None, **(spec.get("widgets") or {})},
-        "memory": memory_of(spec),
-        "controls": CONTROLS,
-        "usedIn": [],
-    }
+    # Built as one literal so the keys keep their order; `wrapperWorkflowId` only once the agent is published.
+    return cast(
+        AgentView,
+        {
+            "id": row["id"],
+            "name": s["name"],
+            "slug": row["slug"],
+            "role": s["role"],
+            "instructions": s.get("instructions") or "",
+            "model": s["model"],
+            "channels": s.get("channels") or [],
+            "toolIds": s.get("toolIds") or [],
+            "collections": s.get("collections") or [],
+            "allTeamKnowledgeBases": bool(s.get("allTeamKnowledgeBases")),
+            "skillMenu": s.get("skillMenu") or "team",
+            "accounts": dict(s.get("accounts") or {}),
+            # The owning team comes from the creator's token; the console names it from its teams list.
+            "teamId": row["team_id"],
+            "paused": bool(row["paused"]),
+            "availability": availability,
+            "version": row["version"],
+            "publishedVersion": published,
+            "updatedAt": row["updated_at"],
+            "tasks24h": tasks,
+            # Needs resolution outcomes per thread, which no table records yet.
+            "autoResolvedRate": 0,
+            "workflowIds": [],
+            "guardrails": s.get("guardrails") or GUARDRAILS,
+            "guardrailPins": [
+                {
+                    "guardrailId": p["guardrailId"],
+                    "version": p["version"],
+                    "name": p["name"],
+                    "topics": p["topics"],
+                    "enabled": bool(p.get("enabled", True)),
+                }
+                for p in s.get("guardrailPins") or []
+            ],
+            **({"wrapperWorkflowId": f"agent:{row['id']}"} if published is not None else {}),
+            "limits": wire_limits(limits_of(spec)),
+            "widgetPins": [
+                {
+                    "widgetId": p["widgetId"],
+                    "version": p["version"],
+                    "name": p["name"],
+                    "requiresTools": required_tools(p.get("tree")),
+                }
+                for p in s.get("widgetPins") or []
+            ],
+            "widgets": {"compose": False, "perTurn": None, **(s.get("widgets") or {})},
+            "memory": memory_of(spec),
+            "controls": CONTROLS,
+            "usedIn": [],
+        },
+    )
 
 
 # Kept on a workflow request for its decision to publish, and left out of the Review the console reads.
 STORED_ONLY = frozenset({"definition", "graph"})
 
 
-def _sla_minutes(req: dict[str, Any], now: datetime, hours: float) -> int | None:
+def _sla_minutes(req: PublishRequestRow, now: datetime, hours: float) -> int | None:
     """Minutes left before the request is overdue, from when it was asked; negative once overdue, and None once
     decided, since a decided review has no deadline left."""
-    if req["status"] not in ("pending", "in_review"):
+    if req.status not in ("pending", "in_review"):
         return None
-    asked = datetime.fromisoformat(str(req["created_at"]).replace("Z", "+00:00"))
+    asked = datetime.fromisoformat(str(req.created_at).replace("Z", "+00:00"))
     return int((asked + timedelta(hours=hours) - now).total_seconds() // 60)
 
 
+class ReviewPolicy(TypedDict):
+    id: str
+    name: str
+    condition: str
+    reviewers: str
+    sla: str
+    onTimeout: str
+    fourEyes: bool
+
+
+class ReviewView(TypedDict):
+    """A publish request as the console's Review, in reply order. A kind's view (publish_reviews.view) overrides some
+    keys, drops `publish` and adds its own section (`egressHost`, `toolModule`) at the end."""
+
+    id: str
+    title: str
+    customer: str
+    workflowId: str
+    workflowName: str
+    agentSlug: str
+    agentName: str | None
+    kind: str
+    risk: JsonValue
+    confidence: int
+    proposal: str
+    actionTool: str
+    currency: str
+    policy: ReviewPolicy
+    slaMinutes: int | None
+    approvals: list[str]
+    decidedBy: NotRequired[str]
+    status: str
+    createdAt: str
+    decidedAt: NotRequired[str]
+    reasoning: JsonValue
+    evidence: list[JsonValue]
+    agentPublish: NotRequired[Json]
+    publish: NotRequired[Json]
+    decisionReason: NotRequired[str]
+    egressHost: NotRequired[Json]
+    toolModule: NotRequired[Json]
+
+
 def review_view(
-    req: dict[str, Any], *, name: str, slug: str, sla_hours: float, now: datetime | None = None
-) -> dict[str, Any]:
+    req: PublishRequestRow, *, name: str, slug: str, sla_hours: float, now: datetime | None = None
+) -> ReviewView:
     """A publish request as the console's Review, kind `agent_publish` or `publish_request`. `sla_hours` is the
     tenant's review deadline (`review_sla.sla_hours`). A decided one says who decided it, when and why."""
-    agent = req["kind"] == "agent"
-    body = req["body"]
-    return {
-        "id": req["id"],
-        "title": f"Publish {name} v{req['version']}",
-        "customer": f"Requested by {requester(str(req['requested_by']))}",
-        "workflowId": "" if agent else req["subject_id"],
+    agent = req.kind == "agent"
+    body = req.body
+    policy: ReviewPolicy = {
+        "id": "gp_agent_publish" if agent else "gp_workflow_publish",
+        "name": "Agent publish" if agent else "Workflow publish",
+        "condition": "every version before it serves",
+        "reviewers": "publishers",
+        "sla": "1 business day",
+        "onTimeout": "Stays pending; the requester is notified",
+        "fourEyes": False,
+    }
+    view = {
+        "id": req.id,
+        "title": f"Publish {name} v{req.version}",
+        "customer": f"Requested by {requester(str(req.requested_by))}",
+        "workflowId": "" if agent else req.subject_id,
         "workflowName": name,
         "agentSlug": slug if agent else "",
         "agentName": name if agent else None,
         "kind": "agent_publish" if agent else "publish_request",
         "risk": body.get("tier", "low"),
         "confidence": 1,
-        "proposal": req["note"],
+        "proposal": req.note,
         "actionTool": "publish_agent" if agent else "publish_workflow",
         "currency": "CAD",
-        "policy": {
-            "id": "gp_agent_publish" if agent else "gp_workflow_publish",
-            "name": "Agent publish" if agent else "Workflow publish",
-            "condition": "every version before it serves",
-            "reviewers": "publishers",
-            "sla": "1 business day",
-            "onTimeout": "Stays pending; the requester is notified",
-            "fourEyes": False,
-        },
+        "policy": policy,
         "slaMinutes": _sla_minutes(req, now or datetime.now(UTC), sla_hours),
-        "approvals": [req["decided_by"]] if req["decided_by"] else [],
-        **({"decidedBy": req["decided_by"]} if req["decided_by"] else {}),
-        "status": req["status"],
-        "createdAt": req["created_at"],
-        **({"decidedAt": req["decided_at"]} if req["decided_at"] else {}),
+        "approvals": [req.decided_by] if req.decided_by else [],
+        **({"decidedBy": req.decided_by} if req.decided_by else {}),
+        "status": req.status,
+        "createdAt": req.created_at,
+        **({"decidedAt": req.decided_at} if req.decided_at else {}),
         "reasoning": body.get("changes", []),
         "evidence": [],
         **({"agentPublish": body} if agent else {"publish": {k: v for k, v in body.items() if k not in STORED_ONLY}}),
-        **({"decisionReason": req["decision_reason"]} if req.get("decision_reason") else {}),
+        **({"decisionReason": req.decision_reason} if req.decision_reason else {}),
     }
+    return cast(ReviewView, view)
 
 
-def require_newest_draft(row: dict[str, Any], version: int) -> None:
-    if version != row["version"]:
-        raise Unprocessable(f"v{version} is not the newest draft (v{row['version']}).", code="not_newest_draft")
-    if row["published_version"] == version:
+def require_newest_draft(row: AgentRow, version: int) -> None:
+    if version != row.version:
+        raise Unprocessable(f"v{version} is not the newest draft (v{row.version}).", code="not_newest_draft")
+    if row.published_version == version:
         raise Unprocessable(f"v{version} is already published.", code="already_published")

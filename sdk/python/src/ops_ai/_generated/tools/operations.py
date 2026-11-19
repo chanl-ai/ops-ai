@@ -232,7 +232,21 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/apps",
         "pathParams": [],
-        "query": ["include"],
+        "query": [
+            "include",
+            "view",
+            "appState",
+            "category",
+            "kind",
+            "accountId",
+            "hasAccount",
+            "page",
+            "pageSize",
+            "search",
+            "sortBy",
+            "sortOrder",
+            "ids",
+        ],
         "stream": False,
     },
     "apps_make_team_default": {
@@ -385,7 +399,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/egress/hosts",
         "pathParams": [],
-        "query": ["page", "pageSize", "search", "templateId"],
+        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "egress_remove_host": {
@@ -421,7 +435,25 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/executions",
         "pathParams": [],
-        "query": ["page", "pageSize", "tool", "moduleId", "thread", "decision", "key"],
+        "query": [
+            "tool",
+            "moduleId",
+            "thread",
+            "decision",
+            "key",
+            "call",
+            "link",
+            "since",
+            "until",
+            "result",
+            "assistant",
+            "page",
+            "pageSize",
+            "search",
+            "sortBy",
+            "sortOrder",
+            "ids",
+        ],
         "stream": False,
     },
     "expressions_evaluate_formulas": {
@@ -448,6 +480,51 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/health/background",
         "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "mcp_links_create_mcp_link": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/mcp-links",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "mcp_links_delete_mcp_link": {
+        "body": None,
+        "headers": [],
+        "method": "DELETE",
+        "path": "/v1/mcp-links/{link_id}",
+        "pathParams": ["link_id"],
+        "query": [],
+        "stream": False,
+    },
+    "mcp_links_get_mcp_link": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/mcp-links/{link_id}",
+        "pathParams": ["link_id"],
+        "query": [],
+        "stream": False,
+    },
+    "mcp_links_list_mcp_links": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/mcp-links",
+        "pathParams": [],
+        "query": ["teamId", "page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
+        "stream": False,
+    },
+    "mcp_links_pause_mcp_link": {
+        "body": "json",
+        "headers": [],
+        "method": "PATCH",
+        "path": "/v1/mcp-links/{link_id}",
+        "pathParams": ["link_id"],
         "query": [],
         "stream": False,
     },
@@ -493,7 +570,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/secrets",
         "pathParams": [],
-        "query": ["page", "pageSize", "search", "templateId", "teamId"],
+        "query": ["teamId", "readOnly", "page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "secrets_rename_secret": {
@@ -655,7 +732,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/tool-modules/grants",
         "pathParams": [],
-        "query": ["view", "search", "page", "pageSize"],
+        "query": ["view", "page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "tool_modules_list_mocks": {
@@ -664,7 +741,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/tool-modules/{module_id}/operations/{op_id}/mocks",
         "pathParams": ["module_id", "op_id"],
-        "query": ["environment"],
+        "query": ["environment", "page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "tool_modules_list_modules": {
@@ -674,16 +751,17 @@ OPERATIONS: dict[str, Operation] = {
         "path": "/v1/tool-modules",
         "pathParams": [],
         "query": [
-            "page",
-            "pageSize",
             "view",
-            "search",
-            "sortBy",
-            "sortOrder",
             "type",
             "access",
             "approvalState",
             "templateId",
+            "page",
+            "pageSize",
+            "search",
+            "sortBy",
+            "sortOrder",
+            "ids",
         ],
         "stream": False,
     },
@@ -795,7 +873,7 @@ class Operations:
     def __init__(self, transport: Transport) -> None:
         self._t = transport
 
-    def gateway_health(self) -> Any:
+    def gateway_health(self) -> Health:
         "Health"
         return self._t.call(SERVICE, OPERATIONS["gateway_health"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
@@ -842,10 +920,46 @@ class Operations:
             SERVICE, OPERATIONS["apps_set_app_credential_secret"], {"credential_id": credential_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    def apps_list_apps(self, *, include: str | None = None, x_acting_for: str | None = None) -> list[SystemCard]:
+    def apps_list_apps(
+        self,
+        *,
+        include: str | None = None,
+        view: str | None = None,
+        app_state: list[str] | None = None,
+        category: list[str] | None = None,
+        kind: list[str] | None = None,
+        account_id: list[str] | None = None,
+        has_account: list[str] | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+        x_acting_for: str | None = None,
+    ) -> SystemCardList:
         "List Apps"
         return self._t.call(
-            SERVICE, OPERATIONS["apps_list_apps"], {}, {"include": include}, {"x-acting-for": x_acting_for}, None
+            SERVICE,
+            OPERATIONS["apps_list_apps"],
+            {},
+            {
+                "include": include,
+                "view": view,
+                "appState": app_state,
+                "category": category,
+                "kind": kind,
+                "accountId": account_id,
+                "hasAccount": has_account,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {"x-acting-for": x_acting_for},
+            None,
         )  # type: ignore[no-any-return]
 
     def apps_add_app(self, body: NewAppIn) -> AccountDetail:
@@ -981,14 +1095,23 @@ class Operations:
         page: int | None = None,
         page_size: int | None = None,
         search: str | None = None,
-        template_id: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> HostList:
         "List Hosts"
         return self._t.call(
             SERVICE,
             OPERATIONS["egress_list_hosts"],
             {},
-            {"page": page, "pageSize": page_size, "search": search, "templateId": template_id},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -1012,13 +1135,23 @@ class Operations:
     def executions_list_executions(
         self,
         *,
-        page: int | None = None,
-        page_size: int | None = None,
         tool: str | None = None,
         module_id: list[str] | None = None,
         thread: str | None = None,
         decision: str | None = None,
         key: str | None = None,
+        call: str | None = None,
+        link: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
+        result: list[str] | None = None,
+        assistant: list[str] | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> ExecutionList:
         "List Executions"
         return self._t.call(
@@ -1026,13 +1159,23 @@ class Operations:
             OPERATIONS["executions_list_executions"],
             {},
             {
-                "page": page,
-                "pageSize": page_size,
                 "tool": tool,
                 "moduleId": module_id,
                 "thread": thread,
                 "decision": decision,
                 "key": key,
+                "call": call,
+                "link": link,
+                "since": since,
+                "until": until,
+                "result": result,
+                "assistant": assistant,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
             },
             {},
             None,
@@ -1053,6 +1196,51 @@ class Operations:
     def apps_knowledge_source_hosts(self, body: SourceHostsIn) -> list[SourceHost]:
         "Knowledge Source Hosts"
         return self._t.call(SERVICE, OPERATIONS["apps_knowledge_source_hosts"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def mcp_links_list_mcp_links(
+        self,
+        *,
+        team_id: list[str] | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultMcpLinkView:
+        "List Mcp Links"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["mcp_links_list_mcp_links"],
+            {},
+            {
+                "teamId": team_id,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
+    def mcp_links_create_mcp_link(self, body: McpLinkIn) -> McpLinkView:
+        "Create Mcp Link"
+        return self._t.call(SERVICE, OPERATIONS["mcp_links_create_mcp_link"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def mcp_links_get_mcp_link(self, link_id: str) -> McpLinkView:
+        "Get Mcp Link"
+        return self._t.call(SERVICE, OPERATIONS["mcp_links_get_mcp_link"], {"link_id": link_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def mcp_links_pause_mcp_link(self, link_id: str, body: McpLinkPatch) -> McpLinkView:
+        "Pause Mcp Link"
+        return self._t.call(SERVICE, OPERATIONS["mcp_links_pause_mcp_link"], {"link_id": link_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def mcp_links_delete_mcp_link(self, link_id: str) -> Any:
+        "Delete Mcp Link"
+        return self._t.call(SERVICE, OPERATIONS["mcp_links_delete_mcp_link"], {"link_id": link_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     def apps_my_accounts(self, *, every: bool | None = None) -> list[MyAccount]:
         "My Accounts"
@@ -1081,18 +1269,30 @@ class Operations:
     def secrets_list_secrets(
         self,
         *,
+        team_id: str | None = None,
+        read_only: list[str] | None = None,
         page: int | None = None,
         page_size: int | None = None,
         search: str | None = None,
-        template_id: str | None = None,
-        team_id: str | None = None,
-    ) -> Any:
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> SecretList:
         "List Secrets"
         return self._t.call(
             SERVICE,
             OPERATIONS["secrets_list_secrets"],
             {},
-            {"page": page, "pageSize": page_size, "search": search, "templateId": template_id, "teamId": team_id},
+            {
+                "teamId": team_id,
+                "readOnly": read_only,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -1128,16 +1328,17 @@ class Operations:
     def tool_modules_list_modules(
         self,
         *,
-        page: int | None = None,
-        page_size: int | None = None,
         view: str | None = None,
-        search: str | None = None,
-        sort_by: str | None = None,
-        sort_order: str | None = None,
         type: list[str] | None = None,
         access: list[str] | None = None,
         approval_state: list[str] | None = None,
-        template_id: str | None = None,
+        template_id: list[str] | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> ModuleList:
         "List Modules"
         return self._t.call(
@@ -1145,16 +1346,17 @@ class Operations:
             OPERATIONS["tool_modules_list_modules"],
             {},
             {
-                "page": page,
-                "pageSize": page_size,
                 "view": view,
-                "search": search,
-                "sortBy": sort_by,
-                "sortOrder": sort_order,
                 "type": type,
                 "access": access,
                 "approvalState": approval_state,
                 "templateId": template_id,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
             },
             {},
             None,
@@ -1180,16 +1382,27 @@ class Operations:
         self,
         *,
         view: str | None = None,
-        search: str | None = None,
         page: int | None = None,
         page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> ToolGrantList:
         "List Grants"
         return self._t.call(
             SERVICE,
             OPERATIONS["tool_modules_list_grants"],
             {},
-            {"view": view, "search": search, "page": page, "pageSize": page_size},
+            {
+                "view": view,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -1253,13 +1466,33 @@ class Operations:
             SERVICE, OPERATIONS["tool_modules_import_operations"], {"module_id": module_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    def tool_modules_list_mocks(self, module_id: str, op_id: str, *, environment: str | None = None) -> MockList:
+    def tool_modules_list_mocks(
+        self,
+        module_id: str,
+        op_id: str,
+        *,
+        environment: str | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> MockList:
         "List Mocks"
         return self._t.call(
             SERVICE,
             OPERATIONS["tool_modules_list_mocks"],
             {"module_id": module_id, "op_id": op_id},
-            {"environment": environment},
+            {
+                "environment": environment,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -1334,7 +1567,7 @@ class AsyncOperations:
     def __init__(self, transport: AsyncTransport) -> None:
         self._t = transport
 
-    async def gateway_health(self) -> Any:
+    async def gateway_health(self) -> Health:
         "Health"
         return await self._t.call(SERVICE, OPERATIONS["gateway_health"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
@@ -1381,10 +1614,46 @@ class AsyncOperations:
             SERVICE, OPERATIONS["apps_set_app_credential_secret"], {"credential_id": credential_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    async def apps_list_apps(self, *, include: str | None = None, x_acting_for: str | None = None) -> list[SystemCard]:
+    async def apps_list_apps(
+        self,
+        *,
+        include: str | None = None,
+        view: str | None = None,
+        app_state: list[str] | None = None,
+        category: list[str] | None = None,
+        kind: list[str] | None = None,
+        account_id: list[str] | None = None,
+        has_account: list[str] | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+        x_acting_for: str | None = None,
+    ) -> SystemCardList:
         "List Apps"
         return await self._t.call(
-            SERVICE, OPERATIONS["apps_list_apps"], {}, {"include": include}, {"x-acting-for": x_acting_for}, None
+            SERVICE,
+            OPERATIONS["apps_list_apps"],
+            {},
+            {
+                "include": include,
+                "view": view,
+                "appState": app_state,
+                "category": category,
+                "kind": kind,
+                "accountId": account_id,
+                "hasAccount": has_account,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {"x-acting-for": x_acting_for},
+            None,
         )  # type: ignore[no-any-return]
 
     async def apps_add_app(self, body: NewAppIn) -> AccountDetail:
@@ -1522,14 +1791,23 @@ class AsyncOperations:
         page: int | None = None,
         page_size: int | None = None,
         search: str | None = None,
-        template_id: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> HostList:
         "List Hosts"
         return await self._t.call(
             SERVICE,
             OPERATIONS["egress_list_hosts"],
             {},
-            {"page": page, "pageSize": page_size, "search": search, "templateId": template_id},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -1553,13 +1831,23 @@ class AsyncOperations:
     async def executions_list_executions(
         self,
         *,
-        page: int | None = None,
-        page_size: int | None = None,
         tool: str | None = None,
         module_id: list[str] | None = None,
         thread: str | None = None,
         decision: str | None = None,
         key: str | None = None,
+        call: str | None = None,
+        link: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
+        result: list[str] | None = None,
+        assistant: list[str] | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> ExecutionList:
         "List Executions"
         return await self._t.call(
@@ -1567,13 +1855,23 @@ class AsyncOperations:
             OPERATIONS["executions_list_executions"],
             {},
             {
-                "page": page,
-                "pageSize": page_size,
                 "tool": tool,
                 "moduleId": module_id,
                 "thread": thread,
                 "decision": decision,
                 "key": key,
+                "call": call,
+                "link": link,
+                "since": since,
+                "until": until,
+                "result": result,
+                "assistant": assistant,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
             },
             {},
             None,
@@ -1594,6 +1892,51 @@ class AsyncOperations:
     async def apps_knowledge_source_hosts(self, body: SourceHostsIn) -> list[SourceHost]:
         "Knowledge Source Hosts"
         return await self._t.call(SERVICE, OPERATIONS["apps_knowledge_source_hosts"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def mcp_links_list_mcp_links(
+        self,
+        *,
+        team_id: list[str] | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultMcpLinkView:
+        "List Mcp Links"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["mcp_links_list_mcp_links"],
+            {},
+            {
+                "teamId": team_id,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
+    async def mcp_links_create_mcp_link(self, body: McpLinkIn) -> McpLinkView:
+        "Create Mcp Link"
+        return await self._t.call(SERVICE, OPERATIONS["mcp_links_create_mcp_link"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def mcp_links_get_mcp_link(self, link_id: str) -> McpLinkView:
+        "Get Mcp Link"
+        return await self._t.call(SERVICE, OPERATIONS["mcp_links_get_mcp_link"], {"link_id": link_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def mcp_links_pause_mcp_link(self, link_id: str, body: McpLinkPatch) -> McpLinkView:
+        "Pause Mcp Link"
+        return await self._t.call(SERVICE, OPERATIONS["mcp_links_pause_mcp_link"], {"link_id": link_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def mcp_links_delete_mcp_link(self, link_id: str) -> Any:
+        "Delete Mcp Link"
+        return await self._t.call(SERVICE, OPERATIONS["mcp_links_delete_mcp_link"], {"link_id": link_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def apps_my_accounts(self, *, every: bool | None = None) -> list[MyAccount]:
         "My Accounts"
@@ -1624,18 +1967,30 @@ class AsyncOperations:
     async def secrets_list_secrets(
         self,
         *,
+        team_id: str | None = None,
+        read_only: list[str] | None = None,
         page: int | None = None,
         page_size: int | None = None,
         search: str | None = None,
-        template_id: str | None = None,
-        team_id: str | None = None,
-    ) -> Any:
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> SecretList:
         "List Secrets"
         return await self._t.call(
             SERVICE,
             OPERATIONS["secrets_list_secrets"],
             {},
-            {"page": page, "pageSize": page_size, "search": search, "templateId": template_id, "teamId": team_id},
+            {
+                "teamId": team_id,
+                "readOnly": read_only,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -1677,16 +2032,17 @@ class AsyncOperations:
     async def tool_modules_list_modules(
         self,
         *,
-        page: int | None = None,
-        page_size: int | None = None,
         view: str | None = None,
-        search: str | None = None,
-        sort_by: str | None = None,
-        sort_order: str | None = None,
         type: list[str] | None = None,
         access: list[str] | None = None,
         approval_state: list[str] | None = None,
-        template_id: str | None = None,
+        template_id: list[str] | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> ModuleList:
         "List Modules"
         return await self._t.call(
@@ -1694,16 +2050,17 @@ class AsyncOperations:
             OPERATIONS["tool_modules_list_modules"],
             {},
             {
-                "page": page,
-                "pageSize": page_size,
                 "view": view,
-                "search": search,
-                "sortBy": sort_by,
-                "sortOrder": sort_order,
                 "type": type,
                 "access": access,
                 "approvalState": approval_state,
                 "templateId": template_id,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
             },
             {},
             None,
@@ -1729,16 +2086,27 @@ class AsyncOperations:
         self,
         *,
         view: str | None = None,
-        search: str | None = None,
         page: int | None = None,
         page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> ToolGrantList:
         "List Grants"
         return await self._t.call(
             SERVICE,
             OPERATIONS["tool_modules_list_grants"],
             {},
-            {"view": view, "search": search, "page": page, "pageSize": page_size},
+            {
+                "view": view,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -1814,13 +2182,33 @@ class AsyncOperations:
             SERVICE, OPERATIONS["tool_modules_import_operations"], {"module_id": module_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    async def tool_modules_list_mocks(self, module_id: str, op_id: str, *, environment: str | None = None) -> MockList:
+    async def tool_modules_list_mocks(
+        self,
+        module_id: str,
+        op_id: str,
+        *,
+        environment: str | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> MockList:
         "List Mocks"
         return await self._t.call(
             SERVICE,
             OPERATIONS["tool_modules_list_mocks"],
             {"module_id": module_id, "op_id": op_id},
-            {"environment": environment},
+            {
+                "environment": environment,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]

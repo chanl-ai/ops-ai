@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import AsyncIterator
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +19,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_kb.ai import AiClient
 from ops_kb.files import KnowledgeFiles
-from ops_kb.store.knowledge import kb_changes
+from ops_kb.store.knowledge import kb_changes, kb_sources
+from ops_store import isolation
 
 from .conftest import kb_client
 from .pdfs import policy_pdf
@@ -135,6 +136,30 @@ async def test_a_draft_answers_only_once_approved_and_cites_its_source_passage(c
     assert again.status_code == 409 and again.json()["error"]["code"] == "draft_decided", again.text
 
 
+async def test_a_reviewers_reason_is_stored_with_the_decision_and_served(client: httpx.AsyncClient) -> None:
+    await drafted(client)
+    waiting = await queue(client)
+    assert all(d["decisionReason"] is None for d in waiting), "no decision, no reason"
+    first, second = waiting
+    url = "/v1/knowledge-changes/decide"
+    approved = data(await client.post(url, json={"ids": [first["id"]], "decision": "approve", "reason": "Checked."}))
+    rejected = data(await client.post(url, json={"ids": [second["id"]], "decision": "reject", "reason": "Wrong."}))
+    assert (approved[0]["decisionReason"], rejected[0]["decisionReason"]) == ("Checked.", "Wrong.")
+    served = data(await client.get(f"/v1/knowledge-changes/{first['id']}"))
+    assert served["decisionReason"] == "Checked."
+    too_long = await client.post(url, json={"ids": [first["id"]], "decision": "reject", "reason": "x" * 501})
+    assert too_long.status_code == 400, too_long.text
+
+
+async def test_a_decision_with_no_reason_serves_null(client: httpx.AsyncClient) -> None:
+    await drafted(client)
+    [first, _] = await queue(client)
+    [decided] = data(
+        await client.post("/v1/knowledge-changes/decide", json={"ids": [first["id"]], "decision": "approve"})
+    )
+    assert decided["status"] == "approved" and decided["decisionReason"] is None
+
+
 async def test_a_changed_section_is_drafted_again_and_its_approved_pair_marked_for_a_second_look(
     client: httpx.AsyncClient, ai: Ai
 ) -> None:
@@ -165,7 +190,9 @@ async def test_the_queue_filters_by_origin_on_the_server_and_offers_decisions_on
     assert all(d["canDecide"] for d in drafts["data"]), "the builder who owns the source may decide"
     async with _signed_in(engine, tenant, "vera@harborpine.example", "team_ops", {"team_ops": "viewer"}) as vera:
         seen = data(await vera.get("/v1/knowledge-changes", params={"view": "open"}))["data"]
-        refused = await vera.post("/v1/knowledge-changes/decide", json={"ids": [seen[0]["id"]], "decision": "approve"})
+        refused = await vera.post(
+            "/v1/knowledge-changes/decide", json={"ids": [seen[0]["id"]], "decision": "approve", "reason": "ok"}
+        )
     assert seen and not any(d["canDecide"] for d in seen), seen
     assert refused.status_code == 403, refused.text
 
@@ -204,3 +231,22 @@ async def test_the_queue_pages_in_the_database_and_reads_sources_once_per_page(
     assert len(many["data"]) == 5 and many["viewCounts"]["open"] == 42, many["viewCounts"]
     assert {d["id"] for d in few["data"]} <= {d["id"] for d in many["data"]}, "the newest come first"
     assert many_statements == few_statements, (few_statements, many_statements)
+
+
+async def test_the_queue_shows_the_sources_freshness_not_a_fixed_fresh(
+    client: httpx.AsyncClient, engine: AsyncEngine, tenant: str
+) -> None:
+    src, _ = await drafted(client)
+    assert {(d["freshness"], d["reviewBy"]) for d in await queue(client)} == {("no_schedule", "")}
+    slot = (datetime.now(UTC) - timedelta(hours=2)).strftime("%H:%M")
+    daily = {"kind": "daily", "time": slot, "tz": "UTC"}
+    data(await client.patch(f"/v1/sources/{src['id']}", json={"schedule": daily}))
+    with isolation.tenant_wide("test: age a source's last sync", tenant_id=tenant):
+        async with engine.begin() as c:
+            await c.execute(
+                sa.update(kb_sources)
+                .where(kb_sources.c.tenant_id == tenant, kb_sources.c.id == src["id"])
+                .values(last_good_sync_at=datetime.now(UTC) - timedelta(days=3))
+            )
+    seen = await queue(client)
+    assert {d["freshness"] for d in seen} == {"stale"} and all(d["reviewBy"] for d in seen), seen

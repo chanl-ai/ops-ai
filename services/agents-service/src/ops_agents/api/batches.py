@@ -8,14 +8,13 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Iterable
 from itertools import groupby
-from typing import Any
 
 from ops_engine.store import DefinitionStore, RunStore
 from ops_service_kit.logging import get_logger
 from ops_store import background, isolation
 
 from ..store.background import heartbeats
-from ..store.batches import Batches, run_key
+from ..store.batches import Batches, PendingRowOut, run_key
 from ..store.engine import AsyncEngine, EngineTransactions
 from .engine_runs import start_run
 
@@ -25,9 +24,9 @@ EVERY_S = 2.0
 BATCH_VIA = "start:batch"
 
 
-def _by_batch(rows: Iterable[dict[str, Any]]) -> Iterable[tuple[tuple[str, str, str], list[dict[str, Any]]]]:
-    keyed = sorted(rows, key=lambda r: (r["tenant_id"], r["batch_id"], r["row"]))
-    for key, group in groupby(keyed, key=lambda r: (r["tenant_id"], r["team_id"], r["batch_id"])):
+def _by_batch(rows: Iterable[PendingRowOut]) -> Iterable[tuple[tuple[str, str, str], list[PendingRowOut]]]:
+    keyed = sorted(rows, key=lambda r: (r.tenant_id, r.batch_id, r.row))
+    for key, group in groupby(keyed, key=lambda r: (r.tenant_id, r.team_id, r.batch_id)):
         yield key, list(group)
 
 
@@ -45,7 +44,7 @@ async def start_pending(db: AsyncEngine, *, limit: int = PER_TICK) -> int:
             definitions = DefinitionStore(EngineTransactions(db))
             runs = RunStore(EngineTransactions(db))
             for row in rows:
-                stored = await definitions.get(str(row["workflow_id"]), int(row["version"]), team=team)
+                stored = await definitions.row(row.workflow_id, row.version, team=team)
                 if stored is None:
                     await store.stop(batch_id, "Stopped: the workflow version this batch runs is gone.")
                     break
@@ -53,13 +52,13 @@ async def start_pending(db: AsyncEngine, *, limit: int = PER_TICK) -> int:
                     runs,
                     stored,
                     team_id=team,
-                    mode=row["mode"],
-                    input=dict(row["input"]),
-                    run_key=run_key(batch_id, int(row["row"]), int(row["attempt"])),
-                    created_by=str(row["created_by"]),
+                    mode=row.mode,
+                    input=dict(row.input),
+                    run_key=run_key(batch_id, row.row, row.attempt),
+                    created_by=row.created_by,
                     started_via=BATCH_VIA,
                 )
-                await store.started(batch_id, int(row["row"]), int(row["attempt"]), str(run["id"]))
+                await store.started(batch_id, row.row, row.attempt, run.id)
                 started += 1
     return started
 

@@ -22,7 +22,7 @@ needed. Publish requests are approved as they are made because `registry_auto_ap
 | # | Step | Expected |
 |---|---|---|
 | 1 | Create an agent granted `lookup_account` and `place_wire_hold`, publish v2, open two chats with it, open its page | The page loads with a Caller limits section |
-| 2 | Look at Can talk on, Guardrails and the tabs | Chat is the only channel; only "Tool calls per turn" is shown; no Evals tab; Recent runs lists exactly the two chats `GET /v1/agents/{id}/runs` returns |
+| 2 | Look at Can talk on, Guardrails and the tabs | Chat is the only channel; only "Tool calls per turn" is shown; an Evals tab, since eval runs score the newest version; Recent runs lists exactly the two chats `GET /v1/agents/{id}/runs` returns |
 | 3 | Turn on temperature with highest 0.7 and default 0.9, make only `lookup_account` switchable, allow added instructions, save | 422 `invalid_limits`, message starting `limits.temperature.default`; the agent stays at v2 |
 | 4 | Set the default to 0.4 and save | The draft over the published v1 (v2) with temperature 0 to 0.7 default 0.4, switchable `lookup_account`, added instructions allowed; history says "Changed caller limits" |
 | 5 | Request publish of the draft | The review's `agentPublish.limits` equals the saved limits; the draft is published |

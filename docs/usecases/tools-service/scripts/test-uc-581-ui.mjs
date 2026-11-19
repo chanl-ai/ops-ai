@@ -11,7 +11,7 @@ import { request } from 'node:https';
 import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 
-import { AGENTS_PORT, KB_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, KB_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack, required } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
@@ -21,7 +21,7 @@ const PASSWORD = 'northfield-demo';
 const SHOTS = evidenceDir('581', 'uc');
 const PLUGIN = 'opsai.salesforce';
 const LOGIN_HOST = 'login.salesforce.test';
-const SALESFORCE = join(ROOT, '..', 'ops-ai-plugins/plugins/salesforce/src/ops_plugin_salesforce');
+const SALESFORCE = join(process.env.OPS_PLUGINS_REPO || join(ROOT, '..', 'ops-ai-plugins'), 'plugins/salesforce/src/ops_plugin_salesforce');
 // Plugins are off until their release; this walk turns them on for its own services, and kb-service reads a plugin's
 // knowledge source through this run's tools-service.
 process.env.OPS_PLUGINS = 'true';
@@ -110,13 +110,13 @@ try {
       const login = sf.info.login_url;
       // The team's own client is made under Credentials, with no account, and the turn-on picks it.
       const own = await call(tools, 'POST', '/v1/app-credentials', priya, { app: `plugin:${PLUGIN}`, clientId: 'ops-ai-acme', clientSecret: 'acme-connected-app-secret' });
-      const on = await call(tools, 'PUT', `/v1/apps/plugin:${PLUGIN}/team`, priya, { enabled: true, settings: { login_url: login }, credentialId: own.data?.id });
+      const on = await call(tools, 'PUT', `/v1/apps/plugin:${PLUGIN}/team`, priya, { enabled: true, signIn: 'team', settings: { login_url: login }, credentialId: own.data?.id });
       const connectionId = on.data?.connectionId;
       const started = await call(tools, 'POST', `/v1/apps/plugin:${PLUGIN}/accounts/${connectionId}/sign-in`, priya, { account: 'team' });
       const back = started.data?.authorizeUrl ? await signInAt(started.data.authorizeUrl, 'acme.integration') : {};
       const signed = await call(tools, 'POST', '/v1/sign-ins/complete', priya, { state: back.state ?? '', code: back.code ?? '' });
-      const base = (await call(kb, 'POST', '/v1/knowledge-bases', priya, { name: 'Salesforce articles', owner: 'p.shah@harborpine.example' })).data ?? {};
-      const agent = (await call(agents, 'POST', '/v1/agents', priya, { name: 'Case helper', role: 'Works Salesforce cases' })).data ?? {};
+      const base = required(await call(kb, 'POST', '/v1/knowledge-bases', priya, { name: 'Salesforce articles', owner: 'p.shah@harborpine.example' }), 'create the knowledge base');
+      const agent = required(await call(agents, 'POST', '/v1/agents', priya, { name: 'Case helper', role: 'Works Salesforce cases' }), 'create the agent');
       check(
         'setup: Salesforce is on for the team, the team signed in, and the base and agent exist',
         on.status === 200 && signed.status === 200 && !!base.id && !!agent.id,
@@ -124,7 +124,7 @@ try {
       );
 
       // S3: the source through kb-service's API, synced through it; its listing tool is now plain plugin data.
-      const source = (await call(kb, 'POST', '/v1/sources', priya, { type: 'tool', name: 'Salesforce articles', config: { plugin: PLUGIN, source: 'articles' }, kbIds: [base.id] })).data ?? {};
+      const source = required(await call(kb, 'POST', '/v1/sources', priya, { type: 'tool', name: 'Salesforce articles', config: { plugin: PLUGIN, source: 'articles' }, kbIds: [base.id] }), 'create the source');
       const sync = async (full) => call(kb, 'POST', `/v1/sources/${source.id}/sync`, priya, { full });
       const fetched = async () => (await fakeState()).fetched;
       const runOf = (r) => r.data?.status ?? r.data?.run?.status;
@@ -191,7 +191,7 @@ try {
 
         await step('17 granted and saved, the agent page names the tool by its title', async () => {
           // The agent page saves a change as it is made, so the grant is read back rather than saved by a button.
-          const stored = await until(async () => (await call(agents, 'GET', `/v1/agents/${agent.id}`, priya)).data ?? {}, (a) => (a.toolIds ?? []).includes('salesforce_find_cases'), 30);
+          const stored = await until(async () => required(await call(agents, 'GET', `/v1/agents/${agent.id}`, priya), 'read the agent'), (a) => (a.toolIds ?? []).includes('salesforce_find_cases'), 30);
           await page.reload({ waitUntil: 'domcontentloaded' });
           const chip = picker.getByText('Find cases', { exact: true });
           const named = await chip.waitFor({ timeout: 60_000 }).then(() => true, () => false);
@@ -205,7 +205,9 @@ try {
         await browser.close();
       }
     },
-    { demo: true, tools: { env: { ...sf.info.settings, OPS_PLUGIN_PATHS: JSON.stringify([SALESFORCE]) } } },
+    { demo: true, tools: { env: { ...sf.info.settings, OPS_PLUGIN_PATHS: JSON.stringify([SALESFORCE]) } },
+    // kb-service reads the plugin's declared sources through tools-service; without these it refuses to make a tool source.
+    kbEnv: { OPS_PLUGIN_PATHS: JSON.stringify([SALESFORCE]), OPS_TOOLS_URL: `http://127.0.0.1:${TOOLS_PORT}` } },
   );
 } finally {
   sf.child.stdin.end();

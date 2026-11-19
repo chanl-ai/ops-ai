@@ -27,9 +27,9 @@ async def _started_by_approver(c: AsyncClient, engine: AsyncEngine, headers: dic
 async def test_a_run_records_whether_its_starter_approves_its_writes(stack: Stack) -> None:  # noqa: F811
     c, engine = stack
     await unowned_live(engine, "refunds", by="seed")
-    assert await _started_by_approver(c, engine, ADMIN, 1), "an admin decides the team's reviews"
+    loose_admin = person("priya", "team_ops", "admin", policies={"requesterMayDecide": True})
+    assert await _started_by_approver(c, engine, loose_admin, 1), "an admin decides the team's reviews when allowed"
     # A builder decides reviews since D59; one whose role lost reviews.decide does not approve their writes.
     no_decide = person("jo", "team_ops", "builder", unticked=(("reviews", "decide"),))
     assert not await _started_by_approver(c, engine, no_decide, 2), "a role without reviews.decide does not"
-    four_eyes = person("priya", "team_ops", "admin", policies={"requesterMayDecide": False})
-    assert not await _started_by_approver(c, engine, four_eyes, 3), "with the four-eyes rule someone else decides"
+    assert not await _started_by_approver(c, engine, ADMIN, 3), "by default someone else decides an admin's run"

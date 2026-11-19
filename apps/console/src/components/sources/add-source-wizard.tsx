@@ -27,7 +27,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { useApproveAiSteps, useCreateSource, usePutSourceItem, useSourceKinds, useSourcePreview } from '@/hooks/knowledge-queries';
-import { type AiSwitches, aiDefaults, createInput, firstSyncCalls, PIECES_HIGH, PIECES_LOW } from '@/lib/add-source';
+import { type AiSwitches, aiDefaults, createInput, firstSyncCalls, kindsToConnect, kindUnavailable, PIECES_HIGH, PIECES_LOW } from '@/lib/add-source';
 import { appPageHref } from '@/lib/app-links';
 import { count, plural } from '@/lib/format';
 import type { Schedule, Source, SourceKindOption, SourceKindPreview } from '@/lib/types/knowledge';
@@ -72,11 +72,14 @@ export function AddSourceWizard({
   onOpenChange,
   kb,
   onCreated,
+  initialKind,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   kb: { id: string; name: string };
   onCreated: (source: Source, approval: AiApproval) => void;
+  /** Opens on step 2 with this kind chosen: `site` is the first website kind the team may add, `push` pushed by API. */
+  initialKind?: 'site' | 'push';
 }) {
   const kinds = useSourceKinds(open);
   const create = useCreateSource();
@@ -129,6 +132,20 @@ export function AddSourceWizard({
   const previewValues = useDebounced(values, PREVIEW_DEBOUNCE_MS);
   const previewing = !!kind?.previews && step >= 2 && valid && Object.keys(valueErrors(inputs, previewValues)).length === 0;
   const preview = useSourcePreview({ plugin: kind?.plugin, source: kind?.source, values: previewValues }, previewing);
+
+  // A menu item that names the kind skips step 1, once per opening; with no such kind the wizard stays on step 1.
+  const preset = React.useRef(false);
+  React.useEffect(() => {
+    if (!open) preset.current = false;
+  }, [open]);
+  React.useEffect(() => {
+    if (!open || !initialKind || preset.current || !kinds.data) return;
+    preset.current = true;
+    const k = kinds.data.find((o) => (initialKind === 'site' ? o.type === 'tool' && !!o.site && o.canCreate !== false : o.type === 'push'));
+    if (k) choose(k);
+    // choose is recreated each render; this runs once per opening.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initialKind, kinds.data]);
 
   const dirty = !!key;
   const close = (o: boolean) => {
@@ -250,7 +267,7 @@ export function AddSourceWizard({
                     {groups.map((g) => (
                       <CommandGroup key={g.id} heading={g.label}>
                         {g.kinds.map((k) => {
-                          const notConnected = !!k.needsConnection && !k.connected;
+                          const notConnected = kindUnavailable(k);
                           return (
                             <CommandItem
                               key={kindKey(k)}
@@ -266,7 +283,7 @@ export function AddSourceWizard({
                               <span className="min-w-0 flex-1">
                                 <span className="block truncate font-medium">{k.title}</span>
                                 <span className="block truncate text-xs text-muted-foreground">
-                                  {k.type !== 'tool' ? BUILT_IN_HINT[k.type] : k.site ? 'Pages of one website' : k.needsConnection ? (k.connected ? 'Connected' : 'Not connected') : 'From the app'}
+                                  {k.type !== 'tool' ? BUILT_IN_HINT[k.type] : k.site ? 'Pages of one website' : k.canCreate === false ? (k.cannotCreateBecause ?? 'Cannot be added') : k.needsConnection ? (k.connected ? 'Connected' : 'Not connected') : 'From the app'}
                                 </span>
                               </span>
                               {key === kindKey(k) && <Badge variant="secondary">Chosen</Badge>}
@@ -279,9 +296,7 @@ export function AddSourceWizard({
                 )}
               </CommandList>
             </Command>
-            {options
-              .filter((k) => k.needsConnection && !k.connected && k.plugin)
-              .map((k) => (
+            {kindsToConnect(options).map((k) => (
                 <p key={kindKey(k)} className="text-xs text-muted-foreground">
                   {k.title} needs a connection first.{' '}
                   <Link href={appPageHref(`plugin:${k.plugin}`)} className="inline-flex items-center gap-1 text-foreground underline underline-offset-4">

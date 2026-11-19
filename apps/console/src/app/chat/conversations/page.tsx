@@ -20,7 +20,7 @@ import { idColumn } from '@/components/shared/id-column';
 import { selectColumn } from '@/components/shared/select-column';
 import { Button } from '@/components/ui/button';
 import { useBulkDeleteThreads, useBulkUpdateThreads, useChatThreads, useDeleteThread, useUpdateThread } from '@/hooks/chat-queries';
-import { useKnowledgeBases } from '@/hooks/knowledge-queries';
+import { useKnowledgeBaseNames } from '@/hooks/knowledge-queries';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { useSticky } from '@/hooks/use-sticky';
 import { count, plural, relativeTime } from '@/lib/format';
@@ -29,7 +29,6 @@ import { cn } from '@/lib/utils';
 import { serverPagination } from '@/components/shared/server-pagination';
 
 type Row = ChatThreadRow & { onRowClick: (t: ChatThreadRow) => void; href: string };
-const ALL = { page: 1, pageSize: 100 };
 const STATE_LABEL: Record<string, string> = { active: 'Active', pinned: 'Pinned', archived: 'Archived' };
 const stateOf = (t: ChatThreadRow) => (t.archived ? 'archived' : t.pinned ? 'pinned' : 'active');
 
@@ -134,7 +133,6 @@ export default function ConversationsPage() {
   const router = useRouter();
   const list = useListParams<ChatFilters>('title');
   const query = useChatThreads(list.params);
-  const kbList = useKnowledgeBases(ALL);
   const update = useUpdateThread();
   const remove = useDeleteThread();
   const bulkUpdate = useBulkUpdateThreads();
@@ -151,9 +149,11 @@ export default function ConversationsPage() {
     setResetKey((k) => k + 1);
   };
 
-  const kbs = kbList.data?.data ?? [];
   const rowsData = query.data?.data ?? [];
   const facets = query.data?.facets ?? {};
+  // Names by id: the page's rows and the facet's values, not a page of every knowledge base.
+  const kbLookup = useKnowledgeBaseNames([...rowsData.flatMap((t) => t.kbIds), ...Object.keys(facets.kbIds ?? {})]);
+  const kbs = kbLookup.data ?? [];
   const agentNames = Object.fromEntries(rowsData.map((t) => [t.agentId, t.agentName]));
   const kbNames = Object.fromEntries(kbs.map((k) => [k.id, k.name]));
 
@@ -174,9 +174,9 @@ export default function ConversationsPage() {
             },
           ),
         remove: setDeleting,
-        colorOf: (id) => kbList.data?.data.find((k) => k.id === id)?.color ?? 'slate',
+        colorOf: (id) => kbs.find((k) => k.id === id)?.color ?? 'slate',
       }),
-    [update, kbList.data],
+    [update, kbLookup.data],
   );
   const rows: Row[] = React.useMemo(() => rowsData.map((t) => ({ ...t, href: `/chat/${t.id}`, onRowClick: (x: ChatThreadRow) => router.push(`/chat/${x.id}`) })), [rowsData, router]);
   const options = (key: string, label: (v: string) => string) => Object.keys(facets[key] ?? {}).map((v) => ({ value: v, label: label(v), count: facets[key]?.[v] ?? 0 }));

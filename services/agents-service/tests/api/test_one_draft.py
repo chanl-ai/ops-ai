@@ -85,6 +85,6 @@ async def test_two_saves_at_once_after_publish_leave_one_draft(database_url: str
                 *(reg.save(aid, {"name": "Raced", "role": f"edit {i}"}, by="a@x") for i in range(4))
             )
             assert saved == [2, 2, 2, 2], saved
-            assert [v["version"] for v in await reg.versions(aid)] == [2, 1]
+            assert [v.version for v in await reg.versions(aid)] == [2, 1]
     finally:
         await engine.dispose()

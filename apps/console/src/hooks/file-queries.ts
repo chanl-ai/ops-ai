@@ -24,6 +24,8 @@ export const useFiles = (p: ListParams<FileFilters> & { view: FileView }) => use
 /** Polls while a scan is running so the sheet moves from Scanning to its result without a reload. */
 export const useFile = (id: string | null) =>
   useTeamQuery({ queryKey: fk.one(id ?? ''), queryFn: () => api.files.get(id!), enabled: !!id, refetchInterval: (q) => (q.state.data?.scan.status === 'pending' ? 1000 : false) });
+/** Reads several files' details at once, e.g. the names and sizes of files picked by id. */
+export const useFileDetails = () => React.useCallback((ids: string[]) => Promise.all(ids.map((id) => api.files.get(id))), []);
 export const useUploadLimits = () => useTeamQuery({ queryKey: fk.limits, queryFn: api.files.limits, staleTime: 60_000 });
 export const useStorageSettings = (enabled = true) => useTeamQuery({ queryKey: fk.storage, queryFn: api.files.storage.get, enabled });
 

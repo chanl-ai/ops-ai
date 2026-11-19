@@ -22,7 +22,7 @@ ops.agents.apply("resources/agent.yaml")
 ops.agents.chat("ag_guide", "What documents open a business account?")
 ```
 
-`opsai agents eval` scores dataset cases on a published agent. Stream, wait and background runs stay **Planned** until the Agent Run API ships.
+`ops.agents.eval(id, cases)` scores dataset cases on a published agent; the `opsai agents eval` verb is **Planned**. Stream, wait and background runs stay **Planned** until the Agent Run API ships.
 
 ## Examples
 

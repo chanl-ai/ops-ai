@@ -18,6 +18,7 @@ from uuid import uuid4
 
 import httpx
 from fake_salesforce import salesforce
+from usecase_harness import PLUGINS_REPO
 from usecase_harness import (
     PLATFORM_INTERNAL_PORT,
     PLATFORM_PORT,
@@ -30,7 +31,6 @@ from usecase_harness import (
     signed_in,
     tools,
 )
-from usecase_harness import ROOT as REPO
 
 AUTH = {
     "OPS_AUTH_MODE": "platform",
@@ -39,7 +39,7 @@ AUTH = {
 }
 SALESFORCE = Path(
     os.environ.get("OPS_SALESFORCE_PLUGIN")
-    or REPO.parent / "ops-ai-plugins/plugins/salesforce/src/ops_plugin_salesforce"
+    or PLUGINS_REPO / "plugins/salesforce/src/ops_plugin_salesforce"
 )
 APP = "plugin:opsai.salesforce"
 CASE = "SELECT Id, CaseNumber, Status FROM Case WHERE CaseNumber = '00044818'"

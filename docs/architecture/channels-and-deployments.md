@@ -63,7 +63,8 @@ the thread: `reject`, `enqueue` (default) or `interrupt`.
 Built in E6 against a fake Microsoft Graph source
 ([mailbox-adapter](../services/agents-service/experiments/mailbox-adapter.md)); a real tenant run is next. The
 adapter calls the thread API over HTTP, so no graph knows that mail exists: a graph receives an `email` whose
-attachments are file references in `channel_files`.
+attachments are file references (`channel_files`, which held their bytes and was never read, was dropped in agents
+0106).
 
 | Fact | Handling |
 |---|---|

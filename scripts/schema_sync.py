@@ -74,7 +74,7 @@ async def recorded(url: str) -> dict[str, str | None]:
     try:
         for _, _, table in CHAINS:
             exists = await c.fetchval("SELECT to_regclass($1) IS NOT NULL", f"public.{table}")
-            rows = await c.fetch(f"SELECT version_num FROM {table}") if exists else []
+            rows = await c.fetch(f"SELECT version_num FROM {table}") if exists else []  # noqa: S608
             found[table] = ",".join(sorted(str(r[0]) for r in rows)) or None
     finally:
         await c.close()

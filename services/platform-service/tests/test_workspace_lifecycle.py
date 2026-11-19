@@ -15,6 +15,8 @@ from typing import Any
 
 import pytest
 import sqlalchemy as sa
+from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.pool import QueuePool
 
 from ops_access import ANY_TEAM, BUILTIN_ROLES
 from ops_access.catalogue import ADMIN
@@ -37,8 +39,15 @@ class FakeUsage:
     runs: dict[str, int] = field(default_factory=dict[str, int])
     live: dict[str, list[str]] = field(default_factory=dict[str, list[str]])
     down: bool = False
+    # The platform database: no connection may be held while agents-service is asked (no transaction across a call).
+    engine: AsyncEngine | None = None
 
     async def of(self, tenant_id: str, team_id: str) -> TeamUsage:
+        if self.engine is not None:
+            pool = self.engine.pool
+            assert isinstance(pool, QueuePool)
+            held = pool.checkedout()
+            assert held == 0, f"{held} database connection(s) held while agents-service is asked"
         if self.down:
             raise UsageUnavailable("agents-service did not answer")
         return TeamUsage(runs_in_progress=self.runs.get(team_id, 0), live_workflows=self.live.get(team_id, []))
@@ -46,7 +55,7 @@ class FakeUsage:
 
 @pytest.fixture
 def usage(signin: SignInRig) -> Iterator[FakeUsage]:
-    fake = FakeUsage()
+    fake = FakeUsage(engine=signin.app_engine)
     signin.app.dependency_overrides[team_usage] = lambda: fake
     yield fake
     signin.app.dependency_overrides.pop(team_usage, None)

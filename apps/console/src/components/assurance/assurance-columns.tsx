@@ -72,7 +72,7 @@ export const suiteColumns: ColumnDef<Clickable<AssuranceSuite>>[] = [
 ];
 
 export const runColumns: ColumnDef<AssuranceRun>[] = [
-  { id: 'name', accessorFn: (r) => r.asset.name, header: ({ column }) => <DataTableColumnHeader column={column} title="Asset" />, cell: ({ row }) => <AssetCell asset={row.original.asset} sub={`v${row.original.version}`} />, enableHiding: false },
+  { id: 'name', accessorFn: (r) => r.asset.name, header: ({ column }) => <DataTableColumnHeader column={column} title="Asset" />, cell: ({ row }) => <AssetCell asset={row.original.asset} sub={row.original.version ? `v${row.original.version}` : 'Not published'} />, enableHiding: false },
   kindColumn(),
   { accessorKey: 'trigger', header: 'Trigger', cell: ({ row }) => <span className="whitespace-nowrap text-xs">{TRIGGER_LABEL[row.original.trigger]}</span>, filterFn: facetFilterFn },
   {
@@ -93,7 +93,7 @@ export const runColumns: ColumnDef<AssuranceRun>[] = [
     header: 'Review',
     cell: ({ row }) =>
       row.original.reviewId ? (
-        <Link className="text-xs whitespace-nowrap underline underline-offset-2" href={`/reviews?review=${row.original.reviewId}`}>
+        <Link className="text-xs whitespace-nowrap underline underline-offset-2" href={`/work/tasks?review=${row.original.reviewId}`}>
           {row.original.reviewId}
         </Link>
       ) : (
@@ -109,7 +109,7 @@ export const gateColumns: ColumnDef<AssuranceGate>[] = [
   tierColumn(),
   {
     id: 'steps',
-    header: 'Gate steps',
+    header: 'Checks',
     cell: ({ row }) => (
       <div className="flex max-w-xl flex-wrap gap-1" data-testid={`gate-steps-${row.original.reviewId}`}>
         {row.original.steps.map((s) => (
@@ -130,7 +130,7 @@ export const gateColumns: ColumnDef<AssuranceGate>[] = [
     id: 'review',
     header: 'Review',
     cell: ({ row }) => (
-      <Link className="text-xs whitespace-nowrap underline underline-offset-2" href={`/reviews?review=${row.original.reviewId}`}>
+      <Link className="text-xs whitespace-nowrap underline underline-offset-2" href={`/work/tasks?review=${row.original.reviewId}`}>
         {row.original.reviewId}
       </Link>
     ),

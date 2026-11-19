@@ -8,14 +8,13 @@ import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useCreateSecret, useRotateSecret } from '@/hooks/secrets-queries';
+import { type SecretMeta, useCreateSecret, useRotateSecret } from '@/hooks/secrets-queries';
 import { useTeam } from '@/hooks/use-team';
-import type { SecretMeta } from '@/lib/types/secrets';
 
 /** Chips drawn in the Used by cell before "and N more"; a secret read by ten operations would otherwise make a row ten chips tall. */
 export const USED_BY_SHOWN = 3;
 export const usersText = (s: SecretMeta) => {
-  const names = s.usedBy.map((u) => u.operation);
+  const names = (s.usedBy ?? []).map((u) => u.operation);
   return names.length > USED_BY_SHOWN ? `${names.slice(0, USED_BY_SHOWN).join(', ')} and ${names.length - USED_BY_SHOWN} more` : names.join(', ');
 };
 
@@ -73,7 +72,7 @@ export function SecretDialog({ open, rotating, onOpenChange, onSaved }: { open: 
           <Input id="secret-value" type="password" value={value} aria-invalid={!!(errors.value ?? errors.submit)} onChange={(e) => (setValue(e.target.value), setErrors({}))} autoComplete="new-password" />
         </FormField>
         {!rotating && team && <p className="text-xs text-muted-foreground">Saved in {team.name}: only its tool modules read it. Another team that calls the same system adds its own under the same name.</p>}
-        {rotating && rotating.usedBy.length > 0 && <p className="text-xs text-muted-foreground">The next call of {usersText(rotating)} sends the new value.</p>}
+        {rotating && (rotating.usedBy ?? []).length > 0 && <p className="text-xs text-muted-foreground">The next call of {usersText(rotating)} sends the new value.</p>}
       </div>
     </DialogShell>
   );

@@ -12,9 +12,11 @@ from typing import Annotated, Any, TypeAlias
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
+from ops_identity.fastapi import Tx
 from ops_service_kit.http import Envelope
 
 from ...store.graphs import GraphStore
+from ..agent_registry import registry
 from ..auth import principal
 from ..deps import Runtime, runtime
 from ..envelope import ok
@@ -47,10 +49,15 @@ def _title(name: str) -> str:
 
 
 @router.get("", response_model=Envelope[list[GraphInfo]])
-async def list_graphs(rt: Rt) -> JSONResponse:
+async def list_graphs(rt: Rt, _: Tx) -> JSONResponse:
+    """Every graph the caller's tenant can run, with the input each needs."""
     out: list[dict[str, Any]] = []
+    # The compiled graphs are every tenant's; an agent's own graph is listed only to its tenant.
+    ours = await registry(rt).tenant_owners({n.removeprefix("agent:") for n in rt.graphs if n.startswith("agent:")})
     for name in rt.graphs:
         if name.startswith("agent:"):
+            if name.removeprefix("agent:") not in ours:
+                continue
             # A published agent's own graph (agent_registry.go_live): the agent's name, a message in.
             agent = rt.catalog.agent(name.removeprefix("agent:"))
             if agent is None:

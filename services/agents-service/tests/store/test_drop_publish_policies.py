@@ -31,7 +31,7 @@ async def _sql(url: str, *statements: tuple[str, dict[str, Any]]) -> list[Any]:
     return out
 
 
-def test_the_old_tables_go_and_platforms_policies_are_untouched(database_url: str) -> None:
+def test_the_old_tables_go_and_platforms_policies_are_untouched(emptied_database: str) -> None:
     cfg = Config(str(ROOT / "alembic.ini"))
     command.downgrade(cfg, BEFORE)
     old, newer = new_id("ten"), new_id("ten")
@@ -44,7 +44,7 @@ def test_the_old_tables_go_and_platforms_policies_are_untouched(database_url: st
     at = now_iso()
     asyncio.run(
         _sql(
-            database_url,
+            emptied_database,
             (tenant, {"t": old, "at": at}),
             (tenant, {"t": newer, "at": at}),
             (document, {"t": old, "d": json.dumps(saved), "at": at}),
@@ -59,7 +59,7 @@ def test_the_old_tables_go_and_platforms_policies_are_untouched(database_url: st
     command.upgrade(cfg, "head")
     (rows, tables) = asyncio.run(
         _sql(
-            database_url,
+            emptied_database,
             (
                 "SELECT tenant_id, value FROM policies WHERE key = 'publishReview' AND tenant_id IN (:a, :b)",
                 {"a": old, "b": newer},
@@ -75,7 +75,7 @@ def test_the_old_tables_go_and_platforms_policies_are_untouched(database_url: st
     command.upgrade(cfg, "head")
     asyncio.run(
         _sql(
-            database_url,
+            emptied_database,
             ("DELETE FROM policies WHERE tenant_id IN (:a, :b)", {"a": old, "b": newer}),
             ("DELETE FROM tenants WHERE id IN (:a, :b)", {"a": old, "b": newer}),
         )

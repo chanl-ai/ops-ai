@@ -25,6 +25,8 @@ from ops_identity import ServiceClient, dev_service_signer
 from .conftest import Gateway
 
 SERVICES = Path(__file__).parents[3]
+# The scope agents-service claims on tools-service (ops_agents.api.app.PUBLIC_SCOPES).
+VIEW = ["tools:view"]
 # The server the test database is on; a lane's is on its own port.
 _SERVER = make_url(os.environ.get("OPS_TEST_DATABASE_URL", "postgresql+asyncpg://ops:ops@localhost:5477/ops_test"))
 ADMIN = _SERVER.set(drivername="postgresql", database="postgres").render_as_string(hide_password=False)
@@ -33,7 +35,7 @@ ADMIN = _SERVER.set(drivername="postgresql", database="postgres").render_as_stri
 async def test_tool_access_is_internal_and_comes_from_the_gateway_registry(gateway: Gateway) -> None:
     assert (await gateway.client.get("/v1/tools/place_wire_hold", headers={"Authorization": ""})).status_code == 401
     tools = GatewayClient(
-        ServiceClient(gateway.client, dev_service_signer(), "agents", "tools", tenant=lambda: "local")
+        ServiceClient(gateway.client, dev_service_signer(), "agents", "tools", VIEW, tenant=lambda: "local")
     )
     assert await tools.tool_access("place_wire_hold") == "write"
     assert await tools.tool_access("send_reply") == "write"
@@ -71,9 +73,9 @@ def _tools_head() -> str | None:
     return ScriptDirectory.from_config(Config(str(SERVICES / "tools-service" / "alembic.ini"))).get_current_head()
 
 
-def _upgrade(service: str, db: str, monkeypatch: pytest.MonkeyPatch) -> None:
+def _upgrade(service: str, db: str, monkeypatch: pytest.MonkeyPatch, target: str = "head") -> None:
     monkeypatch.setenv("OPS_DATABASE_URL", _SERVER.set(database=db).render_as_string(hide_password=False))
-    command.upgrade(Config(str(SERVICES / service / "alembic.ini")), "head")
+    command.upgrade(Config(str(SERVICES / service / "alembic.ini")), target)
 
 
 async def test_tools_chain_creates_its_tables_on_a_fresh_database(
@@ -117,6 +119,11 @@ async def test_tools_chain_adopts_tables_the_agents_chain_created(
     db = fresh_database
     await asyncio.to_thread(_upgrade, "agents-service", db, monkeypatch)
     await _scalar(db, "INSERT INTO gateway_fences VALUES ('gth_keep', 7) RETURNING 1")
+    await asyncio.to_thread(_upgrade, "tools-service", db, monkeypatch, "tools_0081_store_roles")
+    # tools_0082 keys a fence by the tenant of the calls on its thread and deletes one no call names, so the kept
+    # fence's thread has a call in tenant t1.
+    await _scalar(db, _CALL.format(id="c_keep", effect="false", scope="row:c_keep").replace("'th_1'", "'gth_keep'"))
     await asyncio.to_thread(_upgrade, "tools-service", db, monkeypatch)
     assert await _scalar(db, "SELECT version_num FROM alembic_version_tools") == _tools_head()
-    assert await _scalar(db, "SELECT generation FROM gateway_fences WHERE thread_id = 'gth_keep'") == 7
+    fence = "SELECT tenant_id || ':' || generation FROM gateway_fences WHERE thread_id = 'gth_keep'"
+    assert await _scalar(db, fence) == "t1:7"

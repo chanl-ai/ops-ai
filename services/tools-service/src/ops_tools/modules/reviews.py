@@ -6,11 +6,13 @@ who reviews it and, once decided, tells tools-service through `POST /v1/tool-mod
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Protocol
 
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_service_kit.errors import ApiError, ServiceUnavailable
+from ops_service_kit.http import Json
 
+from ..store.modules import Change, Module
 from .policy import FORWARDED
 from .review_diff import review_diff
 
@@ -22,16 +24,16 @@ class ReviewOpener(Protocol):
         *,
         tenant_id: str,
         team_id: str,
-        module: dict[str, Any],
+        module: Module,
         version: str,
-        changes: list[dict[str, Any]],
+        changes: list[Change],
         note: str,
         security: bool = True,
     ) -> str: ...
 
     async def open_host(
         self, credentials: dict[str, str], *, tenant_id: str, team_id: str, host: str, app: str
-    ) -> dict[str, Any]: ...
+    ) -> Json: ...
 
 
 class Reviews:
@@ -46,9 +48,9 @@ class Reviews:
         *,
         tenant_id: str,
         team_id: str,
-        module: dict[str, Any],
+        module: Module,
         version: str,
-        changes: list[dict[str, Any]],
+        changes: list[Change],
         note: str,
         security: bool = True,
     ) -> str:
@@ -88,7 +90,7 @@ class Reviews:
 
     async def open_host(
         self, credentials: dict[str, str], *, tenant_id: str, team_id: str, host: str, app: str
-    ) -> dict[str, Any]:
+    ) -> Json:
         """The Security task for an app's first address on an unlisted host, as agents-service answers it:
         the one still waiting for the host, its latest refusal, or a new one. Raises when Reviews cannot be reached,
         so nothing is held for a task that was never opened."""

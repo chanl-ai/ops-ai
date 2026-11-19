@@ -13,11 +13,13 @@ from typing import Any, cast
 
 import httpx
 import pytest
+from pydantic import HttpUrl
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_ingest import ModelBudgetSpent, ModelUnavailable
 from ops_kb.ai import AiClient, models_clients
 from ops_kb.files import KnowledgeFiles
+from ops_service_kit.settings import Endpoint
 
 from .conftest import kb_client
 from .pdfs import policy_pdf
@@ -183,7 +185,7 @@ def test_models_services_ceiling_refusals_stop_the_step_and_send_the_runs_ceilin
         sent.append(request)
         return httpx.Response(429, json={"success": False, "error": {"code": "run_spend_cap", "message": "spent"}})
 
-    client = models_clients("http://models", "mk_dev_kb")("t1", "airun_1", 5.0)
+    client = models_clients(Endpoint(url=HttpUrl("http://models")), "mk_dev_kb")("t1", "airun_1", 5.0)
     inner = cast(Any, client).inner
     inner.http = httpx.Client(transport=httpx.MockTransport(answer), base_url="http://models")
     with pytest.raises(ModelBudgetSpent, match="source's ceiling"):

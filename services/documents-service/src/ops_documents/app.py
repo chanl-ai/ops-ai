@@ -18,7 +18,6 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Depends, FastAPI, Header, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
 
 from ops_access import can
 from ops_documents.agents_client import TypeUses
@@ -66,33 +65,42 @@ from ops_documents.store import DocumentTypesStore, ExtractionsStore, NameTakenE
 from ops_documents.store.metadata import reachable
 from ops_documents.templates import templates_router
 from ops_documents.tools_client import PluginTemplates
-from ops_extract import page_images
+from ops_extract import page_images, shapes
 from ops_extract.layout import layout_of
 from ops_identity import Auth, CurrentCaller, Principal, install_auth
+from ops_identity.fastapi import Tx
 from ops_ingest.reading import OcrMode, ocr_installed
 from ops_service_kit.background import BackgroundHealthOut
 from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, ValidationFailed
 from ops_service_kit.http import (
     Envelope,
     ListResult,
+    Out,
     error_body,
     error_responses,
     install_error_handlers,
     ok,
     operation_id,
-    paged,
 )
+from ops_service_kit.listing import ListQuery
+from ops_service_kit.logging import get_logger
 from ops_service_kit.settings import Settings
+from ops_store import background as background_tasks
+from ops_store import isolation
 from ops_store.background import LOCAL as LOCAL_BEATS
 from ops_store.background import report as background_report
+
+log = get_logger(__name__)
 
 # The longest side of a page image asked for at low detail.
 LOW_DETAIL_SIDE = 512
 
 
-class Health(BaseModel):
-    status: str
-    reason: str | None = None
+class Health(Out):
+    """200 ok, or degraded with the reason: 503 when the database is out of reach, 200 when only OCR is missing."""
+
+    status: Literal["ok", "degraded"]
+    reason: Literal["database", "ocr"] | None = None
 
 
 def _status(e: DocumentsError) -> ApiError:
@@ -188,20 +196,31 @@ def create_documents_app(
     config = Settings()
     readings = readings or extractor.readings or Readings(extractor.files, ReadingsStore(engine))
 
+    async def kept(start: Callable[[], Coroutine[Any, Any, None]]) -> None:
+        # Each process reports its own failures on /health/background; one that still escapes is logged here, so it
+        # never cancels the group, which would stop the server and the other processes with it.
+        try:
+            await start()
+        except Exception as e:
+            log.warning("documents_background_stopped", error=f"{type(e).__name__}: {e}"[:500])
+
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
-        # Readings, extractions and test runs queued or running when the process stopped run again.
-        await readings.resume()
-        await extractor.resume()
-        await document_types.resume()
-        # Work that runs beside the server, such as the service event relay, stopped with it.
-        tasks = [asyncio.create_task(start()) for start in background]
-        try:
-            yield
-        finally:
-            for task in tasks:
-                task.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
+        # The supervisor every queued reading, extraction and test run starts on; leaving it cancels what still runs.
+        async with background_tasks.supervisor():
+            # Readings, extractions and test runs queued or running when the process stopped run again.
+            await readings.resume()
+            await extractor.resume()
+            await document_types.resume()
+            # Work that runs beside the server, such as the service event relay, on one TaskGroup: leaving it cancels
+            # each process and waits for it, so none outlives the server.
+            async with asyncio.TaskGroup() as group:
+                tasks = [group.create_task(kept(start)) for start in background]
+                try:
+                    yield
+                finally:
+                    for task in tasks:
+                        task.cancel()
 
     app = FastAPI(
         title="documents-service", version="0.1.0", lifespan=lifespan, generate_unique_id_function=operation_id
@@ -231,24 +250,31 @@ def create_documents_app(
         response_model_exclude_none=True,
         responses={503: {"model": Health}},
     )
-    async def health() -> dict[str, str] | JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def health(response: Response) -> Health:  # pyright: ignore[reportUnusedFunction]
         if not await reachable(engine):
-            return JSONResponse({"status": "degraded", "reason": "database"}, status_code=503)
+            response.status_code = 503
+            return Health(status="degraded", reason="database")
         if not ocr_installed():
             # Text files still read; every scanned page fails with "OCR not installed" until Tesseract is there.
-            return {"status": "degraded", "reason": "ocr"}
-        return {"status": "ok"}
+            return Health(status="degraded", reason="ocr")
+        return Health(status="ok")
 
     @app.get("/health/background", tags=["health"], response_model=BackgroundHealthOut)
-    async def health_background() -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
+    async def health_background() -> BackgroundHealthOut:  # pyright: ignore[reportUnusedFunction]
         """This service's background processes and their state; counts and error types only, no record's data."""
-        return {"processes": background_report(await LOCAL_BEATS.read(), "documents", time.time())}
+        return BackgroundHealthOut.model_validate(
+            {"processes": background_report(await LOCAL_BEATS.read(), "documents", time.time())}
+        )
 
     def found(value: Any, what: str) -> Any:
         if value is None:
             raise NotFound(what)
         return value
 
+    # A route that reads or writes only rows, or asks files-service or tools-service before its first row, takes `Tx`:
+    # one transaction, opened at its first row. A route that reads a row and then asks another service or the model,
+    # or saves a row a background task then picks up, keeps a transaction per store call, so none is open while the
+    # other service works and the task finds its row committed.
     docs = APIRouter(prefix="/v1/documents", tags=["documents"], responses=errors)
 
     @docs.post(
@@ -270,13 +296,13 @@ def create_documents_app(
     @docs.get("/extractions", response_model=Envelope[ListResult[Extraction]], dependencies=[service_scope("view")])
     async def file_extractions(  # pyright: ignore[reportUnusedFunction]
         who: Caller,
+        _: Tx,
+        q: ListQuery,
         file_id: str = Query(alias="fileId", min_length=1, max_length=64),
-        page: int = Query(1, ge=1),
-        page_size: int = Query(20, alias="pageSize", ge=1, le=100),
     ) -> JSONResponse:
-        """A file's extractions by the caller's team, newest first; a file the team cannot see is 404."""
-        rows, total = await extractor.for_file(who, file_id, page=page, page_size=page_size)
-        return ok(paged(rows, total, page, page_size))
+        """A file's extractions by the caller's team on the shared list contract, newest first; a file the team
+        cannot see is 404."""
+        return ok(await extractor.for_file(who, file_id, q))
 
     @docs.post("/classifications", response_model=Envelope[Classification], dependencies=[service_scope("run")])
     async def classify_file(body: ClassifyIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
@@ -304,6 +330,7 @@ def create_documents_app(
     async def get_reading(  # pyright: ignore[reportUnusedFunction]
         file_id: str,
         who: Caller,
+        _: Tx,
         ocr: OcrMode = "auto",
         language: str = Query("eng", min_length=2, max_length=64, pattern=r"^[A-Za-z_]+(\+[A-Za-z_]+)*$"),
         page: int | None = Query(None, ge=1),
@@ -352,6 +379,7 @@ def create_documents_app(
     async def get_layout(  # pyright: ignore[reportUnusedFunction]
         file_id: str,
         who: Caller,
+        _: Tx,
         page: int | None = Query(None, ge=1),
         ocr: bool = False,
     ) -> JSONResponse:
@@ -364,7 +392,7 @@ def create_documents_app(
         return ok(_page_of(found, page) if page is not None else found)
 
     @docs.get("/extractions/{extraction_id}", response_model=Envelope[Extraction], dependencies=[service_scope("view")])
-    async def get_extraction(extraction_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def get_extraction(extraction_id: str, who: Caller, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok(found(await extractor.get(who, extraction_id), "Extraction"))
 
     @docs.patch(
@@ -372,14 +400,14 @@ def create_documents_app(
         response_model=Envelope[Extraction],
         dependencies=[service_scope("edit")],
     )
-    async def correct_field(extraction_id: str, key: str, body: CorrectionIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def correct_field(extraction_id: str, key: str, body: CorrectionIn, who: Caller, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """A checker's value for one field; the original value and confidence are kept beside it."""
         if not who.edits:
             raise CreateNotAllowedError("Your role in this team cannot correct documents.")
         return ok(found(await extractor.correct(who, extraction_id, key, body.value, record=body.record), "Extraction"))
 
     @docs.post("/purge", response_model=Envelope[Purged], dependencies=[service_scope("delete", services_only=True)])
-    async def purge(body: PurgeIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def purge(body: PurgeIn, who: Caller, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Removes what the token's team derived from a deleted file: its extractions with their corrections, and the
         samples naming it. A workflow on the file-deleted trigger calls this; files-service never does. A file
         files-service still serves the team is refused (409), so a purge can never remove the reads of a live file."""
@@ -404,7 +432,9 @@ def create_documents_app(
         """A document type and its version 1; the name is unique in the team."""
         try:
             asked = body.model_dump(mode="json", by_alias=True, exclude={"sample_file_id"})
-            made = await document_types.create(who, asked)
+            # The type and its version 1 in one transaction, committed before a sample asks files-service.
+            async with isolation.request_transaction():
+                made = await document_types.create(who, asked)
         except NameTakenError as e:
             raise Conflict(f"A document type named {body.name} or with id {body.id} exists.", code="name_taken") from e
         if body.sample_file_id:
@@ -413,12 +443,14 @@ def create_documents_app(
         return ok(made, 201)
 
     @types.get("", response_model=Envelope[DocumentTypeList], dependencies=[service_scope("view")])
-    async def list_types(who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """The team's types, and whether the caller may add one (the console's New type)."""
-        return ok({"items": await document_types.list(who), "canCreate": who.creates})
+    async def list_types(who: Caller, _: Tx, q: ListQuery) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """The team's types on the shared list contract, by name and searched on it, and whether the caller may add
+        one (the console's New type). sortBy name or latestVersion with sortOrder sets the order; equal versions
+        keep name order."""
+        return ok(await document_types.page(who, q))
 
     @types.get("/{type_id}", response_model=Envelope[DocumentType], dependencies=[service_scope("view")])
-    async def get_type(type_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def get_type(type_id: str, who: Caller, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok(found(await document_types.get(who, type_id), "Document type"))
 
     @types.delete("/{type_id}", status_code=204, response_class=Response, dependencies=[service_scope("edit")])
@@ -426,8 +458,10 @@ def create_documents_app(
         """Deletes the team's type with its versions and samples; reads already made keep their fields. 409 `in_use`
         while a workflow of the team reads it, naming each in `details.usedBy`. An app's resource row reads not added
         again once its copy is deleted."""
-        if await document_types.get(who, type_id) is None:
-            raise NotFound(f"Document type {type_id}")
+        # Gate: the type read in one transaction, closed before agents-service is asked; settle: the delete in another.
+        async with isolation.request_transaction():
+            if await document_types.get(who, type_id) is None:
+                raise NotFound(f"Document type {type_id}")
         if type_uses is not None and (users := await type_uses.of(who, type_id)):
             names = ", ".join(u["name"] for u in users)
             raise Conflict(
@@ -436,9 +470,10 @@ def create_documents_app(
                 code="in_use",
                 details={"usedBy": users},
             )
-        if not await document_types.delete(who, type_id):
-            raise NotFound(f"Document type {type_id}")
-        await copies.removed_record(type_id)
+        async with isolation.request_transaction():
+            if not await document_types.delete(who, type_id):
+                raise NotFound(f"Document type {type_id}")
+            await copies.removed_record(type_id)
         return Response(status_code=204)
 
     @types.post(
@@ -447,7 +482,7 @@ def create_documents_app(
         response_model=Envelope[DocumentTypeVersion],
         dependencies=[service_scope("edit")],
     )
-    async def add_version(type_id: str, body: DocumentTypeVersionIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def add_version(type_id: str, body: DocumentTypeVersionIn, who: Caller, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """The type's next version; earlier versions stay as they were."""
         made = await document_types.add_version(who, type_id, body.model_dump(mode="json", by_alias=True))
         return ok(found(made, "Document type"), 201)
@@ -457,7 +492,7 @@ def create_documents_app(
         response_model=Envelope[DocumentTypeVersion],
         dependencies=[service_scope("view")],
     )
-    async def get_version(type_id: str, version: int, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def get_version(type_id: str, version: int, who: Caller, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok(found(await document_types.get_version(who, type_id, version), "Document type version"))
 
     @types.post(
@@ -494,7 +529,7 @@ def create_documents_app(
         response_class=Response,
         dependencies=[service_scope("edit")],
     )
-    async def remove_example(type_id: str, example_id: str, who: Caller) -> Response:  # pyright: ignore[reportUnusedFunction]
+    async def remove_example(type_id: str, example_id: str, who: Caller, _: Tx) -> Response:  # pyright: ignore[reportUnusedFunction]
         """Later reads of the type are no longer given this example."""
         if not await document_types.remove_example(who, type_id, example_id):
             raise NotFound("Example")
@@ -536,7 +571,7 @@ def create_documents_app(
         return ok(found(await document_types.start_test(who, type_id, version), "Document type version"), 202)
 
     @types.get("/{type_id}/test-runs/{test_id}", response_model=Envelope[TestRun], dependencies=[service_scope("view")])
-    async def get_test(type_id: str, test_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def get_test(type_id: str, test_id: str, who: Caller, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok(found(await document_types.get_test(who, type_id, test_id), "Test run"))
 
     app.include_router(docs)
@@ -554,7 +589,7 @@ def create_documents_app(
     return app
 
 
-def _page_of(layout: dict[str, Any], page: int) -> dict[str, Any]:
+def _page_of(layout: shapes.Layout, page: int) -> shapes.Layout:
     """One page of a layout: its page entry, blocks and words."""
     return {
         "engine": layout["engine"],

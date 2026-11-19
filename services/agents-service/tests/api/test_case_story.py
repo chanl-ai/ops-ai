@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
@@ -17,7 +17,7 @@ from ops_agents.api import case_story
 from ops_agents.api.case_page import whats_left
 from ops_agents.api.engine_runs import MAX_CHILD_DEPTH, runs_above
 from ops_agents.store.case_links import CaseLinks
-from ops_agents.store.cases import CaseStore
+from ops_agents.store.cases import CaseRecord, CaseStore
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.tenancy import tenant_scope
 from ops_engine.store import RunStore
@@ -38,10 +38,11 @@ async def engine(database_url: str) -> AsyncIterator[AsyncEngine]:
     await e.dispose()
 
 
-async def _origin(w: World, created_by: str, team: str = "team_ops") -> dict[str, Any]:
+async def _origin(w: World, created_by: str, team: str = "team_ops") -> case_story.CaseOrigin:
     rt: Any = SimpleNamespace(db=w.engine)
     with tenant_scope(w.tenant):
-        return await case_story.origin(rt, {"created_by": created_by, "team_id": team})
+        # Only who opened the case and its team are read; the rest of the row does not matter here.
+        return await case_story.origin(rt, CaseRecord.model_construct(created_by=created_by, team_id=team))
 
 
 async def test_an_email_started_case_names_the_email_and_links_the_first_run(engine: AsyncEngine) -> None:
@@ -94,14 +95,14 @@ async def test_origin_stops_at_the_bound_and_at_a_missing_parent(engine: AsyncEn
         chain.append(await w.run(DEBTOR, {}, created_by=f"run:{chain[-1]}"))
     with tenant_scope(w.tenant):
         store = RunStore(w.tx)
-        last = await store.get(chain[-1])
+        last = await store.row(chain[-1])
         assert last is not None
         above = await runs_above(store, last)
-        top = await store.get(chain[0])
+        top = await store.row(chain[0])
         assert top is not None
         # The first run's parent is gone: the walk stops at it rather than failing.
         assert await runs_above(store, top) == []
-    assert [r["id"] for r in above] == list(reversed(chain[-1 - MAX_CHILD_DEPTH : -1])), [r["id"] for r in above]
+    assert [r.id for r in above] == list(reversed(chain[-1 - MAX_CHILD_DEPTH : -1])), [r.id for r in above]
     told = await _origin(w, f"run:{chain[1]}")
     assert told["runId"] == chain[0], told
 
@@ -252,7 +253,7 @@ async def test_resolve_is_offered_only_to_who_may_change_status(stack: Stack) ->
     # Every member of the team works its cases (cases.edit), a viewer too.
     assert (await _left(stack, case))["resolvable"] is True
     assert (await _left(stack, case, VIEWER))["resolvable"] is True
-    row = {"status": "open"}
+    row = CaseRecord.model_construct(status="open")
     assert whats_left([], [], [], row, team_name="Ops", due=None, may_edit=False)["resolvable"] is False
     assert (await stack[0].patch(f"/v1/cases/{case}", json={"status": "resolved"}, headers=BUILDER)).status_code == 200
     assert (await _left(stack, case))["resolvable"] is False, "a resolved case is not offered Resolve again"
@@ -260,7 +261,9 @@ async def test_resolve_is_offered_only_to_who_may_change_status(stack: Stack) ->
 
 def test_a_refused_action_stays_in_whats_left() -> None:
     refused = {"taskId": "r1", "status": "refused", "label": "Place hold", "href": "/reviews/r1"}
-    left = whats_left([], [refused], [], {"status": "open"}, team_name="Ops", due="2026-10-30", may_edit=True)
+    left = whats_left(
+        [], [refused], [], CaseRecord.model_construct(status="open"), team_name="Ops", due="2026-10-30", may_edit=True
+    )
     assert left == {
         "items": [
             {
@@ -287,10 +290,10 @@ async def test_the_feed_tells_the_email_that_led_to_the_case_and_says_its_openin
         opened = await store.open(
             team_id="team_ops", subject="Levy notice: Marcus Bell", priority="high", by=f"run:{debtor}"
         )
-        case = str(opened.case["id"])
+        case = str(opened.case.id)
         await store.add_event(case, "run", ref=debtor, detail={}, by=f"run:{debtor}")
         row = await store.get(case, ["team_ops"])
         runs = await CaseLinks(engine).runs(case, "team_ops")
-        told = [x["text"] for x in (await case_story.feed(rt, row, runs, scope=None))["lines"]]
+        told = [cast(str, x["text"]) for x in (await case_story.feed(rt, row, runs, scope=None))["lines"]]
     assert "Email from registry@court.example: Notice of garnishment" in told, told
     assert not any(t.endswith("opened this case") for t in told), told

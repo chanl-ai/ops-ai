@@ -19,7 +19,7 @@ import time
 from collections import Counter
 from dataclasses import dataclass, field
 from itertools import pairwise
-from typing import Any, cast
+from typing import Any, TypedDict, cast
 
 import pdfplumber
 from pdfminer.pdfparser import PDFSyntaxError
@@ -85,6 +85,35 @@ class _Table:
     cells: list[Cell]
 
 
+class _Word(TypedDict):
+    """A word as pdfplumber's `extract_words(extra_attrs=["size"])` gives it: page points, origin top left."""
+
+    text: str
+    x0: float
+    x1: float
+    top: float
+    bottom: float
+    size: float
+
+
+class _Picture(TypedDict):
+    """A picture's box as pdfplumber's `page.images` gives it, in page points."""
+
+    x0: float
+    x1: float
+    top: float
+    bottom: float
+
+
+class _Info(TypedDict, total=False):
+    """The document information dictionary keys read here; pdfplumber leaves values as the file holds them."""
+
+    Title: object
+    Author: object
+    CreationDate: object
+    ModDate: object
+
+
 @dataclass
 class _Sizes:
     body: float
@@ -101,18 +130,18 @@ def _centre_in(box: Rect, rects: list[Rect]) -> bool:
     return any(x0 <= cx <= x1 and top <= cy <= bottom for x0, top, x1, bottom in rects)
 
 
-def _word_rect(word: dict[str, Any]) -> Rect:
+def _word_rect(word: _Word) -> Rect:
     return (float(word["x0"]), float(word["top"]), float(word["x1"]), float(word["bottom"]))
 
 
-def _segments(words: list[dict[str, Any]]) -> list[_Segment]:
-    rows: list[list[dict[str, Any]]] = []
+def _segments(words: list[_Word]) -> list[_Segment]:
+    rows: list[list[_Word]] = []
     for w in sorted(words, key=lambda w: (float(w["top"]), float(w["x0"]))):
         if rows and abs(float(rows[-1][0]["top"]) - float(w["top"])) <= 2:
             rows[-1].append(w)
         else:
             rows.append([w])
-    groups: list[list[dict[str, Any]]] = []
+    groups: list[list[_Word]] = []
     for row in rows:
         row.sort(key=lambda w: float(w["x0"]))
         current = [row[0]]
@@ -183,12 +212,12 @@ def _tables(page: Any, number: int) -> list[_Table]:
 class _Layer:
     segments: list[_Segment]
     tables: list[_Table]
-    words: list[dict[str, Any]]
+    words: list[_Word]
 
 
 def _layer(page: Any, number: int) -> _Layer:
     tables = _tables(page, number)
-    words = [cast(dict[str, Any], w) for w in page.extract_words(extra_attrs=["size"])]
+    words = [cast(_Word, w) for w in page.extract_words(extra_attrs=["size"])]
     rects = [t.box for t in tables]
     outside = [w for w in words if not _centre_in(_word_rect(w), rects)]
     return _Layer(_segments(outside) if outside else [], tables, words)
@@ -197,7 +226,7 @@ def _layer(page: Any, number: int) -> _Layer:
 def _image_rects(page: Any) -> list[Rect]:
     width, height = float(page.width), float(page.height)
     out: list[Rect] = []
-    for image in cast(list[dict[str, Any]], page.images):
+    for image in cast(list[_Picture], page.images):
         x0, top = max(0.0, float(image["x0"])), max(0.0, float(image["top"]))
         x1, bottom = min(width, float(image["x1"])), min(height, float(image["bottom"]))
         if x1 > x0 and bottom > top:
@@ -250,7 +279,7 @@ class PdfFile:
         if count > MAX_PAGES:
             self._pdf.close()
             raise ReadingError("too_many_pages", f"{filename} has {count} pages; the limit is {MAX_PAGES}")
-        meta = cast(dict[str, Any], self._pdf.metadata or {})  # pyright: ignore[reportUnknownMemberType]
+        meta = cast(_Info, self._pdf.metadata or {})  # pyright: ignore[reportUnknownMemberType]
         self.facts = FileFacts(
             filename=filename,
             mime_type="application/pdf",
@@ -364,7 +393,7 @@ class PdfFile:
         )
 
     def _picture_words(
-        self, page: Any, rects: list[Rect], text_words: list[dict[str, Any]], width: float, height: float
+        self, page: Any, rects: list[Rect], text_words: list[_Word], width: float, height: float
     ) -> list[tuple[Any, Box]]:
         """Words OCR'd from the page's picture areas, leaving out any that sit on a text-layer word: a scan carrying
         its own OCR text layer would otherwise be read twice."""

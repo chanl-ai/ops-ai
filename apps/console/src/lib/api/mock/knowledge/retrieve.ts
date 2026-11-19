@@ -617,7 +617,7 @@ export function createRetrieval(deps: Deps) {
       section: x.c.location,
       version: x.c.item.version,
       snippet: bestSentences(x.c.text, 1)[0] ?? x.c.text.slice(0, 160),
-      url: x.c.item.url,
+      url: x.c.item.url ?? undefined,
       stale: x.c.item.reviewBy < today || undefined,
       connectionRevoked: srcById.get(x.c.item.sourceId)?.status === 'revoked' || undefined,
       inForceOn: asOf,
@@ -703,6 +703,9 @@ export function createRetrieval(deps: Deps) {
       synthesisMs,
       permissions,
       shape: s.answerShape,
+      lanes: { asked: [], ran: [], skipped: [] },
+      passages: [],
+      cost: { embeddingTokens: 0 },
       rows,
       trace,
     };

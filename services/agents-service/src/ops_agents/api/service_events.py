@@ -11,11 +11,12 @@ per tenant; one the tenant already has, edited or not, is left as it is."""
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import Any, cast
+from typing import TypedDict, cast
 
 from ops_engine import default_registry
 from ops_engine.definition import WorkflowDefinition, parse, validate
-from ops_engine.store import DefinitionStore, RunStore, WorkflowOwnedError
+from ops_engine.store import DefinitionStore, RunRow, RunStore, WorkflowOwnedError
+from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
 from ops_store import background
@@ -35,7 +36,26 @@ log = get_logger("ops_agents.service_events")
 FAILED = ("failed", "cancelled")
 
 
-def event_workflows(rt: Runtime) -> list[dict[str, Any]]:
+class DeliveredEvent(TypedDict):
+    """The event's stored row with the latest delivery's outcome: the columns in their order, then the runs woken."""
+
+    id: str
+    tenant_id: str
+    team_id: str
+    name: str
+    event_key: str
+    source: str
+    actor: str | None
+    payload: JsonValue
+    status: str
+    run_ids: JsonList
+    attempts: int
+    recorded_at: str
+    updated_at: str
+    woke: list[str]
+
+
+def event_workflows(rt: Runtime) -> list[Json]:
     return rt.event_workflows if rt.event_workflows is not None else EVENT_WORKFLOWS
 
 
@@ -77,7 +97,7 @@ async def ensure_event_workflows(rt: Runtime) -> None:
                 log.warning("event_workflow_id_taken", workflow=d.id, error=str(e))
                 continue
             await store.go_live(d.id, version)
-        elif d.digest() not in {v["digest"] for v in versions}:
+        elif d.digest() not in {v.digest for v in versions}:
             await _follow_seed(rt, store, d)
         rt.event_workflows_seen.add((tenant, d.id))
 
@@ -87,16 +107,16 @@ async def _follow_seed(rt: Runtime, store: DefinitionStore, d: WorkflowDefinitio
     the new one as a publish request its publishReview decides, live at once only where no review is needed; one whose
     live version a person published keeps it and is told an update exists. Either is recorded once per shipped digest
     as a service event."""
-    live = await store.current(d.id)
+    live = await store.serving(d.id)
     events = ServiceEvents(rt.db)
     key = f"{d.id}:{d.digest()[:16]}"
-    if live is not None and live["created_by"] in SEED_AUTHORS:
+    if live is not None and live.created_by in SEED_AUTHORS:
         # Saved as a draft and published through the same request a person's publish opens, so the workspace's
         # publishReview decides it now: live at once where no review is needed, otherwise waiting in Reviews.
         version, _ = await store.publish(
             d.id, name=d.name or d.id, definition=d.wire(), digest=d.digest(), now=now_iso(), by=SEED
         )
-        row = await store.get(d.id, version)
+        row = await store.row(d.id, version)
         if row is None:
             return
         req = await open_publish(rt, d.id, row, live, by=SEED, team="", note="An update to a shipped workflow")
@@ -106,9 +126,9 @@ async def _follow_seed(rt: Runtime, store: DefinitionStore, d: WorkflowDefinitio
             team_id="",
             source=SOURCE,
             actor=None,
-            payload={"workflowId": d.id, "version": version, "reviewId": req["id"], "status": req["status"]},
+            payload={"workflowId": d.id, "version": version, "reviewId": req.id, "status": req.status},
         )
-        log.info("event_workflow_updated", workflow=d.id, version=version, status=req["status"])
+        log.info("event_workflow_updated", workflow=d.id, version=version, status=req.status)
         return
     await events.record(
         name=UPDATE_AVAILABLE,
@@ -116,16 +136,18 @@ async def _follow_seed(rt: Runtime, store: DefinitionStore, d: WorkflowDefinitio
         team_id="",
         source=SOURCE,
         actor=None,
-        payload={"workflowId": d.id, "liveVersion": live["version"] if live else None},
+        payload={"workflowId": d.id, "liveVersion": live.version if live else None},
     )
 
 
 # Which service reports which events (the catalogue in docs/architecture/service-map.md): a service reports only events
 # about its own records, so one holding events:emit cannot start another service's reactions.
 EVENT_OWNERS: dict[str, tuple[str, ...]] = {
-    "tools": ("tool_access.", "tool_module.", "module_review.", "app_account."),
+    # tool.module.* and tool.team_state.changed also keep this service's copy of the catalogue (store/tool_copies.py).
+    "tools": ("tool_access.", "tool_module.", "module_review.", "app_account.", "tool.module.", "tool.team_state."),
     "files": ("file.",),
     "documents": ("extraction.",),
+    "kb": ("kb.", "knowledge."),
     # The task API records a posted task as its own event, so the task runs as the api_task workflow.
     "agents": ("task.",),
 }
@@ -134,22 +156,22 @@ EVENT_OWNERS: dict[str, tuple[str, ...]] = {
 REMINDER = "task.reminder"
 
 
-def reminders(db: AsyncEngine) -> Callable[[dict[str, Any], dict[str, Any]], Awaitable[None]]:
+def reminders(db: AsyncEngine) -> Callable[[RunRow, Json], Awaitable[None]]:
     """The worker's `remind`: a review still waiting is reported as this service's task.reminder event, keyed
     by run, step, iteration and count, so a retried pass records it once. What follows is the handler the tenant runs
     for it; none is shipped, so it is recorded unhandled until a team adds one."""
     handler = handlers(EVENT_WORKFLOWS).get(REMINDER)
 
-    async def remind(run: dict[str, Any], reminder: dict[str, Any]) -> None:
+    async def remind(run: RunRow, reminder: Json) -> None:
         await deliver(
             db,
             handler,
             name=REMINDER,
-            key=f"{run['id']}:{reminder['node']}:{reminder['iteration']}:{reminder['n']}",
-            team_id=str(run.get("team_id") or ""),
+            key=f"{run.id}:{reminder['node']}:{reminder['iteration']}:{reminder['n']}",
+            team_id=run.team_id,
             source=SOURCE,
             actor=None,
-            payload={"runId": run["id"], "workflowId": run["workflow_id"]} | reminder,
+            payload={"runId": run.id, "workflowId": run.workflow_id} | reminder,
         )
 
     return remind
@@ -174,8 +196,8 @@ async def emit(
     team_id: str,
     source: str,
     actor: str | None,
-    payload: dict[str, Any],
-) -> dict[str, Any]:
+    payload: Json,
+) -> DeliveredEvent:
     """Records the event and starts or returns its handler's run. Returns the event row."""
     await ensure_event_workflows(rt)
     return await deliver(
@@ -209,8 +231,8 @@ async def deliver(
     team_id: str,
     source: str,
     actor: str | None,
-    payload: dict[str, Any],
-) -> dict[str, Any]:
+    payload: Json,
+) -> DeliveredEvent:
     """`emit` without first publishing the shipped event workflows, for the engine worker, which has no Runtime: a
     tenant gets them on its first event through the API, and until then the event is recorded unhandled."""
     try:
@@ -233,51 +255,64 @@ async def _deliver(
     team_id: str,
     source: str,
     actor: str | None,
-    payload: dict[str, Any],
-) -> dict[str, Any]:
+    payload: Json,
+) -> DeliveredEvent:
     events = ServiceEvents(db)
     jobs = BackgroundJobs(db)
     event = await events.record(name=name, key=key, team_id=team_id, source=source, actor=actor, payload=payload)
     # A step parked on this event and key resumes before any listener starts: the run it belongs to is waiting.
-    woken = await wake_parked(
-        db, name=name, key=key, team_id=str(event["team_id"]), payload=cast(dict[str, Any], event["payload"])
-    )
+    woken = await wake_parked(db, name=name, key=key, team_id=str(event.team_id), payload=cast(Json, event.payload))
     # The stored event is what runs: a repeat with another payload or team cannot change what an earlier one meant.
     run_key = f"{name}:{key}"
     runs = RunStore(EngineTransactions(db))
     run_ids: list[str] = []
     attempts = 0
     for stored in await listeners(db, name, handler) if handler else []:
-        tried = await attempts_of(db, stored["workflow_id"], run_key)
+        tried = await attempts_of(db, stored.workflow_id, run_key)
         if tried and tried[-1]["status"] not in FAILED:
             run_ids.append(str(tried[-1]["id"]))
             attempts = max(attempts, len(tried))
             continue
         n = len(tried) + 1
-        created_by, via = starter(str(event["source"]), name, cast(str | None, event["actor"]))
+        created_by, via = starter(str(event.source), name, event.actor)
         run, _ = await start_run(
             runs,
             stored,
-            team_id=str(event["team_id"]),
+            team_id=str(event.team_id),
             mode="live",
-            input=cast(dict[str, Any], event["payload"]),
+            input=cast(Json, event.payload),
             run_key=run_key if n == 1 else f"{run_key}:{n}",
             created_by=created_by,
             started_via=via,
         )
-        run_ids.append(str(run["id"]))
+        run_ids.append(run.id)
         attempts = max(attempts, n)
-        title = str(stored.get("name") or stored["workflow_id"])
+        title = stored.name or stored.workflow_id
         # An account-level notice has no team, so no team's Activity shows it; the Background page counts it.
-        if event["team_id"]:
+        if event.team_id:
             await jobs.record(
                 "event_workflows",
                 f"Ran {title}",
                 "done",
-                team_id=str(event["team_id"]),
+                team_id=str(event.team_id),
             )
     status = "started" if run_ids else "resumed" if woken else "unhandled"
     if not run_ids and not woken:
         log.warning("service_event_unhandled", event_name=name, key=key, source=source)
-    await events.started(str(event["id"]), status=status, run_ids=run_ids, attempts=attempts)
-    return event | {"status": status, "run_ids": run_ids, "attempts": attempts, "woke": woken}
+    await events.started(str(event.id), status=status, run_ids=run_ids, attempts=attempts)
+    return DeliveredEvent(
+        id=event.id,
+        tenant_id=event.tenant_id,
+        team_id=event.team_id,
+        name=event.name,
+        event_key=event.event_key,
+        source=event.source,
+        actor=event.actor,
+        payload=event.payload,
+        status=status,
+        run_ids=[*run_ids],
+        attempts=attempts,
+        recorded_at=event.recorded_at,
+        updated_at=event.updated_at,
+        woke=woken,
+    )

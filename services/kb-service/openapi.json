@@ -1,6 +1,28 @@
 {
   "components": {
     "schemas": {
+      "AccessMembers": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "principals": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Principals",
+            "type": "array"
+          }
+        },
+        "required": [
+          "mode",
+          "principals"
+        ],
+        "title": "AccessMembers",
+        "type": "object"
+      },
       "AddedDocuments": {
         "additionalProperties": false,
         "properties": {
@@ -47,6 +69,7 @@
         "type": "object"
       },
       "AiApprovalIn": {
+        "additionalProperties": false,
         "properties": {
           "decision": {
             "enum": [
@@ -114,7 +137,39 @@
         "title": "AiEstimate",
         "type": "object"
       },
+      "AnswerSettings": {
+        "additionalProperties": false,
+        "description": "What the base gives back to an agent's turn: an answer with citations or the pieces alone, whether an answer\nciting none of its pieces is withheld, and what is said when nothing is found. The model, temperature, length and\ninstructions are the agent's.",
+        "properties": {
+          "noAnswerMessage": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Noanswermessage",
+            "type": "string"
+          },
+          "shape": {
+            "enum": [
+              "answer_with_citations",
+              "chunks"
+            ],
+            "title": "Shape",
+            "type": "string"
+          },
+          "withholdUncited": {
+            "title": "Withholduncited",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "shape",
+          "withholdUncited",
+          "noAnswerMessage"
+        ],
+        "title": "AnswerSettings",
+        "type": "object"
+      },
       "AttachIn": {
+        "additionalProperties": false,
         "properties": {
           "sourceIds": {
             "items": {
@@ -269,6 +324,36 @@
         "title": "BackgroundProcessOut",
         "type": "object"
       },
+      "ChangeCitation": {
+        "additionalProperties": false,
+        "description": "A workflow whose runs cited the changed passage; nothing records citations yet, so the list is empty.",
+        "properties": {
+          "citations30D": {
+            "title": "Citations30D",
+            "type": "integer"
+          },
+          "tests": {
+            "title": "Tests",
+            "type": "integer"
+          },
+          "workflowId": {
+            "title": "Workflowid",
+            "type": "string"
+          },
+          "workflowName": {
+            "title": "Workflowname",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workflowId",
+          "workflowName",
+          "citations30D",
+          "tests"
+        ],
+        "title": "ChangeCitation",
+        "type": "object"
+      },
       "ChangeList": {
         "additionalProperties": false,
         "properties": {
@@ -335,6 +420,7 @@
         "type": "object"
       },
       "DecideIn": {
+        "additionalProperties": false,
         "properties": {
           "decision": {
             "enum": [
@@ -352,6 +438,18 @@
             "minItems": 1,
             "title": "Ids",
             "type": "array"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
           }
         },
         "required": [
@@ -382,6 +480,31 @@
           "digest": {
             "title": "Digest",
             "type": "string"
+          },
+          "docType": {
+            "enum": [
+              "pdf",
+              "word",
+              "spreadsheet",
+              "slides",
+              "web",
+              "text",
+              "typed",
+              "app",
+              "other"
+            ],
+            "title": "Doctype",
+            "type": "string"
+          },
+          "duplicateCopy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DuplicateCopy"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "duplicateOf": {
             "anyOf": [
@@ -542,6 +665,17 @@
             "title": "Title",
             "type": "string"
           },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
           "verified": {
             "title": "Verified",
             "type": "boolean"
@@ -584,6 +718,7 @@
           "version",
           "effectiveDate",
           "reviewBy",
+          "freshness",
           "sensitivity",
           "collection",
           "verified",
@@ -592,12 +727,13 @@
           "family",
           "versionStatus",
           "sourceName",
-          "freshness"
+          "docType"
         ],
         "title": "DocumentRow",
         "type": "object"
       },
       "DraftEdit": {
+        "additionalProperties": false,
         "properties": {
           "answer": {
             "maxLength": 4000,
@@ -617,6 +753,26 @@
           "answer"
         ],
         "title": "DraftEdit",
+        "type": "object"
+      },
+      "DuplicateCopy": {
+        "additionalProperties": false,
+        "description": "The item a duplicate repeats, named as the caller knows it.",
+        "properties": {
+          "sourceName": {
+            "title": "Sourcename",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "sourceName"
+        ],
+        "title": "DuplicateCopy",
         "type": "object"
       },
       "EmbeddingCoverage": {
@@ -1293,7 +1449,27 @@
         "title": "ErrorEnvelope",
         "type": "object"
       },
+      "ErrorGroup": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "count"
+        ],
+        "title": "ErrorGroup",
+        "type": "object"
+      },
       "EventIn": {
+        "additionalProperties": false,
         "description": "A service event, as documents-service's relay sends it: the tenant and team come from the token.",
         "properties": {
           "actor": {
@@ -1320,7 +1496,9 @@
             "type": "string"
           },
           "payload": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Payload",
             "type": "object"
           },
@@ -1412,6 +1590,7 @@
         "type": "object"
       },
       "FileIdsIn": {
+        "additionalProperties": false,
         "properties": {
           "fileIds": {
             "items": {
@@ -1427,6 +1606,116 @@
           "fileIds"
         ],
         "title": "FileIdsIn",
+        "type": "object"
+      },
+      "FileSourceConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "fileIds": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Fileids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "fileIds"
+        ],
+        "title": "FileSourceConfig",
+        "type": "object"
+      },
+      "FilterCondition": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "default": "",
+            "title": "Id",
+            "type": "string"
+          },
+          "key": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Key",
+            "type": "string"
+          },
+          "op": {
+            "enum": [
+              "is",
+              "is_not",
+              "one_of",
+              "before",
+              "after",
+              "exists"
+            ],
+            "title": "Op",
+            "type": "string"
+          },
+          "value": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "op"
+        ],
+        "title": "FilterCondition",
+        "type": "object"
+      },
+      "FilterGroup": {
+        "additionalProperties": false,
+        "properties": {
+          "conditions": {
+            "items": {
+              "$ref": "#/components/schemas/FilterCondition"
+            },
+            "maxItems": 20,
+            "title": "Conditions",
+            "type": "array"
+          },
+          "match": {
+            "default": "all",
+            "enum": [
+              "all",
+              "any"
+            ],
+            "title": "Match",
+            "type": "string"
+          }
+        },
+        "title": "FilterGroup",
+        "type": "object"
+      },
+      "Governance": {
+        "additionalProperties": false,
+        "properties": {
+          "duplicates": {
+            "title": "Duplicates",
+            "type": "integer"
+          },
+          "excluded": {
+            "title": "Excluded",
+            "type": "integer"
+          },
+          "held": {
+            "title": "Held",
+            "type": "integer"
+          },
+          "superseded": {
+            "title": "Superseded",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "excluded",
+          "held",
+          "duplicates",
+          "superseded"
+        ],
+        "title": "Governance",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -1478,6 +1767,166 @@
         "title": "Health",
         "type": "object"
       },
+      "IndexJob": {
+        "additionalProperties": false,
+        "properties": {
+          "durationSec": {
+            "title": "Durationsec",
+            "type": "number"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "processed": {
+            "title": "Processed",
+            "type": "integer"
+          },
+          "startedAt": {
+            "title": "Startedat",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "trigger": {
+            "title": "Trigger",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "startedAt",
+          "durationSec",
+          "processed",
+          "failed",
+          "status",
+          "trigger"
+        ],
+        "title": "IndexJob",
+        "type": "object"
+      },
+      "IndexingProgress": {
+        "additionalProperties": false,
+        "properties": {
+          "done": {
+            "title": "Done",
+            "type": "integer"
+          },
+          "taskId": {
+            "title": "Taskid",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "done",
+          "total",
+          "taskId"
+        ],
+        "title": "IndexingProgress",
+        "type": "object"
+      },
+      "IngestApproval": {
+        "additionalProperties": false,
+        "properties": {
+          "approvedSteps": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Approvedsteps",
+            "type": "array"
+          },
+          "decidedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decidedat"
+          },
+          "decidedBy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decidedby"
+          },
+          "requestedBy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requestedby"
+          },
+          "status": {
+            "enum": [
+              "not_needed",
+              "pending",
+              "approved"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "approvedSteps",
+          "requestedBy",
+          "decidedBy",
+          "decidedAt"
+        ],
+        "title": "IngestApproval",
+        "type": "object"
+      },
+      "IngestColumn": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "searchable",
+              "metadata",
+              "ignored"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "role",
+          "key"
+        ],
+        "title": "IngestColumn",
+        "type": "object"
+      },
       "Item": {
         "additionalProperties": false,
         "properties": {
@@ -1499,6 +1948,16 @@
           "digest": {
             "title": "Digest",
             "type": "string"
+          },
+          "duplicateCopy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DuplicateCopy"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "duplicateOf": {
             "anyOf": [
@@ -1566,6 +2025,10 @@
               }
             ],
             "title": "Folder"
+          },
+          "freshness": {
+            "title": "Freshness",
+            "type": "string"
           },
           "id": {
             "title": "Id",
@@ -1651,6 +2114,17 @@
             "title": "Title",
             "type": "string"
           },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
           "verified": {
             "title": "Verified",
             "type": "boolean"
@@ -1693,6 +2167,7 @@
           "version",
           "effectiveDate",
           "reviewBy",
+          "freshness",
           "sensitivity",
           "collection",
           "verified",
@@ -1702,6 +2177,297 @@
           "versionStatus"
         ],
         "title": "Item",
+        "type": "object"
+      },
+      "ItemChunk": {
+        "additionalProperties": false,
+        "properties": {
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "location": {
+            "title": "Location",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Metadata",
+            "type": "object"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "tokens": {
+            "title": "Tokens",
+            "type": "integer"
+          },
+          "units": {
+            "items": {
+              "$ref": "#/components/schemas/ItemUnit"
+            },
+            "title": "Units",
+            "type": "array"
+          }
+        },
+        "required": [
+          "index",
+          "tokens",
+          "location",
+          "kind",
+          "text",
+          "units",
+          "metadata"
+        ],
+        "title": "ItemChunk",
+        "type": "object"
+      },
+      "ItemDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "chunks": {
+            "items": {
+              "$ref": "#/components/schemas/ItemChunk"
+            },
+            "title": "Chunks",
+            "type": "array"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "revisions": {
+            "items": {
+              "$ref": "#/components/schemas/ItemRevision"
+            },
+            "title": "Revisions",
+            "type": "array"
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/ItemVersion"
+            },
+            "title": "Versions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "content",
+          "chunks",
+          "revisions",
+          "versions"
+        ],
+        "title": "ItemDetail",
+        "type": "object"
+      },
+      "ItemReading": {
+        "additionalProperties": false,
+        "properties": {
+          "ocr": {
+            "title": "Ocr",
+            "type": "string"
+          },
+          "pages": {
+            "items": {
+              "$ref": "#/components/schemas/ReadingPage"
+            },
+            "title": "Pages",
+            "type": "array"
+          },
+          "readerVersion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Readerversion"
+          }
+        },
+        "required": [
+          "readerVersion",
+          "ocr",
+          "pages"
+        ],
+        "title": "ItemReading",
+        "type": "object"
+      },
+      "ItemRevision": {
+        "additionalProperties": false,
+        "description": "An edit to the document; nothing records edits yet, so the list is empty.",
+        "properties": {
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "sizeDelta": {
+            "title": "Sizedelta",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "n",
+          "author",
+          "date",
+          "sizeDelta"
+        ],
+        "title": "ItemRevision",
+        "type": "object"
+      },
+      "ItemSettingsUsed": {
+        "additionalProperties": false,
+        "properties": {
+          "current": {
+            "title": "Current",
+            "type": "boolean"
+          },
+          "indexedWith": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Indexedwith"
+          },
+          "preset": {
+            "title": "Preset",
+            "type": "string"
+          },
+          "strategies": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Strategies",
+            "type": "array"
+          }
+        },
+        "required": [
+          "preset",
+          "strategies",
+          "indexedWith",
+          "current"
+        ],
+        "title": "ItemSettingsUsed",
+        "type": "object"
+      },
+      "ItemUnit": {
+        "additionalProperties": false,
+        "description": "What search matches for a piece: its own text (`self`), a child, or a question written for it.",
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "text"
+        ],
+        "title": "ItemUnit",
+        "type": "object"
+      },
+      "ItemVersion": {
+        "additionalProperties": false,
+        "properties": {
+          "allowed": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed"
+          },
+          "digest": {
+            "title": "Digest",
+            "type": "string"
+          },
+          "effectiveDate": {
+            "title": "Effectivedate",
+            "type": "string"
+          },
+          "itemId": {
+            "title": "Itemid",
+            "type": "string"
+          },
+          "sourceName": {
+            "title": "Sourcename",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "itemId",
+          "title",
+          "version",
+          "effectiveDate",
+          "status",
+          "digest",
+          "sourceName"
+        ],
+        "title": "ItemVersion",
         "type": "object"
       },
       "ItemWithDetail": {
@@ -1723,13 +2489,21 @@
             "type": "string"
           },
           "detail": {
-            "additionalProperties": true,
-            "title": "Detail",
-            "type": "object"
+            "$ref": "#/components/schemas/ItemDetail"
           },
           "digest": {
             "title": "Digest",
             "type": "string"
+          },
+          "duplicateCopy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DuplicateCopy"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "duplicateOf": {
             "anyOf": [
@@ -1797,6 +2571,10 @@
               }
             ],
             "title": "Folder"
+          },
+          "freshness": {
+            "title": "Freshness",
+            "type": "string"
           },
           "id": {
             "title": "Id",
@@ -1854,14 +2632,12 @@
           "reading": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/ItemReading"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Reading"
+            ]
           },
           "reviewBy": {
             "title": "Reviewby",
@@ -1874,14 +2650,12 @@
           "settingsUsed": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/ItemSettingsUsed"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Settingsused"
+            ]
           },
           "sizeBytes": {
             "title": "Sizebytes",
@@ -1913,6 +2687,17 @@
           "title": {
             "title": "Title",
             "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
           },
           "verified": {
             "title": "Verified",
@@ -1956,6 +2741,7 @@
           "version",
           "effectiveDate",
           "reviewBy",
+          "freshness",
           "sensitivity",
           "collection",
           "verified",
@@ -1970,6 +2756,39 @@
         "title": "ItemWithDetail",
         "type": "object"
       },
+      "JsonValue": {},
+      "KbAccess": {
+        "additionalProperties": false,
+        "description": "What the console shows of who may search a base: the stored MCP offer beside the fixed facts of the team.",
+        "properties": {
+          "anyApiKey": {
+            "title": "Anyapikey",
+            "type": "boolean"
+          },
+          "documentPermissions": {
+            "title": "Documentpermissions",
+            "type": "string"
+          },
+          "mcp": {
+            "$ref": "#/components/schemas/McpAccess"
+          },
+          "members": {
+            "$ref": "#/components/schemas/AccessMembers"
+          },
+          "publicLink": {
+            "$ref": "#/components/schemas/PublicLink"
+          }
+        },
+        "required": [
+          "members",
+          "anyApiKey",
+          "mcp",
+          "publicLink",
+          "documentPermissions"
+        ],
+        "title": "KbAccess",
+        "type": "object"
+      },
       "KbSourceLink": {
         "additionalProperties": false,
         "properties": {
@@ -1979,8 +2798,7 @@
           },
           "rules": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/SourceRule"
             },
             "title": "Rules",
             "type": "array"
@@ -2007,8 +2825,7 @@
           },
           "rules": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/SourceRule"
             },
             "title": "Rules",
             "type": "array"
@@ -2035,13 +2852,63 @@
         "title": "KbSourceView",
         "type": "object"
       },
+      "KbStats": {
+        "additionalProperties": false,
+        "properties": {
+          "chunks": {
+            "title": "Chunks",
+            "type": "integer"
+          },
+          "documents": {
+            "title": "Documents",
+            "type": "integer"
+          },
+          "failures": {
+            "title": "Failures",
+            "type": "integer"
+          },
+          "medianLatencyMs": {
+            "title": "Medianlatencyms",
+            "type": "integer"
+          },
+          "noAnswerRate": {
+            "title": "Noanswerrate",
+            "type": "integer"
+          },
+          "queries7d": {
+            "title": "Queries7D",
+            "type": "integer"
+          },
+          "queriesChange7d": {
+            "title": "Querieschange7D",
+            "type": "integer"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "documents",
+          "chunks",
+          "failures",
+          "stale",
+          "queries7d",
+          "queriesChange7d",
+          "noAnswerRate",
+          "medianLatencyMs"
+        ],
+        "title": "KbStats",
+        "type": "object"
+      },
       "KnowledgeBase": {
         "additionalProperties": false,
         "properties": {
           "access": {
-            "additionalProperties": true,
-            "title": "Access",
-            "type": "object"
+            "$ref": "#/components/schemas/KbAccess"
+          },
+          "answer": {
+            "$ref": "#/components/schemas/AnswerSettings"
           },
           "automation": {
             "title": "Automation",
@@ -2084,19 +2951,16 @@
           "indexing": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/IndexingProgress"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Indexing"
+            ]
           },
           "jobs": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/IndexJob"
             },
             "title": "Jobs",
             "type": "array"
@@ -2124,9 +2988,7 @@
             "title": "Lastsyncat"
           },
           "metadataProfile": {
-            "additionalProperties": true,
-            "title": "Metadataprofile",
-            "type": "object"
+            "$ref": "#/components/schemas/MetadataProfile"
           },
           "name": {
             "title": "Name",
@@ -2138,8 +3000,7 @@
           },
           "precedence": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/PrecedenceRule"
             },
             "title": "Precedence",
             "type": "array"
@@ -2160,13 +3021,14 @@
             "title": "Protection"
           },
           "retrieval": {
-            "additionalProperties": true,
-            "title": "Retrieval",
-            "type": "object"
+            "$ref": "#/components/schemas/RetrievalSettings"
           },
           "slug": {
             "title": "Slug",
             "type": "string"
+          },
+          "sourceDefaults": {
+            "$ref": "#/components/schemas/SourceDefaults"
           },
           "sources": {
             "items": {
@@ -2176,9 +3038,10 @@
             "type": "array"
           },
           "stats": {
-            "additionalProperties": true,
-            "title": "Stats",
-            "type": "object"
+            "$ref": "#/components/schemas/KbStats"
+          },
+          "sync": {
+            "$ref": "#/components/schemas/SyncSettings"
           },
           "templateId": {
             "anyOf": [
@@ -2204,6 +3067,9 @@
           "precedence",
           "metadataProfile",
           "retrieval",
+          "answer",
+          "sync",
+          "sourceDefaults",
           "access",
           "automation",
           "stats",
@@ -2219,9 +3085,7 @@
         "additionalProperties": false,
         "properties": {
           "access": {
-            "additionalProperties": true,
-            "title": "Access",
-            "type": "object"
+            "$ref": "#/components/schemas/KbAccess"
           },
           "agentNames": {
             "items": {
@@ -2239,6 +3103,9 @@
             "default": true,
             "title": "Agentsknown",
             "type": "boolean"
+          },
+          "answer": {
+            "$ref": "#/components/schemas/AnswerSettings"
           },
           "attached": {
             "items": {
@@ -2335,19 +3202,16 @@
           "indexing": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/IndexingProgress"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Indexing"
+            ]
           },
           "jobs": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/IndexJob"
             },
             "title": "Jobs",
             "type": "array"
@@ -2382,9 +3246,7 @@
             "type": "array"
           },
           "metadataProfile": {
-            "additionalProperties": true,
-            "title": "Metadataprofile",
-            "type": "object"
+            "$ref": "#/components/schemas/MetadataProfile"
           },
           "name": {
             "title": "Name",
@@ -2396,8 +3258,7 @@
           },
           "precedence": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/PrecedenceRule"
             },
             "title": "Precedence",
             "type": "array"
@@ -2418,13 +3279,14 @@
             "title": "Protection"
           },
           "retrieval": {
-            "additionalProperties": true,
-            "title": "Retrieval",
-            "type": "object"
+            "$ref": "#/components/schemas/RetrievalSettings"
           },
           "slug": {
             "title": "Slug",
             "type": "string"
+          },
+          "sourceDefaults": {
+            "$ref": "#/components/schemas/SourceDefaults"
           },
           "sourceNames": {
             "items": {
@@ -2441,9 +3303,7 @@
             "type": "array"
           },
           "stats": {
-            "additionalProperties": true,
-            "title": "Stats",
-            "type": "object"
+            "$ref": "#/components/schemas/KbStats"
           },
           "suggestedQuestions": {
             "items": {
@@ -2451,6 +3311,9 @@
             },
             "title": "Suggestedquestions",
             "type": "array"
+          },
+          "sync": {
+            "$ref": "#/components/schemas/SyncSettings"
           },
           "templateId": {
             "anyOf": [
@@ -2476,6 +3339,9 @@
           "precedence",
           "metadataProfile",
           "retrieval",
+          "answer",
+          "sync",
+          "sourceDefaults",
           "access",
           "automation",
           "stats",
@@ -2494,7 +3360,36 @@
         "type": "object"
       },
       "KnowledgeBaseIn": {
+        "additionalProperties": false,
         "properties": {
+          "access": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access"
+          },
+          "answer": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer"
+          },
           "collections": {
             "default": [],
             "items": {
@@ -2565,6 +3460,34 @@
             ],
             "title": "Protection"
           },
+          "retrieval": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retrieval"
+          },
+          "sourceDefaults": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sourcedefaults"
+          },
           "sourceIds": {
             "default": [],
             "items": {
@@ -2572,6 +3495,20 @@
             },
             "title": "Sourceids",
             "type": "array"
+          },
+          "sync": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync"
           },
           "templateId": {
             "anyOf": [
@@ -2594,7 +3531,36 @@
         "type": "object"
       },
       "KnowledgeBasePatch": {
+        "additionalProperties": false,
         "properties": {
+          "access": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access"
+          },
+          "answer": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer"
+          },
           "collections": {
             "anyOf": [
               {
@@ -2631,6 +3597,20 @@
             ],
             "title": "Description"
           },
+          "metadataProfile": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadataprofile"
+          },
           "name": {
             "anyOf": [
               {
@@ -2653,6 +3633,23 @@
             ],
             "title": "Owner"
           },
+          "precedence": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/JsonValue"
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Precedence"
+          },
           "protection": {
             "anyOf": [
               {
@@ -2671,7 +3668,9 @@
           "retrieval": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -2679,6 +3678,34 @@
               }
             ],
             "title": "Retrieval"
+          },
+          "sourceDefaults": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sourcedefaults"
+          },
+          "sync": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync"
           },
           "templateId": {
             "anyOf": [
@@ -2701,9 +3728,7 @@
         "additionalProperties": false,
         "properties": {
           "access": {
-            "additionalProperties": true,
-            "title": "Access",
-            "type": "object"
+            "$ref": "#/components/schemas/KbAccess"
           },
           "agentNames": {
             "items": {
@@ -2721,6 +3746,9 @@
             "default": true,
             "title": "Agentsknown",
             "type": "boolean"
+          },
+          "answer": {
+            "$ref": "#/components/schemas/AnswerSettings"
           },
           "automation": {
             "title": "Automation",
@@ -2763,19 +3791,16 @@
           "indexing": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/IndexingProgress"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Indexing"
+            ]
           },
           "jobs": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/IndexJob"
             },
             "title": "Jobs",
             "type": "array"
@@ -2803,9 +3828,7 @@
             "title": "Lastsyncat"
           },
           "metadataProfile": {
-            "additionalProperties": true,
-            "title": "Metadataprofile",
-            "type": "object"
+            "$ref": "#/components/schemas/MetadataProfile"
           },
           "name": {
             "title": "Name",
@@ -2817,8 +3840,7 @@
           },
           "precedence": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/PrecedenceRule"
             },
             "title": "Precedence",
             "type": "array"
@@ -2839,13 +3861,14 @@
             "title": "Protection"
           },
           "retrieval": {
-            "additionalProperties": true,
-            "title": "Retrieval",
-            "type": "object"
+            "$ref": "#/components/schemas/RetrievalSettings"
           },
           "slug": {
             "title": "Slug",
             "type": "string"
+          },
+          "sourceDefaults": {
+            "$ref": "#/components/schemas/SourceDefaults"
           },
           "sourceNames": {
             "items": {
@@ -2862,9 +3885,10 @@
             "type": "array"
           },
           "stats": {
-            "additionalProperties": true,
-            "title": "Stats",
-            "type": "object"
+            "$ref": "#/components/schemas/KbStats"
+          },
+          "sync": {
+            "$ref": "#/components/schemas/SyncSettings"
           },
           "templateId": {
             "anyOf": [
@@ -2890,6 +3914,9 @@
           "precedence",
           "metadataProfile",
           "retrieval",
+          "answer",
+          "sync",
+          "sourceDefaults",
           "access",
           "automation",
           "stats",
@@ -2920,8 +3947,7 @@
           },
           "citedBy": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/ChangeCitation"
             },
             "title": "Citedby",
             "type": "array"
@@ -2951,6 +3977,17 @@
               }
             ],
             "title": "Decidedby"
+          },
+          "decisionReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decisionreason"
           },
           "documentId": {
             "title": "Documentid",
@@ -3292,6 +4329,43 @@
         "title": "Lookups",
         "type": "object"
       },
+      "McpAccess": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "toolName": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "title": "Toolname",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "toolName"
+        ],
+        "title": "McpAccess",
+        "type": "object"
+      },
+      "MetadataProfile": {
+        "additionalProperties": false,
+        "properties": {
+          "required": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required",
+            "type": "array"
+          }
+        },
+        "required": [
+          "required"
+        ],
+        "title": "MetadataProfile",
+        "type": "object"
+      },
       "NamedRef": {
         "additionalProperties": false,
         "properties": {
@@ -3383,6 +4457,7 @@
         "type": "object"
       },
       "OwnerIn": {
+        "additionalProperties": false,
         "properties": {
           "owner": {
             "title": "Owner",
@@ -3396,6 +4471,7 @@
         "type": "object"
       },
       "PageIn": {
+        "additionalProperties": false,
         "properties": {
           "text": {
             "maxLength": 100000,
@@ -3573,16 +4649,14 @@
           },
           "chunks": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/PlaygroundChunk"
             },
             "title": "Chunks",
             "type": "array"
           },
           "citations": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/PlaygroundCitation"
             },
             "title": "Citations",
             "type": "array"
@@ -3676,6 +4750,120 @@
         "title": "PlaygroundAnswer",
         "type": "object"
       },
+      "PlaygroundChunk": {
+        "additionalProperties": false,
+        "description": "A piece the search found, with each lane's score.",
+        "properties": {
+          "chunkId": {
+            "title": "Chunkid",
+            "type": "string"
+          },
+          "documentId": {
+            "title": "Documentid",
+            "type": "string"
+          },
+          "documentTitle": {
+            "title": "Documenttitle",
+            "type": "string"
+          },
+          "lanes": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Lanes",
+            "type": "object"
+          },
+          "location": {
+            "title": "Location",
+            "type": "string"
+          },
+          "rejected": {
+            "title": "Rejected",
+            "type": "boolean"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "sourceName": {
+            "title": "Sourcename",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunkId",
+          "documentId",
+          "documentTitle",
+          "sourceName",
+          "score",
+          "lanes",
+          "location",
+          "text",
+          "rejected",
+          "version"
+        ],
+        "title": "PlaygroundChunk",
+        "type": "object"
+      },
+      "PlaygroundCitation": {
+        "additionalProperties": false,
+        "description": "A passage the answer cites, numbered as the answer cites it.",
+        "properties": {
+          "documentId": {
+            "title": "Documentid",
+            "type": "string"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page"
+          },
+          "section": {
+            "title": "Section",
+            "type": "string"
+          },
+          "snippet": {
+            "title": "Snippet",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "n",
+          "documentId",
+          "title",
+          "section",
+          "version",
+          "snippet"
+        ],
+        "title": "PlaygroundCitation",
+        "type": "object"
+      },
       "PluginSource": {
         "additionalProperties": false,
         "properties": {
@@ -3708,10 +4896,48 @@
         "title": "PluginSource",
         "type": "object"
       },
+      "PrecedenceRule": {
+        "additionalProperties": false,
+        "description": "A rule choosing between two returned pieces on one topic; the index applies one: a newer version wins.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "loser": {
+            "title": "Loser",
+            "type": "string"
+          },
+          "winner": {
+            "title": "Winner",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "kind",
+          "winner",
+          "loser"
+        ],
+        "title": "PrecedenceRule",
+        "type": "object"
+      },
       "PreviewIn": {
+        "additionalProperties": false,
         "properties": {
           "config": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Config",
             "type": "object"
           }
@@ -3746,11 +4972,126 @@
         "title": "PreviewPage",
         "type": "object"
       },
-      "QueryIn": {
+      "PublicLink": {
+        "additionalProperties": false,
         "properties": {
+          "answerStyle": {
+            "title": "Answerstyle",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "rateLimit": {
+            "title": "Ratelimit",
+            "type": "integer"
+          },
+          "showSourceLinks": {
+            "title": "Showsourcelinks",
+            "type": "boolean"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "slug",
+          "answerStyle",
+          "rateLimit",
+          "showSourceLinks"
+        ],
+        "title": "PublicLink",
+        "type": "object"
+      },
+      "QueryIn": {
+        "additionalProperties": false,
+        "properties": {
+          "alsoKbIds": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alsokbids"
+          },
+          "collection": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collection"
+          },
+          "overrides": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overrides"
+          },
           "question": {
             "title": "Question",
             "type": "string"
+          },
+          "runAsId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runasid"
+          },
+          "runtime": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runtime"
+          },
+          "settings": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settings"
           }
         },
         "required": [
@@ -3791,6 +5132,64 @@
           "health"
         ],
         "title": "Reader",
+        "type": "object"
+      },
+      "ReadingPage": {
+        "additionalProperties": false,
+        "description": "One page of the stored reading: how it was read, its blocks by kind after cleaning, and what cleaning removed.\nNumber and reader are documents-service's, passed on as it sent them.",
+        "properties": {
+          "blocks": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Blocks",
+            "type": "object"
+          },
+          "number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Number"
+          },
+          "ocrConfidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ocrconfidence"
+          },
+          "readBy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Readby"
+          },
+          "removedChars": {
+            "title": "Removedchars",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "number",
+          "readBy",
+          "blocks",
+          "removedChars"
+        ],
+        "title": "ReadingPage",
         "type": "object"
       },
       "RerankOut": {
@@ -3834,6 +5233,115 @@
         "title": "RerankOut",
         "type": "object"
       },
+      "RetrievalSettings": {
+        "additionalProperties": false,
+        "description": "How a search of the base runs (retrieval.py) and which of its pieces it may return.",
+        "properties": {
+          "chunkLimit": {
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Chunklimit",
+            "type": "integer"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/FilterGroup"
+          },
+          "hybridWeight": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Hybridweight",
+            "type": "number"
+          },
+          "includeUntagged": {
+            "title": "Includeuntagged",
+            "type": "boolean"
+          },
+          "meaningThreshold": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Meaningthreshold",
+            "type": "number"
+          },
+          "queryModel": {
+            "title": "Querymodel",
+            "type": "string"
+          },
+          "rerank": {
+            "title": "Rerank",
+            "type": "boolean"
+          },
+          "rewrite": {
+            "title": "Rewrite",
+            "type": "string"
+          },
+          "rewriteInstructions": {
+            "title": "Rewriteinstructions",
+            "type": "string"
+          },
+          "scopeCollections": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scopecollections",
+            "type": "array"
+          },
+          "scopeSourceIds": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scopesourceids",
+            "type": "array"
+          },
+          "searchMode": {
+            "enum": [
+              "keyword",
+              "meaning",
+              "hybrid"
+            ],
+            "title": "Searchmode",
+            "type": "string"
+          },
+          "tagsExclude": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tagsexclude",
+            "type": "array"
+          },
+          "tagsInclude": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tagsinclude",
+            "type": "array"
+          },
+          "threshold": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Threshold",
+            "type": "number"
+          }
+        },
+        "required": [
+          "searchMode",
+          "hybridWeight",
+          "rerank",
+          "chunkLimit",
+          "threshold",
+          "meaningThreshold",
+          "rewrite",
+          "rewriteInstructions",
+          "queryModel",
+          "scopeCollections",
+          "scopeSourceIds",
+          "tagsInclude",
+          "tagsExclude",
+          "includeUntagged",
+          "filters"
+        ],
+        "title": "RetrievalSettings",
+        "type": "object"
+      },
       "RewriteOut": {
         "additionalProperties": false,
         "description": "The question as asked and as searched, present when a base rewrites questions.",
@@ -3874,6 +5382,174 @@
           "asked"
         ],
         "title": "RewriteOut",
+        "type": "object"
+      },
+      "RunError": {
+        "additionalProperties": false,
+        "description": "One failure a run recorded: the step (list, get, store or parse), its class and message, and the item when one\nwas reached (a listing failure names none; an app's item may have no title).",
+        "properties": {
+          "errorClass": {
+            "title": "Errorclass",
+            "type": "string"
+          },
+          "itemId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Itemid"
+          },
+          "itemTitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Itemtitle"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "phase": {
+            "title": "Phase",
+            "type": "string"
+          }
+        },
+        "required": [
+          "phase",
+          "errorClass",
+          "message"
+        ],
+        "title": "RunError",
+        "type": "object"
+      },
+      "RunPhase": {
+        "additionalProperties": false,
+        "description": "One step of a run as the console draws it; no run records its steps yet, so the list is empty.",
+        "properties": {
+          "durationMs": {
+            "title": "Durationms",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "done",
+              "running",
+              "skipped",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "durationMs",
+          "status"
+        ],
+        "title": "RunPhase",
+        "type": "object"
+      },
+      "ScheduleDaily": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "daily",
+            "title": "Kind",
+            "type": "string"
+          },
+          "time": {
+            "title": "Time",
+            "type": "string"
+          },
+          "tz": {
+            "title": "Tz",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "time",
+          "tz"
+        ],
+        "title": "ScheduleDaily",
+        "type": "object"
+      },
+      "ScheduleHourly": {
+        "additionalProperties": false,
+        "properties": {
+          "every": {
+            "title": "Every",
+            "type": "integer"
+          },
+          "kind": {
+            "const": "hourly",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "every"
+        ],
+        "title": "ScheduleHourly",
+        "type": "object"
+      },
+      "ScheduleManual": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "manual",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "ScheduleManual",
+        "type": "object"
+      },
+      "ScheduleWeekly": {
+        "additionalProperties": false,
+        "properties": {
+          "day": {
+            "title": "Day",
+            "type": "string"
+          },
+          "kind": {
+            "const": "weekly",
+            "title": "Kind",
+            "type": "string"
+          },
+          "time": {
+            "title": "Time",
+            "type": "string"
+          },
+          "tz": {
+            "title": "Tz",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "time",
+          "tz",
+          "day"
+        ],
+        "title": "ScheduleWeekly",
         "type": "object"
       },
       "Scope": {
@@ -3923,6 +5599,7 @@
         "type": "object"
       },
       "ScopesIn": {
+        "additionalProperties": false,
         "description": "What a person searches for while picking what a plugin source takes in: sites or spaces by name, or, with\n`parent`, what one picked site holds (its libraries).",
         "properties": {
           "cursor": {
@@ -4018,7 +5695,21 @@
         "type": "object"
       },
       "SearchIn": {
+        "additionalProperties": false,
         "properties": {
+          "collection": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collection"
+          },
           "kbIds": {
             "items": {
               "type": "string"
@@ -4039,9 +5730,62 @@
             ],
             "title": "Limit"
           },
+          "overrides": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overrides"
+          },
           "question": {
             "title": "Question",
             "type": "string"
+          },
+          "runAsId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runasid"
+          },
+          "runtime": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runtime"
+          },
+          "settings": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settings"
           }
         },
         "required": [
@@ -4054,6 +5798,13 @@
       "SearchOut": {
         "additionalProperties": false,
         "properties": {
+          "answers": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/AnswerSettings"
+            },
+            "title": "Answers",
+            "type": "object"
+          },
           "cost": {
             "$ref": "#/components/schemas/SearchCost"
           },
@@ -4131,18 +5882,22 @@
             "type": "array"
           },
           "cleaning": {
-            "additionalProperties": true,
-            "title": "Cleaning",
-            "type": "object"
+            "$ref": "#/components/schemas/SourceCleaning"
           },
           "collection": {
             "title": "Collection",
             "type": "string"
           },
           "config": {
-            "additionalProperties": true,
-            "title": "Config",
-            "type": "object"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ToolSourceConfig"
+              },
+              {
+                "$ref": "#/components/schemas/FileSourceConfig"
+              }
+            ],
+            "title": "Config"
           },
           "createdAt": {
             "title": "Createdat",
@@ -4153,18 +5908,14 @@
             "type": "string"
           },
           "health": {
-            "additionalProperties": true,
-            "title": "Health",
-            "type": "object"
+            "$ref": "#/components/schemas/SourceHealth"
           },
           "id": {
             "title": "Id",
             "type": "string"
           },
           "ingest": {
-            "additionalProperties": true,
-            "title": "Ingest",
-            "type": "object"
+            "$ref": "#/components/schemas/SourceIngest"
           },
           "itemsFailed": {
             "title": "Itemsfailed",
@@ -4210,8 +5961,7 @@
           },
           "metadataMapping": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/SourceMetadataMapping"
             },
             "title": "Metadatamapping",
             "type": "array"
@@ -4240,14 +5990,10 @@
             "type": "string"
           },
           "parsing": {
-            "additionalProperties": true,
-            "title": "Parsing",
-            "type": "object"
+            "$ref": "#/components/schemas/SourceParsing"
           },
           "permissions": {
-            "additionalProperties": true,
-            "title": "Permissions",
-            "type": "object"
+            "$ref": "#/components/schemas/SourcePermissions"
           },
           "rebuild": {
             "anyOf": [
@@ -4261,16 +6007,36 @@
           },
           "rules": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/SourceRule"
             },
             "title": "Rules",
             "type": "array"
           },
           "schedule": {
-            "additionalProperties": true,
-            "title": "Schedule",
-            "type": "object"
+            "discriminator": {
+              "mapping": {
+                "daily": "#/components/schemas/ScheduleDaily",
+                "hourly": "#/components/schemas/ScheduleHourly",
+                "manual": "#/components/schemas/ScheduleManual",
+                "weekly": "#/components/schemas/ScheduleWeekly"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ScheduleManual"
+              },
+              {
+                "$ref": "#/components/schemas/ScheduleHourly"
+              },
+              {
+                "$ref": "#/components/schemas/ScheduleDaily"
+              },
+              {
+                "$ref": "#/components/schemas/ScheduleWeekly"
+              }
+            ],
+            "title": "Schedule"
           },
           "scopeSummary": {
             "title": "Scopesummary",
@@ -4312,8 +6078,7 @@
           },
           "waitingHosts": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/WaitingHost"
             },
             "title": "Waitinghosts",
             "type": "array"
@@ -4349,9 +6114,84 @@
           "itemsFailed",
           "itemsPending",
           "usedByKbIds",
-          "createdAt"
+          "createdAt",
+          "health"
         ],
         "title": "Source",
+        "type": "object"
+      },
+      "SourceCleaning": {
+        "additionalProperties": false,
+        "properties": {
+          "duplicates": {
+            "enum": [
+              "flag",
+              "skip"
+            ],
+            "title": "Duplicates",
+            "type": "string"
+          },
+          "furniture": {
+            "title": "Furniture",
+            "type": "boolean"
+          },
+          "mainContent": {
+            "title": "Maincontent",
+            "type": "boolean"
+          },
+          "siteRepeats": {
+            "title": "Siterepeats",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "furniture",
+          "mainContent",
+          "siteRepeats",
+          "duplicates"
+        ],
+        "title": "SourceCleaning",
+        "type": "object"
+      },
+      "SourceDefaults": {
+        "additionalProperties": false,
+        "description": "How a new source of the base splits its documents; each source keeps its own copy, changed on the source. AI\nsteps are refused here: they need an estimate and an approval per source.",
+        "properties": {
+          "childSize": {
+            "title": "Childsize",
+            "type": "integer"
+          },
+          "overlap": {
+            "title": "Overlap",
+            "type": "integer"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "strategies": {
+            "items": {
+              "enum": [
+                "structure",
+                "fixed",
+                "context_headers",
+                "parent_child",
+                "table_rows",
+                "clean"
+              ],
+              "type": "string"
+            },
+            "title": "Strategies",
+            "type": "array"
+          }
+        },
+        "required": [
+          "strategies",
+          "size",
+          "overlap",
+          "childSize"
+        ],
+        "title": "SourceDefaults",
         "type": "object"
       },
       "SourceDetail": {
@@ -4403,18 +6243,22 @@
             "title": "Canpublish"
           },
           "cleaning": {
-            "additionalProperties": true,
-            "title": "Cleaning",
-            "type": "object"
+            "$ref": "#/components/schemas/SourceCleaning"
           },
           "collection": {
             "title": "Collection",
             "type": "string"
           },
           "config": {
-            "additionalProperties": true,
-            "title": "Config",
-            "type": "object"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ToolSourceConfig"
+              },
+              {
+                "$ref": "#/components/schemas/FileSourceConfig"
+              }
+            ],
+            "title": "Config"
           },
           "createdAt": {
             "title": "Createdat",
@@ -4426,30 +6270,23 @@
           },
           "errorGroups": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/ErrorGroup"
             },
             "title": "Errorgroups",
             "type": "array"
           },
           "governance": {
-            "additionalProperties": true,
-            "title": "Governance",
-            "type": "object"
+            "$ref": "#/components/schemas/Governance"
           },
           "health": {
-            "additionalProperties": true,
-            "title": "Health",
-            "type": "object"
+            "$ref": "#/components/schemas/SourceHealth"
           },
           "id": {
             "title": "Id",
             "type": "string"
           },
           "ingest": {
-            "additionalProperties": true,
-            "title": "Ingest",
-            "type": "object"
+            "$ref": "#/components/schemas/SourceIngest"
           },
           "itemCount": {
             "title": "Itemcount",
@@ -4510,8 +6347,7 @@
           },
           "metadataMapping": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/SourceMetadataMapping"
             },
             "title": "Metadatamapping",
             "type": "array"
@@ -4540,14 +6376,10 @@
             "type": "string"
           },
           "parsing": {
-            "additionalProperties": true,
-            "title": "Parsing",
-            "type": "object"
+            "$ref": "#/components/schemas/SourceParsing"
           },
           "permissions": {
-            "additionalProperties": true,
-            "title": "Permissions",
-            "type": "object"
+            "$ref": "#/components/schemas/SourcePermissions"
           },
           "readers": {
             "items": {
@@ -4568,8 +6400,7 @@
           },
           "recentRuns": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/SyncRun"
             },
             "title": "Recentruns",
             "type": "array"
@@ -4587,8 +6418,7 @@
           },
           "rules": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/SourceRule"
             },
             "title": "Rules",
             "type": "array"
@@ -4596,19 +6426,38 @@
           "running": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/SyncRun"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Running"
+            ]
           },
           "schedule": {
-            "additionalProperties": true,
-            "title": "Schedule",
-            "type": "object"
+            "discriminator": {
+              "mapping": {
+                "daily": "#/components/schemas/ScheduleDaily",
+                "hourly": "#/components/schemas/ScheduleHourly",
+                "manual": "#/components/schemas/ScheduleManual",
+                "weekly": "#/components/schemas/ScheduleWeekly"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ScheduleManual"
+              },
+              {
+                "$ref": "#/components/schemas/ScheduleHourly"
+              },
+              {
+                "$ref": "#/components/schemas/ScheduleDaily"
+              },
+              {
+                "$ref": "#/components/schemas/ScheduleWeekly"
+              }
+            ],
+            "title": "Schedule"
           },
           "scopeSummary": {
             "title": "Scopesummary",
@@ -4650,8 +6499,7 @@
           },
           "waitingHosts": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/WaitingHost"
             },
             "title": "Waitinghosts",
             "type": "array"
@@ -4688,6 +6536,7 @@
           "itemsPending",
           "usedByKbIds",
           "createdAt",
+          "health",
           "readers",
           "recentRuns",
           "errorGroups",
@@ -4699,7 +6548,65 @@
         "title": "SourceDetail",
         "type": "object"
       },
+      "SourceHealth": {
+        "additionalProperties": false,
+        "properties": {
+          "daysFailing": {
+            "title": "Daysfailing",
+            "type": "integer"
+          },
+          "failedRuns": {
+            "title": "Failedruns",
+            "type": "integer"
+          },
+          "failingSince": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failingsince"
+          },
+          "lastGoodSyncAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastgoodsyncat"
+          },
+          "state": {
+            "enum": [
+              "needs_reconnect",
+              "failing",
+              "healthy",
+              "never"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "tombstoned": {
+            "title": "Tombstoned",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "state",
+          "daysFailing",
+          "failedRuns",
+          "tombstoned"
+        ],
+        "title": "SourceHealth",
+        "type": "object"
+      },
       "SourceIn": {
+        "additionalProperties": false,
         "properties": {
           "aiCeiling": {
             "anyOf": [
@@ -4717,7 +6624,9 @@
           "cleaning": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -4734,7 +6643,9 @@
           "config": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -4754,7 +6665,9 @@
           "ingest": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -4775,7 +6688,9 @@
             "anyOf": [
               {
                 "items": {
-                  "additionalProperties": true,
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/JsonValue"
+                  },
                   "type": "object"
                 },
                 "type": "array"
@@ -4804,7 +6719,9 @@
           "parsing": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -4817,7 +6734,9 @@
             "anyOf": [
               {
                 "items": {
-                  "additionalProperties": true,
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/JsonValue"
+                  },
                   "type": "object"
                 },
                 "type": "array"
@@ -4831,7 +6750,9 @@
           "schedule": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -4881,18 +6802,102 @@
         "title": "SourceIn",
         "type": "object"
       },
+      "SourceIngest": {
+        "additionalProperties": false,
+        "properties": {
+          "approval": {
+            "$ref": "#/components/schemas/IngestApproval"
+          },
+          "childSize": {
+            "title": "Childsize",
+            "type": "integer"
+          },
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/IngestColumn"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "overlap": {
+            "title": "Overlap",
+            "type": "integer"
+          },
+          "preset": {
+            "title": "Preset",
+            "type": "string"
+          },
+          "questionsPerSection": {
+            "title": "Questionspersection",
+            "type": "integer"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "strategies": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Strategies",
+            "type": "array"
+          }
+        },
+        "required": [
+          "preset",
+          "strategies",
+          "size",
+          "overlap",
+          "childSize",
+          "questionsPerSection",
+          "columns",
+          "model",
+          "approval"
+        ],
+        "title": "SourceIngest",
+        "type": "object"
+      },
       "SourceKind": {
         "additionalProperties": false,
         "properties": {
+          "canCreate": {
+            "default": true,
+            "title": "Cancreate",
+            "type": "boolean"
+          },
+          "cannotCreateBecause": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cannotcreatebecause"
+          },
+          "cannotCreateCode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cannotcreatecode"
+          },
           "connected": {
             "default": false,
             "title": "Connected",
             "type": "boolean"
           },
           "defaults": {
-            "additionalProperties": true,
-            "title": "Defaults",
-            "type": "object"
+            "$ref": "#/components/schemas/SourceKindDefaults"
           },
           "group": {
             "enum": [
@@ -4903,7 +6908,9 @@
             "type": "string"
           },
           "inputs": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Inputs",
             "type": "object"
           },
@@ -4972,7 +6979,125 @@
         "title": "SourceKind",
         "type": "object"
       },
+      "SourceKindDefaults": {
+        "additionalProperties": false,
+        "properties": {
+          "aiCeiling": {
+            "title": "Aiceiling",
+            "type": "number"
+          },
+          "cleaning": {
+            "$ref": "#/components/schemas/SourceCleaning"
+          },
+          "ingest": {
+            "$ref": "#/components/schemas/SourceIngest"
+          },
+          "metadataMapping": {
+            "items": {
+              "$ref": "#/components/schemas/SourceMetadataMapping"
+            },
+            "title": "Metadatamapping",
+            "type": "array"
+          },
+          "parsing": {
+            "$ref": "#/components/schemas/SourceParsing"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/SourceRule"
+            },
+            "title": "Rules",
+            "type": "array"
+          },
+          "schedule": {
+            "discriminator": {
+              "mapping": {
+                "daily": "#/components/schemas/ScheduleDaily",
+                "hourly": "#/components/schemas/ScheduleHourly",
+                "manual": "#/components/schemas/ScheduleManual",
+                "weekly": "#/components/schemas/ScheduleWeekly"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ScheduleManual"
+              },
+              {
+                "$ref": "#/components/schemas/ScheduleHourly"
+              },
+              {
+                "$ref": "#/components/schemas/ScheduleDaily"
+              },
+              {
+                "$ref": "#/components/schemas/ScheduleWeekly"
+              }
+            ],
+            "title": "Schedule"
+          }
+        },
+        "required": [
+          "parsing",
+          "cleaning",
+          "ingest",
+          "rules",
+          "metadataMapping",
+          "aiCeiling",
+          "schedule"
+        ],
+        "title": "SourceKindDefaults",
+        "type": "object"
+      },
+      "SourceMetadataMapping": {
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "title": "From",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "from"
+        ],
+        "title": "SourceMetadataMapping",
+        "type": "object"
+      },
+      "SourceParsing": {
+        "additionalProperties": false,
+        "properties": {
+          "ocr": {
+            "enum": [
+              "off",
+              "auto",
+              "always"
+            ],
+            "title": "Ocr",
+            "type": "string"
+          },
+          "tables": {
+            "title": "Tables",
+            "type": "boolean"
+          },
+          "vision": {
+            "title": "Vision",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ocr",
+          "tables",
+          "vision"
+        ],
+        "title": "SourceParsing",
+        "type": "object"
+      },
       "SourcePatch": {
+        "additionalProperties": false,
         "properties": {
           "aiCeiling": {
             "anyOf": [
@@ -4990,7 +7115,9 @@
           "cleaning": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -5013,7 +7140,9 @@
           "ingest": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -5026,7 +7155,9 @@
             "anyOf": [
               {
                 "items": {
-                  "additionalProperties": true,
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/JsonValue"
+                  },
                   "type": "object"
                 },
                 "type": "array"
@@ -5062,7 +7193,9 @@
           "parsing": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -5075,7 +7208,9 @@
             "anyOf": [
               {
                 "items": {
-                  "additionalProperties": true,
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/JsonValue"
+                  },
                   "type": "object"
                 },
                 "type": "array"
@@ -5089,7 +7224,9 @@
           "schedule": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -5126,7 +7263,9 @@
           "values": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -5137,6 +7276,20 @@
           }
         },
         "title": "SourcePatch",
+        "type": "object"
+      },
+      "SourcePermissions": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "title": "SourcePermissions",
         "type": "object"
       },
       "SourcePreview": {
@@ -5187,18 +7340,22 @@
             "type": "array"
           },
           "cleaning": {
-            "additionalProperties": true,
-            "title": "Cleaning",
-            "type": "object"
+            "$ref": "#/components/schemas/SourceCleaning"
           },
           "collection": {
             "title": "Collection",
             "type": "string"
           },
           "config": {
-            "additionalProperties": true,
-            "title": "Config",
-            "type": "object"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ToolSourceConfig"
+              },
+              {
+                "$ref": "#/components/schemas/FileSourceConfig"
+              }
+            ],
+            "title": "Config"
           },
           "createdAt": {
             "title": "Createdat",
@@ -5209,18 +7366,14 @@
             "type": "string"
           },
           "health": {
-            "additionalProperties": true,
-            "title": "Health",
-            "type": "object"
+            "$ref": "#/components/schemas/SourceHealth"
           },
           "id": {
             "title": "Id",
             "type": "string"
           },
           "ingest": {
-            "additionalProperties": true,
-            "title": "Ingest",
-            "type": "object"
+            "$ref": "#/components/schemas/SourceIngest"
           },
           "itemsFailed": {
             "title": "Itemsfailed",
@@ -5266,8 +7419,7 @@
           },
           "metadataMapping": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/SourceMetadataMapping"
             },
             "title": "Metadatamapping",
             "type": "array"
@@ -5296,14 +7448,10 @@
             "type": "string"
           },
           "parsing": {
-            "additionalProperties": true,
-            "title": "Parsing",
-            "type": "object"
+            "$ref": "#/components/schemas/SourceParsing"
           },
           "permissions": {
-            "additionalProperties": true,
-            "title": "Permissions",
-            "type": "object"
+            "$ref": "#/components/schemas/SourcePermissions"
           },
           "rebuild": {
             "anyOf": [
@@ -5317,8 +7465,7 @@
           },
           "rules": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/SourceRule"
             },
             "title": "Rules",
             "type": "array"
@@ -5328,9 +7475,30 @@
             "type": "boolean"
           },
           "schedule": {
-            "additionalProperties": true,
-            "title": "Schedule",
-            "type": "object"
+            "discriminator": {
+              "mapping": {
+                "daily": "#/components/schemas/ScheduleDaily",
+                "hourly": "#/components/schemas/ScheduleHourly",
+                "manual": "#/components/schemas/ScheduleManual",
+                "weekly": "#/components/schemas/ScheduleWeekly"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ScheduleManual"
+              },
+              {
+                "$ref": "#/components/schemas/ScheduleHourly"
+              },
+              {
+                "$ref": "#/components/schemas/ScheduleDaily"
+              },
+              {
+                "$ref": "#/components/schemas/ScheduleWeekly"
+              }
+            ],
+            "title": "Schedule"
           },
           "scopeSummary": {
             "title": "Scopesummary",
@@ -5379,8 +7547,7 @@
           },
           "waitingHosts": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/WaitingHost"
             },
             "title": "Waitinghosts",
             "type": "array"
@@ -5417,10 +7584,51 @@
           "itemsPending",
           "usedByKbIds",
           "createdAt",
+          "health",
           "usedBy",
           "running"
         ],
         "title": "SourceRow",
+        "type": "object"
+      },
+      "SourceRule": {
+        "additionalProperties": false,
+        "properties": {
+          "field": {
+            "enum": [
+              "path",
+              "title",
+              "mime",
+              "modified_after",
+              "size_under"
+            ],
+            "title": "Field",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "include",
+              "exclude"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "field",
+          "value"
+        ],
+        "title": "SourceRule",
         "type": "object"
       },
       "SyncIn": {
@@ -5468,8 +7676,7 @@
           },
           "errors": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/RunError"
             },
             "title": "Errors",
             "type": "array"
@@ -5498,8 +7705,7 @@
           },
           "phases": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/RunPhase"
             },
             "title": "Phases",
             "type": "array"
@@ -5534,6 +7740,46 @@
           "log"
         ],
         "title": "SyncRun",
+        "type": "object"
+      },
+      "SyncSettings": {
+        "additionalProperties": false,
+        "description": "How the syncs of the base's sources treat what they find: a changed version applied at once or held in Changes\nfor review, an item removed at its source taken out of search or kept and flagged, when an item is stale, and\nwhether the owner is told when a sync keeps failing.",
+        "properties": {
+          "changes": {
+            "enum": [
+              "apply",
+              "review"
+            ],
+            "title": "Changes",
+            "type": "string"
+          },
+          "notifyOnFailure": {
+            "title": "Notifyonfailure",
+            "type": "boolean"
+          },
+          "removedAtSource": {
+            "enum": [
+              "remove",
+              "keep"
+            ],
+            "title": "Removedatsource",
+            "type": "string"
+          },
+          "staleAfterDays": {
+            "maximum": 3650.0,
+            "minimum": 1.0,
+            "title": "Staleafterdays",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "changes",
+          "removedAtSource",
+          "staleAfterDays",
+          "notifyOnFailure"
+        ],
+        "title": "SyncSettings",
         "type": "object"
       },
       "TokenRange": {
@@ -5592,6 +7838,7 @@
         "type": "object"
       },
       "TombstonesIn": {
+        "additionalProperties": false,
         "properties": {
           "ids": {
             "items": {
@@ -5607,6 +7854,130 @@
           "ids"
         ],
         "title": "TombstonesIn",
+        "type": "object"
+      },
+      "ToolSourceConfig": {
+        "additionalProperties": false,
+        "description": "What an app's source keeps of its settings for the screen: the plugin and source it reads, its tools and\nconnection, and the values it was set up with.",
+        "properties": {
+          "connectionId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connectionid"
+          },
+          "getTool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gettool"
+          },
+          "listTool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Listtool"
+          },
+          "paused": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paused"
+          },
+          "plugin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plugin"
+          },
+          "site": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Site"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "values": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Values"
+          }
+        },
+        "required": [
+          "plugin",
+          "source",
+          "title",
+          "listTool",
+          "getTool",
+          "connectionId",
+          "paused",
+          "site",
+          "values"
+        ],
+        "title": "ToolSourceConfig",
         "type": "object"
       },
       "ValidationError": {
@@ -5650,6 +8021,7 @@
         "type": "object"
       },
       "VerifyIn": {
+        "additionalProperties": false,
         "properties": {
           "verified": {
             "title": "Verified",
@@ -5660,6 +8032,32 @@
           "verified"
         ],
         "title": "VerifyIn",
+        "type": "object"
+      },
+      "WaitingHost": {
+        "additionalProperties": false,
+        "properties": {
+          "host": {
+            "title": "Host",
+            "type": "string"
+          },
+          "runKey": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runkey"
+          }
+        },
+        "required": [
+          "host",
+          "runKey"
+        ],
+        "title": "WaitingHost",
         "type": "object"
       },
       "WrittenItem": {
@@ -5686,6 +8084,7 @@
         "type": "object"
       },
       "WrittenItemIn": {
+        "additionalProperties": false,
         "description": "One item written into a typed text or push source. `name` is its key: sent again with the same content it is\nunchanged, with new content it is the item's next version.",
         "properties": {
           "content": {
@@ -5741,6 +8140,19 @@
               }
             ],
             "title": "Title"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "pattern": "^https?://\\S+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
           }
         },
         "required": [
@@ -6456,6 +8868,7 @@
     },
     "/v1/knowledge-bases": {
       "get": {
+        "description": "The team's knowledge bases, newest first; `search` in the name, description or owner, `ids` for exact rows\n(pickers), `templateId` to filter; a facet by health. No `Tx`: \"used by\" is asked of agents-service after the\npage's transaction ends.",
         "operationId": "knowledge_bases_list_knowledge_bases",
         "parameters": [
           {
@@ -6474,11 +8887,16 @@
             "name": "pageSize",
             "required": false,
             "schema": {
-              "default": 25,
-              "maximum": 100,
-              "minimum": 1,
-              "title": "Pagesize",
-              "type": "integer"
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
             }
           },
           {
@@ -6499,7 +8917,7 @@
           },
           {
             "in": "query",
-            "name": "templateId",
+            "name": "sortBy",
             "required": false,
             "schema": {
               "anyOf": [
@@ -6510,7 +8928,41 @@
                   "type": "null"
                 }
               ],
-              "title": "Templateid"
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {
@@ -8039,6 +10491,7 @@
     },
     "/v1/knowledge-bases/{kb_id}/documents": {
       "get": {
+        "description": "A base's documents. Each filter keeps rows matching any of its values; each facet counts its values over\nthe rows the other filters keep, so a chip's counts say what choosing it would show.",
         "operationId": "knowledge_bases_list_documents",
         "parameters": [
           {
@@ -8087,6 +10540,139 @@
                 }
               ],
               "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sourceId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sourceid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "collection",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Collection"
+            }
+          },
+          {
+            "in": "query",
+            "name": "docType",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Doctype"
+            }
+          },
+          {
+            "in": "query",
+            "name": "freshness",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Freshness"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sensitivity",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sensitivity"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tags",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tags"
             }
           },
           {
@@ -10815,6 +13401,7 @@
     },
     "/v1/sources": {
       "get": {
+        "description": "The team's sources, newest first; `search` in the name, owner or collection; facets by type and status.",
         "operationId": "sources_list_sources",
         "parameters": [
           {
@@ -10833,11 +13420,16 @@
             "name": "pageSize",
             "required": false,
             "schema": {
-              "default": 25,
-              "maximum": 100,
-              "minimum": 1,
-              "title": "Pagesize",
-              "type": "integer"
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
             }
           },
           {
@@ -10854,6 +13446,56 @@
                 }
               ],
               "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {
@@ -12930,6 +15572,7 @@
     },
     "/v1/sources/{source_id}/items": {
       "get": {
+        "description": "A source's documents, oldest first; `search` in the title or path; a facet by status.",
         "operationId": "sources_list_items",
         "parameters": [
           {
@@ -12957,11 +15600,16 @@
             "name": "pageSize",
             "required": false,
             "schema": {
-              "default": 25,
-              "maximum": 100,
-              "minimum": 1,
-              "title": "Pagesize",
-              "type": "integer"
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
             }
           },
           {
@@ -12978,6 +15626,56 @@
                 }
               ],
               "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {
@@ -13726,6 +16424,7 @@
     },
     "/v1/sources/{source_id}/runs": {
       "get": {
+        "description": "A source's sync runs, newest first, with a facet by status.",
         "operationId": "sources_list_runs",
         "parameters": [
           {
@@ -13753,11 +16452,82 @@
             "name": "pageSize",
             "required": false,
             "schema": {
-              "default": 25,
-              "maximum": 100,
-              "minimum": 1,
-              "title": "Pagesize",
-              "type": "integer"
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {
@@ -14016,15 +16786,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/SyncIn"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Body"
+                "$ref": "#/components/schemas/SyncIn"
               }
             }
           }

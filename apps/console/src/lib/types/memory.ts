@@ -1,20 +1,10 @@
+import type { OpsAI } from '@chanl-ai/ops-ai';
+
 /** What an agent remembers about the person using the console; only ever their own. */
 export type MemoryKind = 'fact' | 'preference' | 'episode';
 
-export interface Memory {
-  id: string;
-  agentId: string;
-  agentName: string;
-  kind: MemoryKind;
-  /** A fact's or preference's name (timezone); an episode has none. */
-  key: string | null;
-  value: string;
-  confidence: number;
-  /** `extraction` learned from a chat turn, `asked` when they said "remember that", `person` when they corrected it. */
-  source: 'extraction' | 'asked' | 'person';
-  sourceThreadId: string | null;
-  createdAt: string;
-}
+/** A memory as `GET /v1/me/memories` answers it. */
+export type Memory = Awaited<ReturnType<OpsAI['raw']['agents']['memory_list_memories']>>[number];
 
 /** One forget, correction, export or retention deletion, as the server stored it. */
 export type MemoryAuditRow = Record<string, unknown> & { action: string; actor: string; at: string };

@@ -50,20 +50,20 @@ it asserts.
 | # | Step | Expected |
 |---|---|---|
 | 1 | (api) Priya turns the plugin on for team_ops (`PUT /v1/plugins/test.templates/team`) | 200 |
-| 2 | (api) `GET /v1/templates` on agents-service and documents-service as team_ops, then as team_platform | team_ops: the agent, skill and workflow (agents-service) and the document type (documents-service), each with `installed.copies` 0; team_platform: none |
+| 2 | (api) `GET /v1/templates` on agents-service and documents-service as team_ops, then as team_platform | team_ops: the agent, skill and workflow (agents-service) and the document type (documents-service), each with `installed.copies` 0; team_platform: the same four, each that grants the app's tools marked `off`. Every installed pack's templates list for every team (built-in apps too); the checks read the desk's own rows |
 | 3 | (api) Install the agent (`POST /v1/resources/plugin:test.templates:case-helper/copies`) | 201; a draft agent in team_ops granting `templates_get_case` and `templates_close_case`; `needs` names the knowledge base and model alias left |
 | 4 | (api) The same install again | 200 with the same copy; nothing new made |
 | 5 | (api) Delete the agent, install again | 201 with a new agent |
 | 6 | (api) Install the skill and the workflow | 201 each; a draft skill granting `templates_close_case`; a draft workflow under an id of its own |
 | 7 | (api) Install the document type on documents-service | 201; a document type in team_ops with the template's fields, ready to read |
 | 8 | (api) team_platform reads the copies | Not found for each |
-| 9 | (api) team_platform installs the agent | 404 `template_not_found` |
+| 9 | (api) team_platform installs the agent | 422 `app_off`: the agent grants the app's tools, which are off for that team |
 | 10 | (api) Install the agent at version 1 | 404 `template_version_not_found` |
 | 11 | (api) Install the agent with model alias `nobody-serves-this` after its copy is deleted | 422 `unknown_model_alias`; no agent made |
-| 21 | (sdk) `templates_list_templates(kind="agent")` and `resources_copy_resource` as team_ops on a fresh install | The same list as the API; 201 then 200 with the same copy |
+| 21 | (sdk) `templates_list_templates(kind="agent")` and `resources_copy_resource` as team_ops on a fresh install | The same list as the API, the desk's agent among the built-in apps' ones; 201 then 200 with the same copy |
 | 22 | (sdk) `resources_copy_resource("plugin:test.templates:close-politely", {})` | The skill's copy with its record id |
 | 23 | (cli) `opsai resources list plugin:test.templates`, then `opsai resources add plugin:test.templates case-helper` | Each exits 0; four resources; the agent's copy |
-| 30 | `GET /v1/plugin-templates` on tools-service, the app's resources | The four resources; each is named `<source>:<template id>` for Add to team |
+| 30 | `GET /v1/plugin-templates` on tools-service, the app's resources | The four resources among every installed pack's; each is named `<source>:<template id>` for Add to team |
 | 31 | `POST /v1/resources/plugin:test.templates:case-helper/copies` on agents-service twice (the agent was deleted in step 11), and `POST /v1/resources/plugin:test.templates:case-letter/copies` on documents-service | 201 then 200 with the same copy; the document type answers the copy step 7 made |
 | 32 | (ui) Priya opens the templates desk's page › Resources, presses Add to team on the agent, comes back and presses Open, then adds the document type | Four rows each offer Add to team; the agent's copy opens at `/agents/{id}`, the row then reads Added and Open lands on the same copy; the document type's copy opens at `/document-types/{id}` |
 | 40 | (api) Priya turns the desk on; Ravi and James list `GET /v1/templates?source=plugin:test.resources` on agents-service and documents-service | 200; each sees the ticket helper, close-ticket skill, ticket triage workflow and ticket form, each with `installed.copies` 0 |

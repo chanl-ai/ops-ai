@@ -30,6 +30,10 @@ export function AddDocumentsDialog({
   noun = 'document',
   isPending,
   onSubmit,
+  folder = false,
+  initialFiles,
+  startWith,
+  uploadTitle = 'Upload new files',
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -40,6 +44,13 @@ export function AddDocumentsDialog({
   noun?: string;
   isPending: boolean;
   onSubmit: (fileIds: string[]) => Promise<unknown>;
+  /** Offers "Choose a folder"; see FileUpload. */
+  folder?: boolean;
+  /** Files dropped on the page before the dialog opened. */
+  initialFiles?: File[];
+  /** Opens the file or folder chooser at once. */
+  startWith?: 'files' | 'folder';
+  uploadTitle?: string;
 }) {
   const limits = useUploadLimits();
   const purposes = (limits.data?.perPurpose ?? []).map((l) => l.purpose);
@@ -107,7 +118,7 @@ export function AddDocumentsDialog({
           </FormField>
         )}
         {/* Keyed on the purpose: a new purpose starts a new upload under its own limits. */}
-        {purpose && <FileUpload key={purpose} purpose={purpose} multiple onChange={setUploads} title="Upload new files" testId="add-documents-upload" />}
+        {purpose && <FileUpload key={purpose} purpose={purpose} multiple onChange={setUploads} title={uploadTitle} testId="add-documents-upload" folder={folder} initialFiles={initialFiles} startWith={startWith} />}
         {pick && (
           <div className="flex flex-col gap-1.5">
             <p className="text-sm font-medium">Or pick from Files</p>

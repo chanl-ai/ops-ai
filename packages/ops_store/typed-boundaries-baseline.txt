@@ -1,0 +1,7 @@
+# 28 boundaries crossed without a model in packages/ops_store (scripts/check_typed_boundaries.py). A row may only fall.
+4 dict-any packages/ops_store/src/ops_store/conformance.py
+7 dict-any packages/ops_store/src/ops_store/copies.py
+2 dict-any packages/ops_store/src/ops_store/database.py
+3 dict-any packages/ops_store/src/ops_store/dialect.py
+8 dict-any packages/ops_store/src/ops_store/outbox.py
+4 dict-any packages/ops_store/src/ops_store/testing.py

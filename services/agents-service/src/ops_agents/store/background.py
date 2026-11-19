@@ -6,11 +6,12 @@ Activity, an account admin reads every team's on Govern > Background."""
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, ClassVar, Literal
+from typing import ClassVar, Literal
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ops_service_kit.http import Json
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.logging import get_logger
 from ops_store import Guarantee
@@ -64,7 +65,7 @@ class Job:
     outcome: str
     at: str
 
-    def as_wire(self, team_name: str | None = None) -> dict[str, Any]:
+    def as_wire(self, team_name: str | None = None) -> Json:
         process = BY_KEY.get(self.process)
         return {
             "id": self.id,
@@ -98,7 +99,7 @@ class BackgroundJobs:
 
     async def _insert(self, process: str, summary: str, outcome: Outcome, *, team_id: str | None) -> None:
         t = background_jobs
-        row: dict[str, Any] = {"id": new_id("bjob"), "process": process, "summary": summary[:500]}
+        row: Json = {"id": new_id("bjob"), "process": process, "summary": summary[:500]}
         row |= {"outcome": outcome, "at": now_iso()} | ({"team_id": team_id} if team_id else {})
         async with tenant_tx(self.engine) as c:
             await c.execute(t.insert().values(**row))

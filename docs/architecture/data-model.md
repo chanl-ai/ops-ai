@@ -64,7 +64,7 @@ erDiagram
     string team_id FK
     string user_id FK "empty while invited"
     string email UK "unique per team"
-    string role "admin, builder, approver, viewer"
+    string role "admin, builder, approver, viewer, chat_user"
     string status "active, invited, removed"
   }
   api_keys {
@@ -216,6 +216,11 @@ erDiagram
 | `registry_agents, registry_agent_versions` | An agent and its immutable versions. A version carries the limits a caller may override within, the on or off switch of each pinned guardrail and optional call caps per turn and per conversation. An empty per-turn model-call cap means 50, and an empty per-conversation cap means 200 model calls and a cost of 5.00 | built |
 | `registry_publish_requests` | A request to publish a version, decided by a second person. Moves to the reviews package | partial (moving) |
 | `registry_skills, registry_skill_versions` | Versioned procedures an agent loads when a request matches. A skill records who created it, once, so the right to delete it does not pass to whoever saved a draft last | built |
+| `agent_skill_pins` | The skills each agent's newest version pins, one row per agent and skill with the pinned version and the agent's team, written in the transaction that saves the version (0113). The skills list counts pins from it and a skill's delete guard reads it; a published version older than the newest is read from its spec | built |
+| `tool_catalog` | This service's copy of tools-service's tool modules, one row per module of the tenant with its name, title, app, `owner_team` (null: workspace-level, every team reads it), status, version, revision and deleted flag (`ops_store.copies`, 0116). Kept by `tool.module.*` events on `POST /v1/events` and the hourly `tool_catalog_resync` of `GET /v1/tool-catalog`; a delete stays as a tombstone | built, not yet read by `/v1/tools` |
+| `tool_catalog_operations` | The served operations of each `tool_catalog` module (id, name, access, requires approval, enabled), rewritten in the transaction that applies the module event the module row holds (0116) | built, not yet read by `/v1/tools` |
+| `tool_team_state` | One team's grant of a module it does not own (`approval:<module id>`): the operations it covers by name and when it ends, team policy, kept by `tool.team_state.changed` and the resync (0116) | built, not yet read by `/v1/tools` |
+| `api_key_copies` | This service's copy of platform-service's API keys for the Channels list: name, prefix (the key's public id part), status, target, created, last-used and expiry times, revision and deleted flag, team policy (`ops_store.copies`, 0118); never the secret or its hash. Kept by the worker's `api_key_copy_resync` of `GET /v1/api-key-summaries` every minute and by `api_key.changed` on `POST /v1/platform-events`, which platform-service does not send yet | built, read by `GET /v1/channels` |
 | `registry_guardrails, registry_guardrail_versions` | Versioned checks on the question and the answer | built |
 | `graph_threads` | A conversation or job thread, with the overrides set for the thread. Its origin and owning team are planned `ix_graph_threads_team_updated` (tenant_id, team_id, updated_at) serves a team's thread list (0071). | partial |
 | `chat_search` | A thread's title, agent, last reply and questions as plain columns, so search works on every supported database | built |
@@ -227,6 +232,7 @@ erDiagram
 | `thread_leases` | Which process runs the thread now, with a generation number that fences out a stopped process | built |
 | `thread_budgets` | The model-call, token and cost caps of a thread, checked against what it has spent. A chat conversation gets its caps from its agent when it starts. When they are spent the conversation pauses, and its owner continues or a team admin raises them. An answer names the pause it answers, so a screen showing an older pause is refused | built |
 | `model_call_records` | Each model call a run made, for replay and cost | built |
+| `model_call_records_unattributed`, `thread_budgets_unattributed` | The calls and budgets recorded before tenancy (agents 0104) whose thread is gone and whose events name no single tenant. Kept as recorded spend for operators to count; no store reads them and no tenant transaction can | built |
 | `ops_checkpoints, ops_checkpoint_writes, ops_checkpoint_fences` | Run state after each step, so a run resumes from its last step after a crash. Gain run and step columns `ix_ops_checkpoints_run` (tenant_id, team_id, (metadata->>'run_id')) serves the delete by run (migration 0071); like these tables it is raw SQL with no metadata until the checkpointer's SQL Server rewrite, so the diagram and the golden DDL do not show it. | built |
 | `agent_runs` | One run of an agent: mode, status and reason, settings used, budget and usage | planned |
 | `agent_run_queue` | Background runs waiting for a worker | planned |
@@ -301,7 +307,7 @@ erDiagram
 
 | Table | Holds | Status |
 |---|---|---|
-| `engine_definitions` | Workflow definitions by version. Each version has a stage: draft, live, paused or superseded. A draft goes live when its publish review is approved. `archived_at` and `archived_by` are set on every version of an archived workflow, which starts no run (migration 0070) `ix_engine_definitions_live` (tenant_id, workflow_id) WHERE stage = 'live', on PostgreSQL and SQL Server alike, serves service event listeners and the mailbox listener (0071). | built |
+| `engine_definitions` | Workflow definitions by version. Each version has a stage: draft, live, paused or superseded. A draft goes live when its publish review is approved. `archived_at` and `archived_by` are set on every version of an archived workflow, which starts no run (migration 0070) `ix_engine_definitions_live` (tenant_id, workflow_id) WHERE stage = 'live', on PostgreSQL and SQL Server alike, serves service event listeners and the mailbox listener (0071). `mailbox` is the address the version's Email received trigger names (`definitions.watched_mailbox`, filled for every version by 0118), so the Channels list joins a mailbox to the live workflows that read it. | built |
 | `engine_runs` | One run of a workflow version, with status and outcome. A run another run's step started has `created_by` = `run:<parent id>`, which is how a parent finds the runs it waits on. Indexes: `ix_engine_runs_parent_status` (tenant_id, created_by, status) finds a parent's unfinished runs, `ix_engine_runs_team_created` (tenant_id, team_id, created_at) and `ix_engine_runs_team_status_created` (tenant_id, team_id, status, created_at) serve the runs list (migrations 0065 and 0066; 0066 replaced `ix_engine_runs_created_by`) `ix_engine_runs_workflow_created` (tenant_id, workflow_id, created_at) serves the runs list filtered by one workflow (migration 0071). | built |
 | `engine_steps` | The step journal: one row per node, iteration and attempt. Gains pack id, version, hash and an output reference | built |
 | `engine_work` | The work queue, claimed by workers under a lease Indexes: `ix_engine_work_due` (status, build, available_at) and `ix_engine_work_lease` (status, build, lease_expires_at), one per branch of the claim: due queued work, and claimed work whose lease lapsed (0071). | built |
@@ -314,7 +320,7 @@ erDiagram
 | `case_type_versions` | Each saved version of a case type: its fields, each with a key, label and type (the extraction field types, file or link). A case pins the published version it opened with (migration 0069) | built |
 | `task_assists` | What task assist wrote for a typed task when its step paused, one row per review step (`step_id` = run:node:iteration). A second write for the same step is refused, so a task costs one model call (migration 0064) | built |
 | `registry_workflows, registry_workflow_versions, registry_validations` | The first workflow registry, replaced by engine_definitions | retiring |
-| `deployments, channel_messages, channel_cursors, channel_files` | The first mailbox channel, replaced by trigger bindings. A deployment records the team that owns it, so only a builder or administrator of that team can create, pause or poll it; deployments made before this existed have no owner until an administrator sets one | retiring |
+| `deployments, channel_messages, channel_cursors` | The first mailbox channel, replaced by trigger bindings. A deployment records the team that owns it, so only a builder or administrator of that team can create, pause or poll it; deployments made before this existed have no owner team, and no permission cell covers them | retiring |
 
 Today these tables are migrated with agents-service; they move to the workflows engine's own migration chain.
 
@@ -481,10 +487,11 @@ erDiagram
 |---|---|---|
 | `tool_modules` | A connected business system | built |
 | `module_operations, module_versions` | Its operations and their versions, each with an approval policy. An operation imported from OpenAPI keeps the JSON Schema of its first success response, so a workflow step shows its output fields before it runs | built |
-| `security_reviews, module_approvals` | The security team's review and approvals before publish | built |
+| `security_reviews, module_approvals` | A module's review before publish, decided by the Security team for a security change and by the module's team otherwise, and its approvals | built |
 | `module_egress_hosts, egress_hosts, egress_ranges, egress_audit` | The hosts and address ranges a module may reach, and each check made | built |
 | `gateway_calls, gateway_fences` | Every call with its verified caller and outcome, the kind of run (test or live) and the account it used, the route that took it (the API or MCP) and the name an MCP client gives itself, reconciled by key; fences reject stale approvals | built |
 | `connections, app_credentials, connection_audit` | An app's accounts, one row each: how the platform signs in to one system, its credentials bound to the system's address, and whether it is a sandbox account (which test runs use); a team's own OAuth client, kept once; secret parts are rows of `tool_secrets` | built |
+| `app_cards` | Each team's app cards (plugins, accounts and built-in apps) as rows, so the Apps list pages, searches and sorts in SQL. Rebuilt from the plugins, bindings and accounts when the team's stamp differs from the install's; held to its team by the database (0084) | built |
 | `connection_tokens, oauth_states` | Encrypted OAuth tokens, stored against the rotation they replaced, and sign-ins in progress | built |
 | `operation_mocks` | An operation's mock answers in test, which a test call gets before anything is sent | built |
 | `tool_secrets, secret_audit` | Encrypted credentials and every read of them. Each secret also lists the teams whose modules may read it; none means every team | built |
@@ -602,7 +609,7 @@ erDiagram
     string status
     string scan_status
     string retention_class_id
-    string storage_key "admins only"
+    string storage_key "files.manage only"
   }
   file_versions {
     string file_id PK
@@ -663,7 +670,7 @@ erDiagram
 | `kb_items, kb_item_versions, kb_chunks` | Documents, their versions and the passages retrieval returns | built |
 | `kb_changes, kb_runs` | What changed on each sync, and each sync run | built |
 | `kb_retired_bases` | The id of a deleted knowledge base, so a search that names it skips it and an agent keeps its other bases | built |
-| `files` | One row per file: type, digest, purpose, scan result, sensitivity, retention class and storage location. The storage location is shown to admins of the file's team only. The file list searches name, uploader and digest, filters by upload date, purpose, scan result and sensitivity, and counts each view (quarantined, under legal hold, unused for 30 days, expiring within 30 days) and each filter value with grouped queries, so no page counts rows it did not load | built |
+| `files` | One row per file: type, digest, purpose, scan result, sensitivity, retention class and storage location. The storage location is shown only to people who hold `files.manage` in the file's team, which Admin and Builder do. The file list searches name, uploader and digest, filters by upload date, purpose, scan result and sensitivity, and counts each view (quarantined, under legal hold, unused for 30 days, expiring within 30 days) and each filter value with grouped queries, so no page counts rows it did not load | built |
 | `file_blobs` | One row per digest in a team, so two uploads of the same bytes share one stored file, even when they finish together | built |
 | `file_versions, file_references, file_legal_holds` | Each version is its own stored object; a reference blocks deletion; a legal hold keeps its history after release | built |
 | `file_idempotency` | The key of an upload request, so a retried upload returns the first file | built |
