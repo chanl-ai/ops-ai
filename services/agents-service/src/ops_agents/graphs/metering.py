@@ -21,7 +21,16 @@ from ops_service_kit.http import Json, JsonValue
 from .models import Facts, Grade, GraphModels
 from .usage import collecting, report_usage
 
-__all__ = ["BudgetStoppedError", "CallSite", "Meter", "MeteredModels", "metered", "report_usage"]
+__all__ = [
+    "BudgetStoppedError",
+    "CallSite",
+    "ChainBudgetReachedError",
+    "ChainExhausted",
+    "Meter",
+    "MeteredModels",
+    "metered",
+    "report_usage",
+]
 
 
 @dataclass(frozen=True)
@@ -39,6 +48,16 @@ class Meter(Protocol):
 
 class BudgetStoppedError(Exception):
     """A person rejected raising an exhausted budget; the run ends with this error."""
+
+
+@dataclass(frozen=True)
+class ChainExhausted(Exhausted):
+    """The budget a specialist's thread shares with the thread that asked it is spent. Only the asking thread has a
+    person to raise it, so the specialist's run ends instead of pausing."""
+
+
+class ChainBudgetReachedError(Exception):
+    """A specialist's run ended because the budget of the chain it runs in is spent."""
 
 
 def call_site() -> CallSite | None:
@@ -75,6 +94,8 @@ async def guard(meter: Meter, site: CallSite) -> None:
     decision carrying a `budget` raises the caps and the call goes ahead; a rejection stops the run. LangGraph restarts
     the node on resume, so calls the node made before this point run, and are recorded, again."""
     while (spent := await meter.exhausted(site.thread_id)) is not None:
+        if isinstance(spent, ChainExhausted):
+            raise ChainBudgetReachedError(f"The chain's {spent.limit} budget is spent ({spent.spent} of {spent.cap}).")
         answer: Any = interrupt(
             {
                 "kind": "budget_exhausted",

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-19",
+  "title": "Agents that ask other agents share one budget",
+  "description": "When an agent asks another agent, the second one's model calls now count against the first conversation's budget, so a chain cannot spend past its cap unnoticed. The tool result shows which agents were on the chain.",
+  "tag": "improved"
+}

@@ -28,6 +28,7 @@ from ops_agents.store.tenancy import LOCAL_TENANT, tenant_scope
 from ops_engine.store import metadata as engine_metadata
 from ops_identity import Auth, Identity, ServiceAuth, service_verifiers
 from ops_identity import Principal as Caller
+from ops_metering import Budget
 from ops_service_kit.settings import Settings
 from tests.api.test_action_roles import ADMIN, OUTSIDER, REVIEWER, VIEWER, introspect
 from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model, sse_events
@@ -157,6 +158,14 @@ async def test_the_default_asks_only_specialists_the_person_may_chat_with_and_as
             )
             assert not named.ok and named.output["code"] == "specialist_not_offered", named.output
             assert await calls_.offers_in("ag_branch", children[0]["id"]) == [], "a specialist asks no other agent"
+            looped = await calls_.run(
+                agent="ag_branch",
+                arguments={"question": "x"},
+                key="k-loop",
+                parent_thread_id=children[0]["id"],
+                parent_run_id=None,
+            )
+            assert not looped.ok and looped.output["code"] == "agent_on_path", looped.output
             assert await calls_.offers_in("ag_dispute", thread) == [], "only the team default asks specialists"
         nobody = await calls_.run(
             agent="ag_dispute", arguments={"question": "x"}, key="k-none", parent_thread_id=thread, parent_run_id=None
@@ -232,6 +241,40 @@ async def test_a_service_identity_is_offered_only_the_agents_its_scopes_reach(st
         with acting_for(service(["chat:run"])):
             offered = [g.name for g in await calls_.offers_in("ag_branch", thread)]
     assert offered == ["agent__ag_dispute"], offered
+
+
+async def test_a_specialist_spends_the_callers_budget_and_stops_when_it_is_spent(stack: Stack) -> None:
+    c, rt = stack
+    assert (await c.put(URL, json={"agentId": "ag_branch"}, headers=ADMIN)).status_code == 200
+    thread = (await start(c, VIEWER))["id"]
+    assert rt.usage is not None
+    with tenant_scope(TENANT):
+        await rt.usage.set_budget(thread, Budget(max_calls=3))
+    events = await say(c, thread, ASK_DISPUTE, VIEWER)
+    (first,) = [e["call"]["output"] for e in events if e.get("type") == "tool_end"]
+    with tenant_scope(TENANT):
+        spent = (await rt.usage.totals(thread)).calls
+        # The caller's two model calls and the specialist's one, counted once, on the caller's thread.
+        assert (first["status"], spent) == ("answered", 3), (first, spent)
+        # A second agent asked once the chain's budget is spent runs no turn; the caller is told and goes on.
+        with acting_for(viewer()):
+            second = (
+                await AgentCalls(rt).run(
+                    agent="ag_dispute",
+                    arguments={"question": "x"},
+                    key="k-2",
+                    parent_thread_id=thread,
+                    parent_run_id=None,
+                )
+            ).output
+        assert (second["status"], second["code"]) == ("budget_reached", "chain_budget_reached"), second
+        assert [step.split("@")[0] for step in second["path"]] == ["ag_branch", "ag_dispute"], second
+        assert (await rt.usage.totals(thread)).calls == 3, "the stopped specialist spent from the chain"
+    # The caller is held by the same total: its next turn waits on the budget card its person answers.
+    await say(c, thread, "And the deadline?", VIEWER)
+    waiting: dict[str, Any] = (await c.get(f"/v1/chat/threads/{thread}", headers=VIEWER)).json()["data"]["messages"][-1]
+    card: dict[str, Any] = waiting.get("budget") or {}
+    assert card.get("state") == "waiting", waiting
 
 
 async def test_a_handover_is_checked_like_a_start_and_back_restores_the_start_agent(stack: Stack) -> None:

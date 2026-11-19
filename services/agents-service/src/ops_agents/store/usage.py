@@ -7,9 +7,10 @@ from decimal import Decimal
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
+from pydantic import JsonValue
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from ops_agents.graphs.metering import CallSite
+from ops_agents.graphs.metering import CallSite, ChainExhausted
 from ops_metering import MICRO, Budget, Exhausted, PriceTable, Totals, Usage, cost, exhausted
 from ops_service_kit.http import Out
 from ops_service_kit.ids import now_iso
@@ -19,7 +20,8 @@ from ops_store.rows import one
 from ops_store.schema import TENANT_SCOPED, system
 
 from .base import metadata
-from .model_calls import UNATTRIBUTED, ModelCall, ModelCallLedger
+from .graphs import GraphStore, graph_threads
+from .model_calls import UNATTRIBUTED, ModelCall, ModelCallLedger, model_call_records
 from .tenancy import RuntimeStore, current_tenant
 
 thread_budgets = sa.Table(
@@ -66,6 +68,16 @@ def _micros(amount: Decimal) -> int:
 
 def _amount(micros: int | None) -> Decimal:
     return Decimal(micros or 0) * MICRO
+
+
+def _asked_by(meta: JsonValue) -> str | None:
+    """The thread whose agent asked this thread's agent, from the two keys api/agent_calls.py writes on a specialist's
+    thread. `parentThreadId` is one a request body cannot set (routers/graphs.py SERVER_META), unlike the thread's
+    `parent_thread_id` column, so no caller attaches a thread to someone else's budget."""
+    if not isinstance(meta, dict):
+        return None
+    parent = meta.get("parentThreadId")
+    return str(parent) if parent and meta.get("calledBy") else None
 
 
 class UsageLedger(RuntimeStore):
@@ -117,7 +129,28 @@ class UsageLedger(RuntimeStore):
         )
 
     async def totals(self, thread_id: str) -> Totals:
-        return (await self.calls.sums(thread_id, by_run=False)).get(None, Totals())
+        """What the thread has spent, with what the specialists it asked spent on their own threads. A specialist's
+        calls are recorded once, on its thread, and counted here, so a chain's spend is charged to the thread it
+        started on and never twice."""
+        m = model_call_records.c
+        spent = [sa.func.coalesce(sa.func.sum(x), 0) for x in (m.calls, m.input_tokens, m.output_tokens, m.cost_micros)]
+        q = sa.select(*spent).where(m.thread_id.in_([thread_id, *await self._asked(thread_id)]))
+        async with self.tx() as c:
+            summed: tuple[Any, ...] = tuple((await c.execute(q)).one())
+        return Totals(int(summed[0]), int(summed[1]), int(summed[2]), _amount(int(summed[3])))
+
+    async def _asked(self, thread_id: str) -> list[str]:
+        """The threads of the specialists `thread_id`'s agent asked."""
+        t = graph_threads.c
+        async with self.tx() as c:
+            found = (await c.execute(sa.select(t.id, t.meta).where(t.parent_thread_id == thread_id))).all()
+        return [str(child) for child, meta in found if _asked_by(meta) == thread_id]
+
+    async def _own(self, thread_id: str) -> Exhausted | None:
+        budget = await self.budget(thread_id)
+        if budget is None or budget.is_empty():
+            return None
+        return exhausted(await self.totals(thread_id), budget)
 
     async def totals_by_run(self, thread_id: str) -> dict[str | None, Totals]:
         return await self.calls.sums(thread_id, by_run=True)
@@ -148,7 +181,11 @@ class UsageLedger(RuntimeStore):
         await self.set_budget(thread_id, current.updated(budget))
 
     async def exhausted(self, thread_id: str) -> Exhausted | None:
-        budget = await self.budget(thread_id)
-        if budget is None or budget.is_empty():
-            return None
-        return exhausted(await self.totals(thread_id), budget)
+        """The thread's own cap already reached, else, for a specialist's thread, the cap of the thread that asked it
+        (`ChainExhausted`): a specialist spends from its caller's budget and adds none of its own."""
+        if (own := await self._own(thread_id)) is not None:
+            return own
+        row = await GraphStore(self.engine).thread_row(thread_id)
+        root = _asked_by(row.meta) if row is not None else None
+        spent = await self._own(root) if root is not None else None
+        return ChainExhausted(spent.limit, spent.spent, spent.cap) if spent is not None else None

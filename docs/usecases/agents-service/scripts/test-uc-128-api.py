@@ -102,6 +102,29 @@ with agents() as api:
         ended,
     )
 
+    capped = data(api.post("/v1/threads", json={"graph": "agent:ag_branch", "budget": {"maxCalls": 3}}, headers=TEAM))
+    runs = f"/v1/threads/{capped['threadId']}/runs/stream"
+    state = f"/v1/threads/{capped['threadId']}/state"
+    asked = sse(api.post(runs, json={"input": {"message": ask}}, headers=TEAM, timeout=120).text)
+    outputs = [e["data"].get("output") for e in asked if isinstance(e.get("data"), dict)]
+    path = [step.split("@")[0] for out in outputs if isinstance(out, dict) for step in out.get("path") or []]
+    spent = data(api.get(state, headers=TEAM))["cost"]["calls"]
+    api.post(runs, json={"input": {"message": "And the deadline?"}}, headers=TEAM, timeout=120)
+    paused = (data(api.get(state, headers=TEAM)).get("interrupt") or {}).get("payload") or {}
+    check(
+        "9 the specialist's model call is spent from the asking run's budget, which then waits for its person",
+        (path, spent, paused.get("kind"), paused.get("limit")) == (["ag_branch", "ag_dispute"], 3, "budget_exhausted", "calls"),
+        {"path": path, "spent": spent, "paused": paused},
+    )
+
+    api.post(runs, json={"resume": {"decision": "approved"}}, headers=TEAM, timeout=120)
+    after = data(api.get(state, headers=TEAM))
+    check(
+        "10 continuing the budget finishes the waiting turn",
+        not after.get("interrupt") and after["cost"]["calls"] > 3,
+        {"interrupt": after.get("interrupt"), "cost": after["cost"]},
+    )
+
 src = ROOT / "services" / "agents-service" / "src" / "ops_agents"
 hits = subprocess.run(
     [

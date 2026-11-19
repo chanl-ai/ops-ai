@@ -28,6 +28,12 @@ The agents service runs on the scripted model, seeded with Branch Concierge (`ag
 | 6 | Grep the default path for an agent id | None: the default comes from the stored setting only |
 | 7 | Grant Branch Concierge `agent:ag_dispute`, publish, and schedule a run of it that asks Card Dispute Resolver | The run ends, no specialist turn runs, and the run's events hold one `agent_call_refused` naming `ag_dispute` with code `no_caller` |
 | 8 | Ask the same in a new chat with Branch Concierge | One tool call, answered by Card Dispute Resolver |
+| 9 | Start a run of Branch Concierge capped at 3 model calls, ask it to call Card Dispute Resolver, then send a second message | The tool result names the path Branch Concierge, Card Dispute Resolver; the run's cost is 3 calls (its own two and the specialist's one); the second message waits on `budget_exhausted` for calls |
+| 10 | Continue the budget | The waiting turn finishes and the cost rises above 3 |
+
+A budget is checked when a turn starts, not before each model call, so a specialist that starts under the cap finishes
+its turn. A specialist asked after the cap is reached runs no turn and the asking agent reads `budget_reached`; the
+unit suite covers that (`tests/api/test_team_default_agent.py`), since the scripted model makes one tool call a turn.
 
 In the console (ui layer), signed in through platform-service:
 
