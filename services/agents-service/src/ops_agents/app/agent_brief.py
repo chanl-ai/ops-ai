@@ -108,8 +108,13 @@ def patched(
         try:
             brief = brief_view(spec)
         except ValidationError as exc:
+            # The brief of a version without one is read from its role and instructions; either can fail to fit.
+            too_long = any(e["type"] == "string_too_long" for e in exc.errors())
             raise ValidationFailed(
-                "Write the agent's purpose before switching to the brief.", code="validation_failed"
+                "This agent's instructions are too long to become a brief. Shorten them, or keep the full prompt."
+                if too_long
+                else "Write the agent's purpose before switching to the brief.",
+                code="validation_failed",
             ) from exc
         if writes_prompt and mode is None:
             raise Unprocessable(
