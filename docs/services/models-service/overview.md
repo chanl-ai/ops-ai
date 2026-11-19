@@ -1,15 +1,50 @@
-# models-service
+# Models service
 
-Status: first slice built, 2026-10-11; checked 2026-10-16. `services/models-service` (`ops_models`), on :8730, with
-its own migration chain (`alembic_version_models`). Opt-in: `make up` does not start it, and callers use it only when
-`OPS_MODELS_URL` is set. Tests: `services/models-service/tests` (scripted provider; no real model calls).
-Design: ADR ai-gateway (the key-and-budget service in front of the data-plane gateway), service map row
-`models-service`, console plan `docs/plan/ai-gateway-console.md`.
+Status: current, checked against the code on 2026-11-18. Built: aliases, keys with budgets, OpenAI-compatible and Azure OpenAI providers, completions and embeddings with a call log. Not built: the Anthropic provider and the admission check before a thread opens.
 
-## What it does
+The models service is the one way out for model calls. Every service that needs a model calls one OpenAI-compatible
+endpoint here with its own model key; the service checks what that key may still spend and which data it is cleared
+for, picks the provider behind the alias it asked for, and records each call without its prompt or answer. Workers
+hold a model key, never a provider's credential.
 
-Every model call goes through one OpenAI-compatible endpoint that knows which key is calling, what that key may
-still spend, and which bank alias it asked for. Workers hold a model key, never a provider credential.
+## At a glance
+
+| Item | Detail |
+|---|---|
+| Owns | Provider connections and the account's provider keys, model aliases and their versions, model keys with budgets and spend, the call log |
+| Port | 8730 |
+| Code | `services/models-service` (`ops_models`), with `ops_metering` for cost |
+| Database | Own migration chain (`alembic_version_models`, `services/models-service/migrations`). Tables: `provider_connections`, `provider_keys`, `model_aliases`, `model_keys`, `model_key_tenants`, `model_key_spend`, `model_call_log`, `model_calls_untenanted` |
+| Isolation | Tenant rows are read as `ops_models_tenant` (`services/models-service/src/ops_models/store/provider_keys.py:26`); tests `services/models-service/tests/test_call_log_rows_isolated.py`, `test_provider_key_rows_isolated.py`, `test_model_key_share_rows_isolated.py` |
+| Secrets it holds | The account's provider keys, sealed with `OPS_SECRETS_KEY`, which must be set outside dev (`services/models-service/src/ops_models/__main__.py:52`), and never returned. Model keys are stored only as a hash; the secret is shown once at issue and at rotation |
+| Calls out to | The model providers a connection names, over HTTPS: an OpenAI-compatible endpoint (OpenAI, vLLM, Ollama, LiteLLM, a gateway) or an Azure OpenAI resource; the fake OpenAI in dev. No other Ops AI service |
+| Called by | agents-service for every agent turn, kb-service for embeddings and its AI steps, documents-service for model reads, tools-service for the check before sending; each on its own key (`scripts/stack.sh:132`, `:194`, `:206`, `:211`) |
+| Events | None sent or received |
+| When something is down | An unreachable or failing provider is answered with its own code and logged as an `error` row ("Provider failures" below); a refusal is never retried here |
+| Design | [ADR on the AI gateway](../../architecture/decisions/ai-gateway.md) and the [console plan](../../plan/ai-gateway-console.md) |
+| Routes | API reference tab, HTTP API › Models (internal), built from `services/models-service/openapi.json`; `make -C services/models-service openapi-check` fails when it drifts, and every test checks each JSON response against it (`ops_service_kit.contract`) |
+
+```mermaid
+flowchart LR
+  caller[Service with a model key] --> gate[Key status, budget, rate, alias, clearance]
+  gate -->|refused| log[(model_call_log)]
+  gate --> provider[Provider behind the alias]
+  provider --> cost[Cost from the alias version's price]
+  cost --> log
+```
+
+## Run and test it alone
+
+| Task | Command |
+|---|---|
+| Serve on :8730 in the foreground | `make -C services/models-service run`; on the stack, `make restart SVC=models` |
+| Apply its migrations | `make -C services/models-service migrate` |
+| Tests on a scripted provider (no real model calls) | `make -C services/models-service test` (`T=` names files) |
+| Lint, strict types, tests and the OpenAPI gate | `make -C services/models-service verify` |
+| Regenerate `openapi.json` | `make -C services/models-service openapi` |
+| The agents path through it end to end | `make usecase-test UC=uc-028`; provider failures and a rebind, `UC=uc-060` |
+
+## How it works
 
 | Part | Detail |
 |---|---|
@@ -26,7 +61,7 @@ still spend, and which bank alias it asked for. Workers hold a model key, never 
 | Install settings | Read by models-service alone (`ops_models.connection_settings`), so no other service fails over them. OPENAI_API_BASE (or OPENAI_BASE_URL) alone, or OPENAI_API_TYPE=openai, is an OpenAI-compatible endpoint with a bearer key (vLLM, Ollama, LiteLLM, a gateway, api.openai.com); OPENAI_API_TYPE=azure makes it an Azure endpoint and needs OPENAI_API_VERSION, with OPENAI_API_REGION optional. Only a combination that cannot work stops models-service, naming the variable: Azure without its endpoint or api-version, an unknown type, a base that is not a URL. The dev seed rewrites `openai-local` from them on every start (key name `openai`, filled from OPENAI_API_KEY by `scripts/stack.sh`); an install runs `deploy/fly/connect_model.py`, which takes them as defaults. Unset, nothing changes. The agents kernel's direct path reads only OPENAI_API_TYPE, to refuse an Azure key |
 | Call log | `model_call_log`, one row per authenticated completion, denials included: key, alias and version, provider model, tokens, cost, latency, outcome and reason, run, step and thread ids, and the caller's request hash. No prompt or completion text. `GET /v1/models/calls?keyId&alias&outcome&threadId` answers one page on the shared list contract (`data`, `pagination`, newest first, then by id) and `byKey`, each key's count and cost over every matching call |
 
-Admin and admission routes take the service token; a person reaches them through platform-gateway later.
+Admin and admission routes take a service token, and the provider and key settings also take an account admin's token (`settings.manage`).
 
 Services that are not agents call through one client, `ops_service_kit.model_calls`: `ModelCalls.structured` (a
 `final_result` answer, tools-service's sending check), `ModelCalls.embed` (vectors and their tokens) and
@@ -83,22 +118,6 @@ connection names, and 404 `alias_not_found`. A caller's own problem is never ans
 refusal: those statuses mean the caller's model key or clearance.
 Use case uc-060 drives this path, including the rebind to a closed port and back.
 
-## Routes
-
-| Route | Purpose |
-|---|---|
-| `GET, POST /v1/models/providers` | Provider connections (service token or account admin) |
-| `PUT /v1/models/providers/{id}` | Rebind a connection's base URL, credential name, api-version and region (left out: kept); every alias on it follows |
-| `GET, POST /v1/models/aliases` | Aliases with their current version; create an alias with version 1 |
-| `GET, POST /v1/models/aliases/{name}/versions` | All versions; add one |
-| `GET, POST /v1/models/keys`, `POST /v1/models/keys/{id}/rotate` | Keys without secrets; issue; rotate |
-| `GET /v1/models/calls` | The metadata log with filters and per-key totals |
-| `POST /v1/models/admit` | The key-admission check agents-service asks before opening a thread |
-| `POST /v1/models/chat/completions` | OpenAI-compatible egress, streamed when asked |
-| `POST /v1/models/embeddings` | Vectors from an embedding alias, through the same checks |
-
-Every route is typed; `openapi.json` is committed and `make openapi-check` (in `verify`) fails when it drifts. The tests check every JSON response against it (`ops_service_kit.contract`).
-
 ## Tests
 
 | Failure mode | Test | Watched to fail |
@@ -133,7 +152,6 @@ Every route is typed; `openapi.json` is committed and `make openapi-check` (in `
 | The OpenAI SDK is typed against httpx2 | An injected client is an `httpx2.AsyncClient`; httpx's runs but fails the type check |
 | The check runs before the call | A key under its cap may make one call that takes it over; the next is refused. A reservation per call would close it |
 | Concurrent calls race the cap | Two calls checked at once both pass; spend is added with one `UPDATE … SET spent = spent + cost`, so it is never lost, only overshot |
-| Table name | The call log is `model_call_log`: agents-service's replay ledger already has `model_calls` in the shared database |
 | Prompt-free logging needs a real check | A test that looked for one late prompt fragment passed while a cut prompt was being logged; it now checks several fragments of prompt and reply |
 
 ## Not built yet
@@ -142,5 +160,5 @@ Every route is typed; `openapi.json` is committed and `make openapi-check` (in `
 |---|---|
 | agents-service's KeyAdmission adapter (`/v1/models/admit` before a thread opens) and use cases uc-016, uc-017 | Next slice; turns already run through completions (uc-028) |
 | Anthropic provider, retries and timeouts, failover with evidence, redaction | Later slices, per the ADR's day-one table |
-| Azure OpenAI with Entra ID (managed identity) sign-in; a per-connection option to refuse an answer from another region; one call against a real resource | Later cards; the real call is owed with the first customer |
+| Azure OpenAI with Entra ID (managed identity) sign-in; a per-connection option to refuse an answer from another region; one call against a real resource | Later; the real call waits for a customer's resource |
 | Data-plane gateway (Portkey) behind this service | Deployment |

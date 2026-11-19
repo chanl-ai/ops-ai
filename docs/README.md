@@ -107,7 +107,7 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `architecture/tool-lifecycle.md` | A tool from connect to import, review, access, grant, call, write approval and display; built versus target; the per-operation approval policy |
 | `architecture/mcp.md` | MCP both ways: the server per team and person, the client for outside servers, built-in tools, sign-in, audit, rate limits and masking; one owner per job; built versus not built |
 | `architecture/workflow-runner.md` | Workflow runner: LangGraph with a step journal, Postgres queue and workers; the ops_engine split from agents through ports; resilience, scale, console, versioning, proof |
-| `architecture/channels-and-deployments.md` | Deployments, the adapter contract, identity and keys per channel, busy-thread input, the mailbox adapter |
+| `architecture/channels-and-deployments.md` | Deployments on the widget, API and MCP channels, the Email received trigger, the adapter contract, identity and keys per channel, busy-thread input |
 | `architecture/chat-widgets.md` | Widgets an agent shows in chat: templates it fills, layouts it composes from a catalogue, overrides, buttons that need a tool |
 | `architecture/identity-and-tenancy.md` | Sign-in seam, delegation, process principals, tools gateway, row-level security, prototype shortcuts |
 | `architecture/roles-and-permissions.md` | Who may do what: the roles grid, team policies, approvals, the access rules and the exceptions register |
@@ -145,10 +145,10 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `architecture/migration/test-pruning.md` | Where the service test suites spend time, parallel runs, and every test deleted as redundant with its surviving cover |
 | `architecture/definitions-and-versions.md` | Draft to publish, pointers, the pin per thread, what happens without it, migrate |
 | `architecture/durability-failure-and-audit.md` | Leases, sweeper, fencing, re-execution, idempotency, side-effect classes, journal, checkpoint growth and pruning |
-| `architecture/data.md` | Tables per service, the checkpointer package, designed stores, retention |
+| `architecture/data.md` | How data is stored: the store rules, the generated inventory of every repository and its tables, the databases and their isolation, the checkpointer, retention and growth |
 | `architecture/operations.md` | Running it, environments, health, the acceptance gate, what to watch, runbooks |
 | `architecture/enterprise-architecture.md` | One-page picture for an enterprise: identity, observability and secrets bands, the platform, both gateways, and how to build, develop and deploy it, with status per part |
-| `architecture/data-model.md` | Every table, grouped by owning service, with keys, links, status per table and the database portability rules; companion to the architecture page |
+| `architecture/data-model.md` | Every table, grouped by owning service, with keys, links and status per table; the database rules are on the data page |
 | `architecture/delivery.md` | What is proven and by which evidence, what is still open, known gaps, open decisions with defaults, and the open questions for the bank |
 
 ## Index
@@ -502,7 +502,8 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `architecture/make.md` | How make is organised: root orchestration, fragments by concern, the service verb set, env names, ports, one stack per machine and `make review`, the daily commands |
 | `architecture/cloud-boxes.md` | Warm cloud boxes: one Fly Sprite with its own checkout and stack behind one address; the box-up, box-check, box-sleep, box-stop and box-reset commands |
 | `architecture/embedded-chat.md` | Embedded chat for customers: the design, the identity options and the recommendation |
-| `services/agents-service/overview.md` | Agents service: modules, graphs on four calls, settings, proofs, where it differs from the specs |
+| `services/README.md` | The eight services as cards, the sections every service page holds, and the commands that work in every service folder |
+| `services/agents-service/overview.md` | Agents service: what it owns, ports, isolation, secrets, calls and events; how to run it alone; graphs, cases, activity, channels, memory and attachments; where it differs from the specs |
 | `services/agents-service/design.md` | Agents service design for Human Tasks: the flow from pause to decision, the reviews routes with `group=case`, the data they read, the decide sequence |
 | `services/agents-service/chat-streaming.md` | Chat streaming: the SSE events, `replace`, and the audit record of a withdrawn answer |
 | `services/agents-service/experiments/own-checkpointer.md` | E0: own LangGraph checkpointer on asyncpg with tenant row-level security |
@@ -530,7 +531,7 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `services/platform-service/overview.md` | platform-service: sign-in, sessions, members, invites, API keys and audit; the only token issuer, verified elsewhere through ops_identity |
 | `services/tools-service/design.md` | tools-service design: the flow, the API, the data and the sequences; the console's screens are the Apps menu (guide/apps.md) |
 | `services/documents-service/design.md` | documents-service design: the flow, six screens as wireframes, the API, the data, the sequences, the workflows that use it and the sample documents |
-| `services/tools-service/overview.md` | tools-service: the tool-module registry, calls resolved and validated through it, executors, and the executions log |
+| `services/tools-service/overview.md` | Tools service: what it owns, isolation, secrets, calls and events, its coupling to agents-service code; the registry, egress, accounts, the gateway, executors, catalogue events and the call log |
 | `services/files-service/overview.md` | files-service on :8750: uploads, proxy routes, dedupe, downloads, scan hook, retention and legal holds over local, S3 and Azure Blob stores; its client |
 | `services/files-service/tests.md` | files-service failure modes and the test guarding each |
 | `services/runner-service/overview.md` | runner-service on :8770: code tools' Python on WASM, its walls, `ops.call` back through tools-service |
