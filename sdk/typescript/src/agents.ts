@@ -50,6 +50,17 @@ export class Agents {
     return this.raw.agents.agents_references_search({ query: { ...query, forAgent, search: search || undefined } as never });
   }
 
+  /** Grants the agent a tool, knowledge base, skill, agent or workflow its brief mentions, as a new draft. `added` is empty when the agent already held it. */
+  addReference(id: string, kind: 'tool' | 'knowledge' | 'skill' | 'agent' | 'workflow', refId: string) {
+    return this.raw.agents.agents_add_reference({ path: { agent_id: id }, body: { kind, id: refId } as never });
+  }
+
+  /** What stops the agent's newest draft from being published, each problem with the field it is in. */
+  async publishCheck(id: string, version?: number) {
+    version ??= (await this.get(id)).version;
+    return this.raw.agents.agents_publish_check({ path: { agent_id: id }, query: { version } as never });
+  }
+
   validate(definition: Record<string, unknown>) {
     const missing = (['name', 'role'] as const).filter((key) => !definition[key]);
     return {
