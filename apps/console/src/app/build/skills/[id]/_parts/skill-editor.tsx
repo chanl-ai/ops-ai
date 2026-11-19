@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Eye, Pencil, RefreshCw, TriangleAlert, Users, X } from 'lucide-react';
+import { CircleAlert, Eye, Pencil, RefreshCw, TriangleAlert, Users, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { AddMenu } from '@/components/shared/add-menu';
@@ -22,6 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useSaveSkillDraft, useSkill, useSkillOptions } from '@/hooks/skill-queries';
+import { useLeaveGuard } from '@/hooks/use-leave-guard';
 import { SKILL_LOADING_OPTIONS } from '@/components/skills/skill-loading';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { PageSaveActions } from '@/components/shared/page-save-actions';
@@ -75,6 +76,8 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange }: { skill: Skil
   const stepsDoc = React.useRef<InstructionDocumentHandle>(null);
   // A save refused because a newer version exists: what the service said. Cleared by Reload.
   const [stale, setStale] = React.useState<string | null>(null);
+  // A save that did not go through for any other reason: what the service said, kept with a Retry until a save works.
+  const [failed, setFailed] = React.useState<string | null>(null);
   // A save refused for one step, shown on that step until the steps change.
   const [refused, setRefused] = React.useState<PublishBlocker | null>(null);
   // A skill has steps or parts, never both: one with parts keeps its Markdown body.
@@ -88,6 +91,7 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange }: { skill: Skil
     scope: !same(form.toolIds, saved.toolIds) || !same(form.knowledgeBases, saved.knowledgeBases) || !same(form.guardrails, saved.guardrails) || form.refusal.trim() !== saved.refusal.trim(),
   };
   const dirty = changed.wording || changed.scope;
+  useLeaveGuard(dirty && !readOnly);
   // The page holds back what would redraw this form (a file added, a version restored) while there is unsaved text.
   React.useEffect(() => {
     onDirtyChange?.(dirty);
@@ -97,13 +101,14 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange }: { skill: Skil
   const errors = { name: form.name.trim() ? undefined : 'Name the skill.', parts: partsError(form.parts) };
   const found = React.useMemo(() => (newest.state === 'draft' ? inText(sk.publishCheck.problems ?? NONE) : NONE), [newest.state, sk.publishCheck.problems]);
   const problems = React.useMemo(() => (refused ? [...found, refused] : found), [found, refused]);
-  const discard = () => (setForm(saved), setEndingValid(true), setWhenValid(true), setRefused(null), setDiscards((n) => n + 1));
+  const discard = () => (setForm(saved), setEndingValid(true), setWhenValid(true), setRefused(null), setFailed(null), setDiscards((n) => n + 1));
   const tools = options.data?.tools ?? [];
   const toolOf = (id: string) => tools.find((t) => t.toolId === id) ?? sk.content.tools.find((t) => t.toolId === id);
   const target = newest.state === 'draft' ? `draft v${newest.version}` : `draft v${newest.version + 1}`;
 
   // The tab remounts once the saved version arrives, so the toast follows the awaited result rather than mutate callbacks.
   const submit = async () => {
+    setFailed(null);
     try {
       const d = await save.mutateAsync({ name: form.name, useWhen: form.when.useWhen, loading: form.loading, instructions: form.instructions, toolIds: form.toolIds, knowledgeBases: form.knowledgeBases, guardrails: form.guardrails, refusal: form.refusal.trim(), parts: form.parts, ...(stepped ? { steps: form.steps, notWhen: form.when.notWhen.trim(), exit: form.ending.exit, returns: form.ending.returns, success: form.ending.success } : {}), note: note.trim() || undefined, baseVersion: newest.version });
       toast.success(`Saved draft v${d.versions[0].version}`, { description: `${EDIT_CLASS[d.versions[0].editClass].hint} Run the tests before requesting review.` });
@@ -116,6 +121,8 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange }: { skill: Skil
         stepsDoc.current?.focus({ field: 'steps', step: onStep.position.step });
         return void toast.error('Couldn’t save the draft', { description: `Step ${onStep.position.step} needs a fix.` });
       }
+      // The toast goes away; the page keeps saying so, with a way to try again, while the text is still unsaved.
+      setFailed((e as Error).message);
       toast.error('Couldn’t save the draft', { description: (e as Error).message });
     }
   };
@@ -141,6 +148,19 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange }: { skill: Skil
             <p>{stale} Reloading shows their version and drops the changes you have not saved; copy anything you want to keep first.</p>
             <Button variant="outline" size="sm" onClick={() => void reload()} disabled={current.isFetching} data-testid="skill-stale-reload">
               <RefreshCw className="size-3.5" /> Reload
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+      {failed && !stale && (
+        <Alert data-testid="skill-save-failed">
+          <CircleAlert />
+          <AlertTitle>Your last change didn’t save</AlertTitle>
+          <AlertDescription>
+            <p>It is kept on this page. Check your connection, then retry.</p>
+            <p className="text-xs">{failed}</p>
+            <Button variant="outline" size="sm" onClick={() => void submit()} disabled={save.isPending} data-testid="skill-save-retry">
+              <RefreshCw className="size-3.5" /> Retry
             </Button>
           </AlertDescription>
         </Alert>
