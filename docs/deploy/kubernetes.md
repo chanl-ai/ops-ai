@@ -1,110 +1,86 @@
-# Ops AI on Kubernetes
+# Install on Kubernetes
 
-Status: current. Proven on a local kind cluster; not yet run on a bank's cluster.
+Status: current. Proven on a local kind cluster; not yet run on a managed cloud cluster.
 
-<!-- The proof is deploy/k8s/proof.sh. -->
+Run Ops AI on your Kubernetes cluster when your platform team runs workloads there rather than on single machines. The
+install is plain Kustomize: a base with one folder per service, and an overlay you copy for your environment. The images
+are the ones Compose runs, and PostgreSQL stays outside the cluster.
 
-Ops AI on Kubernetes uses Kustomize and no other tool: a base with one folder per service, and an overlay per
-environment that picks the images, the origin, the secrets and the database. The images are the ones Compose runs,
-and the database is installed the way [the database guide](database.md) describes.
+## Before you start
 
-The manifests are in `deploy/k8s/`, applied with `kubectl apply -k`; the images build from `deploy/fly/Dockerfile`.
-
-## What runs
-
-| Workload | Image | Probes (startup, readiness, liveness) | Reads |
-|---|---|---|---|
-| platform, tools, models, kb, files, documents | that service's | its health path, each | `ops-settings`, `ops-origin`, its own Secret `ops-<service>` |
-| agents | agents | port open; `/health` (503 until a model is connected, which keeps it out of the Service); port open | as above |
-| runner | runner | `/health`, each | `ops-settings`, `ops-origin`, `ops-runner` (no database login); 1 GiB; wasmtime's compiled cache at `/tmp/wasmtime` (`OPS_RUNNER_COMPILED_DIR`) |
-| worker | agents, `python -m ops_agents.api.worker` | liveness: a database query | `ops-agents` |
-| opa | opa (policy built in) | `/health` | nothing |
-| console | console | `/login` | `ops-console` (the service URLs it writes in at start) |
-| proxy | proxy (Caddy) | `/api/platform/v1/health` | upstreams by Service name |
-| migrate (Job) | platform, `migrate` | none | `ops-settings`, `ops-origin`, `ops-migrate` |
-
-Every pod runs as uid 10001 (`runAsNonRoot`) under the runtime's default seccomp profile, drops every capability,
-cannot escalate, and has a read-only root filesystem with an emptyDir at `/tmp` (the proxy also at Caddy's `/config`
-and `/data`). The console is the one exception to the read-only root: it copies its build into `.next` inside the
-image at every start (`deploy/images/console-start.mjs`). files and kb keep their bytes on a 1 GiB
-PersistentVolumeClaim each (`fsGroup` 10001 makes it writable) and update with `Recreate`, since the volume is
-ReadWriteOnce.
-
-platform's internal port (8711, API-key introspection) is admitted by the NetworkPolicy `platform-internal` from
-agents, tools, models, kb, files and documents only; its public port 8710 stays open to every pod. A NetworkPolicy
-is enforced only by a network plugin that implements it (Calico, Cilium, and kindnet on kind 0.33, where the proof ran); on a plugin
-that does not, 8711 is open to every pod in the cluster, as it is to every container on the compose network.
-
-## Facts that shape it
-
-| Fact | Consequence |
+| Item | What you need |
 |---|---|
-| Each service refuses a schema behind its chain | Services started before the migrate Job restart until it has run; nothing races the migrations |
-| A Job's pod template cannot change | An upgrade deletes the finished Job, then applies again (below) |
-| Each Secret holds one service's login, its signing key, the public keys and only the keys it uses (`deploy/images/service_keys.py`) | No pod can sign as another service or read another's database tables |
-| Secrets come from env files beside the overlay, written by `deploy/k8s/write_secrets.py` and ignored by git | Nothing secret is committed; Kustomize's hash suffix rolls the pods whose Secret changed |
-| PostgreSQL is outside the cluster | The base's Service `postgres` has no selector; the overlay's EndpointSlice says where it is (or patch it to `type: ExternalName` for a host name) |
-| Pods drop every capability, and a binary carrying a file capability will not start then | The proxy image strips Caddy's (it listens on 8080, no low port) |
-| Hosted forms count submissions per client address, read from `X-Forwarded-For` past the proxies in `OPS_FORMS_TRUSTED_PROXIES`; the base trusts `10.0.0.0/8`, `172.16.0.0/12` and `127.0.0.1/32`, the usual pod networks | If the cluster runs workloads you do not trust, narrow `OPS_FORMS_TRUSTED_PROXIES` in the overlay to the embed pod's network, so another pod cannot claim any address it likes |
-| The base's manifests are written by `deploy/k8s/generate.py`, the shared settings read from compose's `x-settings` | Change the table there (or the setting in `deploy/compose/app.yaml`) and regenerate; the YAML is committed for review, and `make verify` runs `generate.py --check`, which fails on a base that is not what it writes |
+| A cluster | `kubectl` with Kustomize, a namespace you may create, and a network plugin that enforces NetworkPolicy (Calico, Cilium or similar) |
+| The manifests | A clone at the release tag: `git clone --branch v1.0.0 https://github.com/chanl-ai/ops-ai.git` |
+| PostgreSQL | 15 or newer, installed by your DBA with one login per service ([Database](database.md)) |
+| A model endpoint | Any OpenAI-compatible endpoint and its key |
+| Python with uv | On the machine you install from, to write the Secrets |
 
 ## Install
 
-1. Install the database as a DBA would (`docs/deploy/database.md`): `roles.sql`, the database owned by
-   `ops_migrator`, `bundle.sql`, `grants.sql`, a password per login. Keep the logins in a private file as
+<!-- site: steps -->
+1. **Install the database** with your DBA ([Database](database.md)), and keep the logins in a private file as
    `ops_migrator=...` and `ops_<service>_runtime=...` lines.
-2. Copy `deploy/k8s/overlays/example` to your overlay and set every `<...>`: the registry and release tag, the origin
-   people open, and the database's address in `postgres-endpoint.yaml`.
-3. Write the secret env files beside it:
+2. **Copy the example overlay** and set every `<...>` in it: the registry and release tag, the address people open,
+   and the database's address in `postgres-endpoint.yaml`.
 
-```
-uv run python deploy/k8s/write_secrets.py --overlay deploy/k8s/overlays/<yours> --db-host postgres:5432 --db-name ops \
-  --logins <logins file> --admin <file with the five OPS_BOOTSTRAP_* lines>
-kubectl apply -k deploy/k8s/overlays/<yours>
-kubectl -n ops-ai wait --for=condition=complete job/migrate --timeout=300s
-```
+   ```bash
+   cp -r deploy/k8s/overlays/example deploy/k8s/overlays/prod
+   ```
 
-4. Connect a model from agents-service (it signs with its own key), put the two printed keys in a private file as
-   `OPS_MODELS_KEY_AGENTS=` and `OPS_MODELS_KEY_DOCUMENTS=` lines, write the env files again with `--models <file>`,
-   and apply again:
+3. **Write the Secrets and apply.** The Secret files are written beside the overlay and ignored by git.
 
-```
-kubectl -n ops-ai exec deploy/agents -- python /app/deploy/fly/connect_model.py --models-url http://models:8730 \
-  --base-url <endpoint>/v1 --key-ref <secret name> --alias default --model <id> --input-price <n> --output-price <n> \
-  --budget <cap> --key-id purpose:agents        # again with --key-id purpose:documents
-```
+   ```bash
+   uv run python deploy/k8s/write_secrets.py --overlay deploy/k8s/overlays/prod --db-host postgres:5432 --db-name ops \
+     --logins <logins file> --admin <file with the five OPS_BOOTSTRAP_* lines>
+   kubectl apply -k deploy/k8s/overlays/prod
+   kubectl -n ops-ai wait --for=condition=complete job/migrate --timeout=300s
+   ```
 
-5. Point the bank's ingress or load balancer at the Service `proxy` (port 8080), and walk it:
-   `OPS_SMOKE_EMAIL=<admin> OPS_SMOKE_PASSWORD=<password> node deploy/fly/smoke.mjs https://<ops host>`.
+4. **Connect a model.** Run the connect step twice, put the two printed keys in a private file as
+   `OPS_MODELS_KEY_AGENTS=` and `OPS_MODELS_KEY_DOCUMENTS=` lines, write the Secrets again with `--models <file>`,
+   and apply again.
 
-## Operate
+   ```bash
+   kubectl -n ops-ai exec deploy/agents -- python /app/deploy/fly/connect_model.py --models-url http://models:8730 \
+     --base-url <endpoint>/v1 --key-ref <name of the stored key> --alias default --model <id> \
+     --input-price <n> --output-price <n> --budget <cap> --key-id purpose:agents   # again with purpose:documents
+   ```
 
-| Task | How |
-|---|---|
-| Status | `kubectl -n ops-ai get pods`; a pod's probes in `kubectl describe pod` |
-| Logs | `kubectl -n ops-ai logs deploy/<service> -f`; the Job's with `logs job/migrate` |
-| Upgrade | Database first (`upgrade.sql` and `grants.sql`, or let the Job migrate with the migrator's login), then set the new tag in the overlay, `kubectl -n ops-ai delete job migrate`, `kubectl apply -k <overlay>` |
-| Roll back | Restore the database or run `downgrade.sql`, then the previous tag; a service of an older release refuses a newer schema |
-| Back up | The database as any PostgreSQL; the files and kb PersistentVolumeClaims with the cluster's volume snapshots |
-| Remove | `kubectl delete -k <overlay>` (the claims go with it) |
+5. **Route traffic** from your ingress or load balancer, with TLS, to the Service `proxy` on port 8080. Sign in as the
+   first admin.
 
-## Proof
+## How it runs
 
-`sh deploy/k8s/proof.sh` (kind and kubectl on the machine, about 3 GB of Docker memory): builds the images, makes
-cluster `ops-ai-proof` with the proxy's NodePort on `localhost:18891`, starts a PostgreSQL container outside the
-cluster and installs the baseline there with one login per service, writes the Secrets, applies the kind overlay,
-waits for the Job and every Deployment, connects the fake model, prints each pod's uid, read-only root and seccomp
-profile, checks that tools reaches platform's internal port and the worker is refused, and runs the smoke walk:
-sign-in, chat, an upload, a workflow run on the worker, a document read and three console pages. It removes the
-cluster and the database at the end (`KEEP=1` leaves them).
+- Every pod runs as a non-root user with every capability dropped, the runtime's default seccomp profile and a
+  read-only root filesystem; the console is the one pod with a writable root, because it writes its build at start.
+- Each service gets its own Secret holding its own database login and only the keys it uses, so no pod can act as
+  another service or read another's tables.
+- Services that start before the schema job has run restart until it finishes; nothing races the schema.
+- The files and knowledge services keep their bytes on a 1 GiB volume each and run one replica.
+- A NetworkPolicy admits only the services to the platform's private API-key port. On a network plugin that does not
+  enforce NetworkPolicy, that port is open to every pod in the cluster.
 
-## Not covered
+## Options
 
-| Item | State |
-|---|---|
-| A Helm chart | Not built: Kustomize overlays carry the same choices |
-| Ingress and TLS | The bank's own, in front of the Service `proxy` |
-| More than one replica, autoscaling, disruption budgets | One replica each; the services are stateless apart from files and kb |
-| The embed app | No image yet |
-| A cloud cluster | Proven on kind only |
-| Plugins | The settings point tools and kb at `/plugins`; the base mounts nothing there, so a cluster loads no plugin until its overlay adds a volume holding the plugins folder at `/plugins` in both (`docs/guide/plugins.md`) |
+| Setting | Where | What it does |
+|---|---|---|
+| Images and tag | The overlay's `kustomization.yaml` | The registry and release to run |
+| Origin | The overlay | The address people open |
+| Database address | `postgres-endpoint.yaml` | An EndpointSlice for an IP, or patch the Service to `ExternalName` for a host name |
+| Volume size | The overlay | Raise the files and knowledge volumes above 1 GiB for real use |
+| `OPS_FORMS_TRUSTED_PROXIES` | The overlay | Which pod networks may set the client address for hosted forms; narrow it if the cluster runs workloads you do not trust |
+| Plugins | The overlay | Mount a volume holding the plugins folder at `/plugins` in tools and kb; the base mounts none |
+
+## Limits
+
+- One replica of each service; autoscaling and disruption budgets are not set.
+- A Helm chart is planned; the Kustomize overlays carry the same choices.
+- The app that serves chat widgets on your other sites has no image yet.
+
+## Next
+
+<!-- site: cards -->
+- **[Monitor](monitoring.md)**: Pod status, health and logs.
+- **[Upgrade](upgrade.md)**: Database first, then the new tag.
+- **[Back up and restore](backup-and-restore.md)**: The database and the two volumes.

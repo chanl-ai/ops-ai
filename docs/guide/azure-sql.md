@@ -1,16 +1,17 @@
 # Azure SQL
 
-Status: current. Read from the release's SQL Server scripts, their tests and the services' database code.
+Status: partial. Read from the release's SQL Server scripts, their tests and the continuous integration jobs.
 
 > [!WARNING]
-> Ops AI does not run on Azure SQL Database or SQL Server yet. The scripts below are ready for your DBA to review now,
-> so the review can run in parallel with the remaining work. Install on PostgreSQL today; Azure Database for
-> PostgreSQL Flexible Server is supported.
+> A full install of Ops AI on Azure SQL Database or SQL Server is not yet proven. Install on PostgreSQL today; Azure
+> Database for PostgreSQL Flexible Server is supported. The SQL Server scripts are ready for your DBA to review now, so
+> the review can run in parallel with the remaining work.
 
-Azure SQL Database and SQL Server 2025 or later are the second supported database in the design. The services reach
-the database only through each service's store layer, and the places where the two databases differ (locking, queue
-claims, inserts that update an existing row, the clock, the tenant of a transaction) sit in one dialect layer, so the
-services above the stores do not change.
+Azure SQL Database and SQL Server 2025 are the second database Ops AI is built for. Each service reaches the database
+only through its own store, and the places where the two databases differ (locking, queue claims, inserts that update
+an existing row, the clock, the tenant of a transaction) sit in one layer, so the services above the stores do not
+change. On every change, continuous integration runs the store, service kit and identity suites, and each service's
+store and isolation tests, on SQL Server 2025 beside PostgreSQL, and fails when a SQL Server case is skipped.
 
 ## Ready for review
 
@@ -37,8 +38,8 @@ sqlcmd -b -U ops_migrator -d ops -i grants.sql
 
 | Item | Why it matters | Status |
 |---|---|---|
-| Applying the scripts to an Azure SQL database and comparing the result with the services' table definitions | No script has yet run on a server | Planned |
-| Running the services on Azure SQL and SQL Server | Database code that is specific to PostgreSQL remains in each service and is being moved into the dialect layer | Partial |
+| A full install on Azure SQL or SQL Server, from the scripts to a signed-in console | The scripts and each service's stores are tested on SQL Server 2025; the whole install has not run on one | Planned |
+| Running the services on Azure SQL and SQL Server | Each service's store and isolation tests pass on SQL Server 2025; database code specific to PostgreSQL remains in some services and is moving into the shared layer | Partial |
 | Saved run state for workflows and chats | Its three tables are written with PostgreSQL-specific code and are not in the SQL Server scripts | Planned |
 | Knowledge search | PostgreSQL full-text search has no SQL Server equivalent in the scripts yet | Planned |
 | Sign-in data | The platform service still sets the tenant with PostgreSQL statements and uses four lookup functions that run before the tenant is known | Planned |
