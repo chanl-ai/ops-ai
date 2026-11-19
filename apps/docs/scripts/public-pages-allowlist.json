@@ -1,0 +1,18 @@
+{
+  "background/problem-statement.md": 1,
+  "console/agents-and-workflows.md": 3,
+  "console/embedding-the-chat.md": 7,
+  "guide/agents.md": 1,
+  "guide/apps.md": 1,
+  "guide/build-with-ops-ai.md": 14,
+  "guide/install-cli.md": 16,
+  "guide/models.md": 1,
+  "guide/plugins-install.md": 20,
+  "guide/plugins.md": 28,
+  "guide/quickstart.md": 17,
+  "guide/workflows.md": 3,
+  "sdk/changelog-next-major.md": 216,
+  "sdk/python.md": 7,
+  "sdk/typescript.md": 5,
+  "sdk/upgrading.md": 2
+}

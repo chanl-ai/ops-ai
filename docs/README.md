@@ -11,6 +11,10 @@ These documents design an operational AI platform for banks and describe the con
 | Area | Start at | What it holds |
 |---|---|---|
 | Welcome | `welcome.md` | The site's first page: what Ops AI is for and where a developer starts |
+| Deploy and operate | `deploy-and-operate.md` | The operator's tab: choose a deployment, install, the database, upgrade, back up and monitor |
+| Security | `security.md` | The security reviewer's tab: isolation, sign-in, approvals and audit, data handling, model calls |
+| Reference | `reference.md` | The HTTP API, the SDKs, the CLI and MCP, and the changelog |
+| Contributing | `contributing.md` | How Ops AI is built: architecture, standards, services, packages, the use-case catalogue, designs, agent skills, releases |
 | Background | `background/problem-statement.md` | Why bank AI workflows stall and what the platform needs |
 | Architecture | `architecture/README.md` | The system as built: services, runtime, human in the loop, identity, data, operations, and the decision records in `architecture/decisions/` |
 | Design, by area | The design table below | Proposed and approved designs with their wireframes and mocks: workflows and agents, tools, human tasks, cases, chat, data, and the prior-art research behind them |
@@ -61,8 +65,11 @@ shared list: the shareable guide built from `guide/*.md` is meant to present the
 | A relative link, or a code span naming a file (`services/x/y.py:42`) | A link to the page here, or to the file on GitHub |
 
 A link to a page or file that does not exist fails the site build, and so does a diagram SVG that no longer matches
-its data file. The sidebar is the list `SITE` in `apps/docs/src/lib/nav.mjs`: four tabs (Docs, API reference,
-Architecture, Contributing), each with groups in the order a reader needs them. A page appears there once `SITE`
+its data file. The sidebar is the list `SITE` in `apps/docs/src/lib/nav.mjs`: five tabs (Docs, Deploy and operate,
+Security, Reference, Contributing), each with groups in the order a reader needs them. Internals (architecture,
+standards, services, packages, use cases, designs, plans) go only in Contributing. On a Docs, Security or Reference
+page, `apps/docs/scripts/check-public-pages.mjs` refuses repository paths, `file:line` references, local ports and
+make targets in code; its allowlist of older pages may only shrink. A page appears there once `SITE`
 names it or a folder it takes whole, and a page it does not place fails the site build. Edit a diagram in `diagrams/<name>.yaml`, then run `pnpm --filter docs diagrams` to export its SVG.
 
 ## Reading order

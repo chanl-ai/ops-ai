@@ -21,8 +21,8 @@ export const REF = process.env.VERCEL_GIT_COMMIT_SHA || process.env.OPS_DOCS_GIT
 // Folders that exist in a working copy but not in the repository; a link into one is a broken link.
 const NOT_PUBLIC = ['evidence', 'shape', 'triage', 'dist'];
 const SKIP_DIRS = new Set(['.git', 'node_modules', '.next', '.source', '.venv', '__pycache__', '.pytest_cache', '.turbo']);
-// Folders of docs/ the site does not show: docs/plan/ (delivery plans) and docs/media/ (README screenshots).
-export const SITE_EXCLUDE = ['docs/plan/', 'docs/media/'];
+// Folders of docs/ the site does not show: docs/media/ (README screenshots).
+export const SITE_EXCLUDE = ['docs/media/'];
 
 /** The repository root: two folders above the docs app. */
 export function repoRoot() {
