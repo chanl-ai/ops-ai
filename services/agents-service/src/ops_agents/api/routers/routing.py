@@ -41,9 +41,9 @@ class RouteWorkflow(In):
 @router.post("/v1/threads/{thread_id}/route-to-people", response_model=Envelope[Routed], status_code=202)
 async def route_one(rt: Rt, me: Me, thread_id: str, body: RouteThread) -> JSONResponse:
     """Taking a case from the workflow to people is a decision on it: a reviewer or admin of its team."""
-    row = await graph_store(rt).thread(thread_id)
+    row = await graph_store(rt).thread_row(thread_id)
     require_reviews_decide(
-        review_teams(me), str((row or {}).get("team_id") or me.team_id), f"routing thread {thread_id}"
+        review_teams(me), (row.team_id if row is not None else "") or me.team_id, f"routing thread {thread_id}"
     )
     status = await route_thread(rt, thread_id, body.reason, me.email)
     return ok({"threadId": thread_id, "status": status}, status=202)

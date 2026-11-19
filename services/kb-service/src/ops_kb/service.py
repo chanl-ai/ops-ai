@@ -27,7 +27,7 @@ from ops_documents_client import DocumentsRefused
 from ops_identity import Principal, ServiceUnreachable
 from ops_ingest import InvalidIngestError, ParsedDocument, SplitResult, split, validate_settings
 from ops_ingest.metadata import Sensitivity, resolve_metadata
-from ops_ingest.models import AI_STEPS, IngestApproval, IngestSettings
+from ops_ingest.models import AI_STEPS, IngestApproval, IngestSettings, IngestStrategy
 from ops_ingest.rules import ItemFacts, evaluate_rules
 from ops_ingest.split import ai_step_allowed, document_digest
 from ops_ingest.strategies.faq import piece_digest
@@ -301,7 +301,7 @@ class Who:
             return
         can(self.caller, "knowledge", step, team=team_id or self.team_id, what=f"to {action}", protection=protection)
 
-    def require_provisioner_for(self, body: dict[str, Any]) -> None:
+    def require_provisioner_for(self, body: Provisioned | Mapping[str, JsonValue]) -> None:
         """Only the provisioning service sets `templateId` or `protection`; the seed, with no caller, may."""
         if self.caller is not None and (body.get("templateId") is not None or body.get("protection") is not None):
             require_provisioner(self.caller, "knowledge")
@@ -381,14 +381,14 @@ logger = get_logger(__name__)
 FRESH_GRACE = timedelta(hours=1)
 
 
-def _period(schedule: dict[str, Any]) -> timedelta:
+def _period(schedule: Json) -> timedelta:
     kind = schedule["kind"]
     if kind == "hourly":
-        return timedelta(hours=int(schedule["every"]))
+        return timedelta(hours=int(cast(str | int, schedule["every"])))
     return timedelta(days=7) if kind == "weekly" else timedelta(days=1)
 
 
-def freshness(schedule: dict[str, Any], good: datetime | None, now: datetime) -> str:
+def freshness(schedule: Json, good: datetime | None, now: datetime) -> str:
     """`no_schedule` when the source only syncs when asked. Otherwise `stale` once its latest slot is more than the
     grace past and no good sync has happened since the slot (a failed run does not count, and a source that never
     synced well is stale); `fresh` before that, since the beat has until then to run the slot."""
@@ -776,7 +776,7 @@ class KnowledgeService:
             **self._rights(who, b.team_id, b.name, b.protection),
         }
 
-    async def create_base(self, who: Who, i: dict[str, Any]) -> BaseView:
+    async def create_base(self, who: Who, i: BaseInput) -> BaseView:
         who.require_builder(who.team_id, "create a knowledge base", "create")
         if who.team_id is None:
             raise ValidationFailed("A knowledge base is made in one team; this call names none.", code="team_required")
@@ -792,8 +792,8 @@ class KnowledgeService:
         existing = await self.store.taken(who.tenant_id, name=name, kb_id=i.get("id") or None)
         if any(b.name.lower() == name.lower() for b in existing):
             raise Conflict("A knowledge base with this name already exists.")
-        if i.get("id") and any(b.id == i["id"] for b in existing):
-            raise Conflict(f"A knowledge base with id {i['id']} already exists.")
+        if (kb_id := i.get("id")) and any(b.id == kb_id for b in existing):
+            raise Conflict(f"A knowledge base with id {kb_id} already exists.")
         who.require_provisioner_for(i)
         source_ids = list(dict.fromkeys(i.get("sourceIds") or []))
         await self._known_sources(who, source_ids)
@@ -957,7 +957,7 @@ class KnowledgeService:
         ]
         return found.page
 
-    async def plugin_sources(self, who: Who, plugin: str) -> list[dict[str, Any]]:
+    async def plugin_sources(self, who: Who, plugin: str) -> list[PluginSourceView]:
         """The sources the caller's team made from one plugin's knowledge sources, each with the bases it feeds. Read
         by the team the call names, a service's included, so an app's resource list shows only that team's."""
         if not who.team_id:
@@ -976,7 +976,7 @@ class KnowledgeService:
             if s.type == "tool" and s.team_id == who.team_id and (cfg := dict(s.config or {})).get("plugin") == plugin
         ]
 
-    async def get_source(self, who: Who, source_id: str) -> dict[str, Any]:
+    async def get_source(self, who: Who, source_id: str) -> SourceDetailView:
         found = await self.store.sources(who.tenant_id, [source_id])
         if not found:
             raise NotFound("No source with that id.")
@@ -1007,7 +1007,7 @@ class KnowledgeService:
             "running": next((r for r in recent if r["status"] == "running"), None),
             **self._rights(who, s.team_id, s.name, None),
             # The Last sync tile's "Took ..." hint; absent until a first run.
-            **({"lastRunDurationSec": recent[0]["durationSec"]} if recent else {}),
+            **cast(LastRun, {"lastRunDurationSec": recent[0]["durationSec"]} if recent else {}),
             "errorGroups": [],
             "itemCount": item_total(s.item_counts),
             "reindexNeeded": any(self.built_under_other_settings(s, i) for i in items),
@@ -1020,7 +1020,7 @@ class KnowledgeService:
             },
         }
 
-    async def create_source(self, who: Who, i: dict[str, Any]) -> SourceView:
+    async def create_source(self, who: Who, i: SourceInput) -> SourceView:
         who.require_builder(who.team_id, "create a source", "create")
         kind = str(i.get("type") or "")
         if kind not in SOURCE_TYPES_IN_PHASE:
@@ -1067,7 +1067,7 @@ class KnowledgeService:
             db_now=now,
             item_counts={},
         )
-        given = {k: i[k] for k in SETTINGS_KEYS if i.get(k) is not None}
+        given = {k: v for k in SETTINGS_KEYS if (v := i.get(k)) is not None}
         if kb_ids and (split := await self._base_split(who.tenant_id, kb_ids[0])):
             # A new source of a base splits as the base says, where it says something other than the default; the
             # source keeps its own copy, and what the create sends wins.
@@ -1098,9 +1098,9 @@ class KnowledgeService:
             # A sync that could not start (the lease is held, the plugin turned off) is recorded on its source.
             logger.info("kb_first_sync_not_started", source=s.id, code=e.code)
 
-    async def source_kinds(self, who: Who) -> list[dict[str, Any]]:
+    async def source_kinds(self, who: Who) -> list[SourceKindView]:
         """Files, then each knowledge source the team's apps offer (none when this service reads no tools)."""
-        out: list[dict[str, Any]] = [
+        out: list[SourceKindView] = [
             {"type": t, "kind": t, "group": "built_in", "title": KIND_LABEL[t], **kind_defaults(t, self.ocr)}
             for t in ("file", *WRITTEN_TYPES)
         ]
@@ -1120,7 +1120,10 @@ class KnowledgeService:
                     "needsConnection": needs,
                     "connected": not needs or (bool(d.connectionId) and d.connectionStatus == "healthy"),
                     "canCreate": refusal is None,
-                    **({"cannotCreateCode": refusal[0], "cannotCreateBecause": refusal[1]} if refusal else {}),
+                    **cast(
+                        AppKindParts,
+                        {"cannotCreateCode": refusal[0], "cannotCreateBecause": refusal[1]} if refusal else {},
+                    ),
                     "previews": bool(d.previewTool),
                     "pickers": bool(d.scopesTool),
                     "inputs": d.inputs,
@@ -1691,7 +1694,7 @@ class KnowledgeService:
 
     async def decide_drafts(
         self, who: Who, ids: list[str], *, decision: str, edit: dict[str, str] | None = None, reason: str | None = None
-    ) -> list[dict[str, Any]]:
+    ) -> list[ChangeView]:
         """Approve, reject or edit FAQ drafts, each by the knowledge owner of its source. An approved pair is
         searchable at once (embedded with the rest of the tenant's units); an edit keeps it waiting for review."""
         found = {
@@ -2217,7 +2220,7 @@ class KnowledgeService:
         rerank["ms"] = ms_since(started)
         return dataclasses.replace(found, passages=passages, rerank=rerank)
 
-    async def query(self, who: Who, kb_id: str, question: str, *, collection: str | None = None) -> dict[str, Any]:
+    async def query(self, who: Who, kb_id: str, question: str, *, collection: str | None = None) -> QueryView:
         """The query route and the console's Playground: the passages one knowledge base returns for a question, with
         each lane's score, which lanes ran, and the embedding tokens the question cost. No model writes an answer here;
         an answer is a kernel turn (agents-service), where the rule that withholds an uncited answer lives."""
@@ -2247,7 +2250,7 @@ class KnowledgeService:
                     "documentId": p.item_id,
                     "title": p.title,
                     "section": p.section,
-                    **({"page": p.page} if p.page else {}),
+                    **cast(CitationParts, {"page": p.page} if p.page else {}),
                     "version": f"v{p.version}",
                     "snippet": p.snippet,
                 }
@@ -2268,8 +2271,8 @@ class KnowledgeService:
                 }
                 for n, p in enumerate(passages)
             ],
-            **({"noAnswer": True} if not passages else {}),
-            **found_out(found).model_dump(by_alias=True, exclude_unset=True),
+            **cast(FoundParts, {"noAnswer": True} if not passages else {}),
+            **cast(FoundParts, found_out(found).model_dump(by_alias=True, exclude_unset=True)),
             "retrievalMs": int((datetime.now(UTC) - started).total_seconds() * 1000),
             "synthesisMs": 0,
             "shape": "chunks",
@@ -2298,28 +2301,28 @@ class KnowledgeService:
             raise NotFound("No sync run with that id.")
         return _run(found[0])
 
-    async def update_source(self, who: Who, source_id: str, patch: dict[str, Any]) -> dict[str, Any]:
+    async def update_source(self, who: Who, source_id: str, patch: SourcePatchInput) -> SourceRebuilt:
         s = await self._changeable_source(who, source_id)
         values: SourceChanges = {}
-        if patch.get("name") is not None:
-            if not str(patch["name"]).strip():
+        if (name := patch.get("name")) is not None:
+            if not str(name).strip():
                 raise ValidationFailed("Give the source a name.")
-            values["name"] = str(patch["name"]).strip()
-        if patch.get("sensitivity") is not None:
-            if patch["sensitivity"] not in SENSITIVITIES:
+            values["name"] = str(name).strip()
+        if (sensitivity := patch.get("sensitivity")) is not None:
+            if sensitivity not in SENSITIVITIES:
                 raise ValidationFailed(f"Sensitivity is one of {', '.join(SENSITIVITIES)}.")
-            values["sensitivity"] = patch["sensitivity"]
-        if patch.get("owner") is not None:
-            if not str(patch["owner"]).strip():
+            values["sensitivity"] = sensitivity
+        if (owner := patch.get("owner")) is not None:
+            if not str(owner).strip():
                 raise ValidationFailed("A source always has an owner.")
-            values["owner"] = str(patch["owner"]).strip()
-        if patch.get("collection") is not None:
-            values["collection"] = patch["collection"]
-        if patch.get("tags") is not None:
-            values["tags"] = patch["tags"]
-        if patch.get("values") is not None:
-            values["config"] = await self._values_changed(who, s, json_object(patch["values"]))
-        given = {k: patch[k] for k in SETTINGS_KEYS if patch.get(k) is not None}
+            values["owner"] = str(owner).strip()
+        if (collection := patch.get("collection")) is not None:
+            values["collection"] = collection
+        if (tags := patch.get("tags")) is not None:
+            values["tags"] = tags
+        if (own := patch.get("values")) is not None:
+            values["config"] = await self._values_changed(who, s, json_object(own))
+        given = {k: v for k in SETTINGS_KEYS if (v := patch.get(k)) is not None}
         before = self.settings_of(s)
         if given:
             values["settings"] = wire(self._merged(before, given))
@@ -2335,7 +2338,7 @@ class KnowledgeService:
             rebuild = await self.start_rebuild(who, after)
         return {**self._source(after, by_source.get(source_id, [])), "rebuild": rebuild}
 
-    async def _values_changed(self, who: Who, s: SourceRow, given: dict[str, Any]) -> Json:
+    async def _values_changed(self, who: Who, s: SourceRow, given: Json) -> Json:
         """A plugin source's own settings (a site's start, include and exclude rules, depth, pace), merged over the
         saved ones and checked against what its plugin declares, as a create checks them."""
         if s.type != "tool":
@@ -2347,7 +2350,7 @@ class KnowledgeService:
         )
         return {**cfg, "values": checked["values"]}
 
-    async def decide_ai_steps(self, who: Who, source_id: str, *, approve: bool) -> dict[str, Any]:
+    async def decide_ai_steps(self, who: Who, source_id: str, *, approve: bool) -> SourceRebuilt:
         """The knowledge owner's approval of the source's AI steps as now chosen, or its revocation; the one audit log
         records it as a settings change, and a change in what the split asks the model rebuilds the pieces."""
         s = await self._changeable_source(who, source_id)
@@ -2375,7 +2378,7 @@ class KnowledgeService:
         _, by_source = await self._joined(who.tenant_id)
         return {**self._source(changed, by_source.get(source_id, [])), "rebuild": rebuild}
 
-    async def estimate_ai_steps(self, who: Who, source_id: str) -> dict[str, Any]:
+    async def estimate_ai_steps(self, who: Who, source_id: str) -> AiEstimateView:
         """The chosen AI steps' calls and tokens, from a preview split of up to ESTIMATE_SAMPLE indexed items with a
         model that answers nothing (no call is made), scaled to every indexed item of the source."""
         s = await self._source_row(who, source_id)
@@ -2450,7 +2453,7 @@ class KnowledgeService:
         return await self.tombstones(who, source_id)
 
     @staticmethod
-    def _merged(current: SourceSettings, given: dict[str, Any]) -> SourceSettings:
+    def _merged(current: SourceSettings, given: dict[str, JsonValue]) -> SourceSettings:
         try:
             return merged(current, given)
         except InvalidSettings as e:
@@ -2535,7 +2538,7 @@ class KnowledgeService:
 
     # ── Changes ──────────────────────────────────────────────────────────
 
-    async def _changes_out(self, who: Who, found: list[ChangeRow]) -> list[dict[str, Any]]:
+    async def _changes_out(self, who: Who, found: list[ChangeRow]) -> list[ChangeView]:
         """Changes as the Changes queue shows them; the sources and bases they name are read once for all of them."""
         if not found:
             return []
@@ -2551,9 +2554,9 @@ class KnowledgeService:
         sources: dict[str, SourceRow],
         bases: dict[str, BaseRow],
         by_source: dict[str, list[str]],
-    ) -> dict[str, Any]:
+    ) -> ChangeView:
         s = sources.get(ch.source_id)
-        kbs = [{"id": k, "name": bases[k].name} for k in by_source.get(ch.source_id, []) if k in bases]
+        kbs: list[KbRef] = [{"id": k, "name": bases[k].name} for k in by_source.get(ch.source_id, []) if k in bases]
         if ch.origin == "faq":
             # Deciding a draft is changing the source, so it takes the right the decide route checks.
             allowed = s is not None and self._rights(who, s.team_id, s.name, None)["canEdit"]
@@ -2589,14 +2592,15 @@ class KnowledgeService:
             "canDecide": waiting and s is not None and self._rights(who, s.team_id, s.name, None)["canEdit"],
             "status": ch.status if held else "approved",
             "createdAt": _iso(ch.changed_at),
-            **(
+            **cast(
+                Decided,
                 {
                     "decidedAt": _iso(ch.decided_at or ch.changed_at),
                     "decidedBy": ch.decided_by or ch.changed_by,
                     "decisionReason": ch.decision_reason,
                 }
                 if not waiting
-                else {}
+                else {},
             ),
         }
 
@@ -2610,7 +2614,7 @@ class KnowledgeService:
         page_size: int,
         search: str | None,
         origin: list[str] | None = None,
-    ) -> dict[str, Any]:
+    ) -> ChangeListView:
         """A sync's change is applied when it runs; an FAQ draft waits for the knowledge owner (open) until decided.
         The From facet counts the view before it is filtered by origin, so every origin shows its count."""
         size = max(1, min(page_size, MAX_PAGE_SIZE))
@@ -2633,7 +2637,7 @@ class KnowledgeService:
             "viewCounts": {**found.views, "conflicts": 0},
         }
 
-    async def get_change(self, who: Who, change_id: str) -> dict[str, Any]:
+    async def get_change(self, who: Who, change_id: str) -> ChangeView:
         found = await self.store.changes(who.tenant_id, ids=[change_id])
         if not found:
             raise NotFound("No change with that id.")
@@ -2729,7 +2733,7 @@ class KnowledgeService:
                                                             "text": text})  # fmt: skip
         return json_object(put["item"])
 
-    async def put_item(self, who: Who, source_id: str, i: dict[str, Any]) -> dict[str, Any]:
+    async def put_item(self, who: Who, source_id: str, i: ItemInput) -> WrittenItemView:
         """One item written into a typed text or push source, by its `name`: stored as a file through files-service
         like an upload, then indexed by the source's sync. The same name with the same content is `unchanged` and
         starts no run, so a caller may send it again safely; the same name with new content is its next version.
@@ -2783,7 +2787,7 @@ class KnowledgeService:
         outcome = "unchanged" if same else "created" if before is None else "updated"
         return {"outcome": outcome, "item": self._item(item, found, await self._copies(who, [item]))}
 
-    async def add_documents(self, who: Who, kb_id: str, file_ids: list[str]) -> dict[str, Any]:
+    async def add_documents(self, who: Who, kb_id: str, file_ids: list[str]) -> AddedDocumentsView:
         """Files from Files added to the base: into its own documents source, made and attached the first
         time, then synced at once, which also activates the source. Returns the source id, the files and the run."""
         b = await self._changeable(who, kb_id)
@@ -2888,7 +2892,7 @@ class KnowledgeService:
             )
         return ItemReading(reader_version=narrow.field(answer, "readerVersion", str), ocr=ocr, pages=out)
 
-    async def item(self, who: Who, item_id: str) -> dict[str, Any]:
+    async def item(self, who: Who, item_id: str) -> ItemDetailView:
         """The item, its source, pieces, versions and copy read in one transaction; then, with none open,
         documents-service's reading of its file."""
         async with isolation.request_transaction():
@@ -2901,7 +2905,7 @@ class KnowledgeService:
             units = await self.store.units(who.tenant_id, item_id)
             versions = await self.store.versions(who.tenant_id, item_id)
             copies = await self._copies(who, [i])
-        searched: dict[str, list[dict[str, str]]] = {}
+        searched: dict[str, list[SearchedAs]] = {}
         for u in units:
             searched.setdefault(u.chunk_id, []).append({"kind": u.kind, "text": u.text})
         reading = await self._reading_summary(who, s, i)
@@ -2924,7 +2928,7 @@ class KnowledgeService:
                         "index": c.position,
                         "tokens": c.tokens,
                         "location": _location(c.section, c.page),
-                        **({"page": c.page} if c.page else {}),
+                        **cast(CitationParts, {"page": c.page} if c.page else {}),
                         "kind": "content",
                         "text": c.text,
                         # What search matches for this piece: its own text, its children and its questions.
@@ -2944,7 +2948,7 @@ class KnowledgeService:
                         "digest": v.digest,
                         "sourceName": s.name,
                         # Who the source system lets see this version; stored, not yet enforced.
-                        **({"allowed": v.allowed} if v.allowed else {}),
+                        **cast(Allowed, {"allowed": v.allowed} if v.allowed else {}),
                     }
                     for v in versions
                 ],
@@ -2991,14 +2995,14 @@ def audit_entry(  # noqa: PLR0917 - each argument a different part of the entry
     target_kind: str,
     target_id: str,
     name: str,
-    before: dict[str, Any],
-    values: Mapping[str, object],
+    before: Mapping[str, JsonValue],
+    values: BaseChanges | SourceChanges,
 ) -> AuditEntry | None:
     """The audit entry for a settings change: who made it, which fields changed, and each field before and after
     (for a nested setting, its changed keys). None when nothing changed. The seed, with no caller, is not audited."""
     if who.caller is None:
         return None
-    changes: dict[str, Any] = {}
+    changes: Json = {}
     for key, after in values.items():
         old = before.get(key)
         if old == after:
@@ -3008,7 +3012,7 @@ def audit_entry(  # noqa: PLR0917 - each argument a different part of the entry
             keys = sorted(k for k in {*was, *now} if was.get(k) != now.get(k))
             changes[key] = {k: {"from": was.get(k), "to": now.get(k)} for k in keys}
         else:
-            changes[key] = {"from": old, "to": after}
+            changes[key] = {"from": old, "to": cast(JsonValue, after)}
     if not changes:
         return None
     return {
@@ -3187,7 +3191,7 @@ def ai_steps_waiting(settings: IngestSettings) -> list[str]:
     ]
 
 
-def written_bytes(i: dict[str, Any], title: str) -> tuple[bytes, str]:
+def written_bytes(i: ItemInput, title: str) -> tuple[bytes, str]:
     """The bytes and mime of an item written through the API: its `text` (Markdown by default, headed by its title) or
     its base64 `content`, one of the two."""
     text, content = i.get("text"), i.get("content")
@@ -3294,7 +3298,7 @@ SHOWN_ORIGIN = {"sync": "source_sync", "faq": "generated_faq"}
 CHANGE_ORIGINS = {shown: stored for stored, shown in SHOWN_ORIGIN.items()}
 
 
-def _draft_out(ch: ChangeRow, s: SourceRow | None, kbs: list[dict[str, Any]]) -> dict[str, Any]:
+def _draft_out(ch: ChangeRow, s: SourceRow | None, kbs: list[KbRef]) -> ChangeCore:
     """An FAQ draft as the Changes queue shows it: the pair, the passage it quotes beside it, and its review state."""
     detail = detail_of(ch)
     return {
@@ -3562,7 +3566,7 @@ class SourceView(SourceParts, ItemCounts):
     schedule: Json
     health: Json
     deletedAtSource: str
-    staleAfterDays: int
+    staleAfterDays: Number
     notifyOnFailure: bool
     sensitivity: str
     collection: str
@@ -3661,6 +3665,347 @@ class RunView(RunParts):
     phases: list[JsonValue]
     errors: list[JsonValue]
     log: list[JsonValue]
+
+
+class Provisioned(TypedDict, total=False):
+    """The fields of a create only the provisioning service sets."""
+
+    templateId: str | None
+    protection: str | None
+
+
+class BaseInput(Provisioned, total=False):
+    """A new knowledge base as `KnowledgeBaseIn` dumps it by alias, or as the seed sends it."""
+
+    id: str | None
+    name: str
+    owner: str | None
+    description: str
+    color: str
+    sourceIds: list[str]
+    preset: str
+    collections: list[str]
+    retrieval: Json | None
+    answer: Json | None
+    sync: Json | None
+    access: Json | None
+    sourceDefaults: Json | None
+
+
+class SourceInput(TypedDict, total=False):
+    """A new source as `SourceIn` dumps it by alias, or as the seed and the pages and documents sources send it."""
+
+    type: str
+    name: str
+    collection: str
+    owner: str | None
+    sensitivity: str
+    status: str | None
+    tags: list[str]
+    fileIds: list[str]
+    kbIds: list[str]
+    sync: bool
+    config: Json | None
+    schedule: Json | None
+    parsing: Json | None
+    cleaning: Json | None
+    ingest: Json | None
+    rules: list[Json] | None
+    metadataMapping: list[Json] | None
+    aiCeiling: float | None
+
+
+class SourcePatchInput(TypedDict, total=False):
+    """A source's patch as `SourcePatch` dumps it by alias with no nulls."""
+
+    name: str
+    values: Json
+    collection: str
+    owner: str
+    sensitivity: str
+    tags: list[str]
+    schedule: Json
+    parsing: Json
+    cleaning: Json
+    ingest: Json
+    rules: list[Json]
+    metadataMapping: list[Json]
+    aiCeiling: float
+
+
+class ItemInput(TypedDict, total=False):
+    """An item written through the API, as `WrittenItemIn` dumps it with no nulls."""
+
+    name: str
+    title: str
+    text: str
+    content: str
+    mime: str
+    url: str
+
+
+class PluginSourceView(TypedDict):
+    """A source made from a plugin's knowledge source, as `plugin_sources` sends it."""
+
+    id: str
+    name: str
+    source: str
+    kbIds: list[str]
+
+
+class ReaderView(TypedDict):
+    id: str
+    name: str
+    slug: str
+    color: str
+    health: str
+
+
+class Governance(TypedDict):
+    excluded: int
+    held: int
+    duplicates: int
+    superseded: int
+
+
+class LastRun(TypedDict, total=False):
+    lastRunDurationSec: float
+
+
+class SourceDetailView(SourceView, Rights, LastRun):
+    """A source's detail page, keys in the order sent; `SourceDetail` in schemas.py documents the same fields."""
+
+    readers: list[ReaderView]
+    recentRuns: list[RunView]
+    running: RunView | None
+    errorGroups: list[Json]
+    itemCount: int
+    reindexNeeded: bool
+    requiredMetadata: list[str]
+    governance: Governance
+
+
+class SourceRebuilt(SourceView):
+    """A source after a settings change, with the rebuild the change started (None when it needs none)."""
+
+    rebuild: RunView | None
+
+
+class AppKindParts(TypedDict, total=False):
+    """The keys a kind read from a team's app carries; a built-in kind has none of them."""
+
+    plugin: str
+    source: str
+    site: bool
+    needsConnection: bool
+    connected: bool
+    canCreate: bool
+    cannotCreateCode: str
+    cannotCreateBecause: str
+    previews: bool
+    pickers: bool
+    inputs: dict[str, Json]
+
+
+class SourceKindView(KindDefaults, AppKindParts):
+    """One kind Add source lists, keys in the order sent; `SourceKind` in schemas.py documents the same fields."""
+
+    type: str
+    group: str
+    title: str
+    kind: str
+
+
+class KbRef(TypedDict):
+    id: str
+    name: str
+
+
+class FaqView(TypedDict):
+    question: str
+    answer: str
+    quote: str
+    sectionPath: list[JsonValue]
+    addsWords: list[str]
+
+
+class Decided(TypedDict, total=False):
+    """The keys a change carries once decided (an FAQ draft carries them always, null until then), and a draft's
+    pair."""
+
+    decidedAt: str | None
+    decidedBy: str | None
+    decisionReason: str | None
+    faq: FaqView
+
+
+class ChangeCore(Decided):
+    """A change as `_draft_out` builds it, before its source's review state is added."""
+
+    id: str
+    summary: str
+    origin: str
+    proposedBy: str
+    rationale: str
+    documentId: str
+    documentTitle: str
+    sourceId: str
+    sourceName: str
+    section: str
+    kbs: list[KbRef]
+    fromVersion: str
+    toVersion: str
+    before: str
+    after: str
+    trust: str
+    citedBy: list[Json]
+    owner: str
+    canDecide: bool
+    status: str
+    createdAt: str | None
+
+
+class ChangeView(ChangeCore, ReviewState):
+    """A change as the Changes queue sends it; `KnowledgeChange` in schemas.py documents the same fields in another
+    order."""
+
+
+class ChangeListView(TypedDict):
+    data: list[ChangeView]
+    pagination: PageJSON
+    facets: dict[str, dict[str, int]]
+    viewCounts: dict[str, int]
+
+
+class CitationParts(TypedDict, total=False):
+    page: int
+
+
+class CitationView(CitationParts):
+    n: int
+    documentId: str
+    title: str
+    section: str
+    version: str
+    snippet: str
+
+
+class ChunkView(TypedDict):
+    chunkId: str
+    documentId: str
+    documentTitle: str
+    sourceName: str
+    score: float
+    lanes: dict[str, float]
+    location: str
+    text: str
+    rejected: bool
+    version: str
+
+
+class FoundParts(TypedDict, total=False):
+    """`SearchOut` dumped with `exclude_unset`: the passages, lanes and cost, and a rewrite or rerank when asked."""
+
+    passages: list[Json]
+    lanes: Json
+    cost: Json
+    rewrite: Json | None
+    rerank: Json | None
+    noAnswer: bool
+
+
+class QueryView(FoundParts):
+    """The Playground's answer, keys in the order sent; `PlaygroundAnswer` in schemas.py documents the same fields."""
+
+    id: str
+    question: str
+    matchers: list[str]
+    answer: str
+    citations: list[CitationView]
+    chunks: list[ChunkView]
+    retrievalMs: int
+    synthesisMs: int
+    shape: str
+
+
+class TokenRange(TypedDict):
+    low: int
+    high: int
+
+
+class AiEstimateView(TypedDict):
+    steps: list[str]
+    model: str
+    sampledItems: int
+    totalItems: int
+    calls: int
+    inputTokens: int
+    outputTokens: TokenRange
+    basis: str
+
+
+class WrittenItemView(TypedDict):
+    outcome: str
+    item: ItemView
+
+
+class AddedDocumentsView(TypedDict):
+    sourceId: str
+    files: list[dict[str, str]]
+    run: RunView
+
+
+class SettingsUsed(TypedDict):
+    preset: str
+    strategies: list[IngestStrategy]
+    indexedWith: JsonValue
+    current: bool
+
+
+class SearchedAs(TypedDict):
+    kind: str
+    text: str
+
+
+class ChunkDetail(CitationParts):
+    index: int
+    tokens: int
+    location: str
+    kind: str
+    text: str
+    units: list[SearchedAs]
+    metadata: Mapping[str, JsonValue]
+
+
+class Allowed(TypedDict, total=False):
+    allowed: list[JsonValue]
+
+
+class VersionDetail(Allowed):
+    itemId: str
+    title: str
+    version: str
+    effectiveDate: str
+    status: str
+    digest: str
+    sourceName: str
+
+
+class ItemDetail(TypedDict):
+    content: str
+    chunks: list[ChunkDetail]
+    revisions: list[Json]
+    versions: list[VersionDetail]
+
+
+class ItemDetailView(ItemView):
+    """An item's page, keys in the order sent; `ItemWithDetail` in schemas.py documents the same fields."""
+
+    reading: Json | None
+    settingsUsed: SettingsUsed
+    sourceName: str
+    sourceType: str
+    detail: ItemDetail
 
 
 class HeldVersion(TypedDict):

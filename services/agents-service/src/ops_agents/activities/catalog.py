@@ -25,6 +25,7 @@ from ops_agent_kernel.types import (
     WidgetTemplate,
 )
 from ops_contracts.chat import EffectiveSettings
+from ops_service_kit.http import Json, JsonList
 
 from .agent_limits import AgentLimits
 
@@ -77,14 +78,15 @@ class SkillPinRule(_Model):
     parts: list[dict[str, Any]] = []
 
 
-def kernel_skills(skill_id: str, version: int, slug: str, content: dict[str, Any], tokens: int = 0) -> list[Skill]:
+def kernel_skills(skill_id: str, version: int, slug: str, content: Json, tokens: int = 0) -> list[Skill]:
     """A skill version as the kernel reads it: the whole skill, or one entry per part (`<skill>/<part>`) whose body is
     the shared instructions and then the part's. The one place a skill's parts become what a turn can load."""
     guardrails = tuple(str(g) for g in cast(list[Any], content.get("guardrails") or []))
     refusal = str(content.get("refusal") or "")
-    loading = content.get("loading") or "on_match"
+    loading = cast(Literal["on_match", "always"], content.get("loading") or "on_match")
     shared = str(content.get("instructions") or "")
-    parts: list[dict[str, Any]] = list(content.get("parts") or [])
+    # A stored version's parts are objects (the skill route checks them); any other value fails below as it did.
+    parts = cast(list[Json], list(cast(JsonList, content.get("parts") or [])))
     if not parts:
         return [
             Skill(
@@ -116,7 +118,7 @@ def kernel_skills(skill_id: str, version: int, slug: str, content: dict[str, Any
                 max(1, (len(body) + 3) // 4),
                 refusal,
                 str(p["slug"]),
-                int(p.get("budget") or 0),
+                int(cast(int, p.get("budget") or 0)),
             )
         )
     return out
@@ -346,9 +348,9 @@ class Catalog(_Model):
                         "useWhen": k.use_when,
                         "loading": k.loading,
                         "instructions": k.instructions,
-                        "guardrails": k.guardrails,
+                        "guardrails": [*k.guardrails],
                         "refusal": k.refusal,
-                        "parts": k.parts,
+                        "parts": [*k.parts],
                     },
                     k.tokens,
                 )

@@ -291,13 +291,15 @@ jobs:
           exit $failed
 
   release-proof:
-    # A pull request into main is a release: the upgrade from the last tag's schema on a seeded database, and a fresh
-    # install through ./install.sh on the released images. A push to a release or hotfix branch runs it too. Needs the
-    # whole history and its tags.
+    # A pull request into main is a release: the branch's version file matches its name, the upgrade from the last tag's
+    # schema on a seeded database, and a fresh install through ./install.sh. A push to a release or hotfix branch runs it
+    # too. Both come before the vX.Y.Z tag publishes the images, so the install pulls images built from this commit from
+    # a registry inside the runner (BUILD=1); the pull from ghcr.io is a check after the tag
+    # (docs/deploy/release.md). Needs the whole history and its tags.
     needs: plan
     if: (github.event_name == 'pull_request' && github.base_ref == 'main') || needs.plan.outputs.release == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -306,14 +308,25 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           node: "true"
+          # The install proof walks every console page headless (deploy/release/install_proof.sh step 4).
+          browser: "true"
+      - name: The version file matches the branch
+        env:
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: python3 scripts/release.py check-version
       - name: The upgrade from the last release
         run: |
           last=$(git tag --list 'v20*' --sort=-v:refname | head -1)
           [ -n "$last" ] || { echo "::error title=No release tag::The upgrade proof needs the last release's tag."; exit 1; }
-          echo "upgrade from $last"
-          make db-scripts-proof FROM="$last"
+          floor=$(sed -n 's/^FLOOR=//p' deploy/database/proof.sh)
+          if git merge-base --is-ancestor "$floor" "$last"; then from=$last; else
+            from=$floor
+            echo "$last is before $floor, the offline-upgrade floor (docs/deploy/database.md); proving from $floor"
+          fi
+          echo "upgrade from $from"
+          make db-scripts-proof FROM="$from"
       - name: A fresh install
-        run: make install-proof
+        run: make install-proof BUILD=1
 
   maintainer-review:
     # A raised or new baseline row, or a new access exception line, in this pull request's commits needs an approving

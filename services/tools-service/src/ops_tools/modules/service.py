@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import re
 import time
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, NotRequired, TypedDict, cast
@@ -1185,7 +1185,7 @@ class ModuleService:
         return out
 
     @staticmethod
-    def _drop_none[V: Mapping[str, object]](d: V) -> V:
+    def _drop_none[V: (ApprovalView, VersionView)](d: V) -> V:
         return cast(V, {k: v for k, v in d.items() if v is not None})
 
     def _approval_out(self, a: Approval) -> ApprovalView:

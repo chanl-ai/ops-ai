@@ -16,7 +16,6 @@ import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any
 
 from cryptography import x509
 from cryptography.exceptions import UnsupportedAlgorithm
@@ -24,6 +23,8 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
 from cryptography.hazmat.primitives.asymmetric.types import PrivateKeyTypes
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
+
+from ops_service_kit.http import Json, JsonValue
 
 LIFETIME = timedelta(minutes=5)
 EXPIRES_SOON = timedelta(days=30)
@@ -48,7 +49,7 @@ class CertificateInfo:
     def expires_soon(self, now: datetime) -> bool:
         return now + EXPIRES_SOON >= self.not_after
 
-    def view(self, now: datetime) -> dict[str, Any]:
+    def view(self, now: datetime) -> Json:
         return {
             "thumbprint": self.thumbprint,
             "subject": self.subject,
@@ -100,7 +101,7 @@ def sign(
     audience: str,
     cert_pem: str | None = None,
     key_id: str | None = None,
-    extra: Mapping[str, Any] | None = None,
+    extra: Mapping[str, JsonValue] | None = None,
     now: datetime | None = None,
 ) -> str:
     """A compact JWT. `subject` None leaves `sub` out (a Google service account's grant has none); `extra` adds claims
@@ -112,14 +113,14 @@ def sign(
         alg = "ES256"
     else:
         raise SigningError("The signing key must be RSA or P-256.")
-    header: dict[str, Any] = {"alg": alg, "typ": "JWT"}
+    header: dict[str, str] = {"alg": alg, "typ": "JWT"}
     if cert_pem:
         der = _certificate(cert_pem).public_bytes(serialization.Encoding.DER)
         header["x5t#S256"] = _b64(hashlib.sha256(der).digest())
     if key_id:
         header["kid"] = key_id
     at = int((now or datetime.now(UTC)).timestamp())
-    claims: dict[str, Any] = {k: v for k, v in (extra or {}).items() if k not in CHECKED}
+    claims: Json = {k: v for k, v in (extra or {}).items() if k not in CHECKED}
     claims |= {"iss": issuer, "aud": audience, "iat": at, "nbf": at, "exp": at + int(LIFETIME.total_seconds())}
     claims["jti"] = uuid.uuid4().hex
     if subject is not None:

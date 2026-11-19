@@ -8,11 +8,11 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 from contextvars import ContextVar
-from typing import Any, cast
+from typing import Any, TypedDict, cast
 
 from ops_identity import ServiceCallError, ServiceUnreachable
 from ops_service_kit.errors import ApiError
-from ops_service_kit.http import Json
+from ops_service_kit.http import Json, JsonValue
 
 from .deps import Runtime
 
@@ -103,6 +103,16 @@ def input_rows(args: Mapping[str, object]) -> list[dict[str, str]]:
     return rows
 
 
+class CallWords(TypedDict):
+    """A call in words (describe_call): the action short, the action with its values, what approving it does, and its
+    values as rows."""
+
+    label: str
+    sentence: str
+    consequence: str | None
+    fields: list[dict[str, str]]
+
+
 # Each operation the tool directory lists, by name: its input schema and description.
 # Each operation's input schema, description and title (a plugin tool's; None for others).
 Operations = dict[str, tuple[Json, str, str | None]]
@@ -188,15 +198,15 @@ def call_label(catalog: Any, call: Mapping[str, object], titles: Mapping[str, st
     return humanize(tool) if tool else "Run the step"
 
 
-async def describe_calls(rt: Runtime, calls: Mapping[str, Mapping[str, object]]) -> dict[str, dict[str, Any]]:
+async def describe_calls(rt: Runtime, calls: Mapping[str, Mapping[str, JsonValue]]) -> dict[str, CallWords]:
     """Each call in words (describe_call), keyed as given, with the tool directory read once for all of them."""
     ops = await operations(rt) if calls else None
     return {k: await describe_call(rt, c, currency=None, money_key=None, ops=ops) for k, c in calls.items()}
 
 
 async def describe_call(
-    rt: Runtime, call: Mapping[str, object], *, currency: str | None, money_key: str | None, ops: Any = _UNREAD
-) -> dict[str, Any]:
+    rt: Runtime, call: Mapping[str, JsonValue], *, currency: str | None, money_key: str | None, ops: Any = _UNREAD
+) -> CallWords:
     """One call in words: `label` (the action, short), `sentence` (the action with its values), `consequence`, and
     `fields` [{label, value}]. `money_key` is the input the review reads as its amount (typed_fields), shown with the
     account's currency. `ops` is the directory already read (describe_calls); unread, it is read for this call."""

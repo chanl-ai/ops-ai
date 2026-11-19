@@ -313,13 +313,11 @@ class OpsReads:
         """The Ops tools for `agent_id` on a turn of `thread_id`, for the turn's person."""
         if TURN_PERSON.get() is None:
             return []
-        thread = await graph_store(self.rt).thread(thread_id) if thread_id else None
-        if thread is None or await TeamDefaults(self.rt.db).agent(str(thread["team_id"])) != agent_id:
+        thread = await graph_store(self.rt).thread_row(thread_id) if thread_id else None
+        if thread is None or await TeamDefaults(self.rt.db).agent(thread.team_id) != agent_id:
             return []
         offered = (
-            TOOLS
-            if await self._off_apps(str(thread["team_id"]))
-            else {k: v for k, v in TOOLS.items() if k != REQUEST_APP}
+            TOOLS if await self._off_apps(thread.team_id) else {k: v for k, v in TOOLS.items() if k != REQUEST_APP}
         )
         return [
             ToolGrant(name, OPS_SERVER, description, "read", schema) for name, (description, schema) in offered.items()
@@ -401,7 +399,7 @@ class OpsReads:
         rows = await hitl_facade.list_reviews(
             self.rt, view=view, filters={}, search=None, page_no=1, size=50, me=names, teams=reader_teams(person)
         )
-        counts = cast(dict[str, int], rows["viewCounts"])
+        counts = rows["viewCounts"]
         data = cast(list[Json], rows["data"])
         mine, open_ = counts.get("mine", 0), counts.get("open", 0)
         if which == "mine":

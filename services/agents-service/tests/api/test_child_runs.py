@@ -71,7 +71,7 @@ async def test_an_unpublished_workflow_is_refused(stack: tuple[AsyncClient, Runt
     )
     assert outcome.ok is False and "not published" in outcome.output["error"]
     assert rt.graph_store is not None
-    assert [t["graph"] for t in await rt.graph_store.threads(None)] == ["agent_wrapper"]
+    assert [t.graph for t in await rt.graph_store.thread_rows(None)] == ["agent_wrapper"]
 
 
 async def test_a_paused_child_returns_a_handle_and_shows_in_cases(stack: tuple[AsyncClient, Runtime]) -> None:
@@ -79,9 +79,9 @@ async def test_a_paused_child_returns_a_handle_and_shows_in_cases(stack: tuple[A
     parent, events = await agent_turn(client, ASK)
     text = "".join(str(e.get("data")) for e in events if e["event"] == "text")
     assert rt.graph_store is not None
-    children = [t for t in await rt.graph_store.threads("dispute_email") if t["parent_thread_id"] == parent]
+    children = [t for t in await rt.graph_store.thread_rows("dispute_email") if t.parent_thread_id == parent]
     assert len(children) == 1
-    child = children[0]["id"]
+    child = children[0].id
     # The parent says it is waiting, does not invent an outcome, and leaves the child's id to its run card.
     assert "waiting for a review" in text and child not in text
     rows = (await client.get("/runs", params={"view": "needs_person", "page": 1, "pageSize": 25})).json()["data"]
@@ -102,5 +102,5 @@ async def test_a_retried_call_finds_the_same_child(stack: tuple[AsyncClient, Run
     )
     assert first.output["threadId"] == again.output["threadId"]
     assert rt.graph_store is not None
-    assert len(await rt.graph_store.threads("dispute_email")) == 1
+    assert len(await rt.graph_store.thread_rows("dispute_email")) == 1
     assert len(await rt.graph_store.runs(first.output["threadId"])) == 1

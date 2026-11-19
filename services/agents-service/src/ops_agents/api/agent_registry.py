@@ -690,6 +690,10 @@ class ReviewView(TypedDict):
     decisionReason: NotRequired[str]
     egressHost: NotRequired[Json]
     toolModule: NotRequired[Json]
+    # Added by the review list and the routes: who it is assigned to and whether the caller may decide it.
+    assignee: NotRequired[JsonValue]
+    caseTitle: NotRequired[str | None]
+    canDecide: NotRequired[bool]
 
 
 def review_view(

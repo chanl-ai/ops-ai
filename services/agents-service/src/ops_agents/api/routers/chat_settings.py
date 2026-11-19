@@ -25,10 +25,11 @@ from ops_agents.activities.catalog import AgentDefinition
 from ops_agents.activities.overrides import limits_for, parse, resolve
 from ops_contracts.chat import BudgetAnswer, ChatOverrides, NamedRef, ThreadLimits, ThreadSettings
 from ops_service_kit.errors import ApiError, NotFound, Unprocessable
-from ops_service_kit.http import Json
+from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.ids import now_iso
 from ops_store import isolation
 
+from ...store.graphs import StoredThread
 from ..auth import Principal, principal
 from ..chat_budget import answer as answer_budget
 from ..chat_threads import chat_row, messages_of, thread_view
@@ -43,23 +44,23 @@ Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI re
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
 
 
-async def _thread(rt: Runtime, me: Principal, thread_id: str) -> tuple[Json, AgentDefinition, AgentLimits]:
+async def _thread(rt: Runtime, me: Principal, thread_id: str) -> tuple[StoredThread, AgentDefinition, AgentLimits]:
     row = await chat_row(rt, thread_id, me)
     if row is None:
         raise NotFound("Conversation")
-    meta = cast(Json, row["meta"] or {})
+    meta = row.meta_object()
     agent = await thread_agent(rt, me, meta)
     if agent is None:
         raise Unprocessable("This conversation's agent is no longer live.")
     return row, agent, limits_for(agent, rt.settings.model_alias)
 
 
-async def _view(rt: Runtime, row: Json, agent: AgentDefinition, limits: AgentLimits) -> ThreadSettings:
+async def _view(rt: Runtime, row: StoredThread, agent: AgentDefinition, limits: AgentLimits) -> ThreadSettings:
     try:
         kb_names = {k.id: k.name for k in await rt.kbs().bases()}
     except ApiError:
         kb_names = {}  # kb-service down: the panel still opens, bases show by id
-    overrides = ChatOverrides.model_validate(row["overrides"]) if row.get("overrides") else None
+    overrides = ChatOverrides.model_validate(row.overrides) if row.overrides else None
     return ThreadSettings(
         limits=ThreadLimits(
             allowed_models=limits.allowed_models,
@@ -92,7 +93,7 @@ async def get_settings(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
     return ok((await _view(rt, row, agent, limits)).wire())
 
 
-def merge(stored: Mapping[str, object] | None, patch: Mapping[str, object]) -> dict[str, Any]:
+def merge(stored: Json | None, patch: Mapping[str, JsonValue]) -> Json:
     """PATCH semantics on wire (camelCase) keys: sent replaces, null clears, absent keeps."""
     merged = {**(stored or {}), **patch}
     return {k: v for k, v in merged.items() if v is not None}
@@ -103,13 +104,13 @@ async def patch_settings(rt: Rt, me: Me, thread_id: str, body: Annotated[dict[st
     """Off the request transaction: the reply names the bases from kb-service. The body stays a JSON object, not a
     model: a field sent as null clears it and one left out is kept, and the resolver names an unknown field (422)."""
     row, agent, limits = await _thread(rt, me, thread_id)
-    merged = parse(merge(cast(Json | None, row.get("overrides")), body), "thread")
+    merged = parse(merge(cast(Json | None, row.overrides), body), "thread")
     resolve(
         limits, agent.default_kb_ids, thread=merged, widgets_per_turn=agent.widgets_per_turn
     )  # 422 naming the field, before anything is stored
     stored = (merged.model_dump(mode="json", by_alias=True, exclude_none=True) if merged else None) or None
     await graph_store(rt).set_overrides(thread_id, stored, updated_at=now_iso())
-    return ok((await _view(rt, {**row, "overrides": stored}, agent, limits)).wire())
+    return ok((await _view(rt, row.model_copy(update={"overrides": stored}), agent, limits)).wire())
 
 
 @router.post("/threads/{thread_id}/budget")

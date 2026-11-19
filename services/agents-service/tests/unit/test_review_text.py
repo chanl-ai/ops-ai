@@ -10,8 +10,9 @@ from typing import Any
 import pytest
 
 from ops_agents.api.review_text import describe_call, input_rows, question, source_file
+from ops_service_kit.http import Json, JsonList
 
-HOLD = {"tool": "place_hold", "input": {"account_id": "CHQ-2219", "amount": 3250.0, "reason": "NS-2026-GN-01187"}}
+HOLD: Json = {"tool": "place_hold", "input": {"account_id": "CHQ-2219", "amount": 3250.0, "reason": "NS-2026-GN-01187"}}
 SCHEMA = {"properties": {"accountId": {"type": "string"}, "amount": {"type": "number"}, "reason": {"type": "string"}}}
 
 
@@ -60,7 +61,7 @@ async def test_a_machine_id_is_left_out_and_the_operations_description_says_what
     op = SimpleNamespace(
         name="apply_tool_access", input_schema={}, description="Grants or refuses the access. Internal."
     )
-    call = {
+    call: Json = {
         "tool": "apply_tool_access",
         "input": {"moduleId": "mod_core_banking", "approvalId": "apr_f150a1", "decision": "approved"},
     }
@@ -69,8 +70,8 @@ async def test_a_machine_id_is_left_out_and_the_operations_description_says_what
     assert said["consequence"] == "Grants or refuses the access."
 
 
-ACCOUNTS = [{"id": "CHQ-2219", "balance": 5000.0}]
-HOLD_INPUT = {"document": {"name": "Marcus Bell", "amount": 3250}, "accounts": ACCOUNTS}
+ACCOUNTS: JsonList = [{"id": "CHQ-2219", "balance": 5000.0}]
+HOLD_INPUT: Json = {"document": {"name": "Marcus Bell", "amount": 3250}, "accounts": ACCOUNTS}
 
 
 @pytest.mark.asyncio

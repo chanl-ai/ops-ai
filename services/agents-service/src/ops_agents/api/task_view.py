@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from typing import cast
 
 from ops_engine.store import RunStep, RunStore
-from ops_service_kit.http import Json, JsonValue
+from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.narrow import a_list, an_object, json_list, json_object
 from ops_store.team_scope import acting_team
 
@@ -94,7 +94,7 @@ async def typed_task(
     ref = an_object(given, "a task's type")
     type_id, version = str(ref["id"]), cast(int | None, ref.get("version"))
     # The step's params as it stored them; a value other than an object reads as it always has (`tt.bind` decides).
-    params = cast(Json, payload.get("params") or {})
+    params: Json = cast(Json, payload.get("params") or {})
     step = str(payload.get("step_id") or "")
     reads = reads or TaskReads(rt, [run] if run is not None else [], [step])
     try:
@@ -110,7 +110,7 @@ async def typed_task(
         }
     if run is not None and "cases" in _declared(record) and "cases" not in params:
         # A type that shows cases gets the ones its run and child runs opened, not a value the step had to pass.
-        params = {**params, "cases": await reads.cases(run)}
+        params = {**params, "cases": cast(JsonList, await reads.cases(run))}
     bound = tt.bind(record, params, worded)
     # A write's preview in the operation's own words: its fields and sentence from the one describer, which the
     # Human Task page draws instead of naming the call's input keys itself.
@@ -120,7 +120,9 @@ async def typed_task(
         call = data.get("call")
         if region["region"] == "write_preview" and isinstance(call, dict) and call.get("tool"):
             told = await describe_call(rt, call, currency=None, money_key=None)
-            region["data"] = data | {"fields": told["fields"], "sentence": told["sentence"]}
+            # Each row copied as JSON: the same label and value.
+            fields: JsonList = [dict[str, JsonValue](f) for f in told["fields"]]
+            region["data"] = {**data, "fields": fields, "sentence": told["sentence"]}
     # Task assist, when the team had it on as the step paused: after the question, before the evidence.
     if helped := task_assist.region(
         task_assist.settled(await reads.assist(step), datetime.now(UTC)),
@@ -129,8 +131,9 @@ async def typed_task(
         bound["regions"].insert(1 if bound["regions"][:1] and bound["regions"][0]["region"] == "header" else 0, helped)
     return {
         "type": {"id": type_id, "version": n, "name": str(record.get("name") or type_id)},
-        **bound,
-        "warnings": list[JsonValue](tt.check_params(record, params)),
+        "regions": cast(JsonList, bound["regions"]),
+        "actions": cast(JsonList, bound["actions"]),
+        "warnings": cast(JsonList, list(tt.check_params(record, params))),
     }
 
 

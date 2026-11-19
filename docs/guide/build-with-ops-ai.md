@@ -67,13 +67,14 @@ flowchart LR
 |---|---|---|---|---|---|
 | Validate, apply, publish, run and trace a workflow | built | built | built | built | built |
 | Apply an agent and chat with it | built | built | built | built | built |
-| Evaluate an agent | planned | built | built | built | built |
+| Evaluate an agent | planned | planned | built | planned | built |
 | Run an agent in wait, stream or background mode | planned | built | built | planned | built |
 | Replay a workflow run | planned | planned | planned | planned | planned |
 
 ## Next
 
 <!-- site: cards -->
+- [Examples for builders](examples/README.md): short examples on each surface, in Python, TypeScript and the command line.
 - [Build your first tool](build-your-first-tool.md): a REST tool on your own API.
 - [Card disputes](use-cases/card-disputes.md): a full workflow with an agent and an approval.
 - [Python SDK](../sdk/python.md) and [TypeScript SDK](../sdk/typescript.md).

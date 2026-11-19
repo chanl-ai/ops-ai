@@ -117,13 +117,14 @@ A definition has an `id`, a `name`, a list of `nodes` and a list of `connections
 | An event from another service | Built |
 | A parent workflow | Built |
 | A chat, from the assistant's start card or an agent that has the workflow as a tool | Built |
-| A due time on the platform clock | Built |
+| A due time on the platform clock; the same key runs once | Built |
 | A recurring schedule, a signed incoming webhook, polling another system | Planned |
 
 ## Next
 
 <!-- site: cards -->
 - **[Build with Ops AI](build-with-ops-ai.md)**: nineteen example workflows, from mapping one field to a child workflow per record.
+- **[Workflow examples](examples/workflows.md)**: check, publish, run, decide and fix a workflow in Python, TypeScript and the command line.
 - **[Human tasks and approvals](human-tasks.md)**: pause a run for a person.
 - **[Cases](cases.md)**: open a case from a run.
 - **[Agents](agents.md)**: add an agent step, or give a workflow to an agent as a tool.

@@ -32,8 +32,9 @@
       {"step": "The services' store tests on both databases", "no_local_twin": "Needs the SQL Server container; nearest proof is `make mssql-remote-test PKG=services/<svc> T=<files>`."}
     ],
     "release-proof": [
+      {"step": "The version file matches the branch", "no_local_twin": "Reads the branch name GitHub gives the run; run `BRANCH=release/X.Y.Z python3 scripts/release.py check-version` by hand."},
       {"step": "The upgrade from the last release", "no_local_twin": "Needs Docker and the release tags; run `make db-scripts-proof FROM=<last tag>` by hand."},
-      {"step": "A fresh install", "no_local_twin": "Pulls the released images and installs through ./install.sh; run `make install-proof` by hand."}
+      {"step": "A fresh install", "no_local_twin": "Builds the commit's images into a local registry and installs through ./install.sh; run `make install-proof BUILD=1` by hand."}
     ],
     "maintainer-review": [
       {"step": "The base revision's copies of the gate", "no_local_twin": "Reads the pull request's base revision on GitHub."},

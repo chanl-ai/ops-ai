@@ -66,8 +66,17 @@ draft = ops.agents.apply("agent.yaml")
 ops.agents.chat(draft["id"], "What documents open a business account?")
 ```
 
-`ops.agents.eval(id, cases)` scores a set of cases against a published agent. An `opsai agents eval` command, and the run
-methods in the TypeScript SDK, are planned.
+`ops.agents.eval(id, cases)` scores a set of cases against a published agent from Python. An `opsai agents eval` command,
+and the run and eval methods in the TypeScript SDK, are planned.
+
+A background run lives in the program that started it and is lost if that program exits before the reply is on the
+thread. `opsai agents run --mode background` exits as soon as it prints the ids, so its run is lost; use it from a
+program that keeps running. Runs that carry on without the caller are planned.
+
+`ops.agents.schedule(id, message, due_at=...)` arms one run at a due time; the same key runs once. Repeating schedules
+are planned.
+
+[Agent examples](examples/agents.md) shows each of these in Python, TypeScript and the command line.
 
 ## Agent or workflow
 

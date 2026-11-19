@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import cast
 
 from ops_agent_kernel.ports import ToolOutcome
 from ops_documents_client import (
@@ -23,6 +23,7 @@ from ops_documents_client import (
     reading_text,
 )
 from ops_files_client import FileInfo, FileNotFound, FilesClient, FilesRefused
+from ops_service_kit.http import Json
 
 from .modules.seed import FILE_TOOL_NAMES, FILE_TOOL_TIMEOUT_MS
 
@@ -37,9 +38,9 @@ POLL_S = 1.0
 MATCHES = 10
 
 
-def _reason(answer: dict[str, Any], otherwise: str) -> str:
+def _reason(answer: Json, otherwise: str) -> str:
     """Why documents-service could not read the file, as it said it."""
-    error: dict[str, Any] = answer.get("error") or {}
+    error = cast(Json, answer.get("error") or {})
     return str(error.get("message") or otherwise)
 
 
@@ -57,7 +58,7 @@ class FileTools:
         self.files, self.documents = files, documents
         self.wait_s, self.sleep, self.ocr = wait_s, sleep, ocr
 
-    async def run(self, tool: str, arguments: dict[str, Any], *, tenant: str, team: str | None) -> ToolOutcome:
+    async def run(self, tool: str, arguments: Json, *, tenant: str, team: str | None) -> ToolOutcome:
         if not team:
             return ToolOutcome(False, {"error": "A file belongs to a team; this call acts in none."})
         found = await self._file(tenant, team, str(arguments.get("file") or "").strip())
@@ -104,7 +105,7 @@ class FileTools:
             False, {"error": f"Several of the team's files match {ref}; name one by its id.", "files": listed}
         )
 
-    async def _finished(self, tenant: str, team: str, answer: dict[str, Any]) -> dict[str, Any]:
+    async def _finished(self, tenant: str, team: str, answer: Json) -> Json:
         """The extraction once it has finished, waiting for a large file's background read within the deadline."""
         ends = time.monotonic() + self.wait_s
         while answer.get("status") in READING and time.monotonic() < ends:
@@ -123,12 +124,12 @@ class FileTools:
         if not text:
             reason = _reason(answer, "it has no text to read, even by OCR")
             return ToolOutcome(False, {**head, "error": f"{file.name} could not be read: {reason}"})
-        out: dict[str, Any] = {**head, "text": text[:TEXT_LIMIT]}
+        out: Json = {**head, "text": text[:TEXT_LIMIT]}
         if len(text) > TEXT_LIMIT:
             out["note"] = f"Cut at {TEXT_LIMIT} of {len(text)} characters."
         return ToolOutcome(True, out)
 
-    async def _type(self, tenant: str, team: str, ref: str) -> dict[str, Any] | None:
+    async def _type(self, tenant: str, team: str, ref: str) -> Json | None:
         """The team's document type with this id, or the one named so."""
         try:
             return await self.documents.document_type(tenant, team, ref)

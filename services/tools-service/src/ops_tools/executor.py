@@ -139,7 +139,9 @@ def _failure(code: str, message: str, status: int | None = None, side: str | Non
     return ToolOutcome(False, {"error": error})
 
 
-def with_access(e: AuthFailed, op: Mapping[str, Any], module: Mapping[str, Any]) -> AuthFailed:
+def with_access(
+    e: AuthFailed, op: Operation | Mapping[str, JsonValue], module: Module | Mapping[str, JsonValue]
+) -> AuthFailed:
     """A person's sign-in request names the app and whether the call reads or changes something, so the chat asks in
     those words ("reads Salesforce as you", "makes the change in your name")."""
     if e.code == "CONNECTION_NOT_LINKED":
