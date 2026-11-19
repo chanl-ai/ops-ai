@@ -1,6 +1,7 @@
 import type { RefKind, ReferenceGroup, ReferenceItem, ReferenceSearch } from '@/lib/types/references';
 
 import type { ReferencesApi } from '../../references-contract';
+import { ApiError } from '../../contract';
 import { respond } from '../runtime';
 
 const GROUP_LABEL: Record<RefKind, string> = { tool: 'Tools', knowledge: 'Knowledge', skill: 'Skills', agent: 'Agents', workflow: 'Workflows' };
@@ -57,6 +58,12 @@ export function createReferencesMock(): ReferencesApi {
         if (m === 'empty') return { groups: [] };
         const q = p.search.trim().toLowerCase();
         return { groups: grouped(ITEMS.filter((i) => (!p.kind || i.kind === p.kind) && i.label.toLowerCase().includes(q)), p.limit ?? 8) };
+      }),
+    add: (_agentId, ref) =>
+      respond(() => {
+        const item = ITEMS.find((i) => i.kind === ref.kind && i.id === ref.id);
+        if (!item) throw new ApiError('The team does not offer that.', 422, undefined, 'unknown_reference');
+        return { added: [{ ...item, held: true, adds: null }], agentVersion: 2 };
       }),
     labels: (_context, ids) => respond((): ReferenceSearch => ({ groups: grouped(ITEMS.filter((i) => ids.includes(`${i.kind}:${i.id}`)), 100) })),
   };

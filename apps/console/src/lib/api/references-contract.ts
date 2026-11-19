@@ -1,4 +1,4 @@
-import type { RefKind, ReferenceContext, ReferenceSearch } from '@/lib/types/references';
+import type { AddedReferences, Ref, RefKind, ReferenceContext, ReferenceSearch } from '@/lib/types/references';
 
 /**
  * What an agent brief or a skill step can point at (agents-service `GET /v1/references`): the team's tools, knowledge
@@ -12,4 +12,9 @@ export interface ReferencesApi {
    * the person or no longer offered is left out of the answer, and the document draws it as Missing.
    */
   labels(context: ReferenceContext, ids: string[]): Promise<ReferenceSearch>;
+  /**
+   * Grants the agent what the brief points at (a tool, an agent, a workflow, a knowledge base or a skill) as one new
+   * draft version. 422 `unknown_reference` and `not_published`.
+   */
+  add(agentId: string, ref: Ref): Promise<AddedReferences>;
 }

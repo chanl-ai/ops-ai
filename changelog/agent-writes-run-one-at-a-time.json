@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-19",
+  "title": "Agent changes run one at a time",
+  "description": "When an agent makes several changes in one reply, they now run one after another instead of side by side, on every agent. A skill loaded in a chat now replaces the one loaded by the reply before, so skills no longer pile up as a conversation goes on.",
+  "tag": "improved"
+}

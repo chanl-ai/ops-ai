@@ -442,6 +442,11 @@ export function createChatMock(deps: Deps): ChatApi {
 
       const msg: ChatMessage = { id: id('m'), role: 'assistant', content: '', at: now() };
       t.messages.push(msg);
+      // As the Runtime reports a stepped skill: the brief agent's card dispute skill moves one step per reply.
+      if (t.agentId === 'ag_dispute') {
+        const step = Math.min(4, t.messages.filter((x) => x.role === 'user').length);
+        msg.skillRun = { running: { skillId: 'card_dispute', version: 1, name: 'Card dispute', step, stepsTotal: 4, stepText: 'Look up the charge', sub: step === 3 ? { skillId: 'verify_identity', version: 1, name: 'Verify identity', step: 1, stepsTotal: 2, stepText: 'Ask for the last four digits' } : null }, history: [] };
+      }
       touch(t);
       const snapshot = () => structuredClone(msg);
       yield { type: 'start', userMessage: userMessage && structuredClone(userMessage), messageId: msg.id };

@@ -74,6 +74,38 @@ export interface Agent {
   /** Which skills a person may pick with / in a chat with it (`team` when absent). */
   skillMenu?: SkillMenu;
   controls: AgentControls;
+  /** The prompt as four headings and two lists; null for an agent written as plain text, which keeps its role and instructions. */
+  brief?: AgentBrief | null;
+  /** Null for an agent that has never had a brief. `full`: the builder's text is the prompt and only Never is kept from the brief. */
+  promptMode?: PromptMode | null;
+  patterns?: AgentPatterns;
+  /** What the agent holds, counted by the service. */
+  uses?: AgentUses;
+}
+
+export type PromptMode = 'brief' | 'full';
+
+export interface AgentBrief {
+  purpose: string;
+  goal: string;
+  howToAnswer: string;
+  never: string[];
+  success: string[];
+}
+
+export type Thinking = 'default' | 'low' | 'medium' | 'high';
+
+export interface AgentPatterns {
+  thinking: Thinking;
+  parallelReads: boolean;
+}
+
+export interface AgentUses {
+  tools: number;
+  knowledgeBases: number;
+  skills: number;
+  agents: number;
+  workflows: number;
 }
 
 export interface GuardrailPin {
@@ -158,6 +190,10 @@ export type AgentPatch = Partial<AgentInput> & {
   memory?: MemorySettings;
   /** Which skills a person may pick with / in a chat with it (`team` when absent). */
   skillMenu?: SkillMenu;
+  /** Sent only after the builder edits a brief field; the service then writes `role` and `instructions` itself. */
+  brief?: AgentBrief;
+  promptMode?: PromptMode;
+  patterns?: AgentPatterns;
   note?: string;
 };
 
