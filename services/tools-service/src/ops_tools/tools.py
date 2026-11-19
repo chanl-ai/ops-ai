@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from ops_agent_kernel.ports import ToolOutcome
 from ops_agents.activities.catalog import Catalog
@@ -13,6 +13,7 @@ from ops_agents.activities.tools import LocalToolExecutor
 from ops_email import MailNotConfiguredError, MailSender, OutboundMessage
 from ops_identity import ActingForPerson, ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_service_kit.errors import ApiError
+from ops_service_kit.http import Json, JsonValue
 
 from .file_tools import FileTools
 from .knowledge_tools import KnowledgeSearch
@@ -72,7 +73,9 @@ class AccessDecisions(Protocol):
 
 
 class ToolRunner(Protocol):
-    async def run(self, tool: str, arguments: dict[str, Any], *, key: str, caller: ToolCaller) -> ToolOutcome: ...
+    async def run(
+        self, tool: str, arguments: Mapping[str, JsonValue], *, key: str, caller: ToolCaller
+    ) -> ToolOutcome: ...
 
 
 class LocalToolRunner:
@@ -101,10 +104,12 @@ class LocalToolRunner:
         self.file_tools = file_tools
         self.knowledge = knowledge
 
-    async def run(self, tool: str, arguments: dict[str, Any], *, key: str, caller: ToolCaller) -> ToolOutcome:
+    async def run(self, tool: str, arguments: Mapping[str, JsonValue], *, key: str, caller: ToolCaller) -> ToolOutcome:
         # send_acknowledgement sends the same way; it is declared a write that runs at once (seed.SENDS).
         if tool in ("send_reply", "send_acknowledgement"):
-            message = OutboundMessage(key, (arguments["to"],), arguments["subject"], arguments["body"])
+            message = OutboundMessage(
+                key, (cast(str, arguments["to"]),), cast(str, arguments["subject"]), cast(str, arguments["body"])
+            )
             mailbox = str(arguments.get("mailbox") or "")
             try:
                 sender = await self._mailbox_sender(caller, mailbox) if mailbox else self._process_sender(caller)
@@ -117,16 +122,16 @@ class LocalToolRunner:
         if tool in FILE_TOOL_NAMES:
             if self.file_tools is None:
                 return ToolOutcome(False, {"error": "This tools-service reads no files: documents-service is not set."})
-            return await self.file_tools.run(tool, arguments, tenant=caller.tenant_id, team=caller.team_id)
+            return await self.file_tools.run(tool, cast(Json, arguments), tenant=caller.tenant_id, team=caller.team_id)
         if tool in KNOWLEDGE_TOOL_NAMES:
             if self.knowledge is None:
                 return ToolOutcome(False, {"error": "This tools-service searches no knowledge: kb-service is not set."})
-            return await self.knowledge.run(arguments, tenant=caller.tenant_id, team=caller.team_id)
+            return await self.knowledge.run(cast(Json, arguments), tenant=caller.tenant_id, team=caller.team_id)
         if tool == APPLY_ACCESS:
             return await self._apply_access(arguments, caller)
-        return await self.tools.execute(tool, arguments, key=key, approval_token=DECIDED)
+        return await self.tools.execute(tool, cast(Json, arguments), key=key, approval_token=DECIDED)
 
-    async def _apply_access(self, arguments: dict[str, Any], caller: ToolCaller) -> ToolOutcome:
+    async def _apply_access(self, arguments: Mapping[str, JsonValue], caller: ToolCaller) -> ToolOutcome:
         """A tool access request's decision, applied to the module's grant. Who decided is the person the
         verified approval token names; the request must be one the calling team decides."""
         if self.decisions is None:
@@ -139,7 +144,7 @@ class LocalToolRunner:
                 str(arguments["moduleId"]),
                 approval_id=str(arguments["approvalId"]),
                 decision=str(arguments["decision"]),
-                reason=arguments.get("reason"),
+                reason=cast(str | None, arguments.get("reason")),
                 by=caller.approvers[0],
                 team_id=caller.team_id,
                 deciders=caller.approvers,
@@ -148,7 +153,7 @@ class LocalToolRunner:
             return ToolOutcome(False, {"error": str(e), "code": e.code})
         return ToolOutcome(True, {"approvalId": approval["id"], "status": approval["status"]})
 
-    async def _open_case(self, arguments: dict[str, Any], key: str, caller: ToolCaller) -> ToolOutcome:
+    async def _open_case(self, arguments: Mapping[str, JsonValue], key: str, caller: ToolCaller) -> ToolOutcome:
         """A case in the caller's team, keyed by the call so a retried call finds the case it opened."""
         if self.cases is None:
             return ToolOutcome(False, {"error": "This tools-service opens no cases: agents-service is not configured."})

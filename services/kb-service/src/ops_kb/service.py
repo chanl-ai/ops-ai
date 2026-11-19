@@ -301,7 +301,7 @@ class Who:
             return
         can(self.caller, "knowledge", step, team=team_id or self.team_id, what=f"to {action}", protection=protection)
 
-    def require_provisioner_for(self, body: dict[str, Any]) -> None:
+    def require_provisioner_for(self, body: Mapping[str, JsonValue]) -> None:
         """Only the provisioning service sets `templateId` or `protection`; the seed, with no caller, may."""
         if self.caller is not None and (body.get("templateId") is not None or body.get("protection") is not None):
             require_provisioner(self.caller, "knowledge")
@@ -381,14 +381,14 @@ logger = get_logger(__name__)
 FRESH_GRACE = timedelta(hours=1)
 
 
-def _period(schedule: dict[str, Any]) -> timedelta:
+def _period(schedule: Json) -> timedelta:
     kind = schedule["kind"]
     if kind == "hourly":
-        return timedelta(hours=int(schedule["every"]))
+        return timedelta(hours=int(cast(str | int, schedule["every"])))
     return timedelta(days=7) if kind == "weekly" else timedelta(days=1)
 
 
-def freshness(schedule: dict[str, Any], good: datetime | None, now: datetime) -> str:
+def freshness(schedule: Json, good: datetime | None, now: datetime) -> str:
     """`no_schedule` when the source only syncs when asked. Otherwise `stale` once its latest slot is more than the
     grace past and no good sync has happened since the slot (a failed run does not count, and a source that never
     synced well is stale); `fresh` before that, since the beat has until then to run the slot."""
@@ -2991,14 +2991,14 @@ def audit_entry(  # noqa: PLR0917 - each argument a different part of the entry
     target_kind: str,
     target_id: str,
     name: str,
-    before: dict[str, Any],
+    before: Mapping[str, JsonValue],
     values: Mapping[str, object],
 ) -> AuditEntry | None:
     """The audit entry for a settings change: who made it, which fields changed, and each field before and after
     (for a nested setting, its changed keys). None when nothing changed. The seed, with no caller, is not audited."""
     if who.caller is None:
         return None
-    changes: dict[str, Any] = {}
+    changes: Json = {}
     for key, after in values.items():
         old = before.get(key)
         if old == after:
@@ -3008,7 +3008,7 @@ def audit_entry(  # noqa: PLR0917 - each argument a different part of the entry
             keys = sorted(k for k in {*was, *now} if was.get(k) != now.get(k))
             changes[key] = {k: {"from": was.get(k), "to": now.get(k)} for k in keys}
         else:
-            changes[key] = {"from": old, "to": after}
+            changes[key] = {"from": old, "to": cast(JsonValue, after)}
     if not changes:
         return None
     return {

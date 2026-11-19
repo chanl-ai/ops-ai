@@ -10,10 +10,11 @@ under its lease. Only definition workflows can be routed: code graphs have no pl
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import cast
 
 from ops_agents.graphs.definition import BUILT_IN_NODES
 from ops_service_kit.errors import Conflict
+from ops_service_kit.http import Json, JsonList
 from ops_service_kit.ids import new_id, now_iso
 
 from ..store.leases import LeaseHeldError
@@ -27,29 +28,29 @@ WRITE_KINDS = frozenset({"tool"})
 OPEN_STATUSES = ("idle", "busy", "interrupted", "error")
 
 
-async def plan_kinds(rt: Runtime, row: dict[str, Any]) -> dict[str, str] | None:
-    """Node id to kind for a definition workflow's pinned version; None for a code graph."""
+async def plan_kinds(rt: Runtime, row: Json) -> dict[str, str] | None:
+    """Node id to kind for a definition workflow's pinned version; None for a code graph. `row` is a thread row, whose
+    graph is its string column and version its integer one."""
     if row["graph"] in rt.graphs or row.get("version") is None:
         return None
-    d = await definition(rt, row["graph"], row["version"])
+    d = await definition(rt, cast(str, row["graph"]), cast(int, row["version"]))
     return {n.id: n.kind for n in d.nodes}
 
 
-async def _meta(rt: Runtime, thread_id: str) -> dict[str, Any]:
+async def _meta(rt: Runtime, thread_id: str) -> Json:
     return await graph_store(rt).meta(thread_id)
 
 
-async def _set_flag(rt: Runtime, thread_id: str, value: dict[str, Any]) -> None:
+async def _set_flag(rt: Runtime, thread_id: str, value: Json) -> None:
     await graph_store(rt).merge_meta(thread_id, {FLAG: value}, lock=True)
 
 
-async def requested_route(rt: Runtime, thread_id: str) -> dict[str, Any] | None:
+async def requested_route(rt: Runtime, thread_id: str) -> Json | None:
     """The thread's routing request if one is waiting to be applied."""
-    route: Any = (await _meta(rt, thread_id)).get(FLAG)
+    route = (await _meta(rt, thread_id)).get(FLAG)
     if not isinstance(route, dict):
         return None
-    found = cast(dict[str, Any], route)
-    return None if found.get("appliedBy") else dict(found)
+    return None if route.get("appliedBy") else dict(route)
 
 
 async def mark_route_applied(rt: Runtime, thread_id: str, run_id: str) -> None:
@@ -57,9 +58,9 @@ async def mark_route_applied(rt: Runtime, thread_id: str, run_id: str) -> None:
     await _set_flag(rt, thread_id, {**route, "appliedBy": run_id, "appliedAt": now_iso()})
 
 
-def remaining(plan: dict[str, str], values: dict[str, Any]) -> list[str]:
+def remaining(plan: dict[str, str], values: Json) -> list[str]:
     """The plan's steps that have not run on this thread, in plan order: the ones routing skips."""
-    visited: list[Any] = values.get("visited") or []
+    visited = cast(JsonList, values.get("visited") or [])
     ran = {str(v).split("@", 1)[0] for v in visited}
     return [n for n in plan if n not in ran and n not in BUILT_IN_NODES]
 

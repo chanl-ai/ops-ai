@@ -4,9 +4,9 @@ change it records. Values are put and read through `secrets.SecretResolver`; thi
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
-from typing import Any, ClassVar
+from typing import ClassVar
 
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
@@ -159,7 +159,9 @@ class SecretStore(Store):
     role = ROLE
     system_role = SYSTEM_ROLE
 
-    async def _audit(self, c: AsyncConnection, tenant_id: str, team_id: str, change: dict[str, Any]) -> None:
+    async def _audit(
+        self, c: AsyncConnection, tenant_id: str, team_id: str, change: Mapping[str, str | int | datetime | None]
+    ) -> None:
         await c.execute(secret_audit.insert().values(tenant_id=tenant_id, team_id=team_id, **change))
         if change["action"] in NAMES_CHANGED:
             # Whether an auth config's client secret is held decides its app's card state (store/app_cards.py).

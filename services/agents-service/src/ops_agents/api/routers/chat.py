@@ -64,13 +64,15 @@ from ops_service_kit.errors import (
     ValidationFailed,
 )
 from ops_service_kit.errors import ServiceUnavailable as Unavailable
-from ops_service_kit.http import Envelope
+from ops_service_kit.http import Envelope, Json
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.logging import get_logger
+from ops_service_kit.narrow import json_object
 from ops_store import isolation
 
 from ...store.chat_list import ChatListQuery, ChatPage, chat_facets, chat_page
 from ...store.events import EventLog
+from ...store.graphs import StoredThread
 from ...store.leases import LeaseHeldError
 from ...store.team_defaults import TeamDefaults
 from ...store.tenancy import current_tenant
@@ -124,15 +126,17 @@ class ServiceUnavailable(ApiError):
     code = "model_unavailable"
 
 
-async def _thread_row(rt: Runtime, me: Principal | None, thread_id: str) -> dict[str, Any]:
+async def _thread_row(rt: Runtime, me: Principal | None, thread_id: str) -> StoredThread:
     row = await chat_row(rt, thread_id, me)
     if row is None:
         raise NotFound("Conversation")
     return row
 
 
-def _meta(row: dict[str, Any]) -> dict[str, Any]:
-    return dict(row["meta"])
+def _meta(row: StoredThread) -> Json:
+    """A copy of a chat thread's meta. `chat_row` and the list's SQL pass only rows whose meta is an object holding the
+    chat flag; any other stored value goes through `dict()` unchanged, so it fails or converts exactly as it did."""
+    return dict(cast(Json, row.meta))
 
 
 def _allowed_kbs(rt: Runtime, agent: AgentDefinition) -> list[str]:
@@ -216,18 +220,18 @@ def _uncursor(cursor: str, order: str, numeric: bool) -> tuple[str | int, str]:
     return key, thread_id
 
 
-def _sort_key(sort_by: str, row: dict[str, Any]) -> str | int:
+def _sort_key(sort_by: str, row: StoredThread) -> str | int:
     """The value a cursor carries for a thread under an explicit sort; the same value the store orders by."""
     m = _meta(row)
     match sort_by:
         case "title":
             return str(m.get("title") or "").lower()
         case "createdAt":
-            return str(row["created_at"])
+            return str(row.created_at)
         case "messageCount":
-            return int(m.get("messageCount") or 0)
+            return int(cast(str | int | float, m.get("messageCount") or 0))
         case _:
-            return str(m.get("lastMessageAt") or row["created_at"])
+            return str(m.get("lastMessageAt") or row.created_at)
 
 
 @router.get("/threads")
@@ -310,14 +314,14 @@ async def list_threads(
         if more and last is not None:
             if q.sort_by == "default":
                 m = _meta(last)
-                key = f"{int(bool(m.get('pinned')))}|{m.get('lastMessageAt') or last['created_at']}"
+                key = f"{int(bool(m.get('pinned')))}|{m.get('lastMessageAt') or last.created_at}"
             else:
                 key = _sort_key(q.sort_by, last)
-            next_cursor = _cursor(order, key, str(last["id"]))
+            next_cursor = _cursor(order, key, str(last.id))
     page_rows = [r for r in chosen_rows if may_read(_meta(r), me)]
-    msgs = await messages_of(rt, [r["id"] for r in page_rows], reader=person_of(me))
+    msgs = await messages_of(rt, [r.id for r in page_rows], reader=person_of(me))
     result = ThreadList(
-        data=[thread_row_view(rt, r, msgs[r["id"]]) for r in page_rows],
+        data=[thread_row_view(rt, r, msgs[r.id]) for r in page_rows],
         pagination=PaginationMeta(
             page=page if cursor is None else start // page_size + 1,
             page_size=page_size,
@@ -390,7 +394,7 @@ async def _test_agent(rt: Runtime, me: Principal, agent_id: str, version: int | 
     return definition_of(agent_id, n, saved.spec)
 
 
-async def thread_agent(rt: Runtime, me: Principal, meta: dict[str, Any]) -> AgentDefinition | None:
+async def thread_agent(rt: Runtime, me: Principal, meta: Json) -> AgentDefinition | None:
     """The agent a thread runs: for a test thread the saved agent it tests (a draft is not in the live catalog),
     otherwise the live one; None when it is not live. The one place the settings, connectors and kb routes ask."""
     agent_id = str(meta.get("agentId"))
@@ -421,14 +425,14 @@ async def create_thread(rt: Rt, me: Me, body: ChatThreadInput) -> JSONResponse:
     kb_ids = body.kb_ids if body.kb_ids or body.agent_id is not None else list(agent.default_kb_ids)
     kb_names = await _check_kbs(rt, agent, kb_ids)
     now = now_iso()
-    meta: dict[str, Any] = {
+    meta: Json = {
         "chat": True,
         "title": (body.title or "").strip() or NEW_TITLE,
         "agentId": agent.id,
         "agentName": agent.name,
         "agentVersion": agent.version,
-        "kbIds": kb_ids,
-        "kbNames": kb_names,
+        "kbIds": [*kb_ids],
+        "kbNames": [*kb_names],
         "pinned": False,
         "archived": False,
         "hidden": False,
@@ -502,7 +506,7 @@ async def update_thread(rt: Rt, me: Me, thread_id: str, body: ChatThreadPatch) -
     """Off the request transaction: a change of bases or agent asks kb-service, and the reply is the thread read."""
     row = await _thread_row(rt, me, thread_id)
     meta = _meta(row)
-    patch: dict[str, Any] = {}
+    patch: Json = {}
     if body.title is not None:
         if not body.title.strip():
             raise ValidationFailed("A conversation needs a title.")
@@ -515,8 +519,8 @@ async def update_thread(rt: Rt, me: Me, thread_id: str, body: ChatThreadPatch) -
         agent = await thread_agent(rt, me, meta)
         if agent is None:
             raise Unprocessable("This conversation's agent is no longer live.")
-        patch["kbNames"] = await _check_kbs(rt, agent, body.kb_ids)
-        patch["kbIds"] = body.kb_ids
+        patch["kbNames"] = [*await _check_kbs(rt, agent, body.kb_ids)]
+        patch["kbIds"] = [*body.kb_ids]
     if body.agent_id is not None and body.agent_id != meta.get("agentId"):
         patch |= await _handover(rt, me, meta, body.agent_id)
     if patch:
@@ -526,7 +530,7 @@ async def update_thread(rt: Rt, me: Me, thread_id: str, body: ChatThreadPatch) -
     return await get_thread(rt, me, thread_id)
 
 
-async def _handover(rt: Runtime, me: Principal, meta: dict[str, Any], agent_id: str) -> dict[str, Any]:
+async def _handover(rt: Runtime, me: Principal, meta: Json, agent_id: str) -> Json:
     """The meta for handing the conversation to `agent_id` (an @mention), checked as starting a chat with it. The agent
     it started on, and that agent's bases, are kept so handing back to it restores them."""
     if meta.get("deploymentId"):
@@ -536,13 +540,13 @@ async def _handover(rt: Runtime, me: Principal, meta: dict[str, Any], agent_id: 
     if agent is None:
         raise Unprocessable("That agent is not live, so the conversation cannot move to it.", code="agent_not_live")
     require_chat_use(me, team_id=team)
-    start = {
+    start: Json = {
         "id": meta.get("startAgentId") or meta.get("agentId"),
         "name": meta.get("startAgentName") or meta.get("agentName"),
         "kbIds": meta["startKbIds"] if meta.get("startAgentId") else meta.get("kbIds"),
         "kbNames": meta["startKbNames"] if meta.get("startAgentId") else meta.get("kbNames"),
     }
-    moved = {"agentId": agent.id, "agentName": agent.name, "agentVersion": agent.version}
+    moved: Json = {"agentId": agent.id, "agentName": agent.name, "agentVersion": agent.version}
     if agent.id == start["id"]:
         # Back: the start agent and the bases the conversation had before the handover.
         return moved | {
@@ -554,14 +558,15 @@ async def _handover(rt: Runtime, me: Principal, meta: dict[str, Any], agent_id: 
             "startKbNames": None,
         }
     kb_ids = list(agent.default_kb_ids)
-    return moved | {
-        "kbIds": kb_ids,
-        "kbNames": await _check_kbs(rt, agent, kb_ids),
+    away: Json = {
+        "kbIds": [*kb_ids],
+        "kbNames": [*await _check_kbs(rt, agent, kb_ids)],
         "startAgentId": start["id"],
         "startAgentName": start["name"],
         "startKbIds": start["kbIds"] or [],
         "startKbNames": start["kbNames"] or [],
     }
+    return moved | away
 
 
 @router.delete("/threads/{thread_id}")
@@ -616,12 +621,14 @@ def _frame(event: ChatStreamEvent) -> dict[str, str]:
     return {"data": json.dumps(event.wire(), ensure_ascii=False)}
 
 
-async def _start_run(rt: Runtime, thread_id: str, graph_input: dict[str, Any]) -> tuple[str, dict[str, Any], Any]:
+async def _start_run(rt: Runtime, thread_id: str, graph_input: Json) -> tuple[str, Json, Any]:
     """Takes the thread's lease and records the run, as POST /v1/threads/{id}/runs/stream does."""
     store = graph_store(rt)
     row, graph = await resolve(rt, thread_id)
     if waiting := pending(await graph.aget_state(config(thread_id))):
-        kinds = {cast(dict[str, Any], w["payload"]).get("kind") for w in waiting if isinstance(w["payload"], dict)}
+        kinds = {
+            cast(str | None, json_object(w["payload"]).get("kind")) for w in waiting if isinstance(w["payload"], dict)
+        }
         if "budget_exhausted" in kinds:
             raise Conflict("This conversation is paused on its budget; continue it first.", code="budget_paused")
         raise Conflict("This conversation is waiting for an approval; decide it first.", code="run_waiting")
@@ -639,9 +646,7 @@ async def _start_run(rt: Runtime, thread_id: str, graph_input: dict[str, Any]) -
     return run_id, row, graph
 
 
-async def _compacted(
-    rt: Runtime, thread_id: str, meta: dict[str, Any], history: list[dict[str, Any]]
-) -> list[dict[str, Any]]:
+async def _compacted(rt: Runtime, thread_id: str, meta: Json, history: list[Json]) -> list[Json]:
     """The history a long thread's turn reads: older turns as one summary, kept on the thread (chat_history.compacted).
     A summary that cannot be made leaves the history whole."""
     model = rt.graph_deps.ports.model if rt.graph_deps is not None else None
@@ -653,7 +658,7 @@ async def _compacted(
         return (await agent.run(text)).output
 
     try:
-        shorter, made = await compacted(history, cast(dict[str, Any] | None, meta.get("historySummary")), summarize)
+        shorter, made = await compacted(history, cast(Json | None, meta.get("historySummary")), summarize)
     except Exception as e:  # a failed summary call: the turn reads the whole history, as before compaction
         log.warning("history_summary_failed", thread=thread_id, error=type(e).__name__)
         return history
@@ -685,7 +690,7 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
     agent = (
         tested
         if test
-        else await pinned_definition(rt, str(meta.get("agentId")), int(pinned))
+        else await pinned_definition(rt, str(meta.get("agentId")), int(cast(str | int | float, pinned)))
         if pinned is not None
         else await live_agent(rt, str(meta.get("agentId")))
     )
@@ -731,31 +736,32 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
             id=new_id("m"), role="user", content=question, at=now_iso(), attachments=body.attachments or None
         )
 
-    graph_input: dict[str, Any] = {
+    graph_input: Json = {
         "agent_id": agent.id,
         **({"agent_version": agent.version} if pinned is not None else {}),
         **({"test_agent": agent.model_dump(mode="json")} if test else {}),
         "message": question,
-        "history": await _compacted(rt, thread_id, meta, [history_entry(m) for m in transcript]),
+        "history": [*await _compacted(rt, thread_id, meta, [history_entry(m) for m in transcript])],
         "requested_by": me.email,
     }
     # The / menu needs skills: view in the conversation's team; a part picked earlier keeps loading only while the
     # person still holds it.
     try:
-        can(caller_of(me), "skills", "view", team=str(row["team_id"]), what="the team's skills", code="forbidden")
+        can(caller_of(me), "skills", "view", team=str(row.team_id), what="the team's skills", code="forbidden")
         may_pick = True
     except Forbidden:
         if body.skill is not None:
             raise
         may_pick = False
     last = next((m for m in reversed(transcript) if m.role == "assistant"), None)
-    earlier = cast(list[dict[str, Any]], history_entry(last).get("skills") or []) if last is not None else []
-    team = str(row["team_id"] or "")
+    earlier = cast(list[Json], history_entry(last).get("skills") or []) if last is not None else []
+    team = str(row.team_id or "")
     if (turn := await skill_turn(rt, agent, body.skill, earlier, team=team, may_pick=may_pick)) is not None:
-        graph_input["skill_turn"] = turn
+        # A SkillTurn is a TypedDict of JSON values, kept on the run input as it is.
+        graph_input["skill_turn"] = cast(Json, turn)
     # The settings this turn runs on: the agent's limits, then the thread's overrides, then this message's; a value
     # outside the limits is a 422 naming the field and no run starts.
-    thread_overrides = ChatOverrides.model_validate(row["overrides"]) if row.get("overrides") else None
+    thread_overrides = ChatOverrides.model_validate(row.overrides) if row.overrides else None
     turn_overrides = parse(body.overrides, "turn")
     effective = resolve_settings(
         limits_for(agent, rt.settings.model_alias),
@@ -765,12 +771,13 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
         widgets_per_turn=agent.widgets_per_turn,
     )
     if "knowledgeBaseIds" in effective.sources:
-        graph_input["kb_ids"] = effective.knowledge_base_ids
+        graph_input["kb_ids"] = [*effective.knowledge_base_ids]
     elif meta.get("kbIds"):
         # The bases picked when the thread was started stay outside the resolver: one the agent has since lost is
         # answered as withdrawn (agent_wrapper._granted), not refused on every message.
-        graph_input["kb_ids"] = [str(k) for k in cast(list[Any], meta["kbIds"])]
-        effective.knowledge_base_ids = graph_input["kb_ids"]
+        started = [str(k) for k in cast(list[Any], meta["kbIds"])]
+        graph_input["kb_ids"] = [*started]
+        effective.knowledge_base_ids = started
         effective.sources["knowledgeBaseIds"] = "started"
     if think:
         # The person chose the deeper model for this one reply; the agent's own allowed models are its builder's.
@@ -781,8 +788,8 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
         if user_message.attachments:
             graph_input["attachments"] = [a.model_dump(mode="json", by_alias=True) for a in user_message.attachments]
     # Kept on the run as they were sent, beside the settings resolved from them.
-    if row.get("overrides"):
-        graph_input["thread_overrides"] = row["overrides"]
+    if row.overrides:
+        graph_input["thread_overrides"] = row.overrides
     if meta.get("attachments"):
         graph_input["thread_attachments"] = meta["attachments"]
     if turn_overrides is not None:
@@ -796,31 +803,31 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
         reader = cast(ChatAttachmentReader | None, rt.chat_attachments)
         if reader is None:
             raise Unavailable("Attached files are read through Files, which this installation does not run.")
-        read = await reader.read(current_tenant(), str(row["team_id"]), asked=asked, earlier=earlier)
+        read = await reader.read(current_tenant(), str(row.team_id), asked=asked, earlier=earlier)
         notes = read.notes
         graph_input["attached_files"] = [
             {"fileId": f.file_id, "name": f.name, **({"unread": f.unread} if f.unread else {})} for f in read.files
         ]
         if read.passages:
-            graph_input["attached_passages"] = read.passages
+            graph_input["attached_passages"] = [*read.passages]
     run_id, thread_row, graph = await _start_run(rt, thread_id, graph_input)
     if replaced:
         # The supersede rule: the replaced turns stay in the log and drop out of the conversation.
         await EventLog(graph_store(rt).engine).append(
             thread_id=thread_id,
-            team_id=row["team_id"],
+            team_id=row.team_id,
             run_id=None,
             type_="superseded",
             data={"messageIds": replaced, "byRun": run_id},
         )
-    patch: dict[str, Any] = {"lastMessageAt": now_iso()}
+    patch: Json = {"lastMessageAt": now_iso()}
     if meta.get("title") == NEW_TITLE:
         patch["title"] = question if len(question) <= 48 else question[:47].rstrip() + "…"
     await update_meta(rt, thread_id, **patch)
 
     # Every turn's settings, for the audit trail as `run.settings` and on the reply for whoever reads it later.
     await EventLog(graph_store(rt).engine).append(
-        thread_id=thread_id, team_id=row["team_id"], run_id=run_id, type_="run.settings", data=effective.wire()
+        thread_id=thread_id, team_id=row.team_id, run_id=run_id, type_="run.settings", data=effective.wire()
     )
     assistant = ChatMessage(
         id=assistant_id(run_id),
@@ -844,7 +851,7 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
         failure included, is read by finish_learning, so it never fails the turn early."""
         try:
             found = await start_learning(
-                rt, me, agent, team_id=str(row["team_id"]), thread_id=thread_id, message=question, history=transcript
+                rt, me, agent, team_id=str(row.team_id), thread_id=thread_id, message=question, history=transcript
             )
         except Exception as e:
             if not into.done():
@@ -912,7 +919,7 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
             # What could not be read, told in the reply, and kept in the log so a reload says the same.
             note = "".join(f"\n\n_{n}_" for n in notes)
             await EventLog(graph_store(rt).engine).append(
-                thread_id=thread_id, team_id=row["team_id"], run_id=run_id, type_="text", data=note
+                thread_id=thread_id, team_id=row.team_id, run_id=run_id, type_="text", data=note
             )
             for out in builder.apply("text", note):
                 yield _frame(out)
@@ -921,7 +928,7 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
         if extraction is not None and not assistant.error:
             # What the person said about themselves is kept for their next chat with this agent.
             saved = await finish_learning(
-                rt, me, agent, extraction, team_id=str(row["team_id"]), thread_id=thread_id, run_id=run_id
+                rt, me, agent, extraction, team_id=str(row.team_id), thread_id=thread_id, run_id=run_id
             )
             builder.apply("memory", {"saved": saved})
         if assistant.error:
@@ -956,7 +963,7 @@ async def feedback(rt: Rt, me: Me, thread_id: str, message_id: str, body: Feedba
     fb = body.feedback.model_dump(mode="json", exclude_none=True) if body.feedback else None
     await EventLog(graph_store(rt).engine).append(
         thread_id=thread_id,
-        team_id=row["team_id"],
+        team_id=row.team_id,
         run_id=None,
         type_="feedback",
         data={"messageId": message_id, "feedback": fb},

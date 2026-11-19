@@ -20,6 +20,7 @@ from ops_agents.api.routers.tool_catalog import known_tools, tool_options
 from ops_agents.store.agent_registry import registry_agents
 from ops_agents.store.tenancy import LOCAL_TENANT, tenant_scope
 from ops_contracts.chat import ApprovalWidget, ChatMessage, WidgetEvent
+from ops_service_kit.http import Json
 from tests.conftest import SEED
 
 TITLED = OperationRef(
@@ -72,7 +73,7 @@ async def db() -> AsyncIterator[AsyncEngine]:
 
 
 async def test_an_approval_card_names_a_plugin_tool_by_its_title() -> None:
-    call = {"tool": "salesforce_update_record", "input": {"object": "Case", "id": "500A"}}
+    call: Json = {"tool": "salesforce_update_record", "input": {"object": "Case", "id": "500A"}}
     told = await describe_call(cast(Any, Rt()), call, currency=None, money_key=None)
     assert told["label"] == "Update a record" and told["sentence"].startswith("Update a record"), told
     plain = await describe_call(

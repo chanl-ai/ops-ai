@@ -35,7 +35,7 @@ class Rig:
     async def team(self, tid: str) -> str:
         row = await chat_row(self.rt, tid, None)
         assert row is not None
-        return str(row["team_id"])
+        return str(row.team_id)
 
     async def put(self, team: str, name: str, pages: list[str] | None, *, tenant: str = "local") -> dict[str, Any]:
         writer = self.files.client(service="kb", scopes=["files:view", "files:create"])

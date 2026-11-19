@@ -10,7 +10,7 @@ one moment for the agents, workflows and versions it joins."""
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal, TypeAlias, cast
+from typing import Annotated, Literal, TypeAlias, cast
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
@@ -19,7 +19,7 @@ from ops_access import can
 from ops_identity import CurrentTenantCaller
 from ops_identity.fastapi import Tx
 from ops_service_kit import narrow
-from ops_service_kit.http import Envelope, Out
+from ops_service_kit.http import Envelope, Json, Out
 
 from ...store.pin_users import PinUsers
 from ..account_names import account_uses_in
@@ -88,8 +88,8 @@ async def tool_uses(rt: Runtime, team_id: str | None, tools: list[str]) -> dict[
     for d in await team_workflows(rt):
         if d.get("archived_at"):
             continue
-        for node in cast(list[dict[str, Any]], dict(d.get("definition") or {}).get("nodes") or []):
-            tool = str(dict(node.get("parameters") or {}).get("operation") or "")
+        for node in cast(list[Json], dict(d.get("definition") or {}).get("nodes") or []):
+            tool = str(dict(cast(Json, node.get("parameters") or {})).get("operation") or "")
             if node.get("type") == "ops.action.tool" and tool in wanted:
                 add(tool, {"kind": "workflow", "id": str(d["workflow_id"]), "name": str(d["name"])})
     # Agents then workflows, each by id: the registry reads are unordered, so an updated row would otherwise move.
@@ -114,9 +114,9 @@ async def document_type_uses(rt: Runtime, types: list[str]) -> dict[str, list[di
     for d in await team_workflows(rt):
         if d.get("archived_at"):
             continue
-        for node in cast(list[dict[str, Any]], dict(d.get("definition") or {}).get("nodes") or []):
-            ref = dict(node.get("parameters") or {}).get("documentType")
-            type_id = str(cast(dict[str, Any], ref).get("id") or "") if isinstance(ref, dict) else ""
+        for node in cast(list[Json], dict(d.get("definition") or {}).get("nodes") or []):
+            ref = dict(cast(Json, node.get("parameters") or {})).get("documentType")
+            type_id = str(ref.get("id") or "") if isinstance(ref, dict) else ""
             use = {"kind": "workflow", "id": str(d["workflow_id"]), "name": str(d["name"])}
             if type_id in out and use not in out[type_id]:
                 out[type_id].append(use)

@@ -12,6 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ops_service_kit.http import Json
 from ops_store import Guarantee, isolation
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.search import contains
@@ -86,7 +87,7 @@ class MailboxRow:
     updated_at: str = ""
     tenant_id: str = field(default="")
 
-    def values(self) -> dict[str, Any]:
+    def values(self) -> Json:
         return {k: v for k, v in asdict(self).items() if k not in ("tenant_id",)}
 
 

@@ -14,7 +14,7 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any, NotRequired, TypedDict, cast
+from typing import Any, Final, NotRequired, TypedDict, cast
 
 from ops_engine.store import RUN_PREFIX, DefinitionRow, DefinitionStore, RunStore
 from ops_policy import input_hash
@@ -253,8 +253,37 @@ class ReplyPreview(TypedDict):
     cases: list[ReplyCase]
 
 
+class OptionView(TypedDict):
+    """One option of a review as the console draws it, in reply order."""
+
+    name: str
+    label: str
+    consequence: str | None
+    fields: list[dict[str, str]]
+    inputs: JsonList
+
+
+class EngineRow(TypedDict):
+    """A review step as all_rows lists it, in reply order: what a list counts, filters, facets and pages on, and under
+    BUILD what expand builds its full review from (the run, its decision or None, and its case, "" for none)."""
+
+    id: str
+    title: str
+    workflowId: JsonValue
+    agentSlug: JsonValue
+    kind: str
+    risk: str
+    status: str
+    slaMinutes: int | None
+    dueAt: str | None
+    createdAt: JsonValue
+    caseId: str | None
+    _engine_review: tuple[Json, Json | None, str]
+    decidedAt: NotRequired[JsonValue]
+
+
 # The key of an all_rows row that holds what expand builds its full review from; expand drops it with the row.
-BUILD = "_engine_review"
+BUILD: Final = "_engine_review"
 
 # The default options' decisions, as the console sends them, and the ports they choose.
 DEFAULT_DECISIONS = {"approved": "approve", "rejected": "reject", "approve": "approve", "reject": "reject"}
@@ -453,10 +482,10 @@ class TaskWords(TypedDict, total=False):
     customer: str
 
 
-def _task_words(task: dict[str, Any], payload: ReviewPayload) -> TaskWords:
+def _task_words(task: Json, payload: ReviewPayload) -> TaskWords:
     """A typed review's row words from its task: the header's title and the message as the reason, and whoever the step
     names as having asked, so a list row reads as the task screen does whatever the workflow."""
-    data = {str(r["region"]): cast(Json, r.get("data") or {}) for r in task["regions"]}
+    data = {str(r["region"]): cast(Json, r.get("data") or {}) for r in cast(list[Json], task["regions"])}
     words: TaskWords = {}
     if title := data.get("header", {}).get("title"):
         words["title"] = str(title)
@@ -666,8 +695,8 @@ def as_decided(payload: ReviewPayload, resume: Decision) -> ReviewPayload:
 
 async def view(
     rt: Runtime,
-    run: dict[str, Any],
-    decided: dict[str, Any] | None = None,
+    run: Json,
+    decided: Json | None = None,
     *,
     case_id: str | None = None,
     titles: dict[str, Any] | None = None,
@@ -708,7 +737,7 @@ async def view(
     said = {id(c): d for c, d in zip(held, described, strict=True)}
     inputs_of = {str(o.get("name")): list(entries(o.get("inputs"))) for o in declared}
 
-    def option_view(name: str) -> dict[str, Any]:
+    def option_view(name: str) -> OptionView:
         opt_call = next((o.get("call") for o in declared if str(o.get("name")) == name), None)
         d = said.get(id(opt_call)) if isinstance(opt_call, dict) else None
         return {
@@ -892,7 +921,7 @@ async def read_rows(rt: Runtime) -> RowReads | None:
     return RowReads(on_case, steps, [_payload(run, d) for run, d in steps])
 
 
-async def all_rows(rt: Runtime) -> list[dict[str, Any]]:
+async def all_rows(rt: Runtime) -> list[EngineRow]:
     """Each review step of the selected team's runs (the one a run waits on as pending, and every decided one) as a
     row holding what the list counts, filters, facets and pages on: id, status, title, risk, workflow, deadline, case
     and when it opened and was decided. No typed task, wording or reply preview is read; `expand` builds the full
@@ -900,7 +929,7 @@ async def all_rows(rt: Runtime) -> list[dict[str, Any]]:
     return await build_rows(rt, await read_rows(rt))
 
 
-async def build_rows(rt: Runtime, reads: RowReads | None) -> list[dict[str, Any]]:
+async def build_rows(rt: Runtime, reads: RowReads | None) -> list[EngineRow]:
     """`all_rows` from its local reads. Every tool the steps call is asked at once; within one_read_per_tool each is
     then asked once for the request, so a caller that asked first (`prefetch_policies`) makes this call none."""
     if reads is None:
@@ -909,12 +938,12 @@ async def build_rows(rt: Runtime, reads: RowReads | None) -> list[dict[str, Any]
     await ask_policies(rt, reads.tools)
     hours = await sla_hours(rt)
     now = datetime.now(UTC)
-    out: list[dict[str, Any]] = []
+    out: list[EngineRow] = []
     for (run, decided), payload in zip(steps, payloads, strict=True):
         policies = [await policy_of(rt, str(c.get("tool"))) for c in _calls(payload) if c.get("tool")]
         # A wait for a person to connect their account has no deadline.
         timed = decided is None and connect_wait(payload) is None
-        row: dict[str, Any] = {
+        row: EngineRow = {
             "id": step_id(run, payload),
             "title": str(payload.get("title") or f"Review {run['workflow_id']}"),
             "workflowId": run["workflow_id"],

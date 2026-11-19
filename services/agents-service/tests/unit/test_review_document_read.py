@@ -123,7 +123,7 @@ async def test_a_read_check_carries_each_fields_boxes_so_the_task_page_can_draw_
     fields = READ["records"][0]["fields"]
     address = {**fields["address"], "boxes": [box, {"page": "one"}]}
     records = [{**READ["records"][0], "fields": {**fields, "address": address}}]
-    check = {**CHECK, "draft": {**CHECK["draft"], "read": {**READ, "records": records}}}
+    check: dict[str, Any] = {**CHECK, "draft": {**CHECK["draft"], "read": {**READ, "records": records}}}
     review = await engine_reviews.view(RT, {**RUN, "waiting": {"payload": check}}, case_id="", titles=TITLES)
     got = review["read"]["records"][0]["fields"]
     # A box the page cannot place (no numeric page) is dropped rather than drawn at the top left.
@@ -131,7 +131,7 @@ async def test_a_read_check_carries_each_fields_boxes_so_the_task_page_can_draw_
 
 
 async def test_a_read_check_whose_step_names_the_file_under_file_shows_that_name() -> None:
-    check = {**CHECK, "draft": {"file": "TEST012.pdf", "read": READ}}
+    check: dict[str, Any] = {**CHECK, "draft": {"file": "TEST012.pdf", "read": READ}}
     review = await engine_reviews.view(RT, {**RUN, "waiting": {"payload": check}}, case_id="", titles=TITLES)
     assert review["read"]["fileName"] == "TEST012.pdf"
 
@@ -159,7 +159,7 @@ async def test_a_read_combined_with_another_source_shows_each_sources_value_and_
         "hasConflicts": True,
     }
     one = {**READ, "records": READ["records"][:1]}
-    check = {**CHECK, "draft": {"document": "levy_notice_scan.pdf", "read": one, "facts": combined}}
+    check: dict[str, Any] = {**CHECK, "draft": {"document": "levy_notice_scan.pdf", "read": one, "facts": combined}}
     review = await engine_reviews.view(RT, {**RUN, "waiting": {"payload": check}}, case_id="", titles=TITLES)
     read = review["read"]
     fields = read["records"][0]["fields"]
@@ -179,7 +179,7 @@ async def test_a_read_of_one_source_has_no_sources() -> None:
 
 async def test_a_decided_check_keeps_the_corrected_values_it_was_approved_with() -> None:
     fixed = [{"values": {"name": "Priya Natarajan", "address": "18 Oak Avenue, Toronto ON M4V 1A5"}}]
-    decided = {"payload": CHECK, "resume": {"decision": "approved", "edited": fixed}, "at": "now"}
+    decided: dict[str, Any] = {"payload": CHECK, "resume": {"decision": "approved", "edited": fixed}, "at": "now"}
     review = await engine_reviews.view(RT, RUN, decided, case_id="", titles=TITLES)
     assert review["status"] == "approved"
     assert review["read"]["corrected"] == [fixed[0]["values"]]
@@ -250,7 +250,11 @@ async def _policy(_rt: Any, _tool: str) -> Any:
 
 
 async def test_a_review_with_no_read_and_no_reply_has_neither() -> None:
-    payload = {"node": "check", "step_id": "wfrun_1:check:1", "draft": {"record": {"name": "Marcus Bell"}}}
+    payload: dict[str, Any] = {
+        "node": "check",
+        "step_id": "wfrun_1:check:1",
+        "draft": {"record": {"name": "Marcus Bell"}},
+    }
     review = await engine_reviews.view(RT, {**RUN, "waiting": {"payload": payload}}, case_id="", titles=TITLES)
     assert ("read" in review, "reply" in review) == (False, False)
     assert review["customer"] == "Marcus Bell"

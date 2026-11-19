@@ -27,7 +27,7 @@ from ..store.events import EventLog
 RESUME_PURPOSE = "workflow-resume"
 
 
-def resume_key(run_id: str, waiting: dict[str, Any]) -> str:
+def resume_key(run_id: str, waiting: Json) -> str:
     return f"resume:{run_id}:{waiting['node']}:{waiting['iteration']}"
 
 
@@ -85,7 +85,8 @@ def read_token(review_key: str, token: str, *, now: float | None = None) -> Resu
     """The claim a valid, unexpired token carries; BadResumeToken otherwise."""
     try:
         head, sig = token.split(".", 1)
-        claim = ResumeClaim(**cast(dict[str, Any], json.loads(_unb64(head))))
+        # A claim that is not an object fails here as any malformed token does (TypeError, so BadResumeToken).
+        claim = ResumeClaim(**json.loads(_unb64(head)))
         signature = _unb64(sig)
     except (ValueError, TypeError, binascii.Error) as e:
         raise BadResumeToken("not a resume token") from e
@@ -97,7 +98,7 @@ def read_token(review_key: str, token: str, *, now: float | None = None) -> Resu
 
 
 def resume_link(
-    review_key: str, *, tenant: str, team: str, run_id: str, waiting: dict[str, Any], seconds: float
+    review_key: str, *, tenant: str, team: str, run_id: str, waiting: Json, seconds: float
 ) -> dict[str, str]:
     """The URL and token an outside system posts its result to, valid a day past the step's own limit."""
     claim = ResumeClaim(
@@ -105,7 +106,7 @@ def resume_link(
         team=team,
         run_id=run_id,
         node=str(waiting["node"]),
-        iteration=int(waiting["iteration"]),
+        iteration=int(cast(int, waiting["iteration"])),
         interrupt_id=str(waiting["interruptId"]),
         expires_at=int(time.time() + seconds + 86400),
     )
@@ -136,7 +137,7 @@ async def resumed(
     return True
 
 
-async def wake_parked(db: AsyncEngine, *, name: str, key: str, team_id: str, payload: dict[str, Any]) -> list[str]:
+async def wake_parked(db: AsyncEngine, *, name: str, key: str, team_id: str, payload: Json) -> list[str]:
     """Resumes every step of `team_id` parked on event `name` with correlation key `key`; the runs woken. A
     wait row whose run has moved on is cleared instead."""
     if not key:

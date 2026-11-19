@@ -17,6 +17,7 @@ from ops_kb.service import freshness
 from ops_kb.source_settings import defaults, stored
 from ops_kb.store import knowledge
 from ops_kb.store.knowledge import kb_sources
+from ops_service_kit.http import Json
 from ops_store import isolation
 
 from .pdfs import HARDSHIP
@@ -95,7 +96,7 @@ async def test_documents_are_fresh_stale_or_without_a_schedule_from_the_sources_
     assert await _freshness(client, kb_row["id"]) == ["stale"]
 
 
-DAILY_2AM = {"kind": "daily", "time": "02:00", "tz": "UTC"}
+DAILY_2AM: Json = {"kind": "daily", "time": "02:00", "tz": "UTC"}
 YESTERDAY_GOOD = datetime(2026, 11, 10, 2, 1, tzinfo=UTC)
 
 
@@ -113,7 +114,7 @@ def test_freshness_adds_the_grace_to_the_slot(now: datetime, good: datetime | No
     assert freshness(DAILY_2AM, good, now) == expected
 
 
-HOURLY = {"kind": "hourly", "every": 1}
+HOURLY: Json = {"kind": "hourly", "every": 1}
 HOURLY_GOOD = datetime(2026, 11, 11, 9, 1, tzinfo=UTC)
 
 

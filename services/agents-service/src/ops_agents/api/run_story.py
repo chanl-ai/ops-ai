@@ -31,7 +31,7 @@ from .actors import NamedActors, actors, started_by_of
 from .deps import Runtime
 from .engine_runs import starters_of
 from .file_names import named
-from .review_text import describe_calls, humanize, operations
+from .review_text import CallWords, describe_calls, humanize, operations
 
 EMAIL_TRIGGER = "ops.trigger.email"
 END = "ops.flow.end"
@@ -772,7 +772,7 @@ def lines(
     *,
     workflow: str,
     team: str,
-    calls: dict[str, Json],
+    calls: dict[str, CallWords],
     who: NamedActors,
     started: dict[str, str] | None = None,
     started_names: dict[str, str] | None = None,
@@ -827,7 +827,7 @@ def lines(
             if said:
                 out.append(_line(finished, "automation", workflow, f"{step_name}: {said[:160]}", page))
         elif executor == TOOL:
-            told = calls.get(key) or {}
+            told = calls.get(key)
             g = an_object(st.get("input") or {}, "a tool step's input")
             if g.get("operation") in (REPLY_TOOL, ACK_TOOL) and not failed:
                 given = an_object(g.get("input") or {}, "a reply's input")
@@ -841,7 +841,9 @@ def lines(
                     )
                 )
             else:
-                said = str(told.get("sentence") or humanize(str(g.get("operation") or "")) or step_name)
+                said = str(
+                    (told.get("sentence") if told else None) or humanize(str(g.get("operation") or "")) or step_name
+                )
                 out.append(_line(finished or began, "automation", workflow, f"{said} failed" if failed else said, page))
         elif executor == REVIEW:
             title = _review_title(run, st, node, step_name)
