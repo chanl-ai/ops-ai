@@ -126,7 +126,7 @@ export const SITE = [
           { page: 'guide/operate.md', title: 'Operate', icon: 'activity' },
           { page: 'guide/system-components.md', icon: 'boxes' },
           { page: 'deploy/monitoring.md', title: 'Monitor', icon: 'activity' },
-          { page: 'deploy/upgrade.md', title: 'Upgrade', icon: 'arrow-up-circle' },
+          { page: 'deploy/upgrade.md', title: 'Upgrade', icon: 'circle-arrow-up' },
           { page: 'deploy/backup-and-restore.md', title: 'Back up and restore', icon: 'archive' },
           { page: 'guide/plugins-install.md', title: 'Install and pin plugins', icon: 'package-plus' },
           { page: 'deploy/security-scanning.md', title: 'Security scanning', icon: 'scan-search' },
