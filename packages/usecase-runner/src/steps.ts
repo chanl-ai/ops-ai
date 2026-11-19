@@ -118,7 +118,7 @@ export async function publishAgent(
   made?.add(`agent ${name}`, () => ops.raw.agents.agents_delete_agent({ path: { agent_id: agent.id } }));
   let version = agent.draftVersion ?? agent.version ?? 1;
   if (toolIds?.length) {
-    const saved = (await ops.raw.agents.agents_update_agent({ path: { agent_id: agent.id }, body: { toolIds } as never })) as { version?: number };
+    const saved = (await ops.agents.update(agent.id, { toolIds })) as { version?: number };
     version = saved.version ?? version;
   }
   await ops.agents.publish(agent.id, 'Published by the use case', version);

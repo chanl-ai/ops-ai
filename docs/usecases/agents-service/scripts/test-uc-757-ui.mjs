@@ -6,11 +6,13 @@
 // (`skillRun`); the model here does not run a skill, so the thread read is given that field at the network edge and the
 // server side of it is proved by the api script.
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, evidenceDir, finish, shootBothWidths, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { agentBase, saveAgent } from '../../lib/agent_save.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const PASSWORD = 'northfield-demo';
 const JAMES = 'j.richardson@harborpine.example';
 const MAYA = 'm.okafor@harborpine.example';
+const PRIYA = 'p.shah@harborpine.example';
 const RUN = Math.random().toString(36).slice(2, 6);
 const AREA = 'agents-service';
 const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: PASSWORD }) })).json()).data.token;
@@ -34,7 +36,7 @@ await withUiStack(
       steps: [{ do: 'Ask which charge is disputed.' }, { do: 'Look the charge up and say what it shows.' }, { do: 'Tell the cardholder what happens next.' }],
     });
     const agent = await made('/v1/agents', { name: `Dispute desk ${RUN}`, role: 'Helps cardholders with disputes' });
-    await made(`/v1/agents/${agent.id}`, { brief: { purpose: 'Help cardholders dispute a charge.', goal: 'Every dispute ends with a clear next step.', howToAnswer: 'Keep answers short.', never: ['Promise a refund before the review'], success: ['The cardholder knows what happens next'] } }, 'PATCH');
+    await made(`/v1/agents/${agent.id}`, { brief: { purpose: 'Help cardholders dispute a charge.', goal: 'Every dispute ends with a clear next step.', howToAnswer: 'Keep answers short.', never: ['Promise a refund before the review'], success: ['The cardholder knows what happens next'] }, ...(await agentBase(agents, J, agent.id)) }, 'PATCH');
 
     const browser = await chromium.launch();
     const errors = [];
@@ -46,7 +48,9 @@ await withUiStack(
       // So is a link's prefetch (`_rsc`) the browser drops when the page is left before it answers.
       const dropped = (r) => (r.method() === 'POST' && /\/chat\/threads\/[^/]+\/messages$/.test(r.url())) || (/[?&]_rsc=/.test(r.url()) && r.failure()?.errorText === 'net::ERR_ABORTED');
       page.on('requestfailed', (r) => !dropped(r) && failed.push(`${who}: ${r.method()} ${r.url()} ${r.failure()?.errorText}`));
-      page.on('response', (r) => r.status() >= 400 && failed.push(`${who}: ${r.status()} ${r.request().method()} ${r.url()}`));
+      // Steps 20 and 21 make the agent save answer 409 on purpose.
+      const stale = (r) => r.status() === 409 && r.request().method() === 'PATCH' && /\/v1\/agents\/[^/]+$/.test(r.url());
+      page.on('response', (r) => r.status() >= 400 && !stale(r) && failed.push(`${who}: ${r.status()} ${r.request().method()} ${r.url()}`));
     };
     const signIn = async (email) => {
       const page = await (await browser.newContext({ viewport: { width: 1440, height: 1000 } })).newPage();
@@ -157,6 +161,33 @@ await withUiStack(
       await page.getByRole('option', { name: 'High' }).click();
       const saidHigh = (await (await thought).json()).data?.patterns?.thinking;
       check('16 with no model chosen, a change to Thinking still saves', saidHigh === 'high', saidHigh);
+
+      // 20. Priya saves the agent while James has it open: his next change is not saved over hers, and the page says so.
+      const agentSave = (r) => r.request().method() === 'PATCH' && r.url().endsWith(`/v1/agents/${agent.id}`);
+      const hers = await saveAgent(agents, as(await tokenFor(PRIYA)), agent.id, { skillMenu: 'attached' });
+      const refused = page.waitForResponse(agentSave, { timeout: 60_000 });
+      await page.locator('#ag-thinking').click();
+      await page.getByRole('option', { name: 'Low' }).click();
+      const refusedWith = (await refused).status();
+      const told = await page.getByTestId('agent-stale-base').waitFor({ timeout: 30_000 }).then(() => page.getByTestId('agent-stale-base').innerText(), () => '');
+      check('20 a change made after another person saved is refused, and the page says who saved', hers.ok && refusedWith === 409 && /p\.shah@harborpine\.example saved a newer draft/.test(told), { hers: hers.status, refusedWith, told });
+      const resent = page.waitForResponse((r) => agentSave(r) && r.ok(), { timeout: 60_000 });
+      await page.getByTestId('agent-stale-reload').click();
+      const both = (await (await resent).json()).data;
+      check('20 reloading keeps his unsaved change and hers', both?.patterns?.thinking === 'low' && both?.skillMenu === 'attached' && (await page.getByTestId('agent-stale-base').count()) === 0, { thinking: both?.patterns?.thinking, skillMenu: both?.skillMenu });
+
+      // 21. His own save from elsewhere is no clash to tell him about: the page reads the agent again and saves.
+      await page.getByTestId('agent-save-status').filter({ hasText: /saved/i }).waitFor({ timeout: 30_000 });
+      await saveAgent(agents, J, agent.id, { skillMenu: 'team' });
+      const answers = [];
+      const note = (r) => agentSave(r) && answers.push(r.status());
+      page.on('response', note);
+      const landed = page.waitForResponse((r) => agentSave(r) && r.ok(), { timeout: 60_000 });
+      await page.locator('#ag-thinking').click();
+      await page.getByRole('option', { name: 'High' }).click();
+      const mine = (await (await landed).json()).data;
+      page.off('response', note);
+      check('21 after his own save elsewhere the change saves with no message', answers.join() === '409,200' && mine?.patterns?.thinking === 'high' && mine?.skillMenu === 'team' && (await page.getByTestId('agent-stale-base').count()) === 0, { answers, thinking: mine?.patterns?.thinking, skillMenu: mine?.skillMenu });
 
       // 17. The test panel shows the step tracker after a reply.
       // A live agent of the demo: the agent written above is a draft, and only a test chat reaches a draft.

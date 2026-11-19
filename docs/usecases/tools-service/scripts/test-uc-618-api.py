@@ -5,7 +5,7 @@ hold the app's tool. A check whose behaviour is not built names the task it wait
 from __future__ import annotations
 
 from apps_walk import AUTH, TEAM_OF, app_path, apps_stack, target
-from usecase_harness import agents, as_role, check, data, finish, until
+from usecase_harness import agents, as_role, check, data, finish, save_agent, until
 
 APP = "plugin:test.header-key"
 KEYED = "plugin:test.person-key"
@@ -17,7 +17,7 @@ with apps_stack() as w, agents(gateway_url=str(w.gw.base_url).rstrip("/"), env=A
     account = w.turn_on("admin", "test.header-key", credentials={"key": w.m["secrets"]["key"]})
     made = api.post("/v1/agents", json={"name": "Records helper", "role": "Reads records"}, headers=builder)
     agent_id = str((data(made) or {}).get("id") or "")
-    api.patch(f"/v1/agents/{agent_id}", json={"toolIds": ["header_key_get_record"]}, headers=builder)
+    save_agent(api, agent_id, {"toolIds": ["header_key_get_record"]}, headers=builder)
     users = w.kept(w.gw.get(f"{app_path(APP)}/used-by", headers=admin))
     check(
         "1 before turning the desk off, its users name the agent Records helper and the tool it holds",

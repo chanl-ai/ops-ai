@@ -11,7 +11,7 @@ from typing import Any
 
 import httpx
 from ai_steps_stack import OPS, ai_stack, definition, publish, run
-from usecase_harness import bearer, check, data, finish, signed_in, sse
+from usecase_harness import bearer, check, data, finish, save_agent, signed_in, sse
 
 SAID = "Ann Lee, SSN ending 6789, email ann.lee@example.com, phone (902) 555-0147, account 4401235567."
 RAW = ("6789", "ann.lee@example.com", "555-0147", "4401235567")
@@ -96,9 +96,10 @@ with ai_stack("uc265") as (api, people):
     )
 
     agent = data(api.get(f"/v1/agents/{aid}", headers=OPS))
-    off = api.patch(
-        f"/v1/agents/{aid}",
-        json={"guardrails": {**agent["guardrails"], "redactPii": False}, "note": "off"},
+    off = save_agent(
+        api,
+        aid,
+        {"guardrails": {**agent["guardrails"], "redactPii": False}, "note": "off"},
         headers=OPS,
     )
     asked = api.post(
