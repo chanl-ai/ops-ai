@@ -576,7 +576,7 @@ class MemoryReads:
         configurable = get_config().get("configurable") or {}
         thread_id, run_id = str(configurable.get("thread_id") or ""), str(configurable.get("run_id") or "")
         store = graph_store(self.rt)
-        thread = await store.thread(thread_id) if thread_id else None
+        thread = await store.thread_row(thread_id) if thread_id else None
         run = await store.run(run_id) if run_id else None
         if thread is None or run is None:
             return None
@@ -586,7 +586,7 @@ class MemoryReads:
 
         return await self.recall(
             person_of(person),
-            str(thread["team_id"]),
+            thread.team_id,
             agent_id,
             str(given.get("message") or ""),
             thread_id=thread_id,
@@ -660,13 +660,15 @@ class MemoryReads:
     async def run(self, arguments: Json) -> ToolOutcome:
         person = TURN_PERSON.get()
         thread_id = str((get_config().get("configurable") or {}).get("thread_id") or "")
-        thread = await graph_store(self.rt).thread(thread_id) if thread_id else None
-        agent_id = str(an_object((thread or {}).get("meta") or {}, "the thread's meta").get("agentId") or "")
+        thread = await graph_store(self.rt).thread_row(thread_id) if thread_id else None
+        agent_id = str(
+            an_object((thread.meta if thread is not None else None) or {}, "the thread's meta").get("agentId") or ""
+        )
         if person is None or not agent_id or await self._agent(agent_id) is None:
             return ToolOutcome(ok=False, output={"error": "There is no memory to search on this turn."})
         words = [w.lower() for w in str(arguments.get("query") or "").split() if len(w) > 2][:6]
         rows = await Memories(graph_store(self.rt).engine).matches(
-            person_of(person), str((thread or {}).get("team_id") or ""), agent_id, words, limit=SEARCH_RESULTS
+            person_of(person), thread.team_id if thread is not None else "", agent_id, words, limit=SEARCH_RESULTS
         )
         return ToolOutcome(
             ok=True, output={"memories": [{"kind": r.kind, "key": r.key, "value": r.value} for r in rows]}

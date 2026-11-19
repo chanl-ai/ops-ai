@@ -82,7 +82,7 @@ async def test_an_agent_without_the_grant_neither_finds_nor_runs_it(stack: tuple
     ends = [e["data"] for e in events if e["event"] == "tool_end" and e["data"]["tool"] == "search_tools"]
     assert ends and "workflow__dispute_email" not in json.dumps(ends[0]["output"]), ends
     assert rt.graph_store is not None
-    assert await rt.graph_store.threads("dispute_email") == [], "no child started"
+    assert await rt.graph_store.thread_rows("dispute_email") == [], "no child started"
 
 
 async def test_granting_an_unpublished_or_paused_workflow_is_refused_with_the_reason(
@@ -116,4 +116,4 @@ async def test_a_workflow_paused_between_offer_and_call_is_refused_with_the_reas
     assert (outcome.ok, outcome.output["code"]) == (False, "workflow_paused"), outcome.output
     assert "paused" in outcome.output["error"]
     assert rt.graph_store is not None
-    assert await rt.graph_store.threads("dispute_email") == []
+    assert await rt.graph_store.thread_rows("dispute_email") == []

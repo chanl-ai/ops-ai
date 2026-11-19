@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from ops_agent_kernel.ports import ToolOutcome
 from ops_agents.activities.catalog import Catalog
@@ -19,6 +19,9 @@ from .file_tools import FileTools
 from .knowledge_tools import KnowledgeSearch
 from .modules.review_events import APPLY_ACCESS
 from .modules.seed import FILE_TOOL_NAMES, KNOWLEDGE_TOOL_NAMES
+
+if TYPE_CHECKING:
+    from .modules.service import ApprovalView
 
 # The local executor refuses a write without a token. By the time a call reaches it the gateway has decided, so
 # this marker only says so; the token itself was checked by OPA.
@@ -69,7 +72,7 @@ class AccessDecisions(Protocol):
         by: str | None,
         team_id: str | None = None,
         deciders: Sequence[str] = (),
-    ) -> Mapping[str, object]: ...
+    ) -> ApprovalView | Mapping[str, JsonValue]: ...
 
 
 class ToolRunner(Protocol):

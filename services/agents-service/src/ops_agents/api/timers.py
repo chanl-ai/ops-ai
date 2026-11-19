@@ -241,12 +241,12 @@ async def fire_job_now(rt: Runtime, thread_id: str) -> Json:
 async def fire_job(rt: Runtime, row: Any) -> FireResult:
     """Starts the agent turn the thread's schedule meta names. Idempotent on the timer id."""
     store = graph_store(rt)
-    thread = await store.thread(row.thread_id)
+    thread = await store.thread_row(row.thread_id)
     if thread is None:
         if getattr(row, "timer_id", None) and row.timer_id != "job":
             await store_of(rt).close(row, None, "cancelled")
         return FireResult("cancelled", row.timer_id)
-    meta = an_object(thread.get("meta") or {}, "thread meta")
+    meta = an_object(thread.meta or {}, "thread meta")
     schedule = an_object(meta.get("schedule") or {}, "the thread's schedule")
     if store_of(rt).enabled and row.timer_id != "job":
         require_graphs(rt)
@@ -269,8 +269,8 @@ async def fire_job(rt: Runtime, row: Any) -> FireResult:
         except LeaseHeldError:
             return FireResult("busy", row.timer_id)
     agent_id = str(schedule.get("agentId") or "")
-    if str(thread["graph"]).startswith("agent:"):
-        agent_id = str(thread["graph"]).removeprefix("agent:")
+    if thread.graph.startswith("agent:"):
+        agent_id = thread.graph.removeprefix("agent:")
     message = str(schedule.get("message") or "Review held wires.")
     if not await store.start_run(
         run_id, row.thread_id, "timer", now_iso(), {"input": {"message": message}}, generation=generation

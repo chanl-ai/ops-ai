@@ -54,7 +54,7 @@ FLOW = parse(
 
 def _bank_change(question: str) -> dict[str, Any]:
     """A team's copy of write_approval whose header asks `question`, a template over the step's params."""
-    seed = next(s for s in tt.seeds() if s["id"] == "write_approval")
+    seed: Any = next(s for s in tt.seeds() if s["id"] == "write_approval")
     props = {**seed["params"]["properties"], "vendor": {"type": "string"}}
     regions = [{"region": "header", "bind": {"title": question}}, *seed["regions"][1:]]
     return {**seed, "name": "Bank change", "params": {**seed["params"], "properties": props}, "regions": regions}
@@ -96,7 +96,8 @@ async def test_an_open_task_keeps_its_version_when_the_type_moves_on(engine: Asy
     with tenant_scope(tenant):
         await types.save_draft("bank_change", _bank_change("Approve new bank details for {vendor}"), by="b@x")
         await types.publish("bank_change", 2, by="b@x")
-        task = (await engine_reviews.get(rt, run_id))["task"]
+        review: Any = await engine_reviews.get(rt, run_id)
+        task = review["task"]
     assert task["type"] == {"id": "bank_change", "version": 1, "name": "Bank change"}
     regions = {r["region"]: r["data"] for r in task["regions"]}
     assert regions["header"] == {"title": "Change the bank account for Acme?"}

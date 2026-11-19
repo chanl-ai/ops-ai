@@ -65,7 +65,9 @@ class Stack:
 
     async def children(self, parent: str) -> list[dict[str, Any]]:
         assert self.rt.graph_store is not None
-        return [t for t in await self.rt.graph_store.threads("levy-case") if t["parent_thread_id"] == parent]
+        return [
+            t.model_dump() for t in await self.rt.graph_store.thread_rows("levy-case") if t.parent_thread_id == parent
+        ]
 
     async def decide(self, tid: str, decision: str, *, confirm: bool = True, **extra: Any) -> Any:
         """Maya decides. A hold asks for a step-up (place_hold's policy), sent unless `confirm` is off."""

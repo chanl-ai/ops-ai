@@ -1,19 +1,13 @@
-# 30 boundaries crossed without a model in services/tools-service (scripts/check_typed_boundaries.py). A row may only fall.
+# 20 boundaries crossed without a model in services/tools-service (scripts/check_typed_boundaries.py). A row may only fall.
 1 body apps_add_own_account
 1 body gateway_platform_event
 3 dict-any services/tools-service/src/ops_tools/app.py
 1 dict-any services/tools-service/src/ops_tools/connections/records.py
-1 dict-any services/tools-service/src/ops_tools/connectors.py
 2 dict-any services/tools-service/src/ops_tools/egress.py
-2 dict-any services/tools-service/src/ops_tools/executor.py
 1 dict-any services/tools-service/src/ops_tools/expressions.py
 1 dict-any services/tools-service/src/ops_tools/gateway_calls.py
 1 dict-any services/tools-service/src/ops_tools/held_hosts.py
-3 dict-any services/tools-service/src/ops_tools/modules/directory.py
-1 dict-any services/tools-service/src/ops_tools/modules/policy.py
+1 dict-any services/tools-service/src/ops_tools/modules/directory.py
 5 dict-any services/tools-service/src/ops_tools/modules/seed.py
-1 dict-any services/tools-service/src/ops_tools/modules/service.py
 2 dict-any services/tools-service/src/ops_tools/plugins/executor.py
 1 dict-any services/tools-service/src/ops_tools/registry.py
-2 dict-any services/tools-service/src/ops_tools/store/modules.py
-1 dict-any services/tools-service/src/ops_tools/tools.py

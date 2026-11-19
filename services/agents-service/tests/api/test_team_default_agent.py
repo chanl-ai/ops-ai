@@ -137,7 +137,7 @@ async def test_the_default_asks_only_specialists_the_person_may_chat_with_and_as
     assert rt.graph_store is not None
     children = [
         t
-        for t in await rt.graph_store.threads("agent_wrapper")
+        for t in [r.model_dump() for r in await rt.graph_store.thread_rows("agent_wrapper")]
         if cast(dict[str, Any], t["meta"] or {}).get("calledBy")
     ]
     assert [(t["meta"]["agentId"], t["meta"]["calledBy"], t["meta"]["startedFor"]) for t in children] == [
@@ -170,7 +170,7 @@ ASK_DISPUTE = 'call agent__ag_dispute {"question": "Can I dispute a card charge?
 async def called(rt: Runtime) -> list[str]:
     """The specialists that ran a turn of their own, by the agent that asked."""
     assert rt.graph_store is not None
-    metas = [cast(dict[str, Any], t["meta"] or {}) for t in await rt.graph_store.threads("agent_wrapper")]
+    metas = [t.meta_object() for t in await rt.graph_store.thread_rows("agent_wrapper")]
     return [f"{m['calledBy']}>{m['agentId']}" for m in metas if m.get("calledBy")]
 
 
