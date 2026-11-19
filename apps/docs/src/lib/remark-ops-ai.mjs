@@ -4,7 +4,7 @@
  *
  * - the first `# heading` becomes the page title
  * - a "Status: ..." first paragraph becomes the status line with a badge
- * - a table cell that starts with built, partial, planned or not built shows that word as a badge
+ * - a table cell that starts with built, partial, planned, upcoming or not built shows that word as a badge
  * - `<!-- site: cards -->` above a table or a list renders it as summary cards
  * - `<!-- site: steps -->` above a numbered list renders it as steps
  * - `<!-- site: whats-new -->` becomes the What's new entries in changelog/, newest first, so release notes never go stale
@@ -28,9 +28,9 @@ import { SKIP, visit } from 'unist-util-visit';
 
 import { githubUrl, isSitePage, pageAnchors, repoIndex } from './repo.mjs';
 
-const BADGE = /^(not built|built|partial|planned)(?=$|[\s,.;:)])[\s,.;:)-]*/i;
+const BADGE = /^(not built|built|partial|planned|upcoming)(?=$|[\s,.;:)])[\s,.;:)-]*/i;
 const STATUS_WORDS =
-  /^(not built|not started|in progress|partly built|built|partial|planned|designed|proposed|proposal|done|passing|failing|retired|superseded|current|option|decided|draft|blocked|deferred|dropped|historical|approved|accepted|runs today|not yet runnable)\b[\s,.:;)-]*/i;
+  /^(not built|not started|in progress|partly built|built|partial|planned|upcoming|designed|proposed|proposal|done|passing|failing|retired|superseded|current|option|decided|draft|blocked|deferred|dropped|historical|approved|accepted|runs today|not yet runnable)\b[\s,.:;)-]*/i;
 const CODE_PATH = /^(?:\.{0,2}\/)?[\w@.-]+(?:\/[\w@.-]+)*\/?(?::(\d+)(?:-(\d+))?)?$/;
 const ALERTS = { NOTE: 'info', TIP: 'info', IMPORTANT: 'info', WARNING: 'warn', CAUTION: 'error' };
 

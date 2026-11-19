@@ -64,6 +64,19 @@ export const SITE = [
         ],
       },
       {
+        group: 'Examples',
+        icon: 'code',
+        open: true,
+        entries: [
+          { page: 'guide/examples/README.md', title: 'Examples for builders', icon: 'list' },
+          { page: 'guide/examples/agents.md', icon: 'bot' },
+          { page: 'guide/examples/skills.md', icon: 'sparkles' },
+          { page: 'guide/examples/workflows.md', icon: 'git-branch' },
+          { page: 'guide/examples/step-by-step-skills.md', icon: 'list-ordered' },
+          { page: 'guide/examples/coming-from-other-frameworks.md', icon: 'arrow-right-left' },
+        ],
+      },
+      {
         group: 'Build',
         icon: 'blocks',
         open: true,

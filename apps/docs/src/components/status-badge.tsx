@@ -16,6 +16,7 @@ const TONES: Record<string, string> = {
   blocked: 'partial',
   failing: 'drop',
   planned: 'planned',
+  upcoming: 'planned',
   designed: 'planned',
   proposed: 'planned',
   proposal: 'planned',

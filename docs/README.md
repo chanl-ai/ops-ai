@@ -17,6 +17,7 @@ These documents design an operational AI platform for banks and describe the con
 | Console | `console/page-plan.md` | Console pages, the UI standard, user guides, and screens approved (`console/approved/`) or waiting for approval (`console/proposed/`) |
 | Services and packages | `services/<name>/overview.md`, `packages/<name>/overview.md` | One page per service and library: what it does, its routes and tables, its tests |
 | Deploy | `deploy/install-guide.md` | Installing and running Ops AI: Compose, Kubernetes, the database, the release package |
+| Examples for builders | `guide/examples/README.md` | Runnable examples for agent, skill and workflow builders in Python, TypeScript and the command line, and a map from other agent frameworks |
 | Client guide | `guide/README.md` | One architecture and installation guide for a client team, the source of `deploy/client-install-guide.html` |
 | Use cases | `usecases/README.md` | The end-to-end checks that prove each feature, and how to run them |
 
@@ -51,7 +52,8 @@ shared list: the shareable guide built from `guide/*.md` is meant to present the
 |---|---|
 | `# Title` as the first line | The page title (and its sidebar name) |
 | `Status: proposed design. ...` as the first paragraph | A status line with a badge for the opening words |
-| A table cell starting with `built`, `partial`, `planned` or `not built` | That word as a green, amber, blue or grey badge |
+| A table cell starting with `built`, `partial`, `planned`, `upcoming` or `not built` | That word as a green, amber, blue or grey badge. `Upcoming` is the word the builder example pages use for anything that is not in the current release |
+| `> [!NOTE]` whose first words are `**Upcoming.**` | The callout that marks a section about a feature that is not in the current release |
 | `<!-- site: cards -->` directly above a table or a list | Summary cards: a table row or list item each; the first cell, or the item's opening **bold** or link, is the title |
 | `<!-- site: steps -->` directly above a numbered list | Numbered steps |
 | `> [!NOTE]`, `> [!WARNING]` (GitHub alerts) | A callout |
@@ -201,6 +203,12 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `guide/build-with-ops-ai.md` | Developer landing: the simple-first ladder, the two public bridges, and the Example folders |
 | `guide/workflows.md` | Author, validate, publish and test-run workflows from the Python SDK, TypeScript SDK and `opsai workflows` |
 | `guide/agents.md` | Author, publish and chat with agents from the SDK and `opsai agents` |
+| `guide/examples/README.md` | Examples for builders: who each page is for, how to connect, and how to read the examples |
+| `guide/examples/agents.md` | Agent examples per surface: create and publish, chat, knowledge, tools, test a draft, run modes, scoring with cases |
+| `guide/examples/skills.md` | Skill examples per surface: write and publish, attach to an agent, pick for one reply; skill verbs marked upcoming |
+| `guide/examples/workflows.md` | Workflow examples per surface: check, publish and run, a person's decision, an agent step, reading a run, refused starts |
+| `guide/examples/step-by-step-skills.md` | Upcoming: skills with numbered steps, rule checks, exits, approvals and sub-skills |
+| `guide/examples/coming-from-other-frameworks.md` | 22 agent patterns from LangChain and LangGraph, the OpenAI Agents SDK and Strands, each with the Ops AI way and the upcoming features |
 | `guide/workflow-example-coverage.md` | Generated: every built node type and the Example that teaches it |
 | `guide/agent-example-coverage.md` | Generated: every Agent Example and the capabilities it teaches |
 | `guide/developer-surface-coverage.md` | Generated: API, Python, TypeScript, CLI and UI proof per lifecycle operation |
