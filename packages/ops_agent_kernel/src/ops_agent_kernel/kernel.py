@@ -1027,6 +1027,12 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
         # A question about a blocked topic gets the guardrail's message; the answering model is never called.
         try:
             hit = await guard.check(guard_model, rules, req.user_turn)
+        except BudgetReachedError:
+            # Nothing is written yet, so there is nothing to close on.
+            state.text = BUDGET_REACHED
+            yield TextDelta(BUDGET_REACHED)
+            yield finish("completed", "budget_reached")
+            return
         except guard.GuardrailUnavailable as e:
             state.text = GUARDRAIL_UNAVAILABLE
             yield TextDelta(GUARDRAIL_UNAVAILABLE)

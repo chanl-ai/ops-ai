@@ -22,6 +22,7 @@ from ops_agents.api.auth import Principal
 from ops_agents.api.child_runs import ChildRuns, acting_for
 from ops_agents.api.deps import Runtime
 from ops_agents.api.ops_tools import ops_assistant_id
+from ops_agents.api.run_person import person_of_thread
 from ops_agents.store.agent_registry import registry_agents
 from ops_agents.store.base import metadata
 from ops_agents.store.events import EventLog
@@ -234,21 +235,31 @@ async def test_an_agent_already_on_the_chain_is_not_asked_again(stack: Stack, mo
 
 async def test_a_run_with_no_person_reaches_only_its_own_teams_agents_and_workflows(stack: Stack) -> None:
     c, rt = stack
+
+    async def scheduled(key: str, asked: str) -> str:
+        """A scheduled run of Branch Concierge told to ask `asked`; its thread."""
+        body = {"key": key, "message": ask(asked, "Anything held?")}
+        made = await c.post("/v1/agents/ag_branch/jobs", json=body, headers=ADMIN)
+        assert made.status_code == 201, made.text
+        return str(made.json()["data"]["threadId"])
+
+    # The team's default agent, which a person's chat lets ask every specialist: a run with no person does not.
+    assert (await c.put(URL, json={"agentId": "ag_branch"}, headers=ADMIN)).status_code == 200
     await grant(c, "ag_branch", "ag_dispute")
+    await scheduled("nightly", "ag_dispute")
+    await scheduled("monthly", "ag_fraud")  # in its own team, and never granted to it
     await grant(c, "ag_branch", "ag_fraud")
     await move(rt, "ag_fraud", "team_fraud")
-    job: dict[str, Any] = {}
-    for key, asked in (("nightly", "ag_dispute"), ("weekly", "ag_fraud")):
-        made = await c.post(
-            "/v1/agents/ag_branch/jobs", json={"key": key, "message": ask(asked, "Anything held?")}, headers=ADMIN
-        )
-        assert made.status_code == 201, made.text
-        job = made.json()["data"]
-    # A scheduled run acts as its agent: it asks the agent of its own team, and never the other team's.
+    job = {"threadId": await scheduled("weekly", "ag_fraud")}  # granted, and now another team's
+    # A scheduled run acts as its agent: it asks the agent it was granted in its own team, and no other.
     assert await called(rt) == ["ag_branch>ag_dispute"]
     assert rt.graph_store is not None
-    metas = [cast(dict[str, Any], t["meta"] or {}) for t in await rt.graph_store.threads("agent_wrapper")]
-    assert [m["chain"]["startedFor"] for m in metas if m.get("calledBy")] == ["agent:ag_branch"]
+    rows = await rt.graph_store.threads("agent_wrapper")
+    (asked_row,) = [t for t in rows if cast(dict[str, Any], t["meta"] or {}).get("calledBy")]
+    asked_meta = cast(dict[str, Any], asked_row["meta"])
+    assert asked_meta["chain"]["startedFor"] == "agent:ag_branch", asked_meta
+    # The asked agent acts as the run that asked it, not as a chat that lost its person, whose calls are refused.
+    assert person_of_thread(asked_row) is None
     with tenant_scope(TENANT):
         events = await EventLog(rt.graph_store.engine).for_threads([job["threadId"]])
         refused = [e.data for e in events if e.type == "agent_call_refused"]

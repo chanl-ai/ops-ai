@@ -1,6 +1,6 @@
 {
   "date": "2026-11-19",
   "title": "Agents that ask other agents share one budget",
-  "description": "When an agent asks another agent, the second one's model calls now count against the first conversation's budget, so a chain cannot spend past its cap unnoticed. The tool result shows which agents were on the chain.",
+  "description": "When an agent asks another agent, both spend from the first conversation's budget, which is now checked before every model call: an agent asked at the cap stops and the first agent gives one closing answer. A scheduled run can ask the agents it was granted, and start workflows, in its own team only.",
   "tag": "improved"
 }

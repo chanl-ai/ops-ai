@@ -160,7 +160,8 @@ class AgentCalls:
         out: list[ToolGrant] = []
         seen: set[str] = set()
         granted = self._granted(agent_id)
-        if await TeamDefaults(self.rt.db).agent(thread.team_id) == agent_id:
+        # Every specialist is the default agent's to ask for a person only: with no person it holds its grants alone.
+        if who is not None and await TeamDefaults(self.rt.db).agent(thread.team_id) == agent_id:
             granted = list(dict.fromkeys([*[a.id for a in self.rt.catalog.agents if a.id != agent_id], *granted]))
         # Only the agents of the thread's tenant: the catalogue holds every tenant's.
         owners = await registry(self.rt).tenant_owners({sid for sid in granted if sid != agent_id})

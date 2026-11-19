@@ -86,12 +86,17 @@ with agents() as api:
         ).text
     )
     refused = [e["data"] for e in logged if e["type"] == "agent_call_refused"]
+    outcomes = [
+        e["data"]["output"].get("status")
+        for e in logged
+        if isinstance(e.get("data"), dict)
+        and e["data"].get("tool") == "agent__ag_dispute"
+        and isinstance(e["data"].get("output"), dict)
+    ]
     check(
-        "7 a scheduled run with no person is refused its granted agent, and the thread's log says so",
-        published.status_code == 201
-        and refused == [{"agentId": "ag_branch", "withheld": ["ag_dispute"], "code": "no_caller"}]
-        and '"answered"' not in str(logged).replace("'", '"'),
-        {"publish": published.status_code, "job": job, "refused": refused},
+        "7 a scheduled run with no person acts as its agent and asks the agent of its own team",
+        published.status_code == 201 and refused == [] and "answered" in outcomes,
+        {"publish": published.status_code, "job": job, "refused": refused, "outcomes": outcomes},
     )
 
     again = data(api.post("/chat/threads", json={"agentId": "ag_branch", "kbIds": []}, headers=TEAM))
@@ -123,6 +128,20 @@ with agents() as api:
         "10 continuing the budget finishes the waiting turn",
         not after.get("interrupt") and after["cost"]["calls"] > 3,
         {"interrupt": after.get("interrupt"), "cost": after["cost"]},
+    )
+
+    tight = data(api.post("/v1/threads", json={"graph": "agent:ag_branch", "budget": {"maxCalls": 1}}, headers=TEAM))
+    cut = sse(
+        api.post(
+            f"/v1/threads/{tight['threadId']}/runs/stream", json={"input": {"message": ask}}, headers=TEAM, timeout=120
+        ).text
+    )
+    stopped = [o.get("status") for e in cut if isinstance(e.get("data"), dict) and isinstance(o := e["data"].get("output"), dict)]
+    closed = data(api.get(f"/v1/threads/{tight['threadId']}/state", headers=TEAM))
+    check(
+        "11 a specialist asked at the cap makes no model call, and the asking agent answers once from what it has",
+        "budget_reached" in stopped and closed["cost"]["calls"] == 2 and not closed.get("interrupt"),
+        {"stopped": stopped, "cost": closed["cost"], "interrupt": closed.get("interrupt")},
     )
 
 src = ROOT / "services" / "agents-service" / "src" / "ops_agents"

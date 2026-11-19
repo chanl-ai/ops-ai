@@ -81,6 +81,11 @@ def _asked_by(meta: JsonValue) -> str | None:
     return str(parent) if parent and meta.get("calledBy") else None
 
 
+def _agent_conversation(graph: str) -> bool:
+    """Whether a thread on `graph` is an agent's conversation: the shared chat graph or a published agent's own."""
+    return graph == "agent_wrapper" or graph.startswith("agent:")
+
+
 class UsageLedger(RuntimeStore):
     # A budget check and the usage it admits are read and written in one transaction (TRANSACTION).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION})
@@ -199,12 +204,17 @@ class UsageLedger(RuntimeStore):
             return None
         return exhausted(await self.totals(thread_id), budget)
 
-    async def chain_root(self, thread_id: str) -> str:
-        """The thread whose budget `thread_id`'s model calls count against: itself, or for a specialist's thread the
-        thread its chain started on, read from what api/agent_calls.py wrote when the specialist was asked."""
-        q = sa.select(graph_threads.c.meta).where(graph_threads.c.id == thread_id, team_visible(graph_threads))
+    async def chain_root(self, thread_id: str) -> str | None:
+        """The thread whose budget an agent's reply on `thread_id` counts against: itself, or for a specialist's
+        thread the thread its chain started on, read from what api/agent_calls.py wrote when the specialist was asked.
+        None for a thread that is not an agent's conversation."""
+        t = graph_threads.c
+        q = sa.select(t.graph, t.meta).where(t.id == thread_id, team_visible(graph_threads))
         async with self.tx() as c:
-            meta: JsonValue = (await c.execute(q)).scalar_one_or_none()
+            row = (await c.execute(q)).first()
+        if row is None or not _agent_conversation(str(row[0] or "")):
+            return None
+        meta: JsonValue = row[1]
         asked = _asked_by(meta)
         if asked is None or not isinstance(meta, dict):
             return thread_id
@@ -213,7 +223,9 @@ class UsageLedger(RuntimeStore):
 
     async def spent_before_call(self, thread_id: str) -> str | None:
         """Asked before every model call of a graph run: the thread whose spent budget the call would count against,
-        or None when the call may run. `totals` counts a chain one call deep, as deep as chains go today
-        (ops_contracts.chain.MAX_DEPTH)."""
+        or None when the call may run. Only an agent's conversation is stopped here. A workflow's agent step is
+        checked where the step starts (graphs/metering.py `guard`), which pauses it for a person: ending it part-way
+        would hand a half-done step to the next node. `totals` counts a chain one call deep, as deep as chains go
+        today (ops_contracts.chain.MAX_DEPTH)."""
         root = await self.chain_root(thread_id)
-        return root if await self.exhausted(root) is not None else None
+        return root if root is not None and await self.exhausted(root) is not None else None
