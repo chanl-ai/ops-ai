@@ -1,6 +1,6 @@
 # Implementation plan
 
-Status: draft for review. Builds on the architecture overview (`docs/architecture/overview.md`), the
+Status: draft for review. Builds on the architecture (`docs/architecture/README.md`), the
 decision records ADR-0001 to ADR-0012 (`docs/architecture/decisions/`), specs `01` to `04` and `07`
 to `09`, the design lessons and the problem
 statement (`docs/background/problem-statement.md`). Durations are in weeks from the start of phase 0
@@ -39,8 +39,8 @@ the date by about the delay shown.
 | The seven workstreams staffed at the phase-1 range (23 to 32 engineers; 28 to 37 with leadership and the embedded solutions engineer, section 4) by week 2 | Roughly proportional |
 | One approved model endpoint and a test-data rule allowing real archived mail in suites by week 6 | Suite work slips; step 5 moves |
 | Exchange administration grants app access to a test mailbox within 2 weeks of request and to the production mailbox by week 14 (`03` Q1) | Step 3 or step 7 moves day for day |
-| No external case system must remain the record of operations cases (overview open question 9) | Add 4 to 6 weeks for case sync as a tool module |
-| Redaction is not required on day one (overview open question 13) | Add 2 to 3 weeks to the AI gateway workstream, off the critical path if decided by week 4 |
+| No external case system must remain the record of operations cases (open question 9) | Add 4 to 6 weeks for case sync as a tool module |
+| Redaction is not required on day one (open question 13) | Add 2 to 3 weeks to the AI gateway workstream, off the critical path if decided by week 4 |
 | Workflow 1 has no `money_movement` action, so its effective tier is `low` or `medium` (ADR-0004) | A money action makes it `high`, which cannot reach production in phase 1 |
 | Security and Model Risk book review capacity from week 4 and review incrementally | Reviews started after week 14 add 4 to 8 weeks |
 
@@ -58,7 +58,7 @@ the date by about the delay shown.
 |---|---|---|---|
 | 0 Foundations | 0–8 | Environments, contracts, walking skeleton in `test` | none |
 | 1 First email workflow | 4–24 | One real shared inbox in production, one or more agents, one knowledge base, per-action approval | `low`, `medium` |
-| 2 Workflows 2 and 3 | 20–32 | Two more email workflows built from the template and the module library, with materially less effort | `low`, `medium`; `high` once the Model Risk second-line group exists (overview open question 21) |
+| 2 Workflows 2 and 3 | 20–32 | Two more email workflows built from the template and the module library, with materially less effort | `low`, `medium`; `high` once the Model Risk second-line group exists (open question 21) |
 | 3 Chat and canvas | 26–44 | Chat for staff (`07` phase 2a, then 2b); editable canvas for builders (`01` 5.10) | as above |
 | 4 Scale | 36 onward | `critical` tier with staged rollout, more connectors, more departments, automated model-update runs | all |
 
@@ -83,18 +83,18 @@ starts its suite while workflow 1 is in pilot.
 | Workflow 1 selection rules | One shared inbox with steady volume (≥ 50 mails a day) and three to six intents; actions are reads, a reply and at most one non-money write, so its effective tier is `medium` or `low` (`01` 5.2, ADR-0004); one department with a named knowledge owner and approver groups whose members are entitled in the systems the actions touch (`01` Q2); a manual baseline (handling time, SLA breach rate) measurable for four weeks before go-live |
 | Exit criteria (each can fail) | (1) Acceptance suites green in `test` and each test seen failing once: `01` A1–A22, `02` A1–A17, `03` G-A1–G-A28, `04` E1–E38, `08` MR1–MR12, `09` GV1–GV15. (2) Four weeks in production with: zero write calls without a valid approval token in the data gateway call log; every mail in the watched folders accounted for by an intake record (daily reconciliation against the mailbox count shows zero lost and zero duplicate runs); mail-to-case p95 within `01` 9; SLA breach rate no worse than the manual baseline; data gateway and AI gateway availability ≥ 99.9% in business hours. (3) The production version's evidence bundle is retrievable and its digest verifies (`04` E7). (4) A production rollback and re-promote rehearsed during the pilot, with smoke results. (5) Workflow-specific effort for workflow 1 recorded by role (section 10), so phase 2 has a baseline |
 | Dependencies | Phase 0 exit; section 8 decisions due by week 16; Security, Model Risk and change board engaged from week 4 |
-| Risks | Security review starts late (mitigation: design review at week 4, module reviews per version as they land, pen test booked for weeks 16–18); real mail cannot be used in suites (`04` Q4) (mitigation: redacted copies, decided by week 6); first department's documents lack effective dates and supersedes fields and most items are `held` (`02` Q3) (mitigation: metadata mapping and owner backfill sprint in weeks 8–12); policy approval tokens not accepted by Security (overview open question 19) (mitigation: launch with every write approved by a person; the feature stays off by gate data); Graph throttling at polling rate (mitigation: backoff per `03` 5.6.13, measured in the skeleton) |
+| Risks | Security review starts late (mitigation: design review at week 4, module reviews per version as they land, pen test booked for weeks 16–18); real mail cannot be used in suites (`04` Q4) (mitigation: redacted copies, decided by week 6); first department's documents lack effective dates and supersedes fields and most items are `held` (`02` Q3) (mitigation: metadata mapping and owner backfill sprint in weeks 8–12); policy approval tokens not accepted by Security (open question 19) (mitigation: launch with every write approved by a person; the feature stays off by gate data); Graph throttling at polling rate (mitigation: backoff per `03` 5.6.13, measured in the skeleton) |
 
 **Pilot shape.** Weeks 20 to 24 run workflow 1 in production with every write approved by a person
 (policy approval tokens off), the manual-handling queue staffed, and a daily review of rejected and
 edited actions, each of which the rejection-to-case loop has already turned into a proposed case that a person activates (`04` 5.15). The workflow owner may turn policy approval on
-for named write classes only after Security confirms (overview open question 19) and through a publish.
+for named write classes only after Security confirms (open question 19) and through a publish.
 
 ### Phase 2: Workflows 2 and 3 (weeks 20–32)
 
 | Item | Content |
 |---|---|
-| Deliverables | Workflows 2 and 3 in production in two further teams or departments, built from the email-intake template, library agents and existing modules, by the departments' own editors; at most one new module per workflow, built by the owning system team; renewal flow for approvals (`03` A6) and the candidate list of corrected cases (`04` 5.1.5 later) if workflow 1 showed they are needed; continue-as-new for long cases if overview open question 7 requires it; `high` tier opened (`04` S13) once the Model Risk S8 group is named, with four-eyes money actions allowed from then; validation of workflows 2 and 3 and periodic review dates for workflow 1 (`08`); findings in the console; approvals from Teams if not in phase 1 (`09` Q3) and from email (`09` Q4); webhooks and API keys for the first external caller (`09`); agent eval case editing and rubric scoring once judge agreement is measured (`04` 5.10.8); skills (`11`): registry, tests, `skill_publish` reviews, agent pins, generation through the AI gateway and `SKILL.md` import and export, so workflows 2 and 3 reuse workflow 1's procedures instead of copying instructions |
+| Deliverables | Workflows 2 and 3 in production in two further teams or departments, built from the email-intake template, library agents and existing modules, by the departments' own editors; at most one new module per workflow, built by the owning system team; renewal flow for approvals (`03` A6) and the candidate list of corrected cases (`04` 5.1.5 later) if workflow 1 showed they are needed; continue-as-new for long cases if open question 7 requires it; `high` tier opened (`04` S13) once the Model Risk S8 group is named, with four-eyes money actions allowed from then; validation of workflows 2 and 3 and periodic review dates for workflow 1 (`08`); findings in the console; approvals from Teams if not in phase 1 (`09` Q3) and from email (`09` Q4); webhooks and API keys for the first external caller (`09`); agent eval case editing and rubric scoring once judge agreement is measured (`04` 5.10.8); skills (`11`): registry, tests, `skill_publish` reviews, agent pins, generation through the AI gateway and `SKILL.md` import and export, so workflows 2 and 3 reuse workflow 1's procedures instead of copying instructions |
 | Exit criteria (each can fail) | (1) Workflow 2's workflow-specific effort is at most 50% of workflow 1's, and its elapsed time from kickoff to production at most 6 weeks (section 10). (2) Workflow 3 needs zero platform-team tickets, apart from module work done by system teams. (3) Someone outside the platform team builds workflow 3's draft from the documentation alone and records every point where they needed help (design lessons, "Verification culture": a cold first run). (4) Workflows 1 to 3 run together with per-workflow budgets, call logs and evidence separated |
 | Dependencies | Phase 1 exit; Exchange grants for two more mailboxes; knowledge owners for the new departments |
 | Risks | Exit criterion (1) fails: this is the problem statement's stop condition (section 11); a new department needs a new collection and IdP mapping, which is a platform and Risk step (`02` "Marginal effort"); suite building dominates and does not shrink |
@@ -105,16 +105,16 @@ for named write classes only after Security confirms (overview open question 19)
 |---|---|
 | Deliverables | Chat phase 2a (`07` Scope): thread API, stream relay, `ops-views` with native renderers, host-native approvals and confirmations, user delegation (ADR-0005 phase 1 vs later), sandbox origin with App Bridge, feedback to test candidates; chat template with its suite. Then 2b: sharing, attachments, custom MCP Apps, export, the intranet widget behind staff SSO (ADR-0009), exposure to the bank's assistant over MCP and A2A. Editable canvas for the builder role over the same server check (`01` 5.10), further node types from the palette as workflows need them, API trigger (`01` row 2) |
 | Exit criteria (each can fail) | (1) `07` acceptance tests 1–15 green in `test`, test 16 once sharing ships. (2) A second chat agent is created from the chat template by a department with no front-end change. (3) A builder creates a canvas workflow with no template, and it publishes through the same gate and server check, with the first-publish platform review (`01` 5.10.2). (4) A chat write and a case action use the same review and token path, proven by the audit log (`07` CD-6) |
-| Dependencies | `07` open questions 1, 3, 5, 6, 8 by week 20; overview open question 18 by week 28; IdP token exchange with `act` claim (overview open question 6) |
+| Dependencies | `07` open questions 1, 3, 5, 6, 8 by week 20; open question 18 by week 28; IdP token exchange with `act` claim (open question 6) |
 | Risks | Bank proxies buffer server-sent events (`07` Q5) (fallback: chunked fetch with the same parts); the bank standardises on Microsoft 365 Copilot (ADR-0009 "what would change our mind"): then exposure over MCP and A2A moves first and the console chat shrinks; user delegation not supported by the IdP (ADR-0005 fallback: gateway-minted delegation tokens, needs Security sign-off) |
 
 ### Phase 4: Scale (week 36 onward)
 
 | Item | Content |
 |---|---|
-| Deliverables | Staged percentage rollout (`04` operation 25, ADR-0004), then `critical` opened (`04` S11, S13); automated model-update runs and drift checks (`04` 5.8.3, 5.8.5); module revoke and deprecate in the console; dedicated department pools where regulation requires; Graph change notifications if the network review allows (overview open question 20); more connector types (`02` "later" sources, code modules, bank-run n8n via MCP if overview open questions 11 and 14 allow); discovery of unregistered model traffic (`03` 5.10); further templates (`01` 4.3); department onboarding as a routine; model risk monitoring thresholds that raise findings, drift and decommissioning records, inventory export to the bank's model risk system (`08` R11); Slack and further notification channels; signed audit export (`09` L4); team creation in the console |
+| Deliverables | Staged percentage rollout (`04` operation 25, ADR-0004), then `critical` opened (`04` S11, S13); automated model-update runs and drift checks (`04` 5.8.3, 5.8.5); module revoke and deprecate in the console; dedicated department pools where regulation requires; Graph change notifications if the network review allows (open question 20); more connector types (`02` "later" sources, code modules, bank-run n8n via MCP if open questions 11 and 14 allow); discovery of unregistered model traffic (`03` 5.10); further templates (`01` 4.3); department onboarding as a routine; model risk monitoring thresholds that raise findings, drift and decommissioning records, inventory export to the bank's model risk system (`08` R11); Slack and further notification channels; signed audit export (`09` L4); team creation in the console |
 | Exit criteria (each can fail) | (1) A `critical` workflow ramps 5% → 50% → 100% and a ramp is withdrawn once in `test` without affecting in-flight cases. (2) An alias change runs every affected suite automatically and refuses the move on one failing version. (3) Workflow N on existing modules reaches production in at most 3 weeks elapsed and 3 person-weeks, measured over the last five workflows. (4) The discovery report finds at least one known unregistered caller planted for the test |
-| Dependencies | Change board agreement on pointer moves for `critical` (overview open question 8); Model Risk acceptance of ramp evidence |
+| Dependencies | Change board agreement on pointer moves for `critical` (open question 8); Model Risk acceptance of ramp evidence |
 | Risks | Platform team becomes the bottleneck for module creation (mitigation: system teams own modules, `03` "Marginal effort"); catalogue sprawl (curate before adding a second module per system, design lessons, "Lessons that do not transfer") |
 
 ## 4. Team shape
@@ -131,9 +131,9 @@ three decisions; each operations team configures its own path (problem statement
 | System teams (CRM, core banking, document store, Exchange) | Their own tool modules inside WS2's model | Publish and own the first three to four modules; approve scope requests; Exchange administration grants mailbox access |
 | Department operations team (first workflow) | Workflow 1 cell | Intents, examples, fields, queues, SLAs, approval rules, suite, pilot staffing, approvers |
 | Knowledge owner per department | WS4 content side | Collections, metadata backfill, golden set, curation queue |
-| Security | WS7 reviews | Threat model, module review model (Decision 1), pen test, policy approval tokens (overview open question 19) |
+| Security | WS7 reviews | Threat model, module review model (Decision 1), pen test, policy approval tokens (open question 19) |
 | Model Risk | WS6 gate data | Gate composition and thresholds, evidence acceptance (Decision 2), deviation acknowledgement (ADR-0004) |
-| Change board | WS6 releases | Pointer moves outside the window below an agreed tier (Decision 3, overview open question 8) |
+| Change board | WS6 releases | Pointer moves outside the window below an agreed tier (Decision 3, open question 8) |
 
 ### Roles and headcount by phase
 
@@ -242,7 +242,7 @@ Mission: the one door to models, with keys held only by the key-and-budget servi
 | E3.3 Aliases | Alias versions with cleared sensitivity; callers name aliases only; alias move refused without passing runs | `03` G-A19, or an alias moves with a failing affected version | `03` 5.8.3–5.8.4, `04` 5.8.2 | `/agents/[id]` model select (aliases only) |
 | E3.4 Metadata log | Model call log per request to SIEM; cache hit rate; usage API | `03` G-A21 | `03` 5.8.7, M7 | `/workflows` cost column, `/` overview |
 | E3.5 Egress lock | Network policy and CI lint on provider hosts | `03` G-A18, `02` A15 | `03` 5.8.2 | API only |
-| E3.6 Sensitivity | Sensitivity ceiling per alias version; redaction only if overview open question 13 requires | `03` G-A22 | `03` 5.8.9 | API only |
+| E3.6 Sensitivity | Sensitivity ceiling per alias version; redaction only if open question 13 requires | `03` G-A22 | `03` 5.8.9 | API only |
 
 ### WS4 Knowledge
 
@@ -272,7 +272,7 @@ screen on the real API.
 | E5.1 Cases and SLAs | Cases, queues, calendars; SLA deadline in PostgreSQL, timer in Temporal; pause on `waiting_customer` | `01` A2, A13 or A14 | `01` 4.8, 5.8 | `/cases`, `/cases/[id]` |
 | | Inbound reply on the thread attaches to the open case; reopen window | A reply starts a second run, or a reply after 14 days reopens | `01` 5.8.4 | `/cases/[id]` |
 | E5.2 Per-action approval | Drafted actions with full payload and citations; edit clears approvals; four-eyes; only humans decide; outbox when Temporal is down | `01` A4, A5, A12, or an approval during a Temporal outage is lost | `01` 5.7 | `/cases/[id]` action card |
-| | Policy approval tokens behind gate data, off until overview open question 19 is answered | `01` A7 or A21 | `01` 5.7.6, ADR-0005 | Approval rules tab |
+| | Policy approval tokens behind gate data, off until open question 19 is answered | `01` A7 or A21 | `01` 5.7.6, ADR-0005 | Approval rules tab |
 | | Case to test case | `04` E14 | `04` 5.1.5 | `/cases/[id]` "Add to test suite" |
 | E5.3 Console on the real API | BFF with bank SSO; per-namespace switch from mock to HTTP in `apps/console/src/lib/api/index.ts` (section 9) | A namespace marked real still serves mock data, or the browser calls the Python API directly | ADR-0002 | All |
 | | Workflow page tabs on phase-1 APIs: field contract (type, unit, format, sensitivity); approval form refuses auto-approve on money tools; edit class shown before save | Gaps listed in `01` 7 remain | `01` 7 | `/workflows/[id]` |

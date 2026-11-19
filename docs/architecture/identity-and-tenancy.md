@@ -146,6 +146,6 @@ The one list of trust shortcuts; other pages link here.
 
 ## Open
 
-Whether the bank's IdP can issue a delegation token with an `act` claim is untested (overview open question 6). If it
+Whether the bank's IdP can issue a delegation token with an `act` claim is untested (open question 6 in [delivery](delivery.md#open-questions)). If it
 cannot, the gateway mints internal delegation tokens after authenticating both parties, which concentrates trust in
 the gateway and needs Security's sign-off.

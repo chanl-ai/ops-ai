@@ -38,8 +38,7 @@ bands:
   - groups:
       - id: shared
         label: "Shared services: one database chain each, called through typed clients"
-        style: new
-        columns: 5
+        columns: 6
         rows:
           - boxes:
               - { id: tools, label: tools-service, note: data gateway, href: services/tools-service/overview.md }
@@ -47,6 +46,7 @@ bands:
               - { label: kb-service, note: knowledge, href: services/kb-service/overview.md }
               - { label: files-service, note: file bytes, href: services/files-service/overview.md }
               - { label: documents-service, note: what a file says, href: services/documents-service/overview.md }
+              - { label: runner-service, note: "code tools, no network", href: services/runner-service/overview.md }
   - groups:
       - id: outside
         label: Outside the platform
@@ -56,7 +56,7 @@ bands:
           - boxes:
               - { label: Bank systems, note: "OpenAPI and MCP, test and live" }
               - { label: Model providers, note: "OpenAI-compatible, by alias" }
-              - { label: PostgreSQL or SQL Server, note: "row security per tenant", href: deploy/database.md }
+              - { label: PostgreSQL, note: "row security per tenant; SQL Server planned", href: deploy/database.md }
               - { label: OPA, note: "tool policy, beside tools-service" }
 links:
   - { from: callers, to: agents, label: "runs, chats, decisions", fromX: 0.33, straight: true }

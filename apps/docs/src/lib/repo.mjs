@@ -86,7 +86,7 @@ export function pageAnchors(repoPath) {
 
 let index;
 
-/** { root, files: Set, dirs: Set, pages: { 'docs/x.md': { url } }, order: ['architecture/overview.md', ...] } */
+/** { root, files: Set, dirs: Set, pages: { 'docs/x.md': { url } }, order: ['architecture/README.md', ...] } */
 export function repoIndex() {
   if (index) return index;
   const root = repoRoot();

@@ -3,7 +3,7 @@
 Status: current. Every document below is a draft for review unless its own status line says otherwise.
 
 These documents design an operational AI platform for banks and describe the console in
-`apps/console/` that shows it. Backend code runs for all six services (`services/platform-service`, `services/agents-service`, `services/tools-service`, `services/models-service`, `services/kb-service`, `services/files-service`). Reviews, Cases and work items move into the planned `ops_hitl` package, hosted by agents-service. `architecture/README.md` is the entry page for the system as built.
+`apps/console/` that shows it. Backend code runs as eight services under `services/` (platform, agents, tools, models, kb, files, documents and runner). Reviews, Cases and work items move into the planned `ops_hitl` package, hosted by agents-service. `architecture/README.md` is the entry page for the system as built.
 
 ## Map
 
@@ -69,15 +69,15 @@ names it or a folder it takes whole, and a page it does not place fails the site
 
 | Reader | Read in this order |
 |---|---|
-| Engineer | `background/problem-statement.md` → `architecture/overview.md` → `architecture/service-map.md` → the topic spec for the area you work on → `plan/implementation-plan.md` |
-| Architect | `background/problem-statement.md` → `architecture/overview.md` → `architecture/platform-choices.md` (the current choice per area; `architecture/decisions/` keeps the options behind each) → [tool system design](design/tools/tool-system.md) → `architecture/service-map.md` |
-| Risk reviewer | `background/problem-statement.md` → `architecture/overview.md` (traceability, failure modes) → [ADR-0012 Assurance: governance and testing as one system](architecture/decisions/assurance.md) → ADR-0005 |
+| Engineer | `background/problem-statement.md` → `architecture/README.md` → `architecture/service-map.md` → the topic spec for the area you work on → `plan/implementation-plan.md` |
+| Architect | `background/problem-statement.md` → `architecture/enterprise-architecture.md` → `architecture/platform-choices.md` (the current choice per area; `architecture/decisions/` keeps the options behind each) → [tool system design](design/tools/tool-system.md) → `architecture/service-map.md` |
+| Risk reviewer | `background/problem-statement.md` → `architecture/enterprise-architecture.md` → `architecture/delivery.md` (what is proven, open questions) → [ADR-0012 Assurance: governance and testing as one system](architecture/decisions/assurance.md) → ADR-0005 |
 
 ## Requirements
 
 | # | Requirement | Where it is met |
 |---|---|---|
-| 1 | Implement the problem statement: seven reasons, three decisions and the model-traffic mandate, four components, edit classes, ten knowledge requirements | Every spec; traceability in `architecture/overview.md` |
+| 1 | Implement the problem statement: seven reasons, three decisions and the model-traffic mandate, four components, edit classes, ten knowledge requirements | Every spec, through the problem statement's item ids |
 | 2 | Deliver the email-to-workflow reference flow: mailbox, understand, route to case, queue and SLA, drafted actions with per-action approval | [agents and workflows](console/agents-and-workflows.md), [tool system design](design/tools/tool-system.md) |
 | 3 | Fix the architecture first, with each decision stating options, criteria, evidence and what would change it | `architecture/decisions/` |
 | 4 | Build on open source (Temporal and peers) so existing implementations can plug in | ADR-0001, ADR-0007 |
@@ -87,18 +87,17 @@ names it or a folder it takes whole, and a page it does not place fails the site
 | 8 | Apply lessons from earlier agent platforms; the agents are internal and not voice or customer facing | The decision records, each with the lessons it applies |
 | 9 | Treat the console as the UI reference; each spec states what each screen needs from the backend | "UI mapping" section of each spec |
 | 10 | The bank runs no workflow or agent runtime today, so the runtime choice is greenfield; existing agents stay behind adapters | ADR-0001 |
-| 11 | Judge every decision on the marginal effort of the next workflow, not only the first | `architecture/overview.md` (throughput), each spec's "Marginal effort" section |
+| 11 | Judge every decision on the marginal effort of the next workflow, not only the first | `architecture/decisions/README.md` (the scoring weights), each spec's "Marginal effort" section |
 | 12 | Staff chat with agents inside the platform, with MCP Apps for in-chat data views | [chat in the console](console/chat.md), ADR-0009 |
 | 13 | First workflow: the lending servicing inbox (hardship, payoff statements, address changes), with no money movement, so it fits the `low` and `medium` tiers | `architecture/service-map.md` | Services, packages, layering, cross-service contracts and deployment targets (VM, Compose, Kubernetes) |
 
 ## Architecture
 
-Start at `architecture/README.md`; it gives the reading order and what is proven.
+Start at `architecture/README.md`; it gives the map, one request end to end and where to read next.
 
 | Path | Topic |
 |---|---|
-| `architecture/README.md` | Entry page: what Ops AI is, reading order by chapter, what is proven and by which evidence |
-| `architecture/overview.md` | The rule, the system picture, seven services, three run kinds, what runs today, evaluation criteria, open questions |
+| `architecture/README.md` | Entry page: the services and their ports, one request end to end, where to read next by topic, and the pages a security review starts from |
 | `architecture/words-and-entities.md` | Glossary (graph, thread, run, interrupt, lease, fence, timer) and the entity relationships |
 | `architecture/api.md` | API families and calls, which exist in code, request conventions, the event schema |
 | `architecture/runtime.md` | Inside agents-service: kernel, graphs, compiled definitions, the LangGraph adapter, process types, engine seam, libraries |
@@ -150,14 +149,14 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `architecture/operations.md` | Running it, environments, health, the acceptance gate, what to watch, runbooks |
 | `architecture/enterprise-architecture.md` | One-page picture for an enterprise: identity, observability and secrets bands, the platform, both gateways, and how to build, develop and deploy it, with status per part |
 | `architecture/data-model.md` | Every table, grouped by owning service, with keys, links, status per table and the database portability rules; companion to the architecture page |
-| `architecture/delivery.md` | What is proven, what is next, known gaps, the open decisions with defaults |
+| `architecture/delivery.md` | What is proven and by which evidence, what is still open, known gaps, open decisions with defaults, and the open questions for the bank |
 
 ## Index
 
 | Path | Topic |
 |---|---|
 | `background/problem-statement.md` | Why bank AI workflows stall, what the platform needs, the reference flow. Item IDs every spec traces to |
-| `architecture/overview.md` | Reference architecture, layering, evaluation criteria, throughput, end-to-end flow, traceability, failure modes, open questions |
+| `architecture/decisions/README.md` | Index of the decision records with each one's status and where its current answer lives, and the weights the records score options against |
 | `architecture/decisions/durable-execution-runtime.md` | Temporal and the graph interpreter |
 | `architecture/decisions/implementation-language.md` | Python for execution and the control plane, TypeScript for the UI |
 | `architecture/decisions/workflow-definition-format.md` | Declarative definition format, templates, portability |

@@ -1,6 +1,6 @@
-# Ops AI architecture
+# System architecture
 
-Status: current. The platform with what an enterprise runs around it: identity, observability, secrets, both gateways, dependencies, and how it is built and deployed.
+Status: current, updated 2026-11-18. The platform with what an enterprise runs around it: identity, observability, secrets, both gateways, dependencies, and how it is built and deployed. The short map is the [architecture entry page](README.md).
 
 Ops AI is an open-source platform that lets an enterprise's operations teams hand routine work to AI, with a person approving anything that moves money or changes a record. It runs work in two ways: agents, which decide their next step within set limits, and workflows, which run the same typed steps every time. A deployment can run either or both. All work reaches business systems and AI models only through two gateways, and stores its state in a SQL database the enterprise provides.
 
@@ -111,7 +111,7 @@ Every request passes the same checks in order. Access is granted per team, and a
 
 <!-- site: steps -->
 
-1. **Authentication**A short-lived token from `platform-service`, or a team API key. Federation with an enterprise IdP (Entra ID, Okta, Keycloak) over OIDC is planned.
+1. **Authentication**A short-lived token from `platform-service`, or a team API key. A workspace can sign its people in through its own identity provider over OIDC or SAML ([SAML sign-in](saml-sign-in.md)).
 2. **Tenant isolation**Each tenant sees only its own records; a request for another tenant's record returns 404, which keeps its existence private. Row-level security protects run, checkpoint, workflow and identity tables; the data gateway and knowledge filter by tenant in each query.
 3. **Team scoping**The token lists the caller's teams. A record in another team of the same tenant answers 403 and names the owning team.
 4. **Authorization (RBAC)**A person's rights in a team are the union of their role assignments, from the table below. An API key holds three fixed cells (`KEY_GRANTS`: start a live run, cancel its own runs, run the team's tools; register row E28).
@@ -125,7 +125,7 @@ Every request passes the same checks in order. Access is granted per team, and a
 | `viewer` | Read everything in the team | built (yes) every definition write, run and decision goes through `can()` |
 | API key | Act for one team through three fixed cells (register row E28) | built (yes) `KEY_GRANTS` in `packages/ops_access/src/ops_access/check.py` |
 
-A refused write answers 403 with the code `role_required` and names the role it needs; a builder acting in another team's records gets 403 `team_forbidden` naming the owning team. Mapping IdP groups to these roles, and platform roles such as model risk and security held through IdP groups, are planned.
+A refused write answers 403 with the code `role_required` and names the role it needs; a builder acting in another team's records gets 403 `team_forbidden` naming the owning team. Provider groups map to teams and roles at sign-in ([SAML sign-in](saml-sign-in.md)); platform roles such as model risk held through provider groups are planned.
 
 > [!NOTE]
 > **Why services verify tokens themselves.** Each call is authorized in the service that receives it, locally. Identity can restart or slow down without stopping work in progress, and token minting stays with `platform-service`, the only holder of the signing key.
@@ -144,7 +144,7 @@ A refused write answers 403 with the code `role_required` and names the role it 
 
 ## 9 AI gateway
 
-`models-service` is the way agents and workflows reach an AI model. Workers hold a gateway key; provider credentials stay in the gateway. Today agents use it once `OPS_MODELS_URL` is set, and it is started with `make -C services/models-service run`; making it the default path for every agent call is next.
+`models-service` is the way agents and workflows reach an AI model. Workers hold a gateway key; provider credentials stay in the gateway. Every shipped layout (`make up`, Compose, Kubernetes) sets `OPS_MODELS_URL`, so every model call goes through it; a process started without that setting calls the provider directly.
 
 | Part | What it does | Status |
 |---|---|---|
@@ -152,7 +152,7 @@ A refused write answers 403 with the code `role_required` and names the role it 
 | Keys, budgets and admission | Gateway keys with rotation and a budget per key, checked before a run starts | built |
 | Completions | An OpenAI-compatible completions endpoint | built |
 | Call log | Metadata for every call: alias, key, tokens, cost, latency | built |
-| Default path | Every agent and workflow model call routed through the gateway | partial opt-in today |
+| Default path | Every agent and workflow model call routed through the gateway | built in every shipped layout; a process without `OPS_MODELS_URL` calls the provider directly |
 | Data plane and failover | Portkey OSS behind the gateway, with a second provider per alias | planned |
 
 > [!NOTE]
@@ -188,7 +188,7 @@ A run is one piece of work by an agent or a workflow, with a status, a budget an
 
 ## Service map
 
-A service is a package with API routes, background loops and its own database migrations. Each is named after the console section it serves. Today each service runs as its own process; a single host program, `ops-host`, that starts any set of them in one process is the first part of version 1.
+A service is a package with API routes, background loops and its own database migrations. Each is named after the console section it serves, and each runs as its own process. A process host (`deploy/host`) starts any set of them from one image; running several services inside one process is planned.
 
 | Service | Serves | Owns | Port | Status |
 |---|---|---|---|---|
@@ -199,7 +199,8 @@ A service is a package with API routes, background loops and its own database mi
 | `models-service` | AI gateway | Aliases, provider connections, keys, budgets, call log | 8730 | partial |
 | `kb-service` | Knowledge bases | Sources, ingestion, retrieval, citations | 8740 | built |
 | `files-service` | Files | File metadata, bytes, versions, references, legal hold, storage settings and credentials | 8750 | partial |
-| `documents-service` | Document types; file Preview and Extract | Page layout, classify and split, extractions with cited positions, document types, templates, corrections and accuracy; reads bytes through files-service and never stores them | planned | partial |
+| `documents-service` | Document types; file Preview and Extract | Page layout, classify and split, extractions with cited positions, document types, templates, corrections and accuracy; reads bytes through files-service and never stores them | 8760 | partial |
+| `runner-service` | Tools (a code tool's functions) | Runs a code tool's Python function on WASM with no network, no database and no secrets; its only caller is tools-service | 8770 | partial |
 | reviews (`ops_hitl`) | Cases, Reviews | Reviews, cases, queues, decisions, approval tokens | in agents | partial package planned |
 | triggers (`ops_triggers`) | Deployments | Trigger registry, dedupe, schedules, SLA timers | in agents | partial package planned |
 
@@ -222,21 +223,20 @@ A service is a package with API routes, background loops and its own database mi
 
 ## 10 Database
 
-The platform connects to a SQL database the enterprise runs, usually a managed instance owned by its data team. Each service may have its own database or share a server. Development uses a local PostgreSQL 17 container, and unit tests use SQLite. Every table, its owning service, keys and status are on the [data model page](data-model.md).
+The platform connects to a SQL database the enterprise runs, usually a managed instance owned by its data team. Each service may have its own database or share a server. Development uses a local PostgreSQL container, and unit tests use SQLite. Every table, its owning service, keys and status are on the [data model page](data-model.md).
 
 | Database | Status | Tenant isolation |
 |---|---|---|
 | PostgreSQL (Azure Database for PostgreSQL, Amazon RDS or Aurora, Cloud SQL, self-run) | built (runs today) | Today: row-level security on run, checkpoint, workflow, chat attachment, chat search, widget deployment and identity tables, and a tenant filter in each query elsewhere. Planned: the store layer on every table, with row-level security as a backstop |
-| Azure SQL (SQL Server dialect) | planned | Store layer, plus a security policy as a backstop, on from the first release |
-| MySQL 8 | planned | Store layer |
+| SQL Server 2025 and Azure SQL | planned: the schema scripts are ready for a DBA, the services do not run on it yet ([Azure SQL](../guide/azure-sql.md)) | Store layer, plus a security policy as a backstop, on from the first release |
 
-- All three run through SQLAlchemy, with a CI job per database once each lands.
+- Both run through SQLAlchemy Core and one dialect layer; MySQL was dropped ([ADR-0017](decisions/database-support.md)).
 - Planned: every tenant query goes through scoped repositories that add the tenant filter, with a test that checks the filter is present.
 - Backups, high availability, encryption at rest and network rules follow the enterprise's existing database practice.
 - Services connect as a least-privilege login role. One platform migration needs a superuser or membership of `ops_platform_lookup`, so a managed PostgreSQL needs that grant before the first migrate.
 
 > [!NOTE]
-> **Why three databases.** Banks standardise on one of a small set of database engines, and adding a new engine to a bank's estate takes months of approval. Supporting PostgreSQL, Azure SQL and MySQL means Ops AI runs on the engine already approved. Putting tenant isolation in the store layer is what makes that possible, because row-level security exists on only some of them.
+> **Why two databases.** Banks standardise on one of a small set of database engines, and adding a new engine to a bank's estate takes months of approval. Supporting PostgreSQL and SQL Server means Ops AI runs on the engine most banks have already approved. Putting tenant isolation in the store layer is what makes that possible, because the two express row security differently.
 
 ## 11 Build
 
@@ -248,7 +248,7 @@ One repository holds the console, every service and every shared library, with o
 | `services/<x>-service` | One deployable per console section, each with its own `Makefile`, migrations, OpenAPI file and tests | Python 3.12, FastAPI, Alembic |
 | `packages/ops_*` | Libraries used by two or more services, including the workflow engine and the agent kernel | Python 3.12, SQLAlchemy |
 | `packages/usecase-runner` | Runs the end-to-end use cases and reports a verdict per check | Node, Playwright |
-| `deploy/` | Deployment targets: Compose today; VM and Kubernetes scheduled | Compose, systemd, Kustomize |
+| `deploy/` | Deployment targets: Compose and Kubernetes built; one VM with systemd designed | Compose, Kustomize, systemd |
 | `docs/` | Architecture, decision records, one spec per topic, use cases, service docs | Markdown, checked on commit |
 
 > [!NOTE]
@@ -290,7 +290,7 @@ Everything runs from the root `Makefile`. Prerequisites: Python 3.12, [uv](https
 
 <!-- site: cards -->
 - **Console only**: Runs on in-memory data alone. Suited to screen work and demos. `pnpm install` then `make dev`, at `localhost:3016`. State lives in memory and resets on reload. `?mock=slow`, `?mock=error` and `?mock=empty` show each loading, error and empty state.
-- **Full stack**: The console on the real services, with the model key supplied by the environment or a gitignored `.env`. `make install` once per clone: pnpm packages and one uv workspace for every Python service. `make up` starts PostgreSQL :5477, OPA :8181, platform :8710, agents :8700, tools :8720, kb :8740, files :8750 and the console :3016, applying each service's migrations to the existing database first, never dropping it (the files service starts before the knowledge service, which stores its uploads through it). If the database holds a migration this checkout does not have, `make up` stops and names the service. `OPS_STACK_WORKER=1` also starts the workflow worker, which runs workflows of typed nodes; `make -C services/models-service run` starts the AI gateway on :8730. `make up AUTH=platform` uses real sign-in through platform-service with seeded people.
+- **Full stack**: The console on the real services, with the model key supplied by the environment or a gitignored `.env`. `make install` once per clone: pnpm packages and one uv workspace for every Python service. `make up` starts PostgreSQL :5477, OPA :8181, every service (platform :8710, agents :8700, tools :8720, models :8730, kb :8740, files :8750, documents :8760, runner :8770), the workflow worker, the console :3016 and a fake model, applying each service's migrations to the existing database first, never dropping it. If the database holds a migration this checkout does not have, `make up` stops and names the service. `make up AUTH=platform` uses real sign-in through platform-service with seeded people.
 
 | Daily task | Command |
 |---|---|
@@ -315,15 +315,15 @@ A use case passes only when its script exits 0, prints only `PASS` lines, at lea
 
 ## Deploy
 
-The same packages run in three layouts; only the host's flags change. Every release runs on one virtual machine with plain systemd, and Compose and Kubernetes are optional.
+The same images run in each layout; only the settings change. Compose and Kubernetes are built; one virtual machine with plain systemd is designed.
 
 <!-- site: cards -->
-- **One process**: Every service in one process. For evaluation, development and tests. Today `make up` runs each service as its own local process; the single-process host, `ops-host`, is the first part of version 1.
-- **One virtual machine**: systemd units for a web process (all routes), a loops process (workers, sweepers, schedules, SLA timers) and separate `tools` and `models` processes, with PostgreSQL managed or on the VM, the OPA binary, and local disk or an object store.
-- **Split services**: A Kustomize base per service and an overlay per environment, each service scaled on its own. Compose today covers the development PostgreSQL and OPA.
+- **Compose on one machine**: Every service, the workflow worker, the console, OPA and one proxy as containers against an outside PostgreSQL, with a one-shot migrate job before the services ([Compose](../deploy/compose.md)). Built.
+- **Kubernetes**: A Kustomize base per service and an overlay per environment, the migrate Job and per-service secrets, each service scaled on its own; proven on kind ([Kubernetes](../deploy/kubernetes.md)). Built.
+- **One virtual machine**: systemd units with PostgreSQL managed or on the VM, the OPA binary, and local disk or an object store. Designed; `deploy/vm` does not exist yet.
 
 > [!NOTE]
-> **Why three layouts.** One process is the fastest way to evaluate and develop. A single VM fits a small production deployment and bank estates that run plain virtual machines. Split services fit when load or a security boundary needs a component on its own. Because the code is identical in all three, a use case that passes in one passes in the others.
+> **Why several layouts.** Compose fits evaluation and a small production install on one machine. Kubernetes fits when load or a security boundary needs a component on its own. A plain VM fits bank estates that run no container runtime. The images are the same in each, so a use case that passes in one passes in the others.
 
 | Release step | What happens |
 |---|---|
@@ -381,8 +381,8 @@ Each row is a seam. Changing the choice changes a setting or an adapter, and the
 
 | Seam | Default in the repository | Enterprise options | Status |
 |---|---|---|---|
-| Database | PostgreSQL in a local container | Managed or self-run PostgreSQL today; Azure SQL and MySQL 8 planned | dependency |
-| Identity provider | platform-service with seeded people | Entra ID, Okta, Keycloak, any OIDC IdP | planned |
+| Database | PostgreSQL in a local container | Managed or self-run PostgreSQL today; SQL Server 2025 and Azure SQL planned | dependency |
+| Identity provider | platform-service with seeded people | Any OIDC or SAML provider, such as Entra ID, Okta or Keycloak | built |
 | Secrets | Gitignored `.env` locally | Vault, Azure Key Vault, AWS Secrets Manager, injected as environment | dependency |
 | Model providers | Scripted model; OpenAI or Anthropic | Azure OpenAI, Anthropic, Bedrock, self-hosted, each behind an alias | partial |
 | Business systems | Seeded tool catalogue | Core banking, CRM, ticketing, event streams, imported from OpenAPI or MCP | built |

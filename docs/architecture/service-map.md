@@ -1,8 +1,10 @@
 # Service map
 
-Status: current, 2026-10-18. Approved; where a row says designed or planned, it is the target and is not
-built yet. The target design is [workflows and agents](../design/workflows/workflows-and-agents.md); specs 14 and 17 defer to this page
-where they differ.
+Status: current, updated 2026-11-18. Where a row says designed or planned, it is the target and is not built yet. The
+target design is [workflows and agents](../design/workflows/workflows-and-agents.md); specs 14 and 17 defer to this page where they differ.
+
+The eight services, what each owns, which service calls which and why, the events they exchange, the background
+processes they run, and where each can be deployed.
 
 ## Services
 
@@ -14,10 +16,10 @@ after the console section it serves. `packages/` holds reusable libraries; `serv
 
 | Service | Console section | Owns | State |
 |---|---|---|---|
-| `platform-service` | Govern: Access, Audit log, Settings | Sign-in, sessions, tenancy, teams, roles, audit, API keys; later notifications, usage, search. The only issuer of identity tokens (asymmetric, public keys at a JWKS route); every service verifies locally through `ops_identity`. Routes nothing and hosts nothing; holds no model or tool credentials | In code: `services/platform-service`, `packages/ops_identity` (`docs/services/platform-service/overview.md`); adoption by agents and tools next |
+| `platform-service` | Govern: Access, Audit log, Settings | Sign-in, sessions, tenancy, teams, roles, audit, API keys; later notifications, usage, search. The only issuer of identity tokens (asymmetric, public keys at a JWKS route); every service verifies locally through `ops_identity`. Routes nothing and hosts nothing; holds no model or tool credentials | In code: `services/platform-service`, `packages/ops_identity` (`docs/services/platform-service/overview.md`); every service verifies callers through `ops_identity` |
 | `agents-service` | Agents, Workflows, Deployments, Skills; Chat; Assurance; Work: Cases, Reviews | Definitions and versions, publish and release gate, evals, channels (mailbox, widget, MCP, API), execution: kernel turns, threads, runs, leases, timers, usage and thread budgets. Hosts the workflow runner (`ops_engine`) and, today, Reviews, Cases and decisions | Prototype in `services/agents-service` |
 | `tools-service` | Data Hub: Tools, Connections; tool-call Activity | Tool egress: tool modules, app accounts (how each system is signed in to, a sandbox account for test runs, with their tokens), app credentials, credentials, mock answers in test, OPA policy, approval-token checks, call log and dedupe | Prototype in `services/tools-service` |
-| `models-service` | AI gateway (`docs/plan/ai-gateway-console.md`) | Model egress: aliases, provider keys, per-key ledgers and budgets, logging, failover, in front of Portkey (ADR-0008) | First slice built in `services/models-service` on :8730 (`docs/services/models-service/overview.md`); opt-in through `OPS_MODELS_URL`, and `make up` does not start it |
+| `models-service` | AI gateway (`docs/plan/ai-gateway-console.md`) | Model egress: aliases, provider keys, per-key ledgers and budgets, logging, failover, in front of Portkey (ADR-0008) | First slice built in `services/models-service` on :8730 (`docs/services/models-service/overview.md`); `make up`, Compose and Kubernetes start it and set `OPS_MODELS_URL`, so every model call goes through it |
 | `kb-service` | Data Hub: Knowledge bases, Wiki | Sources, ingestion, indexing, retrieval, citations, freshness | First slice built in `services/kb-service` on :8740 (`docs/services/kb-service/overview.md`), started by `make up`; uses `packages/ops_ingest` |
 | `files-service` | Data Hub: Files, uploads | File bytes: upload, download, type judged from the bytes, scanning, dedupe, retention, legal hold, WORM evidence | First slice on :8750: uploads, proxy routes on the local backend, dedupe, downloads, legal holds, scan hook; client in `packages/ops_files_client` |
 | `documents-service` | Data Hub: Document types; the file page's Preview and Extract; the Human Task read check | What is read from a file: page layout (text blocks with boxes), classify and split, extractions with cited positions, document types and their versions, samples, templates, corrections, per-field accuracy. Never holds bytes | Built on :8760 with its own migration chain, on `packages/ops_extract` ([documents service](../services/documents-service/overview.md)) |
@@ -115,7 +117,7 @@ its own tables and only reading the other services' `/health/background`; a team
 | `files-service` | Storage, dedupe, holds, type from bytes, OCR for scans | Purge to documents on delete | Retention jobs, resumable uploads, virus scan |
 | `documents-service` | Reading each file once (scans, half-scanned pages, images, filled forms; OCR auto) for knowledge, chat attachments and document types; extraction and document types, on :8760 with its own chain | layout, cited boxes, templates, classify, file page, proof on the restraining-notice samples | Tables, split, accuracy from corrections |
 | `runner-service` | Python functions on WASM, `ops.call` to bound tools, secret handles | none | TypeScript, curated packages, gVisor and Firecracker backends, test cases at publish |
-| `ops-host` | none | none | Starts any set of services in one process |
+| `ops-host` | `deploy/host`: starts the processes a TOML file lists from one image, `OPS_ENABLED_SERVICES` picks which | none | Several services inside one process |
 
 Dev ports: platform 8710, agents 8700, tools 8720, models 8730, kb 8740, files 8750, documents 8760, runner 8770, console 3016.
 
@@ -131,7 +133,7 @@ One short name runs through every layer, so a service can move to its own reposi
 | Docs | `docs/services/<x>-service/` | `docs/services/agents-service/` |
 | Image, Kubernetes base, systemd unit | `<x>-service` | `agents-service` |
 
-Short names: `platform`, `agents`, `tools`, `models`, `kb`, `files`, `documents`. Console labels keep their product names.
+Short names: `platform`, `agents`, `tools`, `models`, `kb`, `files`, `documents`, `runner`. Console labels keep their product names.
 Settings read the `OPS_` prefix from one shared class; per-service prefixes (`OPS_<X>_`) need per-service settings
 classes (designed).
 
@@ -140,7 +142,7 @@ classes (designed).
 | Service | Specs and decisions |
 |---|---|
 | `platform-service` | [sign-in library](../packages/ops_signin/overview.md); ADR-0004, ADR-0013 |
-| `agents-service` | [agents and workflows](../console/agents-and-workflows.md) (including cases, queues, SLAs); [ADR-0012 Assurance: governance and testing as one system](decisions/assurance.md) (including Reviews); [chat in the console](../console/chat.md); the model-risk spec; [agent guardrails and skills](agent-guardrails.md); [agent guardrails and skills](agent-guardrails.md); specs 14–17; [tool system design](../design/tools/tool-system.md) (mailbox); ADR-0001, ADR-0003, ADR-0005, ADR-0012, ADR-0014, ADR-0015, ADR-0016 |
+| `agents-service` | [agents and workflows](../console/agents-and-workflows.md) (including cases, queues, SLAs); [ADR-0012 Assurance: governance and testing as one system](decisions/assurance.md) (including Reviews); [chat in the console](../console/chat.md); the model-risk spec; [agent guardrails and skills](agent-guardrails.md); specs 14–17; [tool system design](../design/tools/tool-system.md) (mailbox); ADR-0001, ADR-0003, ADR-0005, ADR-0012, ADR-0014, ADR-0015, ADR-0016 |
 | `tools-service` | [tool system design](../design/tools/tool-system.md); ADR-0005 |
 | `models-service` | [tool system design](../design/tools/tool-system.md); ADR-0008 |
 | `kb-service` | [kb-service](../services/kb-service/overview.md); ADR-0006 |
@@ -156,7 +158,7 @@ classes (designed).
 | Chat lives in `agents-service` | Chat sessions, threads and messages belong to `agents-service`; replaces the default in spec 14 Q2 |
 | Definitions are pinned per thread | Immutable versioned JSON definitions with a digest (ADR-0003); each thread compiles and pins `(definition, version, digest)`, so the pin survives a republish |
 | Human in the loop is a shared package | `ops_hitl` (planned) holds Reviews, Cases, work items and the token signing key behind its own API, so agents and workflows decide through one queue; agents-service hosts it |
-| Services are independent of processes | A process is one copy of `ops-host`, which starts any set of services: all in one process for dev and tests, split by service in production. Planned as the first part of version 1 |
+| Services are independent of processes | Each service runs as its own process; where one machine runs several, the process host in `deploy/host` starts them from one image. Several services inside one process is planned |
 
 ## Contracts that cross services
 
@@ -199,11 +201,11 @@ network. Designed: `agents-service` still has `ops_agents.api`, `ops_agents.grap
 | `ops_engine` | The workflow runner: node type registry, compiler to LangGraph, step journal, Postgres work queue, worker loop, leases with generation fencing, reconcile-by-key ([workflow-runner.md](workflow-runner.md)) | agents | Built in part (slice 1); runs inside agents-service |
 | `ops_hitl` | Reviews, Cases, work items, decisions, approval-token minting | agents | Planned; the code lives in `agents-service` today |
 | `ops_triggers` | Schedule, webhook, email and poll triggers that start agent runs and workflow runs | agents | Planned |
-| `sdk-ts`, `sdk-py` | Generated clients | console, services | Designed |
+| `sdk/python`, `sdk/typescript` | The public SDKs: a layer generated from each service's `openapi.json` by `make sdk`, with hand-written nouns and verbs on top | console, CLI, outside callers | Built ([Python](../sdk/python.md), [TypeScript](../sdk/typescript.md)) |
 
 ## Deployment targets
 
-Every release must run on one virtual machine with no container runtime; Compose and Kubernetes are optional.
+The design requires every release to run on one virtual machine with no container runtime. Today Compose and Kubernetes are built and the VM target is designed.
 
 | Target | Shape | State |
 |---|---|---|
@@ -223,12 +225,12 @@ SQL Server 2025 and Azure SQL are being added ([ADR-0017](decisions/database-sup
 | Tools service stands alone | `ops_tools` stops importing the seed catalogue and local executors from `ops_agents.activities` (`registry.py`, `tools.py`, `__main__.py`); then `tests/gateway` moves to `services/tools-service/tests`, which needs agents fixtures until then |
 | `ops_hitl` | Move the Reviews facade, decisions and token minting out of `agents-service` into the package |
 | `ops_triggers` | Build the package |
-| `ops-host` | One host that starts any set of services in one process |
+| Several services in one process | The process host starts each service as its own process today |
 | Migrations per service | Done for tools: own chain (`alembic_version_tools`) adopting `gateway_calls` and `gateway_fences`; agents 0006 and 0008 still create them on a fresh database. Left: review tables, with `ops_hitl` |
 | `ops_service_kit` contents | Envelope, auth and wiring move in; the seed directory default stops pointing into agents tests |
 | `ops_engine` | Finish the runner's remaining parts |
 | models-service | Per-key ledger behind the key-admission port, on `ops_metering` |
-| `deploy/vm`, `deploy/k8s` | Build the targets |
+| `deploy/vm` | Build the target |
 
 ## Open questions
 

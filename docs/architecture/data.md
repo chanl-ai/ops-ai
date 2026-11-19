@@ -216,7 +216,7 @@ name, so a receiver deploys before its sender.
 |---|---|---|
 | Checkpoints of an open thread | Kept; the latest is needed to resume | In code |
 | Checkpoints of a closed thread | Pruned once the journal holds the record; deleted entirely once the case is closed for good | `prune_thread` in code; no scheduled job |
-| Journal | Kept for the tenant's retention; exported as signed JSON lines | Designed; the owner of retention is overview open question 4 |
+| Journal | Kept for the tenant's retention; exported as signed JSON lines | Designed; the owner of retention is open question 4 in [delivery](delivery.md#open-questions) |
 | Gateway call log | Kept with the journal; read by module owners | Designed |
 | Sign-ins in progress (`oauth_states`) | Expired rows go when the tenant starts its next sign-in; a state lives ten minutes | In code |
 | Connection audit | Grows with people's changes to connections, not with calls; kept with the audit log | Designed |

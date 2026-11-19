@@ -790,16 +790,17 @@ The platform connects to a SQL database the enterprise runs, usually a managed i
 | Database | Status | Tenant isolation |
 |---|---|---|
 | PostgreSQL 15 to 17 | built (runs today) | Tenant filter in the store layer, with row-level security as a second check. Today row-level security covers run, checkpoint, workflow, chat attachment, chat search, widget deployment and identity tables |
-| Azure SQL, SQL Server 2022 | planned | Tenant filter in the store layer, with a row-level security policy on from the first release |
-| MySQL 8.0 and 8.4 | planned | Tenant filter in the store layer |
+| SQL Server 2025 and Azure SQL | planned: schema scripts ready for a DBA, services not yet run on it ([Azure SQL](../guide/azure-sql.md)) | Tenant filter in the store layer, with a row-level security policy on from the first release |
+
+MySQL was dropped ([ADR-0017](decisions/database-support.md)); SQL Server 2022 is not supported because it lacks the json and vector types.
 
 | Rule | What it means for the schema |
 |---|---|
 | Store operations | Repositories call a small set of operations (current time, claim one row, upsert, lock a row, tenant and system transactions), each rendered per database |
-| JSON columns | JSONB on PostgreSQL, JSON on MySQL, NVARCHAR(MAX) with a JSON check on Azure SQL. Queries filter on columns; a JSON field that needs filtering becomes a column |
+| JSON columns | JSONB on PostgreSQL, the json type on SQL Server 2025 and Azure SQL. Queries filter on columns; a JSON field that needs filtering becomes a column |
 | Keys | Bounded text with a binary collation, so `Msg-1` and `msg-1` stay distinct. Keys built from outside text are indexed through a SHA-256 column |
-| Leases | Row locks with a generation number, which work on all three databases |
+| Leases | Row locks with a generation number, which work on both databases |
 | Migrations | One portable baseline per service, with database-specific parts such as row-level security kept in one helper |
 
 > [!NOTE]
-> **Why three databases and a store-layer filter.** Banks run the database they already license, and adding a new engine to a bank's estate takes months of approval. Row-level security exists only on some engines, so the tenant filter that must hold everywhere lives in the store layer, and each database's own row-level checks stay on as a second line where they exist.
+> **Why two databases and a store-layer filter.** Banks run the database they already license, and adding a new engine to a bank's estate takes months of approval. Row-level security exists only on some engines, so the tenant filter that must hold everywhere lives in the store layer, and each database's own row-level checks stay on as a second line where they exist.
