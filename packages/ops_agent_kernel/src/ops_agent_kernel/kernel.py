@@ -211,22 +211,27 @@ class _TurnState:
             self.restored -= 1
         self.carried.clear()
 
-    def moved(self, run: SkillRunState) -> None:
-        """The running-skill record after a step tool or a step's tool result changed it."""
+    def moved(self, run: SkillRunState) -> str | None:
+        """The running-skill record after a step tool or a step's tool result changed it. When the step it lands on
+        calls a tool a skill stopped in this reply holds, the skill ends there, and what the model is told instead
+        is returned."""
         if (stopped := steps.held(self.run, run)) is not None:
             self.held[stopped[0]] = stopped[1]
+        if run.running is not None:
+            self.held.pop(run.running.skill_id, None)
+        if (halted := steps.halted(run, self.stepped, self.held)) is not None:
+            run = halted.run
         was, self.run, now = self.run.running, run, run.running
-        if now is not None:
-            self.held.pop(now.skill_id, None)
         self.events.append(SkillRunChanged(run.model_copy(deep=True)))
         if now is None or (was is not None and (was.skill_id, was.version) == (now.skill_id, now.version)):
-            return
+            return halted.said if halted is not None else None
         self.drop_carried()
         skill = next((s for s in self.stepped if (s.skill_id, s.version) == (now.skill_id, now.version)), None)
         if skill is not None:
             self.started.append(skill)
             entry = skillset.loaded_entry(skill, skill.use_when, now.inputs)
             self.events.append(skillset.event(entry, "started"))
+        return None
 
     def hidden(self) -> set[str]:
         """Tools not offered on the next model step, whatever the current step names: those the running skill keeps
@@ -252,8 +257,7 @@ class _TurnState:
             return None
         self.judged.add(run_step)
         moved = steps.on_result(self.run, self.stepped, output, ok)
-        self.moved(moved.run)
-        return moved.said
+        return self.moved(moved.run) or moved.said
 
     def last_step(self, step: int) -> bool:
         """The last step of a turn with more than one offers no tool, so the turn always keeps a step to answer in."""
@@ -566,9 +570,9 @@ def _step_tool(state: _TurnState, grant: ToolGrant) -> Tool[None]:
         if not moved.ok:
             rec.status, rec.output = "error", {"error": moved.said}
             return {"error": moved.said}
-        state.moved(moved.run)
-        rec.status, rec.output = "ok", {"now": moved.said}
-        return {"now": moved.said}
+        said = state.moved(moved.run) or moved.said
+        rec.status, rec.output = "ok", {"now": said}
+        return {"now": said}
 
     async def prepare(ctx: RunContext[None], tool_def: ToolDefinition) -> ToolDefinition | None:
         running = grant.name == step_tools.SWITCH or state.run.running is not None
@@ -1142,8 +1146,10 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
                     state.unstarted = step_tools.needs(skill, missing)
                 else:
                     told: list[str] = []
-                    state.moved(steps.start(state.run, skill, state.stepped, by="menu", inputs=inputs, told=told))
-                    state.unstarted = " ".join(told)
+                    halted = state.moved(
+                        steps.start(state.run, skill, state.stepped, by="menu", inputs=inputs, told=told)
+                    )
+                    state.unstarted = halted or " ".join(told)
             continue
         if skill is not None and skill.loading == "on_match" and skill not in state.loaded:
             how = "picked" if entry.get("how") == "picked" else "carried"

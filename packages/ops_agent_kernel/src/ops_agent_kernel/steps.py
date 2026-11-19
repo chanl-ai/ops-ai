@@ -56,6 +56,7 @@ __all__ = [
     "StepResult",
     "SubRun",
     "denied",
+    "halted",
     "held",
     "judged",
     "leave",
@@ -377,11 +378,20 @@ def _failed(run: SkillRunState, skills: Sequence[Skill], told: list[str]) -> Non
     _end(run, ends, skills)
 
 
+def _own(run: SkillRunState) -> set[str]:
+    """The tools the running skill holds itself since it failed. Started again, it is proving its own check once
+    more, so no other skill's hold on one of these stops it: two failed skills that name the same tool would
+    otherwise lock it for the whole conversation."""
+    r = run.running
+    kept = run.held_by_failed.get(r.skill_id) if r is not None else None
+    return set(kept.tools) if kept is not None else set()
+
+
 def _held_for(run: SkillRunState) -> HeldTools | None:
     """The failed skill that holds the current step's tool, when it is not the skill running."""
     r = run.running
     tool = target(run)
-    if r is None or tool is None:
+    if r is None or tool is None or tool in _own(run):
         return None
     return next((h for sid, h in run.held_by_failed.items() if sid != r.skill_id and tool in h.tools), None)
 
@@ -531,7 +541,7 @@ def withheld(run: SkillRunState, skills: Sequence[Skill]) -> set[str]:
     out: set[str] = set() if r is None else _tools(r, skills) - {target(run)}
     for skill_id, kept in run.held_by_failed.items():
         if r is None or r.skill_id != skill_id:
-            out |= set(kept.tools)
+            out |= set(kept.tools) - _own(run)
     return out
 
 
@@ -680,6 +690,26 @@ def held(before: SkillRunState, after: SkillRunState) -> tuple[str, list[str]] |
         return None
     last = after.history[-1]
     return None if last.ended in RELEASES else (last.skill_id, last.tools)
+
+
+def halted(run: SkillRunState, skills: Sequence[Skill], reply_holds: Mapping[str, Sequence[str]]) -> Moved | None:
+    """The record with the running skill ended as failed, and what the model is told, when its current step calls a
+    tool a skill stopped earlier in this reply still holds (`reply_holds`, by skill id); None when it does not. The
+    same rule as for a failed skill's hold: the skill does not stay on a step whose tool is not offered."""
+    r = run.running
+    tool = target(run)
+    if r is None or tool is None:
+        return None
+    holder = next((sid for sid, tools in reply_holds.items() if sid != r.skill_id and tool in tools), None)
+    if holder is None:
+        return None
+    before = run
+    run = run.model_copy(deep=True)
+    slug = next((s.slug for s in skills if s.skill_id == holder), holder)
+    how = next((h.ended for h in reversed(run.history) if h.skill_id == holder), "stopped")
+    why = f"{tool} is held for the rest of this reply because {slug} ended as {how}; start {slug} again."
+    _end(run, "failed", skills, holds=False)
+    return Moved(run, f"{why} {said(before, run)}")
 
 
 def shown(text: str, names: Mapping[str, str]) -> str:

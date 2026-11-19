@@ -113,6 +113,18 @@ async def test_a_failed_skill_holds_the_write_of_the_sub_skill_it_never_reached(
     await reply(ask, alone, fresh)
     assert [c for c, _ in fresh.calls] == ["refund_charge"], fresh.calls
 
+    # Two failed skills hold the refund. Each, started again, is re-proving its own check, so the other's hold does
+    # not stop it: the tool is never locked for the whole conversation.
+    both = Systems(lookup_charge=_amount, refund_charge={"refunded": True})
+    gave_up = Script(("switch_skill", {"slug": "pay-out"}), ("exit", {"name": "failed"}), "I stopped.")
+    one, _ = await reply(ask, gave_up, both)
+    failed = Script(("switch_skill", {"slug": "check-then-pay"}), ("lookup_charge", {"chargeId": "CH-1"}), "No.")
+    held, _ = await reply(replace(carrying(ask, run_of(one)), turn_id="t2", user_turn="Refund CH-1."), failed, both)
+    assert set(run_of(held).held_by_failed) == {"sk_pay", "sk_check"}, run_of(held)
+    retry = Script(("switch_skill", {"slug": "pay-out"}), ("refund_charge", {"chargeId": "CH-2"}), "CH-2 is refunded.")
+    await reply(replace(carrying(ask, run_of(held)), turn_id="t3", user_turn="Pay out CH-2."), retry, both)
+    assert [c for c, _ in both.calls] == ["lookup_charge", "refund_charge"], both.calls
+
 
 async def test_a_failed_skill_still_holds_its_write_after_more_skills_ended_than_the_record_lists() -> None:
     skills = pay_out_after_a_check({"action": "retry", "retries": 0})
@@ -177,6 +189,10 @@ async def test_an_exit_that_stops_a_skill_holds_its_later_write_for_the_rest_of_
     )
     result, _ = await reply(ask, model, systems)
     assert ("sk_check", "escalate", 1) in ended(run_of(result)), run_of(result)
+    # The pay-out skill does not sit on a step it cannot do: it ends at once and the model is told why.
+    assert run_of(result).running is None, run_of(result)
+    why = "refund_charge is held for the rest of this reply because check-then-pay ended as escalate"
+    assert why in json.dumps(model.returned[2]), model.returned
     assert all("refund_charge" not in offered for offered in model.offered[2:]), model.offered
     assert [c for c, _ in systems.calls] == ["lookup_charge"], systems.calls
 
