@@ -31,6 +31,7 @@ import re
 import sys
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, cast
 
 import sqlalchemy as sa
@@ -40,6 +41,9 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_service_kit.settings import Settings
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "deploy" / "fly"))
+from database_url import asyncpg_url, ssl_mode  # shared with deploy/fly/staging/apps.py
 
 BATCH = 200
 # Refused rows named per reader before the rest are counted.
@@ -545,14 +549,29 @@ async def run_reader(engine: AsyncEngine, reader: Reader, limit: int | None) -> 
     return out
 
 
+def open_engine(url: str) -> AsyncEngine:
+    """The engine for `url`. The plain URL `fly postgres attach` prints is opened with the asyncpg driver and its
+    `sslmode`; a SQLAlchemy URL is opened as given. An unreadable URL stops the run without quoting it, since it
+    holds the password."""
+    options: dict[str, Any] = {}
+    mode = ssl_mode(url)
+    if mode:
+        options["connect_args"] = {"ssl": mode}
+    target = asyncpg_url(url)
+    try:
+        make_url(target)
+    except (sa.exc.ArgumentError, ValueError):
+        sys.exit("OPS_DATABASE_URL is not a database URL (not shown: it holds the password)")
+    return load("ops_store.database:open_database")(target, **options)
+
+
 async def main_async(args: argparse.Namespace) -> int:
     chosen = [r for r in READERS if args.service in (None, r.service)]
     if args.list:
         for r in chosen:
             print(f"{r.service:10} {r.name}")
         return 0
-    open_database = load("ops_store.database:open_database")
-    engine: AsyncEngine = open_database(Settings().database_url)
+    engine = open_engine(Settings().database_url)
     event.listen(engine.sync_engine, "before_cursor_execute", refuse_writes)
     problems = 0
     absent: list[str] = []

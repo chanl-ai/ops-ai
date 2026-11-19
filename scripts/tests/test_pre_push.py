@@ -117,3 +117,61 @@ def test_a_real_push_runs_the_trees_hook_and_skips_an_unfinished_change_to_a_pus
     git(repo, "commit", "-qm", "bad")
     done = real_push()
     assert done.returncode != 0 and "pushed files" in done.stdout + done.stderr, done.stdout + done.stderr
+
+
+ZERO = "0" * 40
+
+
+def console_push(repo: Path, tmp_path: Path, local: str, _since: str) -> tuple[int, str, bool]:
+    """Pushes `local` as a new branch through the hook with a `node` that records that the console suite ran and fails;
+    returns the exit status, the output and whether the suite ran."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    ran = tmp_path / "suite-ran"
+    (bin_dir / "node").write_text(f"#!/bin/sh\ntouch {ran}\nexit 1\n")
+    (bin_dir / "node").chmod(0o755)
+    env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "OPS_RUFF": RUFF, "HOME": str(repo)}
+    done = subprocess.run(
+        ["sh", str(repo / ".githooks/pre-push"), "origin"],
+        cwd=repo,
+        input=f"refs/heads/release/1.0.0 {local} refs/heads/release/1.0.0 {ZERO}\n",
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    return done.returncode, done.stdout + done.stderr, ran.exists()
+
+
+def console_repo(tmp_path: Path, change: str) -> tuple[Path, str, str]:
+    """A repo whose origin/main is the base and whose origin/develop holds one console change on top of it."""
+    repo, base = make_repo(tmp_path)
+    git(repo, "update-ref", "refs/remotes/origin/main", base)
+    (repo / "apps/console/src").mkdir(parents=True)
+    (repo / "apps/console/src/a.ts").write_text("export const a = 1\n")
+    (repo / "bad.py").write_text(change)
+    git(repo, "add", ".")
+    git(repo, "commit", "-qm", "console change")
+    head = git(repo, "rev-parse", "HEAD")
+    git(repo, "update-ref", "refs/remotes/origin/develop", head)
+    return repo, base, head
+
+
+def test_a_new_branch_at_a_commit_the_remote_has_skips_the_console_suite(tmp_path: Path) -> None:
+    repo, _, head = console_repo(tmp_path, "x = 1\n")
+    status, out, ran = console_push(repo, tmp_path, head, head)
+    assert (status, ran) == (0, False) and "already on origin" in out, out
+
+
+def test_a_commit_the_remote_lacks_runs_the_console_suite(tmp_path: Path) -> None:
+    repo, _, head = console_repo(tmp_path, "x = 1\n")
+    (repo / "apps/console/src/a.ts").write_text("export const a = 2\n")
+    git(repo, "commit", "-qam", "one new commit")
+    status, out, ran = console_push(repo, tmp_path, git(repo, "rev-parse", "HEAD"), head)
+    assert (status, ran) == (1, True) and "console unit suite failed" in out, out
+
+
+def test_commits_the_remote_has_are_still_linted(tmp_path: Path) -> None:
+    repo, base, head = console_repo(tmp_path, "import os,sys\n")
+    status, out, ran = console_push(repo, tmp_path, head, base)
+    assert (status, ran) == (1, False) and "pushed files" in out, out

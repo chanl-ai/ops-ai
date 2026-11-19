@@ -96,7 +96,13 @@ def with_version(sha: str, v: str) -> str:
 
 def runs_for(workflow: str, sha: str) -> list[dict]:
     fields = "databaseId,conclusion,status"
-    return gh_json("run", "list", "--workflow", workflow, "--commit", sha, "--json", fields, "--limit", "10")
+    try:
+        return gh_json("run", "list", "--workflow", workflow, "--commit", sha, "--json", fields, "--limit", "10")
+    except Refusal as e:
+        # GitHub answers 404 for a workflow file it has never run (deploy-staging.yml until someone runs it by hand).
+        if "HTTP 404" in str(e):
+            return []
+        raise
 
 
 def ci_status(sha: str) -> str:
@@ -127,7 +133,8 @@ def staging_problem(sha: str) -> str | None:
     done = [j for j in deploys if j.get("conclusion") == "success"]
     if not done:
         return f"the staging deploy of {sha[:8]} is {deploys[0].get('conclusion') or 'not finished'}, not success"
-    log = run("gh", "run", "view", "--job", str(done[0]["databaseId"]), "--log")
+    # The jobs API, because `gh run view --job --log` prints nothing for a job in a called workflow (staging / deploy).
+    log = run("gh", "api", f"repos/{{owner}}/{{repo}}/actions/jobs/{done[0]['databaseId']}/logs")
     walk = WALK.search(log)
     if "click walk skipped" in log or not walk:
         return f"the staging deploy of {sha[:8]} did not run the click walk"
