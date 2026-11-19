@@ -1658,6 +1658,8 @@ class PublishBlocker(Out):
         "already_published",
         "deprecated",
         "too_long",
+        # Only ever a warning: a tool a step's sentence names and the step does not run.
+        "mention",
     ]
     id: str | None = None
     position: BlockerPosition | None = None
@@ -1684,6 +1686,8 @@ class SkillPublishCheck(Out):
     # Each problem's sentence, kept for callers that read only these; `problems` says where each one is.
     blockers: list[str]
     problems: list[PublishBlocker] = Field(default_factory=list[PublishBlocker])
+    # What does not block: a tool a step's sentence names and the step does not run.
+    warnings: list[PublishBlocker] = Field(default_factory=list[PublishBlocker])
     edit_class: Literal["free", "re_test", "re_approval"]
     approvers_needed: int
 

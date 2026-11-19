@@ -1,7 +1,9 @@
 """A skill's steps through /v1/skills and the agent's pins, by failure mode: a save dropping the steps, exits,
 results, not-when or success lines, storing a mistyped rule as a check the model judges, or saving a skill that cannot
 run; a pin losing the steps, or a pin saved before steps no longer loading; a skill publishing while a step names a
-tool the team no longer offers, or the refusal not saying which step.
+tool the team no longer offers, or the refusal not saying which step; a step that changes something saved or
+published with no rule behind it; and a tool a sentence only names being run as the step's tool, or a step that
+names one tool and runs none publishing unseen.
 
 Where the design names no shape, these tests fix one: a refused step answers its 1-based position as
 `error.details.step`."""
@@ -106,10 +108,11 @@ async def test_a_save_keeps_the_steps_and_refuses_a_mistyped_rule_or_a_skill_tha
             "steps_always_on": {"loading": "always", "useWhen": ""},
             "unknown_reference": {"steps": _step(2, use={"kind": "skill", "id": "sk_missing"})},
             "sub_skill_depth": {"steps": _step(2, use={"kind": "skill", "id": nested})},
-            # A rule on a result needs the one tool the result comes from: none named, or two in the text.
+            # A rule on a result needs the tool the result comes from, stored as the step's own: naming it in the
+            # sentence is not enough.
             "check_needs_tool": {"steps": _step(1, use=None, do="Look up the customer and the charge.")},
         }
-        two = "Use @tool:lookup_customer or @tool:request_document."
+        two = "Look up the customer with @tool:lookup_customer."
         error = _error(await c.put(url, json={"steps": _step(1, use=None, do=two), "baseVersion": 1}))
         assert (error["code"], error["details"]["step"]) == ("check_needs_tool", 1), error
         for code, change in cannot_run.items():
@@ -158,22 +161,58 @@ async def test_an_attached_skill_runs_with_its_steps_and_a_pin_saved_before_step
     assert loaded.instructions == pin["instructions"] and loaded.program is None
 
 
-async def test_a_step_that_names_its_tool_inside_its_text_runs_that_tool(tmp_path: Path) -> None:
-    """A builder writes "Look up the customer with @tool:lookup_customer" with nothing in front of the step. Read as
-    a step with no tool, its rule runs on no result and the write of the step after it is never kept back."""
+RECEIPT = {"kind": "tool", "id": "request_document"}
+# A rule on the write's own result, and an ending when it does not hold: the default would offer the write again.
+SENT: dict[str, Any] = {"check": {"text": "exists(result.id)"}, "ifNot": {"action": "exit", "exit": "failed"}}
+
+
+async def test_a_step_that_changes_something_is_refused_without_a_rule_check(tmp_path: Path) -> None:
+    async with _app(str(tmp_path / "db.sqlite")) as c:
+        body = {**REFUND, "toolIds": ["lookup_customer", "request_document"]}
+        ask = {"do": "Ask for the receipt.", "use": RECEIPT}
+        for check in ({}, {"check": {"text": "The receipt was asked for."}}):
+            error = _error(await c.post("/v1/skills", json={**body, "steps": [STEPS[0], {**ask, **check}]}))
+            assert (error["code"], error["details"]["step"]) == ("write_needs_rule", 2), (check, error)
+        # A read needs none, and the write with a rule on its result is saved.
+        saved = _ok(
+            await c.post("/v1/skills", json={**body, "steps": [{"do": "Look up.", "use": LOOKUP}, {**ask, **SENT}]}),
+            201,
+        )
+        assert saved["publishCheck"]["canRequest"] is True, saved["publishCheck"]
+        # A version stored before the rule cannot be published either.
+        old: dict[str, Any] = {"steps": [{"do": "Look up.", "use": LOOKUP}, ask]}
+        access = {"lookup_customer": "read", "request_document": "write"}
+        problems, _ = await skill_content.publish_problems(old, access, team_id="Retail", skills=cast(Any, None))
+        assert [(p["kind"], cast(Any, p["position"])["step"]) for p in problems] == [("bad_check", 2)], problems
+
+
+async def test_a_tool_a_sentence_only_names_is_not_run_and_the_publish_check_says_so(tmp_path: Path) -> None:
+    """A step runs the tool stored as its `use` and no other. Text sent by the SDK, the CLI or a paste can name a
+    tool without marking it: read as the step's tool, "never use @tool:x here" would run x."""
     async with _app(str(tmp_path / "db.sqlite")) as c:
         steps = [
-            {"do": "Look up the customer with @tool:lookup_customer.", "check": {"text": "result.amount <= 500"}},
-            {"do": "Ask for the receipt with @tool:request_document and wait."},
+            {"do": "Look up the customer with @tool:lookup_customer."},
+            {"do": "Read @tool:lookup_customer again before asking.", "use": RECEIPT, **SENT},
+            {"do": "Use @tool:lookup_customer or @tool:request_document."},
             {"do": "Tell the person what happens next."},
         ]
         body = {**REFUND, "toolIds": ["lookup_customer", "request_document"], "steps": steps}
-        content = _ok(await c.post("/v1/skills", json=body), 201)["content"]
-        assert "use" not in content["steps"][0], "the text is stored as the builder wrote it"
-        program = skill_content.program_of(content)
+        saved = _ok(await c.post("/v1/skills", json=body), 201)
+        program = skill_content.program_of(saved["content"])
         assert program is not None
-        assert [s.use and s.use.id for s in program.steps] == ["lookup_customer", "request_document", None]
-        assert program.targets() == {"lookup_customer", "request_document"}
+        assert [s.use and s.use.id for s in program.steps] == [None, "request_document", None, None]
+        check = saved["publishCheck"]
+        assert check["canRequest"] is False
+        assert [(p["kind"], p["id"], p["position"]["step"]) for p in check["problems"]] == [
+            ("bad_step", "tool:lookup_customer", 1)
+        ], check["problems"]
+        assert sorted((w["id"], w["position"]["step"]) for w in check["warnings"]) == [
+            ("tool:lookup_customer", 2),
+            ("tool:lookup_customer", 3),
+            ("tool:request_document", 3),
+        ], check["warnings"]
+        error = _error(await c.post(f"/v1/skills/{saved['id']}/publish-requests", json={"note": ""}))
+        assert error["code"] == "cannot_request", error
 
 
 async def test_a_step_naming_a_tool_the_team_no_longer_offers_blocks_the_publish_and_says_which_step(
@@ -187,13 +226,13 @@ async def test_a_step_naming_a_tool_the_team_no_longer_offers_blocks_the_publish
             {"do": "Look up the customer.", "use": LOOKUP},
             {"do": "Tell the person the amount."},
             {"do": "Ask them to confirm."},
-            {"do": "Ask for the receipt.", "use": {"kind": "tool", "id": "request_document"}},
+            {"do": "Ask for the receipt.", "use": RECEIPT, **SENT},
         ]
         body = {**REFUND, "toolIds": ["lookup_customer", "request_document"], "steps": steps}
         sid = _ok(await c.post("/v1/skills", json=body), 201)["id"]
         # This read fills the tools list the service keeps for 30 seconds, while the tool is still offered.
         check = _ok(await c.get(f"/v1/skills/{sid}"))["publishCheck"]
-        assert (check["canRequest"], check["problems"], check["blockers"]) == (True, [], [])
+        assert (check["canRequest"], check["problems"], check["blockers"], check["warnings"]) == (True, [], [], [])
 
         directory.withdrawn.add("request_document")
         error = _error(await c.post(f"/v1/skills/{sid}/publish-requests", json={"note": ""}))

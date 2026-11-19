@@ -58,6 +58,7 @@ __all__ = [
     "StepResult",
     "SubRun",
     "barred",
+    "changes",
     "denied",
     "ending",
     "final",
@@ -75,7 +76,6 @@ __all__ = [
     "start",
     "step_done",
     "target",
-    "wired",
 ]
 
 
@@ -89,22 +89,10 @@ class StepProblem:
     message: str
 
 
-def wired(program: SkillProgram) -> SkillProgram:
-    """`program` with the tool of each step that names none in front: a step whose text mentions exactly one tool,
-    agent or workflow runs it. A builder who writes "Look up the account with @tool:get_account" means that tool, and
-    a step with no tool has its check run on no result and keeps no later tool back."""
-    steps: list[SkillStep] = []
-    for s in program.steps:
-        named = [r for r in Ref.found_in(s.do) if r.tool_name is not None] if s.use is None else []
-        steps.append(s.model_copy(update={"use": named[0]}) if len(named) == 1 else s)
-    return program.model_copy(update={"steps": steps})
-
-
 def problems(program: SkillProgram, *, has_parts: bool = False, always_on: bool = False) -> list[StepProblem]:
     """What stops `program` from running, by its own shape. Whether a skill a step runs exists, and whether skills
     run each other in a circle, needs the team's skills and is checked by the caller."""
     found: list[StepProblem] = []
-    program = wired(program)
     count = len(program.steps)
     if not count:
         if program.returns or program.exit or program.success:
@@ -131,8 +119,8 @@ def problems(program: SkillProgram, *, has_parts: bool = False, always_on: bool 
                         StepProblem(
                             "check_needs_tool",
                             n,
-                            f"Step {n}'s check reads a result, and the step names no single tool to get it from. "
-                            "Start the step with @ and the tool it runs.",
+                            f"Step {n}'s check reads a result, and the step runs no tool to get it from. Pick the "
+                            "tool it runs with @, or mark the one its sentence names as this step's tool.",
                         )
                     )
             except expr.CheckError as e:
@@ -706,14 +694,21 @@ def target(run: SkillRunState) -> str | None:
     return use.tool_name if use is not None else None
 
 
+def changes(name: str, access: str | None) -> bool:
+    """Whether a step's tool is one that changes something: any tool that is not a read (a write, a workflow), and
+    any other agent a step hands to, whatever its access says. A tool whose access is not known is taken as one. The
+    one test behind the tools a skill owns (`owned`) and the steps a save asks a rule check of."""
+    return name.startswith("agent:") or (access or "write") != "read"
+
+
 def owned(skills: Sequence[Skill], access: Mapping[str, str]) -> dict[str, list[str]]:
     """The tools reachable only through a step, each with the slugs of the skills whose steps run it: every tool a
-    step of an attached skill runs that is not a read, and every other agent a step hands to. `access` is each
-    granted tool's access by name; a tool it does not hold is taken as a write."""
+    step of an attached skill runs that changes something (`changes`). `access` is each granted tool's access by
+    name."""
     out: dict[str, list[str]] = {}
     for s in skills:
         for name in sorted(s.program.targets()) if s.program is not None else ():
-            if name.startswith("agent:") or access.get(name, "write") != "read":
+            if changes(name, access.get(name)):
                 out.setdefault(name, []).append(s.slug)
     return out
 

@@ -130,6 +130,7 @@ async def check_content(rt: Runtime, fields: Json, *, skill_id: str | None = Non
         offered = {t["id"]: t for t in await known_tools(rt, fresh=True)}
     if unknown := [t for t in tool_ids if t not in offered]:
         raise ValidationFailed(f"Unknown tools: {', '.join(unknown)}.", code="unknown_tool")
+    skill_content.refuse_unruled(program, {t: str(offered[t]["access"]) for t in tool_ids})
     slug = str(fields.get("slug") or slug_of(name))
     parts = _parts(fields.get("parts"), tool_ids, loading)
     if parts:
@@ -635,6 +636,8 @@ class PublishCheck(TypedDict):
     # Each problem's sentence; `problems` is the same list with where each one is.
     blockers: list[str]
     problems: list[Problem]
+    # What the builder should look at and may publish with: a tool a step's sentence names and does not run.
+    warnings: list[Problem]
     editClass: str
     approversNeeded: int
 
@@ -653,10 +656,10 @@ class SkillDetailView(SkillListRow):
     publishCheck: PublishCheck
 
 
-async def _offered_tools(rt: Runtime, *, fresh: bool) -> set[str] | None:
-    """The ids the tools directory offers; None when it cannot answer."""
+async def _offered_tools(rt: Runtime, *, fresh: bool) -> dict[str, str] | None:
+    """The access of each tool the tools directory offers, by id; None when it cannot answer."""
     try:
-        return {str(t["id"]) for t in await known_tools(rt, fresh=fresh)}
+        return {str(t["id"]): str(t["access"]) for t in await known_tools(rt, fresh=fresh)}
     except ToolsUnavailable:
         return None
 
@@ -696,11 +699,13 @@ async def detail(rt: Runtime, skill_id: str, *, fresh: bool = False) -> SkillDet
         block("review_open", f"{pending.id} is already open for v{pending.version}.")
     if too_long := over_budget(newest):
         block("too_long", too_long)
+    warnings: list[Problem] = []
     if newest.content.get("steps") and newest.published_at is None:
         offered = await _offered_tools(rt, fresh=fresh)
-        problems += await skill_content.publish_problems(
+        blocking, warnings = await skill_content.publish_problems(
             newest.content, offered, team_id=row.team_id, skills=_TeamSkills(rt)
         )
+        problems += blocking
     blockers = [p["message"] for p in problems]
     latest = row.published_version
     published = next((v for v in versions if v.version == latest), None)
@@ -784,6 +789,7 @@ async def detail(rt: Runtime, skill_id: str, *, fresh: bool = False) -> SkillDet
                 "canRequest": not blockers,
                 "blockers": blockers,
                 "problems": problems,
+                "warnings": warnings,
                 "editClass": "re_test",
                 "approversNeeded": 1,
             },

@@ -8674,7 +8674,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "missing_field" | "missing_reference" | "unavailable_reference" | "bad_step" | "bad_check" | "bad_exit" | "sub_skill_not_held" | "prompt_rule_in_text" | "review_open" | "already_published" | "deprecated" | "too_long";
+            kind: "missing_field" | "missing_reference" | "unavailable_reference" | "bad_step" | "bad_check" | "bad_exit" | "sub_skill_not_held" | "prompt_rule_in_text" | "review_open" | "already_published" | "deprecated" | "too_long" | "mention";
             /** Message */
             message: string;
             position?: components["schemas"]["BlockerPosition"] | null;
@@ -10165,6 +10165,8 @@ export interface components {
             editClass: "free" | "re_test" | "re_approval";
             /** Problems */
             problems?: components["schemas"]["PublishBlocker"][];
+            /** Warnings */
+            warnings?: components["schemas"]["PublishBlocker"][];
         };
         /** SkillRenderInput */
         SkillRenderInput: {

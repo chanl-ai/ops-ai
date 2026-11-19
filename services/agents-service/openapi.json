@@ -14609,7 +14609,8 @@
               "review_open",
               "already_published",
               "deprecated",
-              "too_long"
+              "too_long",
+              "mention"
             ],
             "title": "Kind",
             "type": "string"
@@ -19218,6 +19219,13 @@
               "$ref": "#/components/schemas/PublishBlocker"
             },
             "title": "Problems",
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/PublishBlocker"
+            },
+            "title": "Warnings",
             "type": "array"
           }
         },

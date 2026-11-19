@@ -1326,6 +1326,7 @@ class PublishBlocker(TypedDict, closed=True):
         "already_published",
         "deprecated",
         "too_long",
+        "mention",
     ]
     message: str
     position: NotRequired[BlockerPosition | None]
@@ -1768,6 +1769,7 @@ class SkillPublishCheck(TypedDict, closed=True):
     canRequest: bool
     editClass: Literal["free", "re_test", "re_approval"]
     problems: NotRequired[list[PublishBlocker]]
+    warnings: NotRequired[list[PublishBlocker]]
 
 
 class SkillRenderInput(TypedDict, closed=True):
