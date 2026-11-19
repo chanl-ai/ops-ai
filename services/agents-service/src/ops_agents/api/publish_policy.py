@@ -57,6 +57,10 @@ SECURITY_PATHS: dict[tuple[str, ...], JsonValue] = {
     ("guardrailPins",): None,
     ("guardrails", "blockedTopics"): None,
     ("guardrails", "redactPii"): True,
+    # A never rule is what the agent may not say without a person, and leaving the brief for a prompt the builder
+    # wrote changes what carries those rules: both are reviewed whatever the team's policy.
+    ("brief", "never"): None,
+    ("promptMode",): None,
 }
 
 

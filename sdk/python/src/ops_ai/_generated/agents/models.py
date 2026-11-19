@@ -241,6 +241,12 @@ class BlockedBy(TypedDict, closed=True):
     when: Literal["before", "after"]
 
 
+class BlockerPosition(TypedDict, closed=True):
+    field: str
+    index: NotRequired[int | None]
+    step: NotRequired[int | None]
+
+
 class BoundWorkflow(TypedDict, closed=True):
     id: str
     name: str
@@ -872,6 +878,20 @@ class HeldTool(TypedDict, closed=True):
     reviewers: NotRequired[str | None]
 
 
+class IfNot(TypedDict, closed=True):
+    action: NotRequired[Literal["retry", "goto", "exit"]]
+    exit: NotRequired[str | None]
+    retries: NotRequired[int]
+    step: NotRequired[int | None]
+
+
+class IfNotOut(TypedDict, closed=True):
+    action: NotRequired[Literal["retry", "goto", "exit"]]
+    exit: NotRequired[str | None]
+    retries: NotRequired[int]
+    step: NotRequired[int | None]
+
+
 class InboxInput(TypedDict, closed=True):
     kind: Literal["customer_reply"]
     messageKey: str
@@ -1246,6 +1266,26 @@ class PromptVariable(TypedDict, closed=True):
     source: str
 
 
+class PublishBlocker(TypedDict, closed=True):
+    id: NotRequired[str | None]
+    kind: Literal[
+        "missing_field",
+        "missing_reference",
+        "unavailable_reference",
+        "bad_step",
+        "bad_check",
+        "bad_exit",
+        "sub_skill_not_held",
+        "prompt_rule_in_text",
+        "review_open",
+        "already_published",
+        "deprecated",
+        "too_long",
+    ]
+    message: str
+    position: NotRequired[BlockerPosition | None]
+
+
 class PublishDecisionFields(TypedDict, closed=True):
     majorChange: NotRequired[bool | None]
     policy: NotRequired[Literal["always", "major", "never"] | None]
@@ -1314,9 +1354,19 @@ class Received(TypedDict, closed=True):
     runId: NotRequired[str | None]
 
 
-class Ref(TypedDict, closed=True):
+class RefInput(TypedDict, closed=True):
+    id: str
+    kind: Literal["tool", "knowledge", "skill", "agent", "workflow"]
+
+
+class RefOutput(TypedDict, closed=True):
     id: str
     kind: Literal["run", "thread", "chat", "review", "email", "case", "workflow", "process"]
+
+
+class RefOut(TypedDict, closed=True):
+    id: str
+    kind: Literal["tool", "knowledge", "skill", "agent", "workflow"]
 
 
 class RemoveCell(TypedDict, closed=True):
@@ -1364,6 +1414,20 @@ class Retried(TypedDict, closed=True):
 class RetryView(TypedDict, closed=True):
     attempts: int
     backoffSeconds: list[float]
+
+
+class ReturnField(TypedDict, closed=True):
+    description: NotRequired[str]
+    name: str
+    required: NotRequired[bool]
+    type: Literal["text", "number", "yes_no"]
+
+
+class ReturnFieldOut(TypedDict, closed=True):
+    description: NotRequired[str]
+    name: str
+    required: NotRequired[bool]
+    type: Literal["text", "number", "yes_no"]
 
 
 class ReviewDecisionInput(TypedDict, closed=True):
@@ -1581,6 +1645,9 @@ class SkillCitation(TypedDict, closed=True):
     section: str
 
 
+Succes: TypeAlias = str
+
+
 class SkillInput(TypedDict, closed=True):
     description: NotRequired[str]
     name: str
@@ -1647,6 +1714,7 @@ class SkillPublishCheck(TypedDict, closed=True):
     blockers: list[str]
     canRequest: bool
     editClass: Literal["free", "re_test", "re_approval"]
+    problems: NotRequired[list[PublishBlocker]]
 
 
 class SkillRenderInput(TypedDict, closed=True):
@@ -1769,6 +1837,16 @@ class StepAttempt(TypedDict, closed=True):
     port: str | None
     startedAt: str
     status: str
+
+
+class StepCheck(TypedDict, closed=True):
+    by: NotRequired[Literal["rule", "model"] | None]
+    text: str
+
+
+class StepCheckOut(TypedDict, closed=True):
+    by: NotRequired[Literal["rule", "model"] | None]
+    text: str
 
 
 class StepUpInput(TypedDict, closed=True):
@@ -3437,54 +3515,6 @@ class SkillActivity(TypedDict, closed=True):
     successRate: float | None
 
 
-class SkillContent(TypedDict, closed=True):
-    guardrails: list[str]
-    inputs: NotRequired[list[SkillInputField]]
-    instructions: str
-    knowledgeBases: list[str]
-    loading: Literal["on_match", "always"]
-    name: str
-    parts: NotRequired[list[SkillPart]]
-    refusal: NotRequired[str | None]
-    resources: list[SkillResource]
-    slug: str
-    tools: list[SkillToolRef]
-    useWhen: str
-
-
-class SkillCreateInput(TypedDict, closed=True):
-    guardrails: NotRequired[list[str]]
-    inputs: NotRequired[list[SkillInput]]
-    instructions: str
-    knowledgeBases: NotRequired[list[str]]
-    loading: NotRequired[Literal["on_match", "always"]]
-    name: str
-    origin: NotRequired[Literal["blank", "generated", "imported", "duplicated"]]
-    ownerTeam: str
-    parts: NotRequired[list[SkillPartInput]]
-    refusal: NotRequired[str]
-    requestReview: NotRequired[bool]
-    reviewNote: NotRequired[str]
-    slug: NotRequired[str | None]
-    toolIds: NotRequired[list[str]]
-    useWhen: NotRequired[str]
-
-
-class SkillDraftPatch(TypedDict, closed=True):
-    baseVersion: int
-    guardrails: NotRequired[list[str] | None]
-    inputs: NotRequired[list[SkillInput] | None]
-    instructions: NotRequired[str | None]
-    knowledgeBases: NotRequired[list[str] | None]
-    loading: NotRequired[Literal["on_match", "always"] | None]
-    name: NotRequired[str | None]
-    note: NotRequired[str]
-    parts: NotRequired[list[SkillPartInput] | None]
-    refusal: NotRequired[str | None]
-    toolIds: NotRequired[list[str] | None]
-    useWhen: NotRequired[str | None]
-
-
 class SkillList(TypedDict, closed=True):
     data: list[Skill]
     facets: dict[str, dict[str, int]]
@@ -3499,20 +3529,18 @@ class SkillOptions(TypedDict, closed=True):
     tools: list[SkillToolRef]
 
 
-class SkillVersion(TypedDict, closed=True):
-    changes: list[str]
-    content: SkillContent
-    editClass: Literal["free", "re_test", "re_approval"]
-    note: str
-    publishedAt: NotRequired[str | None]
-    publishedBy: NotRequired[str | None]
-    reviewId: NotRequired[str | None]
-    savedAt: str
-    savedBy: str
-    state: Literal["draft", "in_review", "published", "superseded", "deprecated", "rejected"]
-    testRun: None
-    tokens: int
-    version: int
+class SkillStep(TypedDict, closed=True):
+    check: NotRequired[StepCheck | None]
+    do: str
+    ifNot: NotRequired[IfNot | None]
+    use: NotRequired[RefInput | None]
+
+
+class SkillStepOut(TypedDict, closed=True):
+    check: NotRequired[StepCheckOut | None]
+    do: str
+    ifNot: NotRequired[IfNotOut | None]
+    use: NotRequired[RefOut | None]
 
 
 class StoryCase(TypedDict, closed=True):
@@ -3711,7 +3739,7 @@ class ActivityRow(TypedDict, closed=True):
     ]
     outcome: str | None
     outcomeText: NotRequired[str | None]
-    ref: Ref
+    ref: RefOutput
     source: Source
     status: Literal["running", "waiting", "done", "failed", "skipped"]
     teamId: str | None
@@ -4087,40 +4115,83 @@ class Plan(TypedDict, closed=True):
     ready: bool
 
 
-class SkillDetail(TypedDict, closed=True):
-    activity: SkillActivity
-    content: SkillContent
-    draftVersion: int | None
-    id: str
+class SkillContent(TypedDict, closed=True):
+    exit: NotRequired[dict[str, str]]
+    guardrails: list[str]
     inputs: NotRequired[list[SkillInputField]]
-    kbCount: int
-    lastEvalPassRate: float | None
-    liveAgents: int
+    instructions: str
+    knowledgeBases: list[str]
     loading: Literal["on_match", "always"]
-    locked: NotRequired[bool | None]
     name: str
-    needs: NotRequired[list[str] | None]
-    origin: Literal["blank", "generated", "imported", "duplicated"]
-    ownerTeam: str
-    parts: NotRequired[list[SkillPartSummary]]
-    pendingReview: NotRequired[SkillPendingReview | None]
-    pendingReviewId: NotRequired[str | None]
-    provenance: SkillProvenance
-    publishCheck: SkillPublishCheck
-    publishedVersion: int | None
-    runs: list[JsonValue]
+    notWhen: NotRequired[str]
+    parts: NotRequired[list[SkillPart]]
+    refusal: NotRequired[str | None]
+    resources: list[SkillResource]
+    returns: NotRequired[list[ReturnFieldOut]]
     slug: str
-    status: Literal["draft", "in_review", "published", "deprecated"]
-    tests: list[JsonValue]
-    tokens: int
-    toolCount: int
-    updatedAt: str
-    updatedBy: str
-    usage: list[SkillUsage]
+    steps: NotRequired[list[SkillStepOut]]
+    success: NotRequired[list[str]]
+    tools: list[SkillToolRef]
     useWhen: str
-    usedBy: int
+
+
+class SkillCreateInput(TypedDict, closed=True):
+    exit: NotRequired[dict[str, str]]
+    guardrails: NotRequired[list[str]]
+    inputs: NotRequired[list[SkillInput]]
+    instructions: str
+    knowledgeBases: NotRequired[list[str]]
+    loading: NotRequired[Literal["on_match", "always"]]
+    name: str
+    notWhen: NotRequired[str]
+    origin: NotRequired[Literal["blank", "generated", "imported", "duplicated"]]
+    ownerTeam: str
+    parts: NotRequired[list[SkillPartInput]]
+    refusal: NotRequired[str]
+    requestReview: NotRequired[bool]
+    returns: NotRequired[list[ReturnField]]
+    reviewNote: NotRequired[str]
+    slug: NotRequired[str | None]
+    steps: NotRequired[list[SkillStep]]
+    success: NotRequired[list[Succes]]
+    toolIds: NotRequired[list[str]]
+    useWhen: NotRequired[str]
+
+
+class SkillDraftPatch(TypedDict, closed=True):
+    baseVersion: int
+    exit: NotRequired[dict[str, str] | None]
+    guardrails: NotRequired[list[str] | None]
+    inputs: NotRequired[list[SkillInput] | None]
+    instructions: NotRequired[str | None]
+    knowledgeBases: NotRequired[list[str] | None]
+    loading: NotRequired[Literal["on_match", "always"] | None]
+    name: NotRequired[str | None]
+    notWhen: NotRequired[str | None]
+    note: NotRequired[str]
+    parts: NotRequired[list[SkillPartInput] | None]
+    refusal: NotRequired[str | None]
+    returns: NotRequired[list[ReturnField] | None]
+    steps: NotRequired[list[SkillStep] | None]
+    success: NotRequired[list[Succes] | None]
+    toolIds: NotRequired[list[str] | None]
+    useWhen: NotRequired[str | None]
+
+
+class SkillVersion(TypedDict, closed=True):
+    changes: list[str]
+    content: SkillContent
+    editClass: Literal["free", "re_test", "re_approval"]
+    note: str
+    publishedAt: NotRequired[str | None]
+    publishedBy: NotRequired[str | None]
+    reviewId: NotRequired[str | None]
+    savedAt: str
+    savedBy: str
+    state: Literal["draft", "in_review", "published", "superseded", "deprecated", "rejected"]
+    testRun: None
+    tokens: int
     version: int
-    versions: list[SkillVersion]
 
 
 class StoryRead(TypedDict, closed=True):
@@ -4234,11 +4305,6 @@ class EnvelopePlan(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeSkillDetail(TypedDict, closed=True):
-    data: SkillDetail
-    success: Literal[True]
-
-
 class EnvelopeToolRow(TypedDict, closed=True):
     data: ToolRow
     success: Literal[True]
@@ -4268,6 +4334,42 @@ class RunStory(TypedDict, closed=True):
     email: StoryEmail | None
     lines: list[StoryLine]
     reads: list[StoryRead]
+
+
+class SkillDetail(TypedDict, closed=True):
+    activity: SkillActivity
+    content: SkillContent
+    draftVersion: int | None
+    id: str
+    inputs: NotRequired[list[SkillInputField]]
+    kbCount: int
+    lastEvalPassRate: float | None
+    liveAgents: int
+    loading: Literal["on_match", "always"]
+    locked: NotRequired[bool | None]
+    name: str
+    needs: NotRequired[list[str] | None]
+    origin: Literal["blank", "generated", "imported", "duplicated"]
+    ownerTeam: str
+    parts: NotRequired[list[SkillPartSummary]]
+    pendingReview: NotRequired[SkillPendingReview | None]
+    pendingReviewId: NotRequired[str | None]
+    provenance: SkillProvenance
+    publishCheck: SkillPublishCheck
+    publishedVersion: int | None
+    runs: list[JsonValue]
+    slug: str
+    status: Literal["draft", "in_review", "published", "deprecated"]
+    tests: list[JsonValue]
+    tokens: int
+    toolCount: int
+    updatedAt: str
+    updatedBy: str
+    usage: list[SkillUsage]
+    useWhen: str
+    usedBy: int
+    version: int
+    versions: list[SkillVersion]
 
 
 class ToolList(TypedDict, closed=True):
@@ -4307,6 +4409,11 @@ class WorkflowDetail(TypedDict, closed=True):
 
 class EnvelopeReviewList(TypedDict, closed=True):
     data: ReviewList
+    success: Literal[True]
+
+
+class EnvelopeSkillDetail(TypedDict, closed=True):
+    data: SkillDetail
     success: Literal[True]
 
 

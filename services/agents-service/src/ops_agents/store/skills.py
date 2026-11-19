@@ -102,6 +102,11 @@ LABELS = {
     "refusal": "refusal",
     "inputs": "inputs",
     "parts": "parts",
+    "notWhen": "not-when line",
+    "steps": "steps",
+    "exit": "exits",
+    "returns": "results",
+    "success": "success checks",
 }
 
 
@@ -111,12 +116,18 @@ def changes_between(old: Json, new: Json) -> list[str]:
 
 def tokens_of(content: Json) -> int:
     """What the body adds to a turn, at four characters a token: the instructions plus the guardrail lines, and with
-    parts the longest part on top, since a part is always read with the shared instructions. A count that is billed,
-    so a part that is not an object, or a list that is a number, fails the save."""
+    parts the longest part on top, since a part is always read with the shared instructions. With steps the longest
+    step is added the same way: one step is in the prompt at a time. A count that is billed, so a part that is not an
+    object, or a list that is a number, fails the save."""
     lines = narrow.entries(content.get("guardrails"))
     text = str(content.get("instructions") or "") + "".join(str(g) for g in lines)
     parts = [narrow.an_object(p, "part") for p in narrow.entries(content.get("parts"))]
     longest = max((len(str(p.get("instructions") or "")) for p in parts), default=0)
+    steps = [narrow.an_object(s, "step") for s in narrow.entries(content.get("steps"))]
+    longest += max(
+        (len(str(s.get("do") or "")) + len(str(narrow.json_object(s.get("check")).get("text") or "")) for s in steps),
+        default=0,
+    )
     return max(1, (len(text) + longest + 3) // 4)
 
 
