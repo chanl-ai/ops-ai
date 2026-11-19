@@ -25,6 +25,7 @@ from fastapi.responses import JSONResponse
 from pydantic import Field, ValidationError
 
 from ops_contracts.field_values import DEFAULT_DATE_ORDER
+from ops_contracts.templates import CopyRef
 from ops_documents.document_types import DocumentTypes
 from ops_documents.extraction import request_of
 from ops_documents.files import Who
@@ -76,17 +77,6 @@ class Installed(Reply):
     newer_available: bool
     # The newest live copy was made from a body other than the template's current one (its digest differs).
     changed: bool = False
-
-
-class CopyRef(Reply):
-    id: str
-    kind: Kind
-    record_id: str
-    source: str
-    template_id: str
-    version: int
-    # Set once the team detached the copy: it is the team's own and takes no updates.
-    detached_at: str | None = None
 
 
 class AddCell(Out):

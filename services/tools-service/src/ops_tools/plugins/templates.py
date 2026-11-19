@@ -27,6 +27,7 @@ from pydantic import Field
 
 from ops_access import Access, reader_of
 from ops_access.check import granted_by
+from ops_contracts.templates import CopyRef, ResourceKind
 from ops_identity import Principal, ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_identity.fastapi import Tx
 from ops_plugin_sdk import Plugin
@@ -38,7 +39,7 @@ from ..callers import tools_reader
 from ..modules.routes import ERRORS
 from .host import PluginHost
 
-Kind = Literal["agent", "skill", "workflow", "document_type", "case_type", "task_type", "guardrail", "knowledge_source"]
+Kind = ResourceKind
 
 
 class TemplateOutside(ValueError):
@@ -154,15 +155,6 @@ SERVICES: dict[str, str] = {
 KNOWLEDGE_CELL = {"area": "knowledge", "action": "edit"}
 
 
-class ResourceCopy(Out):
-    id: str
-    kind: str
-    record_id: str
-    source: str
-    template_id: str
-    version: int
-
-
 class ResourceInstalled(Out):
     copies: int
     version: int | None
@@ -191,7 +183,7 @@ class AppResource(Out):
     # Why the caller cannot add it, in words naming who can; None when they can.
     reason: str | None = None
     # The team's copy, which Open, Remove and an update act on.
-    copy_: ResourceCopy | None = Field(default=None, alias="copy")
+    copy_: CopyRef | None = Field(default=None, alias="copy")
     # The service that makes the copy: agents, documents or kb.
     service: str
 
@@ -329,14 +321,14 @@ def plugin_templates_router(host: PluginHost, copies: Copies | None = None) -> A
                 # Added once the team made a source of it in any of its knowledge bases; the newest is the copy.
                 mine = [x for x in made if x.get("source") == s.name]
                 copy = (
-                    {
-                        "id": mine[0]["id"],
-                        "kind": "knowledge_source",
-                        "recordId": mine[0]["id"],
-                        "source": f"plugin:{m.id}",
-                        "templateId": s.name,
-                        "version": 1,
-                    }
+                    CopyRef(
+                        id=str(mine[0]["id"]),
+                        kind="knowledge_source",
+                        record_id=str(mine[0]["id"]),
+                        source=f"plugin:{m.id}",
+                        template_id=s.name,
+                        version=1,
+                    )
                     if mine
                     else None
                 )

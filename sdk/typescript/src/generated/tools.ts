@@ -2102,7 +2102,7 @@ export interface components {
              * @default false
              */
             canRemove: boolean;
-            copy?: components["schemas"]["ResourceCopy"] | null;
+            copy?: components["schemas"]["CopyRef"] | null;
             /** Id */
             id: string;
             installed?: components["schemas"]["ResourceInstalled"] | null;
@@ -2765,6 +2765,29 @@ export interface components {
              * @default 0
              */
             workflows: number;
+        };
+        /**
+         * CopyRef
+         * @description A team's copy of a template: where it came from and the record it made.
+         */
+        CopyRef: {
+            /** Detachedat */
+            detachedAt: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "agent" | "skill" | "workflow" | "document_type" | "case_type" | "task_type" | "guardrail" | "knowledge_source";
+            /** Recordid */
+            recordId: string;
+            /** Source */
+            source: string;
+            /** Templateid */
+            templateId: string;
+            /** Version */
+            version: number;
         };
         /**
          * CredentialAccount
@@ -4936,21 +4959,6 @@ export interface components {
         RenameIn: {
             /** Name */
             name: string;
-        };
-        /** ResourceCopy */
-        ResourceCopy: {
-            /** Id */
-            id: string;
-            /** Kind */
-            kind: string;
-            /** Recordid */
-            recordId: string;
-            /** Source */
-            source: string;
-            /** Templateid */
-            templateId: string;
-            /** Version */
-            version: number;
         };
         /** ResourceInstalled */
         ResourceInstalled: {

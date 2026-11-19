@@ -690,7 +690,10 @@ export interface components {
              */
             ocr: boolean;
         };
-        /** CopyRef */
+        /**
+         * CopyRef
+         * @description A team's copy of a template: where it came from and the record it made.
+         */
         CopyRef: {
             /** Detachedat */
             detachedAt: string | null;
@@ -698,9 +701,9 @@ export interface components {
             id: string;
             /**
              * Kind
-             * @constant
+             * @enum {string}
              */
-            kind: "document_type";
+            kind: "agent" | "skill" | "workflow" | "document_type" | "case_type" | "task_type" | "guardrail" | "knowledge_source";
             /** Recordid */
             recordId: string;
             /** Source */

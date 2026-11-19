@@ -243,6 +243,7 @@
       },
       "CopyRef": {
         "additionalProperties": false,
+        "description": "A team's copy of a template: where it came from and the record it made.",
         "properties": {
           "detachedAt": {
             "anyOf": [
@@ -260,7 +261,16 @@
             "type": "string"
           },
           "kind": {
-            "const": "document_type",
+            "enum": [
+              "agent",
+              "skill",
+              "workflow",
+              "document_type",
+              "case_type",
+              "task_type",
+              "guardrail",
+              "knowledge_source"
+            ],
             "title": "Kind",
             "type": "string"
           },

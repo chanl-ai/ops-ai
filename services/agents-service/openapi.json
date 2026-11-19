@@ -5448,6 +5448,7 @@
       },
       "CopyRef": {
         "additionalProperties": false,
+        "description": "A team's copy of a template: where it came from and the record it made.",
         "properties": {
           "detachedAt": {
             "anyOf": [
@@ -5469,9 +5470,11 @@
               "agent",
               "skill",
               "workflow",
-              "guardrail",
+              "document_type",
               "case_type",
-              "task_type"
+              "task_type",
+              "guardrail",
+              "knowledge_source"
             ],
             "title": "Kind",
             "type": "string"
@@ -5499,7 +5502,8 @@
           "recordId",
           "source",
           "templateId",
-          "version"
+          "version",
+          "detachedAt"
         ],
         "title": "CopyRef",
         "type": "object"

@@ -19,6 +19,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.pool import QueuePool
 
+from ops_contracts.templates import CopyRef
 from ops_identity import Auth, Identity, dev_service_signer, mint_service_token
 from ops_plugin_sdk import Plugin
 from ops_plugin_sdk.loader import discover
@@ -115,14 +116,10 @@ class FakeCopies:
         self.asked.append((tenant_id, team_id, source))
         base: dict[str, Any] = {"source": source, "version": 1, "requires": {"tools": [], "bind": [], "resources": []}}
         none = {"copies": 0, "version": None, "newerAvailable": False, "changed": False}
-        copy = {
-            "id": "tcp_1",
-            "kind": "agent",
-            "recordId": "ag_1",
-            "source": source,
-            "templateId": "helper",
-            "version": 1,
-        }
+        # Built from the shape agents-service sends, so the fake never holds fewer fields than a real answer.
+        copy = CopyRef(
+            id="tcp_1", kind="agent", record_id="ag_1", source=source, template_id="helper", version=1
+        ).model_dump(by_alias=True)
         return [
             base
             | {

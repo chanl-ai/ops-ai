@@ -46,7 +46,16 @@ class ClassifyIn(TypedDict, closed=True):
 class CopyRef(TypedDict, closed=True):
     detachedAt: str | None
     id: str
-    kind: Literal["document_type"]
+    kind: Literal[
+        "agent",
+        "skill",
+        "workflow",
+        "document_type",
+        "case_type",
+        "task_type",
+        "guardrail",
+        "knowledge_source",
+    ]
     recordId: str
     source: str
     templateId: str

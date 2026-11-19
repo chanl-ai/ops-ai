@@ -1946,7 +1946,7 @@
           "copy": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ResourceCopy"
+                "$ref": "#/components/schemas/CopyRef"
               },
               {
                 "type": "null"
@@ -3865,6 +3865,68 @@
           }
         },
         "title": "ConnectorUse",
+        "type": "object"
+      },
+      "CopyRef": {
+        "additionalProperties": false,
+        "description": "A team's copy of a template: where it came from and the record it made.",
+        "properties": {
+          "detachedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detachedat"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "agent",
+              "skill",
+              "workflow",
+              "document_type",
+              "case_type",
+              "task_type",
+              "guardrail",
+              "knowledge_source"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "recordId": {
+            "title": "Recordid",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "templateId": {
+            "title": "Templateid",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "recordId",
+          "source",
+          "templateId",
+          "version",
+          "detachedAt"
+        ],
+        "title": "CopyRef",
         "type": "object"
       },
       "CredentialAccount": {
@@ -10052,45 +10114,6 @@
           "name"
         ],
         "title": "RenameIn",
-        "type": "object"
-      },
-      "ResourceCopy": {
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "kind": {
-            "title": "Kind",
-            "type": "string"
-          },
-          "recordId": {
-            "title": "Recordid",
-            "type": "string"
-          },
-          "source": {
-            "title": "Source",
-            "type": "string"
-          },
-          "templateId": {
-            "title": "Templateid",
-            "type": "string"
-          },
-          "version": {
-            "title": "Version",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "id",
-          "kind",
-          "recordId",
-          "source",
-          "templateId",
-          "version"
-        ],
-        "title": "ResourceCopy",
         "type": "object"
       },
       "ResourceInstalled": {

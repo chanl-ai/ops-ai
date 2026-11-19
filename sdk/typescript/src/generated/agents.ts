@@ -5135,17 +5135,20 @@ export interface components {
             /** Version */
             version: number;
         };
-        /** CopyRef */
+        /**
+         * CopyRef
+         * @description A team's copy of a template: where it came from and the record it made.
+         */
         CopyRef: {
             /** Detachedat */
-            detachedAt?: string | null;
+            detachedAt: string | null;
             /** Id */
             id: string;
             /**
              * Kind
              * @enum {string}
              */
-            kind: "agent" | "skill" | "workflow" | "guardrail" | "case_type" | "task_type";
+            kind: "agent" | "skill" | "workflow" | "document_type" | "case_type" | "task_type" | "guardrail" | "knowledge_source";
             /** Recordid */
             recordId: string;
             /** Source */

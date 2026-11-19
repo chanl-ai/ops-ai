@@ -30,6 +30,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from pydantic import Field, ValidationError
 
+from ops_contracts.templates import CopyRef
 from ops_documents_client import DocumentsClient, DocumentsRefused
 from ops_identity import ServiceCallError, ServiceUnreachable
 from ops_identity.fastapi import ActingPerson, Tx
@@ -163,17 +164,6 @@ class Installed(Out):
     newer_available: bool
     # The newest live copy was made from a body other than the template's current one (its digest differs).
     changed: bool = False
-
-
-class CopyRef(Out):
-    id: str
-    kind: Kind
-    record_id: str
-    source: str
-    template_id: str
-    version: int
-    # Set once the team detached the copy: it is the team's own and takes no updates.
-    detached_at: str | None = None
 
 
 class AddCell(Out):

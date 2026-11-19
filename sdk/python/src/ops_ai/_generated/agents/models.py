@@ -406,9 +406,18 @@ class CopiedFrom(TypedDict, closed=True):
 
 
 class CopyRef(TypedDict, closed=True):
-    detachedAt: NotRequired[str | None]
+    detachedAt: str | None
     id: str
-    kind: Literal["agent", "skill", "workflow", "guardrail", "case_type", "task_type"]
+    kind: Literal[
+        "agent",
+        "skill",
+        "workflow",
+        "document_type",
+        "case_type",
+        "task_type",
+        "guardrail",
+        "knowledge_source",
+    ]
     recordId: str
     source: str
     templateId: str

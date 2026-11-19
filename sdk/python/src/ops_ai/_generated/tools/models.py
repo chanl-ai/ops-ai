@@ -265,6 +265,25 @@ class ConnectorUse(TypedDict, closed=True):
     workflows: NotRequired[int]
 
 
+class CopyRef(TypedDict, closed=True):
+    detachedAt: str | None
+    id: str
+    kind: Literal[
+        "agent",
+        "skill",
+        "workflow",
+        "document_type",
+        "case_type",
+        "task_type",
+        "guardrail",
+        "knowledge_source",
+    ]
+    recordId: str
+    source: str
+    templateId: str
+    version: int
+
+
 class CredentialAccount(TypedDict, closed=True):
     connectedAt: NotRequired[str | None]
     id: str
@@ -744,15 +763,6 @@ class RemoveIn(TypedDict, closed=True):
 
 class RenameIn(TypedDict, closed=True):
     name: str
-
-
-class ResourceCopy(TypedDict, closed=True):
-    id: str
-    kind: str
-    recordId: str
-    source: str
-    templateId: str
-    version: int
 
 
 class ResourceInstalled(TypedDict, closed=True):
@@ -1305,7 +1315,7 @@ class AppCredential(TypedDict, closed=True):
 class AppResource(TypedDict, closed=True):
     canAdd: bool
     canRemove: NotRequired[bool]
-    copy: NotRequired[ResourceCopy | None]
+    copy: NotRequired[CopyRef | None]
     id: str
     installed: NotRequired[ResourceInstalled | None]
     kind: Literal[
