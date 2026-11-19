@@ -363,6 +363,8 @@ class TurnResult:
         "interrupt",
         "max_tool_calls",
         "max_steps",
+        # The model port refused a call at the budget the reply spends from (ports.BudgetReachedError).
+        "budget_reached",
         "deadline",
         "error",
         "schema_error",

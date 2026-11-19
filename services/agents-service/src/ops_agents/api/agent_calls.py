@@ -9,8 +9,9 @@ thread's event log says which grants were withheld.
 
 Each call carries a chain record (`ops_contracts.chain.ChainRecord`), kept on the specialist's thread: who the chain
 runs for, the thread it started on and the agents on it. An agent already on the path is not asked again. A specialist
-has no budget of its own: its model calls count against the thread the chain started on (store/usage.py), and one
-asked after that budget is spent runs no turn; the asking agent reads `budget_reached`.
+has no budget of its own: its model calls count against the thread the chain started on (store/usage.py), each one
+checked before it runs (api/model_ledger.py). A specialist stopped at that budget returns what it has written, and the
+asking agent reads `budget_reached`.
 """
 
 from __future__ import annotations
@@ -202,15 +203,6 @@ class AgentCalls:
         started_for = chain.started_for
         path: list[JsonValue] = [*chain.path]
         base: Json = {"agent": callee.id, "agentName": callee.name, "path": path}
-        usage = self.rt.usage
-        # A call whose specialist already has a thread is a replay or a resume: it reads that thread's outcome and
-        # starts no turn, so the budget does not hold it back.
-        begun = await store.thread_by_key(f"tool:{key}") is not None
-        if not begun and usage is not None and await usage.exhausted(parent_thread_id) is not None:
-            # The specialist would spend from the asking thread's budget, which is spent: it runs no turn, and the
-            # asking agent goes on with what it has. Checked here only, so a specialist resumed after an approval
-            # still finishes the call a person approved.
-            return ToolOutcome(ok=False, output=base | BUDGET_REACHED)
         meta: Json = {
             "calledBy": caller,
             "calledByName": parent_meta.get("agentName"),
@@ -251,4 +243,8 @@ class AgentCalls:
         if runs and runs[-1].status == "error":
             return ToolOutcome(ok=False, output=base | {"status": "failed"})
         values = narrow.an_object(snap.values or {}, "the specialist's values")
+        if values.get("stop") == "budget_reached":
+            # The specialist's reply ended at the budget its chain shares: the asking agent reads what it had written
+            # and answers from that.
+            return ToolOutcome(ok=False, output=base | BUDGET_REACHED | {"answer": values.get("reply")})
         return ToolOutcome(ok=True, output=base | {"status": "answered", "answer": values.get("reply")})

@@ -99,6 +99,9 @@ class AgentState(TypedDict):
     pending: NotRequired[Json | None]
     decision: NotRequired[Json | None]
     reply: NotRequired[str]
+    # Why the last reply ended (the kernel's stop reason): an agent that asked this one reads a reply cut at the
+    # budget as `budget_reached`, never as an answer (api/agent_calls.py).
+    stop: NotRequired[str]
     tool_results: Annotated[list[Json], operator.add]
     # Set by a chat run: the transcript to answer from (earlier turns minus superseded ones) and who asked, which
     # the approval carries so the reviewer's requester check can refuse the asker.
@@ -214,6 +217,7 @@ def build(
             "messages": [{"role": "user", "content": state["message"]}, {"role": "assistant", "content": result.text}],
             "pending": interrupt_to_state(result.interrupt) if result.interrupt else None,
             "reply": result.text,
+            "stop": result.stop_reason,
         }
 
     async def operations() -> list[OperationRef]:
@@ -312,6 +316,7 @@ def build(
             "decision": None,
             "writes_allowed": [*(state.get("writes_allowed") or []), *now],
             "reply": result.text,
+            "stop": result.stop_reason,
             "tool_results": [{"tool": c.tool, "status": c.status, "output": c.output} for c in result.tool_calls],
         }
 

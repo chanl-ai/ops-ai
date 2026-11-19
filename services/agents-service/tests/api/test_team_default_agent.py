@@ -308,7 +308,7 @@ async def test_a_specialist_spends_the_callers_budget_and_stops_when_it_is_spent
                 )
             ).output
         assert (again["status"], again.get("threadId")) == ("answered", first["threadId"]), again
-        # A second agent asked once the chain's budget is spent runs no turn; the caller is told and goes on.
+        # A second agent asked once the chain's budget is spent makes no model call; the caller is told and goes on.
         with acting_for(viewer()):
             second = (
                 await AgentCalls(rt).run(
@@ -347,6 +347,35 @@ async def test_a_specialist_spends_the_callers_budget_and_stops_when_it_is_spent
     waiting: dict[str, Any] = (await c.get(f"/v1/chat/threads/{thread}", headers=VIEWER)).json()["data"]["messages"][-1]
     card: dict[str, Any] = waiting.get("budget") or {}
     assert card.get("state") == "waiting", waiting
+
+
+async def test_a_specialist_makes_no_model_call_past_the_chains_budget_and_the_asking_agent_closes_once(
+    stack: Stack,
+) -> None:
+    c, rt = stack
+    assert (await c.put(URL, json={"agentId": "ag_branch"}, headers=ADMIN)).status_code == 200
+    thread = (await start(c, VIEWER))["id"]
+    assert rt.usage is not None
+    with tenant_scope(TENANT):
+        # Spent by the asking agent's first model call, before the specialist it asks has made one.
+        await rt.usage.set_budget(thread, Budget(max_calls=1))
+    events = await say(c, thread, ASK_DISPUTE, VIEWER)
+    (asked,) = [e["call"]["output"] for e in events if e.get("type") == "tool_end"]
+    with tenant_scope(TENANT):
+        specialist, whole = (await rt.usage.totals(asked["threadId"])).calls, (await rt.usage.totals(thread)).calls
+    assert (asked["status"], asked.get("code"), specialist) == ("budget_reached", "chain_budget_reached", 0), asked
+    # One call past the cap, on the thread the chain started on: the asking agent's closing answer.
+    assert whole == 2, whole
+    url = f"/v1/chat/threads/{thread}"
+    closing: dict[str, Any] = (await c.get(url, headers=VIEWER)).json()["data"]["messages"][-1]
+    assert closing["role"] == "assistant" and closing["content"] and "budget" not in closing["content"], closing
+    # Its next turn waits on the budget card, which its person answers.
+    await say(c, thread, "And the deadline?", VIEWER)
+    waiting: dict[str, Any] = (await c.get(url, headers=VIEWER)).json()["data"]["messages"][-1]
+    card: dict[str, Any] = waiting.get("budget") or {}
+    assert card.get("state") == "waiting", waiting
+    with tenant_scope(TENANT):
+        assert (await rt.usage.totals(thread)).calls == 2, "a model call ran while the thread waited on its budget"
 
 
 async def test_a_chain_record_sent_by_a_caller_is_not_the_threads_chain(stack: Stack) -> None:

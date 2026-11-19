@@ -198,3 +198,22 @@ class UsageLedger(RuntimeStore):
         if budget is None or budget.is_empty():
             return None
         return exhausted(await self.totals(thread_id), budget)
+
+    async def chain_root(self, thread_id: str) -> str:
+        """The thread whose budget `thread_id`'s model calls count against: itself, or for a specialist's thread the
+        thread its chain started on, read from what api/agent_calls.py wrote when the specialist was asked."""
+        q = sa.select(graph_threads.c.meta).where(graph_threads.c.id == thread_id, team_visible(graph_threads))
+        async with self.tx() as c:
+            meta: JsonValue = (await c.execute(q)).scalar_one_or_none()
+        asked = _asked_by(meta)
+        if asked is None or not isinstance(meta, dict):
+            return thread_id
+        chain = meta.get("chain")
+        return str((chain.get("rootThreadId") if isinstance(chain, dict) else None) or asked)
+
+    async def spent_before_call(self, thread_id: str) -> str | None:
+        """Asked before every model call of a graph run: the thread whose spent budget the call would count against,
+        or None when the call may run. `totals` counts a chain one call deep, as deep as chains go today
+        (ops_contracts.chain.MAX_DEPTH)."""
+        root = await self.chain_root(thread_id)
+        return root if await self.exhausted(root) is not None else None
