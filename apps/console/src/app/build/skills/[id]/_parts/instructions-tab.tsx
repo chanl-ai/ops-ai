@@ -8,7 +8,9 @@ import { AddMenu } from '@/components/shared/add-menu';
 import { FormField } from '@/components/shared/form-field';
 import { SettingsSection } from '@/components/shared/settings-section';
 import { TagInput } from '@/components/shared/tag-input';
+import { SkillDocumentEditor } from '@/components/skills/skill-document-editor';
 import { EDIT_CLASS, EditClassBadge, MarkdownPreview } from '@/components/skills/skill-meta';
+import { SkillResultsSection, type SkillEndingValue } from '@/components/skills/skill-results-section';
 import { AccessBadge } from '@/components/status-badges';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -20,6 +22,7 @@ import { useSaveSkillDraft, useSkillOptions } from '@/hooks/skill-queries';
 import { SKILL_LOADING_OPTIONS } from '@/components/skills/skill-loading';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { PageSaveActions } from '@/components/shared/page-save-actions';
+import type { StepValue } from '@/components/shared/instruction-document';
 import type { SkillDetail, SkillEditClass, SkillLoading, SkillPartContent } from '@/lib/types/skills';
 
 import { PartsSection, partsError } from './parts-section';
@@ -34,9 +37,11 @@ interface Form {
   guardrails: string[];
   refusal: string;
   parts: SkillPartContent[];
+  steps: StepValue[];
+  ending: SkillEndingValue;
 }
 
-const formOf = (sk: SkillDetail): Form => ({ name: sk.content.name, useWhen: sk.content.useWhen, loading: sk.content.loading, instructions: sk.content.instructions, toolIds: sk.content.tools.map((t) => t.toolId), knowledgeBases: sk.content.knowledgeBases, guardrails: sk.content.guardrails, refusal: sk.content.refusal ?? '', parts: sk.content.parts ?? [] });
+const formOf = (sk: SkillDetail): Form => ({ name: sk.content.name, useWhen: sk.content.useWhen, loading: sk.content.loading, instructions: sk.content.instructions, toolIds: sk.content.tools.map((t) => t.toolId), knowledgeBases: sk.content.knowledgeBases, guardrails: sk.content.guardrails, refusal: sk.content.refusal ?? '', parts: sk.content.parts ?? [], steps: sk.content.steps ?? [], ending: { notWhen: sk.content.notWhen ?? '', exit: sk.content.exit ?? {}, returns: sk.content.returns ?? [], success: sk.content.success ?? [] } });
 const same = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x));
 
 /**
@@ -51,10 +56,16 @@ export function InstructionsTab({ skill: sk }: { skill: SkillDetail }) {
   const [form, setForm] = React.useState<Form>(saved);
   const [mode, setMode] = React.useState<'edit' | 'preview'>('edit');
   const [note, setNote] = React.useState('');
+  const [endingValid, setEndingValid] = React.useState(true);
+  // The endings form keeps its own field state, so a discard remounts it on the saved values.
+  const [discards, setDiscards] = React.useState(0);
+  const setEnding = React.useCallback((ending: SkillEndingValue) => setForm((f) => ({ ...f, ending })), []);
+  // A skill has steps or parts, never both: one with parts keeps its Markdown body.
+  const stepped = form.parts.length === 0;
   const newest = sk.versions[0];
   const locked = newest.state === 'in_review' ? `v${newest.version} is waiting in Reviews.` : sk.status === 'deprecated' ? 'The skill is deprecated. Duplicate it to change it.' : undefined;
   const changed = {
-    wording: form.name !== saved.name || form.useWhen !== saved.useWhen || form.loading !== saved.loading || form.instructions !== saved.instructions || JSON.stringify(form.parts) !== JSON.stringify(saved.parts),
+    wording: form.name !== saved.name || form.useWhen !== saved.useWhen || form.loading !== saved.loading || form.instructions !== saved.instructions || JSON.stringify([form.parts, form.steps, form.ending]) !== JSON.stringify([saved.parts, saved.steps, saved.ending]),
     scope: !same(form.toolIds, saved.toolIds) || !same(form.knowledgeBases, saved.knowledgeBases) || !same(form.guardrails, saved.guardrails) || form.refusal.trim() !== saved.refusal.trim(),
   };
   const dirty = changed.wording || changed.scope;
@@ -68,7 +79,7 @@ export function InstructionsTab({ skill: sk }: { skill: SkillDetail }) {
   // The tab remounts once the saved version arrives, so the toast follows the awaited result rather than mutate callbacks.
   const submit = async () => {
     try {
-      const d = await save.mutateAsync({ name: form.name, useWhen: form.useWhen, loading: form.loading, instructions: form.instructions, toolIds: form.toolIds, knowledgeBases: form.knowledgeBases, guardrails: form.guardrails, refusal: form.refusal.trim(), parts: form.parts, note: note.trim() || undefined, baseVersion: newest.version });
+      const d = await save.mutateAsync({ name: form.name, useWhen: form.useWhen, loading: form.loading, instructions: form.instructions, toolIds: form.toolIds, knowledgeBases: form.knowledgeBases, guardrails: form.guardrails, refusal: form.refusal.trim(), parts: form.parts, ...(stepped ? { steps: form.steps, notWhen: form.ending.notWhen, exit: form.ending.exit, returns: form.ending.returns, success: form.ending.success } : {}), note: note.trim() || undefined, baseVersion: newest.version });
       toast.success(`Saved draft v${d.versions[0].version}`, { description: `${EDIT_CLASS[d.versions[0].editClass].hint} Run the tests before requesting review.` });
     } catch (e) {
       toast.error('Couldn’t save the draft', { description: (e as Error).message });
@@ -105,25 +116,31 @@ export function InstructionsTab({ skill: sk }: { skill: SkillDetail }) {
         </div>
       </SettingsSection>
 
-      <SettingsSection title="Instructions" description="Markdown with four sections: Steps, Rules, Examples and Output format.">
-        <div className="flex flex-col gap-2">
-          <ToggleGroup type="single" value={mode} onValueChange={(v) => v && setMode(v as 'edit' | 'preview')} variant="outline" size="sm" className="self-start" aria-label="Editor mode">
-            <ToggleGroupItem value="edit" aria-label="Edit">
-              <Pencil className="size-3.5" /> Edit
-            </ToggleGroupItem>
-            <ToggleGroupItem value="preview" aria-label="Preview" data-testid="instructions-preview-toggle">
-              <Eye className="size-3.5" /> Preview
-            </ToggleGroupItem>
-          </ToggleGroup>
-          {mode === 'edit' ? (
-            <Textarea value={form.instructions} disabled={!!locked} onChange={(e) => setForm({ ...form, instructions: e.target.value })} className="min-h-96 bg-card font-mono text-xs leading-relaxed" aria-label="Instructions" data-testid="instructions-editor" />
-          ) : (
-            <div className="min-h-96 rounded-md border bg-card p-4" data-testid="instructions-preview">
-              <MarkdownPreview text={form.instructions} />
-            </div>
-          )}
-        </div>
-      </SettingsSection>
+      {stepped ? (
+        <SettingsSection title="Notes and steps" description="Notes hold for the whole skill. Steps run in order: each can name a tool, a check on what came back, and what happens when the check fails.">
+          <SkillDocumentEditor skillId={sk.id} name={form.name} value={{ instructions: form.instructions, steps: form.steps }} onChange={(doc) => setForm((f) => ({ ...f, ...doc }))} readOnly={!!locked} problems={sk.publishCheck.problems} />
+        </SettingsSection>
+      ) : (
+        <SettingsSection title="Instructions" description="Markdown with four sections: Steps, Rules, Examples and Output format.">
+          <div className="flex flex-col gap-2">
+            <ToggleGroup type="single" value={mode} onValueChange={(v) => v && setMode(v as 'edit' | 'preview')} variant="outline" size="sm" className="self-start" aria-label="Editor mode">
+              <ToggleGroupItem value="edit" aria-label="Edit">
+                <Pencil className="size-3.5" /> Edit
+              </ToggleGroupItem>
+              <ToggleGroupItem value="preview" aria-label="Preview" data-testid="instructions-preview-toggle">
+                <Eye className="size-3.5" /> Preview
+              </ToggleGroupItem>
+            </ToggleGroup>
+            {mode === 'edit' ? (
+              <Textarea value={form.instructions} disabled={!!locked} onChange={(e) => setForm({ ...form, instructions: e.target.value })} className="min-h-96 bg-card font-mono text-xs leading-relaxed" aria-label="Instructions" data-testid="instructions-editor" />
+            ) : (
+              <div className="min-h-96 rounded-md border bg-card p-4" data-testid="instructions-preview">
+                <MarkdownPreview text={form.instructions} />
+              </div>
+            )}
+          </div>
+        </SettingsSection>
+      )}
 
       <PartsSection parts={form.parts} onChange={(parts) => setForm({ ...form, parts })} disabled={!!locked} />
 
@@ -191,16 +208,18 @@ export function InstructionsTab({ skill: sk }: { skill: SkillDetail }) {
         </div>
       </SettingsSection>
 
+      {stepped && <SkillResultsSection key={discards} value={saved.ending} onChange={setEnding} onValidity={setEndingValid} disabled={!!locked} />}
+
       {!locked && (
         <PageSaveActions
           dirty={dirty}
           saving={save.isPending}
-          onDiscard={() => setForm(saved)}
+          onDiscard={() => (setForm(saved), setEndingValid(true), setDiscards((n) => n + 1))}
           save={
             // Saving asks for a version note and says what this kind of edit needs before it goes live.
             <Popover open={noting} onOpenChange={setNoting}>
               <PopoverTrigger asChild>
-                <Button size="sm" disabled={!dirty || !!errors.name || !!errors.useWhen || !!errors.parts || save.isPending} data-testid="save-skill-draft">
+                <Button size="sm" disabled={!dirty || !!errors.name || !!errors.useWhen || !!errors.parts || !endingValid || save.isPending} data-testid="save-skill-draft">
                   Save {target}
                 </Button>
               </PopoverTrigger>

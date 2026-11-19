@@ -85,7 +85,7 @@ function hash(key: string) {
   return ((h >>> 0) % 10_000) / 10_000;
 }
 
-interface StoredContent {
+interface StoredContent extends Pick<SkillContent, 'notWhen' | 'steps' | 'exit' | 'returns' | 'success'> {
   name: string;
   slug: string;
   useWhen: string;
@@ -277,7 +277,7 @@ export function createSkillsMock(deps: SkillsDeps) {
   const livePins = (sk: Stored) => pins.filter((p) => p.skillId === sk.id && agentOf(p.agentId));
   const statusOf = (sk: Stored): SkillStatus => (sk.deprecated ? 'deprecated' : openReview(sk) ? 'in_review' : published(sk) ? 'published' : 'draft');
   const runFor = (sk: Stored, version: number) => sk.runs.find((r) => r.version === version);
-  const content = (sk: Stored, c: StoredContent): SkillContent => ({ name: c.name, slug: c.slug, useWhen: c.useWhen, loading: c.loading, instructions: c.instructions, tools: refs(c.toolIds), knowledgeBases: c.knowledgeBases, guardrails: c.guardrails, resources: c.resources.map((r) => (r.fileId ? { ...r, blocked: deps.files.state(r.fileId)?.blocked } : r)) });
+  const content = (sk: Stored, c: StoredContent): SkillContent => ({ name: c.name, slug: c.slug, useWhen: c.useWhen, loading: c.loading, instructions: c.instructions, tools: refs(c.toolIds), knowledgeBases: c.knowledgeBases, guardrails: c.guardrails, resources: c.resources.map((r) => (r.fileId ? { ...r, blocked: deps.files.state(r.fileId)?.blocked } : r)), notWhen: c.notWhen, steps: c.steps, exit: c.exit, returns: c.returns, success: c.success });
 
   const row = (sk: Stored): Skill => {
     const n = newest(sk);
@@ -831,7 +831,13 @@ export function createSkillsMock(deps: SkillsDeps) {
           toolIds: patch.toolIds ?? before.toolIds,
           knowledgeBases: patch.knowledgeBases ?? before.knowledgeBases,
           guardrails: patch.guardrails?.filter((g) => g.trim()) ?? before.guardrails,
+          notWhen: patch.notWhen ?? before.notWhen,
+          steps: patch.steps ?? before.steps,
+          exit: patch.exit ?? before.exit,
+          returns: patch.returns ?? before.returns,
+          success: patch.success ?? before.success,
         };
+        const program = (c: StoredContent) => JSON.stringify([c.notWhen ?? '', c.steps ?? [], c.exit ?? {}, c.returns ?? [], c.success ?? []]);
         const changes = [
           nextContent.name !== before.name && 'Name',
           nextContent.useWhen !== before.useWhen && 'Use when',
@@ -840,6 +846,7 @@ export function createSkillsMock(deps: SkillsDeps) {
           nextContent.toolIds.join() !== before.toolIds.join() && 'Tools',
           nextContent.knowledgeBases.join() !== before.knowledgeBases.join() && 'Knowledge bases',
           nextContent.guardrails.join() !== before.guardrails.join() && 'Guardrails',
+          program(nextContent) !== program(before) && 'Steps',
         ].filter((x): x is string => !!x);
         if (!changes.length) throw new ApiError('Nothing changed.', 400);
         if (n.state === 'draft') {

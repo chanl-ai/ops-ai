@@ -1,6 +1,6 @@
 {
   "date": "2026-11-19",
   "title": "Skills can hold numbered steps",
-  "description": "A skill saved through the API, the SDKs or the command line can list numbered steps, each naming a tool and a check on what the tool returned. A save checks every step, and a publish that cannot go ahead names the step that blocks it.",
+  "description": "A skill's page now has notes and numbered steps in one document: type @ to name a tool, a knowledge base or another skill, and add a check to a step. A save checks every step, and a publish that cannot go ahead names the step that blocks it.",
   "tag": "new"
 }

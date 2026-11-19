@@ -247,7 +247,7 @@ def test_kb_add_file_uploads_for_knowledge_and_adds_it_to_the_base(
 def test_skills_apply_saves_the_named_skill_as_a_draft_and_an_export_applies_again(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    step = {"title": "Look up", "use": {"kind": "tool", "id": "lookup"}, "check": {"text": "result.ok", "by": "rule"}}
+    step = {"do": "Look up", "use": {"kind": "tool", "id": "lookup"}, "check": {"text": "result.ok", "by": "rule"}}
     stored = {
         "id": "sk_1",
         "name": "Recall",
