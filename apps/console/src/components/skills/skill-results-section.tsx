@@ -73,6 +73,7 @@ export function SkillResultsSection({ value, onChange, onValidity, disabled }: {
       <fieldset disabled={disabled} className="flex flex-col gap-6" data-testid="skill-results-section">
         <div className="flex flex-col gap-2">
           <span className="text-sm font-medium">Endings</span>
+          <p className="text-xs text-muted-foreground">When a step of another skill runs this one, that step passes only if this skill ends as done. To go on after another ending, give that step a check such as result.exit in [&quot;done&quot;, &quot;skip&quot;].</p>
           {exits.fields.map((f, i) => (
             <div key={f.id} className="flex flex-col gap-2 sm:flex-row sm:items-start">
               <FormField id={`sk-exit-name-${i}`} label="Name" className="sm:w-48" error={errors.exits?.[i]?.name?.message}>
