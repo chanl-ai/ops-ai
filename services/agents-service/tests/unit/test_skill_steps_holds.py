@@ -91,6 +91,8 @@ RUNS_LOOK_RETRY: Call = ("switch_skill", {"slug": "runs-look-retry"})
 SKIP_IS_FINE: Call = ("switch_skill", {"slug": "skip-is-fine"})
 ESCALATE: Call = ("exit", {"name": "escalate"})
 SKIP: Call = ("exit", {"name": "skip"})
+SKIP_OK: Call = ("exit", {"name": "skip", "returns": {"ok": True}})
+RUNS_LOOK_OK: Call = ("switch_skill", {"slug": "runs-look-ok"})
 ID_CHECK = tool("check_id")
 GIVE_UP: Call = ("exit", {"name": "failed"})
 DONE: Call = ("step_done", {})
@@ -239,6 +241,32 @@ def book(if_not: dict[str, Any], version: int = 1) -> list[Skill]:
             "Runs look retry",
             "runs-look-retry",
             program({"do": "Look.", "use": {"kind": "skill", "id": "sk_look_or_escalate"}}, paid),
+        ),
+        stepped(
+            "sk_look_ok",
+            1,
+            "Look ok",
+            "look-ok",
+            program(
+                {**looked, "ifNot": {"action": "retry", "retries": 1}},
+                exit={"skip": "Go on without it."},
+                returns=[{"name": "ok", "type": "yes_no"}],
+            ),
+        ),
+        stepped(
+            "sk_runs_look_ok",
+            1,
+            "Runs look ok",
+            "runs-look-ok",
+            program(
+                {
+                    "do": "Look.",
+                    "use": {"kind": "skill", "id": "sk_look_ok"},
+                    "check": {"text": "result.ok is true", "by": "rule"},
+                    "ifNot": once,
+                },
+                paid,
+            ),
         ),
         stepped(
             "sk_skip_is_fine",
@@ -475,6 +503,13 @@ THREADS = [
         "a skill reached by a jump past a failed check fails its own, then a listed exit is called twice",
         [[JUMP_RUNS_NOTE, look("CH-1"), note("CH-1"), SKIP, SKIP, refund("CH-1")]],
         ["lookup_charge", "add_note"],
+    ),
+    # The step's rule reads the results a skill hands back only when it ended as done: with any other exit the
+    # model names the results itself, so it could say ok and carry the step past the check that failed inside.
+    Thread(
+        "a listed exit that hands back the result the step's rule reads",
+        [[RUNS_LOOK_OK, look("CH-1"), SKIP_OK, refund("CH-1")]],
+        ["lookup_charge"],
     ),
     Thread(
         "a step with a rule of its own that accepts a listed exit goes on",

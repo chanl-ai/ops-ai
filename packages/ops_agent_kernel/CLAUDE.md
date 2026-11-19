@@ -57,7 +57,8 @@ rules: [../../CLAUDE.md](../../CLAUDE.md#folder-guides).
     when an if-not jumps forward to a step with its own check and that check fails, passing the earlier step frees
     the later step's write. Holding it as well would let two skills lock each other for good.
   - A step that runs a skill passes only when that skill ends as done, unless the step has a rule of its own,
-    which then decides (`result.exit in ["done", "skip"]` lets a listed ending go on). A tool error, a
+    which then decides (`result.exit in ["done", "skip"]` lets a listed ending go on). The rule reads the results
+    the skill handed back only when it ended as done; with any other exit it sees `result.exit` alone. A tool error, a
     skill a step could not start, and an exit the model calls take none. An escalate, refuse or failed exit still
     keeps the skill's tools from the rest of that reply.
 - A step that runs a skill hands it the inputs it declares, from the running skill's inputs and then the result of

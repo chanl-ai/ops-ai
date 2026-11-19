@@ -511,11 +511,15 @@ def _sub_ended(
     wants another ending to go on writes `result.exit in ["done", "skip"]`. So no exit carries a step past a
     check that did not pass inside the sub-skill, however often it is called. A sub-skill that ended as failed is
     always a failed attempt of the step. Neither takes a hold here: a check that failed inside took one where it
-    failed. A rule of the step's own that does not hold is a failed check like any other, and takes one."""
+    failed. A rule of the step's own that does not hold is a failed check like any other, and takes one.
+
+    The step's result holds what the sub-skill handed back only when it ended as done. With any other exit the model
+    names the results itself at any step, so a rule such as `result.ok` would pass on its word; they are left out,
+    and such a rule finds nothing and does not hold."""
     r = run.running
     assert r is not None
     r.sub = None
-    value: dict[str, JsonValue] = {"exit": name, **returns}
+    value: dict[str, JsonValue] = {"exit": name, **(returns if name == "done" else {})}
     check = _step(r).check
     ruled = check is not None and _is_rule(check)
     if name == "failed" or (not ruled and name != "done"):
