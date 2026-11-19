@@ -174,6 +174,27 @@ async def test_a_skill_does_not_start_without_an_input_it_requires() -> None:
     assert "charge_id" in picked.instructions[0] and "# Now:" not in picked.instructions[0], picked.instructions[0]
 
 
+async def test_a_skill_whose_first_step_cannot_start_its_skill_says_which_input_is_missing() -> None:
+    pay = replace(pay_out_after_a_check({"action": "retry"})[1], inputs=(SkillInput("charge_id", required=True),))
+    first = program(
+        {"do": "Pay it out.", "use": {"kind": "skill", "id": "sk_pay"}, "ifNot": {"action": "retry", "retries": 0}}
+    )
+    direct = stepped("sk_direct", 1, "Pay at once", "pay-at-once", first)
+    ask = TurnRequest("t1", "th1", agent([direct, pay], max_steps=12), [REFUND], user_turn="Pay it out.")
+    model = Script(("switch_skill", {"slug": "pay-at-once"}), "Which charge?")
+    result, _ = await reply(ask, model)
+    assert ended(run_of(result)) == [("sk_direct", "failed", 1)], run_of(result)
+    assert "needs charge_id," in json.dumps(model.returned[0]), model.returned
+
+    # Picked from the chat menu, the same is written into what the model reads.
+    pick: list[dict[str, Any]] = [
+        {"skillId": "sk_direct", "version": 1, "name": direct.name, "matched": "Picked", "how": "picked"}
+    ]
+    picked = Script("Which charge?")
+    await reply(replace(ask, carried_skills=pick), picked)
+    assert "needs charge_id," in picked.instructions[0], picked.instructions[0]
+
+
 CUSTOMER = ToolGrant("lookup_customer", "bank", "Reads a customer.", "read", {"type": "object", "properties": {}})
 
 
