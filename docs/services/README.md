@@ -58,6 +58,9 @@ place on every page.
 | Regenerate the committed OpenAPI document | `make -C services/<name>-service openapi` |
 | One use case end to end | `make usecase-test UC=<id>` |
 
+Two exceptions: runner-service has no database, so no `migrate`, and platform-service has no `openapi` target; it
+regenerates its document with `uv run python scripts/check_openapi.py --write` in `services/platform-service`.
+
 > [!NOTE]
 > **Databases.** Every service runs on PostgreSQL today. SQL Server 2025 support is partial: CI's `store-mssql` job
 > (`.github/workflows/ci.yml:217`) runs the store, service-kit and identity suites and each service's store and
