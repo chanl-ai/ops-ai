@@ -1,19 +1,52 @@
 # Documents service
 
-Status: first slice built. documents-service runs on :8760 (`make up` starts it as `documents`) with its own
-tables and migration chain (`alembic_version_documents`). It serves the extraction API and document types,
-their versions, samples and capped test runs, the layout, classify, and boxes on every
-extracted field. Templates are planned. Design: this page.
+Status: current, checked against the code on 2026-11-18. Built: readings, extractions with page positions, document types with versions, samples, test runs, templates and corrections. Not built: rotation and scale correction when a template is matched.
+
+The documents service answers what a file says. It reads a file's pages once per team, finds the fields a document type
+asks for, and ties each value to the line on the page it came from, with a confidence. A field it is unsure of is
+marked for a person to check, and each correction a person makes teaches later reads of the same kind of document. It
+never keeps file bytes: it reads them through the files service as the caller's team.
+
+## At a glance
 
 | Item | Detail |
 |---|---|
-| Purpose | What is read from a file: extractions with each field's value, confidence, page and quote, and the document types that say which fields a kind of document carries. |
-| Owns | `extractions`, `extraction_corrections`, `document_types`, `document_type_versions`, `document_type_samples`, `document_type_tests`, `documents_readings`, `documents_reading_pages`, `documents_reading_files`, `documents_outbox` (chain `alembic_version_documents`). Never file bytes. |
-| Depends on | files-service for bytes (`ops_files_client`, as the caller's team), models-service for model calls (its own key `mk_dev_extract`, purpose `files:extract`, a budget share per tenant), platform-service for the `extractionFloor` policy. |
-| Libraries | `packages/ops_extract` (the checks that score a field, the floor, the prompt), `packages/ops_ingest` (parsing and OCR). |
-| Client | `packages/ops_documents_client`: `extract` (answer or poll to the end) and `document_type`. |
+| Owns | Readings of files (page layout, words and boxes), extractions and their corrections, document types and their immutable versions, samples, test runs, the examples corrections teach, template copies |
+| Port | 8760 (`OPS_DOCUMENTS_PORT`) |
+| Code | `services/documents-service` (`ops_documents`), with `ops_extract` (the checks that score a field, the floor, the prompt), `ops_ingest` (parsing and OCR) and `ops_pii` (masking); the client other services use is `packages/ops_documents_client` |
+| Database | Own migration chain (`alembic_version_documents`, `services/documents-service/migrations`). Tables: `documents_readings`, `documents_reading_pages`, `documents_reading_files`, `extractions`, `extraction_corrections`, `document_types`, `document_type_versions`, `document_type_samples`, `document_type_tests`, `document_type_examples`, `documents_template_copies`, `documents_outbox` |
+| Isolation | Every transaction runs as `ops_documents_tenant` (`services/documents-service/src/ops_documents/store/metadata.py:12`) and the team policy holds all three readings tables; another team never sees a reading. Test: `services/documents-service/tests/test_isolation.py` |
+| Secrets it holds | Its own model key (`OPS_MODELS_KEY`) and its service signing key. No file bytes and no provider credential |
+| Calls out to | files-service for bytes, as the caller's team; models-service for model reads, on its own key (`services/documents-service/src/ops_documents/extraction.py:1261`); platform-service for the `extractionFloor` and `pageImages` policies; tools-service for plugin document type templates (`GET /v1/plugin-templates`, `services/documents-service/src/ops_documents/tools_client.py:57`) |
+| Called by | The console (Document types, the file page's Preview and Extract, the Human Task read check); agents-service (Extract from file steps, chat attachments); kb-service (each source file's reading); tools-service (`read_file`, `read_document`) |
+| Events it sends | Through `documents_outbox` and the `documents_relay` process: `reading.finished` and `reading.failed` to kb-service; `extraction.read`, `extraction.finished` and `extraction.corrected` to agents-service (`services/documents-service/src/ops_documents/store/relay.py:18`) |
+| Events it receives | None; the file-deleted purge arrives as a call from the `file_deleted_purge` workflow |
+| When something is down | Without kb-service configured it sends reading events to agents-service only. Without a tools address or a service signing key, the plugin template routes answer 503. A model alias not cleared for images makes a read go on text only, saying why |
+| Routes | API reference tab, HTTP API › Documents, built from `services/documents-service/openapi.json` |
+| Design | [Design page](design.md): the flow, screens, data, sequences and the sample documents |
 
-The service map that applies to every service is `docs/architecture/service-map.md`.
+```mermaid
+flowchart LR
+  file[File in files-service] --> reading[Reading: layout, words, boxes]
+  reading --> template{Template matches?}
+  template -->|yes| checks[Field checks]
+  template -->|no| model[Model read on models-service]
+  model --> checks
+  checks -->|below the floor| review[Marked for a person]
+  checks --> saved[Extraction with values, boxes, confidence]
+  review --> correction[Correction teaches the type]
+```
+
+## Run and test it alone
+
+| Task | Command |
+|---|---|
+| Serve on :8760 in the foreground | `make -C services/documents-service run`; on the stack, `make restart SVC=documents` |
+| Apply its migrations | `make -C services/documents-service migrate` |
+| Tests (need `make db-up`; files-service is faked at its routes by `ops_files_client.testing` and the model at the Models port) | `make -C services/documents-service test` (`T=` names files) |
+| Lint, strict types, tests and the OpenAPI gate | `make -C services/documents-service verify` |
+| Regenerate `openapi.json` | `make -C services/documents-service openapi` |
+| Builders manage document types end to end | `make usecase-test UC=uc-243` |
 
 ## Rules
 
@@ -27,28 +60,13 @@ The service map that applies to every service is `docs/architecture/service-map.
 | A file's reading (`POST /v1/documents/readings`, `DocumentsClient.reading`) is kept per team, files-service digest, reader version and OCR settings, whoever in the team asks: extraction, layouts, a knowledge base, a chat attachment and the read_file tool share one reading, another team never sees it (the team policy holds all three readings tables), and no model is called. A scan is read in the background and reported as `reading.finished` | A chat turn reads every attachment in its thread on each message; the second and later reads answer the stored reading |
 | The workflow runner and the agent kernel never import `ops_extract` | The checks run in one place; `scripts/tests/test_no_cross_service_imports.py` enforces it |
 
-## Routes
-
-| Route | Scope for a service | What it does |
-|---|---|---|
-| `POST /v1/documents/layout` | `documents:run` | `{fileId, ocr?}`: the file's layout, read on the first ask and cached by tenant, content digest, layout engine version and OCR choice: pages, blocks in reading order with table cells, words with confidence, boxes as page fractions |
-| `GET /v1/documents/layout/{fileId}?page=&ocr=` | `documents:view` | The cached layout or one page of it; 404 until it is read |
-| `GET /v1/documents/extractions?fileId=` | `documents:view` | A file's extractions by the caller's team, newest first, paged |
-| `POST /v1/documents/extractions` | `documents:run` | `{fileId, fields or documentTypeId, version?, many, ocr, reviewBelow}`. A small file answers 200 when done; a larger one 202, to poll. `Idempotency-Key` returns the same extraction |
-| `GET /v1/documents/extractions/{id}` | `documents:view` | The extraction, with fields, `needsReview`, floor and corrections |
-| `PATCH /v1/documents/extractions/{id}/fields/{key}` | `documents:edit` | A correction; the original value and confidence are kept |
-| `POST /v1/documents/purge` | `documents:delete`, services only | `{fileId}`: removes what the token's team read from a deleted file; 409 while files-service still serves the file, so a live file's reads are never removed |
-| `GET, POST /v1/document-types`; `GET /v1/document-types/{id}` | `documents:view`, `documents:edit` to create | The team's types, with `canCreate` and `canEdit` from the caller's `documents.edit` |
-| `POST /v1/document-types/{id}/versions`, `.../samples`, `DELETE .../samples/{sampleId}` | `documents:edit` | Version n+1; a sample holds a `test_set` reference on its file |
-| `GET .../versions/{n}/test-estimate`, `POST .../versions/{n}/test-runs`, `GET .../test-runs/{id}` | `documents:view`, `documents:run` | Estimate, start and read a test run |
-
 People are checked against the `documents` permission area: view to read, run to extract, edit to create or change a
 type or correct a field; delete is for services. Built-in roles: admin
-holds every action; builder, reviewer and viewer hold view, edit and run (platform migration 0023).
+and builder hold every action; reviewer and viewer hold view, edit and run; a chat user holds none
+([roles and permissions](../../architecture/roles-and-permissions.md)).
 
 The console's Data Hub > Document types (`/document-types`) lists the team's types and opens one on a version
-picker with Fields, Samples and Tests tabs; its write controls follow `canCreate` and `canEdit`, so with every member
-holding `documents.edit` no one sees it read-only until RBAC lands. Proof: uc-243
+picker with Fields, Samples and Tests tabs; its write controls follow `canCreate` and `canEdit`. Proof: uc-243
 (`docs/usecases/documents-service/builders-manage-document-types.md`); page row in `docs/console/page-plan.md`.
 
 ## Workflows that use it
@@ -132,7 +150,7 @@ naming a field it lacks.
 
 A version may let reads show the model the page image (`pageImages`, off by default). The image carries
 everything printed on the page to the model provider, so three settings must all allow it: the version (turning it on
-needs `documents.manage`, held by team admins; a later version carries it forward), the team's `pageImages` policy
+needs `documents.manage`, held by admins and builders; a later version carries it forward), the team's `pageImages` policy
 (per team, read live from platform-service, off for a team that set nothing, changed under `settings.manage` in the
 Security team; an unreadable policy counts as off), and the model alias version's `images` clearance in models-service,
 which refuses an image to an alias not cleared (403 `images_not_cleared`, logged denied). A page read through OCR goes
@@ -169,15 +187,6 @@ text: `trimPunctuation` (a trailing comma after a name), `lastFour` (the last fo
 `stripLabel` (a leading "Case reference: "). What the model said stays as `extractedValue`, and `cleaned` names the
 rules that changed it. On the court order fixtures' stored reads at default effort they take 59/65 values right to 63/65. The test estimate prices each call at the type's last 20
 measured extractions, then the tenant's, then a fixed guess (`basis`).
-
-## Run the checks
-
-```bash
-make -C services/documents-service verify
-```
-
-Tests need PostgreSQL (`make db-up`); files-service is faked at its routes (`ops_files_client.testing`) and the model
-at the Models port.
 
 ## Sample documents as requirements
 

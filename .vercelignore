@@ -1,0 +1,34 @@
+# What `vercel deploy` from the repository root leaves out. The CLI reads this file, not .gitignore, so it repeats the
+# local-only entries there. The docs build reads tracked files across the repository, so only untracked output goes.
+node_modules
+.next
+.next-*
+.source
+out
+*.tsbuildinfo
+next-env.d.ts
+.env*
+!.env.example
+.venv
+__pycache__
+.pytest_cache
+.ruff_cache
+.logs
+.run
+.data
+.serena
+.mirror
+.pnpm-store
+.playwright-mcp
+/dist
+sdk/python/dist
+sdk/typescript/dist
+/ops-ai.env
+/dba
+/backups
+/evidence
+/shape
+/triage
+.claude/workspace.local.md
+/plugins/*
+!/plugins/README.md

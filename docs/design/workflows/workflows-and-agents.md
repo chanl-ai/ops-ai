@@ -13,7 +13,7 @@ open-ended work is squeezed into a fixed graph, or the fixed work inherits the u
 own steps. This design keeps two ways of running work, agents and workflows, on one set of shared services, and lets
 each run with the other removed.
 
-Read with [architecture overview](../../architecture/overview.md), [runtime](../../architecture/runtime.md) and
+Read with [architecture](../../architecture/README.md), [runtime](../../architecture/runtime.md) and
 [workflow runner](../../architecture/workflow-runner.md), which describe what runs today. The node catalogue and the
 runner options are in [workflow nodes](workflow-nodes.md).
 

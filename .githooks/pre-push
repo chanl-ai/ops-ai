@@ -30,6 +30,17 @@ printf '%s\n' "$refs" | while read -r _local_ref local_sha remote_ref remote_sha
     console=
   fi
   [ -n "$files" ] || [ -n "$console" ] || continue
+  # A fresh worktree has no installed dependencies; the checks below would fail with a bare "test failed" that reads as a
+  # real failure. Stop with the cause instead, and never skip the checks.
+  missing=
+  if [ -n "$console" ]; then
+    for dep in node_modules apps/console/node_modules; do [ -d "$root/$dep" ] || missing="$missing $dep"; done
+  fi
+  if [ -n "$files" ] && [ -z "${OPS_RUFF:-}" ] && [ ! -x "$root/.venv/bin/ruff" ]; then missing="$missing .venv"; fi
+  if [ -n "$missing" ]; then
+    echo "pre-push: this worktree has no$missing; run pnpm install (and uv sync) in $root, then push again"
+    exit 1
+  fi
   # The pushed content, not the working tree: another builder's unfinished file must not block this push. The whole
   # commit is exported because ruff tells first-party packages from third-party ones by the folders on disk; only the
   # changed files are linted.

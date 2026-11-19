@@ -29,7 +29,7 @@ foundation, multi-vendor steering or more than one independent runtime. The GitH
 closest match to "deploy our workflows on other platforms" and is a single-maintainer draft with a
 small following. The IETF draft solves a different problem (agents using websites) and has expired.
 Confidence that no widely adopted AWP exists: high. Confidence that the GitHub project is the one
-intended: medium ([open question 12](../overview.md#open-questions)).
+intended: medium ([open question 12](../delivery.md#open-questions)).
 
 ### Adjacent standards
 

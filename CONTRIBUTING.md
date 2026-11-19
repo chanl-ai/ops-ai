@@ -11,7 +11,7 @@ docs follow. To run the stack first, follow the Quick start in `README.md`.
 |---|---|
 | Anything | `README.md` (Quick start), then `docs/README.md` for where each design lives |
 | Console code | `apps/console/CLAUDE.md` (layers, components, states, copy) and `docs/console/page-plan.md` |
-| A spec or decision | `docs/README.md`, `docs/background/problem-statement.md`, `docs/architecture/overview.md` and the ADRs |
+| A spec or decision | `docs/README.md`, `docs/background/problem-statement.md`, `docs/architecture/delivery.md` (open questions) and the ADRs |
 | Backend design | `docs/architecture/README.md`, then `docs/architecture/service-map.md` |
 
 Claude Code and GitHub Copilot come with skills for this repository: run the stack, install the sample team, add a

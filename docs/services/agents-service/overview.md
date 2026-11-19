@@ -1,30 +1,79 @@
 # Agents service
 
-Status: current, 2026-10-16. Prototype: chat and graphs work on seed data; see "What differs from the specs".
+Status: current, checked against the code on 2026-11-18. Built: agents, workflows and their versions, chat, threads and engine runs, Human Tasks, cases, channels, triggers, memory and activity. Partial: Reviews and Cases live here until the planned `ops_hitl` package. Not built: model-key admission before a thread opens.
 
-The agents service owns agents, workflows, their versions, chat and the runs that execute them
-(`docs/architecture/service-map.md`). Today it serves the console's chat API: agents, threads, replies streamed over
-SSE from a Pydantic AI agent loop (spec 15), gated writes that stop for approval and continue once approved, and
-citations from a keyword passage store. The tools an agent may hold are tools-service's published operations: `GET
-/v1/tools`, the grant check and every run read them from tools-service (`activities/tool_directory.py`), and every
-call, read or write, runs through its gateway's `/v1/calls`. The stack's seeded agents, granted seeded
-operations, are in `services/agents-service/seed/chat_agents.json`; passages and the fixture tools the unit tests
-run on stay in `services/agents-service/tests/fixtures/seed/`.
+The agents service runs the work. It keeps every agent and workflow a team builds, with their versions and who may
+publish them; it runs chat turns and workflow runs, pauses them for a person when a step needs a decision, and picks
+them up again after a restart. Every tool call an agent or a workflow makes goes out through the tools service, every
+model call through the models service, and every file through the files service, so this service holds no system's
+credentials of its own.
+
+## At a glance
+
+| Item | Detail |
+|---|---|
+| Owns | The registry (agents, workflows, guardrails, skills, widgets, their versions and publish requests); threads, runs, the engine's runs, steps and work; reviews and their decisions; cases, case types and task types; channels, widget deployments, mailboxes and trigger events; memories; usage and thread budgets; service events; activity; evaluations |
+| Ports | 8700 for the API (`OPS_PORT`); a worker process with no HTTP runs workflows from `engine_work` (`make -C services/agents-service worker`) |
+| Code | `services/agents-service` (`ops_agents`), with `ops_agent_kernel` (chat turns), `ops_engine` (workflow runs), `ops_checkpointer` (LangGraph state), `ops_service_kit` and `contracts` |
+| Database | Own migration chain (`services/agents-service/migrations`, the default `alembic_version` table). Its store modules and the tables each defines are listed in the generated [inventory](../../architecture/data.md#inventory); it also creates the `ops_engine` tables (`engine_definitions`, `engine_runs`, `engine_steps`, `engine_work`, `engine_waits`) and the checkpointer's (`ops_checkpoints`, `ops_checkpoint_writes`, `ops_checkpoint_fences`) |
+| Isolation | Every transaction runs as `ops_runtime_tenant` (`services/agents-service/src/ops_agents/store/tenancy.py:35`), the role the checkpointer's row-level security uses too (`packages/ops_checkpointer/src/ops_checkpointer/saver.py:57`); the team policy on every team-owned table is checked by `scripts/tests/test_team_boundary.py` |
+| Secrets it holds | Its model key for models-service (`OPS_MODELS_KEY`), or a provider key on the direct path; the HMAC key that signs approval tokens (`OPS_REVIEW_KEY`, shared with tools-service, whose OPA verifies them); its service signing key. Widget mint keys, which a bank's server uses to start widget chats, are stored as a SHA-256 of
+the secret only (`services/agents-service/src/ops_agents/store/widget_keys.py`). No system's credentials: mailbox passwords and app accounts stay in tools-service |
+| Calls out to | tools-service (`POST /v1/calls` for every tool call, grantable operations, mailbox reads); models-service (every turn and AI step); kb-service (grounding and the knowledge tools); files-service and documents-service (attachments and Extract from file); platform-service (people's names, API key summaries, policies, acting-for tokens) (`scripts/stack.sh:132`) |
+| Called by | The console, the embed app, the SDK and CLI; tools-service (`GET /v1/workflow-refs`, `POST /v1/publish-requests`); platform-service (`GET /v1/teams/usage`) |
+| Events it receives | `POST /v1/events` from tools-service, files-service, documents-service and kb-service, each limited to the names it owns (`EVENT_OWNERS`, `services/agents-service/src/ops_agents/api/service_events.py:145`), and `POST /v1/platform-events` from platform-service and tools-service (`team.created`, `policy.changed`, `api_key.changed`) |
+| Events it sends | None to other services. It records its own `task.*` events, `task.reminder` among them, which start its own workflows |
+| When something is down | Without a model key the service starts, `/health` reports the missing key and sending a message answers 503. Without kb-service, opening a thread on knowledge answers 503 `knowledge_unavailable`. Without files-service and documents-service, a message with attachments answers 503. A paused thread survives a restart, since its state is saved after every step |
+| Routes | API reference tab, HTTP API › Agents and workflows, built from `services/agents-service/openapi.json` |
+| Design | [Design page for Human Tasks](design.md), [chat streaming](chat-streaming.md), [workflow node coverage](workflow-node-coverage.md), and the [runtime](../../architecture/runtime.md) architecture page |
+
+```mermaid
+flowchart LR
+  console[Console, embed, SDK] --> api[agents-service API]
+  api --> kernel[Chat turn: agent kernel]
+  api --> engine[Workflow run: engine_work]
+  engine --> worker[Worker process]
+  kernel --> tools[tools-service gateway]
+  worker --> tools
+  kernel --> models[models-service]
+  worker --> models
+  worker -->|a step waits for a person| review[Human Task]
+  review -->|decide| worker
+```
+
+## Run and test it alone
+
+| Task | Command |
+|---|---|
+| Serve on :8700 in the foreground | `make -C services/agents-service run`; on the stack, `make restart SVC=agents` |
+| Run the worker in the foreground | `make -C services/agents-service worker`; on the stack, `make restart SVC=worker` |
+| Apply its migrations | `make -C services/agents-service migrate` |
+| Tests on the test database, tools-service's gateway tests in `tests/gateway` among them | `make -C services/agents-service test` (needs `make db-up`; `T=` names files) |
+| Lint, strict types, the chat loader in a real browser, the standards check, the OpenAPI gate and the tests | `make -C services/agents-service verify` |
+| Regenerate `openapi.json` | `make -C services/agents-service openapi` |
+| End-to-end chat against the running service | `uv run python scripts/prove-chat.py` in `services/agents-service` |
+| Three graphs through the four calls, plus a kill-and-resume | `uv run python scripts/prove-graphs.py` in `services/agents-service` (needs a model key) |
+| Regenerate the dependency list | `make -C services/agents-service sbom` (writes [dependencies](../../architecture/dependencies.md)) |
+
+Real model calls are capped at 10 per experiment unless more are approved; everything else runs on the scripted model
+in `services/agents-service/tests/conftest.py`. The seeded agents, granted seeded operations, are in
+`services/agents-service/seed/chat_agents.json`; the fixtures the unit tests run on stay in
+`services/agents-service/tests/fixtures/seed/`.
 
 ## Code
 
 | Module | Role |
 |---|---|
-| `src/ops_agents/api` | FastAPI app, routers (chat, graphs, reviews, timers), chat turns, leases and sweeper, timers, metering, journal |
-| `src/ops_agents/graphs` | LangGraph graphs `agent_wrapper`, `simple_workflow`, `complex_workflow`; JSON definitions, versions, SLA settings |
-| `src/ops_agents/activities` | Tool, knowledge and gateway calls the graphs and the kernel make; seed catalogue loader |
-| `packages/ops_agent_kernel/present.py` | The built-in `present(shape, data, hint?)` tool every turn offers: the model returns a comparison table as `rows`, a figure as `metric`, a record or a series, and the turn emits it as a widget part with no tool result behind it. The chat shows only the part, never a tool card for it; a malformed part is refused as a tool error |
-| `migrations/` | Alembic history 0001 onward. It still holds the tools service's and review tables until migrations split per service |
+| `services/agents-service/src/ops_agents/api` | FastAPI app, routers (chat, graphs, reviews, timers), chat turns, leases and sweeper, timers, metering, journal |
+| `services/agents-service/src/ops_agents/graphs` | LangGraph graphs `agent_wrapper`, `simple_workflow`, `complex_workflow`; JSON definitions, versions, SLA settings |
+| `services/agents-service/src/ops_agents/activities` | Tool, knowledge and gateway calls the graphs and the kernel make; seed catalogue loader |
+| `packages/ops_agent_kernel/src/ops_agent_kernel/present.py` | The built-in `present(shape, data, hint?)` tool every turn offers: the model returns a comparison table as `rows`, a figure as `metric`, a record or a series, and the turn emits it as a widget part with no tool result behind it. The chat shows only the part, never a tool card for it; a malformed part is refused as a tool error |
+| `migrations/` | Its own Alembic chain (the default `alembic_version` table), which also creates the `ops_engine` tables and the checkpointer's tables |
 | `tests/` | API, unit, checkpointer, gateway and timer tests; `tests/fixtures/` is the only place fixture data lives |
 | `experiments/` | Experiment scripts; their write-ups are in `experiments/` next to this page |
 
-Libraries it uses: `packages/ops_agent_kernel`, `packages/ops_checkpointer`, `packages/ops_service_kit`,
-`packages/contracts`.
+Libraries it uses: `packages/ops_agent_kernel`, `packages/ops_engine`, `packages/ops_checkpointer`,
+`packages/ops_service_kit`, `packages/contracts`.
 
 ## Graphs on four calls
 
@@ -44,8 +93,8 @@ State is saved after every node by the checkpointer, so a pause survives a resta
 |---|---|---|
 | Database | `OPS_DATABASE_URL` | `postgresql+asyncpg://ops:ops@localhost:5477/ops_runtime` |
 | Port | `OPS_PORT` | `8700` |
-| Model | `OPS_MODEL_ALIAS` | `gpt-5.5` (a `claude-*` alias selects Anthropic) |
-| Model key | `OPENAI_API_KEY`, or `ANTHROPIC_API_KEY` for a `claude-*` alias | none |
+| Model | `OPS_MODEL_ALIAS` | `default` (`packages/ops_service_kit/src/ops_service_kit/settings.py:172`); on the direct path a `claude-*` alias selects Anthropic |
+| Model key | `OPS_MODELS_URL` and `OPS_MODELS_KEY` send every turn through models-service (the stack sets both); without them the direct path reads `OPENAI_API_KEY`, or `ANTHROPIC_API_KEY` for a `claude-*` alias | none |
 | Tool gateway | `OPS_GATEWAY_URL` | none: tools then run in process from the fixture catalogue (unit tests only); the stack sets tools-service |
 | Seed directory | `OPS_SEED_DIR` | `services/agents-service/seed/` in dev; unset outside dev, so production starts empty. Tests name `tests/fixtures/seed/` |
 | Seeded agents | `OPS_AGENTS_SEED_FILE` | `chat_agents.json` in the seed directory |
@@ -54,23 +103,12 @@ State is saved after every node by the checkpointer, so a pause survives a resta
 Values carry the `OPS_` prefix because a shared secret store may already define `DATABASE_URL` for another
 service. Without a model key the service starts, `/health` reports the missing key and sending a message returns 503.
 
-## Proofs
-
-| Task | Command (from `services/agents-service`) |
-|---|---|
-| End-to-end chat against the running service | `uv run python scripts/prove-chat.py` |
-| Three graphs through the four calls, plus a kill-and-resume | `uv run python scripts/prove-graphs.py` (needs a model key) |
-| Regenerate `docs/architecture/dependencies.md` | `make sbom` |
-
-Real model calls are capped at 10 per experiment unless more are approved; everything else runs on the
-scripted model in `tests/conftest.py`.
-
-## Cases and Reviews facade
+## Cases and Reviews
 
 The console's Cases runs and Reviews read runtime threads through `ops_agents/api/hitl_facade.py`, on the console's
 own paths, so `NEXT_PUBLIC_OPS_CASES_API_URL` points those two areas here while the rest stays on the mock. Rows are
-built server-side from each thread's state, run journal, SLA timers and decisions. These routes are a stand-in: they
-move into the `ops_hitl` package, which agents-service will host.
+built server-side from each thread's state, run journal, SLA timers and decisions. These routes move into the planned `ops_hitl`
+package, which agents-service will host.
 
 | Route | Does |
 |---|---|
@@ -303,8 +341,8 @@ A person's memories belong to one team and reach every agent in it, unless a mem
 | Learning | Beside each chat turn, one call on the `memory-extract` alias reads the last six messages with the person's words marked and their ten closest saved memories by the database's full-text search, and returns candidates with a kind, a quote, a confidence and a decision: new, same, replaces or conflicts. Only a quote from the person's own words in their latest message is kept, never pasted or quoted text, and only a preference, procedure, fact or person; one decision per memory a turn touches. A card number (Luhn), an IBAN (mod 97) or a US, UK or Canadian national id is never kept, whatever the model says (`api/memory_safety.py`). 0.8 and above is used at once, 0.5 to 0.8 waits as a suggestion, below that is dropped; "remember that ..." under 300 characters is kept once with the source `asked`: the model's reading of it, whether or not its quote includes the asking words, else the words as said. Only the person's own edit has the source `person`. A turn under 20 characters, a regenerate and a test chat learn nothing, and a reply waits for the extraction at most 10 s |
 | History | A change closes the old version and links the new one to it; a learned change to a memory the person confirmed or wrote is kept in conflict while the confirmed one stays in use. One memory per key is in use for a person, held by a per-person lock and a unique index |
 | Recall | Up to 5 standing preferences and procedures, then the best full-text matches for the question across all of the person's memories, ranked in SQL (PostgreSQL `ts_rank`; SQL Server `CONTAINSTABLE` where it has Full-Text Search, else a word count) and again by confidence, recency and kind, until 8 memories or 600 tokens counted as characters / 4 per line. Each answer's memory ids and why each was picked are recorded in `message_memory_use`; a thread keeps ids only, so a reload reads the text from the memory, and shows it only to the memory's person: anyone else allowed to read the thread sees that something was remembered, never what |
-| Taking it back | `/v1/me/memories`: forget (erased after 30 days unless taken back with `POST /{id}/undo`), undo of what a reply just saved (a replaced memory comes back), and `POST /{id}/erase`, which removes a memory and its earlier versions at once. The hourly `memory_cleanup` erases forgotten memories past their grace and suggestions unanswered after 14 days |
-| Not yet | Matching is by words, not meaning, until models-service serves embeddings; the SQL Server memory tests have not run yet on the test machine; team memory, the admin's memory policy and the console screens are later cards. gpt-5-mini makes 7 of 8 decisions right with the code rules above, the miss asking instead of replacing (`experiments/memory-decisions.md`) |
+| Taking it back | `/v1/me/memories`: forget (erased after 30 days unless taken back with `POST /{id}/undo`), undo of what a reply has saved (a replaced memory comes back), and `POST /{id}/erase`, which removes a memory and its earlier versions at once. The hourly `memory_cleanup` erases forgotten memories past their grace and suggestions unanswered after 14 days |
+| Not yet | Memories are matched by words; they use no embeddings yet, though models-service serves them. The SQL Server memory tests are not in CI's SQL Server job. Team memory, the admin's memory policy and the console screens are not built. gpt-5-mini makes 7 of 8 decisions right with the code rules above, the miss asking instead of replacing ([memory decisions](experiments/memory-decisions.md)) |
 
 ## Files attached in chat
 
@@ -333,7 +371,7 @@ reads. A thread that named one keeps its name, and a later turn tells the agent 
 |---|---|
 | Test thread | `POST /chat/threads` with `test: true` runs the agent's newest version, draft included; with `testVersion` a saved version instead, which is how the test panel's Compare asks two versions one question. Test threads are left out of counts and memory. |
 | Reply usage | Each reply in a thread carries `usage`: model calls, tokens, cost and seconds, joined from the model call records and the run's start and finish. |
-| Who may decide | A review step's `requestedBy` names who asked for a decision when the run's starter did not (an event a service reported); they decide only while `requesterMayDecide` allows, as the starter does (tick 29). |
+| Who may decide | A review step's `requestedBy` names who asked for a decision when the run's starter did not (an event a service reported); they decide only while `requesterMayDecide` allows, as the starter does. |
 | Task assist | A typed task's assist is recorded pending at the pause and written beside it by its own prompt port, gated by `taskAssist` alone; a stopping worker waits for it. |
 
 ## Microsoft 365 mailboxes
@@ -352,10 +390,18 @@ registration is what a team's mailbox uses.
 | Spec | Here |
 |---|---|
 | 14 R10–R15 sessions and turns under `/v1/chat/sessions` | The console's thread routes (`/chat/*`, also under `/v1/chat/*`) |
-| 07 CD-11 AI SDK UI message stream | The console's `ChatStreamEvent` frames, which map one to one |
-| 15 §5 resume stream after approval | The approval request runs the continuation and stores it as a new message; the console re-fetches |
-| 13 step-up token verified | Any non-empty token is accepted and recorded on the interrupt |
-| A `levy-hold` child run started by the Hold decision | The hold runs as the `place_hold` step of the `levy-case` thread itself: the approval token is bound to the thread it was minted on (`tools-service/policy/gateway.rego`), so a child run could not present it. The `levy-intake` definition opens one `levy-case` child per matched customer instead |
-| 07 CD-7 no self-approval | Not enforced: the dev auth mode has one user |
-| 17 §2 schema `runtime` | Tables in `public`, so the API tests run on SQLite |
+| 07 CD-11 AI SDK UI message stream | The console's `ChatStreamEvent` frames, which map one to one ([chat streaming](chat-streaming.md)) |
+| 15 §5 resume stream after approval | A chat approval goes through Reviews' decide like every review-owned step, and the resumed reply is stored as a new assistant message the console re-fetches (`services/agents-service/src/ops_agents/api/routers/chat.py:965`) |
+| A `levy-hold` child run started by the Hold decision | The hold runs as the `place_hold` step of the `levy-case` thread itself: the approval token is bound to the thread it was minted on (`services/tools-service/policy/gateway.rego`), so a child run could not present it. The `levy-intake` definition opens one `levy-case` child per matched customer instead |
 | 17 §4 generated `ops_contracts` | Hand-written models mirroring `apps/console/src/lib/types/chat.ts` |
+
+## Not built yet
+
+| Item | State |
+|---|---|
+| The `ops_hitl` package for Reviews, Cases and work items | not built: agents-service serves them (`api/hitl_facade.py`) |
+| Stored columns for review and run rows | not built: a list reads each thread's state and journal, a few queries per thread |
+| A model-key admission check before a thread opens | not built: the `KeyAdmission` port defaults to `AdmitAll` (`services/agents-service/src/ops_agents/api/deps.py:70`); models-service still checks every call's key |
+| Tenancy on the workflow registry | not built: `/v1/workflow-refs` serves every row to any tenant-scoped service token holding `workflows:view` (`services/agents-service/src/ops_agents/api/routers/workflows.py:586`) |
+| Team memory, the admin's memory policy and the memory screens | not built; memory matches by words until it uses embeddings |
+| A shipped handler for `task.reminder` | not built: a reminder is recorded unhandled until a team adds a workflow for it |

@@ -3,8 +3,8 @@
 Status: current.
 
 **Ops AI runs agents and workflows for regulated operations teams, with a person approving every change that
-matters.** You build a workflow once, and it can pass a risk review: each run records who approved it, which version
-ran, what it could reach, and where the record is.
+matters.** Each run records who approved it, which version ran, what it could reach and where the record is, so a
+workflow built once can pass a risk review.
 
 ## The problem it solves
 
@@ -19,17 +19,21 @@ cannot answer, so the pilot stays a pilot, or the team builds approvals, version
 |---|---|
 | A person in charge of the steps that matter | Human Tasks: the workflow waits, a person decides with the facts in front of them, and the approved call carries a token bound to exactly what they saw |
 | The same result every time where it counts | Fixed steps for lookups, branches and system calls, with an AI step only where judgement is needed |
-| Control over what agents can reach | One gateway for every tool, data and model call, with per-team access and a call log |
+| Control over what agents can reach | One gateway for every tool and data call and one for every model call, with per-team access and a call log |
 | A record a reviewer accepts | Versioned agents and workflows, each run kept on the version it started with, and every decision on the case |
-| Your own infrastructure | One machine, Docker or Kubernetes, on PostgreSQL, with a built-in test model that needs no key or network |
+| Your own infrastructure | Docker Compose on one machine or Kubernetes, on PostgreSQL, with a built-in test model that needs no key or network |
 
-## Get started
+## Start here
 
 <!-- site: cards -->
-1. **[Install](guide/install.md)**: Run Ops AI on one machine and sign in to the console.
-2. **[How work flows](guide/how-work-flows.md)**: How a request becomes a run, a task for a person and a record.
-3. **[Agents and workflows](console/agents-and-workflows.md)**: Build an agent, give it tools and knowledge, and put it in a workflow.
-4. **[Deployment options](guide/deployment-options.md)**: Choose how it runs for your team.
+1. **[Quickstart](guide/quickstart.md)**: install Ops AI on one machine and run a first workflow in about ten minutes.
+2. **[How work flows](guide/how-work-flows.md)**: how a request becomes a run, a task for a person and a record.
+3. **[Agents](guide/agents.md)** and **[Workflows](guide/workflows.md)**: the two ways Ops AI runs work.
+4. **[Human tasks and approvals](guide/human-tasks.md)**: how a person stays in charge of the steps that matter.
 
-[What's built today](guide/whats-built-today.md) lists every capability as built, partial or
-planned.
+## For a security or architecture review
+
+Isolation, sign-in, approvals and audit, data handling and model calls are answered in one place for a reviewer.
+
+<!-- site: cards -->
+- **[Security](security/README.md)**: how Ops AI keeps teams, data and model calls under control, with the limits stated.

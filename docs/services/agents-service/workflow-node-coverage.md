@@ -1,9 +1,11 @@
 # Workflow node coverage
 
-Status: current (2026-10-19). Which seeded workflow runs each node type, and which use-case check proves it ran and
-left by the expected port. Two ordinary bank workflows cover every node type a person adds on the canvas:
-`customer_hold` (uc-248) and `complaint_triage` with its child `attachment_record` (uc-249). Both are configuration in
-`services/agents-service/seed/engine_workflows.json`. Neither has a code path of its own.
+Status: partial, checked against the code on 2026-11-18. The node types listed under "Coverage" each run in a seeded workflow; twelve types added since are proved only by the engine's own tests and some use cases ("Not covered here").
+
+Which seeded workflow runs each node type, and which use-case check proves it ran and left by the expected port. Two
+ordinary bank workflows carry most of them: `customer_hold` (uc-248) and `complaint_triage` with its child
+`attachment_record` (uc-249). Both are configuration in `services/agents-service/seed/engine_workflows.json`, with no
+code path of their own.
 
 Run both with the fake model:
 
@@ -64,6 +66,8 @@ Run once each on 2026-10-19, with the same step paths as the isolated runs:
 | Node type | Why | Where it runs |
 |---|---|---|
 | Event (`ops.trigger.event`) | Starts the handler a service event names; not added on the canvas | `seed/event_workflows.json`, `tests/api/test_service_events.py` |
+| Send a message (`ops.action.send`), Filter (`ops.data.filter`), Transform (`ops.data.transform`), Ask (`ops.flow.ask`), Repeat (`ops.flow.repeat`), Wait for (`ops.flow.waitFor`) | No seeded workflow or use case runs them yet | `packages/ops_engine/tests/` |
+| Classify (`ops.ai.classify`), Draft (`ops.ai.draft`), Extract from text (`ops.ai.extractText`), Retrieve from knowledge (`ops.ai.knowledge`), Summarise (`ops.ai.summarise`), Schedule (`ops.trigger.schedule`) | No seeded workflow runs them; use cases do | `packages/ops_engine/tests/` and use cases under `docs/usecases/` |
 | Purge read data (`ops.documents.purge`) | Runs only in the file-deleted event handler | `file_deleted_purge` in `seed/event_workflows.json` |
 
 Ports not driven by these use cases: every node's `error` port, Call a tool's `refused`, Extract's `review` and

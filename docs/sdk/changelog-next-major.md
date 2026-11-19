@@ -1,12 +1,15 @@
-# SDK 1.0.0 changelog (from 0.1.0)
+# SDK 1.0.0 route-by-route record
 
-Status: current, 2026-11-17. Both SDKs (`ops-ai` 0.1.0 to 1.0.0, `@chanl-ai/ops-ai` 0.1.0 to 1.0.0) and the `opsai`
-command line (it ships in `ops-ai`) take the major version; the number is in `sdk/python/pyproject.toml`,
-`sdk/python/src/ops_ai/__init__.py` and `sdk/typescript/package.json`, and `.github/workflows/sdk-publish.yml` publishes a
-version that is not on its registry yet. The "Breaking changes" block below is generated from
-`docs/architecture/migration/api-changes.md` by `sdk/changelog_from_api_changes.py` (one line per route whose old form
-does not fully work); do not edit it by hand. How to change a caller: [upgrading.md](upgrading.md). The tables below
-name the hand-written nouns and CLI verbs that follow each route.
+Status: current, 2026-11-17. For contributors: each changed route with the code that follows it. Callers read the
+[SDK 1.0.0 changelog](changelog.md) instead.
+
+Both SDKs (`ops-ai` 0.1.0 to 1.0.0, `@chanl-ai/ops-ai` 0.1.0 to 1.0.0) and the `opsai` command line (it ships in `ops-ai`)
+take the major version; the number is in `sdk/python/pyproject.toml`, `sdk/python/src/ops_ai/__init__.py` and
+`sdk/typescript/package.json`, and `.github/workflows/sdk-publish.yml` publishes a version that is not on its registry
+yet. The "Breaking changes" block below is generated from `docs/architecture/migration/api-changes.md` by
+`sdk/changelog_from_api_changes.py` (one line per route whose old form does not fully work); do not edit it by hand.
+How to change a caller: [upgrading.md](upgrading.md). The tables below name the hand-written nouns and CLI verbs that
+follow each route.
 
 <!-- breaking:start (sdk/changelog_from_api_changes.py) -->
 ## Breaking changes

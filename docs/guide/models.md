@@ -77,7 +77,7 @@ automated use cases of each release run on it, so no real model call is made in 
 
 | It answers | When |
 |---|---|
-| A rule's tool call or text | The person's message matches a rule's `when` pattern and the rule's tool is offered. A development stack reads its rules from `services/models-service/seed/demo-fake-openai/script.json`; each rule is `{when, tool, arguments}` or `{when, text}`, with `after` and `result` to chain a step after a tool's result |
+| A rule's tool call or text | The person's message matches a rule's `when` pattern and the rule's tool is offered. Each rule is `{when, tool, arguments}` or `{when, text}`, with `after` and `result` to chain a step after a tool's result |
 | A call of the tool named | No rule matches and the message says `call <tool>` for a tool the agent holds: `call <tool> {json}` calls it with that JSON object as its input, `call <tool>` alone with none. Arguments that are not one JSON object are answered as text saying so |
 | The gist of a tool's result | The last message is a tool's result and no rule follows it |
 | A sentence naming the agent and the message | Anything else |

@@ -27,5 +27,5 @@ release-pr: ## PR release/V (or hotfix/V) into main; refuses unless CI and the s
 release-back-merge: ## PR main into develop once the tag vV is on main (V=X.Y.Z; DRY=1 prints, DRY=0 opens)
 	DRY=$(or $(DRY),1) python3 $(ROOT)/scripts/release.py back-merge
 
-install-proof: ## A fresh clone, ./install.sh on images pulled from GHCR, walk, rerun, upgrade, backup, restore, DBA mode (SOURCE, REF)
-	bash $(ROOT)/deploy/release/install_proof.sh "$(or $(SOURCE),$(ROOT))" "$(or $(REF),HEAD)"
+install-proof: ## A fresh clone, ./install.sh on images pulled from GHCR, walk, rerun, upgrade, backup, restore, DBA mode (SOURCE, REF; BUILD=1 builds the commit's images into a local registry first)
+	BUILD=$(or $(BUILD),0) bash $(ROOT)/deploy/release/install_proof.sh "$(or $(SOURCE),$(ROOT))" "$(or $(REF),HEAD)"

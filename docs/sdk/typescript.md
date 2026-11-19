@@ -1,7 +1,6 @@
 # TypeScript SDK
 
-Status: current. Built and tested against the local stack; not yet published to npm, so build it from the
-repository until the first release.
+Status: current, version 1.0.0.
 
 Call Ops AI from TypeScript or JavaScript on Node 20 or newer: start workflow runs and wait for them, decide the human
 tasks they open, and work with agents, cases, tools, knowledge and files, as one person acting in one team. Every
@@ -10,8 +9,11 @@ operation's arguments and answer are typed from the API reference.
 ## Install
 
 ```bash
-pnpm --filter @chanl-ai/ops-ai build && npm install ./sdk/typescript   # until the package is on npm
+npm install @chanl-ai/ops-ai
 ```
+
+The package is not on the public npm registry yet (planned); install it from your company's registry, or build it
+from a clone of the repository.
 
 ## Connect
 
@@ -23,8 +25,8 @@ import { OpsAI } from '@chanl-ai/ops-ai';
 const ops = new OpsAI({ apiKey: 'ok_...', baseUrl: 'https://ops.example.com', team: 'team_claims' });
 ```
 
-The options `baseUrl`, `apiKey` and `team` fall back to `OPS_BASE_URL`, `OPS_API_KEY` and `OPS_TEAM`. On a local stack
-with no proxy, pass `services: { agents: 'http://127.0.0.1:8700', ... }`.
+The options `baseUrl`, `apiKey` and `team` fall back to `OPS_BASE_URL`, `OPS_API_KEY` and `OPS_TEAM`. On an install
+with no proxy in front, pass `services: { agents: '<address>', ... }` with each area's own address.
 
 ## Run a workflow and decide its task
 
@@ -53,7 +55,7 @@ case and take their options as an object: `apps.turnOn(app, fields)`, `apps.addC
 The shared query is `page`, `pageSize` (at most 50), `search`, `sortBy`, `sortOrder` (`asc` or `desc`), `ids` and the
 list's own filters, which take an array. The nouns' `list` passes them on and follows every page. A `raw` operation
 returns one page with `data`, `pagination` and `facets`; read `pagination.hasNext` to go on. The query and the reply
-are described in [Lists and errors](../architecture/api.md#lists-and-errors).
+are described on the [HTTP API](../reference/http-api.md#how-it-works) page.
 
 ```ts
 const page = await ops.raw.agents.agents_list_agents({ query: { page: 1, pageSize: 20, sortBy: 'name', sortOrder: 'asc', search: 'claims' } });
@@ -90,7 +92,7 @@ Moving from 0.1.0: see [Upgrading to 1.0.0](upgrading.md).
 ## Errors
 
 A refused call rejects with a subclass of `OpsError` carrying `status`, `code`, `message`, `requestId` and `details`, the
-same classes as the [Python SDK](python.md#errors). The fields come from the API's one error body, described in [Lists and errors](../architecture/api.md#lists-and-errors).
+same classes as the [Python SDK](python.md#errors). The fields come from the API's one error body, described on the [HTTP API](../reference/http-api.md#how-it-works) page.
 Reads are retried twice on 429 and 5xx; a write only when its route takes an idempotency key and the call sends one.
 
 ```ts
@@ -103,7 +105,9 @@ try {
 }
 ```
 
-## Where it lives
+## Next
 
-The package is `sdk/typescript`; `src/generated` is written by `sdk/generate.py` with openapi-typescript. The example
-`sdk/typescript/examples/run-and-decide.mjs` starts and decides a run.
+<!-- site: cards -->
+- **[Python SDK](python.md)**: Every attribute and verb, with the Python spelling.
+- **[HTTP API](../reference/http-api.md)**: The routes under every call, for `raw` operations.
+- **[Upgrading to 1.0.0](upgrading.md)**: Paging, closed bodies and the one error format.

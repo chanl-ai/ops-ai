@@ -12,6 +12,12 @@ if [ "$(uname -s)" = Darwin ] && [ "$(uname -m)" = x86_64 ] && [ "$(sysctl -n sy
 fi
 root="$(git rev-parse --show-toplevel)"
 git_dir="$(git -C "$root" rev-parse --absolute-git-dir)"
+# A fresh worktree has no .venv; every Python check below would then fail with a missing-interpreter error that the
+# scrub check's own message would hide. Name the cause and stop.
+if [ ! -x "$root/.venv/bin/python" ]; then
+  echo "verify-staged: this worktree has no .venv; run pnpm install (and uv sync) in $root, then commit again"
+  exit 1
+fi
 index="${GIT_INDEX_FILE:-$git_dir/index}"
 case "$index" in /*) ;; *) index="$PWD/$index" ;; esac
 # The export of the index lives in the worktree's git folder and is brought up to date by changed paths only
@@ -81,6 +87,10 @@ if touches '^apps/(console|embed)/|^package\.json$|^pnpm-lock\.yaml$'; then
   # change what is judged. The type checks are incremental: their state lives next to the persistent export, so only the
   # files that changed since the last commit check, and their dependents, are checked again, with the same errors.
   # The unit tests are the ones next to the staged sources (the whole suite runs in .githooks/pre-push).
+  if [ ! -d "$root/node_modules" ] || [ ! -d "$root/apps/console/node_modules" ]; then
+    echo "verify-staged: this worktree has no node_modules; run pnpm install (and uv sync) in $root, then commit again"
+    exit 1
+  fi
   mkdir -p "$tsc_state"
   tsc="$tmp/apps/console/node_modules/.bin/tsc"
   (

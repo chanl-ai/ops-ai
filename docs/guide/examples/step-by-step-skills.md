@@ -1,0 +1,311 @@
+# Step-by-step skills
+
+Status: upcoming. Skills with numbered steps are in review and not yet in a release. The examples on this page were
+run against the code under review.
+
+> [!NOTE]
+> **Upcoming.** Everything on this page is in review and is not in the current release. Names and fields may change
+> before it ships. For what works today, see [Skill examples](skills.md).
+
+A skill today is a block of instructions the agent reads and follows as it sees fit. A step-by-step skill is a
+numbered procedure. The agent works on one step at a time, a check decides whether the step is done, and the skill
+ends with a named exit.
+
+## The problem
+
+Some procedures must happen in order, every time: look up the charge, confirm the amount with the person, then
+refund. Written as free text, the order is a request the model may skip. Written as a workflow, the procedure loses
+the conversation. A step-by-step skill keeps the conversation and makes the order and the checks part of the skill.
+
+## When to use it
+
+| Use | When |
+|---|---|
+| A skill with instructions only | The agent needs guidance, and the order of actions does not matter |
+| A step-by-step skill | A person is in the conversation, the actions must happen in order, and some of them must be checked before the next one starts |
+| A workflow | No conversation is needed, or the work must survive long waits and restarts |
+
+## Write a skill with steps
+
+A skill file gains five fields: `steps`, `exit`, `returns`, `success` and `notWhen`. This example adds a note to a
+customer's record in three steps: look the customer up, confirm the wording, save the note. It uses two tools from the
+sample team, and its second step runs another skill.
+
+```yaml title="confirm-the-wording.yaml"
+name: Confirm the wording
+ownerTeam: Customer Operations
+useWhen: A note must be confirmed before it is saved.
+instructions: ""
+steps:
+  - do: Read the note back and ask the person to confirm it.
+    check: {text: The person confirmed the wording.}
+```
+
+```yaml title="add-a-customer-note.yaml"
+name: Add a customer note
+ownerTeam: Customer Operations
+useWhen: Staff ask to add a note to a customer's record.
+notWhen: Staff only ask to read notes.
+instructions: Never add a note to more than one customer.
+inputs:
+  - name: customer_email
+    description: The customer's email
+    required: true
+steps:
+  - do: Look up the customer with @tool:search_customers.
+    use: {kind: tool, id: search_customers}
+    check: {text: "len(result) == 1"}
+    ifNot: {action: exit, exit: not_found}
+  - do: Confirm the wording.
+    use: {kind: skill, id: CONFIRM_SKILL_ID}
+  - do: Add the note.
+    use: {kind: tool, id: add_customer_note}
+exit:
+  not_found: No single customer matches the email.
+returns:
+  - name: noted
+    type: yes_no
+    description: Whether the note was added
+success:
+  - The person confirmed the wording before the note was saved.
+```
+
+A step names another skill by its id, so each surface publishes the first skill and puts its id into the second.
+
+```python
+import yaml
+from ops_ai import OpsAI
+
+ops = OpsAI()
+
+confirm = ops.skills.create(yaml.safe_load(open("confirm-the-wording.yaml")))
+ops.skills.publish(confirm["id"], note="First version")
+
+definition = yaml.safe_load(open("add-a-customer-note.yaml"))
+definition["steps"][1]["use"]["id"] = confirm["id"]
+skill = ops.skills.create(definition)
+published = ops.skills.publish(skill["id"], note="First version")
+
+for step in ops.skills.get(skill["id"])["content"]["steps"]:
+    print(step["do"], (step.get("check") or {}).get("by"))
+```
+
+```ts
+import { readFileSync } from 'node:fs';
+import { parse } from 'yaml';
+import { OpsAI } from '@chanl-ai/ops-ai';
+
+const ops = new OpsAI();
+
+const confirm = await ops.skills.create(parse(readFileSync('confirm-the-wording.yaml', 'utf8')));
+await ops.skills.publish(confirm.id, 'First version');
+
+const definition = parse(readFileSync('add-a-customer-note.yaml', 'utf8'));
+definition.steps[1].use.id = confirm.id;
+const skill = await ops.skills.create(definition);
+await ops.skills.publish(skill.id, 'First version');
+
+for (const step of (await ops.skills.get(skill.id)).content.steps) console.log(step.do, step.check?.by);
+```
+
+```bash
+CONFIRM=$(opsai skills apply confirm-the-wording.yaml --json | jq -r .id)
+opsai skills publish "$CONFIRM" --note "First version"
+
+sed -i.bak "s/CONFIRM_SKILL_ID/$CONFIRM/" add-a-customer-note.yaml
+SKILL=$(opsai skills apply add-a-customer-note.yaml --json | jq -r .id)
+opsai skills publish "$SKILL" --note "First version"
+```
+
+`create` needs `instructions`, which a skill with steps may leave empty. `opsai skills apply` creates the skill, or
+saves a new draft of the skill the file names by id, slug or name. The stored steps say who judges each check: `rule`
+or `model`.
+
+## Give the skill to an agent and follow the steps
+
+**The problem.** The agent needs the skill, the tools its steps use and the skill its second step runs. Granting
+each one by hand is easy to get wrong.
+
+**When to use it.** Use `add_reference` to grant an agent a skill, a tool, a knowledge base, another agent or a
+workflow by its kind and id. A skill brings the tools and knowledge bases it names and the skills its steps run.
+
+```python
+agent = ops.agents.apply({
+    "name": "Notes desk",
+    "role": "Adds notes to customer records",
+    "instructions": "Help branch staff add notes to customer records. Keep answers short.",
+})
+added = ops.agents.add_reference(agent["id"], "skill", skill["id"])
+for item in added["added"]:
+    print(item["kind"], item["id"])
+
+ops.agents.publish(agent["id"], note="First version")
+
+thread = ops.chat.start(agent["id"], test=True)
+events = list(ops.chat.say(
+    thread["id"],
+    "Add a note: prefers email.",
+    skill=skill["id"],
+    inputs={"customer_email": "ada@example.test"},
+))
+running = events[-1]["message"]["skillRun"]["running"]
+print(running["name"], running["step"], running["stepsTotal"], running["stepText"])
+```
+
+```ts
+const agent = await ops.agents.apply({
+  name: 'Notes desk',
+  role: 'Adds notes to customer records',
+  instructions: 'Help branch staff add notes to customer records. Keep answers short.',
+});
+const added = await ops.agents.addReference(agent.id, 'skill', skill.id);
+for (const item of added.added) console.log(item.kind, item.id);
+
+await ops.agents.publish(agent.id, 'First version');
+
+const thread = await ops.chat.start(agent.id, { test: true });
+const events = await ops.chat.say(thread.id, 'Add a note: prefers email.', {
+  skill: skill.id,
+  inputs: { customer_email: 'ada@example.test' },
+});
+const running = events.at(-1).message.skillRun.running;
+console.log(running.name, running.step, running.stepsTotal, running.stepText);
+```
+
+```bash
+cat > notes-desk.yaml <<EOF
+name: Notes desk
+role: Adds notes to customer records
+instructions: Help branch staff add notes to customer records. Keep answers short.
+EOF
+AGENT=$(opsai agents apply notes-desk.yaml --json | jq -r .id)
+opsai agents add-reference "$AGENT" skill "$SKILL"
+opsai agents publish "$AGENT" --note "First version"
+
+opsai chat say --agent "$AGENT" --test --skill "$SKILL" --input customer_email=ada@example.test -m "Add a note: prefers email."
+```
+
+The examples chat with the agent's newest version (`test`), so they do not wait for the publish request to be
+approved. Each reply carries the skill's record as `skillRun`: the skill that is running, the step it is on, each
+step's result so far, and the skills that ended. The next reply in the same conversation goes on from that step,
+even when the person asks about something else in between. In the reply's `skills` list, `how` is `started` for a
+skill that runs step by step.
+
+A skill starts at step 1 however it is started: a person picks it for a reply, as above, or the agent decides the
+request matches its use-when line and calls `load_skill` or `switch_skill`.
+
+| Field | What it does |
+|---|---|
+| `steps` | Up to 30 steps, run in order |
+| `steps[].do` | What the agent does in this step |
+| `steps[].use` | The one thing the step runs: a tool, another skill, an agent or a workflow. A knowledge base is named in the step's text instead |
+| `steps[].check` | What must hold before the step is done |
+| `steps[].ifNot` | What happens when the check fails: `retry` (up to 3 times), `goto` another step, or `exit` with a named exit |
+| `exit` | The skill's own exits and what each means. Every skill also has `done` and `failed` |
+| `returns` | Values the skill hands back when it ends: text, a number, or yes or no |
+| `success` | Lines that say what a good run looks like |
+| `notWhen` | When the skill should not be used |
+
+In any text of the skill you can name a tool, a knowledge base, a skill, an agent or a workflow with `@`, for example
+`@tool:search_customers`. Saving the skill adds what its steps name to the skill's tools and knowledge bases.
+`opsai skills references <id> --search note` lists what a step may name.
+
+## Rule checks
+
+A check is either a rule or a sentence. A rule is worked out by code from the step's result, so the model cannot
+talk its way past it. A sentence is judged by the model.
+
+```yaml
+check: {text: "result.amount <= 500 and result.status == 'settled'"}   # a rule
+check: {text: The person confirmed the wording.}                       # a sentence
+```
+
+| A rule can use | Examples |
+|---|---|
+| The step's result and the skill's inputs | `result.amount`, `result.items[0].id`, `inputs.customer_email` |
+| Values | Numbers, text in quotes, `true`, `false`, `null`, lists |
+| Comparisons | `==`, `!=`, `<`, `<=`, `>`, `>=`, `in`, `is true`, `is null` |
+| Logic and arithmetic | `and`, `or`, `not`, and arithmetic on numbers |
+| Functions | `len`, `lower`, `contains`, `exists` |
+
+A missing field reads as `null`, and a comparison with `null` is false. A rule reads only its own step's result and
+the inputs, not the results of earlier steps. Which kind a check is gets decided when the skill is saved. A text that
+reads like a rule and is not a valid one is refused, so a typing mistake cannot turn a rule into a sentence.
+
+## Exits
+
+A skill ends with one exit. `done` is accepted only after the last step has passed. `failed`, or an exit the skill
+lists, can end it at any step. A step sends the skill to an exit when its check fails:
+
+```yaml
+ifNot: {action: exit, exit: not_found}
+```
+
+The exit and the values in `returns` are what the caller gets back: the agent, or the step of another skill that
+ran this one.
+
+## How the agent moves through the steps
+
+The agent that holds a step-by-step skill starts it and moves through it with four built-in tools.
+
+| Tool | What it does |
+|---|---|
+| `load_skill` | Starts a skill by its slug at its first step. This is the tool the agent already uses to load a skill without steps, so a skill with steps is never loaded as text |
+| `switch_skill` | Starts a skill by its slug, with its inputs. A skill that is already running ends first, so one skill runs at a time. A skill with a required input that is missing does not start, and the agent asks the person for it |
+| `step_done` | Says the current step is done. It is refused while the step's tool has not run, and for a step whose rule is checked on the tool's result |
+| `exit` | Ends the running skill with one of its exits and its results |
+
+A person can also start the skill by picking it for a reply, as in
+[Give the skill to an agent and follow the steps](#give-the-skill-to-an-agent-and-follow-the-steps). While a step names a tool, that tool and knowledge
+search are the only systems the agent is offered, so a later step's tool cannot run early. A conversation finishes a
+skill on the version it started with, even when a newer version is published meanwhile.
+
+## Approvals
+
+A step's tool waits for approval the same way any tool does: when the tool needs a person's yes, the reply pauses
+until they decide. Two rules are added for steps.
+
+| What happens | What the skill does |
+|---|---|
+| A person denies the step's call | The skill ends as `failed` at once |
+| A step's check fails, or its call is denied | The tools of the later steps are held. No other skill, and no call outside a skill, may use them in that conversation until this skill passes that step |
+
+The hold is per tool. A note held for one customer is held for every customer in that conversation. A reply that
+pauses for an approval keeps the step it is on, and goes on from that step after the decision.
+
+## Sub-skills
+
+A step can run another skill, as step 2 of the example does. Use it for a procedure several skills share, such as
+confirming a caller. A rule on the step can read how the sub-skill ended:
+
+```yaml
+- do: Verify the caller.
+  use: {kind: skill, id: sk_verify_caller}
+  check: {text: "result.exit == 'done' and result.verified is true"}
+  ifNot: {action: exit, exit: failed}
+```
+
+| Rule | Detail |
+|---|---|
+| One level | A skill that a step runs cannot run a skill of its own |
+| Inputs | The sub-skill gets the inputs it declares, from the running skill's inputs and then from the result of the step before. A required one that is missing fails the step |
+| Passing | The step passes when the sub-skill ends as `done`. A rule on the step can accept other exits: `result.exit in ['done', 'skip']` |
+| Results | The rule reads the sub-skill's exit as `result.exit`. It reads the sub-skill's returned values only when the sub-skill ended as `done` |
+
+## What stops a save or a publish
+
+| Problem | When it is refused |
+|---|---|
+| Results, exits or success lines with no steps | On save |
+| Steps in a skill that also has parts, or that loads in every reply | On save |
+| A step that tries to run a knowledge base | On save |
+| A check that reads like a rule and is not a valid one | On save |
+| `goto` a step that does not exist, or an exit the skill does not list | On save |
+| A step that runs its own skill, or a skill whose steps run a skill | On save |
+| A step that names a tool your team no longer offers | On publish. The error names each problem and the step it is on |
+
+## Next steps
+
+- [Skill examples](skills.md): what skills do today.
+- [Workflow examples](workflows.md): fixed steps with a person's approval, built today.
+- [Coming from another framework](coming-from-other-frameworks.md): how this compares with procedures in other agent frameworks.

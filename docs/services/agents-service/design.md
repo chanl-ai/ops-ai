@@ -1,7 +1,9 @@
 # Agents service design
 
-Status: current for Human Tasks. Written when the service's Human Tasks routes first changed; later changes
-add their own rows. What the rest of the service does is in [overview.md](overview.md).
+Status: current for Human Tasks, checked against the code on 2026-11-18.
+
+How a Human Task goes from a paused step to a decision: the flow, the screens, the reviews routes, the data they read
+and the decide sequence. What the rest of the service does is on the [agents service](overview.md) page.
 
 ## Flow: a Human Task from pause to decision
 

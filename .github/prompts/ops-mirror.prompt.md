@@ -1,6 +1,6 @@
 ---
 name: ops-mirror
-description: Install and build Ops AI through a company package mirror (Nexus, Artifactory): set the mirror, test it, find the locked versions it does not serve, and install through it. Use when installs fail behind a proxy or a bank's network has no public internet.
+description: Install Ops AI through a company package mirror (Nexus, Artifactory): set it, test it, find locked versions it lacks. Use when installs fail behind a proxy or without public internet.
 agent: agent
 ---
 

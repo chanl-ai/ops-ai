@@ -17,15 +17,21 @@ these steps start from.
 
 ## Steps
 
-| # | Do | You see |
-|---|---|---|
-| 1 | An Admin opens **Apps**, presses **Add custom app**, enters the App's address and its Bearer key, and tests it | The key never shows again; the test answers from the App |
-| 2 | Open **Apps › Tools**, press **New tool**, name it and pick the App, then add an operation with a name, read or write, and the method | The Tool's page, with the App's address in front of the request |
-| 3 | Write the path, with `{email}` for a value the agent supplies, and the body: JSON, Form or Raw | Each `{name}` and `{{name}}` becomes an input |
-| 4 | Type a value for each input and press **Run** in **Mock** | The Tool's mock answer; nothing leaves the gateway |
-| 5 | Press **Save**, then publish; Security reviews the first version | A save that breaks a rule lists every problem at once |
-| 6 | Switch to **Real** and press **Run** | The App's answer, badged Real, and Request sent: the address with its values, the key hidden, the body as encoded |
-| 7 | Grant the Tool to an agent in a workflow, and publish the workflow | The agent calls the Tool; a write waits only when your team turned approvals on |
+<!-- site: steps -->
+1. **Add the App.** An Admin opens **Data Gateway › Apps**, presses **Add custom app**, enters the App's address and
+   its Bearer key, and tests it. The key never shows again; the test answers from the App.
+2. **Make the Tool.** Open **Data Gateway › Tools**, press **New tool**, name it and pick the App, then add an operation
+   with a name, read or write, and the method. The Tool's page shows the App's address in front of the request.
+3. **Write the request.** Write the path, with `{email}` for a value the agent supplies, and the body: JSON, Form or
+   Raw. Each `{name}` and `{{name}}` becomes an input.
+4. **Run it in Mock.** Type a value for each input and press **Run** in **Mock**. The Tool answers from its mock
+   answers, and nothing leaves the gateway.
+5. **Save and publish.** Press **Save**, then publish; Security reviews the first version. A save that breaks a rule
+   lists every problem at once.
+6. **Run it for real.** Switch to **Real** and press **Run**. You see the App's answer, badged Real, and Request sent:
+   the address with its values, the key hidden, the body as encoded.
+7. **Give it to an agent.** Grant the Tool to an agent in a workflow, and publish the workflow. The agent calls the
+   Tool; a write waits only when your team turned approvals on.
 
 ## Mock and Real
 
@@ -43,6 +49,10 @@ Tool that calls the App and is changed in one place.
 
 - Code tools: a function that shapes what a REST Tool returns.
 - API keys that build Tools from a script.
-- `opsai login`: the SDK reads its address and key from arguments, `OPS_*` variables or a profile file you write.
 
-Proof: uc-611 runs these steps against a payments stand-in, in a browser and through the API.
+## Next
+
+<!-- site: cards -->
+- [Connect an app and use it in an agent](use-cases/connect-an-app.md): give the Tool to an agent and use it in chat.
+- [Hold a write for approval](use-cases/approve-a-write.md): make the Tool's writes wait for a person.
+- [Sign in with a key or password](integrations/sign-in-keys.md): the kinds of key an App can hold.
