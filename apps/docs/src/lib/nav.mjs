@@ -158,7 +158,6 @@ export const SITE = [
           { folder: 'services/kb-service/api', title: 'Knowledge', icon: 'library' },
           { folder: 'services/files-service/api', title: 'Files', icon: 'file' },
           { folder: 'services/documents-service/api', title: 'Documents', icon: 'file-text' },
-          { folder: 'services/models-service/api', title: 'Models (internal)', icon: 'cpu' },
         ],
       },
       {
@@ -297,7 +296,6 @@ export const SITE = [
         entries: [
           { rest: 'design' },
           { group: 'Console', icon: 'monitor', entries: [{ rest: 'console' }] },
-          { group: 'Delivery plans', icon: 'map', entries: [{ rest: 'plan' }] },
         ],
       },
       { group: 'Agent skills', icon: 'sparkles', entries: [{ rest: 'guide/skills' }] },

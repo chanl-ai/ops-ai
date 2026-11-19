@@ -253,7 +253,10 @@ export function remarkOpsAi(options = {}) {
         takeWord(first.children, STATUS_WORDS);
       }
       if (lead.value) lead.value = lead.value.charAt(0).toUpperCase() + lead.value.slice(1);
-      tree.children[firstIndex] = jsx('DocStatus', { status: word ?? 'note', label }, [first]);
+      // "current" is the default state of a page and tells a reader nothing; only the other states show a badge.
+      const empty = first.children.every((c) => c.type === 'text' && !c.value.trim());
+      if (word === 'current' && label === 'current' && empty) tree.children.splice(firstIndex, 1);
+      else tree.children[firstIndex] = jsx('DocStatus', { status: word ?? 'note', label }, [first]);
     }
 
     // Badges in table cells.

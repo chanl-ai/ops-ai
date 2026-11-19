@@ -22,7 +22,8 @@ export const REF = process.env.VERCEL_GIT_COMMIT_SHA || process.env.OPS_DOCS_GIT
 const NOT_PUBLIC = ['evidence', 'shape', 'triage', 'dist'];
 const SKIP_DIRS = new Set(['.git', 'node_modules', '.next', '.source', '.venv', '__pycache__', '.pytest_cache', '.turbo']);
 // Folders of docs/ the site does not show: docs/media/ (README screenshots).
-export const SITE_EXCLUDE = ['docs/media/'];
+// Delivery plans are internal working notes, not documentation.
+export const SITE_EXCLUDE = ['docs/media/', 'docs/plan/'];
 
 /** The repository root: two folders above the docs app. */
 export function repoRoot() {
