@@ -20,6 +20,7 @@ Connect first: see [Before you start](README.md#before-you-start). Each example 
 | Run and stream every event | built | upcoming | built |
 | Run in the background | partial | upcoming | upcoming |
 | Score with cases | built | upcoming | upcoming |
+| Write the agent as a brief, check what blocks a publish, add what the brief mentions | upcoming | upcoming | upcoming |
 
 ## Create and publish an agent
 
@@ -309,6 +310,107 @@ for result in scored["results"]:
 
 The summary counts the cases that passed, the total, and regressions: cases the published version passes and the
 draft fails.
+
+## Upcoming: write the agent as a brief
+
+> [!NOTE]
+> **Upcoming.** This section is in review and is not in the current release. Its examples were run against the code
+> under review.
+
+**The problem.** One long block of instructions mixes what the agent is for, how it should answer and what it must
+never do. A reviewer cannot tell which line is a hard rule.
+
+**When to use it.** Use a brief for a new agent. The platform writes the agent's instructions from the brief, and
+sends the never rules to the model again before every reply. An agent saved without a brief keeps working from its
+instructions as before.
+
+```yaml title="accounts-desk.yaml"
+name: Accounts desk
+role: Answers staff questions about a customer's accounts
+brief:
+  purpose: Answers branch staff questions about a customer's accounts.
+  goal: Staff have the answer, or know who to ask.
+  howToAnswer: Look the customer up with @tool:search_customers before you say anything about them. Keep answers short.
+  never:
+    - Never read out a full account number.
+  success:
+    - Staff know which customer the answer is about.
+patterns:
+  thinking: low
+```
+
+```python
+from ops_ai import OpsAI
+
+ops = OpsAI()
+
+agent = ops.agents.apply("accounts-desk.yaml")
+print(agent["promptMode"])
+
+check = ops.agents.publish_check(agent["id"])
+for problem in check["problems"]:
+    print(problem["kind"], problem["id"], problem["position"]["field"])
+
+ops.agents.add_reference(agent["id"], "tool", "search_customers")
+print(ops.agents.publish_check(agent["id"])["canRequest"])
+
+request = ops.agents.publish(agent["id"], note="First version")
+print(request["status"])
+```
+
+In TypeScript `apply` creates the agent and does not send the brief, so the brief is saved with the update operation by
+its API name.
+
+```ts
+import { readFileSync } from 'node:fs';
+import { parse } from 'yaml';
+import { OpsAI } from '@chanl-ai/ops-ai';
+
+const ops = new OpsAI();
+
+const file = parse(readFileSync('accounts-desk.yaml', 'utf8'));
+const created = await ops.agents.apply(file);
+const agent = await ops.raw.agents.agents_update_agent({
+  path: { agent_id: created.id },
+  body: { brief: file.brief, patterns: file.patterns },
+});
+console.log(agent.promptMode);
+
+const check = await ops.agents.publishCheck(agent.id);
+for (const problem of check.problems) console.log(problem.kind, problem.id, problem.position.field);
+
+await ops.agents.addReference(agent.id, 'tool', 'search_customers');
+console.log((await ops.agents.publishCheck(agent.id)).canRequest);
+
+const request = await ops.agents.publish(agent.id, 'First version');
+console.log(request.status);
+```
+
+```bash
+AGENT=$(opsai agents apply accounts-desk.yaml --json | jq -r .id)
+opsai agents publish-check "$AGENT"
+opsai agents references "$AGENT" --search customer --kind tool
+opsai agents add-reference "$AGENT" tool search_customers
+opsai agents publish-check "$AGENT"
+opsai agents publish "$AGENT" --note "First version"
+```
+
+| Field | What it does |
+|---|---|
+| `brief.purpose` | What the agent is for. Required |
+| `brief.goal` | What a finished conversation looks like |
+| `brief.howToAnswer` | Tone, wording and method. Name a tool, knowledge base, skill, agent or workflow with `@` |
+| `brief.never` | Up to 20 hard rules. They are sent to the model last, before every reply |
+| `brief.success` | Up to 8 lines kept for grading. They are not sent to the model |
+| `patterns.thinking` | How hard the model thinks: `default`, `low`, `medium` or `high` |
+| `patterns.parallelReads` | Whether read tools may run side by side. On by default |
+
+| What you see | What it means |
+|---|---|
+| `promptMode` is `brief` | The instructions are written from the brief. Saving `instructions` on their own is refused with `brief_owns_prompt` |
+| `publish_check` lists `missing_reference` | The brief mentions something the agent does not hold, and the field it is in. The agent cannot be published until you add it or remove the mention |
+| `add_reference` returns an empty `added` | The agent already held it, and no new draft was saved |
+| The publish request is `pending` | A brief with never rules is approved by a second person before it goes live |
 
 ## Next steps
 

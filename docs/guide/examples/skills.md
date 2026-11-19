@@ -163,8 +163,8 @@ skill's version and the inputs it was given.
 ## Upcoming: skill verbs
 
 > [!NOTE]
-> **Upcoming.** This section describes a feature that is not in the current release. The code below has not been run
-> against a release.
+> **Upcoming.** This section is in review and is not in the current release. The verbs were run against the code
+> under review on [Step-by-step skills](step-by-step-skills.md).
 
 Skills get their own verbs, so a skill is a file you apply and publish like an agent.
 
