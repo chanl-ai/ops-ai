@@ -1128,7 +1128,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
     state.plan = (req.resume.interrupt.plan if req.resume else None) or carried_plan
     # A skill an earlier turn loaded is carried in whole (below): it is neither listed to load nor loadable again.
     loadable = [s for s in req.settings.skills if not any(skillset.same(s, e) for e in req.carried_skills)]
-    if (load_grant := skillset.grant(loadable)) is not None:
+    if (load_grant := skillset.grant(loadable, state.stepped)) is not None:
         state.grants[skillset.NAME] = load_grant
         tools.append(_load_skill(state, load_grant))
     for s in req.settings.skills:

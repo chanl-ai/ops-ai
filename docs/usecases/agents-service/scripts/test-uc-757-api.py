@@ -154,4 +154,14 @@ with bank_stack() as s:
         trail == [(1, False), (2, 1), (2, 1), (3, False), (3, False)] and not holds(s.bank) and listed,
         (trail, len(holds(s.bank)), used[0]),
     )
+
+    # A model that reaches for load_skill starts the same steps: a second chat, started that way, goes on from step 1.
+    thread = data(s.api.post("/chat/threads", json={"agentId": aid, "kbIds": []}, headers=me))["id"]
+    loaded = say(f"call load_skill {slug}")
+    went_on = say(f"call {read} {account}")
+    check(
+        "6 loading the skill starts it at step 1, and the next reply goes on to step 2",
+        (loaded.get("step"), went_on.get("step")) == (1, 2) and freeze["id"] in used[-2],
+        (loaded, went_on.get("step"), used[-2]),
+    )
 finish()
