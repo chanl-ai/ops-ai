@@ -2,11 +2,15 @@
 """The gitflow release commands behind `make release-cut`, `release-pr`, `release-back-merge` and `hotfix-cut`
 (docs/deploy/release.md). V=X.Y.Z names the version; DRY=1 (the default) prints what would happen and changes nothing.
 
-  cut         release/V from origin/develop, pushed; the push deploys it to staging (ci.yml, job staging)
-  hotfix-cut  hotfix/V from origin/main, pushed; the push deploys it to staging the same way
-  pr          release/V (or hotfix/V) into main; refuses unless ci.yml and the staging deploy with its click walk
-              succeeded on the branch head; an open PR from that branch is printed instead of a second one
-  back-merge  main into develop, after the tag vV exists on main
+  cut            release/V from origin/develop, pushed; the push deploys it to staging (ci.yml, job staging). When
+                 deploy/release/version is not V, the branch gets one commit on top that sets it
+  hotfix-cut     hotfix/V from origin/main, pushed, with the same version commit; the push deploys it to staging
+  pr             release/V (or hotfix/V) into main; refuses unless its deploy/release/version is V and ci.yml and the
+                 staging deploy with its click walk succeeded on the branch head; an open PR from that branch is
+                 printed instead of a second one
+  back-merge     main into develop, after the tag vV exists on main
+  check-version  exits 1 when BRANCH (default: the checked-out branch) is release/X.Y.Z or hotfix/X.Y.Z and HEAD's
+                 deploy/release/version is not X.Y.Z (ci.yml, job release-proof)
 """
 
 from __future__ import annotations
@@ -16,17 +20,20 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 
 # deploy/fly/stg_deploy.sh prints this line when the walk ran.
 WALK = re.compile(r"click walk \((\d+) OK, (\d+) FAIL\)")
+# The version install.sh installs from a checkout without a tag, and the image tag the release proof expects.
+VERSION_FILE = "deploy/release/version"
 
 
 class Refusal(Exception):
     pass
 
 
-def run(*cmd: str) -> str:
-    done = subprocess.run(cmd, capture_output=True, text=True, check=False)
+def run(*cmd: str, stdin: str | None = None, env: dict[str, str] | None = None) -> str:
+    done = subprocess.run(cmd, capture_output=True, text=True, check=False, input=stdin, env=env)
     if done.returncode != 0:
         raise Refusal(f"{' '.join(cmd[:3])} failed: {(done.stderr or done.stdout).strip()}")
     return done.stdout
@@ -52,6 +59,39 @@ def branch_of(v: str) -> str:
         if remote_has(f"{prefix}/{v}"):
             return f"{prefix}/{v}"
     raise Refusal(f"neither release/{v} nor hotfix/{v} is on origin; make release-cut or hotfix-cut makes it")
+
+
+def file_version(ref: str) -> str:
+    try:
+        return run("git", "show", f"{ref}:{VERSION_FILE}").strip()
+    except Refusal:
+        return "missing"
+
+
+def version_problem(branch: str, ref: str) -> str | None:
+    """Why ref's version file does not match a release or hotfix branch's name, or None (also for any other branch)."""
+    named = re.fullmatch(r"(?:release|hotfix)/(\d+\.\d+\.\d+)", branch)
+    if not named:
+        return None
+    have = file_version(ref)
+    if have != named.group(1):
+        return f"{VERSION_FILE} on {branch} says {have}, not {named.group(1)}; set it to {named.group(1)} on the branch"
+    return None
+
+
+def with_version(sha: str, v: str) -> str:
+    """sha itself when its version file says v, else a new commit on sha that sets it, made without a checkout."""
+    if file_version(sha) == v:
+        return sha
+    if subprocess.run(["git", "var", "GIT_COMMITTER_IDENT"], capture_output=True, check=False).returncode != 0:
+        raise Refusal("no git identity; set git user.name and user.email")
+    blob = run("git", "hash-object", "-w", "--stdin", stdin=f"{v}\n").strip()
+    with tempfile.TemporaryDirectory() as tmp:
+        env = {**os.environ, "GIT_INDEX_FILE": os.path.join(tmp, "index")}
+        run("git", "read-tree", sha, env=env)
+        run("git", "update-index", "--add", "--cacheinfo", f"100644,{blob},{VERSION_FILE}", env=env)
+        tree = run("git", "write-tree", env=env).strip()
+    return run("git", "commit-tree", tree, "-p", sha, "-m", f"chore(release): set the version to {v}").strip()
 
 
 def runs_for(workflow: str, sha: str) -> list[dict]:
@@ -181,12 +221,16 @@ def cut(dry: bool, source: str, prefix: str) -> int:
         raise Refusal(f"{branch} is already on origin")
     sha = run("git", "rev-parse", f"origin/{source}").strip()
     print(f"release: {branch} from origin/{source} at {sha[:8]}; ci.yml on that commit: {ci_status(sha)}")
-    print(f"release: then git push origin {sha}:refs/heads/{branch}")
+    have = file_version(sha)
+    if have != v:
+        print(f"release: {VERSION_FILE} there says {have}; the branch gets one commit on top that sets it to {v}")
+    print(f"release: then git push origin <head>:refs/heads/{branch}")
     print("release: the push runs ci.yml, whose staging job deploys the branch with the click walk")
     if dry:
         print("release: dry run, nothing created (DRY=0 does it)")
         return 0
-    run("git", "push", "origin", f"{sha}:refs/heads/{branch}")
+    head = with_version(sha, v)
+    run("git", "push", "origin", f"{head}:refs/heads/{branch}")
     print(f"release: pushed {branch}; watch it with: gh run list --branch {branch}")
     return 0
 
@@ -198,6 +242,9 @@ def pr(dry: bool) -> int:
     if open_pr(branch, "main"):
         return create_pr(dry, branch, "main", "", "")
     sha = run("git", "rev-parse", f"origin/{branch}").strip()
+    wrong = version_problem(branch, sha)
+    if wrong:
+        raise Refusal(wrong)
     status = ci_status(sha)
     if status != "success":
         raise Refusal(f"ci.yml on {branch} at {sha[:8]} is {status}, not success")
@@ -225,6 +272,13 @@ def main() -> int:
     dry = os.environ.get("DRY", "1") != "0"
     command = sys.argv[1] if len(sys.argv) > 1 else ""
     try:
+        if command == "check-version":
+            branch = os.environ.get("BRANCH") or run("git", "rev-parse", "--abbrev-ref", "HEAD").strip()
+            wrong = version_problem(branch, "HEAD")
+            if wrong:
+                raise Refusal(wrong)
+            print(f"release: {branch}: {VERSION_FILE} says {file_version('HEAD')}")
+            return 0
         run("git", "fetch", "--quiet", "origin", "develop", "main")
         if command == "cut":
             return cut(dry, "develop", "release")
@@ -234,7 +288,7 @@ def main() -> int:
             return pr(dry)
         if command == "back-merge":
             return back_merge(dry)
-        raise Refusal("usage: release.py cut | hotfix-cut | pr | back-merge (V=X.Y.Z)")
+        raise Refusal("usage: release.py cut | hotfix-cut | pr | back-merge | check-version (V=X.Y.Z)")
     except Refusal as why:
         print(f"release: refused: {why}", file=sys.stderr)
         return 1
