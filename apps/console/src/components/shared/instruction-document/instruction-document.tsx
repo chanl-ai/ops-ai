@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import type { Editor } from '@tiptap/core';
-import { Selection } from '@tiptap/pm/state';
+import { Selection, TextSelection } from '@tiptap/pm/state';
 import { EditorContent, useEditor } from '@tiptap/react';
 import { Braces, CircleCheck, CornerDownRight, ListOrdered, Plus } from 'lucide-react';
 
@@ -110,27 +110,37 @@ export function InstructionDocument({ value, onChange, searchReferences, onInser
     const text = normal(value);
     if (text === seen.current) return;
     seen.current = text;
-    editor.chain().setMeta(LOADS_DOCUMENT, true).setMeta('addToHistory', false).setContent(toEditorDoc(value), { emitUpdate: false }).run();
+    // A value the page changed itself (a save that came back with more filled in, another version) replaces the
+    // document. The caret keeps its place where the new document still has one there.
+    // After this render: the document's parts are React components, and drawing them inside an effect is refused.
+    queueMicrotask(() => {
+      if (editor.isDestroyed) return;
+      const { from, to } = editor.state.selection;
+      editor.chain().setMeta(LOADS_DOCUMENT, true).setMeta('addToHistory', false).setContent(toEditorDoc(value), { emitUpdate: false }).run();
+      const size = editor.state.doc.content.size;
+      if (editor.isFocused && to <= size) editor.view.dispatch(editor.state.tr.setSelection(TextSelection.between(editor.state.doc.resolve(from), editor.state.doc.resolve(to))));
+    });
   }, [editor, value]);
 
   React.useEffect(() => {
     editor?.setEditable(!readOnly, false);
   }, [editor, readOnly]);
 
+  // Items picked here are named at once; the page's `resolved` catches up when it asks again.
+  const [picked, setPicked] = React.useState<ReferenceItem[]>([]);
+  const known = React.useMemo(() => resolved && [...resolved, ...picked], [resolved, picked]);
   const gone = React.useRef('[]');
   React.useEffect(() => {
-    const refs = missingReferences(value, resolved);
+    const refs = missingReferences(value, known);
     const text = JSON.stringify(refs);
     if (text === gone.current) return;
     gone.current = text;
     onMissingChange?.(refs);
-  }, [value, resolved, onMissingChange]);
+  }, [value, known, onMissingChange]);
 
   // ---------- the @, {{ and / menus ----------
   const [open, setOpen] = React.useState<OpenMenu | null>(null);
   const [active, setActive] = React.useState('');
-  // Items picked here are named at once; the page's `resolved` catches up when it asks again.
-  const [picked, setPicked] = React.useState<ReferenceItem[]>([]);
   const [found, setFound] = React.useState<{ status: 'loading' | 'ready' | 'error'; groups: ReferenceGroup[] }>({ status: 'loading', groups: [] });
   const menuId = React.useId();
   const searching = open?.trigger === '@';
@@ -284,10 +294,10 @@ export function InstructionDocument({ value, onChange, searchReferences, onInser
     [editor],
   );
   const context = React.useMemo<DocumentContextValue>(
-    () => ({ resolved: resolved && [...resolved, ...picked], missing, invalid, readOnly, chooseAnother, addBack: onInsertReference ? (ref) => void latest.current.onInsertReference?.(ref) : undefined }),
+    () => ({ resolved: known, missing, invalid, readOnly, chooseAnother, addBack: onInsertReference ? (ref) => void latest.current.onInsertReference?.(ref) : undefined }),
     // `onInsertReference` only decides whether Add it back is offered.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [resolved, picked, missing, invalid, readOnly, chooseAnother, !onInsertReference],
+    [known, missing, invalid, readOnly, chooseAnother, !onInsertReference],
   );
 
   React.useImperativeHandle(

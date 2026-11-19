@@ -165,6 +165,18 @@ function enter(editor: Editor): boolean {
   return name === 'line' || name === 'check' ? addStep(editor) : false;
 }
 
+/** The end of the last line of text in the step that starts at `pos`: its check when it has one, else its own line. */
+function endOfStepText(doc: PmNode, pos: number): number {
+  const step = doc.nodeAt(pos)!;
+  let at = pos + 1;
+  let end = at + 1;
+  step.forEach((child) => {
+    if (child.isTextblock) end = at + 1 + child.content.size;
+    at += child.nodeSize;
+  });
+  return end;
+}
+
 function backspace(editor: Editor): boolean {
   const { state, view } = editor;
   const { $from, empty } = state.selection;
@@ -185,11 +197,46 @@ function backspace(editor: Editor): boolean {
   const before = $from.before(-1);
   const prev = $from.node(-2).child(index - 1);
   let tr = state.tr;
+  // The caret goes to the end of the previous step's text, never onto its if-not line, which typing would replace.
+  const prevEnd = endOfStepText(state.doc, before - prev.nodeSize);
   if (prev.childCount === 1 && !step.attrs.use) tr = tr.join(before, 2);
-  else if (step.childCount === 1 && !$from.parent.content.size) tr = tr.delete(before, $from.after(-1)).setSelection(Selection.near(tr.doc.resolve(before), -1));
-  else tr = tr.setSelection(Selection.near(state.doc.resolve(before), -1));
+  else if (step.childCount === 1 && !step.attrs.use && !$from.parent.content.size) tr = tr.delete(before, $from.after(-1)).setSelection(TextSelection.create(tr.doc, prevEnd));
+  else tr = tr.setSelection(TextSelection.create(state.doc, prevEnd));
   view.dispatch(tr.scrollIntoView());
   return true;
+}
+
+/**
+ * Takes the caret from the page before a key is judged. The editor hears of a caret move a moment after it happens, so
+ * a key pressed straight after an arrow key would be judged at the old place and then carried out by the browser at
+ * the new one.
+ */
+function syncCaret(editor: Editor): void {
+  const { view, state } = editor;
+  const sel = view.dom.ownerDocument.getSelection();
+  if (!sel?.isCollapsed || !sel.anchorNode || !view.dom.contains(sel.anchorNode)) return;
+  let pos: number;
+  try {
+    pos = view.posAtDOM(sel.anchorNode, sel.anchorOffset);
+  } catch {
+    return;
+  }
+  if (!state.selection.empty || pos === state.selection.from) return;
+  const $pos = state.doc.resolve(pos);
+  if ($pos.parent.inlineContent) view.dispatch(state.tr.setSelection(TextSelection.create(state.doc, pos)));
+}
+
+/**
+ * True when the caret is at the start (-1) or end (1) of a line whose neighbour on that side cannot be joined to it:
+ * a step's line or check, or the first or last line under a heading. The key is then spent and nothing changes.
+ */
+function atEdge(editor: Editor, side: -1 | 1): boolean {
+  const { $from, empty } = editor.state.selection;
+  if (!empty || !$from.depth) return false;
+  if (side < 0 ? $from.parentOffset > 0 : $from.parentOffset < $from.parent.content.size) return false;
+  const name = $from.parent.type.name;
+  if (name === 'line' || name === 'check') return true;
+  return side < 0 ? $from.index(-1) === 0 : $from.index(-1) === $from.node(-1).childCount - 1;
 }
 
 const shape = (doc: PmNode) => {
@@ -207,8 +254,11 @@ const Structure = Extension.create({
   priority: 1000,
   addKeyboardShortcuts() {
     return {
-      Enter: () => enter(this.editor),
-      Backspace: () => backspace(this.editor),
+      Enter: () => (syncCaret(this.editor), enter(this.editor)),
+      // Every key that deletes backwards from the start of a line, or forwards from its end, is answered here. Left to
+      // the browser, such a key merges the two lines in the page itself and the step's check or if-not line is lost.
+      ...Object.fromEntries(['Backspace', 'Mod-Backspace', 'Alt-Backspace', 'Shift-Backspace', 'Ctrl-h'].map((key) => [key, () => (syncCaret(this.editor), backspace(this.editor) || atEdge(this.editor, -1))])),
+      ...Object.fromEntries(['Delete', 'Mod-Delete', 'Alt-Delete', 'Ctrl-d', 'Ctrl-k'].map((key) => [key, () => (syncCaret(this.editor), atEdge(this.editor, 1))])),
       // Select all takes the text under the caret's heading: the headings themselves cannot be selected away.
       'Mod-a': () => {
         const { state, view } = this.editor;

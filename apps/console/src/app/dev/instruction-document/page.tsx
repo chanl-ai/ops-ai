@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { PageLayout } from '@/components/page-layout';
 import { type DocumentValue, InstructionDocument, referencesIn } from '@/components/shared/instruction-document';
 import { JsonBlock } from '@/components/shared/json-block';
+import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useReferenceLabels, useReferenceSearch } from '@/hooks/references-queries';
@@ -33,14 +34,14 @@ export default function InstructionDocumentPage() {
       }
     >
       <div className="flex flex-col gap-8">
-        <Sample id="brief" title="Agent brief" context={{ forAgent: 'agt_dispute_desk' }} initial={BRIEF} readOnly={readOnly} agent />
-        <Sample id="skill" title="Skill steps" context={{ forSkill: 'skl_chase_documents' }} initial={SKILL} readOnly={readOnly} />
+        <Sample id="brief" title="Agent brief" context={{ forAgent: 'agt_dispute_desk' }} initial={BRIEF} other={SKILL} readOnly={readOnly} agent />
+        <Sample id="skill" title="Skill steps" context={{ forSkill: 'skl_chase_documents' }} initial={SKILL} other={BRIEF} readOnly={readOnly} />
       </div>
     </PageLayout>
   );
 }
 
-function Sample({ id, title, context, initial, readOnly, agent }: { id: string; title: string; context: ReferenceContext; initial: DocumentValue; readOnly: boolean; agent?: boolean }) {
+function Sample({ id, title, context, initial, other, readOnly, agent }: { id: string; title: string; context: ReferenceContext; initial: DocumentValue; other: DocumentValue; readOnly: boolean; agent?: boolean }) {
   const [value, setValue] = React.useState(initial);
   const [gone, setGone] = React.useState<string[]>([]);
   const ids = React.useMemo(() => referencesIn(value).map((r) => `${r.kind}:${r.id}`), [value]);
@@ -48,7 +49,13 @@ function Sample({ id, title, context, initial, readOnly, agent }: { id: string; 
   const search = useReferenceSearch(context);
   return (
     <div className="flex flex-col gap-3" data-testid={`sample-${id}`}>
-      <h2 className="text-lg font-semibold">{title}</h2>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-lg font-semibold">{title}</h2>
+        {/* The page replacing the value, as loading another version does. */}
+        <Button type="button" variant="outline" size="sm" onClick={() => setValue(other)}>
+          Load the other sample
+        </Button>
+      </div>
       <InstructionDocument
         label={title}
         value={value}
