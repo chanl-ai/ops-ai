@@ -1,7 +1,9 @@
 """`make release-pr` (scripts/release.py pr) driven through its command line on a scratch repository with a fake `gh`.
 
 Failure modes: a release PR opens on a branch head whose CI or staging deploy with its click walk did not succeed; the
-body leaves out the merged pull requests or the SDK version, so the reviewer cannot see what ships."""
+body leaves out the merged pull requests or the SDK version, so the reviewer cannot see what ships; a release branch
+ships with a deploy/release/version other than its name, so installs and the release proof ask for the wrong images;
+a cut leaves the version file as develop had it."""
 
 from __future__ import annotations
 
@@ -55,6 +57,8 @@ def release_repo(tmp: Path) -> Path:
     (work / "sdk/typescript").mkdir(parents=True)
     (work / "sdk/python/pyproject.toml").write_text('[project]\nname = "ops-ai"\nversion = "1.0.0"\n')
     (work / "sdk/typescript/package.json").write_text('{"name": "@chanl-ai/ops-ai", "version": "1.0.0"}\n')
+    (work / "deploy/release").mkdir(parents=True)
+    (work / "deploy/release/version").write_text("1.1.0\n")
     git(work, "add", ".")
     git(work, "commit", "-q", "-m", "first")
     git(work, "push", "-q", "origin", "HEAD:main")
@@ -79,15 +83,27 @@ def release_repo(tmp: Path) -> Path:
     return work
 
 
-def release_pr(work: Path, tmp: Path, gh_state: dict) -> subprocess.CompletedProcess[str]:
+def release_pr(
+    work: Path, tmp: Path, gh_state: dict, command: str = "pr", **env_changes: str
+) -> subprocess.CompletedProcess[str]:
     bin_dir = tmp / "bin"
     bin_dir.mkdir(exist_ok=True)
     gh = bin_dir / "gh"
     gh.write_text(FAKE_GH)
     gh.chmod(0o755)
-    env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "V": "1.1.0", "FAKE_GH": json.dumps(gh_state)}
+    env = {
+        **os.environ,
+        "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        "V": "1.1.0",
+        "FAKE_GH": json.dumps(gh_state),
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@t",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@t",
+    }
+    env.update(env_changes)
     return subprocess.run(
-        [sys.executable, str(SCRIPT), "pr"], cwd=work, capture_output=True, text=True, env=env, check=False
+        [sys.executable, str(SCRIPT), command], cwd=work, capture_output=True, text=True, env=env, check=False
     )
 
 
@@ -136,3 +152,26 @@ def test_it_prints_the_title_and_body_when_ready(tmp_path: Path) -> None:
     assert "python ops-ai 1.0.0 -> 1.1.0" in run.stdout
     assert "typescript @chanl-ai/ops-ai 1.0.0 -> 1.1.0" in run.stdout
     assert "merge commit" in run.stdout
+
+
+def test_it_refuses_a_release_branch_whose_version_file_is_not_its_version(tmp_path: Path) -> None:
+    work = release_repo(tmp_path)
+    (work / "deploy/release/version").write_text("0.1.0\n")
+    git(work, "commit", "-q", "-am", "chore: old version")
+    git(work, "push", "-q", "-f", "origin", "HEAD:release/1.1.0")
+    pr = release_pr(work, tmp_path, READY)
+    assert pr.returncode == 1
+    assert "says 0.1.0, not 1.1.0" in pr.stderr
+    check = release_pr(work, tmp_path, READY, "check-version", BRANCH="release/1.1.0")
+    assert check.returncode == 1
+    assert "says 0.1.0, not 1.1.0" in check.stderr
+    assert release_pr(work, tmp_path, READY, "check-version", BRANCH="release/0.1.0").returncode == 0
+
+
+def test_the_cut_sets_the_version_file_in_one_commit_on_develop(tmp_path: Path) -> None:
+    work = release_repo(tmp_path)
+    run = release_pr(work, tmp_path, READY, "cut", V="1.2.0", DRY="0")
+    assert run.returncode == 0, run.stderr
+    git(work, "fetch", "-q", "origin", "release/1.2.0")
+    assert git(work, "show", "origin/release/1.2.0:deploy/release/version") == "1.2.0\n"
+    assert git(work, "rev-parse", "origin/release/1.2.0^").strip() == git(work, "rev-parse", "origin/develop").strip()
