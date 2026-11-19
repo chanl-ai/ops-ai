@@ -25,8 +25,8 @@ opsai people invite a.osei@example.com --role viewer
 - A team owns its agents, workflows, knowledge, files and cases, and the work they produce. Someone outside the team
   cannot open them, even with a direct link: the server refuses and names the team that owns the record.
 - Your organisation is the outer boundary. Records of another organisation on the same install are never found.
-- A person holds roles per team, and may hold different roles in different teams. A role given in every team makes that
-  person a workspace admin. A role can be given with an expiry date.
+- A person holds roles per team, and may hold different roles in different teams. The Admin role given in every team makes
+  that person a workspace admin. A role can be given with an expiry date.
 - What you may do is the sum of your roles in that team. Each permission is an area (agents, workflows, cases,
   knowledge, ...) and an action (view, create, edit, publish, delete, run, decide, manage), for every record in the team
   or only your own.

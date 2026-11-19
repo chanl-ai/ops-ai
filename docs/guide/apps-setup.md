@@ -39,7 +39,7 @@ setting and opens no sign-in; connecting is its own button, and it is optional f
 | 2. For an App that asks where you sign in (Salesforce), pick the place: login.salesforce.com, test.salesforce.com, or your company's address (My Domain), typed as its host | Saved on the App's auth config |
 | 3. Pick whose account Tools use: each person's, the team's, or each person's with the team's for runs nobody started | Asked once, when the App is first turned on |
 | 4. Keep **Give the team's assistant this app's read tools** ticked, or untick it | The assistant gets the read Tools when the App is saved |
-| 5. Press **Turn on** | The team's setting is saved and no sign-in window opens. The window reads, for example, **Saved. Salesforce is on for Operations**, how many read Tools were added, and **Members connect their own account from Connectors › Mine** |
+| 5. Press **Turn on** | The team's setting is saved and no sign-in window opens. The window reads, for example, **Saved. Salesforce is on for Operations**, how many read Tools were added, and **Members connect their own account from Apps › Mine** |
 | 6. Optional: press **Connect my account**, or **Connect the team account** when Tools run as the team's account | The App's own sign-in page opens; allow access there, and the window names the account that signed in |
 
 An App is **Connected** only once an Account has signed in or a test has passed; saving settings alone does not count.
@@ -65,7 +65,7 @@ Connect window asks for more than the steps above.
 | Security admin | Lists the App's hosts, so its sign-in and calls may leave | **Settings › Security › Egress**, Add host (and Add range for a host on a private network) |
 | Team admin | Presses **Turn on** | The window shows the App's settings (such as its API address), whose account calls use (the team's, each person's, or each person's with the team's as backup), the OAuth app (Ops AI's, or your own with its client ID and secret and the return address to register), and its sign-in address. **Turn on** saves them and opens no sign-in; **Connect my account** or **Connect the team account** after it opens the App's sign-in page |
 
-The App's page is **Data Gateway › Apps** then the App's name, at `/integrations/apps/plugin:<plugin id>`. One Connect is
+The App's page is **Data › Apps** then the App's name, at `/integrations/apps/plugin:<plugin id>`. One Connect is
 enough to use it everywhere: test runs and live runs both sign in with the account you connected.
 
 ## Auth configs and secrets
@@ -85,7 +85,7 @@ offline_access)** scopes; without the second, people are signed out when the fir
 Ops AI builds the callback URL from its console address (`OPS_CONSOLE_URL`), so it must match the address people open.
 Changing the client ID or permissions makes the accounts on it sign in again.
 
-**Data Gateway › Secrets** lists the values Tools send, such as an API key in a header. A value is encrypted, never shown
+**Data › Secrets** lists the values Tools send, such as an API key in a header. A value is encrypted, never shown
 again, and removed from whatever an App answers. A Security admin adds, rotates and deletes Secrets.
 
 ## A run waiting for a person

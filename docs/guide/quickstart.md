@@ -25,8 +25,9 @@ install uses a built-in test model, so you need no model key. To install for a t
    ./install.sh --yes
    ```
 
-   When it ends, it prints the address to open and how to sign in as the first admin (`admin@example.com` unless you
-   chose another). `./install.sh status` prints the address again.
+   When it ends, it prints the address to open and how to sign in as the first admin, `admin@example.com`. The
+   generated password is the `OPS_BOOTSTRAP_ADMIN_PASSWORD` line of `ops-ai.env` in the same folder; change it after
+   the first sign-in, then delete that line. `./install.sh status` prints the address again.
 
 2. **Open the console.** Open that address and sign in as the first admin.
 

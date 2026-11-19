@@ -137,8 +137,7 @@ Banks usually have prototype agents already. The platform takes them in piece by
 ## Stop condition
 
 If the second workflow is not materially faster to deliver than the first, the programme stops and
-the approach is re-examined. The [implementation plan](../plan/implementation-plan.md) defines the
-measurement.
+the approach is re-examined. The implementation plan defines the measurement.
 
 ## Next
 

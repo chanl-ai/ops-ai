@@ -13,7 +13,8 @@ Make every write in your team wait for a person, then approve one.
 <!-- site: steps -->
 1. **Turn on approvals.** In the console open **Settings › Approvals**, turn on **Ask before an agent changes anything in
    an app**, set **Who answers** to **Ask a reviewer**, and pick the role that reviews.
-2. **Ask for a write.** In a chat, ask an agent with a write tool to do something, for example "Add a note to case 1042
+2. **Ask for a write.** You need an agent that holds a write tool from an app your team has turned on
+   ([Tools and apps](apps.md)). In a chat, ask it to do something, for example "Add a note to case 1042
    saying the customer called." The chat shows an approval card with the exact input and no write is made.
 3. **Decide it.** A reviewer opens **Work › Human Tasks**, or uses the command line:
 
