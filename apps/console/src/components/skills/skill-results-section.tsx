@@ -12,7 +12,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Textarea } from '@/components/ui/textarea';
 import type { SkillReturnField } from '@/lib/types/skills';
 
 const EXIT_NAME = /^[a-z][a-z0-9_]{0,31}$/;
@@ -21,7 +20,6 @@ const NAME_HELP = 'Lower-case letters, digits and underscores, starting with a l
 
 /** The limits are the service's (a skill's program): 8 exits, 12 results, 8 lines, 300 characters each. */
 export const skillEndingSchema = z.object({
-  notWhen: z.string().max(1024, 'Keep it under 1,024 characters.'),
   exits: z
     .array(z.object({ name: z.string().regex(EXIT_NAME, NAME_HELP).refine((n) => n !== 'done' && n !== 'failed', 'Every skill already ends as done or failed.'), meaning: z.string().trim().min(1, 'Say what this ending means.').max(300, 'Keep it under 300 characters.') }))
     .max(8, 'A skill has at most 8 endings of its own.')
@@ -34,14 +32,13 @@ export const skillEndingSchema = z.object({
 export type SkillEnding = z.infer<typeof skillEndingSchema>;
 
 export interface SkillEndingValue {
-  notWhen: string;
   exit: Record<string, string>;
   returns: SkillReturnField[];
   success: string[];
 }
 
-const toForm = (v: SkillEndingValue): SkillEnding => ({ notWhen: v.notWhen, exits: Object.entries(v.exit).map(([name, meaning]) => ({ name, meaning })), returns: v.returns, success: v.success.map((line) => ({ line })) });
-const fromForm = (f: SkillEnding): SkillEndingValue => ({ notWhen: f.notWhen.trim(), exit: Object.fromEntries(f.exits.map((e) => [e.name, e.meaning.trim()])), returns: f.returns, success: f.success.map((s) => s.line.trim()) });
+const toForm = (v: SkillEndingValue): SkillEnding => ({ exits: Object.entries(v.exit).map(([name, meaning]) => ({ name, meaning })), returns: v.returns, success: v.success.map((line) => ({ line })) });
+const fromForm = (f: SkillEnding): SkillEndingValue => ({ exit: Object.fromEntries(f.exits.map((e) => [e.name, e.meaning.trim()])), returns: f.returns, success: f.success.map((s) => s.line.trim()) });
 
 const TYPES: { value: SkillReturnField['type']; label: string }[] = [
   { value: 'text', label: 'Text' },
@@ -50,7 +47,7 @@ const TYPES: { value: SkillReturnField['type']; label: string }[] = [
 ];
 
 /**
- * When not to use a skill with steps, how it may end, what it hands back and what says it went well. The values are
+ * How a skill with steps may end, what it hands back and what says it went well. The values are
  * passed up on every valid change and saved with the rest of the draft; `onValidity` tells the page to hold the save
  * while a field is wrong.
  */
@@ -72,12 +69,8 @@ export function SkillResultsSection({ value, onChange, onValidity, disabled }: {
   }, [watch, onChange, onValidity]);
 
   return (
-    <SettingsSection title="When not to use it, endings and results" description="These apply to a skill with steps. Every skill ends as done or failed; add an ending when a step should stop the skill another way.">
+    <SettingsSection title="Endings and results" description="These apply to a skill with steps. Every skill ends as done or failed; add an ending when a step should stop the skill another way.">
       <fieldset disabled={disabled} className="flex flex-col gap-6" data-testid="skill-results-section">
-        <FormField id="sk-notwhen" label="Not when" hint="When the agent should leave this skill alone." error={errors.notWhen?.message}>
-          <Textarea id="sk-notwhen" rows={2} className="bg-card" aria-invalid={!!errors.notWhen} {...register('notWhen')} />
-        </FormField>
-
         <div className="flex flex-col gap-2">
           <span className="text-sm font-medium">Endings</span>
           {exits.fields.map((f, i) => (

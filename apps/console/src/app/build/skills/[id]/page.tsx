@@ -3,13 +3,13 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { Archive, BookOpen, Copy, Download, Inbox, MoreHorizontal, Send, Sparkles, Trash2, Wrench } from 'lucide-react';
+import { Activity, Archive, BookOpen, Copy, Download, FlaskConical, History, Inbox, MoreHorizontal, Paperclip, Send, Sparkles, Trash2, Users, Wrench } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { openLink } from '@/components/files/file-actions';
 import { PageLayout } from '@/components/page-layout';
-import { PageTabPanel, PageTabs } from '@/components/shared/page-tabs';
 import { DeleteDialog } from '@/components/shared/delete-dialog';
+import { DetailSheet } from '@/components/shared/detail-sheet';
 import { DisabledReason } from '@/components/shared/disabled-reason';
 import { FieldRow } from '@/components/shared/field-row';
 import { SKILL_LOADING_LABEL } from '@/components/skills/skill-loading';
@@ -18,13 +18,13 @@ import { AttributeCard, RecordLayout } from '@/components/shared/record-layout';
 import { RecordSkeleton } from '@/components/shared/record-skeleton';
 import { DeprecateSkillDialog, RequestReviewDialog } from '@/components/skills/skill-dialogs';
 import { EditClassBadge, ORIGIN, SkillStatusBadge, ToolChips } from '@/components/skills/skill-meta';
+import { SkillUsedBySheet } from '@/components/skills/skill-used-by-sheet';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { BuilderFieldset, ReadOnlyNotice } from '@/components/shared/builder-only';
 import { announcePublish } from '@/components/shared/publish-result';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useDownloadFile } from '@/hooks/file-queries';
 import { useCanBuild } from '@/hooks/me-queries';
 import { useDeleteSkill, useDeprecateSkill, useDuplicateSkill, useExportSkills, useRequestSkillReview, useSkill } from '@/hooks/skill-queries';
@@ -33,15 +33,20 @@ import { plural, relativeTime } from '@/lib/format';
 import type { SkillDetail } from '@/lib/types/skills';
 
 import { ActivityTab } from './_parts/activity-tab';
-import { InstructionsTab } from './_parts/instructions-tab';
 import { ResourcesTab } from './_parts/resources-tab';
+import { SkillEditor } from './_parts/skill-editor';
 import { TestsTab } from './_parts/tests-tab';
-import { UsedByTab } from './_parts/used-by-tab';
 import { VersionsTab } from './_parts/versions-tab';
-import { TabLabel } from '@/components/shared/tab-label';
 
-const TABS = ['instructions', 'resources', 'tests', 'used_by', 'versions', 'activity'] as const;
-type Tab = (typeof TABS)[number];
+// What `?tab=` opens over the page, so links to a skill's tests, versions, files and agents keep landing there.
+// `instructions` is the page itself; the rest are side sheets.
+const PANELS = ['instructions', 'resources', 'tests', 'used_by', 'versions', 'activity'] as const;
+const SHEETS = {
+  tests: { title: 'Tests', description: 'Cases the newest version must pass before it can be published.', width: 'sm:max-w-4xl' },
+  versions: { title: 'Versions', description: 'Every saved version, newest first.', width: 'sm:max-w-3xl' },
+  activity: { title: 'Activity', description: 'How often agents load the skill, and recent turns that did.', width: 'sm:max-w-4xl' },
+  resources: { title: 'Files and templates', description: 'Reference files and text templates the skill can read.', width: 'sm:max-w-2xl' },
+} as const;
 
 export default function SkillPage() {
   const { id } = useParams<{ id: string }>();
@@ -58,7 +63,9 @@ export default function SkillPage() {
 
 function SkillView({ skill: s }: { skill: SkillDetail }) {
   const router = useRouter();
-  const [tab, setTab] = useTabParam(TABS, 'instructions');
+  const [panel, setPanel] = useTabParam(PANELS, 'instructions');
+  const sheet = panel in SHEETS ? SHEETS[panel as keyof typeof SHEETS] : null;
+  const close = (open: boolean) => !open && setPanel('instructions');
   const request = useRequestSkillReview(s.id);
   const deprecate = useDeprecateSkill(s.id);
   const duplicate = useDuplicateSkill();
@@ -81,7 +88,7 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
   };
 
   return (
-    <PageTabs value={tab} onValueChange={(t) => setTab(t as Tab)}>
+    <>
       <PageLayout
         icon={Sparkles}
         backHref="/build/skills"
@@ -92,38 +99,25 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
             <SkillStatusBadge status={s.status} />
             <span className="text-xs text-muted-foreground">
               {s.publishedVersion ? `v${s.publishedVersion} published` : 'Not published'}
-              {s.draftVersion && s.draftVersion !== s.publishedVersion ? ` · draft v${s.draftVersion}` : ''} · {s.ownerTeam} · used by {plural(s.usedBy, 'agent')}
+              {s.draftVersion && s.draftVersion !== s.publishedVersion ? ` · draft v${s.draftVersion}` : ''} · {s.ownerTeam} ·{' '}
+              <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => setPanel('used_by')} data-testid="skill-used-by-link">
+                Used by {plural(s.usedBy, 'agent')}
+              </Button>
             </span>
           </>
         }
-        tabs={
-          <>
-            <TabsList>
-              <TabsTrigger value="instructions">Instructions</TabsTrigger>
-              <TabsTrigger value="resources">
-                <TabLabel label={`Resources · ${newest.content.resources.length}`} />
-              </TabsTrigger>
-              <TabsTrigger value="tests" data-testid="skill-tab-tests">
-                Tests · {s.tests.length}
-              </TabsTrigger>
-              <TabsTrigger value="used_by" data-testid="skill-tab-used-by">
-                Used by · {s.usage.length}
-              </TabsTrigger>
-              <TabsTrigger value="versions" data-testid="skill-tab-versions">
-                Versions · {s.versions.length}
-              </TabsTrigger>
-              <TabsTrigger value="activity">Activity</TabsTrigger>
-            </TabsList>
-          </>
-        }
         actions={
-          canBuild && (
           <>
-            <DisabledReason reason={reviewReason}>
-              <Button onClick={() => setDialog('review')} disabled={!s.publishCheck.canRequest} data-testid="request-review-button">
-                <Send className="size-4" /> Request review
-              </Button>
-            </DisabledReason>
+            <Button variant="outline" onClick={() => setPanel('tests')} data-testid="skill-open-tests">
+              <FlaskConical className="size-4" /> Tests · {s.tests.length}
+            </Button>
+            {canBuild && (
+              <DisabledReason reason={reviewReason}>
+                <Button onClick={() => setDialog('review')} disabled={!s.publishCheck.canRequest} data-testid="request-review-button">
+                  <Send className="size-4" /> Request review
+                </Button>
+              </DisabledReason>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="icon" aria-label="More actions" data-testid="skill-more">
@@ -131,6 +125,21 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setPanel('versions')} data-testid="skill-open-versions">
+                  <History className="size-4" /> Versions · {s.versions.length}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setPanel('activity')} data-testid="skill-open-activity">
+                  <Activity className="size-4" /> Activity
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setPanel('used_by')} data-testid="skill-open-used-by">
+                  <Users className="size-4" /> Used by {plural(s.usedBy, 'agent')}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setPanel('resources')} data-testid="skill-open-resources">
+                  <Paperclip className="size-4" /> Files and templates · {newest.content.resources.length}
+                </DropdownMenuItem>
+                {canBuild && (
+                <>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => void runExport()}>
                   <Download className="size-4" /> Export SKILL.md
                 </DropdownMenuItem>
@@ -157,13 +166,13 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
                   </span>
                   {live.length > 0 && <span className="pl-6 text-xs text-muted-foreground">Pinned by a live agent</span>}
                 </DropdownMenuItem>
+                </>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </>
-          )
         }
       >
-        <PageTabPanel value={tab}>
           <div className="flex flex-col gap-4">
             <ReadOnlyNotice noun="skills" />
             {s.pendingReview && (
@@ -189,6 +198,20 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
                 <AlertDescription>No agent can attach it. {s.usage.length ? `${plural(s.usage.length, 'agent')} still pin a version; detach or replace it there.` : ''}</AlertDescription>
               </Alert>
             )}
+            {s.usedBy > 0 && s.status !== 'deprecated' && (
+              <Alert data-testid="skill-shared-banner">
+                <Users />
+                <AlertTitle>Used by {plural(s.usedBy, 'agent')}</AlertTitle>
+                <AlertDescription>
+                  <span>
+                    {s.usedBy === 1 ? 'It keeps the version it uses until it is moved to a newer one.' : 'They keep the version they use until each one is moved to a newer one.'}{' '}
+                    <Button variant="link" size="sm" className="h-auto p-0" onClick={() => setPanel('used_by')}>
+                      See {s.usedBy === 1 ? 'the agent' : 'the agents'}
+                    </Button>
+                  </span>
+                </AlertDescription>
+              </Alert>
+            )}
             <BuilderFieldset>
             <RecordLayout
               rail={
@@ -207,11 +230,6 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
                       <EditClassBadge editClass={s.publishCheck.editClass} />
                     </div>
                   </AttributeCard>
-                  {s.loading === 'on_match' && (
-                    <AttributeCard title="Use when" icon={BookOpen}>
-                      <p className="text-sm">{s.useWhen}</p>
-                    </AttributeCard>
-                  )}
                   <AttributeCard title="Tools and knowledge" icon={Wrench} testId="skill-scope-card">
                     <div className="flex flex-col gap-3 text-sm">
                       <div>
@@ -260,15 +278,33 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
                 </>
               }
             >
-              {tab === 'instructions' && <InstructionsTab key={`${newest.version}-${newest.savedAt}`} skill={s} />}
-              {tab === 'resources' && <ResourcesTab skill={s} />}
-              {tab === 'tests' && <TestsTab skill={s} />}
-              {tab === 'used_by' && <UsedByTab skill={s} />}
-              {tab === 'versions' && <VersionsTab skill={s} onExport={runExport} />}
-              {tab === 'activity' && <ActivityTab skill={s} />}
+              <SkillEditor key={`${newest.version}-${newest.savedAt}`} skill={s} />
             </RecordLayout>
             </BuilderFieldset>
           </div>
+
+          <SkillUsedBySheet skill={s} open={panel === 'used_by'} onOpenChange={close} canEdit={canBuild} />
+          <DetailSheet
+            open={!!sheet}
+            onOpenChange={close}
+            title={sheet?.title ?? ''}
+            description={sheet?.description}
+            widthClass={sheet?.width}
+            testId="skill-panel-sheet"
+            footerActions={
+              <Button variant="outline" size="sm" onClick={() => close(false)}>
+                Close
+              </Button>
+            }
+          >
+            {/* A sheet is drawn outside the page's fieldset, so it gets its own. */}
+            <BuilderFieldset>
+              {panel === 'tests' && <TestsTab skill={s} />}
+              {panel === 'versions' && <VersionsTab skill={s} onExport={runExport} />}
+              {panel === 'activity' && <ActivityTab skill={s} />}
+              {panel === 'resources' && <ResourcesTab skill={s} />}
+            </BuilderFieldset>
+          </DetailSheet>
 
           <RequestReviewDialog
             open={dialog === 'review'}
@@ -309,8 +345,7 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
               }
             }}
           />
-        </PageTabPanel>
       </PageLayout>
-    </PageTabs>
+    </>
   );
 }

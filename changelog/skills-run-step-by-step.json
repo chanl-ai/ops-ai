@@ -1,6 +1,6 @@
 {
   "date": "2026-11-19",
   "title": "Skills can hold numbered steps",
-  "description": "A skill's page now has notes and numbered steps in one document: type @ to name a tool, a knowledge base or another skill, and add a check to a step. A save checks every step, and a publish that cannot go ahead names the step that blocks it.",
+  "description": "A skill's page now has when to use it, notes and numbered steps in one place: type @ to name a tool, a knowledge base or another skill, and add a check to a step. A publish that cannot go ahead names the step that blocks it, and tests, versions, files and the agents that use the skill open from the page header instead of tabs.",
   "tag": "new"
 }

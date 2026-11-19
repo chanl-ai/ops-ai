@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Eye, Pencil, X } from 'lucide-react';
+import { Eye, Pencil, RefreshCw, TriangleAlert, Users, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { AddMenu } from '@/components/shared/add-menu';
@@ -10,26 +10,31 @@ import { SettingsSection } from '@/components/shared/settings-section';
 import { TagInput } from '@/components/shared/tag-input';
 import { SkillDocumentEditor } from '@/components/skills/skill-document-editor';
 import { EDIT_CLASS, EditClassBadge, MarkdownPreview } from '@/components/skills/skill-meta';
+import { refusedSave } from '@/components/skills/skill-problems';
 import { SkillResultsSection, type SkillEndingValue } from '@/components/skills/skill-results-section';
+import { SkillWhenSection, type SkillWhen, type SkillWhenHandle } from '@/components/skills/skill-when-section';
 import { AccessBadge } from '@/components/status-badges';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { useSaveSkillDraft, useSkillOptions } from '@/hooks/skill-queries';
+import { useSaveSkillDraft, useSkill, useSkillOptions } from '@/hooks/skill-queries';
 import { SKILL_LOADING_OPTIONS } from '@/components/skills/skill-loading';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { PageSaveActions } from '@/components/shared/page-save-actions';
-import type { StepValue } from '@/components/shared/instruction-document';
+import type { InstructionDocumentHandle, StepValue } from '@/components/shared/instruction-document';
+import { plural } from '@/lib/format';
+import type { PublishBlocker } from '@/lib/types/references';
 import type { SkillDetail, SkillEditClass, SkillLoading, SkillPartContent } from '@/lib/types/skills';
 
 import { PartsSection, partsError } from './parts-section';
 
 interface Form {
   name: string;
-  useWhen: string;
+  when: SkillWhen;
   loading: SkillLoading;
   instructions: string;
   toolIds: string[];
@@ -41,15 +46,18 @@ interface Form {
   ending: SkillEndingValue;
 }
 
-const formOf = (sk: SkillDetail): Form => ({ name: sk.content.name, useWhen: sk.content.useWhen, loading: sk.content.loading, instructions: sk.content.instructions, toolIds: sk.content.tools.map((t) => t.toolId), knowledgeBases: sk.content.knowledgeBases, guardrails: sk.content.guardrails, refusal: sk.content.refusal ?? '', parts: sk.content.parts ?? [], steps: sk.content.steps ?? [], ending: { notWhen: sk.content.notWhen ?? '', exit: sk.content.exit ?? {}, returns: sk.content.returns ?? [], success: sk.content.success ?? [] } });
+const formOf = (sk: SkillDetail): Form => ({ name: sk.content.name, when: { useWhen: sk.content.useWhen, notWhen: sk.content.notWhen ?? '' }, loading: sk.content.loading, instructions: sk.content.instructions, toolIds: sk.content.tools.map((t) => t.toolId), knowledgeBases: sk.content.knowledgeBases, guardrails: sk.content.guardrails, refusal: sk.content.refusal ?? '', parts: sk.content.parts ?? [], steps: sk.content.steps ?? [], ending: { exit: sk.content.exit ?? {}, returns: sk.content.returns ?? [], success: sk.content.success ?? [] } });
+const NONE: PublishBlocker[] = [];
 const same = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x));
 
 /**
- * The newest version as a form. Saving edits the open draft, or opens a new draft on top of the published version;
- * nothing reaches an agent until a publisher approves it. The unsaved bar says which edit class the change is.
+ * The newest version as a form: when to use the skill, its notes and steps as one document, then its settings. Saving
+ * edits the open draft, or opens a new draft on top of the published version; nothing reaches an agent until a
+ * publisher approves it. The unsaved bar says which edit class the change is.
  */
-export function InstructionsTab({ skill: sk }: { skill: SkillDetail }) {
+export function SkillEditor({ skill: sk }: { skill: SkillDetail }) {
   const save = useSaveSkillDraft(sk.id);
+  const current = useSkill(sk.id);
   const [noting, setNoting] = React.useState(false);
   const options = useSkillOptions();
   const saved = React.useMemo(() => formOf(sk), [sk]);
@@ -57,21 +65,32 @@ export function InstructionsTab({ skill: sk }: { skill: SkillDetail }) {
   const [mode, setMode] = React.useState<'edit' | 'preview'>('edit');
   const [note, setNote] = React.useState('');
   const [endingValid, setEndingValid] = React.useState(true);
-  // The endings form keeps its own field state, so a discard remounts it on the saved values.
+  const [whenValid, setWhenValid] = React.useState(true);
+  // The when and endings forms keep their own field state, so a discard remounts them on the saved values.
   const [discards, setDiscards] = React.useState(0);
   const setEnding = React.useCallback((ending: SkillEndingValue) => setForm((f) => ({ ...f, ending })), []);
+  const setWhen = React.useCallback((when: SkillWhen) => setForm((f) => ({ ...f, when })), []);
+  const whenForm = React.useRef<SkillWhenHandle>(null);
+  const stepsDoc = React.useRef<InstructionDocumentHandle>(null);
+  // A save refused because a newer version exists: what the service said. Cleared by Reload.
+  const [stale, setStale] = React.useState<string | null>(null);
+  // A save refused for one step, shown on that step until the steps change.
+  const [refused, setRefused] = React.useState<PublishBlocker | null>(null);
   // A skill has steps or parts, never both: one with parts keeps its Markdown body.
   const stepped = form.parts.length === 0;
   const newest = sk.versions[0];
   const locked = newest.state === 'in_review' ? `v${newest.version} is waiting in Reviews.` : sk.status === 'deprecated' ? 'The skill is deprecated. Duplicate it to change it.' : undefined;
   const changed = {
-    wording: form.name !== saved.name || form.useWhen !== saved.useWhen || form.loading !== saved.loading || form.instructions !== saved.instructions || JSON.stringify([form.parts, form.steps, form.ending]) !== JSON.stringify([saved.parts, saved.steps, saved.ending]),
+    wording: form.name !== saved.name || form.when.useWhen !== saved.when.useWhen || form.when.notWhen.trim() !== saved.when.notWhen.trim() || form.loading !== saved.loading || form.instructions !== saved.instructions || JSON.stringify([form.parts, form.steps, form.ending]) !== JSON.stringify([saved.parts, saved.steps, saved.ending]),
     scope: !same(form.toolIds, saved.toolIds) || !same(form.knowledgeBases, saved.knowledgeBases) || !same(form.guardrails, saved.guardrails) || form.refusal.trim() !== saved.refusal.trim(),
   };
   const dirty = changed.wording || changed.scope;
   const editClass: SkillEditClass = changed.scope ? 're_approval' : 're_test';
   const limit = options.data?.limits.useWhenMaxChars ?? 1024;
-  const errors = { name: form.name.trim() ? undefined : 'Name the skill.', useWhen: !form.useWhen.trim() && form.loading !== 'always' ? 'Say when the skill should be used.' : form.useWhen.length > limit ? `Keep it under ${limit} characters.` : undefined, parts: partsError(form.parts) };
+  const errors = { name: form.name.trim() ? undefined : 'Name the skill.', parts: partsError(form.parts) };
+  const found = (newest.state === 'draft' && sk.publishCheck.problems) || NONE;
+  const problems = React.useMemo(() => (refused ? [...found, refused] : found), [found, refused]);
+  const discard = () => (setForm(saved), setEndingValid(true), setWhenValid(true), setRefused(null), setDiscards((n) => n + 1));
   const tools = options.data?.tools ?? [];
   const toolOf = (id: string) => tools.find((t) => t.toolId === id) ?? sk.content.tools.find((t) => t.toolId === id);
   const target = newest.state === 'draft' ? `draft v${newest.version}` : `draft v${newest.version + 1}`;
@@ -79,46 +98,71 @@ export function InstructionsTab({ skill: sk }: { skill: SkillDetail }) {
   // The tab remounts once the saved version arrives, so the toast follows the awaited result rather than mutate callbacks.
   const submit = async () => {
     try {
-      const d = await save.mutateAsync({ name: form.name, useWhen: form.useWhen, loading: form.loading, instructions: form.instructions, toolIds: form.toolIds, knowledgeBases: form.knowledgeBases, guardrails: form.guardrails, refusal: form.refusal.trim(), parts: form.parts, ...(stepped ? { steps: form.steps, notWhen: form.ending.notWhen, exit: form.ending.exit, returns: form.ending.returns, success: form.ending.success } : {}), note: note.trim() || undefined, baseVersion: newest.version });
+      const d = await save.mutateAsync({ name: form.name, useWhen: form.when.useWhen, loading: form.loading, instructions: form.instructions, toolIds: form.toolIds, knowledgeBases: form.knowledgeBases, guardrails: form.guardrails, refusal: form.refusal.trim(), parts: form.parts, ...(stepped ? { steps: form.steps, notWhen: form.when.notWhen.trim(), exit: form.ending.exit, returns: form.ending.returns, success: form.ending.success } : {}), note: note.trim() || undefined, baseVersion: newest.version });
       toast.success(`Saved draft v${d.versions[0].version}`, { description: `${EDIT_CLASS[d.versions[0].editClass].hint} Run the tests before requesting review.` });
     } catch (e) {
+      // In review and deprecated are 409 as well; only a newer version offers a reload.
+      if ((e as { code?: string }).code === 'stale_base') return setStale((e as Error).message);
+      const onStep = refusedSave(e);
+      if (onStep?.position?.step) {
+        setRefused(onStep);
+        stepsDoc.current?.focus({ field: 'steps', step: onStep.position.step });
+        return void toast.error('Couldn’t save the draft', { description: `Step ${onStep.position.step} needs a fix.` });
+      }
       toast.error('Couldn’t save the draft', { description: (e as Error).message });
     }
   };
+  // The page remounts this form when a newer version arrives; with nothing newer, the form goes back to what is saved.
+  const reload = async () => {
+    await current.refetch();
+    setStale(null);
+    discard();
+  };
+  const askNote = async () => {
+    if (whenValid) return setNoting(true);
+    await whenForm.current?.check();
+  };
 
   return (
-    <div className="flex flex-col gap-4" data-testid="skill-instructions-tab">
+    <div className="flex flex-col gap-4" data-testid="skill-editor">
       {locked && <p className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">{locked} Fields are read-only.</p>}
-      <SettingsSection title="Name and loading" description="On match: the model loads the skill when a message fits the use-when line; keep it specific. Always on: the skill is added to every turn of every agent that pins it, after the agent’s own instructions, for shared wording such as a disclosure or tone guide.">
-        <div className="flex flex-col gap-4">
-          <FormField id="si-name" label="Name" error={errors.name}>
-            <Input id="si-name" value={form.name} disabled={!!locked} onChange={(e) => setForm({ ...form, name: e.target.value })} className="bg-card" />
-          </FormField>
-          <FormField id="si-loading" label="Loading">
-            <Select value={form.loading} disabled={!!locked} onValueChange={(v) => setForm({ ...form, loading: v as SkillLoading })}>
-              <SelectTrigger id="si-loading" className="w-48 bg-card" data-testid="skill-loading-select">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {SKILL_LOADING_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </FormField>
-          {form.loading === 'on_match' && (
-            <FormField id="si-usewhen" label="Use when" error={errors.useWhen} hint={`${form.useWhen.length} of ${limit} characters.`}>
-              <Textarea id="si-usewhen" value={form.useWhen} disabled={!!locked} onChange={(e) => setForm({ ...form, useWhen: e.target.value })} className="min-h-16 bg-card" />
-            </FormField>
-          )}
-        </div>
-      </SettingsSection>
-
+      {stale && (
+        <Alert data-testid="skill-stale-base">
+          <Users />
+          <AlertTitle>Someone else saved this skill</AlertTitle>
+          <AlertDescription>
+            <p>{stale} Reloading shows their version and drops the changes you have not saved; copy anything you want to keep first.</p>
+            <Button variant="outline" size="sm" onClick={() => void reload()} disabled={current.isFetching} data-testid="skill-stale-reload">
+              <RefreshCw className="size-3.5" /> Reload
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+      {problems.length > 0 && (
+        <Alert data-testid="skill-publish-problems">
+          <TriangleAlert />
+          <AlertTitle>{found.length ? 'Can’t publish yet' : 'Couldn’t save'}</AlertTitle>
+          <AlertDescription>
+            <p>
+              {plural(problems.length, 'problem')}. Fix {problems.length === 1 ? 'it' : 'them'} in the text and save again.
+            </p>
+            {problems.map((p, i) => (
+              <p key={i} className="flex flex-wrap items-center gap-x-2" data-testid="skill-problem">
+                <span>{p.message}</span>
+                {p.position?.field === 'steps' && p.position.step && (
+                  <Button variant="link" size="sm" className="h-auto p-0" onClick={() => stepsDoc.current?.focus({ field: 'steps', step: p.position!.step! })}>
+                    Go to step {p.position.step}
+                  </Button>
+                )}
+              </p>
+            ))}
+          </AlertDescription>
+        </Alert>
+      )}
+      <SkillWhenSection key={`when-${discards}`} value={saved.when} onChange={setWhen} onValidity={setWhenValid} useWhenMax={limit} needsUseWhen={form.loading === 'on_match'} showNotWhen={stepped} notWhenProblem={problems.find((p) => p.position?.field === 'notWhen')?.message} disabled={!!locked} controls={whenForm} />
       {stepped ? (
         <SettingsSection title="Notes and steps" description="Notes hold for the whole skill. Steps run in order: each can name a tool, a check on what came back, and what happens when the check fails.">
-          <SkillDocumentEditor skillId={sk.id} name={form.name} value={{ instructions: form.instructions, steps: form.steps }} onChange={(doc) => setForm((f) => ({ ...f, ...doc }))} readOnly={!!locked} problems={sk.publishCheck.problems} />
+          <SkillDocumentEditor skillId={sk.id} name={form.name} value={{ instructions: form.instructions, steps: form.steps }} onChange={(doc) => (setRefused(null), setForm((f) => ({ ...f, ...doc })))} readOnly={!!locked} problems={problems} controls={stepsDoc} />
         </SettingsSection>
       ) : (
         <SettingsSection title="Instructions" description="Markdown with four sections: Steps, Rules, Examples and Output format.">
@@ -143,6 +187,29 @@ export function InstructionsTab({ skill: sk }: { skill: SkillDetail }) {
       )}
 
       <PartsSection parts={form.parts} onChange={(parts) => setForm({ ...form, parts })} disabled={!!locked} />
+
+      <SettingsSection title="Name and loading" description="On match: the model loads the skill when a message fits the use-when line; keep it specific. Always on: the skill is added to every turn of every agent that pins it, after the agent’s own instructions, for shared wording such as a disclosure or tone guide.">
+        <div className="flex flex-col gap-4">
+          <FormField id="si-name" label="Name" error={errors.name}>
+            <Input id="si-name" value={form.name} disabled={!!locked} onChange={(e) => setForm({ ...form, name: e.target.value })} className="bg-card" />
+          </FormField>
+          <FormField id="si-loading" label="Loading">
+            <Select value={form.loading} disabled={!!locked} onValueChange={(v) => setForm({ ...form, loading: v as SkillLoading })}>
+              <SelectTrigger id="si-loading" className="w-48 bg-card" data-testid="skill-loading-select">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SKILL_LOADING_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FormField>
+        </div>
+      </SettingsSection>
+
 
       <SettingsSection title="Tools, knowledge and guardrails" description="Changing any of these needs two reviewers. The agent must already hold each tool and knowledge base.">
         <div className="flex flex-col gap-4">
@@ -214,12 +281,12 @@ export function InstructionsTab({ skill: sk }: { skill: SkillDetail }) {
         <PageSaveActions
           dirty={dirty}
           saving={save.isPending}
-          onDiscard={() => (setForm(saved), setEndingValid(true), setDiscards((n) => n + 1))}
+          onDiscard={discard}
           save={
             // Saving asks for a version note and says what this kind of edit needs before it goes live.
-            <Popover open={noting} onOpenChange={setNoting}>
+            <Popover open={noting} onOpenChange={(open) => (open ? void askNote() : setNoting(false))}>
               <PopoverTrigger asChild>
-                <Button size="sm" disabled={!dirty || !!errors.name || !!errors.useWhen || !!errors.parts || !endingValid || save.isPending} data-testid="save-skill-draft">
+                <Button size="sm" disabled={!dirty || !!errors.name || !!errors.parts || !endingValid || save.isPending} data-testid="save-skill-draft">
                   Save {target}
                 </Button>
               </PopoverTrigger>
