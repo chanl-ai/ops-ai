@@ -128,6 +128,9 @@ def console_push(repo: Path, tmp_path: Path, local: str, _since: str) -> tuple[i
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir(exist_ok=True)
     ran = tmp_path / "suite-ran"
+    # Installed dependencies are present, so the hook gets as far as running the suite.
+    (repo / "node_modules").mkdir(exist_ok=True)
+    (repo / "apps/console/node_modules").mkdir(parents=True, exist_ok=True)
     (bin_dir / "node").write_text(f"#!/bin/sh\ntouch {ran}\nexit 1\n")
     (bin_dir / "node").chmod(0o755)
     env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "OPS_RUFF": RUFF, "HOME": str(repo)}
@@ -175,3 +178,16 @@ def test_commits_the_remote_has_are_still_linted(tmp_path: Path) -> None:
     repo, base, head = console_repo(tmp_path, "import os,sys\n")
     status, out, ran = console_push(repo, tmp_path, head, base)
     assert (status, ran) == (1, False) and "pushed files" in out, out
+
+
+def test_a_console_push_from_a_worktree_without_node_modules_names_the_missing_install(tmp_path: Path) -> None:
+    # A bare "test failed" from node --test reads as a real red suite; the hook must name the missing install instead.
+    repo, base = make_repo(tmp_path)
+    (repo / "apps/console/src").mkdir(parents=True)
+    (repo / "apps/console/src/a.ts").write_text("export const a = 1\n")
+    git(repo, "add", ".")
+    git(repo, "commit", "-qm", "console change")
+    done = push(repo, base, git(repo, "rev-parse", "HEAD"))
+    out = done.stdout + done.stderr
+    assert done.returncode != 0 and "pre-push: this worktree has no node_modules" in out and "pnpm install" in out, out
+    assert "console unit suite failed" not in out, out
