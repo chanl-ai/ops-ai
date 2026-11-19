@@ -105,6 +105,7 @@ OPS_FLAGS=mcp_gateway
 |---|---|
 | `mcp_gateway` | The address outside assistants (Claude, Cursor, Copilot) use to reach a team's tools, `/mcp/{env}/{team}`, and the console's MCP channel. Off, `/mcp` answers 404 `feature_off` |
 | `tool_search` | Agents with more tools than `OPS_TOOL_SEARCH_ABOVE` search for the one they need |
+| `area_tabs` | The console's area tabs in the top bar, with the sidebar listing one area at a time. Off, one sidebar lists every area as a section |
 
 The list above is a copy for reading; the registry is `packages/ops_service_kit/src/ops_service_kit/flags.py`, and
 `docker compose`, the Kubernetes overlay (`ops-origin`) and Fly (`[env]`) each pass `OPS_FLAGS` to every service. A name
@@ -120,6 +121,26 @@ For developers:
 | Read it in a service | `settings.feature_flags.on("<name>")`; a name the registry does not hold raises |
 | Read it in the console | `useFlag('<name>')`, or `flag: '<name>'` on a list entry filtered by `useFlagged` (`apps/console/src/hooks/flag-queries.ts`); both are off while the answer loads |
 | Remove it | The release that fully ships the feature deletes the entry, every check that reads it and this table's row, so an install never sets a flag to get a shipped feature |
+
+### Embedding model
+
+Knowledge search by meaning embeds every piece with one model per environment, set in `ops-ai.env` for every service:
+
+| Setting | Default | Notes |
+|---|---|---|
+| `OPS_EMBEDDING_ALIAS` | `bank-embed` | A models-service alias of kind `embedding`; bind it to the provider's model with the connect-model command |
+| `OPS_EMBEDDING_WIDTH` | `1536` | The width vectors are asked at. Above 1,998 every service stops at start, since no vector index on PostgreSQL or Azure SQL holds it; OpenAI's `text-embedding-3-large` is asked at 1,998 or fewer |
+
+Changing either embeds every piece again from what is stored; no file or page is read again. kb-service embeds with
+its own models-service key, `OPS_MODELS_KEY_KB` (issue it with the connect-model command's `--key-id purpose:kb`);
+without it every search runs on keywords and each result names the meaning lane as skipped (`no_embedding_model`).
+
+Meaning search stores each piece's vector in PostgreSQL with pgvector (`vector` 0.5 or newer, for its HNSW index).
+`builtin`, compose and CI run `pgvector/pgvector:pg17`. A database of your own needs the extension offered
+(`SELECT * FROM pg_available_extensions WHERE name = 'vector'`; Azure Database for PostgreSQL lists it under
+`azure.extensions`); the knowledge chain creates it, and a migration on a server without it stops with PostgreSQL's
+error naming the extension. A local stack started on the older `postgres:17-alpine` image
+moves with `make db-move-image`, which dumps every database, starts the new image on a new volume and restores.
 
 ### What is proven and what is not
 
@@ -203,7 +224,7 @@ machine: they name the mirror's file URLs, so do not commit them.
 | Every locked version is at least 30 days old | `scripts/deps_audit.py age`, in the lane: Nexus's free edition has no age rule, so the lane enforces it |
 | No critical advisory (CVSS 9.0 or higher) and no AGPL or GPL licence outside `deploy/mirror-test/audit-baseline.txt` | `scripts/deps_audit.py vulns` (osv-scanner; Sonatype OSS Index too when `OSSINDEX_TOKEN` and `OSSINDEX_USER` are set) and `licenses` |
 | `deps-doctor` names a package the mirror blocks, and the relock succeeds | Run by hand on 2026-10-27 against the lane's Nexus with six 1.17.0 blocked by a routing rule (`deploy/mirror-test/nexus.sh block`): the doctor named it (403, newest served 1.16.0), the relock moved six to 1.16.0, the install and 180 tests passed. Not part of the nightly lane |
-| A mirror that is not Nexus | **unverified**: the lane runs Nexus 3.70.4 only |
+| A mirror that is not Nexus | **unverified**: the proof runs the current sonatype/nexus3 only |
 
 ### By hand
 
@@ -413,30 +434,6 @@ By hand, and on Kubernetes:
 | A drift check compares a live database with what its release expects | It lists every missing, extra or changed object |
 | Runs in flight keep their version | A waiting run resumes on the new release with the workflow or agent version it started on |
 | The script has not yet upgraded across two releases that change the schema | The first release has no earlier one to upgrade from |
-
-### Update from a downloaded diff
-
-For a team that can download files from GitHub (in a browser, or over HTTPS through a proxy) but cannot use git. It works on a source install, a git clone or a folder from a downloaded zip. Your `.env`, `.data` and settings are not part of a diff and stay as they are.
-
-```
-make version
-make update-download TO=<release tag or commit>
-make update-from-diff FILE=.run/updates/<the file it printed> TO=<release tag or commit>
-make up
-```
-
-| Step | What happens |
-|---|---|
-| `make version` | Prints the installed version from the `VERSION` file. In a git clone it records the current commit the first time. In a folder without git, record it once: `make version SET=<commit or release you installed>` |
-| `make update-download` | Downloads the changes from your version to `TO` into `.run/updates/` (it reads `HTTPS_PROXY`) and checks the file is not empty and starts at your version. With no network access from the server, run `make update-url` instead, open the address it prints in a browser, save the page as a file, and use that file below |
-| `make update-from-diff` | Checks again that the file starts at your version, applies it (`git apply --3way` in a git clone, `patch -p1` elsewhere) and records `TO` in `VERSION` |
-| `make up` | Applies any database migrations the new version brings, then starts it |
-
-| If | Then |
-|---|---|
-| The file does not start at your version | Nothing is changed and the files that differ are listed. Check `make version`, or you edited a tracked file: put it back first |
-| The update changes a binary file (an image, for example) | A diff cannot carry it. The update applies everything else and prints each such file with an address to download it from; copy it over the installed one |
-| `TO` is `main` | Refused. Use a release tag or a commit, so the next update starts from a known place |
 
 ### Back up and restore
 

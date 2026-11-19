@@ -128,4 +128,6 @@ AI nodes declare why they exist, their input, instruction, schema, model alias a
 
 ## Start surfaces
 
-Request, hosted form (members-only in the console; a signed public link only when the embed app's origin is set), batch, mailbox, service event, parent workflow, Ops Assistant start card, specialist agent `workflow:<id>`, and a scoped API key are built. Signed webhook, schedule and poll stay **Planned**.
+Request, hosted form (members-only in the console; a signed public link only when the embed app's origin is set), batch, mailbox, service event, parent workflow, Ops Assistant start card, specialist agent `workflow:<id>`, and a scoped API key are built. A schedule trigger is built for one run at a due time, once per key; repeating schedules, signed webhook and poll stay **Planned**.
+
+Runnable examples in Python, TypeScript and the command line: [Workflow examples](examples/workflows.md).

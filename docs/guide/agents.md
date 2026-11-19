@@ -22,7 +22,9 @@ ops.agents.apply("resources/agent.yaml")
 ops.agents.chat("ag_guide", "What documents open a business account?")
 ```
 
-`ops.agents.eval(id, cases)` scores dataset cases on a published agent; the `opsai agents eval` verb is **Planned**. Stream, wait and background runs stay **Planned** until the Agent Run API ships.
+`ops.agents.eval(id, cases)` scores dataset cases on a published agent from Python; the `opsai agents eval` verb and a TypeScript method are **Planned**. `ops.agents.run(id, message, mode=...)` and `opsai agents run --mode` start an agent in wait, stream or background mode; a TypeScript method is **Planned**. A background run is drained by the calling process, so it ends if that process does. `ops.agents.schedule(id, message, due_at=...)` arms one run at a due time, once per key; repeating schedules are **Planned**.
+
+Runnable examples for each of these, in Python, TypeScript and the command line: [Agent examples](examples/agents.md).
 
 ## Examples
 

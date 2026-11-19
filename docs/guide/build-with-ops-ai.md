@@ -59,4 +59,6 @@ Example helpers and comments name the folder or the published id. They do not ci
 
 ## Surfaces
 
-Python, TypeScript and `opsai` expose the same lifecycle: validate, apply, publish, run in test mode, inspect, evaluate an agent. Replay, workflow evaluation and the Agent Run API stay **Planned** on [developer-surface-coverage.md](developer-surface-coverage.md).
+Python, TypeScript and `opsai` expose the same lifecycle: validate, apply, publish, run in test mode, inspect, evaluate an agent. Replay and workflow evaluation stay **Planned**; agent runs and agent evaluation are built on some surfaces only, as [developer-surface-coverage.md](developer-surface-coverage.md) lists.
+
+Short examples for each surface are on [Examples for builders](examples/README.md).

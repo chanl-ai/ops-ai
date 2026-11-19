@@ -17,7 +17,7 @@ use case or test; Partial names what runs and what does not; Planned means desig
 | Testing a draft agent on its own page before publishing | Built |
 | An agent as a workflow step, and a published workflow as an agent's tool | Built |
 | Chat widgets on your other web pages | Partial: widgets are configured, published and keyed in the console; the app that serves them has no image yet |
-| Agents that run on a schedule toward a goal and report back, with no chat | Planned |
+| Agents that run on a schedule toward a goal and report back, with no chat | Partial: one run at a due time, once per key; repeating schedules planned |
 
 ## Workflows, tasks and cases
 
@@ -32,7 +32,8 @@ use case or test; Partial names what runs and what does not; Planned means desig
 | Crash safety: every step journaled, a write made once, a dead worker's run taken over | Built |
 | Versions pinned per run; publishing through a second person's review | Built |
 | Triggers: an API request, a team mailbox, an event from another service | Built |
-| Triggers: a schedule, an incoming webhook, polling a system | Planned |
+| Triggers: a schedule | Partial: one run at a due time, once per key; repeating schedules planned |
+| Triggers: an incoming webhook, polling a system | Planned |
 | Code steps | Partial: formulas and transforms in a bounded sandbox; no general code runtime |
 | Load figures for many concurrent runs | Planned |
 
