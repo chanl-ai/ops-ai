@@ -1,0 +1,68 @@
+/**
+ * What a line of an agent brief or a skill step can point at, as agents-service's `GET /v1/references` answers
+ * (`ReferenceSearch`) and as a publish check reports a problem (`PublishBlocker`). The field names are the wire's, so
+ * these become aliases of the SDK's types once the route is in the generated client.
+ */
+export type RefKind = 'tool' | 'knowledge' | 'skill' | 'agent' | 'workflow';
+
+/** A reference as stored in text: `@kind:id`. */
+export interface Ref {
+  kind: RefKind;
+  id: string;
+}
+
+export interface ReferenceItem extends Ref {
+  /** The item's current name; a chip shows this, never the id. */
+  label: string;
+  hint: string | null;
+  /** The agent or skill being edited already holds it; null for a kind that is not held. */
+  held: boolean | null;
+  /** What picking it adds, in product copy, when it is not held. */
+  adds: string | null;
+  needsApproval: boolean;
+  /** Why it cannot be picked, when it cannot. */
+  disabled: string | null;
+}
+
+export interface ReferenceGroup {
+  kind: RefKind;
+  label: string;
+  items: ReferenceItem[];
+  nextCursor: string | null;
+}
+
+/** Only kinds the person may view, and only groups with items. */
+export interface ReferenceSearch {
+  groups: ReferenceGroup[];
+}
+
+/** The agent or the skill whose document is being edited: exactly one. */
+export type ReferenceContext = { forAgent: string } | { forSkill: string };
+
+export interface BlockerPosition {
+  /** For example `brief.purpose`, `brief.never`, `steps`. */
+  field: string;
+  /** 1-based. */
+  step: number | null;
+  index: number | null;
+}
+
+export interface PublishBlocker {
+  kind:
+    | 'missing_field'
+    | 'missing_reference'
+    | 'unavailable_reference'
+    | 'bad_step'
+    | 'bad_check'
+    | 'bad_exit'
+    | 'sub_skill_not_held'
+    | 'prompt_rule_in_text'
+    | 'review_open'
+    | 'already_published'
+    | 'deprecated'
+    | 'too_long';
+  /** For a reference blocker, `<kind>:<id>`. */
+  id: string | null;
+  position: BlockerPosition | null;
+  message: string;
+}
