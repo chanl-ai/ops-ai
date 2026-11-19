@@ -3,8 +3,12 @@ walked node by node. Nothing is compiled or executed, and a node the grammar doe
 
 The grammar: numbers, strings, `true`, `false`, `null` and lists of them; the roots `result` and `inputs`; `.field`
 and `[integer]` paths (a missing key or index is null, never an error); comparisons, `in`, `is` against `true`,
-`false` or `null`; `and`, `or`, `not`; arithmetic on numbers; and `len`, `lower`, `contains`, `exists`. A comparison
-with null, or an ordered one on a value that is not a number, is false.
+`false` or `null`; `and`, `or`, `not`; arithmetic on numbers; and `len`, `lower`, `contains`, `exists`.
+
+A rule holds only when it is known to be true. A comparison with a value that is not there (null), or an ordered one
+on a value that is not a number, has no answer, and neither has its `not`: `result.frozen is not false` and
+`not (result.balance < 0)` do not hold when the field is missing. `and` and `or` carry on from the side that has an
+answer. Only `exists(x)`, `x is null` and `x is not null` ask whether a value is there, and always have an answer.
 """
 
 from __future__ import annotations
@@ -145,12 +149,11 @@ class _Walker:
         if isinstance(node, ast.UnaryOp):
             v = self.value(node.operand)
             if isinstance(node.op, ast.Not):
-                return not v
+                return None if v is None else not v
             return -v if _number(v) else None
         if isinstance(node, ast.BoolOp):
-            if isinstance(node.op, ast.And):
-                return all(self.value(v) for v in node.values)
-            return any(self.value(v) for v in node.values)
+            parts = [self.value(v) for v in node.values]
+            return _all(parts) if isinstance(node.op, ast.And) else _any(parts)
         if isinstance(node, ast.BinOp):
             return self._arithmetic(node)
         if isinstance(node, ast.Compare):
@@ -171,34 +174,38 @@ class _Walker:
             return left * right
         return left / right if right else None
 
-    def _compare(self, node: ast.Compare) -> bool:
+    def _compare(self, node: ast.Compare) -> bool | None:
         left = self.value(node.left)
+        links: list[bool | None] = []
         for op, right_node in zip(node.ops, node.comparators, strict=True):
             right = self.value(right_node)
-            if not self._holds(op, left, right):
-                return False
+            links.append(self._holds(op, left, right))
             left = right
-        return True
+        return _all(links)
 
-    def _holds(self, op: ast.cmpop, left: Any, right: Any) -> bool:
+    def _holds(self, op: ast.cmpop, left: Any, right: Any) -> bool | None:
+        """Whether one comparison holds; None when it has no answer."""
         if isinstance(op, ast.Is | ast.IsNot):
+            # `is null` asks whether the value is there. Against true or false, a value that is not there is neither.
+            if right is not None and left is None:
+                return None
             same = left is right
             return same if isinstance(op, ast.Is) else not same
         if isinstance(op, ast.In | ast.NotIn):
             if left is None or not isinstance(right, list | str):
-                return False
+                return None
             if isinstance(right, str) and not isinstance(left, str):
-                return False
+                return None
             found = left in right
             return found if isinstance(op, ast.In) else not found
         if left is None or right is None:
-            return False
+            return None
         if isinstance(op, ast.Eq | ast.NotEq):
             # True is not 1: a yes or no value equals only a yes or no value.
             equal = left == right and isinstance(left, bool) == isinstance(right, bool)
             return equal if isinstance(op, ast.Eq) else not equal
         if not (_number(left) and _number(right)):
-            return False
+            return None
         if isinstance(op, ast.Lt):
             return left < right
         if isinstance(op, ast.LtE):
@@ -216,7 +223,22 @@ class _Walker:
         if name == "lower":
             return args[0].lower() if isinstance(args[0], str) else None
         text, part = args
-        return isinstance(text, str) and isinstance(part, str) and part in text
+        return part in text if isinstance(text, str) and isinstance(part, str) else None
+
+
+def _all(parts: list[Any]) -> bool | None:
+    """`and` over parts of which some may have no answer (None): false when one is false, else unanswered when one
+    has no answer."""
+    if any(p is not None and not p for p in parts):
+        return False
+    return None if any(p is None for p in parts) else True
+
+
+def _any(parts: list[Any]) -> bool | None:
+    """`or` over parts of which some may have no answer: true when one is true, else unanswered when one has none."""
+    if any(parts):
+        return True
+    return None if any(p is None for p in parts) else False
 
 
 def _rule(text: str) -> ast.expr:
@@ -248,7 +270,8 @@ def _is_inputs(node: ast.AST) -> bool:
 
 
 def evaluate(text: str, scope: Scope) -> bool:
-    """Whether the rule holds for `scope` (`result`, `inputs`). Raises `CheckError` for a text outside the grammar."""
+    """Whether the rule is known to hold for `scope` (`result`, `inputs`): a rule with no answer does not. Raises
+    `CheckError` for a text outside the grammar."""
     return bool(_Walker(scope).value(_rule(text)))
 
 
