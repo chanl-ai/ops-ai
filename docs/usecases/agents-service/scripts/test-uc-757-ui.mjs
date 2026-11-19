@@ -70,6 +70,13 @@ await withUiStack(
       await page.getByTestId('skill-document').waitFor({ timeout: 120_000 });
       const empty = await page.getByTestId('skill-document').innerText();
       check('10 written notes show as saved and a blank skill\'s notes start empty', /Say what each step found/.test(notes) && !/## Steps|## Rules/.test(empty), { notes, empty });
+      // A check the model judges that states a comparison says to write it as a rule; a sentence that compares nothing does not.
+      const judged = await made('/v1/skills', { name: `Judged walk ${RUN}`, ownerTeam: 'team_ops', useWhen: 'A balance is checked.', instructions: '', steps: [{ do: 'Read the balance aloud.', check: { text: 'The balance is above zero.' } }, { do: 'Say goodbye.', check: { text: 'The caller said goodbye.' } }] });
+      await page.goto(`${consoleUrl}/build/skills/${judged.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await page.getByTestId('skill-document').getByRole('group', { name: 'Step 2' }).waitFor({ timeout: 60_000 });
+      const hinted = page.getByTestId('check-rule-hint');
+      await hinted.first().waitFor({ timeout: 30_000 }).catch(() => undefined);
+      check('10 a judged check that compares a value says to write a rule, and only that one', (await hinted.count()) === 1 && /result\.balance > 0/.test(await hinted.first().innerText()), await page.getByTestId('skill-document').innerText());
       await page.goto(`${consoleUrl}/build/skills/${skill.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await page.getByTestId('skill-document').getByRole('group', { name: 'Step 3' }).waitFor({ timeout: 60_000 });
       const endings = page.getByTestId('skill-results-section');

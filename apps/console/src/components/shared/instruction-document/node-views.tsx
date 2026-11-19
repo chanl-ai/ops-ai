@@ -129,7 +129,7 @@ export function StepView({ node, editor, getPos, updateAttributes }: ReactNodeVi
 }
 
 // A sentence that states a comparison: a model can pass it on a value that fails it, and a rule cannot.
-const COMPARES = /\b(above|below|over|under|at least|at most|more than|less than|greater|fewer|exceeds?|equals?|positive|negative|non-?zero|between|no more than|no less than)\b|[<>=]/i;
+const COMPARES = /\b(above|below|at least|at most|more than|less than|greater|fewer|exceeds?|equals?|positive|negative|non-?zero|between|no more than|no less than)\b|[<>]/i;
 
 /** A step's check. The save decides whether it is a rule the service runs or a sentence the model judges. */
 export function CheckView({ node, updateAttributes }: ReactNodeViewProps) {

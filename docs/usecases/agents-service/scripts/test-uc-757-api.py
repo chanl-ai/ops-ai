@@ -240,10 +240,10 @@ with bank_stack() as s:
     approver = s.who["approver"]
     listed = s.api.get("/reviews", headers=approver)
     opened = s.api.get(f"/reviews/{thread}", headers=approver)
-    routes = [s.api.get(path, headers=approver).status_code for path in ("/v1/tasks", "/v1/publish-requests")]
+    mine = s.api.get("/reviews", headers=me)
     check(
-        "6 the write a test chat waits on is listed in Human Tasks and opens for a reviewer",
-        listed.status_code == 200 and thread in listed.text and opened.status_code == 200,
-        (listed.status_code, thread in listed.text, opened.status_code, routes),
+        "6 the write a test chat waits on is in Human Tasks for the reviewer and the asker, and opens",
+        listed.status_code == 200 and thread in listed.text and opened.status_code == 200 and thread in mine.text,
+        (listed.status_code, thread in listed.text, opened.status_code, mine.status_code, thread in mine.text),
     )
 finish()

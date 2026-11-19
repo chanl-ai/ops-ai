@@ -387,6 +387,9 @@ async def test_one_skill_runs_at_a_time_and_a_sub_skill_returns_to_its_step() ->
     )
     model = Script(("load_skill", {"slug": "refund-a-charge", "matched": "refund"}), "Which charge?")
     begun, events = await reply(refund, model)
+    index = model.instructions[0]
+    assert "before calling any tool its steps call" in index, "a matching request starts the skill, not its tool"
+    assert "Its steps call: lookup_charge, refund_charge." in index, index
     assert "step 1 of 3" in json.dumps(model.returned[0]), model.returned
     assert "# Now: Refund a charge, step 1 of 3" in model.instructions[1], model.instructions[1]
     assert "lookup_charge" in model.offered[1] and "refund_charge" not in model.offered[1], model.offered[1]
@@ -415,6 +418,27 @@ async def test_one_skill_runs_at_a_time_and_a_sub_skill_returns_to_its_step() ->
     failed, _ = await reply(close, Script(start, ("exit", {"name": "failed", "reason": "No date of birth."}), "Sorry."))
     assert run_of(failed).running is None
     assert ("sk_close", "escalate", 1) in ended(run_of(failed)), run_of(failed)
+
+
+async def test_a_check_the_model_judges_is_given_the_result_as_the_tool_returned_it() -> None:
+    """The model is shown a result as it is drawn for the person; judging a sentence on that, a real model passed
+    "the amount is under 500" on a charge of 900."""
+    steps = program(
+        {
+            "do": "Look up the charge.",
+            "use": {"kind": "tool", "id": "lookup_charge"},
+            "check": {"text": "The amount is under 500.", "by": "model"},
+        },
+        {"do": "Tell the person."},
+    )
+    skill = stepped("sk_judged", 1, "Judge a charge", "judge-a-charge", steps)
+    ask = TurnRequest("t1", "th9", agent([skill], max_tool_calls=None), [LOOKUP], user_turn="Check CH-1.")
+    model = Script(("switch_skill", {"slug": "judge-a-charge"}), ("lookup_charge", {"chargeId": "CH-1"}), "It is 900.")
+    done, _ = await reply(ask, model, Systems(lookup_charge=_amount))
+    told = json.dumps(model.returned[1])
+    assert "Now confirm: The amount is under 500." in told and '\\"amount\\": 900' in told, told
+    assert "only if that holds for this result" in told, told
+    assert run_of(done).running.step == 1, "the step waits for the model's own step_done"
 
 
 # --- approval, personal data, and a republished pin ---
