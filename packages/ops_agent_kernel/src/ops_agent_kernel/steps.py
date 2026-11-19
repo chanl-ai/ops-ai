@@ -514,8 +514,10 @@ def _sub_ended(
     failed. A rule of the step's own that does not hold is a failed check like any other, and takes one.
 
     The step's result holds what the sub-skill handed back only when it ended as done. With any other exit the model
-    names the results itself at any step, so a rule such as `result.ok` would pass on its word; they are left out,
-    and such a rule finds nothing and does not hold."""
+    names the results itself at any step, so a rule such as `result.ok` would pass on its word; they are left out.
+    And after any exit but done the rule has to depend on the exit: it must hold for this exit and not hold for
+    `failed`, the one ending no skill lists and no step passes on. A rule that reads something else (an input, a
+    result that is not there) says nothing about this ending, so it does not carry the step on."""
     r = run.running
     assert r is not None
     r.sub = None
@@ -526,7 +528,8 @@ def _sub_ended(
         r.results[str(r.step)] = _kept(value, False)
         _failed(run, skills, told)
         return
-    if check is not None and ruled and not _holds(check, value, r, told):
+    names_exit = name == "done" or (check is not None and not _holds(check, {"exit": "failed"}, r, []))
+    if check is not None and ruled and not (_holds(check, value, r, told) and names_exit):
         r.results[str(r.step)] = _kept(value, False)
         _hold(run, skills)
         _failed(run, skills, told)

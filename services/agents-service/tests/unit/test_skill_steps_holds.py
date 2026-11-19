@@ -92,7 +92,21 @@ SKIP_IS_FINE: Call = ("switch_skill", {"slug": "skip-is-fine"})
 ESCALATE: Call = ("exit", {"name": "escalate"})
 SKIP: Call = ("exit", {"name": "skip"})
 SKIP_OK: Call = ("exit", {"name": "skip", "returns": {"ok": True}})
-RUNS_LOOK_OK: Call = ("switch_skill", {"slug": "runs-look-ok"})
+# The rule on a step that runs the look-ok skill, by the name of the skill that has that step.
+PARENT_RULES = {
+    "ok_true": "result.ok is true",
+    "ok_ne_false": "result.ok != false",
+    "ok_not_false": "result.ok is not false",
+    "tier": 'inputs.tier == "gold"',
+    "names_skip": 'result.exit in ["done", "skip"]',
+    "not_failed": 'result.exit != "failed"',
+}
+
+
+def after_skip(key: str) -> Call:
+    return ("switch_skill", {"slug": f"rule-{key}", "inputs": {"tier": "gold"}})
+
+
 ID_CHECK = tool("check_id")
 GIVE_UP: Call = ("exit", {"name": "failed"})
 DONE: Call = ("step_done", {})
@@ -253,21 +267,24 @@ def book(if_not: dict[str, Any], version: int = 1) -> list[Skill]:
                 returns=[{"name": "ok", "type": "yes_no"}],
             ),
         ),
-        stepped(
-            "sk_runs_look_ok",
-            1,
-            "Runs look ok",
-            "runs-look-ok",
-            program(
-                {
-                    "do": "Look.",
-                    "use": {"kind": "skill", "id": "sk_look_ok"},
-                    "check": {"text": "result.ok is true", "by": "rule"},
-                    "ifNot": once,
-                },
-                paid,
-            ),
-        ),
+        *[
+            stepped(
+                f"sk_rule_{key}",
+                1,
+                f"Rule {key}",
+                f"rule-{key}",
+                program(
+                    {
+                        "do": "Look.",
+                        "use": {"kind": "skill", "id": "sk_look_ok"},
+                        "check": {"text": text, "by": "rule"},
+                        "ifNot": once,
+                    },
+                    paid,
+                ),
+            )
+            for key, text in PARENT_RULES.items()
+        ],
         stepped(
             "sk_skip_is_fine",
             1,
@@ -506,11 +523,23 @@ THREADS = [
     ),
     # The step's rule reads the results a skill hands back only when it ended as done: with any other exit the
     # model names the results itself, so it could say ok and carry the step past the check that failed inside.
-    Thread(
-        "a listed exit that hands back the result the step's rule reads",
-        [[RUNS_LOOK_OK, look("CH-1"), SKIP_OK, refund("CH-1")]],
-        ["lookup_charge"],
-    ),
+    # After any exit but done, the step's rule must depend on the exit: it has to hold for this exit and not hold
+    # for one the skill does not list. A rule about a result, or about something else altogether, does not pass.
+    *[
+        Thread(
+            f"after a failed check inside and a listed exit, the step's rule is {PARENT_RULES[key]}",
+            [[after_skip(key), look("CH-1"), SKIP_OK, refund("CH-1")]],
+            ["lookup_charge", "refund_charge"] if goes_on else ["lookup_charge"],
+        )
+        for key, goes_on in {
+            "ok_true": False,
+            "ok_ne_false": False,
+            "ok_not_false": False,
+            "tier": False,
+            "names_skip": True,
+            "not_failed": True,
+        }.items()
+    ],
     Thread(
         "a step with a rule of its own that accepts a listed exit goes on",
         [[SKIP_IS_FINE, SKIP, refund("CH-2")]],
