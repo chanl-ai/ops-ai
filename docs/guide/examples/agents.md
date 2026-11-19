@@ -17,7 +17,8 @@ Connect first: see [Before you start](README.md#before-you-start). Each example 
 | Answer from a knowledge base | built | built | built |
 | Grant a tool | built | built | built |
 | Test a draft | built | built | built |
-| Run in the background | built | upcoming | built |
+| Run and stream every event | built | upcoming | built |
+| Run in the background | partial | upcoming | upcoming |
 | Score with cases | built | upcoming | upcoming |
 
 ## Create and publish an agent
@@ -255,7 +256,7 @@ skills and guardrails that applied, and the time it took.
 conversation later.
 
 **When to use it.** Use `wait` for a script that needs the reply, `stream` when you want every event, and `background`
-when you only need to start the work.
+when your program has other work to do while the agent replies.
 
 ```python
 started = ops.agents.run(agent["id"], "Summarise the returns policy.", mode="background")
@@ -266,7 +267,7 @@ for recent in ops.agents.trace(agent["id"], limit=5):
 ```
 
 ```bash
-opsai agents run "$AGENT" --message "Summarise the returns policy." --mode background
+opsai agents run "$AGENT" --message "Summarise the returns policy." --mode stream
 opsai agents trace "$AGENT"
 ```
 
@@ -275,6 +276,10 @@ opsai agents trace "$AGENT"
 | `wait` | The collected reply, as `chat` returns it. The default |
 | `stream` | The same reply, with every event kept in `chunks` |
 | `background` | The thread and run ids at once. The reply is on the thread when it finishes |
+
+A background run is carried by the program that started it. Keep that program running until the reply is on the
+thread: a script that exits straight after the call loses the run, and so does the command line, which exits as soon
+as it has printed the ids. Runs that carry on without the caller are upcoming.
 
 ## Score with cases
 

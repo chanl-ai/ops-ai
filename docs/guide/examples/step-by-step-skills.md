@@ -1,7 +1,7 @@
 # Step-by-step skills
 
-Status: upcoming. Skills with numbered steps are written and waiting to be released. This page describes how they
-will work, and its code has not been run against a release.
+Status: upcoming. Skills with numbered steps are being built. This page describes how they will work, and its code
+has not been run against a release.
 
 > [!NOTE]
 > **Upcoming.** Everything on this page describes a feature that is not in the current release. Names and fields may
@@ -76,11 +76,12 @@ TypeScript:
 
 ```ts
 import { readFileSync } from 'node:fs';
+import { parse } from 'yaml';
 import { OpsAI } from '@chanl-ai/ops-ai';
 
 const ops = new OpsAI();
 
-const skill = await ops.skills.create(JSON.parse(readFileSync('refund-a-charge.json', 'utf8')));
+const skill = await ops.skills.create(parse(readFileSync('refund-a-charge.yaml', 'utf8')));
 await ops.skills.publish(skill.id, 'First version');
 ```
 

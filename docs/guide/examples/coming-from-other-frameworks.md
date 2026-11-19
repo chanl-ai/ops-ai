@@ -279,7 +279,7 @@ run that waits for a person holds no worker. An agent's reply is saved when it p
 after the decision.
 
 **Upcoming.** Agent replies that run on workers and survive a restart. Today a reply runs inside the request, and a
-background run from Python ends if the calling program does. Replaying a workflow run, or starting again from one
+background run from Python is lost if the calling program exits first. Replaying a workflow run, or starting again from one
 step, is upcoming too.
 
 ## 19. Scheduled agents
