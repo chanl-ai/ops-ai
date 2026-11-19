@@ -813,6 +813,8 @@ def snapshot(skill_id: str, version: int, content: SkillContent, tokens: int, *,
             "knowledgeBases": content["knowledgeBases"],
             "tokens": tokens,
             **({"parts": content.get("parts")} if content.get("parts") else {}),
+            # What it needs to start, so a turn refuses to start it while a required input is missing.
+            **({"inputs": content.get("inputs")} if content.get("inputs") else {}),
             # A skill with steps is pinned with them, so the runtime serves the program with no lookup.
             **{k: v for k in skill_content.KEYS if (v := cast(Json, content).get(k))},
             "attachedBy": by,
@@ -1151,7 +1153,13 @@ async def skill_turn(
         return None
     seen: set[tuple[str, str]] = set()
     unique = [s for s in extra if (s.skill_id, s.part) not in seen and not seen.add((s.skill_id, s.part))]
-    return {"skills": [asdict(s) for s in unique], "carried": carried}
+    return {"skills": [_wired(s) for s in unique], "carried": carried}
+
+
+def _wired(skill: KernelSkill) -> dict[str, JsonValue]:
+    """A kernel skill as JSON for the graph's state; `agent_wrapper` reads the program back into its model."""
+    program = skill.program.model_dump(mode="json", by_alias=True) if skill.program is not None else None
+    return {**asdict(replace(skill, program=None)), "program": program}
 
 
 class SkillTurn(TypedDict):

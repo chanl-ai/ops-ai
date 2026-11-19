@@ -11,7 +11,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, cast
 
-import pytest
 from httpx import AsyncClient
 
 from ops_agents.activities.catalog import load_catalog
@@ -126,7 +125,6 @@ async def test_a_save_keeps_the_steps_and_refuses_a_mistyped_rule_or_a_skill_tha
         assert kept["version"] == 1 and kept["content"]["steps"] == content["steps"], "a refused save stored nothing"
 
 
-@pytest.mark.skip(reason="waits on the rename PRs")
 async def test_an_attached_skill_runs_with_its_steps_and_a_pin_saved_before_steps_still_loads(tmp_path: Path) -> None:
     async with _app(str(tmp_path / "db.sqlite")) as c:
         sid = await _published(c, {**REFUND, **PROGRAM})

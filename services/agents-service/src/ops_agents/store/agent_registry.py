@@ -149,6 +149,9 @@ SPEC_FIELDS = (
     "limits",
     "widgetPins",
     "widgets",
+    "brief",
+    "promptMode",
+    "patterns",
 )
 
 
@@ -186,6 +189,8 @@ def changes_between(old: Json | None, new: Json) -> list[str]:
         "limits": "caller limits",
         "widgetPins": "widgets",
         "widgets": "widget settings",
+        "promptMode": "prompt mode",
+        "patterns": "thinking and parallel reads",
     }
     out = [f"Changed {labels.get(k, k)}" for k in SPEC_FIELDS if old.get(k) != new.get(k)]
     # A guardrail switched off or on names itself, so the review says what stopped (or started) being checked.

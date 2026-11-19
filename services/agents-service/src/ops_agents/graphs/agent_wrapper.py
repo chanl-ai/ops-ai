@@ -22,6 +22,7 @@ from ops_agent_kernel.types import (
     Passage,
     Resume,
     Skill,
+    SkillInput,
     ToolGrant,
     TranscriptMessage,
     TurnRequest,
@@ -34,6 +35,7 @@ from ops_agents.activities.tool_directory import CatalogTools, OperationRef
 from ops_agents.activities.tools import fill
 from ops_agents.domain.accounts import chosen_accounts
 from ops_contracts.chat import EffectiveSettings
+from ops_contracts.skill_run import SkillProgram
 from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.ids import new_id
 
@@ -70,7 +72,15 @@ def _with_turn_skills(settings: AgentSettings, turn: Json | None) -> AgentSettin
         return settings
     extra: list[Skill] = []
     for d in cast(list[Json], turn.get("skills") or []):
-        fields: dict[str, Any] = {**d, "guardrails": tuple(cast(list[str], d.get("guardrails") or []))}
+        fields: dict[str, Any] = {
+            **d,
+            "guardrails": tuple(cast(list[str], d.get("guardrails") or [])),
+            # State is JSON: the steps and the inputs come back as the kernel's own types.
+            "program": SkillProgram.model_validate(d["program"]) if d.get("program") else None,
+            "inputs": tuple(
+                SkillInput(str(i["name"]), bool(i.get("required"))) for i in cast(list[Json], d.get("inputs") or [])
+            ),
+        }
         extra.append(Skill(**fields))
     keys = {(s.skill_id, s.part) for s in extra}
     kept = [s for s in settings.skills if (s.skill_id, s.part) not in keys]
