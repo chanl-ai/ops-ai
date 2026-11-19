@@ -20,8 +20,11 @@ import json, os, sys
 args = sys.argv[1:]
 state = json.loads(os.environ["FAKE_GH"])
 if args[:2] == ["run", "list"]:
-    print(json.dumps(state["runs"][args[args.index("--workflow") + 1]]))
-elif args[:2] == ["run", "view"] and "--job" in args:
+    workflow = args[args.index("--workflow") + 1]
+    if workflow not in state["runs"]:
+        sys.exit(f"HTTP 404: Not Found (https://api.github.com/repos/o/r/actions/workflows/{workflow})")
+    print(json.dumps(state["runs"][workflow]))
+elif args[:1] == ["api"] and args[1].endswith("/logs"):
     print(state["log"])
 elif args[:2] == ["run", "view"]:
     print(json.dumps({"jobs": state["jobs"][args[2]]}))
@@ -90,7 +93,7 @@ def release_pr(work: Path, tmp: Path, gh_state: dict) -> subprocess.CompletedPro
 
 STAGING_JOB = {"name": "staging / deploy", "conclusion": "success", "databaseId": 11}
 READY = {
-    "runs": {"ci.yml": [{"databaseId": 1, "conclusion": "success", "status": "completed"}], "deploy-staging.yml": []},
+    "runs": {"ci.yml": [{"databaseId": 1, "conclusion": "success", "status": "completed"}]},
     "jobs": {"1": [STAGING_JOB]},
     "log": "stg-deploy: click walk (41 OK, 0 FAIL)",
 }
