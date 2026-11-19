@@ -134,4 +134,4 @@ def masked_run(run: SkillRunState) -> SkillRunState:
         if running.sub is not None:
             running = running.model_copy(update={"sub": _masked_frame(running.sub)})
     history = [h.model_copy(update={"returns": masked(h.returns)}) for h in run.history]
-    return SkillRunState(running=running, history=history)
+    return run.model_copy(update={"running": running, "history": history})

@@ -88,6 +88,10 @@ async def test_a_failed_skill_holds_the_write_of_the_sub_skill_it_never_reached(
     two, _ = await reply(replace(carrying(ask, run_of(result)), turn_id="t2", user_turn="Pay it out."), later, systems)
     assert all("refund_charge" not in offered for offered in later.offered), later.offered
     assert [c for c, _ in systems.calls] == ["lookup_charge"], systems.calls
+    # It does not stay running on a step whose tool it cannot be offered: it ends, and the model is told why.
+    assert run_of(two).running is None, run_of(two)
+    why = "refund_charge is held because check-then-pay failed its check; start check-then-pay again."
+    assert why in json.dumps(later.returned[0]), later.returned
 
     # The failed skill starts again and its check passes: the write is its own to call.
     again = Script(
@@ -96,14 +100,40 @@ async def test_a_failed_skill_holds_the_write_of_the_sub_skill_it_never_reached(
         ("refund_charge", {"chargeId": "CH-2"}),
         "CH-2 is refunded.",
     )
-    await reply(replace(carrying(ask, run_of(two)), turn_id="t3", user_turn="Refund CH-2."), again, systems)
+    three, _ = await reply(replace(carrying(ask, run_of(two)), turn_id="t3", user_turn="Refund CH-2."), again, systems)
     assert [c for c, _ in systems.calls][1:] == ["lookup_charge", "refund_charge"], systems.calls
+    # Having passed the steps that held them, it holds nothing: the pay-out skill runs on its own again.
+    after = Script(("switch_skill", {"slug": "pay-out"}), ("refund_charge", {"chargeId": "CH-2"}), "Refunded again.")
+    await reply(replace(carrying(ask, run_of(three)), turn_id="t4", user_turn="Once more."), after, systems)
+    assert [c for c, _ in systems.calls][3:] == ["refund_charge"], systems.calls
 
     # A conversation where nothing failed holds nothing: the pay-out skill runs on its own.
     fresh = Systems(lookup_charge=_amount, refund_charge={"refunded": True})
     alone = Script(("switch_skill", {"slug": "pay-out"}), ("refund_charge", {"chargeId": "CH-1"}), "CH-1 is refunded.")
     await reply(ask, alone, fresh)
     assert [c for c, _ in fresh.calls] == ["refund_charge"], fresh.calls
+
+
+async def test_a_failed_skill_still_holds_its_write_after_more_skills_ended_than_the_record_lists() -> None:
+    skills = pay_out_after_a_check({"action": "retry", "retries": 0})
+    ask = TurnRequest("t1", "th1", agent(skills, max_steps=12), [LOOKUP, REFUND, NOTE], user_turn="Refund CH-1.")
+    systems = Systems(lookup_charge=_amount, refund_charge={"refunded": True})
+    failing = Script(("switch_skill", {"slug": "check-then-pay"}), ("lookup_charge", {"chargeId": "CH-1"}), "No.")
+    result, _ = await reply(ask, failing, systems)
+    run = run_of(result)
+    # Six later replies each start the pay-out skill and try the refund; each ending is one more entry in the list.
+    for n in range(2, 8):
+        model = Script(
+            ("switch_skill", {"slug": "pay-out"}),
+            ("exit", {"name": "failed"}),
+            ("refund_charge", {"chargeId": "CH-1"}),
+            "Not refunded.",
+        )
+        result, _ = await reply(replace(carrying(ask, run), turn_id=f"t{n}", user_turn="Pay it out."), model, systems)
+        run = run_of(result)
+        assert all("refund_charge" not in offered for offered in model.offered), (n, model.offered)
+    assert "sk_check" not in [h.skill_id for h in run.history], "the failed skill's entry has left the list"
+    assert [c for c, _ in systems.calls] == ["lookup_charge"], systems.calls
 
 
 async def test_a_step_does_not_start_a_skill_without_an_input_it_requires() -> None:

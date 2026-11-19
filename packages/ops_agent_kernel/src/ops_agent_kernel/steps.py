@@ -20,6 +20,7 @@ from ops_contracts.skill_run import (
     REF_TOKEN,
     RESULT_MAX,
     EndedSkill,
+    HeldTools,
     IfNot,
     Ref,
     ReturnField,
@@ -237,10 +238,23 @@ def _tools(r: RunningSkill, skills: Sequence[Skill]) -> set[str]:
     return out
 
 
-def _end(run: SkillRunState, name: str, skills: Sequence[Skill], returns: dict[str, JsonValue] | None = None) -> None:
+def _end(
+    run: SkillRunState,
+    name: str,
+    skills: Sequence[Skill],
+    returns: dict[str, JsonValue] | None = None,
+    *,
+    holds: bool = True,
+) -> None:
+    """Ends the running skill. One that ends as failed holds its step tools from then on, unless `holds` is off:
+    a skill stopped because another failed skill holds its tool has failed no check of its own."""
     r = run.running
     assert r is not None
-    tools = _tools(r, skills)
+    tools = _tools(r, skills) if holds else set[str]()
+    if name == "failed" and tools:
+        kept = run.held_by_failed.get(r.skill_id)
+        both = sorted(tools | set(kept.tools if kept is not None else []))
+        run.held_by_failed[r.skill_id] = HeldTools(slug=r.slug, name=r.name, tools=both)
     run.history.append(
         EndedSkill(
             skill_id=r.skill_id,
@@ -363,10 +377,44 @@ def _failed(run: SkillRunState, skills: Sequence[Skill], told: list[str]) -> Non
     _end(run, ends, skills)
 
 
+def _held_for(run: SkillRunState) -> HeldTools | None:
+    """The failed skill that holds the current step's tool, when it is not the skill running."""
+    r = run.running
+    tool = target(run)
+    if r is None or tool is None:
+        return None
+    return next((h for sid, h in run.held_by_failed.items() if sid != r.skill_id and tool in h.tools), None)
+
+
+def _stop_if_held(run: SkillRunState, skills: Sequence[Skill], told: list[str]) -> None:
+    """Ends the running skill as failed when its current step calls a tool another failed skill holds: the tool is
+    not offered, so the step could never be done. It holds nothing for this: no check of its own failed."""
+    if (holder := _held_for(run)) is None:
+        return
+    told.append(f"{target(run)} is held because {holder.slug} failed its check; start {holder.slug} again.")
+    _end(run, "failed", skills, holds=False)
+
+
+def _released(run: SkillRunState, f: RunningSkill | SubRun) -> None:
+    """The running skill passed the current step of `f`: what it held of that step's tool since it failed is free."""
+    r = run.running
+    assert r is not None
+    use = _step(f).use
+    kept = run.held_by_failed.get(r.skill_id)
+    if kept is None or use is None or use.tool_name not in kept.tools:
+        return
+    left = [t for t in kept.tools if t != use.tool_name]
+    if left:
+        run.held_by_failed[r.skill_id] = kept.model_copy(update={"tools": left})
+    else:
+        del run.held_by_failed[r.skill_id]
+
+
 def _passed(run: SkillRunState, skills: Sequence[Skill], value: Any, told: list[str]) -> None:
     r = run.running
     assert r is not None
     f = _frame(r)
+    _released(run, f)
     f.results[str(f.step)] = _kept(value, True)
     if f.step < len(f.program.steps):
         if isinstance(f, SubRun):
@@ -459,7 +507,9 @@ def start(
         program=program,
         rules=skill.instructions,
     )
-    _enter(run, 1, skills, [] if told is None else told)
+    told = [] if told is None else told
+    _enter(run, 1, skills, told)
+    _stop_if_held(run, skills, told)
     return run
 
 
@@ -474,15 +524,14 @@ def target(run: SkillRunState) -> str | None:
 
 def withheld(run: SkillRunState, skills: Sequence[Skill]) -> set[str]:
     """Tools not offered now: every tool a step of the running skill (or of a skill its steps run) calls, except the
-    current step's, so a later step's write cannot be called before its own step; and the tools of a skill that ended
-    as failed, until that skill starts again. A failed skill's tool stays out even as the current step's tool of
-    another skill, so its write cannot run through a skill that skips the check that failed."""
+    current step's, so a later step's write cannot be called before its own step; and the tools a failed skill
+    holds, to every skill but itself. A held tool stays out even as the current step's tool of another skill, so
+    its write cannot run through a skill that skips the check that failed."""
     r = run.running
     out: set[str] = set() if r is None else _tools(r, skills) - {target(run)}
-    newest = {h.skill_id: h for h in run.history}
-    for h in newest.values():
-        if h.ended == "failed" and (r is None or r.skill_id != h.skill_id):
-            out |= set(h.tools)
+    for skill_id, kept in run.held_by_failed.items():
+        if r is None or r.skill_id != skill_id:
+            out |= set(kept.tools)
     return out
 
 
@@ -510,6 +559,7 @@ def on_result(run: SkillRunState, skills: Sequence[Skill], output: Any, ok: bool
             _failed(run, skills, told)
     else:
         f.results[key] = _kept(output, None)
+    _stop_if_held(run, skills, told)
     return Moved(run, " ".join([*told, said(before, run)]))
 
 
@@ -540,6 +590,7 @@ def step_done(run: SkillRunState, skills: Sequence[Skill]) -> Moved:
         _failed(run, skills, told)
     else:
         _passed(run, skills, res.value if res is not None else None, told)
+    _stop_if_held(run, skills, told)
     return Moved(run, " ".join([*told, said(before, run)]))
 
 
@@ -602,6 +653,7 @@ def leave(run: SkillRunState, skills: Sequence[Skill], name: str, returns: Json)
         _sub_ended(run, skills, name, clean, told)
     else:
         _end(run, name, skills, clean)
+    _stop_if_held(run, skills, told)
     return Moved(run, " ".join([*told, said(before, run)]))
 
 

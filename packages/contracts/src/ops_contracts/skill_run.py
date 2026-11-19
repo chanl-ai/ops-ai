@@ -206,11 +206,21 @@ class EndedSkill(RunModel):
     # An exit name, or `switched` when another skill took its place.
     ended: str
     at_step: int
-    # The tools its steps and its sub-skills' steps call, kept unless it ended as done or switched. A failed skill's
-    # stay withheld until it starts again; another exit's for the rest of the reply it ended in.
+    # The tools its steps and its sub-skills' steps call, kept unless it ended as done or switched: they are not
+    # offered for the rest of the reply it ended in. What a failed skill holds beyond that reply is in
+    # `SkillRunState.held_by_failed`, because this list is capped.
     tools: list[str] = Field(default_factory=list[str])
     # The results it was ended with, by name.
     returns: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
+
+
+class HeldTools(RunModel):
+    """The tools a skill that ended as failed still holds: no other skill is offered one. A tool leaves the list
+    when that skill, started again, passes the step that calls it."""
+
+    slug: str
+    name: str
+    tools: list[str] = Field(default_factory=list[str])
 
 
 class SkillRunState(RunModel):
@@ -218,3 +228,5 @@ class SkillRunState(RunModel):
 
     running: RunningSkill | None = None
     history: list[EndedSkill] = Field(default_factory=list[EndedSkill])
+    # By skill id. Kept apart from `history`, which drops its oldest entries: a hold lasts as long as the thread.
+    held_by_failed: dict[str, HeldTools] = Field(default_factory=dict[str, HeldTools])

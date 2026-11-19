@@ -41,10 +41,11 @@ rules: [../../CLAUDE.md](../../CLAUDE.md#folder-guides).
   the caller hands it back as `TurnRequest.carried_run`. A rule check runs once on the tool result as it arrives; the
   returned record is masked with the rest of the result, the one on an interrupt is not.
 - While a skill's step names a tool, that tool and knowledge search are the only systems offered; tools other steps
-  name wait for their step, and a failed skill's tools stay withheld until it starts again, in every later reply of
-  the thread and also when another skill's current step names one. A step that runs a skill hands it the inputs it
-  declares, from the running skill's inputs and then the result of the step before; a required one missing fails
-  the step.
+  name wait for their step, and a failed skill's tools stay withheld until it starts again and passes the step that
+  calls each, in every later reply of the thread (`SkillRunState.held_by_failed`, outside the capped history). A
+  skill whose current step names a held tool ends as failed at once and the model is told which skill to start.
+  A step that runs a skill hands it the inputs it declares, from the running skill's inputs and then the result of
+  the step before; a required one missing fails the step.
 
 Depends on `ops_service_kit`, `ops_contracts` and `ops_pii`. Depended on by `ops_engine`, agents-service and tools-service.
 
