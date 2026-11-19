@@ -17,6 +17,7 @@ from collections.abc import AsyncIterator, Callable
 from dataclasses import replace
 from typing import Any
 
+import pytest
 from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
@@ -388,7 +389,8 @@ async def test_one_skill_runs_at_a_time_and_a_sub_skill_returns_to_its_step() ->
     model = Script(("load_skill", {"slug": "refund-a-charge", "matched": "refund"}), "Which charge?")
     begun, events = await reply(refund, model)
     index = model.instructions[0]
-    assert "before calling any tool its steps call" in index, "a matching request starts the skill, not its tool"
+    assert "is available only as that step" in index, "the index states the rule the kernel keeps"
+    assert "before calling any tool" not in index, "the order of calls is not left to the model"
     assert "Its steps call: lookup_charge, refund_charge." in index, index
     assert "step 1 of 3" in json.dumps(model.returned[0]), model.returned
     assert "# Now: Refund a charge, step 1 of 3" in model.instructions[1], model.instructions[1]
@@ -525,3 +527,88 @@ async def test_a_pause_keeps_the_step_a_denial_ends_the_skill_and_the_record_hol
     assert SSN not in run_of(found).model_dump_json()
     changes = [e for e in events if type(e).__name__ == "SkillRunChanged"]
     assert changes and all(SSN not in repr(e) for e in changes), changes
+
+
+# --- a skill's write is reached only through its step, and an ending the kernel made is final for the reply ---
+
+PAYMENTS = tool("agent:ag_payments")
+GATED_REFUND = tool("refund_charge", "write", approval=True)
+
+
+def refund_after_a_check() -> Skill:
+    """A lookup whose rule ends the skill as blocked, then the write, then a hand-off to another agent."""
+    steps = program(
+        {
+            "do": "Look up the charge.",
+            "use": {"kind": "tool", "id": "lookup_charge"},
+            "check": {"text": "result.amount <= 500", "by": "rule"},
+            "ifNot": {"action": "exit", "exit": "blocked"},
+        },
+        {"do": "Refund the charge.", "use": {"kind": "tool", "id": "refund_charge"}},
+        {"do": "Tell payments.", "use": {"kind": "agent", "id": "ag_payments"}},
+        exit={"blocked": "The charge is over the refund limit."},
+    )
+    return stepped("sk_refund", 1, "Refund a charge", "refund-a-charge", steps)
+
+
+START: Call = ("switch_skill", {"slug": "refund-a-charge"})
+PASSES: Call = ("lookup_charge", {"chargeId": "CH-2"})
+WRITE: Call = ("refund_charge", {"chargeId": "CH-2"})
+
+# One row per way a model reaches for the write without its step: what it does, and the tools granted.
+REACHES: dict[str, tuple[list[Action], list[ToolGrant]]] = {
+    "with no skill running": ([WRITE], [LOOKUP, REFUND, NOTE, PAYMENTS]),
+    "another agent, with no skill running": ([("agent:ag_payments", {})], [LOOKUP, REFUND, NOTE, PAYMENTS]),
+    "in the model step that starts the skill": ([[START, WRITE]], [LOOKUP, REFUND, NOTE, PAYMENTS]),
+    "in the model step that leaves the skill": (
+        [START, PASSES, [("exit", {"name": "failed"}), WRITE]],
+        [LOOKUP, REFUND, NOTE, PAYMENTS],
+    ),
+    "a write that waits for approval, in the model step that leaves the skill": (
+        [START, PASSES, [("exit", {"name": "failed"}), WRITE]],
+        [LOOKUP, GATED_REFUND, NOTE, PAYMENTS],
+    ),
+}
+
+
+@pytest.mark.parametrize("reach", REACHES, ids=str)
+async def test_a_skills_write_runs_only_as_its_step(reach: str) -> None:
+    actions, tools = REACHES[reach]
+    systems = Systems(lookup_charge=_amount, refund_charge={"refunded": True}, **{"agent:ag_payments": {"ok": True}})
+    settings = agent([refund_after_a_check()], max_tool_calls=None, max_steps=12)
+    model = Script(*actions, ("search_tools", {"query": "refund"}), "I could not refund it.")
+    ask = TurnRequest("t1", "th1", settings, tools, user_turn="Refund CH-2.")
+    result, _ = await reply(ask, model, systems)
+    assert result.status == "completed", f"a refused call must not wait for a person: {result.status}"
+    assert [c for c, _ in systems.calls if c != "lookup_charge"] == [], systems.calls
+    first = set(model.offered[0])
+    assert not first & {"refund_charge", "agent:ag_payments"}, "a skill's write is not offered before its step"
+    assert {"lookup_charge", "add_note"} <= first, "a read, and a write no step runs, stay free"
+    assert "refund_charge" not in json.dumps(model.returned[-1]), "search names no tool that waits for its step"
+
+
+async def test_a_check_that_ends_a_skill_is_final_for_the_reply_and_the_record_says_why() -> None:
+    settings = agent([refund_after_a_check()], max_tool_calls=None, max_steps=12)
+    systems = Systems(lookup_charge=_amount, refund_charge={"refunded": True})
+    ask = TurnRequest("t1", "th1", settings, [LOOKUP, REFUND], user_turn="Refund CH-1.")
+    over: Call = ("lookup_charge", {"chargeId": "CH-1"})
+    model = Script(START, over, START, ("lookup_charge", {"chargeId": "CH-3"}), "CH-1 is over the limit.")
+    one, _ = await reply(ask, model, systems)
+    assert ended(run_of(one)) == [("sk_refund", "blocked", 1)], "the skill ended once, as its if-not says"
+    assert systems.calls == [over], "the ended skill's tools wait for the next reply, its lookup included"
+    told, again = json.dumps(model.returned[1]), json.dumps(model.returned[2])
+    assert "result.amount <= 500" in told and "The charge is over the refund limit." in told, told
+    assert "cannot start again in this reply" in again, again
+    last = run_of(one).history[-1]
+    assert (last.why, last.check, last.meaning, last.in_reply) == (
+        "check",
+        "result.amount <= 500",
+        "The charge is over the refund limit.",
+        True,
+    ), last
+
+    # The next reply may start it again, and the record no longer marks the ending as this reply's.
+    second = Script(START, PASSES, "Shall I refund CH-2?")
+    two, _ = await reply(replace(carrying(ask, run_of(one)), turn_id="t2", user_turn="CH-2 then."), second, systems)
+    assert run_of(two).running.step == 2, run_of(two)
+    assert [h.in_reply for h in run_of(two).history] == [False]

@@ -197,8 +197,11 @@ class _TurnState:
     # Events a tool call raised, sent once the stream reaches its result.
     events: list[KernelEvent] = field(default_factory=list[KernelEvent])
     # By skill id, the step tools of a skill this reply stopped any way but done or switched (steps.held): not offered
-    # for the rest of the reply, even as the current step's tool of another skill, unless that skill starts again.
+    # for the rest of the reply, even as the current step's tool of another skill, unless that skill starts again
+    # (which only a skill the model itself exited can: steps.final).
     held: dict[str, list[str]] = field(default_factory=dict[str, list[str]])
+    # The tools reachable only as a step of a skill, with the slugs of the skills that own each (steps.owned).
+    owned: dict[str, list[str]] = field(default_factory=dict[str, list[str]])
     # What the model is told when a skill picked from the menu did not start for want of an input it requires.
     unstarted: str = ""
 
@@ -233,10 +236,18 @@ class _TurnState:
             self.events.append(skillset.event(entry, "started"))
         return None
 
-    def hidden(self) -> set[str]:
-        """Tools not offered on the next model step, whatever the current step names: those the running skill keeps
-        for its other steps or a failed skill holds (steps.withheld), and those a skill stopped in this reply holds."""
-        return steps.withheld(self.run, self.stepped) | {t for tools in self.held.values() for t in tools}
+    def barred(self, tool: str) -> str | None:
+        """Why a granted tool may not be offered, found by search or called now (steps.barred); None when it may.
+        Knowledge search stays open beside a step's own tool when the turn has knowledge to search."""
+        knowledge = bool(self.req.kb_ids or self.req.all_team_knowledge)
+        return steps.barred(
+            self.run,
+            self.stepped,
+            tool,
+            owned=self.owned,
+            stopped=self.held,
+            always=(SEARCH_KNOWLEDGE,) if knowledge else (),
+        )
 
     def free(self) -> bool:
         """No step names a tool to call now. While one does, the model is offered that tool and nothing to plan,
@@ -613,9 +624,9 @@ def _search(state: _TurnState) -> Tool[None]:
         if (over := state.charge_builtin()) is not None:
             rec.status, rec.output = "error", {"error": over}
             return {"error": over}
-        # A tool a step holds back is not named either: its schema would be all the model needs to ask for it.
-        hidden = state.hidden()
-        offered = [t for t in state.req.tools if t.name not in hidden]
+        # A tool that may not be called now is not named either: its schema would be all the model needs to ask
+        # for it.
+        offered = [t for t in state.req.tools if state.barred(t.name) is None]
         found = search.search(offered, str(arguments.get("query") or ""))
         rec.status, rec.output = "ok", {"tools": found}
         return {"tools": found}
@@ -647,6 +658,15 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: 
                 rec.status, rec.output = "error", {"error": NO_OWN_KNOWLEDGE}
                 return {"error": NO_OWN_KNOWLEDGE}
             arguments = own
+        # Asked again here, and before a person is asked to approve: the offer was made before this model step's
+        # other calls ran, and one of them may have started or left a skill.
+        if (why := state.barred(grant.name)) is not None:
+            rec = state.record(tool_call_id, grant.name, arguments)
+            rec.status, rec.output = "error", {"error": why}
+            return {"error": why}
+        if grant.gated and not ctx.tool_call_approved:
+            # A write stops at a gate: the library ends the run with a deferred request (spec 15 5).
+            raise ApprovalRequired()
         # Where the running skill stood when this call started, when it is that step's tool: its result is checked
         # for that step only, so a result that arrives after the step moved changes nothing.
         at = state.position() if steps.target(state.run) == grant.name else None
@@ -754,27 +774,16 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: 
         # one at a time, in the order the model asked.
         sequential=grant.access != "read" or grant.name.startswith(("workflow:", "agent:")),
     )
-    # A write stops at a gate: the library ends the run with a deferred request (spec 15 5).
-    tool.requires_approval = grant.gated
     # Above the agent's tool-search threshold its schema is sent only once a search finds it.
     tool.defer_loading = deferred
-    knowledge = grant.name == SEARCH_KNOWLEDGE and bool(state.req.kb_ids or state.req.all_team_knowledge)
 
     async def prepare(ctx: RunContext[None], tool_def: ToolDefinition) -> ToolDefinition | None:
-        if not state.offered(ctx, builtin=False):
+        if not state.offered(ctx, builtin=False) or state.barred(grant.name) is not None:
             return None
-        current = steps.target(state.run)
-        if current is None:
-            # No step tool to call now: every tool but the ones a skill's own steps call or a stopped skill holds.
-            return None if grant.name in state.hidden() else tool_def
-        if grant.name in state.hidden():
-            # The current step's own tool, held by a skill this reply stopped: it waits for a later reply.
-            return None
-        if grant.name == current:
+        if deferred and grant.name == steps.target(state.run):
             # Sent with its schema even when the agent searches for its tools: the step cannot pass without it.
-            return replace(tool_def, defer_loading=False) if deferred else tool_def
-        # While a step names its tool, that tool and knowledge search are the only systems to call.
-        return tool_def if knowledge else None
+            return replace(tool_def, defer_loading=False)
+        return tool_def
 
     tool.prepare = prepare
     return tool
@@ -842,11 +851,15 @@ def _own_knowledge(req: TurnRequest, arguments: Json) -> Json | None:
     return {**asked, "collections": collections}
 
 
-def _kept_run(kept: SkillRunState, stepped: list[Skill], has: list[Skill]) -> SkillRunState:
+def _kept_run(kept: SkillRunState, stepped: list[Skill], has: list[Skill], *, new_reply: bool) -> SkillRunState:
     """The record a turn goes on with. A running skill finishes on the steps of the version it started, which the
     record holds; while the agent still pins that version, its own steps and notes are used, because the record a
-    reply returned may hold them masked."""
+    reply returned may hold them masked. A new reply (not one going on after a pause) starts with no ending marked
+    as its own."""
     run = kept.model_copy(deep=True)
+    if new_reply:
+        for ended in run.history:
+            ended.in_reply = False
     running = run.running
     for frame in (running, running.sub if running is not None else None):
         if frame is None:
@@ -1112,13 +1125,16 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
     # Skills that run step by step are driven by their own tools, and the record of the one running is read before
     # anything can end the turn, so every way out returns it.
     state.stepped = step_tools.stepped(req.settings.skills) if builtins else []
+    state.owned = steps.owned(state.stepped, {t.name: t.access for t in req.tools})
     for step_grant in step_tools.grants(state.stepped):
         state.grants[step_grant.name] = step_grant
         tools.append(_step_tool(state, step_grant))
     kept_run = req.resume.interrupt.run if req.resume else req.carried_run
     state.tracks = bool(state.stepped) or kept_run is not None
     if kept_run is not None:
-        state.run = _kept_run(kept_run, state.stepped, step_tools.stepped(req.settings.skills))
+        state.run = _kept_run(
+            kept_run, state.stepped, step_tools.stepped(req.settings.skills), new_reply=req.resume is None
+        )
         if req.settings.redact_pii and not req.resume:
             state.run = pii.remarked(state.run)
     if req.resume:

@@ -75,9 +75,9 @@ def prompt(skills: list[Skill]) -> str:
     ]
     if started:
         parts.append(
-            "## Skills you can start\n\nThese run one step at a time. When a request matches one, call switch_skill "
-            "with its slug before answering and before calling any tool its steps call; you are then given its "
-            "current step.\n" + "\n".join(started)
+            "## Skills you can start\n\nThese run one step at a time. Call switch_skill with a skill's slug to start "
+            "it; you are then given its current step. A tool its steps call that changes something, or hands to "
+            "another agent, is available only as that step.\n" + "\n".join(started)
         )
     return "\n\n".join(parts)
 

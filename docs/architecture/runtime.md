@@ -48,16 +48,29 @@ resumes the kernel with `DeferredToolResults`.
 ## Skills that run step by step
 
 A skill version with `steps` is started, never loaded as text. The kernel keeps one running-skill record per
-conversation (`ops_contracts.skill_run.SkillRunState`) and moves it as tool results arrive.
+conversation (`ops_contracts.skill_run.SkillRunState`) and moves it as tool results arrive. The kernel decides
+every move of a running skill; the model chooses which skill fits, fills in a tool's arguments and writes the words.
+
+| Job | Owner | Never |
+|---|---|---|
+| Which skill fits the request | The model, or the person from the chat menu | |
+| Whether a tool may be offered, found by search or called now | The kernel, one function (`steps.barred`) | Prompt wording |
+| Whether a step passed | The kernel, on a rule | The answering model, for a rule |
+| What happens when it did not pass | The kernel, from the step's "if not" | The answering model |
+| Whether an ended skill may start again | The kernel (`steps.final`) | The answering model |
+| How a skill ended, where and why | The record (`EndedSkill`: the exit, the step, `why`, the check, the author's meaning, `inReply`) | The model's text, the console |
+| Showing the step and the ending in chat | The console, from the record | The model's text |
 
 | Part | What happens | Where |
 |---|---|---|
-| Start | The model calls `switch_skill`, or a person picks the skill from the chat menu. A skill already running ends as `switched`; nothing stacks | `packages/ops_agent_kernel/src/ops_agent_kernel/step_tools.py` |
-| One step at a time | While a step names a tool, that tool and knowledge search are the only systems offered. A rule check (`result.amount <= 500`) runs in code on the tool's result; a sentence check is confirmed by the model with `step_done`, which is told the result as the tool gave it. A step's tool is the reference in front of it, or the one tool, agent or workflow its sentence mentions (`steps.wired`); a save refuses a rule that reads `result` on a step with neither (`check_needs_tool`). The skill index lists the tools each skill's steps call and tells the model to start the skill before calling one | `packages/ops_agent_kernel/src/ops_agent_kernel/steps.py`, `expr.py` |
+| Start | The model calls `switch_skill`, or a person picks the skill from the chat menu. A skill already running ends as `switched`; nothing stacks. A skill the kernel ended in this reply (a check that did not pass, a denied call, a step that could not be done, a held tool) is refused until the person's next message; one the model exited itself may start again | `packages/ops_agent_kernel/src/ops_agent_kernel/step_tools.py` |
+| A skill's tools | Every tool a step of an attached skill runs that is not a read, and every `agent:` tool a step hands to, is reachable only as that step: it is not offered, found by search or run with no skill running or on another step. The same function answers when tools are offered and again when one is called, before any approval is asked for, so a call sent in the model step that starts or leaves a skill is refused. A read, and a write no step runs, stay free | `steps.py` (`owned`, `barred`), `kernel.py` (`_tool`) |
+| One step at a time | While a step names a tool, that tool and knowledge search are the only systems offered. A rule check (`result.amount <= 500`) runs in code on the tool's result and holds only when it is known true: a comparison with a missing value has no answer, and neither has its `not`, so `result.frozen is not false` fails on a result without the field. A sentence check is confirmed by the model with `step_done`, which is told the result as the tool gave it. A step's tool is the reference in front of it, or the one tool, agent or workflow its sentence mentions (`steps.wired`); a save refuses a rule that reads `result` on a step with neither (`check_needs_tool`). The skill index lists the tools each skill's steps call | `packages/ops_agent_kernel/src/ops_agent_kernel/steps.py`, `expr.py` |
 | A step that runs a skill | The kernel starts it from the agent's own pins and returns to the parent step when it ends; one level only | `steps.py` |
 | The prompt | The stable start is the agent's instructions (written from its brief when it has one). The current step, the skill's notes and the brief's never rules are written again before every model request, never rules last, in both prompt modes | `packages/ops_agent_kernel/src/ops_agent_kernel/prompt_writer.py` |
 | Between replies | Each reply journals the record as a `skill_run` event; the chat message carries it as `skillRun`, and the next turn reads it from the newest reply that has one (`TurnRequest.carried_run`) | `services/agents-service/src/ops_agents/graphs/common.py`, `graphs/agent_wrapper.py`, `api/chat_threads.py` |
 | An approval pause | The paused turn keeps the record and the tools held for that reply in its checkpoint; the resumed turn goes on at the same step, and a rejected call ends the skill as failed | `graphs/common.py` (`pending_approval`) |
+| Endings | A failed check takes the step's "if not"; when that ends the skill, the ending is final for the reply and the record says why. The model is told the exit, the step, the check that did not pass and the author's meaning for the exit, and not to say the action was or will be done | `steps.py` (`_end`, `ending`) |
 | Holds | A failed check or a denied call keeps the later steps' tools from every other skill until the holder passes that step; a hold is dropped when the agent no longer pins that version of the holder | `packages/ops_agent_kernel/CLAUDE.md`, "Contract with callers" |
 
 A skill without steps behaves as before, except that loading one on-match skill replaces the one carried from the

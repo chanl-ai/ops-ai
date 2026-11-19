@@ -59,7 +59,9 @@ def grants(skills: Sequence[Skill]) -> list[ToolGrant]:
             SWITCH,
             "platform",
             "Starts one of your skills that run step by step, by its slug, when the request matches its use-when "
-            "line. A skill already running ends first: only one runs at a time.",
+            "line. A skill already running ends first: only one runs at a time. A skill ended in this reply because "
+            "a check did not pass, a person rejected its action or a step could not be done does not start again "
+            "until the person's next message.",
             "read",
             {
                 "type": "object",
@@ -115,6 +117,9 @@ def handle(name: str, run: SkillRunState, skills: Sequence[Skill], arguments: Js
     running = run.running
     if running is not None and running.skill_id == skill.skill_id:
         return Moved(run, f"{skill.name} is already running, on step {running.step}. Go on with that step.", ok=False)
+    if (ended := steps.final(run, skill.skill_id)) is not None:
+        # The kernel ended it in this reply: the ending stands until the person's next message.
+        return Moved(run, steps.ending(ended), ok=False)
     inputs = {k: str(v) for k, v in json_object(arguments.get("inputs")).items()}
     if missing := steps.missing_inputs(skill, inputs):
         return Moved(run, needs(skill, missing), ok=False)

@@ -616,7 +616,7 @@ THREADS = [
         ["lookup_charge", "refund_charge"],
         down=frozenset({"lookup_charge"}),
     ),
-    Thread("a step cannot start its skill", [[RUNS_NEEDY], [note("CH-2")]], ["add_note"]),
+    Thread("a step cannot start its skill", [[RUNS_NEEDY], [PAY, refund("CH-2")]], ["refund_charge"]),
     # Accepted: the holder's own if-not jump to a later write is the author's path; a thread with no failure holds
     # nothing.
     Thread(

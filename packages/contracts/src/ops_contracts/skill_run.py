@@ -199,7 +199,16 @@ class RunningSkill(RunModel):
     rules: str = ""
 
 
+# Why a skill ended when it did not finish: a check did not pass, a person rejected its action, a step could not be
+# done (its tool failed, or the skill it runs could not start), another skill holds its step's tool, or the model
+# called the exit itself.
+EndedWhy = Literal["check", "denied", "error", "held", "exit"]
+
+
 class EndedSkill(RunModel):
+    """How a skill ended, and why: the one record of it. The kernel writes it; the chat draws the ending from it and
+    the kernel reads it to keep a skill it ended from starting again in the same reply."""
+
     skill_id: str
     version: int
     name: str
@@ -212,6 +221,15 @@ class EndedSkill(RunModel):
     tools: list[str] = Field(default_factory=list[str])
     # The results it was ended with, by name.
     returns: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
+    # Set while the record is the one of the reply the skill ended in; cleared when the next reply starts. None of
+    # the four fields below is on a record written before endings carried a reason.
+    in_reply: bool = False
+    # None when it ended as done or switched.
+    why: EndedWhy | None = None
+    # The text of the check that did not pass, when that is why.
+    check: str | None = None
+    # What the skill's author wrote that this exit means; None for done, failed and switched.
+    meaning: str | None = None
 
 
 class Hold(RunModel):
