@@ -2,9 +2,5 @@
   "guide/install-cli.md": 4,
   "guide/models.md": 1,
   "guide/plugins.md": 28,
-  "guide/quickstart.md": 1,
-  "sdk/changelog-next-major.md": 216,
-  "sdk/python.md": 7,
-  "sdk/typescript.md": 5,
-  "sdk/upgrading.md": 2
+  "guide/quickstart.md": 1
 }

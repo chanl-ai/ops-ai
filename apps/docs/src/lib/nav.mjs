@@ -49,6 +49,8 @@ export const SITE = [
           { page: 'guide/human-tasks.md', title: 'Human tasks and approvals', icon: 'user-check' },
           { page: 'guide/cases.md', title: 'Cases', icon: 'folder-open' },
           { page: 'guide/teams-and-access.md', title: 'Teams and access', icon: 'users' },
+          { page: 'guide/security-and-governance.md', title: 'Governance', icon: 'shield-check' },
+          { page: 'guide/models.md', title: 'Models', icon: 'cpu' },
           { page: 'console/embedding-the-chat.md', title: 'Chat on your own pages', icon: 'messages-square' },
         ],
       },
@@ -120,6 +122,7 @@ export const SITE = [
         entries: [
           { page: 'deploy/database.md', title: 'Database', icon: 'database-zap' },
           { page: 'guide/azure-sql.md', icon: 'database' },
+          { page: 'guide/data-and-database.md', title: 'Where data is kept', icon: 'database' },
         ],
       },
       {
@@ -151,9 +154,12 @@ export const SITE = [
         open: true,
         entries: [
           { page: 'security.md', title: 'Security', icon: 'shield' },
-          { page: 'guide/security-and-governance.md', icon: 'shield-check' },
-          { page: 'guide/data-and-database.md', title: 'Data handling', icon: 'database' },
-          { page: 'guide/models.md', title: 'Model calls', icon: 'cpu' },
+          { page: 'security/tenancy-and-isolation.md', icon: 'building-2' },
+          { page: 'security/identity-and-sign-in.md', icon: 'key-round' },
+          { page: 'security/access-approvals-and-audit.md', icon: 'user-check' },
+          { page: 'security/data-handling-and-masking.md', icon: 'eye-off' },
+          { page: 'security/model-calls.md', icon: 'cpu' },
+          { page: 'security/egress-and-connections.md', icon: 'globe-lock' },
         ],
       },
     ],
@@ -164,7 +170,7 @@ export const SITE = [
     description: 'HTTP API, SDKs, CLI, MCP and changes',
     public: true,
     groups: [
-      { group: 'Start here', icon: 'flag', open: true, entries: [{ page: 'reference.md', title: 'Reference', icon: 'braces' }] },
+      { group: 'Start here', icon: 'flag', open: true, entries: [{ page: 'reference.md', title: 'Reference', icon: 'braces' }, { page: 'reference/http-api.md', icon: 'globe' }, { page: 'reference/cli.md', title: 'The opsai command line', icon: 'square-terminal' }, { page: 'reference/mcp.md', title: 'MCP', icon: 'plug' }] },
       { group: 'Plugins', icon: 'puzzle', entries: [{ page: 'guide/plugins.md', title: 'Plugin manifest reference', icon: 'puzzle' }] },
       {
         group: 'HTTP API',
@@ -195,7 +201,7 @@ export const SITE = [
         open: true,
         entries: [
           { page: 'guide/whats-new.md', icon: 'sparkles' },
-          { page: 'sdk/changelog-next-major.md', title: 'SDK 1.0.0 changelog', icon: 'history' },
+          { page: 'sdk/changelog.md', title: 'SDK 1.0.0 changelog', icon: 'history' },
         ],
       },
     ],
@@ -314,6 +320,7 @@ export const SITE = [
         icon: 'pen-tool',
         entries: [
           'design/README.md',
+          { page: 'sdk/changelog-next-major.md', title: 'SDK 1.0.0 route-by-route record', icon: 'history' },
           { page: 'console/agents-and-workflows.md', title: 'Agents and workflows in the console', icon: 'monitor' },
           { rest: 'design' },
           { group: 'Console', icon: 'monitor', entries: [{ rest: 'console' }] },
