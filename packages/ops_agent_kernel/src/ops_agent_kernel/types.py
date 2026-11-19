@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal, NotRequired, TypedDict
 
+from ops_contracts.skill_run import SkillProgram, SkillRunState
 from ops_service_kit.http import Json
 
 # `workflow`: the tool starts a published workflow, whose own review steps are the gate (workflows-as-tools.md).
@@ -105,6 +106,9 @@ class Skill:
     part: str = ""
     # The most tokens this skill or part may hold when loaded; 0 is the reply's whole skill budget.
     budget: int = 0
+    # Its steps, for a skill that runs step by step (steps.py): it is started, never loaded as text, and `instructions`
+    # are then the notes shared by every step. None for a skill without steps.
+    program: SkillProgram | None = None
 
 
 @dataclass(frozen=True)
@@ -162,6 +166,12 @@ class AgentSettings:
     widgets_per_turn: int | None = None
     # Mask personal data in what the turn shows and returns (the agent's redactPii); the model sees it all.
     redact_pii: bool = False
+    # The brief's never rules: written last in the prompt, after everything else, whoever wrote the rest of it.
+    never: list[str] = field(default_factory=list[str])
+    # How hard the model thinks ("low", "medium", "high"); None leaves the model's default and sends no setting.
+    thinking: str | None = None
+    # Off: the model is asked to make one tool call at a time. Writes run one at a time whatever this says.
+    parallel_reads: bool = True
 
 
 @dataclass(frozen=True)
@@ -256,6 +266,9 @@ class Interrupt:
     loaded_skills: list[LoadedSkill] = field(default_factory=list[LoadedSkill])
     # The plan as it stood at the pause (plan.py), so the resumed turn goes on at the same step.
     plan: Plan | None = None
+    # The running-skill record at the pause, unmasked: the resumed turn goes on at the same step. None on a pause
+    # stored before skills had steps.
+    run: SkillRunState | None = None
 
 
 @dataclass(frozen=True)
@@ -315,6 +328,8 @@ class TurnRequest:
     earlier_reads: list[str] = field(default_factory=list[str])
     # A plan an earlier turn left unfinished (a Connect card paused it): this turn goes on from its first open step.
     carried_plan: Json | None = None
+    # The running-skill record the reply before this one returned (TurnResult.run): this turn goes on at its step.
+    carried_run: SkillRunState | None = None
     deadline_seconds: float = 120.0
     # A JSON Schema the turn's answer must match (a workflow's agent step): the model returns structured output
     # through the call, validated against it, on `TurnResult.output`; a mismatch finishes with `schema_error`.
@@ -401,3 +416,6 @@ class TurnResult:
     # The guardrails this turn checked and the pinned ones switched off: {guardrailId, version, name} each.
     guardrails_checked: list[GuardrailRef] = field(default_factory=list[GuardrailRef])
     guardrails_off: list[GuardrailRef] = field(default_factory=list[GuardrailRef])
+    # The skill with steps this conversation is running and the ones that ended, after this turn, whichever way the
+    # turn ended. None when the agent has no skill with steps and the request carried no record.
+    run: SkillRunState | None = None

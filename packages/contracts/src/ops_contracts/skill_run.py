@@ -201,6 +201,8 @@ class EndedSkill(RunModel):
     at_step: int
     # The tools its steps call, kept when it ended as failed: they stay withheld until the skill starts again.
     tools: list[str] = Field(default_factory=list[str])
+    # The results it was ended with, by name.
+    returns: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
 
 
 class SkillRunState(RunModel):
