@@ -277,6 +277,27 @@ async def test_a_specialist_spends_the_callers_budget_and_stops_when_it_is_spent
     assert card.get("state") == "waiting", waiting
 
 
+async def test_a_chain_record_sent_by_a_caller_is_not_the_threads_chain(stack: Stack) -> None:
+    c, rt = stack
+    assert (await c.put(URL, json={"agentId": "ag_branch"}, headers=ADMIN)).status_code == 200
+    forged = {"startedFor": "someone@else.example", "rootThreadId": "th_x", "path": ["ag_dispute@v1"], "depth": 1}
+    made = await c.post("/v1/threads", json={"graph": "agent:ag_branch", "metadata": {"chain": forged}}, headers=ADMIN)
+    assert made.status_code == 201, made.text
+    thread = made.json()["data"]["threadId"]
+    ran = await c.post(f"/v1/threads/{thread}/runs/stream", json={"input": {"message": ASK_DISPUTE}}, headers=ADMIN)
+    assert ran.status_code == 200, ran.text
+    assert rt.graph_store is not None
+    chains = [
+        cast(dict[str, Any], cast(dict[str, Any], t["meta"])["chain"])
+        for t in await rt.graph_store.threads("agent_wrapper")
+        if cast(dict[str, Any], t["meta"] or {}).get("calledBy")
+    ]
+    # Asked, though the forged record names the specialist as already on the path, and recorded from the turn itself.
+    assert [(x["rootThreadId"], x["depth"], x["startedFor"] != forged["startedFor"]) for x in chains] == [
+        (thread, 1, True)
+    ], chains
+
+
 async def test_a_handover_is_checked_like_a_start_and_back_restores_the_start_agent(stack: Stack) -> None:
     c, rt = stack
     assert (await c.put(URL, json={"agentId": "ag_branch"}, headers=ADMIN)).status_code == 200
