@@ -63,6 +63,15 @@ await withUiStack(
       await page.getByTestId('skill-document').waitFor({ timeout: 120_000 });
       await page.getByTestId('skill-document').getByRole('group', { name: 'Step 3' }).waitFor({ timeout: 60_000 });
       check('10 the skill page draws its steps as one document', (await page.getByTestId('skill-document').getByRole('group', { name: /^Step \d/ }).count()) === 3, await page.getByTestId('skill-document').innerText());
+      const notes = await page.getByTestId('skill-document').innerText();
+      // A skill made by the New skill dialog holds only section headings; the notes block shows those as empty.
+      const blank = await made('/v1/skills', { name: `Blank walk ${RUN}`, ownerTeam: 'team_ops', useWhen: 'Never, it is blank.', instructions: '## Steps\n1.\n\n## Rules\n-\n\n## Examples\n\n\n## Output format\n' });
+      await page.goto(`${consoleUrl}/build/skills/${blank.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await page.getByTestId('skill-document').waitFor({ timeout: 120_000 });
+      const empty = await page.getByTestId('skill-document').innerText();
+      check('10 written notes show as saved and a blank skill\'s notes start empty', /Say what each step found/.test(notes) && !/## Steps|## Rules/.test(empty), { notes, empty });
+      await page.goto(`${consoleUrl}/build/skills/${skill.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await page.getByTestId('skill-document').getByRole('group', { name: 'Step 3' }).waitFor({ timeout: 60_000 });
       const endings = page.getByTestId('skill-results-section');
       await endings.scrollIntoViewIfNeeded();
       check('10 the endings section says when another skill\'s step passes', /passes only if this skill ends as done/.test(await endings.innerText()), await endings.innerText());

@@ -71,5 +71,6 @@ with a read and a write on a mock bank, published for the team, and platform sig
 ## Non-vacuous check
 
 Step 6. The third reply calls no tool, and the fourth still finds the skill inside step 2. Without the record carried
-between replies every reply starts with no skill running, and the trail the check compares is empty. Step 3 is the
+between replies every reply starts with no skill running: with `carried_run` left out of the turn, step 6 failed with
+the trail `(1, False), (None, None), (None, None), (None, False), (None, False)`, 13 of 14 checks passed. Step 3 is the
 second: it pairs the refused publish with the publish that goes through once the tool is added.
