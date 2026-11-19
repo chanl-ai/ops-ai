@@ -192,7 +192,8 @@
           "approversNeeded": 1,
           "blockers": [],
           "canRequest": true,
-          "editClass": "re_test"
+          "editClass": "re_test",
+          "problems": []
         },
         "publishedVersion": null,
         "runs": [],
@@ -395,7 +396,15 @@
             "The skill is deprecated."
           ],
           "canRequest": false,
-          "editClass": "re_test"
+          "editClass": "re_test",
+          "problems": [
+            {
+              "id": null,
+              "kind": "deprecated",
+              "message": "The skill is deprecated.",
+              "position": null
+            }
+          ]
         },
         "publishedVersion": 1,
         "runs": [],
@@ -584,7 +593,8 @@
           "approversNeeded": 1,
           "blockers": [],
           "canRequest": true,
-          "editClass": "re_test"
+          "editClass": "re_test",
+          "problems": []
         },
         "publishedVersion": null,
         "runs": [],
@@ -1730,7 +1740,15 @@
             "v1 is already published; save a change to open a draft."
           ],
           "canRequest": false,
-          "editClass": "re_test"
+          "editClass": "re_test",
+          "problems": [
+            {
+              "id": null,
+              "kind": "already_published",
+              "message": "v1 is already published; save a change to open a draft.",
+              "position": null
+            }
+          ]
         },
         "publishedVersion": 1,
         "runs": [],
@@ -1791,6 +1809,16 @@
     "body": {
       "error": {
         "code": "cannot_request",
+        "details": {
+          "problems": [
+            {
+              "id": null,
+              "kind": "already_published",
+              "message": "v1 is already published; save a change to open a draft.",
+              "position": null
+            }
+          ]
+        },
         "message": "v1 is already published; save a change to open a draft.",
         "requestId": "<req>",
         "status": 400
@@ -1879,7 +1907,8 @@
           "approversNeeded": 1,
           "blockers": [],
           "canRequest": true,
-          "editClass": "re_test"
+          "editClass": "re_test",
+          "problems": []
         },
         "publishedVersion": null,
         "runs": [],

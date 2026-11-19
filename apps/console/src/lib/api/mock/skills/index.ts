@@ -35,6 +35,7 @@ import type {
   SkillWarning,
   SkillLoading,
 } from '@/lib/types/skills';
+import type { PublishBlocker } from '@/lib/types/references';
 import type { SearchHit } from '@/lib/types/search';
 
 import { plural } from '@/lib/format';
@@ -47,6 +48,7 @@ import type { FileLinks } from '../files';
 import { auditSink } from '../governance';
 import { pageOptions } from '../../options';
 import { field, id, list, mode, notFound, respond } from '../runtime';
+import { isOffered } from '../references';
 import { guardTeam, inTeam, teamOwner } from '../teams';
 import { packFor, type PastWorkItem, rewrite, splitSections, topicOf } from './generate';
 import { ALWAYS_ON_SEEDS, ARCHIVED_CASES, DOCUMENTS, SKILL_SEEDS, TEMPLATES } from './seed';
@@ -85,7 +87,7 @@ function hash(key: string) {
   return ((h >>> 0) % 10_000) / 10_000;
 }
 
-interface StoredContent {
+interface StoredContent extends Pick<SkillContent, 'inputs' | 'notWhen' | 'steps' | 'exit' | 'returns' | 'success'> {
   name: string;
   slug: string;
   useWhen: string;
@@ -164,6 +166,7 @@ export function createSkillsMock(deps: SkillsDeps) {
       toolIds: sk.tools.map(toolIdOf).filter((x): x is string => !!x),
       knowledgeBases: sk.knowledgeBases,
       guardrails: sk.guardrails,
+      ...sk.program,
       resources: [
         ...(sk.templates ?? []).map((t, i): SkillResource => ({ id: `res_${sk.id}_t${i}`, kind: 'template', name: t.name, body: t.body, addedAt: ago(sk.versions[0].daysAgo), addedBy: sk.versions[0].by })),
         ...(sk.files ?? []).map((f, i): SkillResource => ({ id: `res_${sk.id}_f${i}`, kind: 'file', name: f.name, description: f.description, size: f.sizeKb * 1024, addedAt: ago(sk.versions[0].daysAgo), addedBy: sk.versions[0].by })),
@@ -193,6 +196,7 @@ export function createSkillsMock(deps: SkillsDeps) {
             toolIds: v.tools ? v.tools.map(toolIdOf).filter((x): x is string => !!x) : base.toolIds,
             knowledgeBases: v.knowledgeBases ?? base.knowledgeBases,
             guardrails: v.guardrails ?? base.guardrails,
+            steps: v.steps ?? base.steps,
           },
         })),
       tests: sk.tests.map((t, i) => ({ id: `stc_${sk.id}_${i}`, name: t.name, input: t.input, checks: t.checks, source: t.source, sourceRef: t.sourceRef, createdAt: ago(sk.versions[0].daysAgo), createdBy: sk.versions[0].by, lastOutcome: null })),
@@ -277,7 +281,7 @@ export function createSkillsMock(deps: SkillsDeps) {
   const livePins = (sk: Stored) => pins.filter((p) => p.skillId === sk.id && agentOf(p.agentId));
   const statusOf = (sk: Stored): SkillStatus => (sk.deprecated ? 'deprecated' : openReview(sk) ? 'in_review' : published(sk) ? 'published' : 'draft');
   const runFor = (sk: Stored, version: number) => sk.runs.find((r) => r.version === version);
-  const content = (sk: Stored, c: StoredContent): SkillContent => ({ name: c.name, slug: c.slug, useWhen: c.useWhen, loading: c.loading, instructions: c.instructions, tools: refs(c.toolIds), knowledgeBases: c.knowledgeBases, guardrails: c.guardrails, resources: c.resources.map((r) => (r.fileId ? { ...r, blocked: deps.files.state(r.fileId)?.blocked } : r)) });
+  const content = (sk: Stored, c: StoredContent): SkillContent => ({ name: c.name, slug: c.slug, useWhen: c.useWhen, loading: c.loading, instructions: c.instructions, tools: refs(c.toolIds), knowledgeBases: c.knowledgeBases, guardrails: c.guardrails, resources: c.resources.map((r) => (r.fileId ? { ...r, blocked: deps.files.state(r.fileId)?.blocked } : r)), inputs: c.inputs, notWhen: c.notWhen, steps: c.steps, exit: c.exit, returns: c.returns, success: c.success });
 
   const row = (sk: Stored): Skill => {
     const n = newest(sk);
@@ -319,10 +323,22 @@ export function createSkillsMock(deps: SkillsDeps) {
     else {
       if (!sk.tests.length) blockers.push('Add at least one test case.');
       else if (!runFor(sk, n.version)) blockers.push(`Run the tests on v${n.version}.`);
-      if (!n.content.instructions.trim()) blockers.push('Write the instructions.');
+      if (!n.content.instructions.trim() && !n.content.steps?.length) blockers.push('Write the instructions.');
     }
-    return { canRequest: !blockers.length, blockers, editClass: ec, approversNeeded: ec === 're_approval' ? 2 : 1 };
+    const problems = stepProblems(n.content);
+    blockers.push(...problems.map((p) => p.message));
+    return { canRequest: !blockers.length, blockers, problems, editClass: ec, approversNeeded: ec === 're_approval' ? 2 : 1 };
   };
+
+  /** A step that names something the team no longer offers, as the service's publish check places it. */
+  function stepProblems(c: StoredContent): PublishBlocker[] {
+    return (c.steps ?? []).flatMap((step, i) => {
+      const named = [...(step.use ? [`${step.use.kind}:${step.use.id}`] : []), ...[...`${step.do} ${step.check?.text ?? ''}`.matchAll(/@((?:tool|knowledge|skill|agent|workflow):[\w.-]+)/g)].map((m) => m[1])];
+      return [...new Set(named)]
+        .filter((token) => !isOffered(token))
+        .map((token): PublishBlocker => ({ kind: 'missing_reference', id: token, position: { field: 'steps', step: i + 1, index: null }, message: `Step ${i + 1} names ${token.slice(token.indexOf(':') + 1)}, which this team no longer offers.` }));
+    });
+  }
 
   /** The class of the newest version against what is published: tools, knowledge or guardrails need re-approval. */
   function editClassOf(sk: Stored, c: StoredContent): SkillEditClass {
@@ -818,7 +834,7 @@ export function createSkillsMock(deps: SkillsDeps) {
         const sk = find(sid);
         if (sk.deprecated) throw new ApiError('The skill is deprecated. Duplicate it to change it.', 409);
         const n = newest(sk);
-        if (patch.baseVersion !== n.version) throw new ApiError(`v${n.version} was saved by ${n.savedBy} ${n.version > patch.baseVersion ? 'after you opened the page' : ''}. Reload to see it.`.replace(' .', '.'), 409);
+        if (patch.baseVersion !== n.version) throw new ApiError(`v${n.version} was saved by ${n.savedBy} ${n.version > patch.baseVersion ? 'after you opened the page' : ''}. Reload to see it.`.replace(' .', '.'), 409, undefined, 'stale_base');
         if (n.state === 'in_review') throw new ApiError(`v${n.version} is waiting in Reviews. Withdraw it there, or wait for the decision.`, 409);
         validateContent({ ...patch, loading: patch.loading ?? n.content.loading });
         const before = n.content;
@@ -831,7 +847,14 @@ export function createSkillsMock(deps: SkillsDeps) {
           toolIds: patch.toolIds ?? before.toolIds,
           knowledgeBases: patch.knowledgeBases ?? before.knowledgeBases,
           guardrails: patch.guardrails?.filter((g) => g.trim()) ?? before.guardrails,
+          inputs: patch.inputs ?? before.inputs,
+          notWhen: patch.notWhen ?? before.notWhen,
+          steps: patch.steps ?? before.steps,
+          exit: patch.exit ?? before.exit,
+          returns: patch.returns ?? before.returns,
+          success: patch.success ?? before.success,
         };
+        const program = (c: StoredContent) => JSON.stringify([c.notWhen ?? '', c.steps ?? [], c.exit ?? {}, c.returns ?? [], c.success ?? []]);
         const changes = [
           nextContent.name !== before.name && 'Name',
           nextContent.useWhen !== before.useWhen && 'Use when',
@@ -840,6 +863,8 @@ export function createSkillsMock(deps: SkillsDeps) {
           nextContent.toolIds.join() !== before.toolIds.join() && 'Tools',
           nextContent.knowledgeBases.join() !== before.knowledgeBases.join() && 'Knowledge bases',
           nextContent.guardrails.join() !== before.guardrails.join() && 'Guardrails',
+          program(nextContent) !== program(before) && 'Steps',
+          JSON.stringify(nextContent.inputs ?? []) !== JSON.stringify(before.inputs ?? []) && 'Inputs',
         ].filter((x): x is string => !!x);
         if (!changes.length) throw new ApiError('Nothing changed.', 400);
         if (n.state === 'draft') {

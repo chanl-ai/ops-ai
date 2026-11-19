@@ -45,6 +45,15 @@ def mask(text: str) -> str:
     return _ACCOUNT.sub(lambda m: m.group(0) if m.start() in kept else "[account]", text)
 
 
+# Everything `mask` writes in place of a pattern.
+PLACEHOLDERS = ("[email]", "[SSN]", "[card]", "[phone]", "[account]", "••••")
+
+
+def holds_placeholder(text: str) -> bool:
+    """Whether `text` has a placeholder where `mask` took personal data out: the real value is not in it."""
+    return any(p in text for p in PLACEHOLDERS)
+
+
 class StreamMasker:
     """Masks streamed text without ever showing part of a pattern: text is released only up to whitespace at least HOLD
     characters back from the end, and the rest at `flush`."""

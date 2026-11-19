@@ -19,7 +19,11 @@ rules: [../../CLAUDE.md](../../CLAUDE.md#folder-guides).
 | `context` | Context in spec 15 section 3.1 order; untrusted content in labelled data blocks whose closing delimiter is escaped |
 | `models`, `aliases` | `build_model(settings)` (direct provider key; an alias starting `claude-` selects Anthropic) or `ModelsServiceModels` by alias; a job's own alias (`guardrail-check`, memory extraction) falls back to the turn's model only on "no such alias" |
 | `guard` | Blocked-topic guardrails: one structured classification before and after the answer; a failed check raises `GuardrailUnavailable` and the turn fails closed |
-| `skills` | The skill index, always-on bodies and the `load_skill` built-in, with per-turn caps |
+| `skills` | The skill index, always-on bodies and the `load_skill` built-in, with per-turn caps; loading a skill replaces the one carried from an earlier reply |
+| `steps` | Skills that run step by step: the program a skill version stores (models in `ops_contracts.skill_run`), the problems that stop one from running, and the running-skill record's moves (start, pass, fail, exit, sub-skill) |
+| `expr` | A step's rule check: a whitelist walk over `ast.parse`, reading `result` and `inputs`; nothing is compiled or executed |
+| `step_tools` | The built-ins `switch_skill`, `step_done` and `exit`, counted apart from the cap on kernel tools |
+| `prompt_writer` | `Brief`, `Patterns`, `head(name, brief)` (the agent's stable instructions) and `tail`, written before every model request: the current step, the skill's rules, the never rules last |
 | `search` | `search_tools`: finds only tools the agent is granted |
 | `present`, `kinds`, `layout` | The built-in `present` tool and the widget catalogue: every tree is rebuilt from closed field lists, so no HTML, script or link leaves the kernel |
 | `pii` | Masks what a turn shows and returns; re-exports `ops_pii` |
@@ -33,8 +37,37 @@ rules: [../../CLAUDE.md](../../CLAUDE.md#folder-guides).
 - A provider error fails the turn with a message that says so; there is no fallback chain between providers
   (`src/ops_agent_kernel/models.py:1`).
 - The model sees real values so it can chain calls on an account id; only what is shown and returned is masked.
+- The running-skill record is returned on `TurnResult.run` whichever way a turn ends, and on `Interrupt.run` at a pause;
+  the caller hands it back as `TurnRequest.carried_run`. A rule check runs once on the tool result as it arrives; the
+  returned record is masked with the rest of the result, the one on an interrupt is not.
+- While a skill's step names a tool, that tool and knowledge search are the only systems offered; tools other steps
+  name wait for their step.
+- Holds (`SkillRunState.holds`, outside the capped history; the rule is written out above `_key` in `steps.py`):
+  - A hold is taken the moment a step's check fails or a person denies its call, whatever retries are left and
+    however the skill is then left (exit, switch, end of the reply).
+  - It covers the tools of the later steps, those of skills they run included, and a denied call's own tool; never
+    the tool of the step whose check failed. It is per tool, not per argument: a refund held for one charge is held
+    for every charge.
+  - It keeps those tools from every other skill and from a call with no skill running. A skill whose step names a
+    held tool ends as failed at once, takes no hold, and the model is told which skill to start. The holder is
+    never kept from its own holds; its own if-not jump to a later step is the author's path.
+  - It ends only when the holder passes that same step, or when the agent no longer has that version of the holder
+    (dropped when a turn starts; it does not come back if the skill is put back).
+  - A step takes no new hold while its skill has one standing from that step or an earlier one. Accepted limit:
+    when an if-not jumps forward to a step with its own check and that check fails, passing the earlier step frees
+    the later step's write. Holding it as well would let two skills lock each other for good.
+  - A step that runs a skill passes only when that skill ends as done, unless the step has a rule of its own,
+    which then decides (`result.exit in ["done", "skip"]` lets a listed ending go on). The rule reads the results
+    the skill handed back only when it ended as done; with any other exit it sees `result.exit` alone, and it must
+    depend on the exit: hold for this exit and not hold for `failed`. A rule about an input or a result does not
+    carry the step on after a listed exit. Only a done ending whose rule does not hold takes a hold; an exit that
+    fails the step takes none. A tool error, a
+    skill a step could not start, and an exit the model calls take none. An escalate, refuse or failed exit still
+    keeps the skill's tools from the rest of that reply.
+- A step that runs a skill hands it the inputs it declares, from the running skill's inputs and then the result of
+  the step before; a required one missing fails the step.
 
-Depends on `ops_service_kit` and `ops_pii`. Depended on by `ops_engine`, agents-service and tools-service.
+Depends on `ops_service_kit`, `ops_contracts` and `ops_pii`. Depended on by `ops_engine`, agents-service and tools-service.
 
 ## Run and test
 

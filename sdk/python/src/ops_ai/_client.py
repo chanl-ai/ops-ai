@@ -97,7 +97,7 @@ NOUNS: dict[str, Noun] = {
     "files": Noun("files", list="files_list_files", get="files_get_file"),
     "runs": Noun("agents", list="workflows_list_engine_runs", get="workflows_get_engine_run"),
     "tasks": Noun("agents", list="reviews_list_reviews", get="reviews_get_review"),
-    "skills": Noun("agents", list="agents_list_skills", get="agents_get_skill"),
+    "skills": Noun("agents", list="agents_list_skills", get="agents_get_skill", create="agents_create_skill"),
     "guardrails": Noun("agents", list="agents_list_guardrails", get="agents_get_guardrail"),
     "widgets": Noun("agents", list="agents_list_widgets", get="agents_get_widget"),
     "case_types": Noun("agents", list="cases_list_case_types", get="cases_get_case_type"),
@@ -192,6 +192,64 @@ class AsyncResource:
 class AsyncThreads(AsyncResource):
     async def inbox(self, thread_id: str) -> Any:
         return await self._raw.agents.threads_get_inbox(thread_id)
+
+
+# What a skill's draft holds, as `skills.save_draft` and a skill file name them.
+SKILL_KEYS = (
+    "name",
+    "useWhen",
+    "loading",
+    "instructions",
+    "toolIds",
+    "knowledgeBases",
+    "guardrails",
+    "refusal",
+    "inputs",
+    "parts",
+    "notWhen",
+    "steps",
+    "exit",
+    "returns",
+    "success",
+)
+
+
+def _reference_query(search: str, **query: Any) -> dict[str, Any]:
+    return {k: v for k, v in {"search": search or None, **query}.items() if v is not None}
+
+
+class Skills(Resource):
+    def save_draft(self, id: str, fields: dict[str, Any], *, note: str = "", base_version: int | None = None) -> Any:
+        """Saves `fields` (any of SKILL_KEYS) as the skill's draft. `base_version` is the version the change was made
+        on; left out, it is the newest, read first."""
+        base = base_version if base_version is not None else self.get(id)["version"]
+        body = {k: fields[k] for k in SKILL_KEYS if k in fields}
+        return self._raw.agents.agents_save_skill_draft(id, {**body, "note": note, "baseVersion": base})
+
+    def publish(self, id: str, *, note: str = "") -> Any:
+        """Asks to publish the newest draft. A skill that cannot be published is refused with `cannot_request`, and
+        the error's details name each problem and the step it is on."""
+        return self._raw.agents.agents_request_skill_publish(id, {"note": note})
+
+    def references(self, search: str = "", *, for_skill: str, **query: Any) -> Any:
+        """What the skill's steps can mention with @, grouped by kind. `ids` (`kind:id` each) answers the labels of
+        what a saved text names."""
+        return self._raw.agents.agents_references_search(for_skill=for_skill, **_reference_query(search, **query))
+
+
+class AsyncSkills(AsyncResource):
+    async def save_draft(
+        self, id: str, fields: dict[str, Any], *, note: str = "", base_version: int | None = None
+    ) -> Any:
+        base = base_version if base_version is not None else (await self.get(id))["version"]
+        body = {k: fields[k] for k in SKILL_KEYS if k in fields}
+        return await self._raw.agents.agents_save_skill_draft(id, {**body, "note": note, "baseVersion": base})
+
+    async def publish(self, id: str, *, note: str = "") -> Any:
+        return await self._raw.agents.agents_request_skill_publish(id, {"note": note})
+
+    async def references(self, search: str = "", *, for_skill: str, **query: Any) -> Any:
+        return await self._raw.agents.agents_references_search(for_skill=for_skill, **_reference_query(search, **query))
 
 
 class Runs(Resource):
@@ -379,8 +437,9 @@ class OpsAI:
         self.raw = Raw(self._t)
         self.teams, self.cases = (Resource(self.raw, NOUNS[n]) for n in ("teams", "cases"))
         self.threads = Threads(self.raw, NOUNS["threads"])
-        self.skills, self.guardrails, self.widgets, self.case_types, self.task_types = (
-            Resource(self.raw, NOUNS[n]) for n in ("skills", "guardrails", "widgets", "case_types", "task_types")
+        self.skills = Skills(self.raw, NOUNS["skills"])
+        self.guardrails, self.widgets, self.case_types, self.task_types = (
+            Resource(self.raw, NOUNS[n]) for n in ("guardrails", "widgets", "case_types", "task_types")
         )
         self.knowledge = Knowledge(self.raw, NOUNS["knowledge"])
         self.files = Files(self.raw, NOUNS["files"])
@@ -450,8 +509,9 @@ class AsyncOpsAI:
         self.raw = AsyncRaw(self._t)
         self.teams, self.cases = (AsyncResource(self.raw, NOUNS[n]) for n in ("teams", "cases"))
         self.threads = AsyncThreads(self.raw, NOUNS["threads"])
-        self.skills, self.guardrails, self.widgets, self.case_types, self.task_types = (
-            AsyncResource(self.raw, NOUNS[n]) for n in ("skills", "guardrails", "widgets", "case_types", "task_types")
+        self.skills = AsyncSkills(self.raw, NOUNS["skills"])
+        self.guardrails, self.widgets, self.case_types, self.task_types = (
+            AsyncResource(self.raw, NOUNS[n]) for n in ("guardrails", "widgets", "case_types", "task_types")
         )
         self.knowledge = AsyncKnowledge(self.raw, NOUNS["knowledge"])
         self.files = AsyncFiles(self.raw, NOUNS["files"])

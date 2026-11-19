@@ -28,6 +28,8 @@ from ops_store import isolation
 from ops_store.team_scope import acting_as
 from ops_store.testing import DATABASES, NO_SQL_SERVER, sql_server_schema
 
+from ..conftest import emptied
+
 AT = "2026-11-16T09:00:00.000Z"
 ROOT = Path(__file__).resolve().parents[2]
 TEAM, OTHER = "team_cards", "team_lending"
@@ -49,6 +51,9 @@ def url(request: pytest.FixtureRequest) -> Iterator[str]:
 @pytest.fixture
 async def engine(url: str) -> AsyncIterator[AsyncEngine]:
     e = create_async_engine(url)
+    if url.startswith("postgresql"):
+        # The Postgres database outlives one test, and these rows use fixed ids another store test also inserts.
+        await emptied(e)
     yield e
     await e.dispose()
 

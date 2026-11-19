@@ -57,6 +57,7 @@ import { createPromptsMock } from './prompts';
 import { createAssuranceMock } from './assurance';
 import { createAgentPublishMock, createAgentVersionStore } from './agent-publish';
 import { createMcpLinksMock } from './mcp-links';
+import { createReferencesMock } from './references';
 import { createAgentWrappers } from './agent-wrappers';
 import { createWikiMock } from './wiki';
 import { auditSink } from './governance';
@@ -1151,6 +1152,7 @@ export function createMockApi(): OpsApi {
     modelRisk: modelRisk.api,
     assurance: assurance.api,
     mcpLinks: createMcpLinksMock(),
+    references: createReferencesMock(),
     wiki: createWikiMock({ me, kbNames: () => knowledge.kbNames() }).api,
     ...createGovernanceMock(),
     signInPolicy: signIn.api,

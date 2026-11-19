@@ -340,6 +340,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": ["limit"],
         "stream": False,
     },
+    "agents_references_search": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/references",
+        "pathParams": [],
+        "query": ["forAgent", "forSkill", "search", "kind", "cursor", "limit", "ids"],
+        "stream": False,
+    },
     "agents_render_skill": {
         "body": "json",
         "headers": [],
@@ -2630,6 +2639,35 @@ class Operations:
             SERVICE, OPERATIONS["reviews_decide_publish_request"], {"request_id": request_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
+    def agents_references_search(
+        self,
+        *,
+        for_agent: str | None = None,
+        for_skill: str | None = None,
+        search: str | None = None,
+        kind: str | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
+        ids: list[str] | None = None,
+    ) -> ReferenceSearch:
+        "References Search"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["agents_references_search"],
+            {},
+            {
+                "forAgent": for_agent,
+                "forSkill": for_skill,
+                "search": search,
+                "kind": kind,
+                "cursor": cursor,
+                "limit": limit,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
     def resources_plan_resources(self, body: PlanInput) -> Plan:
         "Plan Resources"
         return self._t.call(SERVICE, OPERATIONS["resources_plan_resources"], {}, {}, {}, body)  # type: ignore[no-any-return]
@@ -4173,6 +4211,35 @@ class AsyncOperations:
         "Decide Publish Request"
         return await self._t.call(
             SERVICE, OPERATIONS["reviews_decide_publish_request"], {"request_id": request_id}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
+    async def agents_references_search(
+        self,
+        *,
+        for_agent: str | None = None,
+        for_skill: str | None = None,
+        search: str | None = None,
+        kind: str | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
+        ids: list[str] | None = None,
+    ) -> ReferenceSearch:
+        "References Search"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["agents_references_search"],
+            {},
+            {
+                "forAgent": for_agent,
+                "forSkill": for_skill,
+                "search": search,
+                "kind": kind,
+                "cursor": cursor,
+                "limit": limit,
+                "ids": ids,
+            },
+            {},
+            None,
         )  # type: ignore[no-any-return]
 
     async def resources_plan_resources(self, body: PlanInput) -> Plan:

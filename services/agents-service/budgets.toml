@@ -226,6 +226,14 @@ queries = 2
 transactions = 2
 connections = 2
 
+# Two transactions by design: the agent and the caller's rights first, then (tools-service and kb-service asked with
+# none open) the team's workflows, skills and agents.
+["GET /v1/references"]
+queries = 8
+transactions = 2
+connections = 2
+query = { forAgent = "ag_fraud" }
+
 ["GET /v1/resources/{resource}/copies/{copy}/update"]
 not_budgeted = "needs an installed template copy; the budget seed installs none yet"
 

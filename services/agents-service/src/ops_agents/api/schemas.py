@@ -15,6 +15,7 @@ from typing import Literal
 from pydantic import ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
+from ops_agent_kernel.steps import IfNot, Ref, ReturnField, StepCheck
 from ops_agents.activities.agent_limits import AgentLimits
 
 # The envelope models live in ops_service_kit.http; the routers keep importing them from here.
@@ -1452,6 +1453,33 @@ class SkillResource(Out):
     added_by: str
 
 
+# A skill's steps as a reply carries them. The fields and their limits are the ones a save takes
+# (ops_contracts.skill_run); these add only what makes each a reply model.
+class RefOut(Out, Ref):
+    pass
+
+
+class StepCheckOut(Out, StepCheck):
+    pass
+
+
+class IfNotOut(Out, IfNot):
+    pass
+
+
+class SkillStepOut(Out):
+    """One step: what to do, what it runs, what must hold after it and what happens when it does not."""
+
+    do: str
+    use: RefOut | None = None
+    check: StepCheckOut | None = None
+    if_not: IfNotOut | None = None
+
+
+class ReturnFieldOut(Out, ReturnField):
+    pass
+
+
 class SkillContent(Out):
     name: str
     slug: str
@@ -1468,6 +1496,13 @@ class SkillContent(Out):
     inputs: list[SkillInputField] = Field(default_factory=list[SkillInputField])
     # Absent on a skill without parts: the whole body is one skill.
     parts: list[SkillPart] = Field(default_factory=list[SkillPart])
+    # A skill that runs step by step; all absent on a skill without steps. Each step's check says who judges it
+    # (`by`: a rule run on the step's result, or the model), set when the skill is saved.
+    not_when: str = ""
+    steps: list[SkillStepOut] = Field(default_factory=list[SkillStepOut])
+    exit: dict[str, str] = Field(default_factory=dict[str, str])
+    returns: list[ReturnFieldOut] = Field(default_factory=list[ReturnFieldOut])
+    success: list[str] = Field(default_factory=list[str])
 
 
 class Skill(Out):
@@ -1534,9 +1569,73 @@ class SkillUsage(Out):
     attached_by: str
 
 
+class ReferenceItem(Out):
+    """One thing a brief or a step can mention with @."""
+
+    kind: Literal["tool", "knowledge", "skill", "agent", "workflow"]
+    id: str
+    label: str
+    hint: str | None = None
+    # For an agent: whether it holds this already. For a skill: whether the skill names this tool or knowledge
+    # base; None for a kind a skill does not hold.
+    held: bool | None = None
+    # What inserting it grants, in words ("Adds Dispute status lookup to this agent"); None when nothing is added.
+    adds: str | None = None
+    needs_approval: bool = False
+    # Why it cannot be inserted, when it cannot.
+    disabled: str | None = None
+
+
+class ReferenceGroup(Out):
+    kind: Literal["tool", "knowledge", "skill", "agent", "workflow"]
+    label: str
+    items: list[ReferenceItem]
+    # Passed back as `cursor` with this group's `kind` for the next items; None when there are no more.
+    next_cursor: str | None = None
+
+
+class ReferenceSearch(Out):
+    """Only kinds the caller may view, and only groups that have an item."""
+
+    groups: list[ReferenceGroup]
+
+
+class BlockerPosition(Out):
+    """Where a publish problem is: the field (`steps`, `notWhen`, `useWhen`, `brief.never`), and the step (from 1)
+    or list index when it has one."""
+
+    field: str
+    step: int | None = None
+    index: int | None = None
+
+
+class PublishBlocker(Out):
+    """One thing that blocks a publish. `id` names the reference for a reference problem, as `<kind>:<id>`."""
+
+    kind: Literal[
+        "missing_field",
+        "missing_reference",
+        "unavailable_reference",
+        "bad_step",
+        "bad_check",
+        "bad_exit",
+        "sub_skill_not_held",
+        "prompt_rule_in_text",
+        "review_open",
+        "already_published",
+        "deprecated",
+        "too_long",
+    ]
+    id: str | None = None
+    position: BlockerPosition | None = None
+    message: str
+
+
 class SkillPublishCheck(Out):
     can_request: bool
+    # Each problem's sentence, kept for callers that read only these; `problems` says where each one is.
     blockers: list[str]
+    problems: list[PublishBlocker] = Field(default_factory=list[PublishBlocker])
     edit_class: Literal["free", "re_test", "re_approval"]
     approvers_needed: int
 

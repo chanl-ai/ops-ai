@@ -103,7 +103,7 @@ export const NOUNS = {
   files: { service: 'files', list: 'files_list_files', get: 'files_get_file' },
   runs: { service: 'agents', list: 'workflows_list_engine_runs', get: 'workflows_get_engine_run' },
   tasks: { service: 'agents', list: 'reviews_list_reviews', get: 'reviews_get_review' },
-  skills: { service: 'agents', list: 'agents_list_skills', get: 'agents_get_skill' },
+  skills: { service: 'agents', list: 'agents_list_skills', get: 'agents_get_skill', create: 'agents_create_skill' },
   guardrails: { service: 'agents', list: 'agents_list_guardrails', get: 'agents_get_guardrail' },
   widgets: { service: 'agents', list: 'agents_list_widgets', get: 'agents_get_widget' },
   caseTypes: { service: 'agents', list: 'cases_list_case_types', get: 'cases_get_case_type' },
@@ -139,6 +139,37 @@ export class Resource {
 
   create(body: unknown): Promise<any> {
     return this.call('create', { body });
+  }
+}
+
+/** What a skill's draft holds, as `skills.saveDraft` names them. */
+export const SKILL_KEYS = [
+  'name', 'useWhen', 'loading', 'instructions', 'toolIds', 'knowledgeBases', 'guardrails', 'refusal', 'inputs', 'parts',
+  'notWhen', 'steps', 'exit', 'returns', 'success',
+] as const;
+
+export type ReferenceQuery = { kind?: string; cursor?: string; limit?: number; ids?: string[] };
+
+export class Skills extends Resource {
+  constructor(t: Transport, private readonly raw: Raw) {
+    super(t, NOUNS.skills);
+  }
+
+  /** Saves `fields` (any of SKILL_KEYS) as the skill's draft. `baseVersion` is the version the change was made on; left out, it is the newest, read first. */
+  async saveDraft(id: string, fields: Record<string, unknown>, { note = '', baseVersion }: { note?: string; baseVersion?: number } = {}) {
+    baseVersion ??= (await this.get(id)).version;
+    const body = Object.fromEntries(SKILL_KEYS.filter((k) => k in fields).map((k) => [k, fields[k]]));
+    return this.raw.agents.agents_save_skill_draft({ path: { skill_id: id }, body: { ...body, note, baseVersion } as never });
+  }
+
+  /** Asks to publish the newest draft. A skill that cannot be published is refused with `cannot_request`, and the error's details name each problem and the step it is on. */
+  publish(id: string, note = '') {
+    return this.raw.agents.agents_request_skill_publish({ path: { skill_id: id }, body: { note } });
+  }
+
+  /** What the skill's steps can mention with @, grouped by kind. `ids` (`kind:id` each) answers the labels of what a saved text names. */
+  references(search: string, forSkill: string, query: ReferenceQuery = {}) {
+    return this.raw.agents.agents_references_search({ query: { ...query, forSkill, search: search || undefined } as never });
   }
 }
 
@@ -298,7 +329,7 @@ export class OpsAI {
   readonly workflows: Workflows;
   readonly threads: Threads;
   readonly cases: Resource;
-  readonly skills: Resource;
+  readonly skills: Skills;
   readonly guardrails: Resource;
   readonly widgets: Resource;
   readonly caseTypes: Resource;
@@ -346,7 +377,7 @@ export class OpsAI {
     this.teams = new Resource(t, NOUNS.teams);
     this.threads = new Threads(t, NOUNS.threads, this.raw);
     this.cases = new Resource(t, NOUNS.cases);
-    this.skills = new Resource(t, NOUNS.skills);
+    this.skills = new Skills(t, this.raw);
     this.guardrails = new Resource(t, NOUNS.guardrails);
     this.widgets = new Resource(t, NOUNS.widgets);
     this.caseTypes = new Resource(t, NOUNS.caseTypes);

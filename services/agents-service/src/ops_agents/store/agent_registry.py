@@ -23,6 +23,7 @@ from ops_store.listing import LISTED, ListPage, list_page
 from ops_store.rows import one
 from ops_store.rows import rows as read_rows
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, team_owned_via
+from ops_store.search import contains
 from ops_store.team_scope import any_team, team_visible
 
 from .base import metadata
@@ -433,6 +434,43 @@ class AgentRegistry(VersionedRegistry[AgentRow, AgentVersionRow]):
         if found is None:
             raise NotFound(f"Agent {record_id} version {version}")
         return found
+
+    async def search_published(
+        self,
+        team: str | None,
+        search: str,
+        offset: int,
+        limit: int,
+        *,
+        ids: list[str] | None = None,
+        skip: str | None = None,
+    ) -> list[tuple[str, str, str]]:
+        """(id, name, role) of `team`'s published agents that are not paused, whose published name or slug holds
+        every word of `search`, by name, cut in the query; `ids` answers exactly those of them. `skip` leaves one
+        agent out (the one being edited). With no `team`, those the acting team sees."""
+        a, v = registry_agents, registry_agent_versions
+        name = json_text(v.c.spec, "name")
+        q = (
+            sa.select(a.c.id, name.label("name"), json_text(v.c.spec, "role").label("role"))
+            .select_from(a)
+            .join(v, sa.and_(v.c.agent_id == a.c.id, v.c.version == a.c.published_version))
+            .where(
+                a.c.tenant_id == current_tenant(),
+                a.c.team_id == team if team else sa.true(),
+                a.c.paused == sa.false(),
+                a.c.id != skip if skip else sa.true(),
+                team_visible(a),
+                team_visible(v),
+            )
+        )
+        if ids is not None:
+            q = q.where(a.c.id.in_(ids))
+        else:
+            q = q.where(*(sa.or_(contains(name, w), contains(a.c.slug, w)) for w in search.split()))
+        q = q.order_by(name, a.c.id).offset(offset).limit(limit)
+        async with self.tx() as c:
+            found = (await c.execute(q)).all()
+        return [(str(i), str(n or ""), str(r or "")) for i, n, r in found]
 
     async def named_versions(self, keys: set[tuple[str, int]]) -> dict[tuple[str, int], tuple[str, str]]:
         """Each (agent, version) of `keys` the acting team sees, as that version's name and the agent's slug, in one

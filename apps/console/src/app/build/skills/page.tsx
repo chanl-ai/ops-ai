@@ -177,7 +177,7 @@ export default function SkillsPage() {
   const options = useSkillOptions();
   const { team } = useTeam();
   const defaultTeam = team?.scope === 'owned' ? team.ownerGroups[0] : undefined;
-  const canBuild = useCanBuild();
+  const canBuild = useCanBuild('skills');
   const [createOpen, setCreateOpen, createKind] = useCreateParam();
   const generateOpen = createOpen && canBuild && createKind === 'generate';
   // After a create the page navigates to the new skill; closing the dialog must not replace that navigation.

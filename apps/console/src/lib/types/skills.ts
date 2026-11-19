@@ -8,6 +8,9 @@ import type { EvalCheck, EvalCheckResult } from './evals';
  * resources). Spec 11.
  */
 
+import type { StepValue } from '@/components/shared/instruction-document/document-model';
+import type { PublishBlocker } from './references';
+
 export type SkillStatus = 'draft' | 'in_review' | 'published' | 'deprecated';
 export type SkillVersionState = 'draft' | 'in_review' | 'published' | 'superseded' | 'deprecated' | 'rejected';
 /** Wording changes re-run the tests; tool, knowledge base or guardrail changes also need a second approver. */
@@ -74,6 +77,26 @@ export interface SkillContent {
   refusal?: string;
   /** Jobs picked on their own from the chat's / menu, each loaded with the instructions as the shared overview. */
   parts?: SkillPartContent[];
+  /** What the skill asks for when it starts; absent when it takes none. A skill with parts takes them on each part. */
+  inputs?: SkillInputField[];
+  /** When not to use the skill. */
+  notWhen?: string;
+  /** Numbered steps the agent follows in order; a skill has steps or parts, never both. */
+  steps?: StepValue[];
+  /** The ways the skill may end beside done and failed: a name and what it means. */
+  exit?: Record<string, string>;
+  /** What the skill hands back when it ends. */
+  returns?: SkillReturnField[];
+  /** Lines that say the skill went well. */
+  success?: string[];
+}
+
+/** One result a skill with steps hands back. */
+export interface SkillReturnField {
+  name: string;
+  type: 'text' | 'number' | 'yes_no';
+  required: boolean;
+  description: string;
 }
 
 /** One part of a skill as saved in its version. */
@@ -249,6 +272,8 @@ export interface SkillActivity {
 export interface SkillPublishCheck {
   canRequest: boolean;
   blockers: string[];
+  /** Each blocker with where it is: a step's number when it is on a step. */
+  problems?: PublishBlocker[];
   editClass: SkillEditClass;
   approversNeeded: number;
 }
@@ -303,6 +328,18 @@ export interface SkillDraftPatch {
   guardrails?: string[];
   refusal?: string;
   parts?: SkillPartContent[];
+  /** What the skill asks for when it starts. */
+  inputs?: SkillInputField[];
+  /** When not to use the skill. */
+  notWhen?: string;
+  /** Numbered steps the agent follows in order; a skill has steps or parts, never both. */
+  steps?: StepValue[];
+  /** The ways the skill may end beside done and failed: a name and what it means. */
+  exit?: Record<string, string>;
+  /** What the skill hands back when it ends. */
+  returns?: SkillReturnField[];
+  /** Lines that say the skill went well. */
+  success?: string[];
   note?: string;
   /** The version the edit was made against; a newer one returns 409. */
   baseVersion: number;
