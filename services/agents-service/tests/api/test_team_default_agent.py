@@ -6,6 +6,7 @@ returns to the wrong agent, or a reload loses who answered. Tokens carry roles a
 
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncIterator
 from typing import Any, cast
 
@@ -25,6 +26,7 @@ from ops_agents.store.agent_registry import registry_agents
 from ops_agents.store.base import metadata
 from ops_agents.store.events import EventLog
 from ops_agents.store.tenancy import LOCAL_TENANT, tenant_scope
+from ops_contracts import chain
 from ops_engine.store import metadata as engine_metadata
 from ops_identity import Auth, Identity, ServiceAuth, service_verifiers
 from ops_identity import Principal as Caller
@@ -160,25 +162,6 @@ async def test_the_default_asks_only_specialists_the_person_may_chat_with_and_as
             assert not named.ok and named.output["code"] == "specialist_not_offered", named.output
             assert await calls_.offers_in("ag_branch", children[0]["id"]) == [], "a specialist asks no other agent"
             assert await calls_.offers_in("ag_dispute", thread) == [], "only the team default asks specialists"
-        # Two agents granted each other. The path is what refuses the call back: this specialist's thread carries no
-        # `calledBy`, so it is offered the agent that asked it, as a deeper chain would be.
-        await grant(c, "ag_dispute", "ag_branch")
-        asked_meta = cast(dict[str, Any], children[0]["meta"])
-        deeper = {k: v for k, v in asked_meta.items() if k != "calledBy"}
-        row, _ = await rt.graph_store.open_thread(
-            "th_deeper", "agent_wrapper", deeper, "team_ops", "", external_key="d"
-        )
-        with acting_for(viewer()):
-            assert [g.name for g in await calls_.offers_in("ag_dispute", row.id)] == ["agent__ag_branch"]
-            looped = await calls_.run(
-                agent="ag_branch",
-                arguments={"question": "x"},
-                key="k-loop",
-                parent_thread_id=row.id,
-                parent_run_id=None,
-            )
-        assert not looped.ok and looped.output["code"] == "agent_on_path", looped.output
-        assert await called(rt) == ["ag_branch>ag_dispute"], "an agent already on the path ran again"
         nobody = await calls_.run(
             agent="ag_dispute", arguments={"question": "x"}, key="k-none", parent_thread_id=thread, parent_run_id=None
         )
@@ -207,6 +190,44 @@ async def grant(c: AsyncClient, holder: str, asked: str) -> None:
 
 async def grant_dispute(c: AsyncClient) -> None:
     await grant(c, "ag_branch", "ag_dispute")
+
+
+def ask(agent: str, question: str) -> str:
+    """What makes the scripted model ask `agent` the question, which may itself ask another agent."""
+    return f"call agent__{agent} {json.dumps({'question': question})}"
+
+
+async def test_an_agent_already_on_the_chain_is_not_asked_again(stack: Stack, monkeypatch: pytest.MonkeyPatch) -> None:
+    c, rt = stack
+    # Chains two calls deep, so an asked agent may ask on, and two agents granted each other.
+    monkeypatch.setattr(chain, "MAX_DEPTH", 2)
+    assert (await c.put(URL, json={"agentId": "ag_branch"}, headers=ADMIN)).status_code == 200
+    await grant(c, "ag_dispute", "ag_branch")
+    await grant(c, "ag_dispute", "ag_fraud")
+    thread = (await start(c, VIEWER))["id"]
+    # The asked agent asks one not on the chain, which answers: nothing but the path refuses the call back below.
+    await say(c, thread, ask("ag_dispute", ask("ag_fraud", "Is this card blocked?")), VIEWER)
+    assert await called(rt) == ["ag_branch>ag_dispute", "ag_dispute>ag_fraud"]
+    # The asked agent told to ask the one that asked it: not offered, so it is not called.
+    await say(c, thread, ask("ag_dispute", ask("ag_branch", "And you?")), VIEWER)
+    assert sorted(await called(rt)) == ["ag_branch>ag_dispute", "ag_branch>ag_dispute", "ag_dispute>ag_fraud"]
+    assert rt.graph_store is not None
+    threads = [
+        (str(t["id"]), cast(dict[str, Any], t["meta"] or {})) for t in await rt.graph_store.threads("agent_wrapper")
+    ]
+    deepest = next(m for _, m in threads if m.get("calledBy") == "ag_dispute")["chain"]
+    assert ([s.split("@")[0] for s in deepest["path"]], deepest["depth"], deepest["rootThreadId"]) == (
+        ["ag_branch", "ag_dispute", "ag_fraud"],
+        2,
+        thread,
+    ), deepest
+    # A model that names the tool it was not offered is refused by the same rule, and told why.
+    second = next(tid for tid, m in threads if m.get("calledBy") == "ag_branch")
+    with tenant_scope(TENANT), acting_for(viewer()):
+        looped = await AgentCalls(rt).run(
+            agent="ag_branch", arguments={"question": "x"}, key="k-loop", parent_thread_id=second, parent_run_id=None
+        )
+    assert not looped.ok and looped.output["code"] == "agent_on_path", looped.output
 
 
 async def test_an_unattended_run_asks_no_agent_and_logs_why_while_a_persons_chat_still_does(stack: Stack) -> None:

@@ -23,7 +23,7 @@ from langgraph.config import get_config
 from ops_access import can
 from ops_agent_kernel.ports import ToolOutcome
 from ops_agent_kernel.types import ToolGrant
-from ops_contracts.chain import ChainRecord
+from ops_contracts.chain import ChainRecord, ChainRefusedError
 from ops_service_kit import narrow
 from ops_service_kit.errors import Forbidden, NotFound
 from ops_service_kit.http import Json, JsonValue
@@ -31,6 +31,7 @@ from ops_service_kit.ids import new_id, now_iso
 
 from ..graphs.common import AGENT_TOOL_PREFIX
 from ..store.events import EventLog
+from ..store.graphs import StoredThread
 from ..store.team_defaults import TeamDefaults
 from .agent_registry import registry
 from .auth import caller_of
@@ -108,14 +109,41 @@ class AgentCalls:
             input_schema=QUESTION_SCHEMA,
         )
 
+    def _chain(
+        self, thread: StoredThread, agent_id: str, *, started_for: str, run_id: str | None = None
+    ) -> ChainRecord:
+        """The chain the turn of `agent_id` on `thread` is on: the record written when its agent was asked, or, for a
+        thread nobody asked, a chain that starts here."""
+        meta = thread.meta_object()
+        if not meta.get("calledBy"):
+            asking = self.rt.catalog.agent(agent_id)
+            return ChainRecord.starting(
+                agent_id=agent_id,
+                version=asking.version if asking is not None else 0,
+                started_for=started_for,
+                thread_id=thread.id,
+                run_id=run_id,
+            )
+        if meta.get("chain"):
+            return ChainRecord.model_validate(meta["chain"])
+        # A specialist's thread opened before chains were recorded: one call deep, as deep as chains then went.
+        return ChainRecord(
+            started_for=str(meta.get("startedFor") or ""),
+            root_thread_id=str(meta.get("parentThreadId") or thread.id),
+            path=[f"{meta['calledBy']}@v0", f"{agent_id}@v0"],
+            depth=1,
+        )
+
     async def offers_in(self, agent_id: str, thread_id: str) -> list[ToolGrant]:
         """Specialists `agent_id` may ask on a turn with a caller: its `agent:<id>` grants, and every specialist when
-        it is the team's default. A specialist's own turn, and a turn with no caller, ask no one."""
+        it is the team's default, less the ones its chain refuses (already on the path, or past its depth). A turn
+        with no caller asks no one."""
         thread = await graph_store(self.rt).thread_row(thread_id) if thread_id else None
         person = TURN_PERSON.get()
-        if thread is None or person is None or thread.meta_object().get("calledBy"):
+        if thread is None or person is None:
             return []
         who = caller_of(person)
+        on = self._chain(thread, agent_id, started_for=person.email or who.sub)
         out: list[ToolGrant] = []
         seen: set[str] = set()
         granted = self._granted(agent_id)
@@ -128,6 +156,10 @@ class AgentCalls:
                 continue
             a = self.rt.catalog.agent(sid)
             if a is None:
+                continue
+            try:
+                on.extended(a.id, a.version)
+            except ChainRefusedError:
                 continue
             # An agent with no team is open to every person of the tenant; a service or a key holds only what its
             # token lists, so it is checked there too.
@@ -150,31 +182,24 @@ class AgentCalls:
         caller = str(parent_meta.get("agentId") or "")
         if not caller and (parent.graph or "").startswith("agent:"):
             caller = parent.graph.removeprefix("agent:")
-        # The chain the asking turn is already on, when it is a specialist's own. Read only beside `parentThreadId`,
-        # which a request body cannot set (routers/graphs.py SERVER_META): a caller's own `chain` is never trusted.
-        asked = parent_meta.get("parentThreadId") and parent_meta.get("chain")
-        on = ChainRecord.model_validate(parent_meta["chain"]) if asked else None
-        if on is not None and on.names(agent):
-            message = "That agent is already on this chain of calls, so it is not asked again."
-            return ToolOutcome(ok=False, output={"error": message, "code": "agent_on_path", "path": on.path})
+        person = TURN_PERSON.get()
+        callee = self.rt.catalog.agent(agent)
+        on = self._chain(
+            parent,
+            caller,
+            started_for=(person.email or caller_of(person).sub) if person is not None else "",
+            run_id=parent_run_id,
+        )
+        try:
+            chain = on.extended(agent, callee.version if callee is not None else 0)
+        except ChainRefusedError as e:
+            return ToolOutcome(ok=False, output={"error": e.message, "code": e.code, "path": [*on.path]})
         # Checked again here, not only when offered: a model may name a tool it was never given.
         if f"{AGENT_TOOL_PREFIX}{agent}" not in {g.name for g in await self.offers_in(caller, parent_thread_id)}:
             message = "That agent cannot be asked on this turn."
             return ToolOutcome(ok=False, output={"error": message, "code": "specialist_not_offered"})
-        person = TURN_PERSON.get()
-        assert person is not None, "offered above, so the turn has a caller"
-        callee = self.rt.catalog.agent(agent)
         assert callee is not None, "offered above"
-        started_for = person.email or caller_of(person).sub
-        asking = self.rt.catalog.agent(caller)
-        # Depth 1: a specialist asks no one (offers_in), so the asking thread is where the chain starts.
-        chain = ChainRecord(
-            started_for=started_for,
-            root_thread_id=parent_thread_id,
-            root_run_id=parent_run_id,
-            path=[f"{caller}@v{asking.version if asking is not None else 0}", f"{callee.id}@v{callee.version}"],
-            depth=1,
-        )
+        started_for = chain.started_for
         path: list[JsonValue] = [*chain.path]
         base: Json = {"agent": callee.id, "agentName": callee.name, "path": path}
         usage = self.rt.usage
