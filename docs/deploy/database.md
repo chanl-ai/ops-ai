@@ -80,7 +80,10 @@ upgrade, and compares it with the newer schema; check 2a checks the values each 
 again and the first guard refuses it; check 2c runs `downgrade.sql` and then `upgrade.sql` and finds every seeded row
 filled the same way; check 5 starts agents-service on the older schema and it refuses. From 874530fa every check
 passes. Agents 0119 makes the two side tables of 0104 (`model_call_records_unattributed`, `thread_budgets_unattributed`)
-on a database that ran the earlier form of 0104, which made none. The skill pins' drop and rebuild (agents 0113, before
+on a database that ran the earlier form of 0104, which made none. Agents 0120 stores in `use` the tool of each skill
+step that named it only in its sentence, in skill versions and in agent versions' skill pins; rendered as SQL it
+writes no rows, because only a database that ran an unreleased build can hold such a step, and that database upgrades
+online (`make migrate`, or the migrate image), where the upgrade stops if any such step is left. The skill pins' drop and rebuild (agents 0113, before
 874530fa) is checked by `services/agents-service/tests/store/test_runtime_tables_migration.py`. Thirteen revisions cannot render as SQL (`ONLINE_ONLY` in `deploy/database/schema.py`): eight
 applied before offline rendering was a rule (agents 0031, 0036, 0042; tools 0001, 0020; platform 0006, 0013, 0017),
 and five that fill rows with values worked out in Python (tools 0071 and 0076, platform 0033 and 0034, agents 0115).
