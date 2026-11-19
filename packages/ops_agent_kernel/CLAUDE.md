@@ -41,14 +41,22 @@ rules: [../../CLAUDE.md](../../CLAUDE.md#folder-guides).
   the caller hands it back as `TurnRequest.carried_run`. A rule check runs once on the tool result as it arrives; the
   returned record is masked with the rest of the result, the one on an interrupt is not.
 - While a skill's step names a tool, that tool and knowledge search are the only systems offered; tools other steps
-  name wait for their step, and a failed skill's tools stay withheld until it starts again and passes the step that
-  calls each, in every later reply of the thread (`SkillRunState.held_by_failed`, outside the capped history). A
-  tool has one holder, the first skill that failed while naming it; a skill that fails later takes no hold on it. A
-  hold comes only from a check that did not pass or a call a person denied, never from the model ending a skill
-  itself, and it is per tool, not per argument: a refund held for one charge is held for every charge. A hold of a
-  skill the agent no longer has is dropped when a turn starts. A
-  skill whose current step names a held tool ends as failed at once and the model is told which skill to start.
-  A step that runs a skill hands it the inputs it declares, from the running skill's inputs and then the result of
+  name wait for their step.
+- Holds (`SkillRunState.holds`, outside the capped history; the rule is written out above `_key` in `steps.py`):
+  - A hold is taken the moment a step's check fails or a person denies its call, whatever retries are left and
+    however the skill is then left (exit, switch, end of the reply).
+  - It covers the tools of the later steps, those of skills they run included, and a denied call's own tool; never
+    the tool of the step whose check failed. It is per tool, not per argument: a refund held for one charge is held
+    for every charge.
+  - It keeps those tools from every other skill and from a call with no skill running. A skill whose step names a
+    held tool ends as failed at once, takes no hold, and the model is told which skill to start. The holder is
+    never kept from its own holds; its own if-not jump to a later step is the author's path.
+  - It ends only when the holder passes that same step, or when the agent no longer has that version of the holder
+    (dropped when a turn starts; it does not come back if the skill is put back).
+  - A step takes no new hold while its skill has one standing from that step or an earlier one. A tool error, a
+    skill a step could not start, and an exit the model calls take none. An escalate, refuse or failed exit still
+    keeps the skill's tools from the rest of that reply.
+- A step that runs a skill hands it the inputs it declares, from the running skill's inputs and then the result of
   the step before; a required one missing fails the step.
 
 Depends on `ops_service_kit`, `ops_contracts` and `ops_pii`. Depended on by `ops_engine`, agents-service and tools-service.

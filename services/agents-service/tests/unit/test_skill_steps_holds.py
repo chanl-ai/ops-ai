@@ -1,21 +1,25 @@
-"""Skills with steps in the kernel, by failure mode: a failed skill's sub-skill write staying callable; an exit that
-stops a skill freeing its later write in the same reply; a skill starting without an input it requires; a rule
-comparing a masked input; a step with a tool still offered plan, tool search and plain skills, or tool search naming
-a tool a later step holds; and a thinking default reaching a saved agent's model request unseen.
+"""Skills with steps in the kernel, by failure mode: a tool running past a step whose check failed or whose call
+was denied (one table of conversations, a row per way round the hold); an exit that stops a skill freeing its later
+write in the same reply; a skill starting without an input it requires; a rule comparing a masked input; a step with
+a tool still offered plan, tool search and plain skills, or tool search naming a tool a later step holds; and a
+thinking default reaching a saved agent's model request unseen.
 
 The scripted model, the systems and the skill builders are those of `test_skill_steps_kernel`."""
 
 from __future__ import annotations
 
 import json
-from dataclasses import replace
+from collections.abc import Callable
+from dataclasses import dataclass, field, replace
 from typing import Any
 
+import pytest
 from pydantic_ai.messages import ModelMessage, ModelResponse
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.profiles import ModelProfile
 
-from ops_agent_kernel.types import Skill, SkillInput, ToolGrant, TurnRequest
+from ops_agent_kernel.ports import ToolOutcome
+from ops_agent_kernel.types import Resume, Skill, SkillInput, ToolGrant, TurnRequest
 from ops_agents.activities.catalog import load_catalog
 from ops_agents.api.agent_registry import definition_of
 from tests.conftest import SEED
@@ -26,6 +30,7 @@ from tests.unit.test_skill_steps_kernel import (
     NOTE,
     REFUND,
     SSN,
+    Action,
     Call,
     Script,
     Systems,
@@ -65,127 +70,340 @@ def pay_out_after_a_check(if_not: dict[str, Any], **rest: Any) -> list[Skill]:
     ]
 
 
-async def test_a_failed_skill_holds_the_write_of_the_sub_skill_it_never_reached() -> None:
-    skills = pay_out_after_a_check({"action": "retry", "retries": 0})
-    ask = TurnRequest("t1", "th1", agent(skills, max_steps=12), [LOOKUP, REFUND, NOTE], user_turn="Refund CH-1.")
-    systems = Systems(lookup_charge=_amount, refund_charge={"refunded": True})
-    model = Script(
-        ("switch_skill", {"slug": "check-then-pay"}),
-        ("lookup_charge", {"chargeId": "CH-1"}),
-        ("refund_charge", {"chargeId": "CH-1"}),
-        "I could not refund CH-1.",
-    )
-    result, _ = await reply(ask, model, systems)
-    assert ended(run_of(result)) == [("sk_check", "failed", 1)]
-    assert "refund_charge" not in model.offered[2], "the sub-skill's write is held after its parent failed"
-    assert "add_note" in model.offered[2], "a tool no step names is offered as before"
-    assert [c for c, _ in systems.calls] == ["lookup_charge"], systems.calls
-
-    # The next reply starts the pay-out skill directly: its step names the refund, which the failed skill holds.
-    later = Script(
-        ("switch_skill", {"slug": "pay-out"}), ("refund_charge", {"chargeId": "CH-1"}), "Nothing was refunded."
-    )
-    two, _ = await reply(replace(carrying(ask, run_of(result)), turn_id="t2", user_turn="Pay it out."), later, systems)
-    assert all("refund_charge" not in offered for offered in later.offered), later.offered
-    assert [c for c, _ in systems.calls] == ["lookup_charge"], systems.calls
-    # It does not stay running on a step whose tool it cannot be offered: it ends, and the model is told why.
-    assert run_of(two).running is None, run_of(two)
-    why = "refund_charge is held because check-then-pay failed its check; start check-then-pay again."
-    assert why in json.dumps(later.returned[0]), later.returned
-
-    # The failed skill starts again and its check passes: the write is its own to call.
-    again = Script(
-        ("switch_skill", {"slug": "check-then-pay"}),
-        ("lookup_charge", {"chargeId": "CH-2"}),
-        ("refund_charge", {"chargeId": "CH-2"}),
-        "CH-2 is refunded.",
-    )
-    three, _ = await reply(replace(carrying(ask, run_of(two)), turn_id="t3", user_turn="Refund CH-2."), again, systems)
-    assert [c for c, _ in systems.calls][1:] == ["lookup_charge", "refund_charge"], systems.calls
-    # Having passed the steps that held them, it holds nothing: the pay-out skill runs on its own again.
-    after = Script(("switch_skill", {"slug": "pay-out"}), ("refund_charge", {"chargeId": "CH-2"}), "Refunded again.")
-    await reply(replace(carrying(ask, run_of(three)), turn_id="t4", user_turn="Once more."), after, systems)
-    assert [c for c, _ in systems.calls][3:] == ["refund_charge"], systems.calls
-
-    # A conversation where nothing failed holds nothing: the pay-out skill runs on its own.
-    fresh = Systems(lookup_charge=_amount, refund_charge={"refunded": True})
-    alone = Script(("switch_skill", {"slug": "pay-out"}), ("refund_charge", {"chargeId": "CH-1"}), "CH-1 is refunded.")
-    await reply(ask, alone, fresh)
-    assert [c for c, _ in fresh.calls] == ["refund_charge"], fresh.calls
-
-    # Giving up is not a failed check: a skill the model ends as failed takes no hold. The pay-out skill and a
-    # goodwill skill each give up, then the check fails and holds the refund; started again, both are ended at once.
-    free_step = program({"do": "Say sorry."}, {"do": "Refund it.", "use": {"kind": "tool", "id": "refund_charge"}})
-    goodwill = stepped("sk_goodwill", 1, "Goodwill", "goodwill", free_step)
-    wide = replace(ask, settings=agent([*skills, goodwill], max_steps=12))
-    both = Systems(lookup_charge=_amount, refund_charge={"refunded": True})
-    gave_up = Script(
-        ("switch_skill", {"slug": "pay-out"}),
-        ("exit", {"name": "failed"}),
-        ("switch_skill", {"slug": "goodwill"}),
-        ("exit", {"name": "failed"}),
-        "I stopped.",
-    )
-    one, _ = await reply(wide, gave_up, both)
-    assert run_of(one).held_by_failed == {}, run_of(one)
-    failed = Script(("switch_skill", {"slug": "check-then-pay"}), ("lookup_charge", {"chargeId": "CH-1"}), "No.")
-    held, _ = await reply(replace(carrying(wide, run_of(one)), turn_id="t2", user_turn="Refund CH-1."), failed, both)
-    holds = {k: v.tools for k, v in run_of(held).held_by_failed.items()}
-    assert holds == {"sk_check": ["lookup_charge", "refund_charge"]}, holds
-    retry = Script(
-        ("switch_skill", {"slug": "pay-out"}),
-        ("switch_skill", {"slug": "goodwill"}),
-        ("step_done", {}),
-        ("refund_charge", {"chargeId": "CH-1"}),
-        "Nothing was refunded.",
-    )
-    last, _ = await reply(replace(carrying(wide, run_of(held)), turn_id="t3", user_turn="Pay it out."), retry, both)
-    assert why in json.dumps(retry.returned[0]) and why in json.dumps(retry.returned[2]), retry.returned
-    assert all("refund_charge" not in offered for offered in retry.offered), retry.offered
-    assert run_of(last).running is None and [c for c, _ in both.calls] == ["lookup_charge"], both.calls
-
-    # An agent that no longer has the skill that failed is not pointed at it: its hold is gone when the turn starts.
-    without = replace(carrying(ask, run_of(result)), settings=agent([skills[1]], max_steps=12), turn_id="t5")
-    paid = Script(("switch_skill", {"slug": "pay-out"}), ("refund_charge", {"chargeId": "CH-1"}), "CH-1 is refunded.")
-    await reply(without, paid, both)
-    assert [c for c, _ in both.calls][1:] == ["refund_charge"], both.calls
+CHECK: Call = ("switch_skill", {"slug": "check-then-pay"})
+PAY: Call = ("switch_skill", {"slug": "pay-out"})
+GOODWILL: Call = ("switch_skill", {"slug": "goodwill"})
+NOTE_PAY: Call = ("switch_skill", {"slug": "note-then-pay"})
+LOOK_PAY_NOTE: Call = ("switch_skill", {"slug": "look-pay-note"})
+GATED: Call = ("switch_skill", {"slug": "hold-then-pay"})
+RUNS_NEEDY: Call = ("switch_skill", {"slug": "runs-needy"})
+HOLD_ONLY: Call = ("switch_skill", {"slug": "hold-only"})
+LOOK_NOTE_PAY: Call = ("switch_skill", {"slug": "look-note-pay"})
+RUNS_LOOK: Call = ("switch_skill", {"slug": "runs-look"})
+CONFIRM_NO: Call = ("switch_skill", {"slug": "confirm-then-pay", "inputs": {"ok": "no"}})
+RUNS_SORRY: Call = ("switch_skill", {"slug": "runs-sorry"})
+GIVE_UP: Call = ("exit", {"name": "failed"})
+DONE: Call = ("step_done", {})
+PLACE: Call = ("place_hold", {})
+GATE = tool("place_hold", "write", approval=True)
 
 
-async def test_a_failed_skill_still_holds_its_write_after_more_skills_ended_than_the_record_lists() -> None:
-    steps = program({"do": "Say sorry."}, {"do": "Refund it.", "use": {"kind": "tool", "id": "refund_charge"}})
-    goodwill = stepped("sk_goodwill", 1, "Goodwill", "goodwill", steps)
-    skills = [*pay_out_after_a_check({"action": "retry", "retries": 0}), goodwill]
-    # Personal data is masked in the record each reply carries on, as it is for an agent by default.
-    settings = agent(skills, redact_pii=True, max_steps=12)
-    ask = TurnRequest("t1", "th1", settings, [LOOKUP, REFUND, NOTE], user_turn="Refund CH-1.")
-    systems = Systems(lookup_charge=_amount, refund_charge={"refunded": True})
-    failing = Script(("switch_skill", {"slug": "check-then-pay"}), ("lookup_charge", {"chargeId": "CH-1"}), "No.")
-    result, _ = await reply(ask, failing, systems)
-    run = run_of(result)
-    # Six later replies each start the pay-out skill and try the refund; each ending is one more entry in the list.
-    for n in range(2, 8):
-        model = Script(
-            ("switch_skill", {"slug": "pay-out"}),
-            ("exit", {"name": "failed"}),
-            ("refund_charge", {"chargeId": "CH-1"}),
-            "Not refunded.",
+def look(charge: str) -> Call:
+    return ("lookup_charge", {"chargeId": charge})
+
+
+def refund(charge: str) -> Call:
+    return ("refund_charge", {"chargeId": charge})
+
+
+def note(charge: str) -> Call:
+    return ("add_note", {"chargeId": charge})
+
+
+def book(if_not: dict[str, Any], version: int = 1) -> list[Skill]:
+    """The skills every thread below has. CH-1 is 900 and fails the look-up rule (500 at most); CH-2 is 200 and
+    passes. A note is saved for CH-2 only."""
+    check, pay = pay_out_after_a_check(if_not)
+    a_tool = {"kind": "tool", "id": "refund_charge"}
+    saved = {"text": "result.saved is true", "by": "rule"}
+    small = {"text": "result.amount <= 500", "by": "rule"}
+    once = {"action": "retry", "retries": 0}
+    noted = {"do": "Note it.", "use": {"kind": "tool", "id": "add_note"}, "check": saved, "ifNot": once}
+    looked = {"do": "Look it up.", "use": {"kind": "tool", "id": "lookup_charge"}, "check": small, "ifNot": once}
+    paid = {"do": "Refund it.", "use": a_tool}
+    needy = stepped("sk_needy", 1, "Needy", "needy", program(paid))
+    return [
+        replace(check, version=version),
+        pay,
+        stepped("sk_goodwill", 1, "Goodwill", "goodwill", program({"do": "Say sorry."}, paid)),
+        stepped("sk_note_pay", 1, "Note then pay", "note-then-pay", program(noted, paid)),
+        stepped(
+            "sk_look_pay_note",
+            1,
+            "Look pay note",
+            "look-pay-note",
+            program(looked, paid, {"do": "Note it.", "use": {"kind": "tool", "id": "add_note"}}),
+        ),
+        stepped(
+            "sk_gated",
+            1,
+            "Hold then pay",
+            "hold-then-pay",
+            program({"do": "Place the hold.", "use": {"kind": "tool", "id": "place_hold"}}, paid),
+        ),
+        replace(needy, inputs=(SkillInput("charge_id", required=True),)),
+        stepped(
+            "sk_runs_needy",
+            1,
+            "Runs needy",
+            "runs-needy",
+            program(
+                {"do": "Pay.", "use": {"kind": "skill", "id": "sk_needy"}, "ifNot": once},
+                {"do": "Note it.", "use": {"kind": "tool", "id": "add_note"}},
+            ),
+        ),
+        stepped(
+            "sk_hold_only",
+            1,
+            "Hold only",
+            "hold-only",
+            program({"do": "Place the hold.", "use": {"kind": "tool", "id": "place_hold"}}),
+        ),
+        stepped(
+            "sk_look_note_pay",
+            1,
+            "Look note pay",
+            "look-note-pay",
+            program({**looked, "ifNot": {"action": "goto", "step": 2}}, noted, paid),
+        ),
+        stepped(
+            "sk_runs_look",
+            1,
+            "Runs look",
+            "runs-look",
+            program({"do": "Look and pay.", "use": {"kind": "skill", "id": "sk_look_pay_note"}, "ifNot": once}),
+        ),
+        stepped(
+            "sk_confirm",
+            1,
+            "Confirm then pay",
+            "confirm-then-pay",
+            program({"do": "Confirm.", "check": {"text": "inputs.ok == 'yes'", "by": "rule"}, "ifNot": once}, paid),
+        ),
+        stepped(
+            "sk_sorry", 1, "Sorry", "sorry", program({"do": "Say sorry."}, exit={"escalate": "Hand it to a person."})
+        ),
+        stepped(
+            "sk_runs_sorry",
+            1,
+            "Runs sorry",
+            "runs-sorry",
+            program(
+                {
+                    "do": "Say sorry.",
+                    "use": {"kind": "skill", "id": "sk_sorry"},
+                    "check": {"text": "result.exit == 'done'", "by": "rule"},
+                    "ifNot": once,
+                },
+                {"do": "Note it.", "use": {"kind": "tool", "id": "add_note"}},
+            ),
+        ),
+    ]
+
+
+def _saved(arguments: dict[str, Any]) -> dict[str, Any]:
+    return {"saved": arguments["chargeId"] == "CH-2"}
+
+
+class Bank(Systems):
+    """The systems of the threads below; a tool named in `down` answers with an error."""
+
+    def __init__(self, down: frozenset[str]) -> None:
+        super().__init__(
+            lookup_charge=_amount,
+            refund_charge={"refunded": True},
+            add_note=_saved,
+            place_hold={"held": True},
         )
-        result, _ = await reply(replace(carrying(ask, run), turn_id=f"t{n}", user_turn="Pay it out."), model, systems)
-        run = run_of(result)
-        assert all("refund_charge" not in offered for offered in model.offered), (n, model.offered)
-    assert "sk_check" not in [h.skill_id for h in run.history], "the failed skill's entry has left the list"
-    assert [c for c, _ in systems.calls] == ["lookup_charge"], systems.calls
+        self.down = down
 
-    # Another skill that names the refund fails on a step before it, then starts again: failing gave it no hold of
-    # its own on a tool already held, so it is stopped when it reaches the refund.
-    gave_up = Script(("switch_skill", {"slug": "goodwill"}), ("exit", {"name": "failed"}), "I stopped.")
-    result, _ = await reply(replace(carrying(ask, run), turn_id="t8", user_turn="A goodwill refund."), gave_up, systems)
-    again = Script(
-        ("switch_skill", {"slug": "goodwill"}), ("step_done", {}), ("refund_charge", {"chargeId": "CH-1"}), "No."
-    )
-    result, _ = await reply(replace(carrying(ask, run_of(result)), turn_id="t9", user_turn="Again."), again, systems)
-    assert all("refund_charge" not in offered for offered in again.offered), again.offered
-    assert run_of(result).running is None and [c for c, _ in systems.calls] == ["lookup_charge"], systems.calls
+    async def execute(self, tool: str, arguments: dict[str, Any], *, key: str, approval_token: str | None) -> Any:
+        if tool in self.down:
+            self.calls.append((tool, arguments))
+            return ToolOutcome(False, {"error": "The system is down."})
+        return await super().execute(tool, arguments, key=key, approval_token=approval_token)
+
+
+Change = Callable[[list[Skill]], list[Skill]]
+
+
+@dataclass(frozen=True)
+class Thread:
+    """One conversation: what the model does in each reply, the calls that reach a system over all of them, and a
+    sentence the model must have been told. A reply may first change the agent's skills. A call that pauses for a
+    person is denied."""
+
+    name: str
+    replies: list[list[Action] | tuple[Change, list[Action]]]
+    calls: list[str]
+    told: str = ""
+    if_not: dict[str, Any] = field(default_factory=lambda: {"action": "retry", "retries": 0})
+    redact: bool = False
+    down: frozenset[str] = frozenset()
+
+
+HELD = "refund_charge is held because check-then-pay failed its check; start check-then-pay again."
+ONE_MORE = {"action": "retry", "retries": 1}
+
+THREADS = [
+    # Rule 1: the hold is taken when the check fails, whatever retries are left and however the skill is left.
+    Thread(
+        "a retry is left and the model gives up",
+        [[CHECK, look("CH-1"), GIVE_UP], [PAY, refund("CH-1")]],
+        ["lookup_charge"],
+        HELD,
+        ONE_MORE,
+    ),
+    Thread(
+        "a retry is left and the reply ends",
+        [[CHECK, look("CH-1")], [PAY, refund("CH-1")]],
+        ["lookup_charge"],
+        HELD,
+        ONE_MORE,
+    ),
+    Thread(
+        "a retry is left and the model switches in the same reply",
+        [[CHECK, look("CH-1"), PAY, refund("CH-1")]],
+        ["lookup_charge"],
+        HELD,
+        ONE_MORE,
+    ),
+    # Rules 2 and 3: later steps' tools are held from every other skill and from a plain call; the failed step's
+    # own tool is not.
+    Thread(
+        "no skill running",
+        [[CHECK, look("CH-1"), refund("CH-1")], [refund("CH-1"), look("CH-1")]],
+        ["lookup_charge", "lookup_charge"],
+    ),
+    Thread(
+        "a skill that gave up first is not the holder",
+        [[PAY, GIVE_UP], [CHECK, look("CH-1")], [PAY, refund("CH-1")]],
+        ["lookup_charge"],
+        HELD,
+    ),
+    Thread(
+        "another skill gave up on a free step first",
+        [[GOODWILL, GIVE_UP], [CHECK, look("CH-1")], [GOODWILL, DONE, refund("CH-1")]],
+        ["lookup_charge"],
+        HELD,
+    ),
+    Thread(
+        "another skill gives up after, then starts again",
+        [[CHECK, look("CH-1")], [GOODWILL, GIVE_UP], [GOODWILL, DONE, refund("CH-1")]],
+        ["lookup_charge"],
+        HELD,
+    ),
+    Thread(
+        "more skills ended than the record lists, the record masked",
+        [[CHECK, look("CH-1")], *([[PAY, GIVE_UP, refund("CH-1")]] * 6)],
+        ["lookup_charge"],
+        HELD,
+        redact=True,
+    ),
+    # Rule 4: only the holder passing that step's check releases it.
+    Thread(
+        "the holder passes its check, and the tool is free again",
+        [[CHECK, look("CH-1")], [CHECK, look("CH-2"), refund("CH-2")], [PAY, refund("CH-2")]],
+        ["lookup_charge", "lookup_charge", "refund_charge", "refund_charge"],
+    ),
+    Thread(
+        "two skills that name the same tools in opposite order do not lock each other",
+        [
+            [NOTE_PAY, note("CH-1")],
+            [NOTE_PAY, note("CH-2"), LOOK_PAY_NOTE, look("CH-1")],
+            [NOTE_PAY, note("CH-2")],
+            [LOOK_PAY_NOTE, look("CH-2"), refund("CH-2"), note("CH-2")],
+        ],
+        ["add_note", "add_note", "lookup_charge", "lookup_charge", "refund_charge", "add_note"],
+        "add_note is held because look-pay-note failed its check; start look-pay-note again.",
+    ),
+    # Rules 4 and 6: the holder leaves the agent, or the agent pins another version of it.
+    Thread(
+        "the holder is no longer on the agent",
+        [[CHECK, look("CH-1")], (lambda skills: skills[1:], [PAY, refund("CH-1")])],
+        ["lookup_charge", "refund_charge"],
+    ),
+    Thread(
+        "the agent has another version of the holder",
+        [[CHECK, look("CH-1")], (lambda skills: [replace(skills[0], version=2), *skills[1:]], [PAY, refund("CH-1")])],
+        ["lookup_charge", "refund_charge"],
+    ),
+    # Rule 7: a denied call holds the denied tool and the later steps' tools.
+    Thread(
+        "a person denies a call",
+        [[GATED, PLACE], [PAY, refund("CH-1")], [PLACE]],
+        [],
+        "refund_charge is held because a person denied a call of hold-then-pay; start hold-then-pay again.",
+    ),
+    Thread(
+        "a denied tool is itself held",
+        [[GATED, PLACE], [HOLD_ONLY, PLACE]],
+        [],
+        "place_hold is held because a person denied a call of hold-then-pay; start hold-then-pay again.",
+    ),
+    # Rule 1, at each place a check runs: inside a skill a step runs, on that skill's result, and on a step with
+    # no tool.
+    Thread(
+        "the check fails inside a skill a step runs, and passing it there releases",
+        [
+            [RUNS_LOOK, look("CH-1")],
+            [PAY, refund("CH-1")],
+            [RUNS_LOOK, look("CH-2"), refund("CH-2"), note("CH-2")],
+            [PAY, refund("CH-2")],
+        ],
+        ["lookup_charge", "lookup_charge", "refund_charge", "add_note", "refund_charge"],
+        "refund_charge is held because runs-look failed its check; start runs-look again.",
+    ),
+    Thread(
+        "the check on the result of a skill a step ran fails",
+        [[RUNS_SORRY, ("exit", {"name": "escalate"})], [note("CH-2")]],
+        [],
+    ),
+    Thread(
+        "a rule on a step with no tool fails",
+        [[CONFIRM_NO, DONE], [PAY, refund("CH-1")]],
+        [],
+        "refund_charge is held because confirm-then-pay failed its check; start confirm-then-pay again.",
+    ),
+    # Rule 5: a step takes no hold while its skill has one standing from an earlier step. Once the earlier step
+    # passes, nothing is left of the later step's failure.
+    Thread(
+        "a later step fails while an earlier hold stands",
+        [[LOOK_NOTE_PAY, look("CH-1"), note("CH-1")], [LOOK_NOTE_PAY, look("CH-2")], [PAY, refund("CH-2")]],
+        ["lookup_charge", "add_note", "lookup_charge", "refund_charge"],
+    ),
+    # Rule 8: a failure that is not a check takes no hold.
+    Thread(
+        "the step's tool answers with an error",
+        [[CHECK, look("CH-1")], [PAY, refund("CH-1")]],
+        ["lookup_charge", "refund_charge"],
+        down=frozenset({"lookup_charge"}),
+    ),
+    Thread("a step cannot start its skill", [[RUNS_NEEDY], [note("CH-2")]], ["add_note"]),
+    # Accepted: the holder's own if-not jump to a later write is the author's path; a thread with no failure holds
+    # nothing.
+    Thread(
+        "the holder's own jump to its write",
+        [[CHECK, look("CH-1"), refund("CH-1")]],
+        ["lookup_charge", "refund_charge"],
+        if_not={"action": "goto", "step": 2},
+    ),
+    Thread("nothing failed", [[PAY, refund("CH-1")]], ["refund_charge"]),
+]
+
+
+@pytest.mark.parametrize("thread", THREADS, ids=lambda t: t.name)
+async def test_a_failed_check_or_a_denied_call_holds_the_later_tools_until_the_holder_passes(thread: Thread) -> None:
+    skills = book(thread.if_not)
+    systems = Bank(thread.down)
+    run: Any = None
+    told: list[Any] = []
+    for n, step in enumerate(thread.replies, start=1):
+        change, actions = step if isinstance(step, tuple) else (None, step)
+        skills = change(skills) if change is not None else skills
+        settings = agent(skills, redact_pii=thread.redact, max_steps=12)
+        ask = TurnRequest(f"t{n}", "th1", settings, [LOOKUP, REFUND, NOTE, GATE], user_turn="Go on.", carried_run=run)
+        model = Script(*actions, "Done.")
+        result, _ = await reply(ask, model, systems)
+        if result.status == "interrupted":
+            assert result.interrupt is not None
+            denied = Resume(result.interrupt, "rejected", reason="No.")
+            model = Script("It was denied.")
+            result, _ = await reply(replace(ask, turn_id=f"t{n}d", user_turn=None, resume=denied), model, systems)
+        told += model.returned
+        run = run_of(result)
+    assert [c for c, _ in systems.calls] == thread.calls, systems.calls
+    assert thread.told in json.dumps(told), told
 
 
 async def test_a_step_does_not_start_a_skill_without_an_input_it_requires() -> None:
@@ -214,14 +432,13 @@ async def test_a_step_does_not_start_a_skill_without_an_input_it_requires() -> N
 
 
 async def test_an_exit_that_stops_a_skill_holds_its_later_write_for_the_rest_of_the_reply() -> None:
-    skills = pay_out_after_a_check(
-        {"action": "exit", "exit": "escalate"}, exit={"escalate": "Hand the request to a person."}
-    )
+    skills = pay_out_after_a_check({"action": "retry"}, exit={"escalate": "Hand the request to a person."})
     ask = TurnRequest("t1", "th1", agent(skills, max_steps=12), [LOOKUP, REFUND, NOTE], user_turn="Refund CH-1.")
     systems = Systems(lookup_charge=_amount, refund_charge={"refunded": True})
     model = Script(
         ("switch_skill", {"slug": "check-then-pay"}),
-        ("lookup_charge", {"chargeId": "CH-1"}),
+        # No check failed: the model hands the request to a person, which holds for this reply only.
+        ("exit", {"name": "escalate"}),
         # The pay-out skill started directly: its step names the refund, which the stopped skill still holds.
         ("switch_skill", {"slug": "pay-out"}),
         ("refund_charge", {"chargeId": "CH-1"}),
@@ -234,7 +451,12 @@ async def test_an_exit_that_stops_a_skill_holds_its_later_write_for_the_rest_of_
     why = "refund_charge is held for the rest of this reply because check-then-pay ended as escalate"
     assert why in json.dumps(model.returned[2]), model.returned
     assert all("refund_charge" not in offered for offered in model.offered[2:]), model.offered
-    assert [c for c, _ in systems.calls] == ["lookup_charge"], systems.calls
+    assert systems.calls == [], systems.calls
+
+    # The next reply is free of it: no check failed and no call was denied.
+    later = Script(("switch_skill", {"slug": "pay-out"}), ("refund_charge", {"chargeId": "CH-1"}), "CH-1 is refunded.")
+    await reply(replace(carrying(ask, run_of(result)), turn_id="t2", user_turn="Pay it out."), later, systems)
+    assert [c for c, _ in systems.calls] == ["refund_charge"], systems.calls
 
 
 async def test_a_skill_does_not_start_without_an_input_it_requires() -> None:

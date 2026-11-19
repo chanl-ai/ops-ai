@@ -207,19 +207,28 @@ class EndedSkill(RunModel):
     ended: str
     at_step: int
     # The tools its steps and its sub-skills' steps call, kept unless it ended as done or switched: they are not
-    # offered for the rest of the reply it ended in. What a failed skill holds beyond that reply is in
-    # `SkillRunState.held_by_failed`, because this list is capped.
+    # offered for the rest of the reply it ended in. What a failed check or a denied call holds beyond that reply
+    # is in `SkillRunState.holds`, because this list is capped.
     tools: list[str] = Field(default_factory=list[str])
     # The results it was ended with, by name.
     returns: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
 
 
-class HeldTools(RunModel):
-    """The tools a skill that ended as failed still holds: no other skill is offered one. A tool leaves the list
-    when that skill, started again, passes the step that calls it."""
+class Hold(RunModel):
+    """Tools kept from every other skill, and from a call with no skill running, because a step's check did not
+    pass or a person denied its call. The skill that holds them is never kept from them itself. The hold ends when
+    that skill passes the same step, or when the agent no longer has this version of it."""
 
+    skill_id: str
+    version: int
     slug: str
     name: str
+    # The step whose check failed or whose call was denied: its number, then a dot and the step of the skill it
+    # runs when that is where it happened ("2", "2.1").
+    step: str
+    denied: bool = False
+    # The tools of the steps after it, those of skills they run included; with the denied tool when a call was
+    # denied; never the tool of the step whose check failed, so the check can always be run again.
     tools: list[str] = Field(default_factory=list[str])
 
 
@@ -228,5 +237,5 @@ class SkillRunState(RunModel):
 
     running: RunningSkill | None = None
     history: list[EndedSkill] = Field(default_factory=list[EndedSkill])
-    # By skill id. Kept apart from `history`, which drops its oldest entries: a hold lasts as long as the thread.
-    held_by_failed: dict[str, HeldTools] = Field(default_factory=dict[str, HeldTools])
+    # Kept apart from `history`, which drops its oldest entries: a hold lasts as long as the thread.
+    holds: list[Hold] = Field(default_factory=list[Hold])

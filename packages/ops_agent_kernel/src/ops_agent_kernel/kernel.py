@@ -831,7 +831,7 @@ def _own_knowledge(req: TurnRequest, arguments: Json) -> Json | None:
     return {**asked, "collections": collections}
 
 
-def _kept_run(kept: SkillRunState, stepped: list[Skill]) -> SkillRunState:
+def _kept_run(kept: SkillRunState, stepped: list[Skill], has: list[Skill]) -> SkillRunState:
     """The record a turn goes on with. A running skill finishes on the steps of the version it started, which the
     record holds; while the agent still pins that version, its own steps and notes are used, because the record a
     reply returned may hold them masked."""
@@ -844,10 +844,12 @@ def _kept_run(kept: SkillRunState, stepped: list[Skill]) -> SkillRunState:
         pinned = next((s for s in stepped if (s.skill_id, s.version) == at and s.program is not None), None)
         if pinned is not None and pinned.program is not None:
             frame.program, frame.rules = pinned.program, pinned.instructions
-    # Only the holder releases a hold, by starting again. A skill the agent no longer has cannot start, so what it
-    # held is free: the model is never pointed at a skill it cannot call.
-    has = {s.skill_id for s in stepped}
-    run.held_by_failed = {k: v for k, v in run.held_by_failed.items() if k in has}
+    # Only the holder ends a hold, by passing the step it was taken on. A skill the agent no longer has, or has in
+    # another version, cannot do that, so what it held is free: the model is never pointed at a skill it cannot
+    # start, or at a step that may no longer exist.
+    # `has` is every skill with steps the agent has, whether or not this turn can run them.
+    pins = {(s.skill_id, s.version) for s in has}
+    run.holds = [h for h in run.holds if (h.skill_id, h.version) in pins]
     return run
 
 
@@ -1105,7 +1107,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
     kept_run = req.resume.interrupt.run if req.resume else req.carried_run
     state.tracks = bool(state.stepped) or kept_run is not None
     if kept_run is not None:
-        state.run = _kept_run(kept_run, state.stepped)
+        state.run = _kept_run(kept_run, state.stepped, step_tools.stepped(req.settings.skills))
         if req.settings.redact_pii and not req.resume:
             state.run = pii.remarked(state.run)
     if req.resume:
