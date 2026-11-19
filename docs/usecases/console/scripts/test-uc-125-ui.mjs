@@ -1,11 +1,16 @@
 // uc-125 a page on sample data says so and cannot be saved, a live setting persists, ui layer:
 // docs/usecases/console/sample-data-pages-say-so.md. Signed in through platform-service as Sam (Security admin).
-import { PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { PLATFORM_PORT, check, chromium, expectSampleData, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const PASSWORD = 'northfield-demo';
 const SAM = 's.adeyemi@harborpine.example';
 // Pages whose data is the mock's. Each must carry the notice and have no enabled control inside its gate.
-const SAMPLE_PAGES = ['/account', '/account/security', '/settings/notifications', '/settings/sign-in', '/settings/webhooks', '/settings/api-keys', '/settings/policies/gates'];
+// Account and API keys are served on platform sign-in, so they are live pages, not sample ones.
+const SAMPLE_PAGES = ['/account/security', '/settings/notifications', '/settings/sign-in', '/settings/webhooks', '/settings/policies/gates'];
+// The same pages at the routes they redirect to, where the console reports their reads of the mock.
+expectSampleData('/settings/account/security', '/settings/team/notifications', '/settings/team/webhooks', '/settings/policies/gates');
+// The notice is the page's own (whole page unserved) or a section's; both say "Sample data:" (sample-data-banner.tsx).
+const NOTICE = '[data-sample-data]';
 
 const signIn = async (browser, consoleUrl, email) => {
   const page = await (await browser.newContext({ viewport: { width: 1440, height: 1000 } })).newPage();
@@ -30,7 +35,7 @@ await withUiStack(
       const report = {};
       for (const path of SAMPLE_PAGES) {
         await sam.goto(`${consoleUrl}${path}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-        const notice = sam.getByTestId('sample-data-notice');
+        const notice = sam.locator(NOTICE).first();
         const shown = await notice.waitFor({ timeout: 120_000 }).then(() => true, () => false);
         await sam.getByTestId('sample-data-gate').first().waitFor({ state: 'attached', timeout: 30_000 }).catch(() => undefined);
         const text = shown ? await notice.innerText() : '';
@@ -41,7 +46,7 @@ await withUiStack(
           (sel) => [...document.querySelectorAll(sel)].filter((e) => !e.matches(':disabled')).map((e) => e.getAttribute('aria-label') || e.textContent?.trim() || e.tagName),
           controls,
         );
-        report[path] = { shown: shown && loaded && /Sample data, changes aren.t saved/.test(text), enabled: live.length === 0 ? 0 : live };
+        report[path] = { shown: shown && loaded && /^Sample data: /.test(text.trim()), enabled: live.length === 0 ? 0 : live };
       }
       check('every sample-data page carries the notice and has no enabled control inside it', Object.values(report).every((r) => r.shown && r.enabled === 0), report);
 
@@ -87,7 +92,7 @@ await withUiStack(
       const saved = await sam.getByText(/Saved as version/).first().waitFor({ timeout: 15_000 }).then(() => true, () => false);
       await sam.reload({ waitUntil: 'domcontentloaded' });
       const kept = await sam.getByLabel('Signed link lifetime').inputValue({ timeout: 120_000 });
-      const notice = await sam.getByTestId('sample-data-notice').count();
+      const notice = await sam.locator(NOTICE).count();
       check('a live setting saves a version, keeps its value after a reload and carries no sample notice', saved && kept === next && notice === 0, { was, next, kept, saved, notice });
 
       check('no page errors', (sam.errors ?? []).length === 0, sam.errors);

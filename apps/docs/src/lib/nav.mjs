@@ -142,6 +142,8 @@ export const SITE = [
         entries: [
           { page: 'sdk/python.md', title: 'Python', icon: 'file-code' },
           { page: 'sdk/typescript.md', title: 'TypeScript', icon: 'file-code-2' },
+          { page: 'sdk/upgrading.md', title: 'Upgrading to 1.0.0', icon: 'circle-arrow-up' },
+          { page: 'sdk/changelog-next-major.md', title: '1.0.0 changelog', icon: 'history' },
         ],
       },
       {
@@ -184,7 +186,7 @@ export const SITE = [
       {
         group: 'Team environments',
         icon: 'cloud',
-        entries: ['deploy/devhost.md', 'deploy/fly.md', 'deploy/fly-staging.md', 'deploy/docs-site.md', 'deploy/demo-mailbox.md'],
+        entries: ['deploy/release.md', 'deploy/devhost.md', 'deploy/fly.md', 'deploy/fly-staging.md', 'deploy/docs-site.md', 'deploy/demo-mailbox.md'],
       },
     ],
   },

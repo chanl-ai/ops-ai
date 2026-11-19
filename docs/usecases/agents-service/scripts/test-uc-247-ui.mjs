@@ -1,9 +1,9 @@
 // uc-247 a builder tests an agent on a real chat thread the server marks test, ui layer:
 // docs/usecases/agents-service/test-an-agent-on-a-real-thread.md. James asks Branch Concierge a question in its page's
 // test panel: the thread the panel starts is marked test, the reply arrives, and the test stays out of his
-// conversations. Ravi, a viewer, asks too and is told the test could not start. Platform sign-in, scripted model.
+// conversations. Ravi, a viewer, is offered no Test tab, and a test thread he asks the server for is refused. Platform sign-in, scripted model.
 import { check, chromium, consoleSignIn, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
-import { JAMES, PASSWORD } from '../../lib/workflow_ui.mjs';
+import { JAMES, PASSWORD, agents, as } from '../../lib/workflow_ui.mjs';
 
 const RAVI = 'r.menon@harborpine.example';
 const AGENT = 'ag_branch';
@@ -56,11 +56,13 @@ await withUiStack(
       const listed = (await james.locator('main').innerText().catch(() => '')).includes(QUESTION);
       check('4 his conversations list the chat and leave the test out', chatListed && !listed, { chatListed, listed });
 
+      // The panel offers Test only to someone who may test (agent-test-panel.tsx canTest); the server refuses the rest.
       const ravi = await consoleSignIn(browser, consoleUrl, RAVI, PASSWORD, errors);
-      const refused = await askInTest(ravi, consoleUrl, `${QUESTION} from Ravi`);
-      const toast = await ravi.getByText('Couldn’t start the test').first().waitFor({ timeout: 30_000 }).then(() => true, () => false);
-      check('2 Ravi, a viewer, asks too and is told the test could not start (403)', refused?.status() === 403 && toast, { status: refused?.status(), toast });
-      // Ravi's refused request is an expected 403 in the console, not a page error.
+      await ravi.goto(`${consoleUrl}/agents/${AGENT}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await ravi.getByTestId('agent-test-panel').waitFor({ timeout: 120_000 }).catch(() => undefined);
+      const testTab = await ravi.getByTestId('test-tab').count();
+      const refused = await fetch(`${agents}/chat/threads`, { method: 'POST', headers: await as(RAVI), body: JSON.stringify({ agentId: AGENT, kbIds: [], test: true }) });
+      check('2 Ravi, a viewer, is offered no Test tab, and a test thread he asks for is refused (403)', testTab === 0 && refused.status === 403, { testTab, status: refused.status });
       check('no page errors', errors.length === 0, errors);
     } finally {
       await browser.close();

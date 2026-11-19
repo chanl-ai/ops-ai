@@ -40,14 +40,14 @@ await withUiStack(
       };
       const page = await signIn(1440);
 
-      await step('1 the hub shows six kinds, three coming soon, and lists the team’s channels from the records', async () => {
+      await step('1 the hub shows five kinds (MCP links have their own tab), two coming soon, and lists the team’s channels from the records', async () => {
         await page.goto(`${consoleUrl}/channels`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await page.getByTestId('channel-gallery').waitFor();
         const cards = await page.locator('[data-testid^="gallery-"]:not([data-testid^="gallery-action"])').evaluateAll((els) => els.map((e) => e.innerText));
         const soon = cards.filter((t) => t.includes('Coming soon')).map((t) => t.split('\n')[0]);
         const rows = await page.locator('[data-testid^="channel-row-"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid').slice('channel-row-'.length)));
         const expected = all.data.slice(0, rows.length).map((c) => c.id);
-        check('1 the hub shows six kinds, three coming soon, and lists the team’s channels from the records', cards.length === 6 && soon.join() === 'MCP,Slack,Teams' && rows.length > 0 && JSON.stringify(rows) === JSON.stringify(expected), { cards: cards.length, soon, rows, expected });
+        check('1 the hub shows five kinds (MCP links have their own tab), two coming soon, and lists the team’s channels from the records', cards.length === 5 && soon.join() === 'Slack,Teams' && rows.length > 0 && JSON.stringify(rows) === JSON.stringify(expected), { cards: cards.length, soon, rows, expected });
       });
 
       await step('2 each built kind’s tab dot is the health the server gives it', async () => {
@@ -65,7 +65,7 @@ await withUiStack(
         const sum = email.data.reduce((n, c) => n + (c.activity7d ?? 0), 0);
         const href = new URL(await card.getByRole('link', { name: /View activity/ }).getAttribute('href'), consoleUrl);
         const sources = href.searchParams.getAll('source');
-        check('3 the email landing counts its week and links Activity to each of its mailboxes', count === sum && href.pathname === '/activity' && JSON.stringify(sources) === JSON.stringify(email.data.map((c) => `channel:${c.id}`)), { count, sum, sources });
+        check('3 the email landing counts its week and links Activity to each of its mailboxes', count === sum && href.pathname === '/govern/activity' && JSON.stringify(sources) === JSON.stringify(email.data.map((c) => `channel:${c.id}`)), { count, sum, sources });
       });
 
       await step('4 the old Deployments address lands on Channels and says so', async () => {
@@ -79,7 +79,7 @@ await withUiStack(
         const named = page.getByTestId('deployments-moved-link');
         await named.getByText(/Wire Fraud Sentinel’s versions are live/).waitFor({ timeout: 30_000 });
         const namedHref = await named.getAttribute('href');
-        check('4 the old Deployments address lands on Channels and says so, linking to where versions are live', said === 1 && generic === '/agents' && namedHref === '/agents/ag_fraud?tab=channels', { url: page.url(), said, generic, namedHref });
+        check('4 the old Deployments address lands on Channels and says so, linking to where versions are live', said === 1 && generic === '/build/agents' && namedHref === '/build/agents/ag_fraud?tab=channels', { url: page.url(), said, generic, namedHref });
       });
 
       await step('5 Chat embed › Embed on a page opens the embed dialog with its agent picker', async () => {

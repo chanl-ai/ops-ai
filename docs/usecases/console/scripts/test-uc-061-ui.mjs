@@ -89,7 +89,7 @@ await withUiStack(
       const spend = widget('series');
       await spend.getByRole('radio', { name: 'Table' }).click();
       const cols = (await spend.getByRole('columnheader').allInnerTexts()).join('|');
-      check('the person switches the inferred series to a table keyed by its date', (await spend.getAttribute('data-renderer')) === 'table' && cols === 'date|groceries|transit', cols);
+      check('the person switches the inferred series to a table keyed by its date', (await spend.getAttribute('data-renderer')) === 'table' && cols === 'Date|Groceries|Transit', cols);
 
       await page.reload({ waitUntil: 'domcontentloaded' });
       await page.getByRole('textbox', { name: 'Message' }).waitFor({ timeout: 120_000 });

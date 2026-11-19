@@ -14,7 +14,9 @@
 # upgrade across one is refused; docs/deploy/database.md gives the path from older releases.
 set -eu
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
-FROM=${1:-874530fa}
+# The offline-upgrade floor; ci.yml reads this line.
+FLOOR=874530fa
+FROM=${1:-$FLOOR}
 TO=${TO:-HEAD}
 NAME=ops-schema-proof
 PORT=${OPS_SCHEMA_PROOF_PORT:-15499}
