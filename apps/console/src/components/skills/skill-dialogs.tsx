@@ -15,7 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { plural } from '@/lib/format';
 import type { SkillCreateInput, SkillDetail, SkillImportPreview, SkillLoading, SkillVersion } from '@/lib/types/skills';
 
-import { DiffView, EDIT_CLASS, EditClassBadge, joinSections } from './skill-meta';
+import { DiffView, EDIT_CLASS, EditClassBadge, UNWRITTEN_SECTIONS } from './skill-meta';
 import { SkillLoadingField } from './skill-loading';
 
 function TeamSelect({ id, teams, value, onChange, error }: { id: string; teams: string[]; value: string; onChange: (v: string) => void; error?: string }) {
@@ -63,7 +63,7 @@ export function NewSkillDialog({ open, onOpenChange, teams, defaultTeam, maxUseW
     setErrors(e);
     if (e.name || e.useWhen || e.team) return;
     try {
-      await onSubmit({ name: name.trim(), useWhen: loading === 'always' ? '' : useWhen.trim(), loading, instructions: joinSections({ steps: '1. ', rules: '- ', examples: '', output_format: '' }), ownerTeam: team, toolIds: [], knowledgeBases: [], guardrails: [], origin: 'blank' });
+      await onSubmit({ name: name.trim(), useWhen: loading === 'always' ? '' : useWhen.trim(), loading, instructions: UNWRITTEN_SECTIONS, ownerTeam: team, toolIds: [], knowledgeBases: [], guardrails: [], origin: 'blank' });
       onOpenChange(false);
     } catch (err) {
       setErrors({ submit: (err as Error).message });

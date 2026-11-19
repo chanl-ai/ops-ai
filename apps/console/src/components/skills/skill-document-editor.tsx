@@ -6,6 +6,7 @@ import { InstructionDocument, referencesIn, type DocumentValue, type Instruction
 import { useReferenceLabels, useReferenceSearch } from '@/hooks/references-queries';
 import type { PublishBlocker } from '@/lib/types/references';
 
+import { UNWRITTEN_SECTIONS } from './skill-meta';
 import { NOTES, placeProblems } from './skill-problems';
 
 export interface SkillDocument {
@@ -15,7 +16,7 @@ export interface SkillDocument {
 
 const toValue = (doc: SkillDocument): DocumentValue => ({
   blocks: [
-    { kind: 'field', key: NOTES, label: 'Notes for every step', locked: true, text: doc.instructions, placeholder: 'What holds for the whole skill: tone, rules, what to hand back.' },
+    { kind: 'field', key: NOTES, label: 'Notes for every step', locked: true, text: doc.instructions.trim() === UNWRITTEN_SECTIONS.trim() ? '' : doc.instructions, placeholder: 'What holds for the whole skill: tone, rules, what to hand back. Optional.' },
     { kind: 'steps', steps: doc.steps, placeholder: 'Describe the first step. Type @ to name a tool, a knowledge base or another skill.' },
   ],
 });

@@ -67,6 +67,9 @@ export function splitSections(instructions: string): Record<SkillSectionKey, str
 }
 export const joinSections = (s: Record<SkillSectionKey, string>) => SECTIONS.map((k) => `## ${SECTION_TITLE[k]}\n${s[k].trim()}`).join('\n\n');
 
+/** The headings a blank skill was created with. Notes that hold only these read as a second, empty step list, so the step document shows them as empty. */
+export const UNWRITTEN_SECTIONS = joinSections({ steps: '1. ', rules: '- ', examples: '', output_format: '' });
+
 export function ToolChips({ tools, max = 4, outOfScope = [] }: { tools: Pick<SkillToolRef, 'toolId' | 'name' | 'access'>[]; max?: number; outOfScope?: string[] }) {
   if (!tools.length) return <span className="text-xs text-muted-foreground">None</span>;
   return (
