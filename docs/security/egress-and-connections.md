@@ -16,8 +16,9 @@ opsai egress allow-host api.core-banking.example.com
 opsai egress list
 ```
 
-The host is now reachable over HTTPS by the team's tools. A call to any host not on the list is refused, and the
-refusal names the host.
+The host is now reachable over HTTPS by the team's tools. By default a tool that names a host not on the list waits
+until a Security admin allows it; under the "Only listed addresses" choice it is refused, and the refusal names the
+host.
 
 ## How it works
 

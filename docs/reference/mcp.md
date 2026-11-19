@@ -15,7 +15,7 @@ JSON configuration:
 {
   "mcpServers": {
     "ops-ai-claims": {
-      "url": "https://ops.example.com/mcp/team_claims",
+      "url": "https://ops.example.com/api/tools/mcp/team_claims",
       "headers": { "Authorization": "Bearer ok_..." }
     }
   }
@@ -29,8 +29,8 @@ to Ops AI and allow the connection on a consent page; the connection then lasts 
 
 | Part | Behaviour |
 |---|---|
-| Team address | `/mcp/<team>` lists the team's read tools the caller may use, the team's published skills as prompts, and template tools |
-| MCP links | `/mcp/<team>/<link>` serves a chosen set of the team's tools and published workflows, made on Channels › MCP. Any other tool is refused; a paused link answers that it is paused; each call is recorded with the link |
+| Team address | `/api/tools/mcp/<team>` lists the team's read tools the caller may use, the team's published skills as prompts, and template tools |
+| MCP links | `/api/tools/mcp/<team>/<link>` serves a chosen set of the team's tools and published workflows, made on Channels › MCP. Any other tool is refused; a paused link answers that it is paused; each call is recorded with the link |
 | Who the call is for | The person who signed in, or the API key's team, with their own permissions. The address's team must be theirs |
 | Test runs | Every call is a test run: it uses an app's test account when the team has one |
 | Writes | A write waits for a person's approval, whatever the team's approval settings |
