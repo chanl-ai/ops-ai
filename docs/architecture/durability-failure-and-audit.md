@@ -1,6 +1,6 @@
 # Durability, failure and audit
 
-Status: current, updated 2026-10-16. The decided design is [workflows and agents](../design/workflows/workflows-and-agents.md); decision records it does not settle remain options.
+Status: current, checked against the code on 2026-11-18. Designed and not built: an append-only journal with identity fields per step, journal retention and signed export. The decided design is [workflows and agents](../design/workflows/workflows-and-agents.md).
 
 LangGraph saves state between nodes. Keeping a run alive for days, with one owner at a time and no duplicated side
 effect, is our code, all in the same PostgreSQL. Fencing and timers are decided in
@@ -36,7 +36,7 @@ deduplication lives where the call lands (tools-service), never in the process t
 
 | Call in a re-run node | What happens |
 |---|---|
-| Agent-kernel model call already completed, inside a graph run on PostgreSQL | Replayed from `model_calls` (`api/model_ledger.py`), keyed by thread and a hash of the request without timestamps and run ids; a re-run resume node makes no second call |
+| Agent-kernel model call already completed, inside a graph run on PostgreSQL | Replayed from `model_call_records` (`api/model_ledger.py`), keyed by thread and a hash of the request without timestamps and run ids; a re-run resume node makes no second call |
 | Workflow model calls (classify, extract, draft, grade) | Repeat: 3 extra calls per crash in the dispute workflow's fan-out. The repeat may differ, though nothing downstream saw the first answer |
 | Model call in flight at the crash | Repeats; a response is recorded only after its stream is read to the end |
 | Tool write through tools-service | Runs once (dedupe below) |
@@ -77,9 +77,11 @@ its paused run's writes are refused. Every write a stale owner can make is check
 | Timer | `timer_id` (interrupt id and round) | A duplicate or early fire does nothing |
 | Kernel tool call | `run_id:turn_id:step:ordinal` | Passed to the tool as its idempotency key |
 
-A gateway that dies after claiming a write and before the tool returns leaves a `running` row; every retry then gets
-409 `write_in_progress` and nobody knows whether the effect happened. That needs a reconciler that asks the tool
-server; it is not built.
+A gateway that dies after claiming a write and before the tool returns leaves a `running` row. A workflow run on the
+engine reconciles it by its key: it asks tools-service for the call (`GET /v1/executions?key=`) and abandons the key
+when the gateway never ran it (`POST /v1/calls/abandon`, `services/tools-service/src/ops_tools/app.py:552`;
+`packages/ops_engine/src/ops_engine/compiler.py:1397-1410`). A chat or agent thread still gets 409
+`write_in_progress` on every retry.
 
 ## Side-effect classes
 
@@ -92,16 +94,18 @@ server; it is not built.
 | money | Place a wire hold | One attempt, then a reconciliation read; approval token from two approvers | Manual handling |
 
 No run ends silently: a failed or stuck run, a recursion limit hit, or a timer past its retry cap lands in manual
-handling, shown in Reviews. Retries by class and the manual-handling queue are designed; today a node error ends the
-run with `error` and the checkpoint keeps the last good step.
+handling, shown in Reviews. A workflow on the engine retries by side-effect class (`RETRY_BY_EFFECTS`,
+`packages/ops_engine/src/ops_engine/compiler.py:1399`), and the run reconciler marks stuck runs
+(`packages/ops_engine/src/ops_engine/store/reconciler.py`). On a chat or agent thread a node error still ends the run
+with `error`, and the checkpoint keeps the last good step.
 
 Route to people is built for definition workflows: `POST /v1/threads/{id}/route-to-people`, or
 `POST /v1/threads:route-to-people` for every open thread of one workflow version. The request sets a flag on the
 thread; `execute` reads it before starting and after every step that ends with no write step in flight, so a write in
 flight finishes and in-flight reads are cancelled. The skipped steps are journaled as `route.skipped`, and the thread
 continues to the built-in `manual_handling` step, which waits for a person with the reason. A waiting or idle thread is
-routed at once under its lease. Code graphs answer 409 `not_routable`. The publisher role is not checked: dev auth
-has no roles, so the requester is recorded.
+routed at once under its lease. Code graphs answer 409 `not_routable`. Routing needs a reviewer's role in the team
+(`reviews.decide`, `services/agents-service/src/ops_agents/api/routers/routing.py`).
 
 ## Approval expiry
 
@@ -119,9 +123,9 @@ gateway after the token's TTL. The agents service renews the token from the reco
 
 | Aspect | Designed | Today |
 |---|---|---|
-| Shape | Append-only table; rows never changed or deleted inside retention | `graph_runs`: one row per run with its events, written at run end, plus `sla` and `lease` rows; run events also go to `thread_events` as they happen, so a crashed run's events up to the crash survive |
+| Shape | Append-only table; rows never changed or deleted inside retention | Workflows on the engine keep a journal row per step attempt in `engine_steps`. Threads keep `graph_runs`: one row per run with its events, written at run end, plus `sla` and `lease` rows; run events also go to `thread_events` as they happen, so a crashed run's events up to the crash survive |
 | Fields per step | `sub`, `act`, token id, input hash, gateway decision, model call id, tool call id, node, version digest, time | Node sequence, owner, generation, crash record; tool decisions in `gateway_calls` |
-| Retention | Set per tenant; checkpoints are pruned, the journal is kept | No retention job |
+| Retention | Set per tenant; checkpoints are pruned, the journal is kept | No journal retention job; a memory retention loop runs |
 | Export | Signed JSON lines to the tenant's storage on a schedule | No |
 
 ## Checkpoint growth and pruning

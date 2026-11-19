@@ -13,12 +13,12 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 from pydantic import Field
 
 from ops_service_kit.errors import ServiceUnavailable
-from ops_service_kit.http import Out
+from ops_service_kit.http import Json, JsonValue, Out
 
 from .app_rows import AppCard, CardToolRow
 from .app_states import AppGroup, AppState
@@ -143,7 +143,9 @@ def can_do(tools: list[ReviewedTool]) -> str:
     return " · ".join(parts) or "No tools switched on yet"
 
 
-async def _reviewed(apps: Apps, who: Caller, tools: Sequence[Mapping[str, object]]) -> list[ReviewedTool]:
+async def _reviewed(
+    apps: Apps, who: Caller, tools: Sequence[CardToolRow] | Sequence[Mapping[str, JsonValue]]
+) -> list[ReviewedTool]:
     """Each tool with whether its write waits, from the gateway's rule: its own setting, its app, the team."""
     if apps.write_approvals is None:
         return [cast(ReviewedTool, {**t, "reviewed": t["access"] != "read" and bool(t["waits"])}) for t in tools]
@@ -198,7 +200,7 @@ def _primary(accounts: list[MyAccountRow], team_default: str | None, saved: set[
     )
 
 
-async def my_connectors(apps: Apps, who: Caller) -> list[dict[str, Any]]:
+async def my_connectors(apps: Apps, who: Caller) -> list[Json]:
     """The caller's connectors in their team, one row per app, joined here so the page makes one call."""
     cards = await apps.cards(who, listed=True, builtins=False)
     mine = await apps.connections.mine(who, every=True)
@@ -211,7 +213,7 @@ async def my_connectors(apps: Apps, who: Caller) -> list[dict[str, Any]]:
         by_app.setdefault(str(m["appId"]), []).append(m)
     conns = await apps.connections.store.by_ids(who.tenant_id, [str(m["connectionId"]) for m in mine])
     may = apps.connections.may_manage(who)
-    rows: list[dict[str, Any]] = []
+    rows: list[Json] = []
     for card in cards:
         plugin = card.get("plugin")
         if card["kind"] == "plugin" and plugin is None:
@@ -243,7 +245,10 @@ async def my_connectors(apps: Apps, who: Caller) -> list[dict[str, Any]]:
                 app_state_reason=card.get("appStateReason"),
                 app_group=card["appGroup"],
                 can_do=can_do(tools),
-                tools=[ConnectorTool(**{k: t[k] for k in ("name", "title", "access", "reviewed")}) for t in tools],
+                tools=[
+                    ConnectorTool(name=t["name"], title=t["title"], access=t["access"], reviewed=t["reviewed"])
+                    for t in tools
+                ],
                 primary_account_id=first["connectionId"] if first else None,
                 account=first.get("account") if first else None,
                 since=first.get("since") if first and first["state"] == "connected" else None,
@@ -274,7 +279,7 @@ async def my_connectors(apps: Apps, who: Caller) -> list[dict[str, Any]]:
                 may_manage=may,
             ).model_dump(by_alias=True)
         )
-    return sorted(rows, key=lambda r: (RANK.get(r["appGroup"], 3), str(r["name"]).lower()))
+    return sorted(rows, key=lambda r: (RANK.get(cast(str, r["appGroup"]), 3), str(r["name"]).lower()))
 
 
 def _identity(apps: Apps, card: AppCard, conn: Account | None, row: MyAccountRow) -> list[IdentityRow]:

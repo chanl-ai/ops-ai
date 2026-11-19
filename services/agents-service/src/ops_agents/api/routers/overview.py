@@ -9,13 +9,13 @@ tools-service answers (`tests/api/test_review_routes_hold_nothing.py`)."""
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, TypeAlias
+from typing import Annotated, TypeAlias, cast
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
 from ops_engine.store import RunStore
-from ops_service_kit.http import Envelope, JsonValue, Out
+from ops_service_kit.http import Envelope, Json, JsonValue, Out
 from ops_store import isolation
 
 from ...store.cases import CaseStore
@@ -124,21 +124,21 @@ async def overview(rt: Rt, me: Me) -> JSONResponse:
             due_rows, due_total = await store.list(
                 teams, due_before=tomorrow.isoformat(timespec="milliseconds").replace("+00:00", "Z"), size=LISTED
             )
-    awaiting = len({r["caseId"] for r in open_rows if r.get("caseId")})
+    awaiting = len({cast(str, r.get("caseId")) for r in open_rows if r.get("caseId")})
     body = OverviewCounts(
         open_reviews=len(open_rows),
         overdue_reviews=len(overdue),
-        urgent_reviews=urgent,
+        urgent_reviews=cast(list[Json], urgent),
         cases=CaseCounts(open=counts["needs"], breaching=counts["breaching"], awaiting_approval=awaiting),
         counts=OverviewListCounts(waiting_for_me=len(mine), runs_in_flight=flight_total, cases_due=due_total),
         waiting_for_me=[
             OverviewTaskRow(
                 id=str(r["id"]),
                 title=str(r.get("title") or "Human Task"),
-                workflow_name=r.get("workflowName"),
-                case_id=r.get("caseId"),
+                workflow_name=cast(str | None, r.get("workflowName")),
+                case_id=cast(str | None, r.get("caseId")),
                 created_at=str(r["createdAt"]),
-                due_at=r.get("dueAt"),
+                due_at=cast(str | None, r.get("dueAt")),
             )
             for r in mine_listed
         ],

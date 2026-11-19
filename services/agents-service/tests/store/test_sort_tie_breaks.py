@@ -34,7 +34,7 @@ async def _threads(e: AsyncEngine, tag: str) -> list[str]:
     store = GraphStore(e)
     for i in IDS:
         await store.create_thread(f"th_{tag}_{i}", f"g_{tag}", {}, TEAM, AT)
-    return [t["id"] for t in await store.threads(f"g_{tag}")]
+    return [t.id for t in await store.thread_rows(f"g_{tag}")]
 
 
 async def _graph_runs(e: AsyncEngine, tag: str) -> list[str]:

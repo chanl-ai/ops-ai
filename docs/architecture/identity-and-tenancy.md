@@ -1,6 +1,6 @@
 # Identity, trust and tenancy
 
-Status: current, updated 2026-10-22: the team is the workspace, and that rule overrides anything below or in another doc that lets data cross teams. The decided design is [workflows and agents](../design/workflows/workflows-and-agents.md); decision records it does not settle remain options.
+Status: current, checked against the code on 2026-11-18. The team is the workspace, and that rule overrides anything below or in another doc that lets data cross teams. Designed and not built: the graph version as `act`, workload identity over mTLS or OIDC, a KMS signer in place of HS256, and a signed OPA bundle. The decided design is [workflows and agents](../design/workflows/workflows-and-agents.md); decision records it does not settle remain options.
 
 Every run acts for someone. Detail: [ADR-0005](decisions/identity-and-entitlement.md) (workflow identities,
 delegation, approval tokens), [ADR-0013](decisions/auth-provider-seam.md) and
@@ -32,7 +32,7 @@ with no team, or code that means "every team".
 
 | Crossing | Where | Change |
 |---|---|---|
-| Tool modules with no team, and modules approved for another team's workflow | `services/tools-service/src/ops_tools/modules/directory.py:70` (`sees_module`), the no-team Platform tools module | Each team installs its own; keys are per team |
+| Tool modules with no team, and modules approved for another team's workflow | `services/tools-service/src/ops_tools/modules/directory.py:93` (`sees_module`), the no-team Platform tools module | Each team installs its own; keys are per team |
 | The dev header acts for every team at the request level | `ops_store.isolation.enter_caller` (reason `dev`) | inside agents-service the dev caller already acts in the one team its request names |
 
 No longer exists: a tool's approver being the module's owning team. agents-service decides every held write in its
@@ -55,8 +55,8 @@ a request.
 
 | Decision | Detail |
 |---|---|
-| Sign-in is a seam | The console calls one `AuthProvider` with `mock`, `oidc` and `firebase` adapters; a workspace's policy (methods, SSO domains, MFA, session length) comes from the API. Bank default: `oidc` against the bank's IdP, MFA required, invite only |
-| Delegation per run | The adapter exchanges the caller's token for a short-lived delegation token: `sub` is who the work is for, `act` is who does it (the graph version), audience the tools gateway. OAuth token exchange (RFC 8693) where the IdP supports it |
+| Sign-in is a seam | The console calls one `AuthProvider` with `platform` (password, OIDC and SAML through platform-service, the default), `mock`, `oidc` and `firebase` adapters (`apps/console/src/lib/auth/provider.ts:57`); a workspace's policy (methods, SSO domains, MFA, session length) comes from the API. Bank default: `oidc` against the bank's IdP, MFA required, invite only |
+| Delegation per run | The adapter exchanges the caller's token for a short-lived delegation token: `sub` is who the work is for, `act` is who does it (the graph version), audience the tools gateway. OAuth token exchange (RFC 8693) where the IdP supports it. In code: acting-for tokens that platform-service signs per person and team, sent as `X-Acting-For` on each tools call (`packages/ops_identity/src/ops_identity/acting_for.py`); the graph version as `act` is designed |
 | Process principals | Mailbox, schedule and webhook runs use a non-human principal owned by the team that owns the channel, with the entitlements that team approved. Its writes run without asking, as register row E49 sets, and a run with nobody in it is not asked |
 | Workload identity | Each service and worker pool has its own (SPIFFE or the platform's equivalent); service-to-service calls use mTLS or OIDC |
 | Tool calls | Every tool call goes through tools-service, which asks OPA. A write runs without asking by default (row E49); where a team or an operation asks, the approval is bound to the input hash, and money needs two approvers |
@@ -85,7 +85,7 @@ their own connections in My security › Connected assistants.
 |---|---|---|
 | Tool read | Delegation token, `X-Lease-Generation` | tools-service: identity known, tool in the registry |
 | Tool write | Delegation token, approval token, lease generation | OPA: token signed by the review service, `inputHash`, `tool`, `thread`, `step` match, not expired, two distinct approvers for money; tools-service: fence, dedupe |
-| Model call | The identity's model key | models-service (planned); today a key-admission port admits every key and a thread budget pauses the thread ([human-in-the-loop.md](human-in-the-loop.md)) |
+| Model call | The identity's model key | models-service, when `OPS_MODELS_URL` is set: each key's status, budget, rate and clearance on every call. agents-service's own admission port still admits every key before a thread opens, and a thread budget pauses the thread ([human-in-the-loop.md](human-in-the-loop.md)) |
 
 The access class (`read` or `write`) comes from the gateway's own registry; the caller never declares
 it. A refusal lists every failed condition and reaches the model as a tool error, so the turn continues. Nine refusal
@@ -98,11 +98,11 @@ reasons are tested ([gateway-approval-token](../services/agents-service/experime
 | Tables | `graph_threads`, `graph_runs`, `thread_events`, `review_decisions`, `review_approvals` (migration 0021) and `ops_checkpoints`, `ops_checkpoint_writes`, `ops_checkpoint_fences` (0004, 0008) carry `tenant_id`; existing rows are the dev tenant `local` |
 | Policy | Each `ENABLE` and `FORCE ROW LEVEL SECURITY` with `tenant_id = current_setting('app.tenant_id', true)` for reads and writes; an unset tenant matches nothing |
 | Tenant source | `ops_identity` enters each request's isolation context (`ops_store.isolation`: tenant, one team, scope) from the verified token or key, after the principal resolves; no service sets its own, and none is read from a body, header or path. Stores and the checkpointer read it per transaction; no repository takes a tenant argument. A path wider than one team names a reason (`isolation.tenant_wide`, `isolation.system_tx`), logged as `isolation.widen` and listed in `packages/ops_store/tests/test_isolation_sites.py` |
-| One tenant or many | `tenancy_mode` (`single`, the default, or `multi`) is the only difference: single refuses creating any tenant but the install's (`bootstrap_tenant_id`, else `local`), 409 `single_tenant` (`ops_platform/tenants.py`, `tests/test_tenancy_mode.py`). Still one per deployment: `graph_tenant_id` (the install's own Microsoft Graph sender), and the 21 agents and 3 models tables with no `tenant_id`. A model call names its tenant (`X-Tenant-Id`); one that uses an account's provider key without it is 400 `tenant_required` |
+| One tenant or many | `tenancy_mode` (`single`, the default, or `multi`) is the only difference: single refuses creating any tenant but the install's (`bootstrap_tenant_id`, else `local`), 409 `single_tenant` (`ops_platform/tenants.py`, `tests/test_tenancy_mode.py`). Still one per deployment: `graph_tenant_id` (the install's own Microsoft Graph sender), and the models-service tables that carry no `tenant_id`. A model call names its tenant (`X-Tenant-Id`); one that uses an account's provider key without it is 400 `tenant_required` |
 | No tenant | A store call with no tenant raises `NoTenantError`; below the store, the tenant role with no `app.tenant_id` sees no row |
 | Role | The compose database user is a superuser and bypasses RLS, so every tenant transaction runs `SET LOCAL ROLE ops_runtime_tenant`. A deployment must connect as a non-superuser role that owns no tables and may `SET ROLE` to `ops_runtime_tenant` and `ops_runtime_system` |
-| Loops (answer a) | The sweeper and the timer poller claim before they know the tenant. They read it from the thread's row as `ops_runtime_system` (`BYPASSRLS`, `GraphStore.tenant_of`), then do the work in a new task that sets it, never on the loop's own context. Requests never run as that role; `tests/store/test_tenancy.py` holds the list of callers. The inbox drain runs inside a run and has its run's tenant |
-| Checkpoints | One compiled graph serves every tenant: the saver takes the tenant from the same context variable when it opens each transaction. Team in the checkpoint key is `local`; team access is decided by the API before a thread is touched |
+| Loops (answer a) | The sweeper and the timer poller claim before they know the tenant. They read it from the thread's row as `ops_runtime_system` (`BYPASSRLS`, `GraphStore.owner_of`), then do the work in a new task that sets it, never on the loop's own context. Requests never run as that role; `tests/store/test_tenancy.py` holds the list of callers. The inbox drain runs inside a run and has its run's tenant |
+| Checkpoints | One compiled graph serves every tenant: the saver takes the tenant from the same context variable when it opens each transaction. The saver takes the team from the same context, and tenant and team are both in every checkpoint key (`packages/ops_checkpointer/src/ops_checkpointer/tables.py`); team access is also decided by the API before a thread is touched |
 | Teams | Another team's thread, run, event or review in the same tenant answers 404, as another tenant's does, and lists show the acting team's only: the store reads through `team_visible` and the database holds the five run tables to the transaction's team (`{t}_isolation`, migration 0073). The reviewer is a person in the thread's own team. The dev header caller acts for every team of its tenant (reason `dev`) |
 | External keys | Unique per `(tenant_id, external_key)`, so one tenant's key neither collides with nor reveals another's |
 | Proven | `tests/store/test_tenancy.py` on PostgreSQL: each tenant counts only its own rows in every table with no tenant clause (turning RLS off on `graph_runs` fails it); a write naming another tenant is refused; one graph run by two tenants stores each checkpoint under its own tenant and B reads nothing of A's. `tests/api/test_platform_identity.py`: 404 across tenants, 403 with the owning team across teams, dev headers 401 in platform mode |
@@ -127,7 +127,7 @@ The one table of token facts; other pages link here. From
 | A step that rewrites the draft after approval is refused at the gateway | Approve the last version of the draft |
 | A step-up token is minted by `POST /v1/auth/step-up` for the caller: in dev auth by agents-service, signed with a key derived from the review key for that purpose only; under platform sign-in by platform-service after a password re-check, EdDSA under its session key with `typ` `step_up`, `email` the person and this service in `aud` | An approval token never passes as a step-up; a session token never passes as a step-up (`typ`), and a step-up never resolves as a session (`kind`) |
 | agents-service accepts a platform step-up through the key set the shared Auth already caches, with no fetch of its own (`api/auth.py`, `verify_platform_step_up`) | The caller's own session token loaded the key; a step-up under a kid the cache does not hold is refused until the person's token refreshes under the new key |
-| Every money decision verifies the step-up's signature, subject (the deciding person) and age (five minutes), and answers 422 `step_up_required` with the reason | Step-up authenticates the approver; it approves nothing by itself. A decision records a fingerprint of the step-up, never the token |
+| A decision whose operation policy asks for step-up (two approvers imply it), or any decision while the workspace's `stepUp` policy is on, verifies the step-up's signature, subject (the deciding person) and age (five minutes), and answers 422 `step_up_required` with the reason | Step-up authenticates the approver; it approves nothing by itself. A decision records a fingerprint of the step-up, never the token |
 
 ## Prototype shortcuts still in the code
 
@@ -135,17 +135,16 @@ The one list of trust shortcuts; other pages link here.
 
 | Shortcut | Where | Production replacement |
 |---|---|---|
-| Dev auth: one fixed user in tenant `local`; `X-Dev-User` names a second reviewer; team from the `X-Team-Id` header | `ops_agents/api/auth.py` with `OPS_AUTH_MODE=dev`; refused by Settings outside `dev`. `OPS_AUTH_MODE=platform` resolves platform tokens and API keys through ops_identity and refuses the dev headers | Platform mode everywhere |
+| Dev auth: one fixed user in tenant `local`; `X-Dev-User` names a second reviewer; team from the `X-Team-Id` header | `packages/ops_identity/src/ops_identity/resolve.py` with `OPS_AUTH_MODE=dev`; refused by Settings outside `dev`. `OPS_AUTH_MODE=platform` resolves platform tokens and API keys through ops_identity and refuses the dev headers | Platform mode everywhere |
 | HMAC (HS256) approval and step-up tokens: the verifier can also mint | `ops_policy.HmacSigner` behind the `Signer` interface, review key in Settings | A KMS `Signer` with an asymmetric key; only the Reviews code (`ops_hitl`) and the sign-in service can mint |
 | The review key reaches OPA by a data write anyone who can reach port 8181 could overwrite | tools-service start-up | A signed OPA bundle |
-| Internal routes accept any registered calling service | models-service's `/v1/models/*` routes take `CurrentService`; providers, keys and alias versions are what a person administers. TODO in `ops_models/app.py` | When the console gets a models admin page, those routes move to `CurrentPrincipal` with an admin role check; aliases, admit and calls stay service-only |
-| Step-up from the demo password: agents-service's dev route, and platform-service's `POST /v1/auth/step-up`, which re-checks the one dev password | money decisions verify signature, subject and five-minute age | The identity provider re-authenticates (SSO, MFA) and platform-service mints |
+| Some models-service routes accept any registered calling service | Aliases, admission and calls take a service token only; provider keys and connections also take an account admin's token with `settings.manage` (`services/models-service/src/ops_models/app.py`) | Aliases move to an admin's token when the console gets an aliases page; admission and calls stay service-only |
+| Step-up in dev auth mode re-checks the dev sign-in's password | agents-service `api/routers/step_up.py` | Platform sign-in: platform-service mints the step-up after the person's own password or a fresh sign-in at their SSO provider |
 | The requester check differs by path. Workflow reviews refuse the requester (403, `hitl_facade.requester_of`) while `requesterMayDecide` is off (row E51); a chat confirmation is answered only by the person who asked (row E50); money refuses the same approver twice. `POST /v1/threads/{id}/approvals` runs the same decider check (`hitl_facade.check_thread_decider`) | `hitl_facade.py`, `routers/chat.py`, `routers/reviews.py` | The rule moves into the `ops_hitl` package with the requester taken from identity |
-| Key budgets admit every key | `KeyAdmission` port in agents-service | A per-key ledger in models-service ([service-map.md](service-map.md)) |
-| Chat approvals use `dev-approval:<id>` | `routers/chat.py` | Chat decide calls the approvals route; until then turning the gateway on refuses chat writes |
+| Key budgets admit every key before a thread opens | `KeyAdmission` port in agents-service, `AdmitAll` by default (`services/agents-service/src/ops_agents/api/deps.py:70`) | agents-service asks models-service's `POST /v1/models/admit`; models-service already checks every call's key |
 
 ## Open
 
-Whether the bank's IdP can issue a delegation token with an `act` claim is untested (overview open question 6). If it
+Whether the bank's IdP can issue a delegation token with an `act` claim is untested (open question 6 in [delivery](delivery.md#open-questions)). If it
 cannot, the gateway mints internal delegation tokens after authenticating both parties, which concentrates trust in
 the gateway and needs Security's sign-off.

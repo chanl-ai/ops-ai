@@ -229,7 +229,7 @@ async def test_an_error_port_is_recorded_as_an_error_and_returned_on_a_rerun() -
 
 
 def test_an_approved_write_reading_a_later_node_is_refused() -> None:
-    raw = BASIC.wire()
+    raw: dict[str, Any] = BASIC.wire()
     for n in raw["nodes"]:
         if n["id"] == "review":
             n["parameters"]["approves"] = "lookup"  # lookup runs before the review: it does not follow it
@@ -363,7 +363,7 @@ async def test_a_dangling_write_is_reconciled_even_if_its_operation_is_now_a_rea
 
 
 def test_a_parameter_error_names_its_field() -> None:
-    raw = BASIC.wire()
+    raw: dict[str, Any] = BASIC.wire()
     for n in raw["nodes"]:
         if n["id"] == "lookup":
             del n["parameters"]["operation"]  # required at the top: the missing property is the field

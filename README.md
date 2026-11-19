@@ -123,7 +123,7 @@ person approves it.
 | [Build with Ops AI](docs/guide/build-with-ops-ai.md) | The developer path, then the [agents](docs/guide/agents.md) and [workflows](docs/guide/workflows.md) manuals |
 | [Security and governance](docs/guide/security-and-governance.md) | Approvals, roles, sign-in and audit |
 | [Install](docs/guide/install.md) | Running it on a server: the install script, Docker Compose, Kubernetes |
-| [Architecture overview](docs/architecture/overview.md) | How the services, the gateways and the runtime fit together |
+| [Architecture](docs/architecture/README.md) | How the services, the gateways and the runtime fit together |
 | [docs/README.md](docs/README.md) | The map of every document |
 
 ## Contributing

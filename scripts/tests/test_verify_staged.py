@@ -132,3 +132,16 @@ def test_a_uv_call_inside_the_hooks_copy_never_repoints_the_checkouts_packages(t
     finally:
         if not pth.read_text().startswith(str(ROOT)):
             subprocess.run(["uv", "run", "--quiet", "python", "-c", "pass"], cwd=ROOT, check=False)
+
+
+def test_a_worktree_without_a_venv_names_the_missing_install_not_a_home_path(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    (repo / "scripts").mkdir(parents=True)
+    shutil.copy(ROOT / "scripts/verify-staged.sh", repo / "scripts/verify-staged.sh")
+    (repo / "note.md").write_text("hello\n")
+    for args in (["init", "-q"], ["add", "."]):
+        subprocess.run(["git", *args], cwd=repo, check=True)
+    done = subprocess.run(["bash", "scripts/verify-staged.sh"], cwd=repo, capture_output=True, text=True, check=False)
+    out = done.stdout + done.stderr
+    assert done.returncode != 0 and "this worktree has no .venv" in out and "uv sync" in out, out
+    assert "names a home path" not in out, out

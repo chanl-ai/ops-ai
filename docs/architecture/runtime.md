@@ -1,6 +1,6 @@
 # Inside the runtime
 
-Status: current, updated 2026-10-16. The decided design is [workflows and agents](../design/workflows/workflows-and-agents.md); decision records it does not settle remain options.
+Status: current, checked against the code on 2026-11-18. Designed and not built: worker pools per tier, and chat and agent threads running on the engine. The decided design is [workflows and agents](../design/workflows/workflows-and-agents.md).
 
 The runtime is `agents-service` (`services/agents-service`, module `ops_agents`), one FastAPI process on port 8700.
 Detail on the kernel is in agent-kernel, on nodes in
@@ -17,11 +17,11 @@ Detail on the kernel is in agent-kernel, on nodes in
 | Workflows as tools | `api/child_runs.py`, `graphs/common.py` (`WorkflowRunner`, `WorkflowTools`) | An agent granted `workflow:<id>` calls a published workflow as a tool; a child thread on it is linked by `parent_thread_id`, and its result or review handle comes back as the tool result ([workflows-as-tools.md](workflows-as-tools.md)) |
 | Graphs | `ops_agents/graphs/` | Three code graphs and the definition compiler; `common.py` bridges a kernel turn into a node |
 | Definition compiler | `graphs/definition.py` | Validates a definition, builds a LangGraph `StateGraph`, caches compiled graphs by digest |
-| Checkpointer | `packages/ops_checkpointer` | `CheckpointSaver`: LangGraph checkpoints on SQLAlchemy Core, on PostgreSQL and SQL Server, under the tables' tenant and team policies, with a per-thread fence |
-| Leases and sweeper | `api/leases.py`, `api/sweeper.py` | Per-thread lease with generation; takeover of expired leases; recovery from the last checkpoint |
+| Checkpointer | `packages/ops_checkpointer` | `CheckpointSaver`: LangGraph checkpoints on SQLAlchemy Core, on PostgreSQL (SQL Server partial), under the tables' tenant and team policies, with a per-thread fence |
+| Leases and sweeper | `store/leases.py`, `api/sweeper.py` | Per-thread lease with generation; takeover of expired leases; recovery from the last checkpoint |
 | Timers | `api/timers.py`, `api/timer_port.py`, `graphs/sla.py` | SLA timers, the poller, `fire()` |
 | Activities | `ops_agents/activities/` | Seed catalogue, local tools, keyword knowledge store, `GatewayToolExecutor` for tools-service |
-| Channels | `api/channels/` | Mailbox adapter, deployment and inbox store |
+| Channels | `api/channels/inbox.py`, `store/channels.py` | Input delivered to a busy thread; the deployments store |
 | Metering | `graphs/metering.py`, `api/metering.py`, `api/usage.py`, `packages/ops_metering` | A usage row per model call; the budget check before each call, which pauses the thread when spent |
 | Model-call ledger | `api/model_ledger.py` | Records each completed model response by thread and request hash, under the alias it ran on; a node re-run after a crash replays it instead of calling the model again |
 | Model source | `ops_agent_kernel/models.py`, `ports.py` (`ModelSource`), `api/model_ledger.py` (`LedgerSource`) | The model a turn runs on, by its agent's alias: through models-service when it is configured, else the one direct model ([Which model a turn runs on](#which-model-a-turn-runs-on)) |
@@ -71,7 +71,7 @@ The hop costs 7 ms at p50 on a local server (E13, [models-service-hop.md](../ser
 | `agent_wrapper` | agent turn → approval → resumed turn | Before a gated tool | An agent deployed on a channel; and console chat: each conversation is a thread on it, each message a run |
 | `simple_workflow` | classify → answer with citation | None | Reference for a workflow with no pause |
 | `complex_workflow` | classify → extract per attachment (Send fan-out, at most 20) → collect → draft → grade (redraft until 0.8 or 3 attempts) → human → send reply | Human review of the draft | Reference for a days-long case |
-| Definition-built | Node kinds agent, extract, collect, draft, grade, condition, human, tool, end; built-in `route_to_people` and `manual_handling` | `human` nodes, with SLA settings; `manual_handling` after a route to people | Workflows published as JSON |
+| Definition-built | Node kinds agent, extract, collect, draft, grade, condition, human, tool, end, pass, agent_turn, extract_records, match, open_cases; built-in `route_to_people` and `manual_handling` | `human` nodes, with SLA settings; `manual_handling` after a route to people | Workflows published as JSON |
 
 Every run, resume and state read compiles the thread's pinned version and refuses if the stored digest no longer
 matches. Compile takes about 3 ms; a cache hit 0.06 ms. The cache matters for memory: each pinned version stays
@@ -91,24 +91,26 @@ compiled in each process while any thread can resume on it
 | | Find-or-create by external key and an inbox for input on a busy thread |
 | | Usage and budgets per thread, a model-call ledger replayed on re-run, route to people |
 
-Designed and not built: a work queue table for enqueued runs and worker pools per tier, a stored event log with
-per-thread `seq`, recovery handed to its own task with a cap (today recovery runs inside the sweep loop, one thread at
-a time).
+Chat and agent threads have no work queue: they run in the API process, and their recovery runs inside the sweep loop,
+one thread at a time. Workflows run on the engine from `engine_work` in the worker process. The per-thread event log
+with `seq` is `thread_events`. Designed and not built: worker pools per tier, and recovery handed to its own task
+with a cap.
 
 ## Process types
 
 | Process | Today | Designed |
 |---|---|---|
 | `api` | One process serves routes and runs the sweeper and the poller | Serves routes and streams; scales with edits and chat connections |
-| `worker` | None | Takes runs from the work queue; owns timers and the poller; scales with concurrent runs |
+| `worker` | Runs workflows from `engine_work`, with no HTTP and no model of its own (`services/agents-service/src/ops_agents/api/worker.py`); chat and agent threads stay in the API process | Takes every run from the work queue; owns timers and the poller; scales with concurrent runs |
 | tools-service | Separate process on 8720 | Own deployable under its own user, so egress stays separate on one machine |
 
 ## The engine
 
 Temporal was removed on 2026-10-16. The engine is `packages/ops_engine`: a step journal, a Postgres work queue,
 worker processes, leases with generation fencing and reconcile-by-key, with LangGraph as the runner on PostgreSQL
-([workflow-runner.md](workflow-runner.md)). Slice 1 is in code and runs inside agents-service; the agent and
-chat routes still call LangGraph directly. The conformance suite, 13 tests from spec 16 §9 and ADR-0016, runs on the
+([workflow-runner.md](workflow-runner.md)). Workflows run on the engine inside agents-service, with retries by
+effects class, a run reconciler (`packages/ops_engine/src/ops_engine/store/reconciler.py`) and review deadlines and
+reminders; chat and agent threads still run on the LangGraph graphs above. The conformance suite, 13 tests from spec 16 §9 and ADR-0016, runs on the
 LangGraph adapter (`services/agents-service/tests/conformance/`,
 [conformance-suite](../services/agents-service/experiments/conformance-suite.md)). Plans must keep every side-effecting node idempotent by key
 or a single attempt with a reconciliation read, carry no engine-specific settings, and wait only through `delay`,

@@ -2,10 +2,8 @@
 
 Status: current.
 
-Until the migration to the engineering standards closes, every change to `services/`, `packages/` or `apps/console/`
-is a component, the pilot or one lane of `docs/architecture/migration/README.md`; its pages name the files, commands
-and acceptance checks per lane, and `docs/architecture/engineering-standards.md` names the rule each check enforces.
-Its hard rules: commit subject at most 72 characters and
+Every change to `services/`, `packages/` or `apps/console/` follows `docs/architecture/engineering-standards.md`,
+which names the rule each check enforces. Its hard rules: commit subject at most 72 characters and
 body at most 3 lines; no `--no-verify`, stash or force push, never a push to `main` or `develop`; one branch and one
 pull request per lane; tests first, one per failure mode (`TS1`, `TS3`); no joins, counts or sums in the browser
 (`UI1`); every access decision through `can()` (`AC1`); a Pydantic model at every boundary (`MD1`, `MD4`).

@@ -277,7 +277,7 @@ class CallLog(Store):
                 assert first is not None, "the unique index conflicted, so the first row exists"
                 return first
 
-    async def refuse_claimed(self, call_id: str, *, reasons: list[str], error: dict[str, Any], latency_ms: int) -> None:
+    async def refuse_claimed(self, call_id: str, *, reasons: list[str], error: dict[str, str], latency_ms: int) -> None:
         """Turns a claimed write that was refused before it ran (its rate limit) into a refused row and gives up the
         claim, so a retry after the window can claim and run it instead of replaying the refusal."""
         async with self.tx() as c:

@@ -225,7 +225,7 @@ class StarterApprovals:
             stepped = bool(await self.policies.value("stepUp")) if self.policies is not None else False
         except (ServiceCallError, PolicyUnread, KeyError, TypeError, ValueError):
             return None
-        if stepped or approval.get("stepUp") or int(approval.get("approvers") or 1) > 1:
+        if stepped or approval.get("stepUp") or int(cast(float | str, approval.get("approvers") or 1)) > 1:
             return None
         starter, digest = run.created_by, input_hash(call["input"])
         found = await ReviewStore(self.db).approve(

@@ -9,7 +9,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
-from ops_access import BY_KEY, Access, effective_answer, publish_mode, team_on
+from ops_access import BY_KEY, Access, EffectiveAnswer, effective_answer, publish_mode, team_on
 from ops_identity import ActingForPerson, Principal, ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_service_kit.errors import Forbidden
 from ops_service_kit.http import Json
@@ -94,7 +94,7 @@ class WriteApprovals:
         levels: tuple[Any, Json] | None = None,
         tool: str | None = None,
         draft: bool = False,
-    ) -> dict[str, Any]:
+    ) -> EffectiveAnswer:
         """The one answer to "does this call wait, and who answers": the tool's own setting, its app's entry and the
         team's, through `effective_answer`. Everything that shows or enforces a wait calls here.
 

@@ -16,7 +16,7 @@ from ops_access import Access, reader_of, require_provisioner
 from ops_identity import CurrentService
 from ops_identity.fastapi import Tx
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
-from ops_service_kit.http import Envelope, In, ListResult, Out, error_responses, ok
+from ops_service_kit.http import Envelope, In, Json, ListResult, Out, error_responses, ok
 from ops_service_kit.listing import ListQuery
 
 from .callers import Person, person, security_admin
@@ -75,7 +75,7 @@ class Change(Out):
     entry: ListedHost | ListedRange | None = None
 
 
-def _host_out(h: stored.ListedHost) -> dict[str, object]:
+def _host_out(h: stored.ListedHost) -> Json:
     """A stored host row as the lists and an add return it."""
     return {
         "host": h.host,
@@ -88,7 +88,7 @@ def _host_out(h: stored.ListedHost) -> dict[str, object]:
     }
 
 
-def _range_out(x: stored.ListedRange) -> dict[str, object]:
+def _range_out(x: stored.ListedRange) -> Json:
     """A stored range row as the list and an add return it."""
     return {
         "cidr": x.cidr,
@@ -120,7 +120,7 @@ def egress_router(store: EgressStore) -> APIRouter:
         except EgressDenied as e:
             raise ValidationFailed(str(e)) from e
 
-    async def _listed(who: Person) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+    async def _listed(who: Person) -> tuple[list[Json], list[Json]]:
         listed = await store.allow_list(who.tenant_id)
         return [_host_out(h) for h in listed.hosts], [_range_out(x) for x in listed.ranges]
 

@@ -23,9 +23,11 @@ from ops_agents.api.deps import Runtime
 from ops_agents.api.ops_tools import ops_assistant_id
 from ops_agents.store.agent_registry import registry_agents
 from ops_agents.store.base import metadata
+from ops_agents.store.events import EventLog
 from ops_agents.store.tenancy import LOCAL_TENANT, tenant_scope
 from ops_engine.store import metadata as engine_metadata
 from ops_identity import Auth, Identity, ServiceAuth, service_verifiers
+from ops_identity import Principal as Caller
 from ops_service_kit.settings import Settings
 from tests.api.test_action_roles import ADMIN, OUTSIDER, REVIEWER, VIEWER, introspect
 from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model, sse_events
@@ -135,7 +137,7 @@ async def test_the_default_asks_only_specialists_the_person_may_chat_with_and_as
     assert rt.graph_store is not None
     children = [
         t
-        for t in await rt.graph_store.threads("agent_wrapper")
+        for t in [r.model_dump() for r in await rt.graph_store.thread_rows("agent_wrapper")]
         if cast(dict[str, Any], t["meta"] or {}).get("calledBy")
     ]
     assert [(t["meta"]["agentId"], t["meta"]["calledBy"], t["meta"]["startedFor"]) for t in children] == [
@@ -160,6 +162,76 @@ async def test_the_default_asks_only_specialists_the_person_may_chat_with_and_as
             agent="ag_dispute", arguments={"question": "x"}, key="k-none", parent_thread_id=thread, parent_run_id=None
         )
         assert not nobody.ok and nobody.output["code"] == "specialist_not_offered", "no person, no specialist"
+
+
+ASK_DISPUTE = 'call agent__ag_dispute {"question": "Can I dispute a card charge?"}'
+
+
+async def called(rt: Runtime) -> list[str]:
+    """The specialists that ran a turn of their own, by the agent that asked."""
+    assert rt.graph_store is not None
+    metas = [t.meta_object() for t in await rt.graph_store.thread_rows("agent_wrapper")]
+    return [f"{m['calledBy']}>{m['agentId']}" for m in metas if m.get("calledBy")]
+
+
+async def grant_dispute(c: AsyncClient) -> None:
+    """Publishes Branch Concierge holding `agent:ag_dispute`, as a builder grants one agent another."""
+    held: list[str] = (await c.get("/v1/agents/ag_branch", headers=ADMIN)).json()["data"]["toolIds"]
+    saved = await c.patch("/v1/agents/ag_branch", json={"toolIds": [*held, "agent:ag_dispute"]}, headers=ADMIN)
+    assert saved.status_code == 200, saved.text
+    body = {"version": saved.json()["data"]["version"], "note": "go"}
+    asked = await c.post("/v1/agents/ag_branch/publish-requests", json=body, headers=ADMIN)
+    assert asked.status_code == 201 and asked.json()["data"]["status"] == "approved", asked.text
+
+
+async def test_an_unattended_run_asks_no_agent_and_logs_why_while_a_persons_chat_still_does(stack: Stack) -> None:
+    c, rt = stack
+    await grant_dispute(c)
+    job = await c.post("/v1/agents/ag_branch/jobs", json={"key": "nightly", "message": ASK_DISPUTE}, headers=ADMIN)
+    assert job.status_code == 201, job.text
+    assert await called(rt) == [], "a run with no person asked a specialist"
+    assert rt.graph_store is not None
+    with tenant_scope(TENANT):
+        events = await EventLog(rt.graph_store.engine).for_threads([job.json()["data"]["threadId"]])
+    refused = [e.data for e in events if e.type == "agent_call_refused"]
+    assert refused == [{"agentId": "ag_branch", "withheld": ["ag_dispute"], "code": "no_caller"}], refused
+    # The same agent, chatting with a person who may chat with the specialist, still asks it.
+    chat = await c.post("/v1/chat/threads", json={"agentId": "ag_branch", "kbIds": []}, headers=VIEWER)
+    assert chat.status_code == 201, chat.text
+    await say(c, chat.json()["data"]["id"], ASK_DISPUTE, VIEWER)
+    assert await called(rt) == ["ag_branch>ag_dispute"]
+
+
+async def test_a_service_identity_is_offered_only_the_agents_its_scopes_reach(stack: Stack) -> None:
+    c, rt = stack
+    await grant_dispute(c)
+    await move(rt, "ag_dispute", "")  # an agent with no team, which every team of the tenant may use
+    chat = await c.post("/v1/chat/threads", json={"agentId": "ag_branch", "kbIds": []}, headers=VIEWER)
+    assert chat.status_code == 201, chat.text
+    thread = chat.json()["data"]["id"]
+
+    def service(scopes: list[str]) -> Principal:
+        token = Caller(
+            kind="service",
+            sub="scheduler",
+            email="",
+            name="scheduler",
+            tenant_id=TENANT,
+            team_id="team_ops",
+            team_ids=[],
+            roles={},
+            scopes=scopes,
+            auth_method="service",
+        )
+        return Principal(name="scheduler", email="", team_id="team_ops", tenant_id=TENANT, identity=token)
+
+    calls_ = AgentCalls(rt)
+    with tenant_scope(TENANT):
+        with acting_for(service([])):
+            assert await calls_.offers_in("ag_branch", thread) == [], "a service without chat:run asked a specialist"
+        with acting_for(service(["chat:run"])):
+            offered = [g.name for g in await calls_.offers_in("ag_branch", thread)]
+    assert offered == ["agent__ag_dispute"], offered
 
 
 async def test_a_handover_is_checked_like_a_start_and_back_restores_the_start_agent(stack: Stack) -> None:

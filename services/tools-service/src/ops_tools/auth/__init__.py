@@ -15,15 +15,15 @@ from __future__ import annotations
 
 import base64
 import hashlib
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Literal
 from urllib.parse import urlsplit
 
 from ops_identity import ActingForPerson
-from ops_service_kit.http import Json
+from ops_service_kit.http import Json, JsonValue
 
 from ..connections.account_events import CONNECTED, connected_key, needs_reconnect_event
 from ..connections.records import EXPIRED, REFUSED
@@ -86,7 +86,7 @@ class Prepared:
 class StrategyInput:
     tenant_id: str
     connection_id: str
-    settings: dict[str, Any]
+    settings: Mapping[str, JsonValue]
     secrets: dict[str, str]
     tokens: Tokens
     stale_rotation: int | None
@@ -172,7 +172,7 @@ STRATEGIES: dict[str, Strategy] = {
 }
 
 
-def certificate_of(settings: dict[str, Any], secrets: dict[str, str]) -> ClientCertificate | None:
+def certificate_of(settings: Json, secrets: dict[str, str]) -> ClientCertificate | None:
     """The account's TLS settings: a client certificate (both its PEM and its private key) and a CA to trust."""
     cert, key, ca = settings.get("clientCertificate"), secrets.get("clientKey"), settings.get("trustedCa")
     if not cert or not key:
@@ -255,7 +255,7 @@ class Authenticator:
             )
         # A credential goes to its own system only: the module's address must be the account's, scheme, host and
         # port, before any secret is read; another allow-listed host gets nothing.
-        plain: dict[str, Any] = dict(conn.settings or {})
+        plain: Json = dict(conn.settings or {})
         base = str(plain.get("baseUrl") or "")
         target = str(module.get("endpoint") or "")
         if not base:
@@ -347,7 +347,7 @@ class Authenticator:
         conn = await self.connections.get(tenant_id, connection_id)
         if conn is None or conn.status == "revoked" or not kind_of(str(conn.auth_kind)).holds_token:
             return False
-        settings: dict[str, Any] = dict(conn.settings or {})
+        settings: Json = dict(conn.settings or {})
         values = await self._secret_values(
             tenant_id, str(conn.team_id), dict(conn.secrets or {}), tool="sign-in keep-alive", actor=actor
         )
@@ -457,7 +457,7 @@ class Authenticator:
         settings = conn.settings
         return await self._not_linked(conn, acting_for, settings, scopes=[], reason="refused")
 
-    async def sign_in_request(self, tenant_id: str, connection_id: str, person: ActingForPerson) -> dict[str, Any]:
+    async def sign_in_request(self, tenant_id: str, connection_id: str, person: ActingForPerson) -> Json:
         """What a CONNECTION_NOT_LINKED refused before the sign-in step carries, as one refused here does: the account,
         its app and a link only `person` can use to connect their own; nothing when the account is gone."""
         conn = await self.connections.get(tenant_id, connection_id)
@@ -470,7 +470,7 @@ class Authenticator:
         self,
         conn: Account,
         person: ActingForPerson,
-        settings: dict[str, Any],
+        settings: Json,
         *,
         scopes: list[str],
         reason: NotLinkedReason = "not_connected",
@@ -479,7 +479,7 @@ class Authenticator:
         connection's scopes and `scopes` (the operation's, and on insufficient_scope those already granted)."""
         kind = kind_of(str(conn.auth_kind))
         # The kind and the fields a person gives, so the console asks for a key in place of a sign-in it cannot start.
-        details: dict[str, Any] = {
+        details: Json = {
             "connectionId": str(conn.id),
             # The account's app: the console's Connect my account opens the account under it.
             "appId": str(conn.app_id),

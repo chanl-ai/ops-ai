@@ -32,10 +32,13 @@ Each runs the make targets it names; the same steps are Claude Code skills of th
 
 | Prompt | Use it to |
 |---|---|
-| `/ops-commit` | Get a change through Ops AI's commit checks: the console and docs checks, the Python verify, a What's new entry for a person using the console, and a commit message that says what was wrong and how it was proven. Use before committing or when the pre-commit hook fails. |
+| `/ops-commit` | Pass Ops AI's commit checks: console and docs checks, Python verify, a What's new entry, and a message saying what was wrong and how it was proven. Use before committing or when pre-commit fails. |
 | `/ops-database` | Point Ops AI at another database: our container, an existing PostgreSQL 15 to 17 (Azure Database for PostgreSQL among them), and later Azure SQL. Use when someone asks which database Ops AI needs or how to use their own. |
 | `/ops-debug` | Diagnose a failing Ops AI service: which one is down, its log, its port, a stale process, or a second stack in the way. Use when a page errors, a make target fails, or a service will not start. |
-| `/ops-mirror` | Install and build Ops AI through a company package mirror (Nexus, Artifactory): set the mirror, test it, find the locked versions it does not serve, and install through it. Use when installs fail behind a proxy or a bank's network has no public internet. |
+| `/ops-docs-edit` | Apply review findings to a docs page and tighten it. |
+| `/ops-docs-review` | Review a docs page as its five readers; changes nothing. |
+| `/ops-docs-write` | Write a public docs page to the user-docs pattern. |
+| `/ops-mirror` | Install Ops AI through a company package mirror (Nexus, Artifactory): set it, test it, find locked versions it lacks. Use when installs fail behind a proxy or without public internet. |
 | `/ops-run` | Run the Ops AI stack locally, in the devcontainer or on a shared VM workspace, on the fake model or OpenAI. Use when someone asks to start, stop or set up Ops AI, or which make target runs it. |
 | `/ops-sample-team` | Install the sample team (people, knowledge, agents, tools, workflows, mailbox) on a running stack and walk the email demo end to end. Use when someone wants demo data, a team to try the console with, or to check the stack works from chat to the second reply. |
 | `/ops-tool-module` | Add a tool module (OpenAPI, MCP, HTTP or a Python code tool) with its credential as a secret and its host on the egress list, then publish it through review. Use when someone wants an agent or workflow to call a new system. |

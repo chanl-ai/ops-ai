@@ -13,7 +13,7 @@ import { DB_VAR, isolate, pgUrl, PORT_VARS } from './isolation.ts';
 import { parseRegistry, RegistryError } from './registry.ts';
 import { EXIT, exitFor, parseChecks, verdict } from './report.ts';
 import { resolveScript } from './resolve.ts';
-import { childEnv } from './run.ts';
+import { childEnv, pluginsRepoRefusal } from './run.ts';
 import { nextId, scaffold } from './scaffold.ts';
 
 const TABLE = `# Use cases
@@ -424,4 +424,17 @@ test('a deployed run is refused when the staging host is unset or is a pattern',
   assert.deepEqual(await deployedRun(STAGING, 'uc-001', 'api', null), { code: EXIT.usage, ran: false });
   assert.deepEqual(await deployedRun(STAGING, 'uc-001', 'api', '*-web.fly.dev'), { code: EXIT.usage, ran: false });
   assert.deepEqual(await deployedRun(STAGING, 'uc-001', 'api', '.fly.dev'), { code: EXIT.usage, ran: false });
+});
+
+test('a script that gets the plugins path through a shared module is refused when the repo is missing', () => {
+  const root = mkdtempSync(join(tmpdir(), 'refusal-'));
+  mkdirSync(join(root, 'docs/usecases/lib'), { recursive: true });
+  mkdirSync(join(root, 'docs/usecases/x/scripts'), { recursive: true });
+  writeFileSync(join(root, 'docs/usecases/lib/several_accounts.py'), 'import os\nREPO = os.environ["OPS_PLUGINS_REPO"]\n');
+  const script = join(root, 'docs/usecases/x/scripts/test-uc-1-api.py');
+  writeFileSync(script, 'import several_accounts\n');
+  const env = { OPS_PLUGINS_REPO: join(root, 'missing') };
+  assert.match(pluginsRepoRefusal(env, script) ?? '', /plugins repository is not at/);
+  writeFileSync(script, 'import json\n');
+  assert.equal(pluginsRepoRefusal(env, script), undefined);
 });

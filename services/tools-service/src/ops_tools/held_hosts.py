@@ -11,7 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from ops_service_kit.errors import Unprocessable
-from ops_service_kit.http import Envelope, Out
+from ops_service_kit.http import Envelope, Json, Out
 
 
 class HostHeld(Exception):
@@ -36,7 +36,7 @@ HELD: dict[int | str, dict[str, Any]] = {
 }
 
 
-def refused(host: str, task: dict[str, Any]) -> Unprocessable:
+def refused(host: str, task: Json) -> Unprocessable:
     reason = str(task.get("decisionReason") or "no reason given")
     return Unprocessable(
         f"Security refused {host} ({task['id']}): {reason}. An admin on the Security team can still list it under "

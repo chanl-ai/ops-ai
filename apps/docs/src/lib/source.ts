@@ -78,7 +78,7 @@ if (built.missing.length) {
   else throw new Error(message);
 }
 
-/** The tree the sidebar shows: four tabs in journey order, built from SITE in nav.mjs. */
+/** The tree the sidebar shows: the tabs in journey order, built from SITE in nav.mjs. */
 export const sidebarTree = built.tree as PageTree.Root;
 
 // Fumadocs takes a tab's link from a page directly inside it, and every tab here holds only groups, so each tab links

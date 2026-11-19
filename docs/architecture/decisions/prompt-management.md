@@ -1,8 +1,6 @@
 # ADR-0011 Prompt management
 
-Status: superseded by ADR-0012 and spec 11: shared text is an always-on skill, 2026-10-08. Instructions staying on the agent version still holds; the prompt block entity below does not.
-
-Status: superseded where it describes approver tiers or approval tokens; the current rules are in [roles-and-permissions.md](../roles-and-permissions.md).
+Status: superseded by ADR-0012 and spec 11: shared text is an always-on skill, 2026-10-08. Instructions staying on the agent version still holds; the prompt block entity below does not. Superseded where it describes approver tiers or approval tokens; the current rules are in [roles-and-permissions.md](../roles-and-permissions.md).
 
 ## Context
 

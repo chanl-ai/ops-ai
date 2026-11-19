@@ -4,7 +4,7 @@ review when it opens, so the reviewer sees what was asked for even if the module
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TypedDict, cast
 from urllib.parse import urlsplit
 
 from ..executor import secret_names
@@ -23,15 +23,42 @@ def _host(m: Module, op: Operation | StoredOperation) -> str | None:
     return urlsplit(path if "://" in path else str(m.get("endpoint") or "")).hostname
 
 
-def _summary(op: Operation | StoredOperation) -> dict[str, Any]:
-    return {"name": op.get("name"), "method": op.get("method"), "path": op.get("path"), "access": op.get("access")}
+class OpSummary(TypedDict):
+    """An operation as the review names it."""
+
+    # Every operation is saved with a name; a stored copy types it as optional.
+    name: str
+    method: str | None
+    path: str | None
+    access: str | None
+
+
+class ChangedOp(OpSummary):
+    fields: list[str]
+
+
+class ReviewDiff(TypedDict):
+    added: list[OpSummary]
+    removed: list[OpSummary]
+    changed: list[ChangedOp]
+    hostsAdded: list[str]
+    secrets: list[str]
+
+
+def _summary(op: Operation | StoredOperation) -> OpSummary:
+    return {
+        "name": cast(str, op.get("name")),
+        "method": op.get("method"),
+        "path": op.get("path"),
+        "access": op.get("access"),
+    }
 
 
 def _inputs(op: Operation | StoredOperation) -> list[str]:
     return sorted(f["name"] for f in op.get("input") or [])
 
 
-def review_diff(m: Module) -> dict[str, Any]:
+def review_diff(m: Module) -> ReviewDiff:
     """The module's change since it was last published: a module never published adds every operation it has; a
     published one compares its staged operations with the published ones (its baseline)."""
     if not _ever_published(m):
@@ -41,7 +68,7 @@ def review_diff(m: Module) -> dict[str, Any]:
     after = m["operations"]
     was = {o.get("id"): o for o in before}
     now = {o["id"]: o for o in after}
-    changed: list[dict[str, Any]] = []
+    changed: list[ChangedOp] = []
     for op_id in now.keys() & was.keys():
         old, new = was[op_id], now[op_id]
         fields = [k for k in COMPARED if old.get(k) != new.get(k)]

@@ -19,7 +19,7 @@ import json
 import re
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Literal, TypedDict, cast
+from typing import Literal, TypedDict, cast
 
 from ops_service_kit.http import Json, JsonList, JsonValue
 
@@ -71,14 +71,29 @@ class TaskTypeRecord(TypedDict, total=False):
     defaults: Json
 
 
+class ParamIssue(TypedDict):
+    """One issue with a task's params (check_params): which param, how bad, and what a person reads."""
+
+    field: str
+    severity: Severity
+    message: str
+
+
+class BoundTask(TypedDict):
+    """What the screen draws (bind), in reply order: the regions with their data, and the actions offered."""
+
+    regions: list[Json]
+    actions: list[Json]
+
+
 class TypeDefinitionError(ValueError):
     """A type version that cannot be drawn: an unknown region or slot, a duplicate action, a bad tone."""
 
 
-def seeds() -> list[dict[str, Any]]:
+def seeds() -> list[Json]:
     """The general types every tenant reads: `[{id, version, name, description, params, regions, actions}]`. Loose
     as the store's `ensure_seeds` takes them."""
-    return cast(list[dict[str, Any]], json.loads(SEED_FILE.read_text()))
+    return cast(list[Json], json.loads(SEED_FILE.read_text()))
 
 
 def valid_id(type_id: str) -> bool:
@@ -135,15 +150,14 @@ def _kind_ok(value: JsonValue, kind: str) -> bool:
     return isinstance(value, KINDS[kind])
 
 
-def check_params(record: Json, params: dict[str, Any]) -> list[dict[str, Any]]:
+def check_params(record: Json, params: Json) -> list[ParamIssue]:
     """`[{field, severity, message}]`: a missing required param is a warning (its fallback is shown), a value of the
     wrong kind an error. The caller decides what an error does: the task API refuses it, a paused run shows it.
     `params` is what a step or an API caller wrote, read as it always was: a value of another type raises. The params
-    and the issues stay loose here: the task API reads each issue's text as a string, the task view reads the issues
-    as JSON and passes params with its run's cases added."""
+    stay JSON: the task view passes them with its run's cases added."""
     schema = cast(TaskTypeRecord, record).get("params") or {}
     props = cast(Json, schema.get("properties") or {})
-    out: list[dict[str, Any]] = []
+    out: list[ParamIssue] = []
     for name in cast(list[str], schema.get("required") or []):
         if params.get(name) in (None, "", []):
             out.append({"field": name, "severity": "warning", "message": f"{name} is missing; the fallback is shown"})
@@ -223,11 +237,11 @@ def _worded(slot: str, value: JsonValue, say: Say) -> JsonValue:
     return value
 
 
-def bind(record: Json, params: dict[str, Any], say: Say = str) -> dict[str, Any]:
+def bind(record: Json, params: Json, say: Say = str) -> BoundTask:
     """What the screen draws: `{regions: [{region, collapsed, data}], actions: [...]}`. A region whose slots all come
     out empty is left out, so a task never shows an empty card. `say` words each value a person reads. `params` is
-    what a step or an API caller wrote, read as it always was; params and the reply stay loose for the task view,
-    which adds its run's cases to the params and edits the regions it gets back."""
+    what a step or an API caller wrote, read as it always was; params and each region and action stay JSON for the
+    task view, which adds its run's cases to the params and edits the regions it gets back."""
     doc = cast(TaskTypeRecord, record)
     p = _fallbacks(doc, params)
     regions: list[Json] = []

@@ -74,7 +74,7 @@ async def test_a_tenant_sees_only_its_own_rows_in_every_run_table(engine: AsyncE
         assert await visible(engine, a, table, thread_a) == 1, table.name
         assert await visible(engine, b, table, thread_a) == 0, table.name
     with tenant_scope(b):
-        assert await GraphStore(engine).thread(thread_a) is None
+        assert await GraphStore(engine).thread_row(thread_a) is None
 
 
 async def test_a_write_naming_another_tenant_is_refused_by_the_policy(engine: AsyncEngine) -> None:
@@ -100,7 +100,7 @@ async def test_no_tenant_reads_nothing(engine: AsyncEngine) -> None:
     with pytest.raises(NoTenantError):
         current_tenant()
     with pytest.raises(NoTenantError):
-        await GraphStore(engine).thread(thread_a)
+        await GraphStore(engine).thread_row(thread_a)
     # Below the store: the tenant role with app.tenant_id unset sees no row at all.
     async with engine.begin() as c:
         await c.execute(sa.text(f"SET LOCAL ROLE {TENANT_ROLE}"))

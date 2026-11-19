@@ -14,7 +14,7 @@ import imaplib
 import socket
 import ssl
 from dataclasses import asdict
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast
 
 import httpx
 from fastapi import APIRouter, Body
@@ -25,7 +25,7 @@ from ops_access import can
 from ops_email import GraphSender, ImapMailSource, MailNotConfiguredError, MailSender, ResendSender, SmtpSender
 from ops_identity import CurrentService, ServiceCallError, ServiceClient
 from ops_service_kit.errors import Forbidden, Unprocessable
-from ops_service_kit.http import Envelope, In, JsonValue, Out, ok
+from ops_service_kit.http import Envelope, In, Json, JsonList, JsonValue, Out, ok
 from ops_service_kit.logging import get_logger
 from ops_service_kit.settings import Settings
 
@@ -153,22 +153,22 @@ class MailboxSenders:
         self.graph = graph
         self.tokens = GraphTokens(settings.graph_login_url, settings.graph_url)
 
-    async def _mailbox(self, tenant: str, team: str, address: str) -> dict[str, Any]:
+    async def _mailbox(self, tenant: str, team: str, address: str) -> Json:
         try:
-            found: list[dict[str, Any]] = await self.agents.get(
+            found: JsonList = await self.agents.get(
                 "/v1/channels/mailboxes", params={"address": address}, tenant=tenant, team=team
             )
         except ServiceCallError as e:
             raise MailboxSendRefused(f"agents-service refused the mailbox read: {e.status} {e}") from e
         if not found:
             raise MailboxSendRefused(f"{address} is not a mailbox of {team}.")
-        return found[0]
+        return cast(Json, found[0])
 
     async def sender(self, tenant: str, team: str, address: str) -> MailSender:
         m = await self._mailbox(tenant, team, address)
         if m.get("sender") == "graph":
             return await self._graph_sender(tenant, team, m)
-        kind, secret, sender_from = m.get("sender"), m.get("senderSecret"), m.get("fromAddress")
+        kind, secret, sender_from = m.get("sender"), cast(str, m.get("senderSecret")), cast(str, m.get("fromAddress"))
         if kind not in ("smtp", "resend") or not secret or not sender_from:
             raise MailboxSendRefused(f"{address} has no reply sender; set one on its Channels page.")
         mailbox_team = str(m["teamId"])
@@ -187,10 +187,12 @@ class MailboxSenders:
 
         if kind == "resend":
             return ResendSender(self.resend_http, await password(), sender_from)
-        host = m.get("smtpHost") or (self.settings.gmail_smtp_host if m.get("provider") == "gmail" else None)
+        host = cast(str | None, m.get("smtpHost")) or (
+            self.settings.gmail_smtp_host if m.get("provider") == "gmail" else None
+        )
         if not host:
             raise MailboxSendRefused(f"{address} names no SMTP server.")
-        port = int(m.get("smtpPort") or 587)
+        port = int(cast(str | int, m.get("smtpPort") or 587))
 
         async def address_to_dial() -> str:
             try:
@@ -202,18 +204,18 @@ class MailboxSenders:
             host,
             self.egress.dial_port(host, port),
             sender_from,
-            username=m.get("username") or m["address"],
+            username=cast(str | None, m.get("username") or m["address"]),
             starttls=bool(m.get("smtpStarttls", True)),
             password_source=password,
             address_source=address_to_dial,
         )
 
-    async def _graph_sender(self, tenant: str, team: str, m: dict[str, Any]) -> MailSender:
+    async def _graph_sender(self, tenant: str, team: str, m: Json) -> MailSender:
         """A Microsoft 365 mailbox replies as itself through Graph, with the team's own app registration."""
-        address, secret = str(m["address"]), m.get("passwordSecret")
+        address, secret = str(m["address"]), cast(str, m.get("passwordSecret"))
         if str(m["teamId"]) != team:
             raise MailboxSendRefused(f"{address} is not a mailbox of {team}.")
-        ms_tenant, client_id = m.get("graphTenantId"), m.get("graphClientId")
+        ms_tenant, client_id = cast(str, m.get("graphTenantId")), cast(str, m.get("graphClientId"))
         if self.graph is None or not (ms_tenant and client_id and secret):
             raise MailboxSendRefused(f"{address} names no Microsoft tenant, client id or client secret.")
         try:

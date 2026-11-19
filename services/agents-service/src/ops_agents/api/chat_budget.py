@@ -51,8 +51,8 @@ async def cap_at_agent(rt: Runtime, thread_id: str, agent: AgentDefinition) -> N
     lower (a caller only lowers them; apis.md). Later turns keep whatever the thread has, so a Raise stays raised."""
     if rt.usage is None:
         return
-    row = await graph_store(rt).thread(thread_id)
-    if row is not None and cast(Json, row["meta"] or {}).get("budgetAllotment"):
+    row = await graph_store(rt).thread_row(thread_id)
+    if row is not None and row.meta_object().get("budgetAllotment"):
         return
     allot = allotment(agent)
     limit, given = budget_from(allot), await rt.usage.budget(thread_id)
@@ -104,8 +104,8 @@ async def answer(rt: Runtime, me: Principal, thread_id: str, body: BudgetAnswer)
     row = await chat_row(rt, thread_id, None)
     if row is None or rt.usage is None:
         raise NotFound("Conversation")
-    meta: Json = dict(row["meta"] or {})
-    team = str(row["team_id"])
+    meta: Json = dict(row.meta_object())
+    team = str(row.team_id)
     if body.action == "continue" and not _owner_or_manager(me, meta, team):
         raise Forbidden("Only the person who started this conversation, or an admin, continues it.", code="not_owner")
     if body.action == "raise":
@@ -130,7 +130,7 @@ async def answer(rt: Runtime, me: Principal, thread_id: str, body: BudgetAnswer)
     runs = [r for r in await store.runs(thread_id) if r.kind in ("input", "resume", "recovery") and r.id != run_id]
     await EventLog(store.engine).append(
         thread_id=thread_id,
-        team_id=row["team_id"],
+        team_id=row.team_id,
         run_id=runs[-1].id if runs else None,
         type_="budget.answered",
         data={"action": body.action, "by": me.email or me.name, "budget": _caps(new)},

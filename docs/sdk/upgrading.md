@@ -1,9 +1,9 @@
 # Upgrading to 1.0.0
 
-Status: current. Version 1.0.0 of both SDKs (`ops-ai` on PyPI, `@chanl-ai/ops-ai` on npm) and the `opsai` command line
-follows API changes with no old-name fallback. The full list, route by route, is in [changelog-next-major.md](changelog-next-major.md).
-Three patterns cover almost every caller. The Python snippets below are run by `sdk/python/tests/test_upgrading.py`; the TypeScript noun is covered by
-`sdk/typescript/test/agents-lists.test.mjs`.
+Status: current. The Python snippets on this page run in the SDK's own tests.
+
+Version 1.0.0 of both SDKs and the opsai command line follows API changes with no old-name fallback. Three patterns
+cover almost every caller; the full list, route by route, is in the [SDK 1.0.0 changelog](changelog.md).
 
 ## Lists answer a page of at most 50 rows
 

@@ -1,13 +1,11 @@
 # ADR-0004 Deployment, tenancy and promotion
 
-Status: superseded in part on 2026-10-16: Temporal was removed, so the Temporal clusters, payload codec and authoriser in the decision no longer apply; services run in `ops-host` processes (see [workflows and agents](../../design/workflows/workflows-and-agents.md)). Earlier status: option, not decided. No ADR had been confirmed as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment. Formerly DR-4.
-
-Status: superseded where it describes approver tiers or approval tokens; the current rules are in [roles-and-permissions.md](../roles-and-permissions.md).
+Status: superseded in part on 2026-10-16: Temporal was removed, so the Temporal clusters, payload codec and authoriser in the decision no longer apply; services run in `ops-host` processes (see [workflows and agents](../../design/workflows/workflows-and-agents.md)). Earlier status: option, not decided. No ADR had been confirmed as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment. Formerly DR-4. Superseded where it describes approver tiers or approval tokens; the current rules are in [roles-and-permissions.md](../roles-and-permissions.md).
 
 ## Context
 
 The platform runs inside the bank on private cloud or on-prem Kubernetes (OpenShift is common in
-banks; the bank's choice is [open question 1](../overview.md#open-questions)). Reasons 6 and 7 of the [problem statement](../../background/problem-statement.md) say one runtime replaces
+banks; the bank's choice is [open question 1](../delivery.md#open-questions)). Reasons 6 and 7 of the [problem statement](../../background/problem-statement.md) say one runtime replaces
 per-agent servers, secrets and logging, and promotion moves a version pointer instead of waiting
 for a release window.
 
@@ -51,7 +49,7 @@ Two refinements:
   Until it exists, production promotion is limited to `low` and `medium` workflows, then `high`, and
   `critical` waits for it.
 - **Very long runs.** A case open for weeks keeps an old interpreter build alive. For runs past a
-  threshold (proposed 30 days, [open question 7](../overview.md#open-questions)), the interpreter uses continue-as-new at a safe point
+  threshold (proposed 30 days, [open question 7](../delivery.md#open-questions)), the interpreter uses continue-as-new at a safe point
   (after a human decision) and moves to the current build, guarded by Temporal patching as the
   documentation requires for upgraded runs ([patching][temporal-patch]).
 

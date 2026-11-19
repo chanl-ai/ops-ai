@@ -9,7 +9,7 @@ need the same credential each hold their own row under the same name."""
 from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
-from typing import Annotated, Any, Literal, TypedDict
+from typing import Annotated, Literal, TypedDict, cast
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse, Response
@@ -19,7 +19,7 @@ from ops_access import Access, policy, reader_of, require_provisioner
 from ops_identity import Principal
 from ops_identity.fastapi import Tx
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
-from ops_service_kit.http import Envelope, In, ListResult, Out, error_responses, ok
+from ops_service_kit.http import Envelope, In, Json, JsonList, ListResult, Out, error_responses, ok
 from ops_service_kit.listing import ListQuery
 from ops_store import isolation
 from ops_store.team_scope import acting_as
@@ -140,16 +140,16 @@ def users_of(modules: list[SecretReader]) -> dict[str, list[SecretUse]]:
 
 def _meta(
     row: StoredSecret, users: dict[str, list[SecretUse]] | None = None, configs: dict[str, str] | None = None
-) -> dict[str, Any]:
+) -> Json:
     config = row.credential_id
     config_name = (configs or {}).get(config, config) if config else None
-    out = {
+    out: Json = {
         "name": row.name,
         "version": row.version,
         "ends": row.ends,
         "createdBy": row.created_by,
         "createdAt": row.created_at.isoformat(),
-        "usedBy": (users or {}).get(row.name, []),
+        "usedBy": cast(JsonList, (users or {}).get(row.name, [])),
         "teamId": row.team_id,
         "teams": [row.team_id],
         "templateId": row.template_id,
@@ -232,7 +232,7 @@ def secrets_router(
             return {}
         return {c.id: c.name or c.id for c in await credentials.team_credentials(tenant_id, owner)}
 
-    async def _one(who: Person, owner: str, name: str) -> dict[str, Any]:
+    async def _one(who: Person, owner: str, name: str) -> Json:
         configs = await _configs(who.tenant_id, owner)
         return _meta(await _row(who, owner, name), await _users(who.tenant_id, owner), configs)
 

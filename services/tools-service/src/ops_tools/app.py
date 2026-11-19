@@ -26,6 +26,7 @@ from ops_service_kit.flags import Flags
 from ops_service_kit.http import (
     Envelope,
     In,
+    Json,
     JsonValue,
     Out,
     error_body,
@@ -38,6 +39,7 @@ from ops_service_kit.logging import get_logger
 from ops_service_kit.settings import Settings
 from ops_store import isolation
 from ops_store.background import LOCAL as LOCAL_BEATS
+from ops_store.background import ProcessReport
 from ops_store.background import report as background_report
 from ops_store.background import supervisor as background_supervisor
 from ops_store.database import reachable
@@ -64,6 +66,7 @@ from .store import CallLog
 from .store.connections import ConnectionStore, plugin_app
 from .store.mcp_links import McpLinks
 from .store.mocks import MockStore
+from .store.modules import Module
 from .store.rate_windows import RateWindows
 from .tools import ToolRunner
 
@@ -203,7 +206,7 @@ def as_response(outcome: Outcome) -> JSONResponse:
         body["error"]["details"] = {"callId": outcome.call_id, "reasons": outcome.reasons, **outcome.details}
         return JSONResponse(body, status_code=outcome.status)
 
-    data: dict[str, Any] = {
+    data: Json = {
         "callId": outcome.call_id,
         "decision": "allow",
         "ok": outcome.ok,
@@ -301,7 +304,7 @@ def create_gateway_app(
     counters = rates or RateWindows(log.engine)
 
     async def with_test_account(
-        tenant_id: str, team_id: str | None, mods: dict[str, Any], rows: list[GrantableRow]
+        tenant_id: str, team_id: str | None, mods: dict[str, Module], rows: list[GrantableRow]
     ) -> set[str]:
         """The ids of the written-to modules whose app has a test account in `team_id`, as records.account_for
         chooses one for a test run: a plugin's app by its plugin, any other by its connection's app."""
@@ -438,7 +441,7 @@ def create_gateway_app(
         return Health(status="ok")
 
     @app.get("/health/background", tags=["health"], response_model=BackgroundHealthOut)
-    async def health_background() -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
+    async def health_background() -> dict[str, list[ProcessReport]]:  # pyright: ignore[reportUnusedFunction]
         """This service's background processes and their state; counts and error types only, no record's data."""
         return {"processes": background_report(await LOCAL_BEATS.read(), "tools", time.time())}
 
@@ -619,7 +622,7 @@ def create_gateway_app(
             acting_for=run_acting_for(claims),
         )
 
-        async def prepare(resolved: Resolved | None, args: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+        async def prepare(resolved: Resolved | None, args: Json) -> tuple[Json, list[str]]:
             return await resolve_handles(claims, resolved, args, secret_resolver)
 
         found = await calls.call(
