@@ -254,7 +254,8 @@ def test_skills_apply_saves_the_named_skill_as_a_draft_and_an_export_applies_aga
         "slug": "recall",
         "ownerTeam": "Retail",
         "version": 4,
-        "status": "draft",
+        "status": "published",
+        "versions": [{"version": 5, "state": "draft"}, {"version": 4, "state": "published"}],
         "content": {"name": "Recall", "useWhen": "", "tools": [{"toolId": "lookup"}], "steps": [step]},
     }
 
@@ -277,6 +278,7 @@ def test_skills_apply_saves_the_named_skill_as_a_draft_and_an_export_applies_aga
     assert (saved.method, saved.url.path) == ("PUT", "/api/agents/v1/skills/sk_1/draft"), "the slug names the skill"
     body = json.loads(saved.content)
     assert body == {"name": "Recall", "toolIds": ["lookup"], "steps": [step], "note": "tighter check", "baseVersion": 4}
+    assert capsys.readouterr().out.split()[-2:] == ["v5", "draft"], "the line names the draft it made, not the skill"
 
 
 def test_people_invite_sends_nothing_without_send(monkeypatch: pytest.MonkeyPatch) -> None:

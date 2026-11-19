@@ -45,6 +45,14 @@ def apply(ops: OpsAI, data: dict[str, Any], *, note: str = "") -> Any:
     return ops.skills.create({**fields, **{k: data[k] for k in CREATE_ONLY if k in data}})
 
 
+def made(skill: dict[str, Any]) -> str:
+    """One line for the version a save or a publish request made: the newest version and its own state. The skill's
+    `status` is that of its published version, which a new draft on top of it does not change."""
+    newest = dict((skill.get("versions") or [{}])[0])
+    version, state = newest.get("version", skill.get("version")), newest.get("state", skill.get("status"))
+    return f"{skill['id']}  {skill['name']}  v{version}  {state}"
+
+
 def main(argv: list[str]) -> int:
     ap = parser("opsai skills", "The team's skills: list, show, apply, export, publish, references.")
     sub = ap.add_subparsers(dest="verb", required=True)
@@ -80,13 +88,13 @@ def _dispatch(ns: argparse.Namespace, ops: OpsAI) -> int:
         return emit(ns, ops.skills.get(ns.id))
     if ns.verb == "apply":
         saved = apply(ops, load_definition(Path(ns.definition)), note=ns.note)
-        return emit(ns, saved, text=f"{saved['id']}  {saved['name']}  v{saved['version']}  {saved['status']}")
+        return emit(ns, saved, text=made(saved))
     if ns.verb == "export":
         file = as_file(ops.skills.get(ns.id))
         return emit(ns, file, text=dump_definition(file, ns.format).rstrip())
     if ns.verb == "publish":
         asked = ops.skills.publish(ns.id, note=ns.note)
-        return emit(ns, asked, text=f"{asked['id']}  {asked['name']}  v{asked['version']}  {asked['status']}")
+        return emit(ns, asked, text=made(asked))
     found = ops.skills.references(ns.search, for_skill=ns.id, kind=ns.kind)
     rows = [{"kind": g["kind"], **item} for g in found["groups"] for item in g["items"]]
     return table(ns, rows, "kind", "id", "label")
