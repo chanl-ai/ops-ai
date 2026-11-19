@@ -837,3 +837,28 @@ async def test_a_saved_agent_sends_no_thinking_setting_and_a_set_one_reaches_the
     low = ThinkingScript("The branch opens at nine.")
     await reply(replace(ask, settings=replace(settings, thinking="low")), low)
     assert low.thinking == ["low"], "the scripted model sees a thinking setting when one is sent"
+
+
+async def test_an_input_handed_to_a_sub_skill_is_masked_in_the_record_a_reply_returns() -> None:
+    """A step that runs a skill hands it the running skill's inputs. With masking on, the copy the sub-skill holds
+    leaves the reply masked like the parent's own, and marked so no rule compares the placeholder."""
+    verify = replace(
+        stepped("sk_verify", 1, "Verify identity", "verify-identity", program({"do": "Ask for the date of birth."})),
+        inputs=(SkillInput("ssn", required=True),),
+    )
+    parent = program({"do": "Verify the person.", "use": {"kind": "skill", "id": "sk_verify"}}, {"do": "Go on."})
+    close = replace(
+        stepped("sk_close", 1, "Close an account", "close-an-account", parent),
+        inputs=(SkillInput("ssn", required=True),),
+    )
+    ask = TurnRequest("t1", "th1", agent([close, verify], redact_pii=True), [], user_turn="Close my account.")
+    model = Script(
+        ("switch_skill", {"slug": "close-an-account", "inputs": {"ssn": SSN}}), "What is your date of birth?"
+    )
+    result, events = await reply(ask, model)
+    sub = run_of(result).running.sub
+    assert sub is not None and "ssn" in sub.inputs, run_of(result)
+    assert SSN not in sub.inputs["ssn"] and sub.masked_inputs == ["ssn"], sub
+    assert SSN not in run_of(result).model_dump_json()
+    changes = [e for e in events if type(e).__name__ == "SkillRunChanged"]
+    assert changes and all(SSN not in repr(e) for e in changes), changes
