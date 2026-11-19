@@ -198,6 +198,9 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange }: { skill: Skil
       ) : (
         <SettingsSection title="Instructions" description="Markdown with four sections: Steps, Rules, Examples and Output format.">
           <div className="flex flex-col gap-2">
+            <p className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground" data-testid="skill-parts-or-steps">
+              This skill is written in parts, so its steps are hidden. A skill has parts or numbered steps, not both. Remove every part to write steps again.
+            </p>
             <ToggleGroup type="single" value={mode} onValueChange={(v) => v && setMode(v as 'edit' | 'preview')} variant="outline" size="sm" className="self-start" aria-label="Editor mode">
               <ToggleGroupItem value="edit" aria-label="Edit">
                 <Pencil className="size-3.5" /> Edit
