@@ -280,6 +280,9 @@ class Interrupt:
     # The running-skill record at the pause, unmasked: the resumed turn goes on at the same step. None on a pause
     # stored before skills had steps.
     run: SkillRunState | None = None
+    # By skill id, the step tools a skill stopped before the pause still holds: the resumed turn is the same reply, so
+    # they stay off offer in it. Empty on a pause stored without it.
+    held: dict[str, list[str]] = field(default_factory=dict[str, list[str]])
 
 
 @dataclass(frozen=True)

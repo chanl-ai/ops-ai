@@ -904,6 +904,7 @@ def _interrupt(state: _TurnState, requests: DeferredToolRequests, history: list[
         loaded_skills=[e for s, e in zip(state.loaded, state.loads, strict=True) if s.loading == "on_match"],
         plan=state.plan,
         run=state.run.model_copy(deep=True) if state.tracks else None,
+        held={k: list(v) for k, v in state.held.items()},
     )
 
 
@@ -1097,6 +1098,8 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
     state.tracks = bool(state.stepped) or kept_run is not None
     if kept_run is not None:
         state.run = _kept_run(kept_run, state.stepped)
+    if req.resume:
+        state.held = {k: list(v) for k, v in req.resume.interrupt.held.items()}
     # A plan the turn goes on with: kept at its pause (an approval), or left open by an earlier turn (a Connect card).
     carried_plan = req.carried_plan if planner.stored(req.carried_plan) else None
     state.plan = (req.resume.interrupt.plan if req.resume else None) or carried_plan
