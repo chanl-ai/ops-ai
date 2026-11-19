@@ -506,14 +506,13 @@ def _sub_ended(
 ) -> None:
     """A sub-skill ended: the step that started it gets its exit and results as that step's result, and the step's
     own check runs on them. A sub-skill that failed is a failed attempt of the step, and takes no hold here: a
-    check of its own that failed took one where it failed. So is one that left by any exit but done while a check
+    check of its own that failed took one where it failed. So is one that left by any exit but done while a step
     of its own is still failed: an exit does not carry the step past a check that did not pass, and the step's own
-    "if not" decides."""
+    "if not" decides. Its step results say so, not the holds: a hold is not taken under an earlier one."""
     r = run.running
     assert r is not None
+    unpassed = r.sub is not None and any(res.passed is False for res in r.sub.results.values())
     r.sub = None
-    inside = f"{r.step}."
-    unpassed = any(h.skill_id == r.skill_id and h.step.startswith(inside) for h in run.holds)
     value: dict[str, JsonValue] = {"exit": name, **returns}
     check = _step(r).check
     if name == "failed" or (unpassed and name != "done"):

@@ -84,6 +84,10 @@ CONFIRM_NO: Call = ("switch_skill", {"slug": "confirm-then-pay", "inputs": {"ok"
 RUNS_SORRY: Call = ("switch_skill", {"slug": "runs-sorry"})
 RUNS_LOOK_PAY: Call = ("switch_skill", {"slug": "runs-look-then-pay"})
 LOOK_THEN_NOTE: Call = ("switch_skill", {"slug": "look-then-note-pay"})
+JUMP_RUNS_NOTE: Call = ("switch_skill", {"slug": "jump-runs-note"})
+LETTER_CHECK_PAY: Call = ("switch_skill", {"slug": "letter-check-pay"})
+CHECK_JUMP: Call = ("switch_skill", {"slug": "check-jump"})
+ID_CHECK = tool("check_id")
 GIVE_UP: Call = ("exit", {"name": "failed"})
 DONE: Call = ("step_done", {})
 PLACE: Call = ("place_hold", {})
@@ -113,6 +117,7 @@ def book(if_not: dict[str, Any], version: int = 1) -> list[Skill]:
     noted = {"do": "Note it.", "use": {"kind": "tool", "id": "add_note"}, "check": saved, "ifNot": once}
     looked = {"do": "Look it up.", "use": {"kind": "tool", "id": "lookup_charge"}, "check": small, "ifNot": once}
     paid = {"do": "Refund it.", "use": a_tool}
+    letter = {"do": "Send the letter.", "use": {"kind": "tool", "id": "add_note"}}
     needy = stepped("sk_needy", 1, "Needy", "needy", program(paid))
     return [
         replace(check, version=version),
@@ -205,11 +210,51 @@ def book(if_not: dict[str, Any], version: int = 1) -> list[Skill]:
             program({"do": "Look.", "use": {"kind": "skill", "id": "sk_look_or_escalate"}, "ifNot": once}, paid),
         ),
         stepped("sk_look_then_note", 1, "Look then note pay", "look-then-note-pay", program(looked, noted, paid)),
+        stepped(
+            "sk_note_or_skip",
+            1,
+            "Note or skip",
+            "note-or-skip",
+            program({**noted, "ifNot": {"action": "retry", "retries": 1}}, exit={"skip": "Go on without the note."}),
+        ),
+        stepped(
+            "sk_jump_runs_note",
+            1,
+            "Jump runs note",
+            "jump-runs-note",
+            program(
+                {**looked, "ifNot": {"action": "goto", "step": 2}},
+                {"do": "Note it.", "use": {"kind": "skill", "id": "sk_note_or_skip"}},
+                paid,
+            ),
+        ),
+        stepped("sk_letter_check_pay", 1, "Letter check pay", "letter-check-pay", program(letter, looked, paid)),
+        stepped(
+            "sk_check_jump",
+            1,
+            "Check jump",
+            "check-jump",
+            program(
+                {**looked, "ifNot": {"action": "goto", "step": 3}},
+                paid,
+                {
+                    "do": "Check who asks.",
+                    "use": {"kind": "tool", "id": "check_id"},
+                    "check": {"text": "result.ok is true", "by": "rule"},
+                    "ifNot": once,
+                },
+                letter,
+            ),
+        ),
     ]
 
 
 def _saved(arguments: dict[str, Any]) -> dict[str, Any]:
     return {"saved": arguments["chargeId"] == "CH-2"}
+
+
+def _known(arguments: dict[str, Any]) -> dict[str, Any]:
+    return {"ok": arguments["chargeId"] == "CH-2"}
 
 
 class Bank(Systems):
@@ -220,6 +265,7 @@ class Bank(Systems):
             lookup_charge=_amount,
             refund_charge={"refunded": True},
             add_note=_saved,
+            check_id=_known,
             place_hold={"held": True},
         )
         self.down = down
@@ -389,15 +435,33 @@ THREADS = [
         "refund_charge is held because look-then-note-pay failed its check; start look-then-note-pay again.",
     ),
     Thread(
-        "a forward jump does not lock: once the holder passes its first step, the other skill runs",
+        "a skill reached by a jump past a failed check fails its own, then leaves through an exit it lists",
+        [[JUMP_RUNS_NOTE, look("CH-1"), note("CH-1"), ("exit", {"name": "skip"}), refund("CH-1")]],
+        ["lookup_charge", "add_note"],
+    ),
+    # X is letter, check, refund; H is check with a jump to 3, refund, check, letter. X fails its check and holds the
+    # refund; H fails both of its checks. Were H to take a second hold, X would end on the letter and H on the
+    # refund for good. With one hold, H passes its first step and X runs.
+    Thread(
+        "a forward jump does not lock two skills",
         [
-            [LOOK_NOTE_PAY, look("CH-1"), note("CH-1")],
-            [NOTE_PAY, note("CH-2")],
-            [LOOK_NOTE_PAY, look("CH-2")],
-            [NOTE_PAY, note("CH-2"), refund("CH-2")],
+            [LETTER_CHECK_PAY, note("CH-2"), look("CH-1")],
+            [CHECK_JUMP, look("CH-1"), ("check_id", {"chargeId": "CH-1"})],
+            [LETTER_CHECK_PAY],
+            [CHECK_JUMP, look("CH-2")],
+            [LETTER_CHECK_PAY, note("CH-2"), look("CH-2"), refund("CH-2")],
         ],
-        ["lookup_charge", "add_note", "lookup_charge", "add_note", "refund_charge"],
-        "add_note is held because look-note-pay failed its check; start look-note-pay again.",
+        [
+            "add_note",
+            "lookup_charge",
+            "lookup_charge",
+            "check_id",
+            "lookup_charge",
+            "add_note",
+            "lookup_charge",
+            "refund_charge",
+        ],
+        "refund_charge is held because letter-check-pay failed its check; start letter-check-pay again.",
     ),
     # Rule 5: a step takes no hold while its skill has one standing from an earlier step. Once the earlier step
     # passes, nothing is left of the later step's failure: an accepted limit, the price of never locking.
@@ -436,7 +500,9 @@ async def test_a_failed_check_or_a_denied_call_holds_the_later_tools_until_the_h
         change, actions = step if isinstance(step, tuple) else (None, step)
         skills = change(skills) if change is not None else skills
         settings = agent(skills, redact_pii=thread.redact, max_steps=12)
-        ask = TurnRequest(f"t{n}", "th1", settings, [LOOKUP, REFUND, NOTE, GATE], user_turn="Go on.", carried_run=run)
+        ask = TurnRequest(
+            f"t{n}", "th1", settings, [LOOKUP, REFUND, NOTE, GATE, ID_CHECK], user_turn="Go on.", carried_run=run
+        )
         model = Script(*actions, "Done.")
         result, _ = await reply(ask, model, systems)
         if result.status == "interrupted":
