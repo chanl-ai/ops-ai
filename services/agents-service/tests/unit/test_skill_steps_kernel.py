@@ -376,6 +376,29 @@ async def test_one_skill_runs_at_a_time_and_a_sub_skill_returns_to_its_step() ->
     )
     assert ended(run) == [("sk_open", "switched", 1)]
 
+    # The model loads an on-match skill that has steps: it starts at step 1 as a menu pick does, and its text is
+    # never handed over whole. The next reply goes on from the record.
+    refund = TurnRequest(
+        "t1",
+        "th4",
+        agent([refund_a_charge(), FEES], max_tool_calls=None),
+        [LOOKUP, REFUND, NOTE],
+        user_turn="Refund it.",
+    )
+    model = Script(("load_skill", {"slug": "refund-a-charge", "matched": "refund"}), "Which charge?")
+    begun, events = await reply(refund, model)
+    assert "step 1 of 3" in json.dumps(model.returned[0]), model.returned
+    assert "# Now: Refund a charge, step 1 of 3" in model.instructions[1], model.instructions[1]
+    assert "lookup_charge" in model.offered[1] and "refund_charge" not in model.offered[1], model.offered[1]
+    assert (run_of(begun).running.skill_id, run_of(begun).running.step) == ("sk_refund", 1)
+    assert [e.run.running.step for e in events if type(e).__name__ == "SkillRunChanged"][:1] == [1], "the tracker"
+    assert [(e.skill_id, e.how) for e in events if type(e).__name__ == "SkillLoaded"] == [("sk_refund", "started")]
+    later = Script("Which charge is it?")
+    await reply(replace(carrying(refund, run_of(begun)), turn_id="t2", user_turn="The big one."), later)
+    assert "# Now: Refund a charge, step 1 of 3" in later.instructions[0], later.instructions[0]
+    assert "lookup_charge" in later.offered[0] and "refund_charge" not in later.offered[0], later.offered[0]
+    assert "load_skill" not in later.offered[0], "the step's tool is the only way on"
+
     close = TurnRequest("t1", "th3", agent(close_an_account()), [], user_turn="Close my account.")
     start: Call = ("switch_skill", {"slug": "close-an-account"})
     model = Script(start, ("exit", {"name": "done", "returns": {"verified": True}}), "Closing it now.")

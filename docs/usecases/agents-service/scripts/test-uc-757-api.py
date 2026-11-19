@@ -118,6 +118,8 @@ with bank_stack() as s:
     # 6. A chat starts the skill and each reply goes on from the step the last one reached.
     thread = data(s.api.post("/chat/threads", json={"agentId": aid, "kbIds": []}, headers=me))["id"]
 
+    used: list[list[Any]] = []
+
     def say(text: str) -> dict[str, Any]:
         res = s.api.post(
             f"/chat/threads/{thread}/messages", json={"content": text}, headers={**me, **STREAM}, timeout=120
@@ -126,6 +128,7 @@ with bank_stack() as s:
             raise SystemExit(f"FAIL chat: {res.status_code} {res.text[:300]}")
         messages = data(s.api.get(f"/chat/threads/{thread}", headers=me))["messages"]
         reply = [m for m in messages if m.get("role") == "assistant"][-1]
+        used.append([k.get("skillId") for k in reply.get("skills") or []])
         return (reply.get("skillRun") or {}).get("running") or {}
 
     account = json.dumps({"accountId": ACCOUNT})
@@ -142,11 +145,13 @@ with bank_stack() as s:
         (confirmed.get("step"), bool(confirmed.get("sub"))),
         (paused.get("step"), bool(paused.get("sub"))),
     ]
+    # The reply that starts the skill lists it among its skills, which the test panel counts.
+    listed = freeze["id"] in used[0]
     # Non-vacuous: the third reply calls nothing, and the fourth still finds the skill inside step 2. With the record
     # not carried between replies, every reply starts with no skill running and the trail is empty.
     check(
         "6 each reply goes on from the step the last one reached, and the write waits for a person on step 3",
-        trail == [(1, False), (2, 1), (2, 1), (3, False), (3, False)] and not holds(s.bank),
-        (trail, len(holds(s.bank))),
+        trail == [(1, False), (2, 1), (2, 1), (3, False), (3, False)] and not holds(s.bank) and listed,
+        (trail, len(holds(s.bank)), used[0]),
     )
 finish()

@@ -245,7 +245,7 @@ export interface ChatMessage {
     /** The part of a skill with parts that ran, by its slug. */
     part?: string;
     /** Picked from the / menu, carried from the reply before, loaded on a match, or always on. */
-    how?: 'picked' | 'carried' | 'loaded' | 'always';
+    how?: 'picked' | 'carried' | 'loaded' | 'always' | 'started';
     inputs?: Record<string, string>;
   }[];
   /** The settings the turn ran on, for whoever explains the answer later. */

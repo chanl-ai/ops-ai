@@ -533,6 +533,17 @@ def _load_skill(state: _TurnState, grant: ToolGrant) -> Tool[None]:
         slug = str(arguments.get("slug") or "")
         if part := str(arguments.get("part") or ""):
             slug = f"{slug.split('/', maxsplit=1)[0]}/{part}"
+        if any(s.slug == slug for s in state.stepped):
+            # A skill with steps is never read as text: loading it starts it at step 1, by switch_skill's rules
+            # (the one running ends as switched, one already running is refused, a required input is asked for).
+            asked: Json = {"slug": slug, "inputs": arguments.get("inputs")}
+            moved = step_tools.handle(step_tools.SWITCH, state.run, state.stepped, asked)
+            if not moved.ok:
+                rec.status, rec.output = "error", {"error": moved.said}
+                return {"error": moved.said}
+            said = state.moved(moved.run) or moved.said
+            rec.status, rec.output = "ok", {"now": said}
+            return {"now": said}
         skill, why = skillset.load(state.req.settings.skills, state.loaded, slug, state.carried)
         if skill is None:
             rec.status, rec.output = "error", {"error": why}
