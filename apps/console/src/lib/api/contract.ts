@@ -36,6 +36,7 @@ import type { ActivityApi } from './activity-contract';
 import type { CaseRecordsApi } from './case-records-contract';
 import type { AssuranceApi } from './assurance-contract';
 import type { McpLinksApi } from './mcp-links-contract';
+import type { ReferencesApi } from './references-contract';
 import type { WikiApi } from './wiki-contract';
 import type {
   Agent,
@@ -226,6 +227,8 @@ export interface OpsApi {
   assurance: AssuranceApi;
   /** The team's MCP links (tools-service): a named address for a chosen set of its tools. */
   mcpLinks: McpLinksApi;
+  /** What an agent brief or a skill step can point at (agents-service `/v1/references`). */
+  references: ReferencesApi;
   wiki: WikiApi;
   tools: {
     list(params: ListParams<ToolFilters>): Promise<ListResult<Tool> & { stats: ToolStats }>;
