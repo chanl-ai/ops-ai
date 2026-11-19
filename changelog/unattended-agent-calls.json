@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-19",
+  "title": "Scheduled agent runs no longer ask other agents",
+  "description": "A run with no person behind it, such as a scheduled one, is not offered the agents it was granted, and its run log records which ones were withheld. Chats with a person work as before.",
+  "tag": "fix"
+}

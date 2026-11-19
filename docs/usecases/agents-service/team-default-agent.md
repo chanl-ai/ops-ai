@@ -20,12 +20,14 @@ The agents service runs on the scripted model, seeded with Branch Concierge (`ag
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | Start a chat with no agent before any default is set | 409 `no_default_agent` |
+| 1 | Start a chat with no agent before any default is set | 201, the chat is on the team's own Ops Assistant |
 | 2 | Set Branch Concierge as the default, start a chat with no agent | 201, the chat is on Branch Concierge |
 | 3 | Ask it to call `agent__ag_dispute` | One tool call, answered by Card Dispute Resolver's own turn, run for the person |
 | 4 | Hand the chat to Card Dispute Resolver, send a message, hand it back | The thread names the start agent while handed over; after Back it does not |
 | 5 | Reload the chat | Each reply names the agent that wrote it |
 | 6 | Grep the default path for an agent id | None: the default comes from the stored setting only |
+| 7 | Grant Branch Concierge `agent:ag_dispute`, publish, and schedule a run of it that asks Card Dispute Resolver | The run ends, no specialist turn runs, and the run's events hold one `agent_call_refused` naming `ag_dispute` with code `no_caller` |
+| 8 | Ask the same in a new chat with Branch Concierge | One tool call, answered by Card Dispute Resolver |
 
 In the console (ui layer), signed in through platform-service:
 
