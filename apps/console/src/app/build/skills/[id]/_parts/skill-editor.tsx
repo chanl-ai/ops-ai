@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 
 import { AddMenu } from '@/components/shared/add-menu';
 import { FormField } from '@/components/shared/form-field';
+import { LeaveGuard } from '@/components/shared/leave-guard';
 import { SettingsSection } from '@/components/shared/settings-section';
 import { TagInput } from '@/components/shared/tag-input';
 import { SkillDocumentEditor } from '@/components/skills/skill-document-editor';
@@ -23,7 +24,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useSaveSkillDraft, useSkill, useSkillOptions } from '@/hooks/skill-queries';
-import { useLeaveGuard } from '@/hooks/use-leave-guard';
 import { SKILL_LOADING_OPTIONS } from '@/components/skills/skill-loading';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { PageSaveActions } from '@/components/shared/page-save-actions';
@@ -95,7 +95,6 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange }: { skill: Skil
     scope: !same(form.toolIds, saved.toolIds) || !same(form.knowledgeBases, saved.knowledgeBases) || !same(form.guardrails, saved.guardrails) || form.refusal.trim() !== saved.refusal.trim(),
   };
   const dirty = changed.wording || changed.scope;
-  useLeaveGuard(dirty && !readOnly);
   // The page holds back what would redraw this form (a file added, a version restored) while there is unsaved text.
   React.useEffect(() => {
     onDirtyChange?.(dirty);
@@ -143,6 +142,7 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange }: { skill: Skil
 
   return (
     <div className="flex flex-col gap-4" data-testid="skill-editor">
+      <LeaveGuard unsaved={dirty && !readOnly} failed={!!failed} />
       {locked && <p className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">{locked} Fields are read-only.</p>}
       {stale && (
         <Alert data-testid="skill-stale-base">
