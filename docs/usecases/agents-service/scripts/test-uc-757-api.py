@@ -11,7 +11,7 @@ from typing import Any
 
 from brief_steps import brief, confirm_skill, freeze_skill
 from main_chains import ACCOUNT, bank_stack, holds, publish_bank_module
-from usecase_harness import check, data, finish
+from usecase_harness import check, data, finish, sse
 
 RUN = int(time.time())
 STREAM = {"Accept": "text/event-stream"}
@@ -119,6 +119,7 @@ with bank_stack() as s:
     thread = data(s.api.post("/chat/threads", json={"agentId": aid, "kbIds": []}, headers=me))["id"]
 
     used: list[list[Any]] = []
+    sent: list[dict[str, Any]] = []
 
     def say(text: str) -> dict[str, Any]:
         res = s.api.post(
@@ -126,10 +127,27 @@ with bank_stack() as s:
         )
         if res.status_code != 200:
             raise SystemExit(f"FAIL chat: {res.status_code} {res.text[:300]}")
-        messages = data(s.api.get(f"/chat/threads/{thread}", headers=me))["messages"]
-        reply = [m for m in messages if m.get("role") == "assistant"][-1]
+        sent[:] = sse(res.text)
+        reply = last_reply()
         used.append([k.get("skillId") for k in reply.get("skills") or []])
         return (reply.get("skillRun") or {}).get("running") or {}
+
+    def last_reply() -> dict[str, Any]:
+        messages = data(s.api.get(f"/chat/threads/{thread}", headers=me))["messages"]
+        return [m for m in messages if m.get("role") == "assistant"][-1]
+
+    def decide(action: dict[str, Any]) -> dict[str, Any]:
+        """A second person decides the write the last reply stopped on; the reply's running-skill record after it."""
+        card = next(e["widget"] for e in sent if e["type"] == "widget" and e["widget"]["kind"] == "approval")
+        url = f"/chat/threads/{thread}/messages/{sent[0]['messageId']}/widgets/{card['id']}/actions"
+        approver = s.who["approver"]
+        if action["type"] == "approve":
+            step_up = s.accounts.post("/v1/auth/step-up", json={"password": "northfield-demo"}, headers=approver)
+            action = {**action, "stepUpToken": data(step_up)["token"]}
+        res = s.api.post(url, json=action, headers=approver)
+        if res.status_code != 200:
+            raise SystemExit(f"FAIL decision: {res.status_code} {res.text[:300]}")
+        return last_reply().get("skillRun") or {}
 
     account = json.dumps({"accountId": ACCOUNT})
     slug = json.dumps({"slug": freeze["slug"]})
@@ -155,6 +173,15 @@ with bank_stack() as s:
         (trail, len(holds(s.bank)), used[0]),
     )
 
+    # The write is approved: the same reply goes on from step 3, the freeze reaches the bank and the skill ends done.
+    after = decide({"type": "approve"})
+    ends = [h.get("ended") for h in after.get("history") or []]
+    check(
+        "6 an approved write goes on from the step it waited on, and the skill ends as done",
+        after.get("running") is None and ends[-1:] == ["done"] and len(holds(s.bank)) == 1,
+        (after.get("running"), ends, len(holds(s.bank))),
+    )
+
     # A model that reaches for load_skill starts the same steps: a second chat, started that way, goes on from step 1.
     thread = data(s.api.post("/chat/threads", json={"agentId": aid, "kbIds": []}, headers=me))["id"]
     loaded = say(f"call load_skill {slug}")
@@ -163,5 +190,16 @@ with bank_stack() as s:
         "6 loading the skill starts it at step 1, and the next reply goes on to step 2",
         (loaded.get("step"), went_on.get("step")) == (1, 2) and freeze["id"] in used[-2],
         (loaded, went_on.get("step"), used[-2]),
+    )
+
+    # In that chat the write is rejected: the skill ends as failed and nothing more reaches the bank.
+    say("call step_done {}")
+    waits = say(f"call {write} {account}")
+    refused = decide({"type": "reject", "reason": "Not this account."})
+    ends = [h.get("ended") for h in refused.get("history") or []]
+    check(
+        "6 a rejected write ends the skill as failed",
+        waits.get("step") == 3 and refused.get("running") is None and ends[-1:] == ["failed"] and len(holds(s.bank)) == 1,
+        (waits.get("step"), refused.get("running"), ends, len(holds(s.bank))),
     )
 finish()
