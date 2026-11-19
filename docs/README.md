@@ -546,6 +546,19 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `guide/whats-new.md` | What's new: every change a person would notice, newest first, built from the changelog |
 | `guide/use-cases/card-disputes.md` | Use case: card disputes, from the request to the approved credit, with SDK code |
 | `guide/use-cases/chat-and-human-tasks.md` | Use case: start the day from the chat home and decide Human Tasks, with SDK code |
+| `guide/use-cases/answer-from-documents.md` | Use case: put a manual into a knowledge base and get cited answers, in the console, CLI and SDK |
+| `guide/use-cases/approve-a-write.md` | Use case: make an app's writes wait for the person in the chat or a reviewer; the settings and the rules that always hold |
+| `guide/use-cases/connect-an-app.md` | Use case: turn Salesforce on, give its tools to an agent, and work a case in chat |
+| `guide/integrations/overview.md` | Integrations: the apps Ops AI ships with and the sign-in kinds |
+| `guide/integrations/salesforce.md` | Salesforce: turn it on, what it brings, settings, permissions asked, sign-in errors, limits |
+| `guide/integrations/github.md` | GitHub: turn it on, what it brings, settings, permissions asked, sign-in errors, limits |
+| `guide/integrations/sharepoint.md` | SharePoint and OneDrive: turn it on, what it brings, settings, permissions asked, sign-in errors, limits |
+| `guide/integrations/confluence.md` | Confluence: turn it on, what it brings, settings, permissions asked, sign-in errors, limits |
+| `guide/integrations/website.md` | Website: turn it on, what it brings, settings, permissions asked, sign-in errors, limits |
+| `guide/integrations/sign-in-oauth.md` | Sign in with OAuth: team or personal sign-in, your own OAuth app |
+| `guide/integrations/sign-in-keys.md` | Sign in with an API key, username and password, or bearer token; each person's own key |
+| `guide/integrations/sign-in-certificates.md` | Sign in with a certificate: signed assertion, signed service account, mutual TLS |
+| `guide/integrations/build-a-plugin.md` | Build a plugin: a four-file example, validate, test, install |
 
 File names are topics. Specs keep their number (01–17; 05 and 06 unused) and decision records their ADR id in the
 title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
