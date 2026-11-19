@@ -1,5 +1,7 @@
 # Lines per class in the tree (scripts/leak_scan.py). A count may only fall.
 home-path 0
-tracker-id 28
+tracker-id 27
 task-id 1
 card-trailer 0
+session-link 0
+tone 0
