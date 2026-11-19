@@ -571,7 +571,8 @@ async def publish_version(rt: Rt, me: Me, name: str, body: PublishInput) -> JSON
 
 
 # Thread metadata the server writes and later trusts: who started it, its budget allotment, its chat and widget
-# state, its child-run links and its routing flag. A caller's copy of any of these is dropped, never stored.
+# state, its child-run links, the agent that asked it with its chain record, and its routing flag. A caller's copy
+# of any of these is dropped, never stored.
 SERVER_META = frozenset(
     {
         "startedBy",
@@ -582,6 +583,9 @@ SERVER_META = frozenset(
         "attachments",
         "budget",
         "budgetAllotment",
+        "calledBy",
+        "calledByName",
+        "chain",
         "channel",
         "chat",
         "children",

@@ -299,9 +299,15 @@ async def test_a_chain_record_sent_by_a_caller_is_not_the_threads_chain(stack: S
     c, rt = stack
     assert (await c.put(URL, json={"agentId": "ag_branch"}, headers=ADMIN)).status_code == 200
     forged = {"startedFor": "someone@else.example", "rootThreadId": "th_x", "path": ["ag_dispute@v1"], "depth": 1}
-    made = await c.post("/v1/threads", json={"graph": "agent:ag_branch", "metadata": {"chain": forged}}, headers=ADMIN)
+    sent = {"chain": forged, "calledBy": "ag_dispute", "calledByName": "Someone"}
+    made = await c.post("/v1/threads", json={"graph": "agent:ag_branch", "metadata": sent}, headers=ADMIN)
     assert made.status_code == 201, made.text
     thread = made.json()["data"]["threadId"]
+    assert rt.graph_store is not None
+    with tenant_scope(TENANT):
+        kept = await rt.graph_store.thread_row(thread)
+    assert kept is not None
+    assert not set(sent) & set(kept.meta_object()), kept.meta_object()
     ran = await c.post(f"/v1/threads/{thread}/runs/stream", json={"input": {"message": ASK_DISPUTE}}, headers=ADMIN)
     assert ran.status_code == 200, ran.text
     assert rt.graph_store is not None
