@@ -3,7 +3,7 @@
 Status: current. Proven by `make skills-proof`.
 
 skill: ops-commit
-description: Get a change through Ops AI's commit checks: the console and docs checks, the Python verify, a What's new entry for a person using the console, and a commit message that says what was wrong and how it was proven. Use before committing or when the pre-commit hook fails.
+description: Pass Ops AI's commit checks: console and docs checks, Python verify, a What's new entry, and a message saying what was wrong and how it was proven. Use before committing or when pre-commit fails.
 targets: make verify, make changelog-verify, make docs-verify, pnpm verify
 
 ## When to use it
