@@ -67,6 +67,9 @@ export interface PublishBlocker {
   message: string;
 }
 
+/** A problem the publish check reports but does not block on: the same shape as a blocker, with the service's own kind. */
+export type PublishWarning = Omit<PublishBlocker, 'kind'> & { kind: string };
+
 /** The answer of `POST /v1/agents/{id}/references`: what was granted and the version it was saved as. */
 export interface AddedReferences {
   added: ReferenceItem[];

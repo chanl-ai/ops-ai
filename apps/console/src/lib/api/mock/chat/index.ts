@@ -442,10 +442,19 @@ export function createChatMock(deps: Deps): ChatApi {
 
       const msg: ChatMessage = { id: id('m'), role: 'assistant', content: '', at: now() };
       t.messages.push(msg);
-      // As the Runtime reports a stepped skill: the brief agent's card dispute skill moves one step per reply.
+      // As the Runtime reports a stepped skill: the brief agent's card dispute skill moves one step per reply for three
+      // replies, ends as `blocked` in the fourth, then a rejected action ends it in the fifth. A later reply repeats
+      // each ending without the in-reply mark.
       if (t.agentId === 'ag_dispute') {
-        const step = Math.min(4, t.messages.filter((x) => x.role === 'user').length);
-        msg.skillRun = { running: { skillId: 'card_dispute', version: 1, name: 'Card dispute', step, stepsTotal: 4, stepText: 'Look up the charge', sub: step === 3 ? { skillId: 'verify_identity', version: 1, name: 'Verify identity', step: 1, stepsTotal: 2, stepText: 'Ask for the last four digits' } : null }, history: [] };
+        const turn = t.messages.filter((x) => x.role === 'user').length;
+        const card = { skillId: 'card_dispute', version: 1, name: 'Card dispute' };
+        const blocked = { ...card, ended: 'blocked', atStep: 4, why: 'exit' as const, check: null, meaning: 'The customer could not be verified' };
+        const rejected = { ...card, ended: 'failed', atStep: 2, why: 'denied' as const, check: null, meaning: null };
+        if (turn <= 3) msg.skillRun = { running: { ...card, step: turn, stepsTotal: 4, stepText: 'Look up the charge', sub: turn === 3 ? { skillId: 'verify_identity', version: 1, name: 'Verify identity', step: 1, stepsTotal: 2, stepText: 'Ask for the last four digits' } : null }, history: [] };
+        else if (turn === 4) msg.skillRun = { running: null, history: [{ ...blocked, inReply: true }] };
+        else if (turn === 5)
+          msg.skillRun = { running: null, history: [{ ...blocked, inReply: false }, { ...rejected, inReply: true }], holds: [{ skillId: 'card_dispute', name: 'Card dispute', step: '2', denied: true, tools: ['open_dispute'] }] };
+        else msg.skillRun = { running: null, history: [{ ...blocked, inReply: false }, { ...rejected, inReply: false }], holds: [{ skillId: 'card_dispute', name: 'Card dispute', step: '2', denied: true, tools: ['open_dispute'] }] };
       }
       touch(t);
       const snapshot = () => structuredClone(msg);

@@ -302,6 +302,14 @@ export function RequestReviewDialog({ open, onOpenChange, skill, isPending, onSu
             ))}
           </ul>
         )}
+        {!!check.warnings?.length && (
+          <ul className="flex flex-col gap-1 rounded-md border border-warning/30 bg-warning/5 p-3 text-warning-text" data-testid="request-review-warnings">
+            <li className="font-medium">Does not block the request</li>
+            {check.warnings.map((w) => (
+              <li key={w.message}>{w.message}</li>
+            ))}
+          </ul>
+        )}
         <FormField id="rr-note" label="What changed and why">
           <Textarea id="rr-note" value={note} onChange={(e) => (setNote(e.target.value), setError(null))} className="min-h-20" placeholder="e.g. Adds the posted-payment warning Lending Servicing asked for." />
         </FormField>

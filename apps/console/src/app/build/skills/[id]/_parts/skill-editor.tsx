@@ -104,6 +104,8 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange }: { skill: Skil
   const errors = { name: form.name.trim() ? undefined : 'Name the skill.', parts: partsError(form.parts) };
   const found = React.useMemo(() => (newest.state === 'draft' ? inText(sk.publishCheck.problems ?? NONE) : NONE), [newest.state, sk.publishCheck.problems]);
   const problems = React.useMemo(() => (refused ? [...found, refused] : found), [found, refused]);
+  // A missing list from an older service is none.
+  const warnings = newest.state === 'draft' ? sk.publishCheck.warnings : undefined;
   const discard = () => (setForm(saved), setEndingValid(true), setWhenValid(true), setInputsValid(true), setRefused(null), setFailed(null), setDiscards((n) => n + 1));
   const tools = options.data?.tools ?? [];
   const toolOf = (id: string) => tools.find((t) => t.toolId === id) ?? sk.content.tools.find((t) => t.toolId === id);
@@ -193,7 +195,7 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange }: { skill: Skil
       <SkillWhenSection key={`when-${discards}`} value={saved.when} onChange={setWhen} onValidity={setWhenValid} useWhenMax={limit} needsUseWhen={form.loading === 'on_match'} showNotWhen={stepped} notWhenProblem={problems.find((p) => p.position?.field === 'notWhen')?.message} disabled={readOnly} controls={whenForm} />
       {stepped ? (
         <SettingsSection title="Notes and steps" description="Notes hold for the whole skill. Steps run in order: each can name a tool, a check on what came back, and what happens when the check fails.">
-          <SkillDocumentEditor skillId={sk.id} name={form.name} value={{ instructions: form.instructions, steps: form.steps }} onChange={(doc) => (setRefused(null), setForm((f) => ({ ...f, ...doc })))} readOnly={readOnly} problems={problems} controls={stepsDoc} />
+          <SkillDocumentEditor skillId={sk.id} name={form.name} value={{ instructions: form.instructions, steps: form.steps }} onChange={(doc) => (setRefused(null), setForm((f) => ({ ...f, ...doc })))} readOnly={readOnly} problems={problems} warnings={warnings} controls={stepsDoc} />
         </SettingsSection>
       ) : (
         <SettingsSection title="Instructions" description="Markdown with four sections: Steps, Rules, Examples and Output format.">

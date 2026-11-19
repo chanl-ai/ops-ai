@@ -192,7 +192,24 @@ export interface SkillRunStep {
 
 export interface SkillRun {
   running: (SkillRunStep & { sub?: (SkillRunStep & { slug?: string }) | null }) | null;
-  history: { skillId: string; version: number; name: string; ended: string; atStep: number }[];
+  /**
+   * How skills ended. `ended` is done, failed, switched or an author's exit name such as blocked. The fields after
+   * `atStep` are absent on a reply saved before the Runtime wrote them, and such a reply shows no ending line.
+   */
+  history: {
+    skillId: string;
+    version: number;
+    name: string;
+    ended: string;
+    atStep: number;
+    /** True while this record is the one of the reply the skill ended in; later replies repeat it without the mark. */
+    inReply?: boolean;
+    why?: 'check' | 'denied' | 'error' | 'held' | 'exit' | null;
+    /** The text of the check that did not pass. */
+    check?: string | null;
+    /** What the skill's author wrote that this exit means. */
+    meaning?: string | null;
+  }[];
   holds?: { skillId: string; name: string; step: string; denied: boolean; tools: string[] }[];
 }
 

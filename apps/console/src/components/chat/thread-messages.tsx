@@ -6,10 +6,12 @@ import { Sparkles } from 'lucide-react';
 
 import { BudgetCard } from '@/components/chat/budget-card';
 import { SendFailedAlert } from '@/components/chat/send-failed';
+import { SkillEnded, SkillTracker } from '@/components/chat/skill-status';
 import { AssistantMessage, UserMessage } from '@/components/chat/message-view';
 import { ChatConversation } from '@/components/shared/chat-blocks';
 import { type LiveTurn, useAnswerBudget } from '@/hooks/chat-queries';
 import { useCan } from '@/hooks/me-queries';
+import { endedInReply, newestRun } from '@/lib/skill-run';
 import type { ChatMessage, ChatThread, MessageFeedback, SendInput, WidgetAction } from '@/lib/types/chat';
 import type { RetrievalTrace } from '@/lib/types/knowledge-retrieval';
 
@@ -102,6 +104,7 @@ export function ThreadMessages({
   // Raise is a team admin's; the server checks it again from the token.
   const canRaise = useCan('chat', 'manage') === true;
   return (
+    <>
     <ChatConversation>
         {messages.length === 0 && <p className="py-10 text-center text-sm text-muted-foreground">No messages yet. Ask something below.</p>}
         {messages.map((m, i) => {
@@ -155,10 +158,16 @@ export function ThreadMessages({
                 )
               }
             />
+            {endedInReply(m).map((e, n) => (
+              // A skill can end twice in one reply (left by the agent, started again), so its place is part of the key.
+              <SkillEnded key={`${e.skillId}/${e.version}/${n}`} ending={e} />
+            ))}
             </React.Fragment>
           );
         })}
         {live?.failed && <SendFailedAlert message={live.failed.message} onRetry={() => onSend(live.failed!.input, live.cutFrom)} onDismiss={onDismissFailed} />}
     </ChatConversation>
+    <SkillTracker run={newestRun(messages, streaming ? live?.assistant.id : undefined)} />
+    </>
   );
 }

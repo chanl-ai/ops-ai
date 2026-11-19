@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { FlaskConical, ListOrdered, RotateCcw } from 'lucide-react';
+import { FlaskConical, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { TestCompare } from '@/components/agents/test-compare';
@@ -21,33 +21,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useChatThread, useCreateThread, useLiveTurn, useSendMessage } from '@/hooks/chat-queries';
 import type { AgentVersion } from '@/lib/types/domain';
-import type { SkillRun } from '@/lib/types/chat';
 import type { RetrievalTrace } from '@/lib/types/knowledge-retrieval';
-
-/**
- * Where a stepped skill is after the last reply: `Card dispute · step 2 of 4`, and the skill it started shown as
- * `inside`. The Runtime reports it on the reply, so the line is never worked out here.
- */
-export function SkillTracker({ run }: { run: SkillRun | null | undefined }) {
-  const r = run?.running;
-  if (!r) return null;
-  const sub = r.sub;
-  return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 border-b bg-muted/40 px-3 py-1.5 text-xs" role="status" data-testid="skill-tracker">
-      <ListOrdered className="size-3.5 text-muted-foreground" aria-hidden />
-      <span className="font-medium">{r.name}</span>
-      <span className="text-muted-foreground tabular-nums">
-        step {r.step} of {r.stepsTotal}
-      </span>
-      {sub && (
-        <span className="text-muted-foreground tabular-nums" data-testid="skill-tracker-sub">
-          · inside {sub.name}, step {sub.step}
-          {sub.stepsTotal ? ` of ${sub.stepsTotal}` : ''}
-        </span>
-      )}
-    </div>
-  );
-}
 
 export const TEST_TABS = ['test', 'why', 'compare', 'versions', 'used'] as const;
 export type TestTab = (typeof TEST_TABS)[number];
@@ -155,7 +129,6 @@ export function AgentTestPanel({
               </Button>
             )}
           </div>
-          <SkillTracker run={replies[replies.length - 1]?.skillRun} />
           {!threadId ? (
             <EmptyState icon={FlaskConical} title={`Test ${agentName}`} description="Ask what a customer or a colleague would. Try a request that should pause for review." />
           ) : thread.isError && !live ? (

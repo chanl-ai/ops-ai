@@ -192,6 +192,36 @@ export function fromEditorDoc(doc: DocNode): DocumentValue {
 
 const sameRef = (a: Ref, b: Ref) => a.kind === b.kind && a.id === b.id;
 
+/**
+ * Where a step's tool shows. A step stores what it runs as `use`, and the same reference may also stand in its
+ * sentence, where the builder picked it. This is the index of that reference among the sentence's references (so the
+ * sentence draws the "runs" mark there), or -1 when `use` is not named in the sentence (saved by the SDK or CLI, or by an
+ * earlier editor, and drawn as a chip in front). Every part of the editor asks here, so none draws the tool twice.
+ */
+export const runsIndex = (use: Ref | null | undefined, mentions: readonly Ref[]): number => (use ? mentions.findIndex((m) => sameRef(m, use)) : -1);
+
+/** What the editor's tree gives of a node, so the model reads it without importing the editor. */
+interface TreeNode {
+  type: { name: string };
+  attrs: Record<string, unknown>;
+  descendants(f: (node: TreeNode) => unknown): void;
+}
+
+/** The references a step's sentence holds in the editor, in order. */
+export const refsInNode = (line: TreeNode | null | undefined): Ref[] => {
+  const found: Ref[] = [];
+  line?.descendants((n) => {
+    if (n.type.name === 'reference') found.push({ kind: n.attrs.kind as RefKind, id: n.attrs.id as string });
+  });
+  return found;
+};
+
+/**
+ * Whether a pick from the `@` menu names what the step runs: the first tool, skill, agent or workflow picked in a step's
+ * sentence. Knowledge is read, not run; a check or if-not line, pasted text and typed text only mention.
+ */
+export const pickSetsUse = (pick: Ref, at: { in: string; use: Ref | null | undefined }): boolean => at.in === 'line' && !at.use && pick.kind !== 'knowledge';
+
 /** Every reference the document names, once each: the ids a page asks the names of. */
 export function referencesIn(value: DocumentValue): Ref[] {
   const texts: string[] = [];

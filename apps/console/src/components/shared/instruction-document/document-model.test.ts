@@ -5,7 +5,7 @@ import { test } from 'node:test';
 
 import type { ReferenceItem } from '@/lib/types/references';
 
-import { type DocumentValue, chipFor, fromEditorDoc, missingReferences, parseText, serializeSegments, toEditorDoc } from './document-model.ts';
+import { type DocumentValue, chipFor, fromEditorDoc, missingReferences, parseText, pickSetsUse, runsIndex, serializeSegments, toEditorDoc } from './document-model.ts';
 
 const item = (kind: ReferenceItem['kind'], id: string, label: string): ReferenceItem => ({ kind, id, label, hint: null, held: true, adds: null, needsApproval: false, disabled: null });
 
@@ -55,4 +55,27 @@ test('a removed item shows as Missing and is reported, but not while the names a
   assert.equal(chipFor({ kind: 'skill', id: 'kb_42' }, resolved).state, 'missing');
   assert.equal(chipFor({ kind: 'tool', id: 'open_dispute' }, undefined).state, 'loading');
   assert.deepEqual(missingReferences(doc, undefined), []);
+});
+
+test('a tool picked anywhere in a step is what the step runs, and only the first pick', () => {
+  const open = { kind: 'tool', id: 'open_dispute' } as const;
+  // Mid-sentence, not just at the start of the line.
+  assert.equal(pickSetsUse(open, { in: 'line', use: null }), true);
+  // A later pick, a check or if-not line, and knowledge (read, never run) only mention.
+  assert.equal(pickSetsUse({ kind: 'skill', id: 'verify_identity' }, { in: 'line', use: open }), false);
+  assert.equal(pickSetsUse(open, { in: 'check', use: null }), false);
+  assert.equal(pickSetsUse({ kind: 'knowledge', id: 'kb_42' }, { in: 'line', use: null }), false);
+});
+
+test('a step whose tool is also in its sentence shows it once, and keeps both through the editor', () => {
+  const step = { do: 'Then use @tool:open_dispute to open the case.', use: { kind: 'tool', id: 'open_dispute' } } as const;
+  const stored: DocumentValue = { blocks: [{ kind: 'steps', steps: [step, { do: 'Say goodbye.', use: { kind: 'tool', id: 'send_email' } }] }] };
+  assert.deepEqual(fromEditorDoc(toEditorDoc(stored)), stored);
+  const mentions = (text: string) => parseText(text).flatMap((s) => (s.t === 'ref' ? [{ kind: s.kind, id: s.id }] : []));
+  // In the sentence: the mark goes on that reference and no chip is drawn in front.
+  assert.equal(runsIndex(step.use, mentions(step.do)), 0);
+  // Saved by the SDK or an earlier editor with the tool only in `use`: the chip stays in front.
+  assert.equal(runsIndex({ kind: 'tool', id: 'send_email' }, mentions('Say goodbye.')), -1);
+  // Another tool mentioned in the sentence is not the one the step runs.
+  assert.equal(runsIndex(step.use, mentions('Never use @tool:close_case here.')), -1);
 });

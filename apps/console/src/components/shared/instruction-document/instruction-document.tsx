@@ -9,8 +9,8 @@ import { Braces, CircleCheck, CornerDownRight, ListOrdered, Plus } from 'lucide-
 import { Button } from '@/components/ui/button';
 import type { PublishBlocker, Ref, RefKind, ReferenceGroup, ReferenceItem, ReferenceSearch } from '@/lib/types/references';
 
-import { type DocNode, type DocumentValue, fromEditorDoc, missingReferences, toEditorDoc } from './document-model';
-import { LOADS_DOCUMENT, type MenuBridge, type MenuPick, type Trigger, addCheck, addIfNot, addStep, instructionExtensions, setStepUse } from './extensions';
+import { type DocNode, type DocumentValue, fromEditorDoc, missingReferences, refsInNode, runsIndex, toEditorDoc } from './document-model';
+import { LOADS_DOCUMENT, type MenuBridge, type MenuPick, type Trigger, addCheck, addIfNot, addStep, canMarkRuns, instructionExtensions, pickReference, setStepRuns } from './extensions';
 import { DocumentContext, type DocumentContextValue, FixRows, type InvalidField, KIND_ICON } from './node-views';
 import { CaretMenu, type MenuRow, type MenuSection } from './reference-menu';
 
@@ -40,6 +40,8 @@ export interface InstructionDocumentProps {
   /** The document's references that `resolved` does not hold, whenever that set changes. */
   onMissingChange?: (refs: Ref[]) => void;
   invalid?: InvalidField[];
+  /** Lines the publish check noticed and does not block on, shown under the heading or step they name. */
+  warnings?: InvalidField[];
   /** What `{{` offers. Left out, `{{` is plain text. */
   variables?: VariableGroup[];
   readOnly?: boolean;
@@ -61,7 +63,6 @@ interface OpenMenu {
   query: string;
   rect: (() => DOMRect | null) | null;
   pick: (run: MenuPick) => void;
-  inStepStart: boolean;
 }
 
 const BLOCK_ROWS: { key: string; label: string; icon: typeof Plus; trailing: string; run: (editor: Editor) => boolean }[] = [
@@ -81,7 +82,7 @@ const MENU_COPY: Record<Trigger, { label: string; empty: (q: string) => string }
  * skills, agents and workflows as chips. `@` opens the grouped picker under the caret, `{{` the variables, `/` adds a
  * step, a check or an if-not line. The agent page and the skill page draw the same component with different blocks.
  */
-export function InstructionDocument({ value, onChange, searchReferences, onInsertReference, resolved, missing = [], onMissingChange, invalid = [], variables, readOnly = false, footer, hint = 'Type @ to add a tool, knowledge or skill', label, controls }: InstructionDocumentProps) {
+export function InstructionDocument({ value, onChange, searchReferences, onInsertReference, resolved, missing = [], onMissingChange, invalid = [], warnings = [], variables, readOnly = false, footer, hint = 'Type @ to add a tool, knowledge or skill', label, controls }: InstructionDocumentProps) {
   const bridge = React.useRef<MenuBridge | null>(null);
   const [extensions] = React.useState(() => instructionExtensions(() => bridge.current));
   // What the page last saw, so a value it hands back unchanged does not reload the document and move the caret.
@@ -181,13 +182,7 @@ export function InstructionDocument({ value, onChange, searchReferences, onInser
           pick: (e, range) => {
             const ref = { kind: item.kind, id: item.id };
             setPicked((p) => [...p, item]);
-            // `@` as the first thing on a step's line names what the step uses; anywhere else it is a chip in the text.
-            if (open.inStepStart && item.kind !== 'knowledge' && !e.state.doc.resolve(range.from).node(-1).attrs.use) setStepUse(e, range, ref);
-            else {
-              // A space follows the chip unless punctuation or a space already does.
-              const after = e.state.doc.resolve(range.to).nodeAfter?.text?.[0];
-              e.chain().focus().insertContentAt(range, !after || /\w/.test(after) ? [{ type: 'reference', attrs: ref }, { type: 'text', text: ' ' }] : { type: 'reference', attrs: ref }).run();
-            }
+            pickReference(e, range, ref);
             if (item.held === false) void latest.current.onInsertReference?.(ref);
           },
         })),
@@ -283,7 +278,8 @@ export function InstructionDocument({ value, onChange, searchReferences, onInser
           const spaced = !before || (before.isText && /[\s(]$/.test(before.text ?? ''));
           editor.chain().focus().insertContentAt({ from: pos, to: pos + 1 }, spaced ? '@' : ' @').run();
           done = true;
-        } else if (node.type.name === 'step' && node.attrs.use?.kind === ref.kind && node.attrs.use?.id === ref.id) {
+        } else if (node.type.name === 'step' && node.attrs.use?.kind === ref.kind && node.attrs.use?.id === ref.id && runsIndex(node.attrs.use, refsInNode(node.firstChild)) < 0) {
+          // Only a tool kept in front: one named in the sentence is found as that reference, which comes next.
           editor.view.dispatch(state.tr.setNodeAttribute(pos, 'use', null));
           editor.chain().focus().insertContentAt(pos + 2, '@').run();
           done = true;
@@ -294,10 +290,20 @@ export function InstructionDocument({ value, onChange, searchReferences, onInser
     [editor],
   );
   const context = React.useMemo<DocumentContextValue>(
-    () => ({ resolved: known, missing, invalid, readOnly, chooseAnother, addBack: onInsertReference ? (ref) => void latest.current.onInsertReference?.(ref) : undefined }),
+    () => ({
+      resolved: known,
+      missing,
+      invalid,
+      warnings,
+      readOnly,
+      chooseAnother,
+      canMarkRuns: (pos) => !!editor && canMarkRuns(editor, pos),
+      markRuns: (pos, ref) => editor && setStepRuns(editor, pos, ref),
+      addBack: onInsertReference ? (ref) => void latest.current.onInsertReference?.(ref) : undefined,
+    }),
     // `onInsertReference` only decides whether Add it back is offered.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [known, missing, invalid, readOnly, chooseAnother, !onInsertReference],
+    [known, missing, invalid, warnings, readOnly, chooseAnother, editor, !onInsertReference],
   );
 
   React.useImperativeHandle(

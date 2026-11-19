@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { NodeViewContent, NodeViewWrapper, type ReactNodeViewProps } from '@tiptap/react';
-import { BookOpen, Bot, Braces, Lock, Plus, Search, Sparkles, TriangleAlert, Workflow, Wrench, X, type LucideIcon } from 'lucide-react';
+import { Ban, BookOpen, Bot, Braces, Lock, Play, Plus, Search, Sparkles, TriangleAlert, Workflow, Wrench, X, type LucideIcon } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { PublishBlocker, Ref, RefKind, ReferenceItem } from '@/lib/types/references';
 
-import { type IfNot, chipFor, refToken } from './document-model';
+import { type IfNot, chipFor, refToken, refsInNode, runsIndex } from './document-model';
 
 export const KIND_ICON: Record<RefKind, LucideIcon> = { tool: Wrench, knowledge: BookOpen, skill: Sparkles, agent: Bot, workflow: Workflow };
 
@@ -27,13 +27,19 @@ export interface DocumentContextValue {
   resolved: readonly ReferenceItem[] | undefined;
   missing: readonly PublishBlocker[];
   invalid: readonly InvalidField[];
+  /** Lines that do not block a publish, drawn like a problem in the warning colour. */
+  warnings: readonly InvalidField[];
   readOnly: boolean;
   /** Set where a missing reference can be given back (the agent page). */
   addBack?: (ref: Ref) => void;
   chooseAnother: (ref: Ref) => void;
+  /** Whether the reference at this position stands in a step's sentence, where it can be marked as what the step runs. */
+  canMarkRuns: (pos: number) => boolean;
+  /** Makes the reference at this position what its step runs, or with null stops the step running it. */
+  markRuns: (pos: number, ref: Ref | null) => void;
 }
 
-export const DocumentContext = React.createContext<DocumentContextValue>({ resolved: undefined, missing: [], invalid: [], readOnly: false, chooseAnother: () => {} });
+export const DocumentContext = React.createContext<DocumentContextValue>({ resolved: undefined, missing: [], invalid: [], warnings: [], readOnly: false, chooseAnother: () => {}, canMarkRuns: () => false, markRuns: () => {} });
 
 const toRef = (id: string | null): Ref | null => {
   const at = id?.indexOf(':') ?? -1;
@@ -68,9 +74,19 @@ export function FixRows({ blockers }: { blockers: readonly PublishBlocker[] }) {
 const placed = (missing: readonly PublishBlocker[], field: string, step?: number) =>
   missing.filter((b) => b.kind === 'missing_reference' && b.position?.field === field && (step === undefined || b.position.step === step));
 
+/** A line the publish check noticed and does not block on. The icon and the word say it, not only the colour. */
+function WarningLine({ message }: { message: string }) {
+  return (
+    <p contentEditable={false} className="flex items-start gap-1 text-xs text-warning-text" data-testid="publish-warning">
+      <TriangleAlert className="mt-0.5 size-3 shrink-0" aria-hidden />
+      <span>Warning: {message}</span>
+    </p>
+  );
+}
+
 /** A locked heading with the text or the list under it. */
 export function BlockView({ node }: ReactNodeViewProps) {
-  const { missing, invalid } = React.useContext(DocumentContext);
+  const { missing, invalid, warnings } = React.useContext(DocumentContext);
   const key = node.attrs.key as string;
   const error = invalid.find((i) => i.field === key);
   const errorId = `${React.useId()}-error`;
@@ -86,6 +102,9 @@ export function BlockView({ node }: ReactNodeViewProps) {
           {error.message}
         </p>
       )}
+      {warnings.filter((w) => w.field === key).map((w) => (
+        <WarningLine key={w.message} message={w.message} />
+      ))}
       <FixRows blockers={placed(missing, key)} />
     </NodeViewWrapper>
   );
@@ -93,21 +112,23 @@ export function BlockView({ node }: ReactNodeViewProps) {
 
 /** One numbered step: what it uses in front, its line, and a check and an if-not line where they were written. */
 export function StepView({ node, editor, getPos, updateAttributes }: ReactNodeViewProps) {
-  const { missing, invalid, readOnly, resolved } = React.useContext(DocumentContext);
+  const { missing, invalid, warnings, readOnly, resolved } = React.useContext(DocumentContext);
   const pos = getPos();
   const number = pos === undefined ? 0 : editor.state.doc.resolve(pos).index() + 1;
   const error = invalid.find((i) => i.field === 'steps' && i.step === number);
   const errorId = `${React.useId()}-error`;
   const use = node.attrs.use as Ref | null;
+  // What the step runs is shown once: on the reference in its sentence when it names it there, else as a chip in front.
+  const inFront = use && runsIndex(use, refsInNode(node.firstChild)) < 0;
   return (
     <NodeViewWrapper role="group" aria-label={`Step ${number}`} aria-invalid={error ? true : undefined} aria-describedby={error ? errorId : undefined} data-step className="flex gap-2 [counter-increment:step]">
       <span contentEditable={false} aria-hidden className="w-5 shrink-0 text-muted-foreground select-none before:content-[counter(step)_'.']" />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         {/* The chip floats, so the step's text starts beside it and the check and if-not lines start under it. */}
         <div className="min-w-0">
-          {use && (
+          {use && inFront && (
             <span contentEditable={false} className="float-left mr-2 inline-flex items-center gap-1">
-              <ReferenceBadge reference={use} resolved={resolved} />
+              <ReferenceBadge reference={use} resolved={resolved} runs />
               {!readOnly && (
                 <Button type="button" variant="ghost" size="icon" className="size-5" aria-label="Remove what this step uses" onClick={() => updateAttributes({ use: null })}>
                   <X className="size-3" />
@@ -122,6 +143,9 @@ export function StepView({ node, editor, getPos, updateAttributes }: ReactNodeVi
             {error.message}
           </p>
         )}
+        {warnings.filter((w) => w.field === 'steps' && w.step === number).map((w) => (
+          <WarningLine key={w.message} message={w.message} />
+        ))}
         <FixRows blockers={placed(missing, 'steps', number)} />
       </div>
     </NodeViewWrapper>
@@ -203,23 +227,64 @@ export function IfNotView({ node, updateAttributes, deleteNode }: ReactNodeViewP
   );
 }
 
-/** A reference as a badge with the item's current name, or Missing when the team no longer has it. */
-export function ReferenceBadge({ reference, resolved }: { reference: Ref; resolved: readonly ReferenceItem[] | undefined }) {
+/**
+ * A reference as a badge with the item's current name, or Missing when the team no longer has it. With `runs` it is the
+ * one its step runs, and says so in words as well as to a screen reader.
+ */
+export function ReferenceBadge({ reference, resolved, runs = false }: { reference: Ref; resolved: readonly ReferenceItem[] | undefined; runs?: boolean }) {
   const chip = chipFor(reference, resolved);
   const Icon = chip.state === 'missing' ? TriangleAlert : KIND_ICON[reference.kind];
   return (
-    <Badge variant={chip.state === 'missing' ? 'destructive' : reference.kind === 'skill' ? 'secondary' : 'outline'} className={chip.state === 'loading' ? 'text-muted-foreground' : undefined} data-testid="reference-chip" data-ref={refToken(reference)} data-state={chip.state}>
+    <Badge
+      variant={chip.state === 'missing' ? 'destructive' : reference.kind === 'skill' ? 'secondary' : 'outline'}
+      className={chip.state === 'loading' ? 'text-muted-foreground' : undefined}
+      role={runs ? 'group' : undefined}
+      aria-label={runs ? `This step runs ${chip.label}` : undefined}
+      data-testid="reference-chip"
+      data-ref={refToken(reference)}
+      data-state={chip.state}
+      data-runs={runs ? '' : undefined}
+    >
       <Icon aria-hidden />
       {chip.label}
+      {runs && (
+        <span className="border-l pl-1.5 text-xs font-medium" data-testid="runs-mark">
+          runs
+        </span>
+      )}
     </Badge>
   );
 }
 
-export function ReferenceView({ node, selected }: ReactNodeViewProps) {
-  const { resolved } = React.useContext(DocumentContext);
+/**
+ * A reference in the text. In a step's sentence the builder can make it what the step runs, or stop that; the one that
+ * is marked carries the "runs" mark (a decoration from the Runs extension, set when the step's tool is named here).
+ */
+export function ReferenceView({ node, selected, getPos, decorations }: ReactNodeViewProps) {
+  const { resolved, readOnly, canMarkRuns, markRuns } = React.useContext(DocumentContext);
+  const reference: Ref = { kind: node.attrs.kind, id: node.attrs.id };
+  const runs = decorations.some((d) => d.spec?.runs);
+  const pos = getPos();
+  const canMark = !readOnly && reference.kind !== 'knowledge' && pos !== undefined && canMarkRuns(pos);
+  const label = runs ? 'Stop running this' : 'Make this the step’s tool';
   return (
-    <NodeViewWrapper as="span" className={selected ? 'rounded-md ring-2 ring-ring' : undefined}>
-      <ReferenceBadge reference={{ kind: node.attrs.kind, id: node.attrs.id }} resolved={resolved} />
+    <NodeViewWrapper as="span" className={`group/ref inline-flex items-center gap-0.5 align-middle ${selected ? 'rounded-md ring-2 ring-ring' : ''}`}>
+      <ReferenceBadge reference={reference} resolved={resolved} runs={runs} />
+      {canMark && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          contentEditable={false}
+          className={`size-5 transition-opacity focus-visible:opacity-100 group-hover/ref:opacity-100 ${selected || runs ? 'opacity-100' : 'opacity-0'}`}
+          aria-label={label}
+          title={label}
+          data-testid={runs ? 'stop-running' : 'make-step-tool'}
+          onClick={() => markRuns(getPos()!, runs ? null : reference)}
+        >
+          {runs ? <Ban className="size-3" /> : <Play className="size-3" />}
+        </Button>
+      )}
     </NodeViewWrapper>
   );
 }
