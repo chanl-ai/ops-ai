@@ -24,6 +24,9 @@ REG_PORT=${REG_PORT:-15612}
 BUILD=${BUILD:-0}
 if [ "$BUILD" = 1 ]; then PREFIX=localhost:$REG_PORT/ops-ai; else PREFIX=ghcr.io/chanl-ai/ops-ai; fi
 export OPS_IMAGE_REGISTRY=$PREFIX
+# A client's shell holds none of the stack's settings. CI and a dev shell export these for the test suites, and compose
+# reads the shell before --env-file, so they would point the installed containers at the suites' database and mail.
+unset OPS_DATABASE_URL OPS_SMTP_HOST
 PROJECT=ops-install-proof
 DBA_PROJECT=ops-install-dba
 PG=ops-install-dba-pg
