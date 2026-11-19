@@ -228,7 +228,7 @@ The platform connects to a SQL database the enterprise runs, usually a managed i
 | Database | Status | Tenant isolation |
 |---|---|---|
 | PostgreSQL (Azure Database for PostgreSQL, Amazon RDS or Aurora, Cloud SQL, self-run) | built (runs today) | Today: row-level security on run, checkpoint, workflow, chat attachment, chat search, widget deployment and identity tables, and a tenant filter in each query elsewhere. Planned: the store layer on every table, with row-level security as a backstop |
-| SQL Server 2025 and Azure SQL | planned: the schema scripts are ready for a DBA, the services do not run on it yet ([Azure SQL](../guide/azure-sql.md)) | Store layer, plus a security policy as a backstop, on from the first release |
+| SQL Server 2025 and Azure SQL | partial: the store, service-kit and identity tests pass on SQL Server 2025 in CI and the schema scripts are ready for a DBA; a full install on it is not yet proven ([Azure SQL](../guide/azure-sql.md)) | Store layer, plus a security policy as a backstop, on from the first release |
 
 - Both run through SQLAlchemy Core and one dialect layer; MySQL was dropped ([ADR-0017](decisions/database-support.md)).
 - Planned: every tenant query goes through scoped repositories that add the tenant filter, with a test that checks the filter is present.

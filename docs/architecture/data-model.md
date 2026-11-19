@@ -790,7 +790,7 @@ The platform connects to a SQL database the enterprise runs, usually a managed i
 | Database | Status | Tenant isolation |
 |---|---|---|
 | PostgreSQL 15 to 17 | built (runs today) | Tenant filter in the store layer, with row-level security as a second check. Today row-level security covers run, checkpoint, workflow, chat attachment, chat search, widget deployment and identity tables |
-| SQL Server 2025 and Azure SQL | planned: schema scripts ready for a DBA, services not yet run on it ([Azure SQL](../guide/azure-sql.md)) | Tenant filter in the store layer, with a row-level security policy on from the first release |
+| SQL Server 2025 and Azure SQL | partial: the store, service-kit and identity tests pass on SQL Server 2025 in CI and the schema scripts are ready for a DBA; a full install on it is not yet proven ([Azure SQL](../guide/azure-sql.md)) | Tenant filter in the store layer, with a row-level security policy on from the first release |
 
 MySQL was dropped ([ADR-0017](decisions/database-support.md)); SQL Server 2022 is not supported because it lacks the json and vector types.
 

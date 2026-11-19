@@ -60,7 +60,7 @@ Experiments are under `docs/services/agents-service/experiments/`; use cases und
 | Reviews, Cases and decisions in their own package, `ops_hitl` | The code lives in agents-service, so a deployment cannot run workflows without it | [Service map](service-map.md#steps-left) |
 | Schedule, webhook, email and poll triggers in one package, `ops_triggers` | Each channel starts runs its own way today | [Service map](service-map.md#steps-left) |
 | Several services in one process | `deploy/host` starts each service as its own process from one image; embedding several in one process is not built | [Service map](service-map.md#deployment-targets) |
-| SQL Server and Azure SQL at run time | The schema scripts are ready for a DBA; the services run on PostgreSQL only | [Azure SQL](../guide/azure-sql.md) |
+| SQL Server and Azure SQL at run time | The store, service-kit and identity tests pass on SQL Server 2025 in CI and the schema scripts are ready for a DBA; no install has run every service on it end to end yet | [Azure SQL](../guide/azure-sql.md) |
 | Delegation tokens with an `act` claim from the bank's identity provider | platform-service mints the tokens today; one issued by an outside provider is untested (open question 6) | [Identity and tenancy](identity-and-tenancy.md) |
 | Grading quality | The grade node is a judge prompt with unknown calibration; the cheapest proof is 30 drafts scored by the judge and by a person | [Human in the loop](human-in-the-loop.md) |
 | A reviewer's day | The Reviews queue for days-long pauses has not been walked by an operator with five paused cases | [Human in the loop](human-in-the-loop.md) |
