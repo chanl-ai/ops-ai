@@ -82,7 +82,11 @@ export class Agents {
       model: definition.model,
       channels: definition.channels,
     };
-    return this.raw.agents.agents_create_agent({ body: body as never });
+    // The create route takes no brief; it is saved on the new agent's draft, as the Python SDK does.
+    const later = Object.fromEntries(['brief', 'promptMode', 'patterns'].filter((k) => definition[k] !== undefined).map((k) => [k, definition[k]]));
+    const made = this.raw.agents.agents_create_agent({ body: body as never });
+    if (!Object.keys(later).length) return made;
+    return made.then((agent: { id: string }) => this.raw.agents.agents_update_agent({ path: { agent_id: agent.id }, body: later as never }));
   }
 
   async publish(id: string, note = '', version?: number) {
