@@ -1,48 +1,53 @@
 # Build with Ops AI
 
-Status: current. Every folder named below runs against a local stack, and its test is part of the repository's checks.
+Status: current. Each step has a runnable example folder in the repository, tested on every change.
 
-Start with one message, one search and one read, then an agent and a workflow, then the two ways agents and workflows
-call each other. Approvals, roles and evaluations come after that, in the agents and workflows manuals. Each step is a
-folder you run as it is and then copy.
+A developer new to Ops AI needs a path from one chat message to an agent and a workflow that call each other. This
+guide is that path, seven short steps, each through the Ops AI command line with the same calls available in the
+Python and TypeScript SDKs. Each step links to an example folder you can run and copy.
 
 ## Before you start
 
-Run the stack on your machine as the [Quickstart](quickstart.md) shows. `make up` installs the sample team the
-examples use. Each folder has the same three files to start from:
-
-| File | What it does |
+| You need | How |
 |---|---|
-| `setup.py` | Signs in, creates or finds what the example needs, and writes `.ops-profile.json` into the folder |
-| `test_example.py` | Runs the example through the Python SDK and checks the result |
-| `README.md` | What the example teaches and the commands for it |
-
-Run any folder the same way:
-
-```bash
-uv run python examples/chat/01-ask-once/setup.py
-uv run pytest examples/chat/01-ask-once/test_example.py
-```
+| An install you can sign in to | Your company's Ops AI, or one on your machine from the [Quickstart](quickstart.md) |
+| The command line | [Install the CLI](install-cli.md), then `opsai login` |
+| The Builder role in a team | Builders create agents, workflows and knowledge bases |
 
 ## The ladder
 
 <!-- site: steps -->
-1. **Chat**: send one message and read the reply. `examples/chat/01-ask-once/`
-2. **Knowledge**: add one page to a knowledge base and search it. `examples/knowledge/01-search-a-page/`
-3. **Tool**: call one read operation and see the record. `examples/tools/01-find-a-customer/`
-4. **Agent**: ask a published agent one question. `examples/agents/01-answer-from-instructions/`
-5. **Workflow**: validate and run a three-step workflow. `examples/workflows/01-normalize-a-request/`
-6. **A workflow asks an agent**: an Agent step calls a published agent and keeps its cited answer. Run
-   `examples/agents/02-cite-the-handbook/setup.py` first. `examples/compositions/01-workflow-asks-agent/`
-7. **An agent starts a workflow**: a chat calls a published workflow as a tool. Run
-   `examples/workflows/01-normalize-a-request/setup.py` first. `examples/compositions/02-agent-starts-workflow/`
+1. **Chat**: send one message and read the reply.
+   `opsai chat say -m "What can you help me with?"`
+   ([example](../../examples/chat/01-ask-once/README.md))
+2. **Knowledge**: add one page to a knowledge base and search it.
+   `opsai kb add-text kb_... --title "ATM limits" --text "The daily limit is 500 dollars."`, then
+   `opsai kb search kb_... "What is the daily limit?"`
+   ([example](../../examples/knowledge/01-search-a-page/README.md))
+3. **Tool**: run one read operation in Mock, then for real.
+   `opsai tools run <app> <tool> --input id=42`, then the same with `--real`
+   ([example](../../examples/tools/01-find-a-customer/README.md))
+4. **Agent**: apply an agent from a file, publish it, and ask it one question.
+   `opsai agents apply agent.yaml`, `opsai agents publish <id>`, `opsai agents chat <id> --message "..."`
+   ([example](../../examples/agents/01-answer-from-instructions/README.md))
+5. **Workflow**: validate, apply and test-run a three-step workflow.
+   `opsai workflows validate workflow.yaml`, `opsai workflows apply workflow.yaml`,
+   `opsai workflows run <id> --input request.json`
+   ([example](../../examples/workflows/01-normalize-a-request/README.md))
+6. **A workflow asks an agent**: an Agent step calls a published agent and keeps its cited answer
+   ([example](../../examples/compositions/01-workflow-asks-agent/README.md)).
+7. **An agent starts a workflow**: a chat calls a published workflow as a tool
+   ([example](../../examples/compositions/02-agent-starts-workflow/README.md)).
 
-The [workflows manual](workflows.md) and the [agents manual](agents.md) list every further folder.
+Expected at each step: the command prints the record it made or the answer it got. A refused step prints why, such as
+a workflow input missing a required field, naming the field.
+
+The [workflows](workflows.md) and [agents](agents.md) pages list every further example: approvals, checklists,
+delegation, evaluations.
 
 ## How agents and workflows meet
 
-Agents and workflows are separate systems that call each other only through their public APIs, so either one works
-without the other.
+Agents and workflows call each other only through their public APIs, so either one works without the other.
 
 ```mermaid
 flowchart LR
@@ -54,21 +59,21 @@ flowchart LR
 | Direction | How | What comes back |
 |---|---|---|
 | A workflow asks an agent | An Agent step names a published agent and maps the prompt from the run's data | The agent's final answer, as the step's output |
-| An agent starts a workflow | The agent's published tool list holds `workflow:<id>`; calling it starts that workflow's live version on behalf of the signed-in person | The run's result, or a handle when the run waits for a person |
-
-[Workflows as agent tools](../architecture/workflows-as-tools.md) has the design.
+| An agent starts a workflow | The workflow is on the agent's published tool list; calling it starts the workflow's live version for the signed-in person | The run's result, or a handle when the run waits for a person |
 
 ## The same operations on every surface
 
-The REST API, the Python SDK, the TypeScript SDK and the `opsai` command offer the same lifecycle: validate, apply,
-publish, run in test mode, inspect, and evaluate an agent. Where a surface is still missing an operation (replaying a
-run, evaluating a workflow, the agent run API from TypeScript), [developer surface
-coverage](developer-surface-coverage.md) marks it planned.
+| Operation | Console | `opsai` | Python SDK | TypeScript SDK | HTTP API |
+|---|---|---|---|---|---|
+| Validate, apply, publish, run and trace a workflow | built | built | built | built | built |
+| Apply an agent and chat with it | built | built | built | built | built |
+| Evaluate an agent | planned | built | built | built | built |
+| Run an agent in wait, stream or background mode | planned | built | built | planned | built |
+| Replay a workflow run | planned | planned | planned | planned | planned |
 
-## Examples, seeds and use cases
+## Next
 
-| Word | Where | What it is for |
-|---|---|---|
-| Example | `examples/` | A folder that teaches one idea, which you run and copy |
-| Seed | `scripts/sample-team/` | The demo data a local stack starts with; [the seeded workflows](skills/wf-builder/examples.md) are listed for the workflow builder skill |
-| Use case | `docs/usecases/` | A user story with its acceptance test, run on every change |
+<!-- site: cards -->
+- [Build your first tool](build-your-first-tool.md): a REST tool on your own API.
+- [Card disputes](use-cases/card-disputes.md): a full workflow with an agent and an approval.
+- [Python SDK](../sdk/python.md) and [TypeScript SDK](../sdk/typescript.md).

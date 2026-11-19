@@ -49,7 +49,10 @@ Tool that calls the App and is changed in one place.
 
 - Code tools: a function that shapes what a REST Tool returns.
 - API keys that build Tools from a script.
-- `opsai login`: the SDK reads its address and key from arguments, `OPS_*` variables or a profile file you write.
 
-The use case [A developer builds a REST tool](../usecases/tools-service/a-developer-builds-a-rest-tool.md) runs these
-steps against a payments stand-in, in a browser and through the API.
+## Next
+
+<!-- site: cards -->
+- [Connect an app and use it in an agent](use-cases/connect-an-app.md): give the Tool to an agent and use it in chat.
+- [Hold a write for approval](use-cases/approve-a-write.md): make the Tool's writes wait for a person.
+- [Sign in with a key or password](integrations/sign-in-keys.md): the kinds of key an App can hold.
