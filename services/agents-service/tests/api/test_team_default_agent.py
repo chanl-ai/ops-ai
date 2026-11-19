@@ -159,15 +159,26 @@ async def test_the_default_asks_only_specialists_the_person_may_chat_with_and_as
             )
             assert not named.ok and named.output["code"] == "specialist_not_offered", named.output
             assert await calls_.offers_in("ag_branch", children[0]["id"]) == [], "a specialist asks no other agent"
+            assert await calls_.offers_in("ag_dispute", thread) == [], "only the team default asks specialists"
+        # Two agents granted each other. The path is what refuses the call back: this specialist's thread carries no
+        # `calledBy`, so it is offered the agent that asked it, as a deeper chain would be.
+        await grant(c, "ag_dispute", "ag_branch")
+        asked_meta = cast(dict[str, Any], children[0]["meta"])
+        deeper = {k: v for k, v in asked_meta.items() if k != "calledBy"}
+        row, _ = await rt.graph_store.open_thread(
+            "th_deeper", "agent_wrapper", deeper, "team_ops", "", external_key="d"
+        )
+        with acting_for(viewer()):
+            assert [g.name for g in await calls_.offers_in("ag_dispute", row.id)] == ["agent__ag_branch"]
             looped = await calls_.run(
                 agent="ag_branch",
                 arguments={"question": "x"},
                 key="k-loop",
-                parent_thread_id=children[0]["id"],
+                parent_thread_id=row.id,
                 parent_run_id=None,
             )
-            assert not looped.ok and looped.output["code"] == "agent_on_path", looped.output
-            assert await calls_.offers_in("ag_dispute", thread) == [], "only the team default asks specialists"
+        assert not looped.ok and looped.output["code"] == "agent_on_path", looped.output
+        assert await called(rt) == ["ag_branch>ag_dispute"], "an agent already on the path ran again"
         nobody = await calls_.run(
             agent="ag_dispute", arguments={"question": "x"}, key="k-none", parent_thread_id=thread, parent_run_id=None
         )
@@ -184,14 +195,18 @@ async def called(rt: Runtime) -> list[str]:
     return [f"{m['calledBy']}>{m['agentId']}" for m in metas if m.get("calledBy")]
 
 
-async def grant_dispute(c: AsyncClient) -> None:
-    """Publishes Branch Concierge holding `agent:ag_dispute`, as a builder grants one agent another."""
-    held: list[str] = (await c.get("/v1/agents/ag_branch", headers=ADMIN)).json()["data"]["toolIds"]
-    saved = await c.patch("/v1/agents/ag_branch", json={"toolIds": [*held, "agent:ag_dispute"]}, headers=ADMIN)
+async def grant(c: AsyncClient, holder: str, asked: str) -> None:
+    """Publishes `holder` holding `agent:<asked>`, as a builder grants one agent another."""
+    held: list[str] = (await c.get(f"/v1/agents/{holder}", headers=ADMIN)).json()["data"]["toolIds"]
+    saved = await c.patch(f"/v1/agents/{holder}", json={"toolIds": [*held, f"agent:{asked}"]}, headers=ADMIN)
     assert saved.status_code == 200, saved.text
     body = {"version": saved.json()["data"]["version"], "note": "go"}
-    asked = await c.post("/v1/agents/ag_branch/publish-requests", json=body, headers=ADMIN)
-    assert asked.status_code == 201 and asked.json()["data"]["status"] == "approved", asked.text
+    live = await c.post(f"/v1/agents/{holder}/publish-requests", json=body, headers=ADMIN)
+    assert live.status_code == 201 and live.json()["data"]["status"] == "approved", live.text
+
+
+async def grant_dispute(c: AsyncClient) -> None:
+    await grant(c, "ag_branch", "ag_dispute")
 
 
 async def test_an_unattended_run_asks_no_agent_and_logs_why_while_a_persons_chat_still_does(stack: Stack) -> None:
