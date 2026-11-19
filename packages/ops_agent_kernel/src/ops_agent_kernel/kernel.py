@@ -196,6 +196,11 @@ class _TurnState:
     judged: set[int] = field(default_factory=set[int])
     # Events a tool call raised, sent once the stream reaches its result.
     events: list[KernelEvent] = field(default_factory=list[KernelEvent])
+    # By skill id, the step tools of a skill this reply stopped any way but done or switched (steps.held): not offered
+    # for the rest of the reply, even as the current step's tool of another skill, unless that skill starts again.
+    held: dict[str, list[str]] = field(default_factory=dict[str, list[str]])
+    # What the model is told when a skill picked from the menu did not start for want of an input it requires.
+    unstarted: str = ""
 
     def drop_carried(self) -> None:
         """A skill loaded or started in this reply takes the place of the ones carried from earlier replies: one
@@ -208,7 +213,11 @@ class _TurnState:
 
     def moved(self, run: SkillRunState) -> None:
         """The running-skill record after a step tool or a step's tool result changed it."""
+        if (stopped := steps.held(self.run, run)) is not None:
+            self.held[stopped[0]] = stopped[1]
         was, self.run, now = self.run.running, run, run.running
+        if now is not None:
+            self.held.pop(now.skill_id, None)
         self.events.append(SkillRunChanged(run.model_copy(deep=True)))
         if now is None or (was is not None and (was.skill_id, was.version) == (now.skill_id, now.version)):
             return
@@ -218,6 +227,16 @@ class _TurnState:
             self.started.append(skill)
             entry = skillset.loaded_entry(skill, skill.use_when, now.inputs)
             self.events.append(skillset.event(entry, "started"))
+
+    def hidden(self) -> set[str]:
+        """Tools not offered on the next model step, whatever the current step names: those the running skill keeps
+        for its other steps or a failed skill holds (steps.withheld), and those a skill stopped in this reply holds."""
+        return steps.withheld(self.run, self.stepped) | {t for tools in self.held.values() for t in tools}
+
+    def free(self) -> bool:
+        """No step names a tool to call now. While one does, the model is offered that tool and nothing to plan,
+        search or load with."""
+        return steps.target(self.run) is None
 
     def position(self) -> tuple[str, int] | None:
         """The skill and step the record is on (the sub-skill's while one runs)."""
@@ -458,7 +477,7 @@ def _plan(state: _TurnState) -> Tool[None]:
         return said
 
     async def prepare(ctx: RunContext[None], tool_def: ToolDefinition) -> ToolDefinition | None:
-        return tool_def if state.plan is None and state.offered(ctx, builtin=True) else None
+        return tool_def if state.plan is None and state.free() and state.offered(ctx, builtin=True) else None
 
     tool = Tool[None].from_schema(
         cast(Callable[..., Awaitable[Any]], call), planner.NAME, g.description, g.input_schema, takes_ctx=True
@@ -522,10 +541,13 @@ def _load_skill(state: _TurnState, grant: ToolGrant) -> Tool[None]:
         rec.status, rec.output = "ok", {"loaded": skill.slug, "version": skill.version}
         return {"skill": skill.name, "version": skill.version, "instructions": skill.instructions}
 
+    async def prepare(ctx: RunContext[None], tool_def: ToolDefinition) -> ToolDefinition | None:
+        return tool_def if state.free() and state.offered(ctx, builtin=True) else None
+
     tool = Tool[None].from_schema(
         cast(Callable[..., Awaitable[Any]], call), skillset.NAME, grant.description, grant.input_schema, takes_ctx=True
     )
-    tool.prepare = _offer(state, builtin=True)
+    tool.prepare = prepare
     return tool
 
 
@@ -576,9 +598,15 @@ def _search(state: _TurnState) -> Tool[None]:
         if (over := state.charge_builtin()) is not None:
             rec.status, rec.output = "error", {"error": over}
             return {"error": over}
-        found = search.search(state.req.tools, str(arguments.get("query") or ""))
+        # A tool a step holds back is not named either: its schema would be all the model needs to ask for it.
+        hidden = state.hidden()
+        offered = [t for t in state.req.tools if t.name not in hidden]
+        found = search.search(offered, str(arguments.get("query") or ""))
         rec.status, rec.output = "ok", {"tools": found}
         return {"tools": found}
+
+    async def prepare(ctx: RunContext[None], tool_def: ToolDefinition) -> ToolDefinition | None:
+        return tool_def if state.free() and state.offered(ctx, builtin=True) else None
 
     tool = Tool[None].from_schema(
         cast(Callable[..., Awaitable[Any]], call),
@@ -587,7 +615,7 @@ def _search(state: _TurnState) -> Tool[None]:
         search.SEARCH.input_schema,
         takes_ctx=True,
     )
-    tool.prepare = _offer(state, builtin=True)
+    tool.prepare = prepare
     return tool
 
 
@@ -722,8 +750,11 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: 
             return None
         current = steps.target(state.run)
         if current is None:
-            # No step tool to call now: every tool but the ones a skill's own steps call (steps.withheld).
-            return None if grant.name in steps.withheld(state.run, state.stepped) else tool_def
+            # No step tool to call now: every tool but the ones a skill's own steps call or a stopped skill holds.
+            return None if grant.name in state.hidden() else tool_def
+        if grant.name in state.hidden():
+            # The current step's own tool, held by a skill this reply stopped: it waits for a later reply.
+            return None
         if grant.name == current:
             # Sent with its schema even when the agent searches for its tools: the step cannot pass without it.
             return replace(tool_def, defer_loading=False) if deferred else tool_def
@@ -1102,7 +1133,10 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
             menu = entry.get("how") == "picked" and skill in state.stepped and not req.resume
             if menu and (running is None or running.skill_id != skill.skill_id):
                 inputs = {k: str(v) for k, v in json_object(entry.get("inputs")).items()}
-                state.moved(steps.start(state.run, skill, state.stepped, by="menu", inputs=inputs))
+                if missing := steps.missing_inputs(skill, inputs):
+                    state.unstarted = step_tools.needs(skill, missing)
+                else:
+                    state.moved(steps.start(state.run, skill, state.stepped, by="menu", inputs=inputs))
             continue
         if skill is not None and skill.loading == "on_match" and skill not in state.loaded:
             how = "picked" if entry.get("how") == "picked" else "carried"
@@ -1117,7 +1151,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
     # so the skill whose step called it ends here, as failed.
     rejected = req.resume.interrupt.pending_call.tool if req.resume and req.resume.decision == "rejected" else None
     if rejected is not None and steps.target(state.run) == rejected:
-        state.moved(steps.denied(state.run))
+        state.moved(steps.denied(state.run, state.stepped))
     passages: list[Passage] = []
     digest: dict[str, str] = {}
     all_messages: list[ModelMessage] = []
@@ -1254,6 +1288,8 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
         written = _with_earlier(
             _with_skills(system_prompt, loadable), state.carried, req.earlier_reads, carried_plan, picked
         )
+        if state.unstarted and state.run.running is None:
+            written = f"{written}\n\n# A skill the person picked did not start\n{state.unstarted}"
         last = prompt_writer.tail(steps.now(state.run, names), req.settings.never)
         return f"{written}\n\n{last}" if last else written
 

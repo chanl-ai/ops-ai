@@ -53,8 +53,10 @@ __all__ = [
     "StepResult",
     "SubRun",
     "denied",
+    "held",
     "judged",
     "leave",
+    "missing_inputs",
     "now",
     "on_result",
     "problems",
@@ -188,19 +190,55 @@ def _is_rule(check: StepCheck) -> bool:
         return True
 
 
-def _holds(check: StepCheck, value: Any, inputs: dict[str, str]) -> bool:
+def _hidden(check: StepCheck, f: RunningSkill | SubRun) -> list[str]:
+    """The inputs `check` reads that the record holds masked: a record carried from an earlier reply keeps a
+    placeholder where personal data was, and a rule never compares one."""
+    if not f.masked_inputs:
+        return []
     try:
-        return expr.evaluate(check.text, {"result": value, "inputs": inputs})
+        read = expr.inputs_read(check.text)
+    except expr.CheckError:
+        return []
+    return sorted(f.masked_inputs) if expr.EVERY_INPUT in read else sorted(read & set(f.masked_inputs))
+
+
+def _holds(check: StepCheck, value: Any, f: RunningSkill | SubRun, told: list[str]) -> bool:
+    """Whether a rule check holds for a step of `f`. A rule that reads a masked input does not hold, and `told`
+    gets the sentence that says why."""
+    if hidden := _hidden(check, f):
+        named = ", ".join(hidden)
+        told.append(
+            f"This step's check reads the input {named}, which is masked in what this conversation keeps, so the "
+            "check could not run and the step did not pass. Do not compare it yourself."
+        )
+        return False
+    try:
+        return expr.evaluate(check.text, {"result": value, "inputs": f.inputs})
     except expr.CheckError:
         return False
 
 
-def _end(run: SkillRunState, name: str, returns: dict[str, JsonValue] | None = None) -> None:
+# Endings after which a skill's step tools are free again: it finished, or another skill took its place.
+RELEASES = ("done", "switched")
+
+
+def _tools(r: RunningSkill, skills: Sequence[Skill]) -> set[str]:
+    """Every tool a step of the running skill calls, and every tool a step of a skill it runs calls, whether or not
+    that skill was reached."""
+    out = set(r.program.targets())
+    if r.sub is not None:
+        out |= r.sub.program.targets()
+    runs = {s.use.id for s in r.program.steps if s.use is not None and s.use.kind == "skill"}
+    for s in skills:
+        if s.skill_id in runs and s.program is not None:
+            out |= s.program.targets()
+    return out
+
+
+def _end(run: SkillRunState, name: str, skills: Sequence[Skill], returns: dict[str, JsonValue] | None = None) -> None:
     r = run.running
     assert r is not None
-    tools = set(r.program.targets())
-    if r.sub is not None:
-        tools |= r.sub.program.targets()
+    tools = _tools(r, skills)
     run.history.append(
         EndedSkill(
             skill_id=r.skill_id,
@@ -208,7 +246,7 @@ def _end(run: SkillRunState, name: str, returns: dict[str, JsonValue] | None = N
             name=r.name,
             ended=name,
             at_step=r.step,
-            tools=sorted(tools) if name == "failed" else [],
+            tools=[] if name in RELEASES else sorted(tools),
             returns=returns or {},
         )
     )
@@ -216,7 +254,7 @@ def _end(run: SkillRunState, name: str, returns: dict[str, JsonValue] | None = N
     run.running = None
 
 
-def _enter(run: SkillRunState, n: int, skills: Sequence[Skill]) -> None:
+def _enter(run: SkillRunState, n: int, skills: Sequence[Skill], told: list[str]) -> None:
     """Puts the running skill on step `n`. A step that runs a skill starts it here, one level deep: a skill the agent
     does not hold, or one whose own steps run a skill, is a failed attempt of the step."""
     r = run.running
@@ -229,10 +267,10 @@ def _enter(run: SkillRunState, n: int, skills: Sequence[Skill]) -> None:
     sub = next((s for s in skills if s.skill_id == step.use.id and s.program is not None), None)
     program = sub.program if sub is not None else None
     if sub is None or program is None or not program.steps or sub.skill_id == r.skill_id:
-        _failed(run, skills)
+        _failed(run, skills, told)
         return
     if any(x.use is not None and x.use.kind == "skill" for x in program.steps):
-        _failed(run, skills)
+        _failed(run, skills, told)
         return
     r.sub = SubRun(
         skill_id=sub.skill_id,
@@ -248,7 +286,7 @@ def _enter(run: SkillRunState, n: int, skills: Sequence[Skill]) -> None:
     )
 
 
-def _failed(run: SkillRunState, skills: Sequence[Skill]) -> None:
+def _failed(run: SkillRunState, skills: Sequence[Skill], told: list[str]) -> None:
     """The current step did not pass: its "if not" decides. With none, it is tried once more."""
     r = run.running
     assert r is not None
@@ -268,19 +306,19 @@ def _failed(run: SkillRunState, skills: Sequence[Skill]) -> None:
             f.step, f.step_text = goto, f.program.steps[goto - 1].do
             f.results.pop(str(goto), None)
             return
-        _sub_ended(run, skills, ends, {})
+        _sub_ended(run, skills, ends, {}, told)
         return
     if again:
         if (use := _step(r).use) is not None and use.kind == "skill":
-            _enter(run, r.step, skills)
+            _enter(run, r.step, skills, told)
         return
     if goto is not None:
-        _enter(run, goto, skills)
+        _enter(run, goto, skills, told)
         return
-    _end(run, ends)
+    _end(run, ends, skills)
 
 
-def _passed(run: SkillRunState, skills: Sequence[Skill], value: Any) -> None:
+def _passed(run: SkillRunState, skills: Sequence[Skill], value: Any, told: list[str]) -> None:
     r = run.running
     assert r is not None
     f = _frame(r)
@@ -291,17 +329,19 @@ def _passed(run: SkillRunState, skills: Sequence[Skill], value: Any) -> None:
             f.step_text = _step(f).do
             f.results.pop(str(f.step), None)
         else:
-            _enter(run, r.step + 1, skills)
+            _enter(run, r.step + 1, skills, told)
         return
     if _required(f.program):
         return
     if isinstance(f, SubRun):
-        _sub_ended(run, skills, "done", {})
+        _sub_ended(run, skills, "done", {}, told)
     else:
-        _end(run, "done")
+        _end(run, "done", skills)
 
 
-def _sub_ended(run: SkillRunState, skills: Sequence[Skill], name: str, returns: dict[str, JsonValue]) -> None:
+def _sub_ended(
+    run: SkillRunState, skills: Sequence[Skill], name: str, returns: dict[str, JsonValue], told: list[str]
+) -> None:
     """A sub-skill ended: the step that started it gets its exit and results as that step's result, and the step's
     own check runs on them. A sub-skill that failed is a failed attempt of the step."""
     r = run.running
@@ -309,11 +349,11 @@ def _sub_ended(run: SkillRunState, skills: Sequence[Skill], name: str, returns: 
     r.sub = None
     value: dict[str, JsonValue] = {"exit": name, **returns}
     check = _step(r).check
-    if name == "failed" or (check is not None and _is_rule(check) and not _holds(check, value, r.inputs)):
+    if name == "failed" or (check is not None and _is_rule(check) and not _holds(check, value, r, told)):
         r.results[str(r.step)] = _kept(value, False)
-        _failed(run, skills)
+        _failed(run, skills, told)
         return
-    _passed(run, skills, value)
+    _passed(run, skills, value, told)
 
 
 def said(before: SkillRunState, after: SkillRunState) -> str:
@@ -358,7 +398,7 @@ def start(
     assert program is not None and program.steps
     run = run.model_copy(deep=True)
     if run.running is not None:
-        _end(run, "switched")
+        _end(run, "switched", skills)
     run.running = RunningSkill(
         skill_id=skill.skill_id,
         version=skill.version,
@@ -372,7 +412,7 @@ def start(
         program=program,
         rules=skill.instructions,
     )
-    _enter(run, 1, skills)
+    _enter(run, 1, skills, [])
     return run
 
 
@@ -396,13 +436,7 @@ def withheld(run: SkillRunState, skills: Sequence[Skill]) -> set[str]:
         if h.ended == "failed" and (r is None or r.skill_id != h.skill_id):
             out |= set(h.tools)
     if r is not None:
-        out |= r.program.targets()
-        if r.sub is not None:
-            out |= r.sub.program.targets()
-        runs = {s.use.id for s in r.program.steps if s.use is not None and s.use.kind == "skill"}
-        for s in skills:
-            if s.skill_id in runs and s.program is not None:
-                out |= s.program.targets()
+        out |= _tools(r, skills)
     out.discard(target(run) or "")
     return out
 
@@ -417,20 +451,21 @@ def on_result(run: SkillRunState, skills: Sequence[Skill], output: Any, ok: bool
     f = _frame(r)
     step = _step(f)
     key = str(f.step)
+    told: list[str] = []
     if not ok:
         f.results[key] = _kept(output, False)
-        _failed(run, skills)
+        _failed(run, skills, told)
     elif step.check is None:
-        _passed(run, skills, output)
+        _passed(run, skills, output, told)
     elif _is_rule(step.check):
-        if _holds(step.check, output, f.inputs):
-            _passed(run, skills, output)
+        if _holds(step.check, output, f, told):
+            _passed(run, skills, output, told)
         else:
             f.results[key] = _kept(output, False)
-            _failed(run, skills)
+            _failed(run, skills, told)
     else:
         f.results[key] = _kept(output, None)
-    return Moved(run, said(before, run))
+    return Moved(run, " ".join([*told, said(before, run)]))
 
 
 def step_done(run: SkillRunState, skills: Sequence[Skill]) -> Moved:
@@ -454,12 +489,13 @@ def step_done(run: SkillRunState, skills: Sequence[Skill]) -> Moved:
     before = run
     run = run.model_copy(deep=True)
     assert run.running is not None
-    if rule and step.check is not None and not _holds(step.check, None, f.inputs):
+    told: list[str] = []
+    if rule and step.check is not None and not _holds(step.check, None, _frame(run.running), told):
         _frame(run.running).results[str(f.step)] = _kept(None, False)
-        _failed(run, skills)
+        _failed(run, skills, told)
     else:
-        _passed(run, skills, res.value if res is not None else None)
-    return Moved(run, said(before, run))
+        _passed(run, skills, res.value if res is not None else None, told)
+    return Moved(run, " ".join([*told, said(before, run)]))
 
 
 def _results(program: SkillProgram, given: Json, *, failed: bool) -> dict[str, JsonValue] | str:
@@ -516,20 +552,37 @@ def leave(run: SkillRunState, skills: Sequence[Skill], name: str, returns: Json)
     before = run
     run = run.model_copy(deep=True)
     assert run.running is not None
+    told: list[str] = []
     if run.running.sub is not None:
-        _sub_ended(run, skills, name, clean)
+        _sub_ended(run, skills, name, clean, told)
     else:
-        _end(run, name, clean)
-    return Moved(run, said(before, run))
+        _end(run, name, skills, clean)
+    return Moved(run, " ".join([*told, said(before, run)]))
 
 
-def denied(run: SkillRunState) -> SkillRunState:
+def denied(run: SkillRunState, skills: Sequence[Skill]) -> SkillRunState:
     """A person rejected the current step's call: the skill ends as failed at once."""
     if run.running is None:
         return run
     run = run.model_copy(deep=True)
-    _end(run, "failed")
+    _end(run, "failed", skills)
     return run
+
+
+def missing_inputs(skill: Skill, inputs: Mapping[str, str]) -> list[str]:
+    """The inputs `skill` requires that `inputs` leaves out or blank, in the order the skill declares them."""
+    return [i.name for i in skill.inputs if i.required and not str(inputs.get(i.name) or "").strip()]
+
+
+def held(before: SkillRunState, after: SkillRunState) -> tuple[str, list[str]] | None:
+    """The skill an event stopped, and the tools its steps call, when it ended any way but done or switched: those
+    tools are not offered for the rest of the reply unless that skill starts again."""
+    was, now_ = before.running, after.running
+    left = was is not None and (now_ is None or now_.skill_id != was.skill_id)
+    if not after.history or not (left or after.history != before.history):
+        return None
+    last = after.history[-1]
+    return None if last.ended in RELEASES else (last.skill_id, last.tools)
 
 
 def shown(text: str, names: Mapping[str, str]) -> str:

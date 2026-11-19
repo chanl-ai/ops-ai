@@ -225,6 +225,23 @@ def _rule(text: str) -> ast.expr:
     return tree
 
 
+# What `inputs_read` holds when a rule reads `inputs` whole (`len(inputs)`), not one of them by name.
+EVERY_INPUT = "*"
+
+
+def inputs_read(text: str) -> set[str]:
+    """The inputs a rule reads, by name; `EVERY_INPUT` among them when it reads `inputs` whole. Raises `CheckError`
+    for a text outside the grammar."""
+    tree = _rule(text)
+    named = [n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute) and _is_inputs(n.value)]
+    whole = sum(1 for n in ast.walk(tree) if _is_inputs(n)) > len(named)
+    return {*named, EVERY_INPUT} if whole else set(named)
+
+
+def _is_inputs(node: ast.AST) -> bool:
+    return isinstance(node, ast.Name) and node.id == "inputs"
+
+
 def evaluate(text: str, scope: Scope) -> bool:
     """Whether the rule holds for `scope` (`result`, `inputs`). Raises `CheckError` for a text outside the grammar."""
     return bool(_Walker(scope).value(_rule(text)))

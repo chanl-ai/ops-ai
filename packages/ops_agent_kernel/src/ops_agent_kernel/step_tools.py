@@ -32,9 +32,26 @@ def limit(skills: Sequence[Skill]) -> int:
     return 4 + 2 * sum(len(s.program.steps) for s in skills if s.program is not None)
 
 
+def needs(skill: Skill, missing: Sequence[str]) -> str:
+    """What is said when `skill` is not started for want of the inputs `missing`."""
+    return (
+        f"{skill.name} needs {', '.join(missing)} before it can start. Ask the person for "
+        f"{'it' if len(missing) == 1 else 'them'}, then call {SWITCH} with the slug {skill.slug} and those inputs."
+    )
+
+
+def _asks(skills: Sequence[Skill]) -> str:
+    """The inputs each skill requires, for the description of switch_skill's `inputs`."""
+    lines = [
+        f"{s.slug} requires {', '.join(names)}" for s in skills if (names := [i.name for i in s.inputs if i.required])
+    ]
+    return f"What the skill needs to start, by name{': ' + '; '.join(lines) if lines else ''}"
+
+
 def grants(skills: Sequence[Skill]) -> list[ToolGrant]:
     """The three tools, for an agent that holds a skill with steps; none otherwise."""
-    slugs: JsonList = [s.slug for s in stepped(skills)]
+    held = stepped(skills)
+    slugs: JsonList = [s.slug for s in held]
     if not slugs:
         return []
     return [
@@ -51,7 +68,7 @@ def grants(skills: Sequence[Skill]) -> list[ToolGrant]:
                     "inputs": {
                         "type": "object",
                         "additionalProperties": {"type": "string"},
-                        "description": "What the skill needs to start, by name",
+                        "description": _asks(held),
                     },
                     "reason": {"type": "string", "maxLength": 300},
                 },
@@ -99,5 +116,7 @@ def handle(name: str, run: SkillRunState, skills: Sequence[Skill], arguments: Js
     if running is not None and running.skill_id == skill.skill_id:
         return Moved(run, f"{skill.name} is already running, on step {running.step}. Go on with that step.", ok=False)
     inputs = {k: str(v) for k, v in json_object(arguments.get("inputs")).items()}
+    if missing := steps.missing_inputs(skill, inputs):
+        return Moved(run, needs(skill, missing), ok=False)
     started = steps.start(run, skill, skills, by="model", inputs=inputs)
     return Moved(started, steps.said(run, started))

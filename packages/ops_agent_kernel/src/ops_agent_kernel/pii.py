@@ -88,10 +88,15 @@ def _masked_program(p: SkillProgram) -> SkillProgram:
 
 
 def _masked_frame[F: (RunningSkill, SubRun)](f: F) -> F:
+    inputs = {k: mask(v) for k, v in f.inputs.items()}
+    # Named so a later reply's rule does not compare the placeholder. Names already marked stay: a placeholder masks
+    # to itself, so it no longer shows as changed.
+    hidden = sorted({*f.masked_inputs, *(k for k, v in f.inputs.items() if inputs[k] != v)})
     return f.model_copy(
         update={
             "step_text": mask(f.step_text),
-            "inputs": {k: mask(v) for k, v in f.inputs.items()},
+            "inputs": inputs,
+            "masked_inputs": hidden,
             "results": {k: r.model_copy(update={"value": masked(r.value)}) for k, r in f.results.items()},
             "program": _masked_program(f.program),
             "rules": mask(f.rules),

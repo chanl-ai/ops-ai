@@ -86,6 +86,14 @@ class Guardrail:
 
 
 @dataclass(frozen=True)
+class SkillInput:
+    """One value a skill asks for when it starts, as its version declares it (`inputs`: name, required)."""
+
+    name: str
+    required: bool = False
+
+
+@dataclass(frozen=True)
 class Skill:
     """A pinned skill version (spec 11): on_match skills are indexed and loaded with load_skill, always skills are
     added to every turn after the instructions. `guardrails` are blocked-topic lines that apply while it is loaded."""
@@ -109,6 +117,9 @@ class Skill:
     # Its steps, for a skill that runs step by step (steps.py): it is started, never loaded as text, and `instructions`
     # are then the notes shared by every step. None for a skill without steps.
     program: SkillProgram | None = None
+    # What the version declares it needs to start. A skill with steps does not start while a required one is missing
+    # (steps.missing_inputs). Empty until the catalog fills it from the stored version's `inputs`.
+    inputs: tuple[SkillInput, ...] = ()
 
 
 @dataclass(frozen=True)

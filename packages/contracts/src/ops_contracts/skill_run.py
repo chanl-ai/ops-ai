@@ -169,6 +169,7 @@ class SubRun(RunModel):
     steps_total: int = 0
     step_text: str = ""
     inputs: dict[str, str] = Field(default_factory=dict[str, str])
+    masked_inputs: list[str] = Field(default_factory=list[str])
     results: dict[str, StepResult] = Field(default_factory=dict[str, StepResult])
     attempts: dict[str, int] = Field(default_factory=dict[str, int])
     return_to: int
@@ -186,6 +187,9 @@ class RunningSkill(RunModel):
     step_text: str
     started_by: Literal["menu", "model"]
     inputs: dict[str, str] = Field(default_factory=dict[str, str])
+    # The inputs whose value here is a placeholder, because the record was masked on its way out of a reply. A rule
+    # that reads one does not run: it would compare the placeholder.
+    masked_inputs: list[str] = Field(default_factory=list[str])
     # Keyed by the step number as text.
     results: dict[str, StepResult] = Field(default_factory=dict[str, StepResult])
     attempts: dict[str, int] = Field(default_factory=dict[str, int])
@@ -202,7 +206,8 @@ class EndedSkill(RunModel):
     # An exit name, or `switched` when another skill took its place.
     ended: str
     at_step: int
-    # The tools its steps call, kept when it ended as failed: they stay withheld until the skill starts again.
+    # The tools its steps and its sub-skills' steps call, kept unless it ended as done or switched. A failed skill's
+    # stay withheld until it starts again; another exit's for the rest of the reply it ended in.
     tools: list[str] = Field(default_factory=list[str])
     # The results it was ended with, by name.
     returns: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
