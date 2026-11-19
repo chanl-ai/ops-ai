@@ -20756,17 +20756,6 @@
             "title": "Metadata",
             "type": "object"
           },
-          "parentThreadId": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Parentthreadid"
-          },
           "version": {
             "anyOf": [
               {

@@ -55,7 +55,7 @@ the thread: `reject`, `enqueue` (default) or `interrupt`.
 | `POST /v1/threads/{id}/runs/stream` | Rejects with 409 `run_active`, naming the owner and the run |
 | Channel input (`POST /v1/threads/{id}/inbox`) | Enqueues in `thread_inbox`, unique on `(thread, message key)`; drained in order by `execute` after the lease is released |
 | Reply to a waiting case | Delivered at once; restarts the SLA timers |
-| Reply to a finished case | Opens a follow-up thread linked by `parent_thread_id` |
+| Reply to a finished case | Refused with 409 `thread_closed`; the channel opens a new case. No request links one case to another: `parent_thread_id` is set only where the server opens a child |
 | Timer due during a run | Rejected and retried next poll; cancelled if the run decided the step |
 
 ## Mailbox adapter

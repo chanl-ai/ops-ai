@@ -44,7 +44,8 @@ graph_threads = sa.Table(
     # redelivered message finds its case instead of opening a second one (E6).
     sa.Column("external_key", sa.String(512)),
     sa.Column("deployment_id", sa.String(64), index=True),
-    # A follow-up case opened by a reply to a closed one points back at it.
+    # The thread whose tool call or workflow step opened this one. Written only where the server opens a child
+    # (api/agent_calls.py, api/child_runs.py); no request body carries it.
     sa.Column("parent_thread_id", sa.String(64), index=True),
     # A chat thread's overrides within its agent's limits, applied to every turn (activities/overrides.py).
     sa.Column("overrides", sa.JSON),

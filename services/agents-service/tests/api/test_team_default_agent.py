@@ -304,9 +304,12 @@ async def test_a_specialist_spends_the_callers_budget_and_stops_when_it_is_spent
     # The chain is the thread's team's: another team reads none of its spend.
     with scope(TENANT, "team_fraud"):
         assert (await rt.usage.totals(thread)).calls == 0, "another team read this team's chain"
-    # A thread a caller links to this one in a request body spends its own budget, never this thread's.
+    # No request body links a thread to this one: the field is refused, a copy in the metadata is dropped, and the
+    # thread a caller makes spends its own budget, never this thread's.
     forged = {"calledBy": "ag_branch", "parentThreadId": thread}
-    body = {"graph": "agent:ag_dispute", "externalKey": "linked", "parentThreadId": thread, "metadata": forged}
+    body = {"graph": "agent:ag_dispute", "externalKey": "linked", "metadata": forged}
+    refused = await c.post("/v1/threads", json=body | {"parentThreadId": thread}, headers=ADMIN)
+    assert refused.status_code == 400, refused.text
     made = await c.post("/v1/threads", json=body, headers=ADMIN)
     assert made.status_code == 201, made.text
     linked = made.json()["data"]["threadId"]
@@ -315,7 +318,7 @@ async def test_a_specialist_spends_the_callers_budget_and_stops_when_it_is_spent
     assert rt.graph_store is not None
     with tenant_scope(TENANT):
         row = await rt.graph_store.thread_row(linked)
-        assert row is not None and row.parent_thread_id == thread, "the body link was not stored, so nothing is proven"
+        assert row is not None and row.parent_thread_id is None and not set(forged) & set(row.meta_object()), row
         own, chain = (await rt.usage.totals(linked)).calls, (await rt.usage.totals(thread)).calls
     assert own > 0 and chain == 3, (own, chain)
     # The caller is held by the same total: its next turn waits on the budget card its person answers.

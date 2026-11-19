@@ -73,8 +73,8 @@ def _amount(micros: int | None) -> Decimal:
 
 def _asked_by(meta: JsonValue) -> str | None:
     """The thread whose agent asked this thread's agent, from the two keys api/agent_calls.py writes on a specialist's
-    thread. `parentThreadId` is one a request body cannot set (routers/graphs.py SERVER_META), unlike the thread's
-    `parent_thread_id` column, so no caller attaches a thread to someone else's budget."""
+    thread; None for any other thread, a workflow an agent started included, whose spend stays on its own budget.
+    Neither key can come from a request body (routers/graphs.py SERVER_META)."""
     if not isinstance(meta, dict):
         return None
     parent = meta.get("parentThreadId")

@@ -2017,7 +2017,6 @@ class ThreadInput(TypedDict, closed=True):
     externalKey: NotRequired[str | None]
     graph: str
     metadata: NotRequired[dict[str, Any]]
-    parentThreadId: NotRequired[str | None]
     version: NotRequired[int | None]
 
 
