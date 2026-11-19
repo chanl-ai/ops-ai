@@ -1,33 +1,35 @@
 # Security
 
-Status: current. Sections marked planned are being written from the architecture pages.
+Status: current. Each page is checked against the code of this release.
 
-Answers for a security or risk reviewer judging Ops AI for a regulated team: how teams are kept apart, who can sign
-in and do what, which writes need a person's approval, what is recorded, how sensitive data is handled, and what
-leaves the install. Each page states the behaviour, the default, how an admin changes it, and the limits.
+Answers for a security or risk reviewer judging Ops AI for a regulated team. Each page states the behaviour, the
+default, how an admin changes it, and the limits, and holds for a self-hosted install and a hosted one alike unless it
+says otherwise.
+
+## In short
+
+- Every team's data is closed to every other team; an organisation's data is closed to every other organisation.
+- People sign in through your identity provider over OIDC or SAML; a first sign-in never makes anyone an admin.
+- Software drafts changes; a team decides which writes wait for a person, and every write over MCP does.
+- People see personal data masked by default; the model sees real values, and only models cleared for the data serve.
+- Every model call goes through one AI gateway in the install, with a key, a budget and no prompt text in its log.
+- Tools reach only HTTPS hosts a Security admin allows; agents hold no credentials.
+- Nothing in the platform calls home.
 
 ## Topics
 
 <!-- site: cards -->
 | Topic | What it answers |
 |---|---|
-| [Security and governance](guide/security-and-governance.md) | Sign-in and SSO, roles, approvals, the tool gateway, secrets, masking, audit and platform hardening, on one page |
-| [Data handling](guide/data-and-database.md) | What is stored, how tenants and teams are kept apart, retention and the audit trail |
-| [Model calls](guide/models.md) | Which model calls leave the install, under which keys, budgets and data-sensitivity limits |
-
-## Coming to this tab
-
-| Page | Status |
-|---|---|
-| Tenancy and isolation | planned |
-| Identity and sign-in | planned |
-| Approvals and audit | planned |
-| Data handling and masking | planned |
-| Model calls | planned |
-| Outbound calls and egress | planned |
+| [Tenancy and isolation](security/tenancy-and-isolation.md) | How teams and organisations are kept apart, in the services and in the database |
+| [Identity and sign-in](security/identity-and-sign-in.md) | OIDC and SAML single sign-on, group rules, passwords, sessions and step-up |
+| [Access, approvals and audit](security/access-approvals-and-audit.md) | Roles, which writes wait for a person, and what is recorded |
+| [Data handling and masking](security/data-handling-and-masking.md) | What people see masked, where data is stored and how long it is kept |
+| [Model calls](security/model-calls.md) | Which model sees what, under which key, budget and clearance |
+| [Egress and connections](security/egress-and-connections.md) | Where a tool call may go, and how it signs in to your systems |
 
 ## Next
 
 <!-- site: cards -->
-- **[What's built today](guide/whats-built-today.md)**: What is built and what is planned, read from the code of this release.
+- **[What's built today](guide/whats-built-today.md)**: What is built and what is planned in this release.
 - **[Security scanning](deploy/security-scanning.md)**: The checks each release passes and how to verify a signed release.

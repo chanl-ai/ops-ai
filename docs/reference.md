@@ -1,27 +1,28 @@
 # Reference
 
-Status: current. The CLI and MCP reference pages are planned.
+Status: current. Agents over MCP are planned; everything else on this tab is built.
 
-Look up the exact shape of a call once you know what you want to build. The HTTP API pages are generated from each
-service's published API description, so they match the release you run; the SDKs wrap the same calls in Python and
-TypeScript.
-
-## What is here
-
-<!-- site: cards -->
-1. **HTTP API**: Every route, with its request, response and errors, one section per area in the HTTP API group of this tab.
-2. **[Python SDK](sdk/python.md)**: Install, connect, run a workflow and decide its task, paging and errors.
-3. **[TypeScript SDK](sdk/typescript.md)**: The same client for Node and the browser.
-4. **[What's new](guide/whats-new.md)**: Changes by release, and the SDK 1.0.0 changelog.
+Look up the exact shape of a call once you know what you want to build. Every surface below reaches the same API under
+the same permissions, so pick the one that fits where your code runs.
 
 ## Surfaces
 
-| Surface | Reference | Status |
-|---|---|---|
-| HTTP API | Generated pages in this tab | built |
-| Python and TypeScript SDKs | [Python](sdk/python.md), [TypeScript](sdk/typescript.md), [upgrading to 1.0.0](sdk/upgrading.md) | built |
-| Command line | [Install the CLI](guide/install-cli.md) and [the command line](sdk/python.md#the-command-line); a full command reference is planned | partial |
-| MCP | A page for connecting an assistant to a team's MCP address | planned |
+<!-- site: cards -->
+1. **[HTTP API](reference/http-api.md)**: Sign-in headers, list paging, errors, and every route, generated from the release you run.
+2. **[Python SDK](sdk/python.md)**: Start workflows, decide their tasks and manage a team from Python.
+3. **[TypeScript SDK](sdk/typescript.md)**: The same client for Node and the browser.
+4. **[The opsai command line](reference/cli.md)**: Every area of the product from a terminal, for scripts and CI.
+5. **[MCP](reference/mcp.md)**: A team's tools in Claude, Cursor or ChatGPT, through the same gateway as an agent.
+6. **[SDK 1.0.0 changelog](sdk/changelog.md)**: What changed for callers in 1.0.0, and [how to upgrade](sdk/upgrading.md).
+
+## Which one to use
+
+| You are | Use |
+|---|---|
+| Writing a service or script in Python or TypeScript | The SDK: paging, retries and errors are handled |
+| Calling from another language or a system that only speaks HTTP | The HTTP API |
+| Automating from a shell or a CI job | `opsai` |
+| Giving an AI assistant your team's tools | MCP |
 
 ## Next
 
