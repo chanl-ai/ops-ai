@@ -391,6 +391,8 @@ def _failed(run: SkillRunState, skills: Sequence[Skill], told: list[str]) -> Non
 #    earlier hold, and once the earlier step passes nothing holds the later step's write. Taking the later hold as
 #    well would let two skills lock each other for good.
 # 6. A tool that answers with an error, a skill a step could not start, and an exit the model calls take none.
+# 7. A step that runs a skill passes only when that skill ends as done, unless the step has a rule of its own
+#    (`_sub_ended`). An exit therefore never carries the step past a check that failed inside the skill.
 #
 # A thread cannot lock for good: a check can only fail when its tool was free, and a hold never covers that tool,
 # so the newest holder can always run its check again and release.
@@ -504,22 +506,23 @@ def _sub_ended(
     returns: dict[str, JsonValue],
     told: list[str],
 ) -> None:
-    """A sub-skill ended: the step that started it gets its exit and results as that step's result, and the step's
-    own check runs on them. A sub-skill that failed is a failed attempt of the step, and takes no hold here: a
-    check of its own that failed took one where it failed. So is one that left by any exit but done while a step
-    of its own is still failed: an exit does not carry the step past a check that did not pass, and the step's own
-    "if not" decides. Its step results say so, not the holds: a hold is not taken under an earlier one."""
+    """A sub-skill ended: the step that started it gets its exit and results as that step's result. The step passes
+    only when the sub-skill ended as done, unless the step has a rule of its own, which then decides: an author who
+    wants another ending to go on writes `result.exit in ["done", "skip"]`. So no exit carries a step past a
+    check that did not pass inside the sub-skill, however often it is called. A sub-skill that ended as failed is
+    always a failed attempt of the step. Neither takes a hold here: a check that failed inside took one where it
+    failed. A rule of the step's own that does not hold is a failed check like any other, and takes one."""
     r = run.running
     assert r is not None
-    unpassed = r.sub is not None and any(res.passed is False for res in r.sub.results.values())
     r.sub = None
     value: dict[str, JsonValue] = {"exit": name, **returns}
     check = _step(r).check
-    if name == "failed" or (unpassed and name != "done"):
+    ruled = check is not None and _is_rule(check)
+    if name == "failed" or (not ruled and name != "done"):
         r.results[str(r.step)] = _kept(value, False)
         _failed(run, skills, told)
         return
-    if check is not None and _is_rule(check) and not _holds(check, value, r, told):
+    if check is not None and ruled and not _holds(check, value, r, told):
         r.results[str(r.step)] = _kept(value, False)
         _hold(run, skills)
         _failed(run, skills, told)

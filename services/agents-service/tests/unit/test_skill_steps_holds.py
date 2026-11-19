@@ -87,6 +87,10 @@ LOOK_THEN_NOTE: Call = ("switch_skill", {"slug": "look-then-note-pay"})
 JUMP_RUNS_NOTE: Call = ("switch_skill", {"slug": "jump-runs-note"})
 LETTER_CHECK_PAY: Call = ("switch_skill", {"slug": "letter-check-pay"})
 CHECK_JUMP: Call = ("switch_skill", {"slug": "check-jump"})
+RUNS_LOOK_RETRY: Call = ("switch_skill", {"slug": "runs-look-retry"})
+SKIP_IS_FINE: Call = ("switch_skill", {"slug": "skip-is-fine"})
+ESCALATE: Call = ("exit", {"name": "escalate"})
+SKIP: Call = ("exit", {"name": "skip"})
 ID_CHECK = tool("check_id")
 GIVE_UP: Call = ("exit", {"name": "failed"})
 DONE: Call = ("step_done", {})
@@ -229,6 +233,27 @@ def book(if_not: dict[str, Any], version: int = 1) -> list[Skill]:
             ),
         ),
         stepped("sk_letter_check_pay", 1, "Letter check pay", "letter-check-pay", program(letter, looked, paid)),
+        stepped(
+            "sk_runs_look_retry",
+            1,
+            "Runs look retry",
+            "runs-look-retry",
+            program({"do": "Look.", "use": {"kind": "skill", "id": "sk_look_or_escalate"}}, paid),
+        ),
+        stepped(
+            "sk_skip_is_fine",
+            1,
+            "Skip is fine",
+            "skip-is-fine",
+            program(
+                {
+                    "do": "Note it.",
+                    "use": {"kind": "skill", "id": "sk_note_or_skip"},
+                    "check": {"text": 'result.exit in ["done", "skip"]', "by": "rule"},
+                },
+                paid,
+            ),
+        ),
         stepped(
             "sk_check_jump",
             1,
@@ -434,10 +459,27 @@ THREADS = [
         ["lookup_charge", "add_note", "lookup_charge", "lookup_charge"],
         "refund_charge is held because look-then-note-pay failed its check; start look-then-note-pay again.",
     ),
+    # A step that runs a skill passes only on done, unless it has a rule of its own: however often the model calls
+    # a listed exit, it does not carry the step past the check that failed inside.
     Thread(
-        "a skill reached by a jump past a failed check fails its own, then leaves through an exit it lists",
-        [[JUMP_RUNS_NOTE, look("CH-1"), note("CH-1"), ("exit", {"name": "skip"}), refund("CH-1")]],
+        "a listed exit called twice in one reply",
+        [[RUNS_LOOK_RETRY, look("CH-1"), ESCALATE, ESCALATE, refund("CH-1")]],
+        ["lookup_charge"],
+    ),
+    Thread(
+        "a listed exit called again after the parent is started again",
+        [[RUNS_LOOK_PAY, look("CH-1"), ESCALATE], [RUNS_LOOK_PAY, ESCALATE, refund("CH-1")]],
+        ["lookup_charge"],
+    ),
+    Thread(
+        "a skill reached by a jump past a failed check fails its own, then a listed exit is called twice",
+        [[JUMP_RUNS_NOTE, look("CH-1"), note("CH-1"), SKIP, SKIP, refund("CH-1")]],
         ["lookup_charge", "add_note"],
+    ),
+    Thread(
+        "a step with a rule of its own that accepts a listed exit goes on",
+        [[SKIP_IS_FINE, SKIP, refund("CH-2")]],
+        ["refund_charge"],
     ),
     # X is letter, check, refund; H is check with a jump to 3, refund, check, letter. X fails its check and holds the
     # refund; H fails both of its checks. Were H to take a second hold, X would end on the letter and H on the
