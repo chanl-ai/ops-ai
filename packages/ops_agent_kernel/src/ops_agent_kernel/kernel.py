@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Literal, cast
 
 from jsonschema import Draft202012Validator
@@ -41,14 +41,16 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.output import NativeOutput, StructuredDict
 from pydantic_ai.run import AgentRunResultEvent
+from pydantic_ai.settings import ModelSettings
 from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.usage import UsageLimits
 
+from ops_contracts.skill_run import SkillRunState
 from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.ids import action_id, input_hash
 from ops_service_kit.narrow import json_object
 
-from . import answer_check, guard, pii, present, search, tool_cache
+from . import answer_check, guard, pii, present, prompt_writer, search, step_tools, steps, tool_cache
 from . import plan as planner
 from . import skills as skillset
 from .context import UnknownVariableError, assemble, cited_numbers
@@ -56,6 +58,7 @@ from .events import (
     CitationsReady,
     Interrupted,
     KernelEvent,
+    SkillRunChanged,
     StatusChanged,
     TextDelta,
     TextReplaced,
@@ -92,6 +95,8 @@ NO_OWN_KNOWLEDGE = "This agent has no knowledge bases to search; answer from the
 
 # The server a call to a name outside the agent's grants is recorded under: it reached none.
 UNGRANTED = "none"
+# The kernel's own tools: they reach no system, so they say nothing about whether a read succeeded.
+KERNEL_TOOLS = (present.NAME, search.NAME, skillset.NAME, planner.NAME, *step_tools.NAMES)
 
 
 def refusal_code(body: object) -> str | None:
@@ -175,6 +180,61 @@ class _TurnState:
     kb_answers: dict[str, BaseAnswer] = field(default_factory=dict[str, BaseAnswer])
     # Calls being made now, by (tool, input hash): the same call made twice in one step waits for the first.
     inflight: dict[tuple[str, str], asyncio.Event] = field(default_factory=dict[tuple[str, str], asyncio.Event])
+    # How many of `loads` were journalled before this turn's own loads (kept at a pause, or carried from a reply).
+    restored: int = 0
+    # The running-skill record (steps.py) as it stands, the agent's skills that run step by step, and whether the turn
+    # returns a record at all: an agent with no such skill and no record carried returns none.
+    run: SkillRunState = field(default_factory=SkillRunState)
+    stepped: list[Skill] = field(default_factory=list[Skill])
+    tracks: bool = False
+    # Skills with steps this turn started, whose guardrails join the check of the answer.
+    started: list[Skill] = field(default_factory=list[Skill])
+    # Calls to the step tools this turn, against step_tools.limit.
+    step_calls: int = 0
+    # The model steps in which the current skill step's tool result was checked: two calls of that tool in one model
+    # step move the record once and count as one attempt.
+    judged: set[int] = field(default_factory=set[int])
+    # Events a tool call raised, sent once the stream reaches its result.
+    events: list[KernelEvent] = field(default_factory=list[KernelEvent])
+
+    def drop_carried(self) -> None:
+        """A skill loaded or started in this reply takes the place of the ones carried from earlier replies: one
+        on-match skill is carried at a time, and none beside a skill with steps."""
+        for skill in self.carried:
+            i = self.loaded.index(skill)
+            del self.loaded[i], self.loads[i], self.hows[i]
+            self.restored -= 1
+        self.carried.clear()
+
+    def moved(self, run: SkillRunState) -> None:
+        """The running-skill record after a step tool or a step's tool result changed it."""
+        was, self.run, now = self.run.running, run, run.running
+        self.events.append(SkillRunChanged(run.model_copy(deep=True)))
+        if now is None or (was is not None and (was.skill_id, was.version) == (now.skill_id, now.version)):
+            return
+        self.drop_carried()
+        skill = next((s for s in self.stepped if (s.skill_id, s.version) == (now.skill_id, now.version)), None)
+        if skill is not None:
+            self.started.append(skill)
+            entry = skillset.loaded_entry(skill, skill.use_when, now.inputs)
+            self.events.append(skillset.event(entry, "started"))
+
+    def position(self) -> tuple[str, int] | None:
+        """The skill and step the record is on (the sub-skill's while one runs)."""
+        r = self.run.running
+        if r is None:
+            return None
+        return (r.sub.skill_id, r.sub.step) if r.sub is not None else (r.skill_id, r.step)
+
+    def step_result(self, run_step: int, at: tuple[str, int] | None, output: JsonValue, ok: bool) -> str | None:
+        """Checks a result of the current step's tool and moves the record; what the model is told, or None when
+        the call was not that step's (`at` is where the record stood when the call started)."""
+        if at is None or self.position() != at or run_step in self.judged:
+            return None
+        self.judged.add(run_step)
+        moved = steps.on_result(self.run, self.stepped, output, ok)
+        self.moved(moved.run)
+        return moved.said
 
     def last_step(self, step: int) -> bool:
         """The last step of a turn with more than one offers no tool, so the turn always keeps a step to answer in."""
@@ -431,10 +491,7 @@ def _plan_left(state: _TurnState, why: str, *, answered: bool = False) -> ToolOu
     the step being worked, and steps never started are skipped."""
     if state.plan is None or planner.finished(state.plan) or state.plan_call not in state.records:
         return None
-    failed = any(
-        r.status == "error" and r.tool not in (present.NAME, search.NAME, skillset.NAME, planner.NAME)
-        for r in state.records.values()
-    )
+    failed = any(r.status == "error" and r.tool not in KERNEL_TOOLS for r in state.records.values())
     state.plan = planner.closed(state.plan) if answered and not failed else planner.paused(state.plan, why)
     rec = state.records[state.plan_call]
     rec.view = {"part": planner.part(state.plan)}
@@ -458,6 +515,7 @@ def _load_skill(state: _TurnState, grant: ToolGrant) -> Tool[None]:
             rec.status, rec.output = "error", {"error": why}
             return {"error": why}
         if skill not in state.loaded:
+            state.drop_carried()
             state.loaded.append(skill)
             state.loads.append(skillset.loaded_entry(skill, str(arguments.get("matched") or skill.use_when)))
             state.hows.append("loaded")
@@ -469,6 +527,44 @@ def _load_skill(state: _TurnState, grant: ToolGrant) -> Tool[None]:
     )
     tool.prepare = _offer(state, builtin=True)
     return tool
+
+
+def _step_tool(state: _TurnState, grant: ToolGrant) -> Tool[None]:
+    """One of the step tools (step_tools.py): it moves the running-skill record and tells the model where it now is.
+    switch_skill is offered whenever the agent holds a skill with steps; step_done and exit while one runs."""
+    cap = step_tools.limit(state.stepped)
+
+    async def call(ctx: RunContext[None], **arguments: Any) -> Any:
+        rec = state.record(ctx.tool_call_id or f"call_{len(state.order)}", grant.name, arguments)
+        state.step_calls += 1
+        if state.step_calls > cap:
+            rec.status, rec.output = "error", {"error": f"Stopped: the skill tools were called more than {cap} times."}
+            raise BuiltinLimitReached(f"The skill tools were called more than {cap} times in one reply.")
+        moved = step_tools.handle(grant.name, state.run, state.stepped, arguments)
+        if not moved.ok:
+            rec.status, rec.output = "error", {"error": moved.said}
+            return {"error": moved.said}
+        state.moved(moved.run)
+        rec.status, rec.output = "ok", {"now": moved.said}
+        return {"now": moved.said}
+
+    async def prepare(ctx: RunContext[None], tool_def: ToolDefinition) -> ToolDefinition | None:
+        running = grant.name == step_tools.SWITCH or state.run.running is not None
+        return tool_def if running and state.offered(ctx, builtin=True) else None
+
+    tool = Tool[None].from_schema(
+        cast(Callable[..., Awaitable[Any]], call), grant.name, grant.description, grant.input_schema, takes_ctx=True
+    )
+    tool.prepare = prepare
+    return tool
+
+
+def _noted(told: Json, note: str | None) -> Json:
+    """What the kernel tells the model with a tool result (`note`, `result` or `error`), with what the running skill's
+    step made of that result."""
+    if note is None:
+        return told
+    return {**told, "note": f"{told['note']} {note}" if told.get("note") else note}
 
 
 def _search(state: _TurnState) -> Tool[None]:
@@ -508,6 +604,9 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: 
                 rec.status, rec.output = "error", {"error": NO_OWN_KNOWLEDGE}
                 return {"error": NO_OWN_KNOWLEDGE}
             arguments = own
+        # Where the running skill stood when this call started, when it is that step's tool: its result is checked
+        # for that step only, so a result that arrives after the step moved changes nothing.
+        at = state.position() if steps.target(state.run) == grant.name else None
         asked = input_hash(arguments)
         if (running := state.inflight.get((grant.name, asked))) is not None:
             # The same call twice in one step: the library runs a step's calls together, so the first is still out.
@@ -524,7 +623,8 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: 
             rec = state.record(tool_call_id, grant.name, arguments)
             # Its card names the call it repeats, which already shows the result, so nothing is drawn twice.
             rec.status, rec.output = same.status, {"repeatOf": same.tool_call_id}
-            return {"note": REPEATED_CALL, "result": same.output}
+            note = state.step_result(ctx.run_step, at, same.output, same.status == "ok")
+            return _noted({"note": REPEATED_CALL, "result": same.output}, note)
         # A read this conversation already made answers from what it kept (tool_cache.py): it reaches no system and
         # spends none of the tool budget.
         cache = await ports.tool_caches.current() if ports.tool_caches is not None else None
@@ -533,7 +633,8 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: 
             rec.status, rec.output, rec.cached = "ok", kept.output, True
             state.read_steps.add(state.step)
             said = kept.for_model if kept.for_model is not None else _numbered(state, kept.output)
-            return {"note": tool_cache.EARLIER, "result": said}
+            note = state.step_result(ctx.run_step, at, kept.output, True)
+            return _noted({"note": tool_cache.EARLIER, "result": said}, note)
         # The agent's tool-call budget counts the calls that reach a system; the built-in present tool reaches none
         # and is bounded by the step limit instead, so an agent with no tool calls can still answer with a widget.
         cap = state.req.settings.max_tool_calls
@@ -586,25 +687,50 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: 
                 said = _numbered(state, outcome.output)
                 if len(state.passages) > before:
                     state.passage_calls.add(rec.tool_call_id)
+            # A rule check reads the result as the system returned it, before anything is masked.
+            note = state.step_result(ctx.run_step, at, outcome.output, outcome.ok)
             if outcome.ok and (outcome.view or {}).get("part"):
                 # Drawn for the person already (a table or a record): told so, the model answers in text instead of
                 # presenting the same rows a second time.
-                return {"note": SHOWN, "result": said}
+                return _noted({"note": SHOWN, "result": said}, note)
             # Errors go back to the model as information so it can explain or try other arguments (spec 15 4.2).
+            if note is not None:
+                return _noted({"result": said} if outcome.ok else {"error": said}, note)
             return said if outcome.ok else {"error": said}
         finally:
             done.set()
             state.inflight.pop((grant.name, asked), None)
 
     tool = Tool[None].from_schema(
-        cast(Callable[..., Awaitable[Any]], call), grant.name, grant.description, grant.input_schema, takes_ctx=True
+        cast(Callable[..., Awaitable[Any]], call),
+        grant.name,
+        grant.description,
+        grant.input_schema,
+        takes_ctx=True,
+        # Reads may run side by side; anything that can change a system (a write, a workflow, another agent) runs
+        # one at a time, in the order the model asked.
+        sequential=grant.access != "read" or grant.name.startswith(("workflow:", "agent:")),
     )
     # A write stops at a gate: the library ends the run with a deferred request (spec 15 5).
     tool.requires_approval = grant.gated
     # Above the agent's tool-search threshold its schema is sent only once a search finds it.
     tool.defer_loading = deferred
+    knowledge = grant.name == SEARCH_KNOWLEDGE and bool(state.req.kb_ids or state.req.all_team_knowledge)
 
-    tool.prepare = _offer(state, builtin=False)
+    async def prepare(ctx: RunContext[None], tool_def: ToolDefinition) -> ToolDefinition | None:
+        if not state.offered(ctx, builtin=False):
+            return None
+        current = steps.target(state.run)
+        if current is None:
+            # No step tool to call now: every tool but the ones a skill's own steps call (steps.withheld).
+            return None if grant.name in steps.withheld(state.run, state.stepped) else tool_def
+        if grant.name == current:
+            # Sent with its schema even when the agent searches for its tools: the step cannot pass without it.
+            return replace(tool_def, defer_loading=False) if deferred else tool_def
+        # While a step names its tool, that tool and knowledge search are the only systems to call.
+        return tool_def if knowledge else None
+
+    tool.prepare = prepare
     return tool
 
 
@@ -670,6 +796,42 @@ def _own_knowledge(req: TurnRequest, arguments: Json) -> Json | None:
     return {**asked, "collections": collections}
 
 
+def _kept_run(kept: SkillRunState, stepped: list[Skill]) -> SkillRunState:
+    """The record a turn goes on with. A running skill finishes on the steps of the version it started, which the
+    record holds; while the agent still pins that version, its own steps and notes are used, because the record a
+    reply returned may hold them masked."""
+    run = kept.model_copy(deep=True)
+    running = run.running
+    for frame in (running, running.sub if running is not None else None):
+        if frame is None:
+            continue
+        at = (frame.skill_id, frame.version)
+        pinned = next((s for s in stepped if (s.skill_id, s.version) == at and s.program is not None), None)
+        if pinned is not None and pinned.program is not None:
+            frame.program, frame.rules = pinned.program, pinned.instructions
+    return run
+
+
+def _names(req: TurnRequest) -> dict[str, str]:
+    """What the model knows each reference in a step's text as: a skill by its slug, an agent or a workflow by the
+    name of the tool that calls it. A tool is known by its id, as written."""
+    names = {f"@skill:{s.skill_id}": s.slug for s in req.settings.skills}
+    names.update({f"@{t.name}": t.name for t in req.tools if t.name.startswith(("agent:", "workflow:"))})
+    return names
+
+
+def _model_settings(req: TurnRequest) -> ModelSettings | None:
+    """The settings sent with each model request; None when the agent sets none, so the model's defaults hold."""
+    sent = ModelSettings()
+    if req.settings.temperature is not None:
+        sent["temperature"] = req.settings.temperature
+    if req.settings.thinking in ("low", "medium", "high"):
+        sent["thinking"] = req.settings.thinking
+    if not req.settings.parallel_reads:
+        sent["parallel_tool_calls"] = False
+    return sent or None
+
+
 def _close_open(state: _TurnState, why: str) -> list[ToolOutput]:
     """Every call the turn left running, closed as not run: a card shows each call's end, never "Running" after the
     reply is over."""
@@ -710,6 +872,7 @@ def _interrupt(state: _TurnState, requests: DeferredToolRequests, history: list[
         history=ModelMessagesTypeAdapter.dump_json(history),
         loaded_skills=[e for s, e in zip(state.loaded, state.loads, strict=True) if s.loading == "on_match"],
         plan=state.plan,
+        run=state.run.model_copy(deep=True) if state.tracks else None,
     )
 
 
@@ -764,12 +927,7 @@ KNOWLEDGE_WITHDRAWN = (
 
 def _system_calls(state: _TurnState) -> list[ToolCallRecord]:
     """Calls that reached a system; the kernel's own tools say nothing about whether the person's ask was answerable."""
-    return [
-        r
-        for i in state.order
-        if (r := state.records[i]).server != UNGRANTED
-        and r.tool not in (present.NAME, search.NAME, skillset.NAME, planner.NAME)
-    ]
+    return [r for i in state.order if (r := state.records[i]).server != UNGRANTED and r.tool not in KERNEL_TOOLS]
 
 
 def _base_withholds(state: _TurnState, block: int, asked: bool) -> str | None:
@@ -866,6 +1024,8 @@ async def run_turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[Kernel
             yield ToolOutput(pii.masked_call(event.call))
         elif isinstance(event, CitationsReady):
             yield CitationsReady(pii.masked_citations(event.citations))
+        elif isinstance(event, SkillRunChanged):
+            yield SkillRunChanged(pii.masked_run(event.run))
         elif isinstance(event, TurnFinished):
             yield TurnFinished(pii.masked_result(event.result))
         else:
@@ -896,6 +1056,16 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
     tools = [_tool(state, ports, g, deferred=searching) for g in sorted(req.tools, key=lambda t: t.name)] + (
         [_present(state), _plan(state), *([] if searching else [_search(state)])] if builtins else []
     )
+    # Skills that run step by step are driven by their own tools, and the record of the one running is read before
+    # anything can end the turn, so every way out returns it.
+    state.stepped = step_tools.stepped(req.settings.skills) if builtins else []
+    for step_grant in step_tools.grants(state.stepped):
+        state.grants[step_grant.name] = step_grant
+        tools.append(_step_tool(state, step_grant))
+    kept_run = req.resume.interrupt.run if req.resume else req.carried_run
+    state.tracks = bool(state.stepped) or kept_run is not None
+    if kept_run is not None:
+        state.run = _kept_run(kept_run, state.stepped)
     # A plan the turn goes on with: kept at its pause (an approval), or left open by an earlier turn (a Connect card).
     carried_plan = req.carried_plan if planner.stored(req.carried_plan) else None
     state.plan = (req.resume.interrupt.plan if req.resume else None) or carried_plan
@@ -905,27 +1075,35 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
         state.grants[skillset.NAME] = load_grant
         tools.append(_load_skill(state, load_grant))
     for s in req.settings.skills:
-        if s.loading == "always":
+        if s.loading == "always" and s.program is None:
             state.loaded.append(s)
             state.loads.append(skillset.loaded_entry(s, skillset.ALWAYS))
             state.hows.append("always")
     # A resumed turn keeps the on-match skills it loaded before the pause (already journalled, so not loaded again).
-    restored = 0
     for entry in req.resume.interrupt.loaded_skills if req.resume else []:
         skill = next(
             (s for s in req.settings.skills if skillset.same(s, entry) and s.version == entry["version"]), None
         )
-        if skill is not None and skill not in state.loaded:
+        if skill is not None and skill.program is None and skill not in state.loaded:
             state.loaded.append(skill)
             state.loads.append(entry)
             state.hows.append(str(entry.get("how") or "loaded"))
-            restored += 1
+            state.restored += 1
     # Skills an earlier turn loaded stay loaded (pinned at their current version), outside this turn's load caps. A
     # part the person picked for this reply arrives the same way but counts against the caps (it is not carried).
     carried: list[Skill] = []
     picked: list[Skill] = []
     for entry in req.carried_skills:
         skill = next((s for s in req.settings.skills if skillset.same(s, entry)), None)
+        if skill is not None and skill.program is not None:
+            # A skill with steps is never carried as text. Picked from the menu for this reply, it starts (and the
+            # one running ends as switched), unless it is the one already running.
+            running = state.run.running
+            menu = entry.get("how") == "picked" and skill in state.stepped and not req.resume
+            if menu and (running is None or running.skill_id != skill.skill_id):
+                inputs = {k: str(v) for k, v in json_object(entry.get("inputs")).items()}
+                state.moved(steps.start(state.run, skill, state.stepped, by="menu", inputs=inputs))
+            continue
         if skill is not None and skill.loading == "on_match" and skill not in state.loaded:
             how = "picked" if entry.get("how") == "picked" else "carried"
             state.loaded.append(skill)
@@ -933,8 +1111,13 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
             state.loads.append(skillset.loaded_entry(skill, str(entry.get("matched") or EARLIER), inputs))
             state.hows.append(how)
             (picked if how == "picked" else carried).append(skill)
-            restored += 1
+            state.restored += 1
     state.carried = carried
+    # A person rejected the call the turn paused on. The library answers the model for it and the tool never runs,
+    # so the skill whose step called it ends here, as failed.
+    rejected = req.resume.interrupt.pending_call.tool if req.resume and req.resume.decision == "rejected" else None
+    if rejected is not None and steps.target(state.run) == rejected:
+        state.moved(steps.denied(state.run))
     passages: list[Passage] = []
     digest: dict[str, str] = {}
     all_messages: list[ModelMessage] = []
@@ -973,6 +1156,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
                 retracted=state.retracted or None,
                 guardrails_checked=[ref(g) for g in dict.fromkeys(checked)],
                 guardrails_off=[ref(g) for g in req.settings.guardrails_off],
+                run=state.run.model_copy(deep=True) if state.tracks else None,
                 **extra,
             )
         )
@@ -985,6 +1169,10 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
     # Always-on skills are loaded from the start, so their guardrails are checked on the question too. An agent
     # whose skills carry guardrails is guarded even before one loads: its answer is never streamed.
     rules = [*req.settings.guardrails, *(g for s in state.loaded for g in skillset.guardrails_of(s))]
+    # So are the guardrails of a skill with steps that is running as the turn starts.
+    if (on := state.run.running) is not None:
+        ids = {on.skill_id, on.sub.skill_id if on.sub is not None else on.skill_id}
+        rules.extend(g for s in state.stepped if s.skill_id in ids for g in skillset.guardrails_of(s))
     guarded = bool(rules) or any(s.guardrails for s in req.settings.skills)
     # A guarded answer streams as it is written and is replaced if its after-answer check fails, unless a rule known at
     # the start holds it until checked. A skill loaded mid-turn cannot hold: its guardrails never do (skills.py).
@@ -1010,6 +1198,9 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
     if not req.resume:
         for entry, how in zip(state.loads, state.hows, strict=True):
             yield skillset.event(entry, how)
+    for raised in state.events:
+        yield raised
+    state.events.clear()
     yield StatusChanged("thinking")
     try:
         if req.resume:
@@ -1022,9 +1213,6 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
             )
             results = DeferredToolResults(approvals={call_id: decision})
             system_prompt, user_prompt = "\n\n".join(f.text for f in req.settings.instructions if f.stable), None
-            system_prompt = _with_earlier(
-                _with_skills(system_prompt, loadable), carried, req.earlier_reads, carried_plan, picked
-            )
         else:
             # Attached files' pages come first: they are what the person asked about, numbered before knowledge.
             passages = list(req.attached)
@@ -1053,12 +1241,21 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
             )
             digest = ctx.digest
             history, results, system_prompt, user_prompt = ctx.history, None, ctx.system_prompt, ctx.user_prompt
-            system_prompt = _with_earlier(
-                _with_skills(system_prompt, loadable), carried, req.earlier_reads, carried_plan, picked
-            )
     except UnknownVariableError as e:
         yield finish("failed", "error", error=str(e))
         return
+
+    names = _names(req)
+
+    def instructions(_: RunContext[None] | None = None) -> str:
+        """The system prompt, written again before every model request: the skill lists and what earlier replies
+        left, then what must come last and can change inside a turn: the running skill's current step, its rules,
+        and the never rules."""
+        written = _with_earlier(
+            _with_skills(system_prompt, loadable), state.carried, req.earlier_reads, carried_plan, picked
+        )
+        last = prompt_writer.tail(steps.now(state.run, names), req.settings.never)
+        return f"{written}\n\n{last}" if last else written
 
     # With a schema the answer is the provider's native structured output (a json_schema response format): the model
     # may call tools, then its final message must match the schema, with no separate answer tool to call or skip.
@@ -1076,7 +1273,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
         deps_type=type(None),
         output_type=[answer_type, DeferredToolRequests],
         tools=tools,
-        instructions=system_prompt,
+        instructions=instructions,
         capabilities=[finder] if searching else None,
     )
     if req.output_schema is not None:
@@ -1113,9 +1310,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
                 message_history=history,
                 deferred_tool_results=results,
                 usage_limits=limits,
-                model_settings={"temperature": req.settings.temperature}
-                if req.settings.temperature is not None
-                else None,
+                model_settings=_model_settings(req),
             ) as stream:
                 async for event in stream:
                     if isinstance(event, PartStartEvent):
@@ -1154,6 +1349,9 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
                             # A call no kernel function recorded (pydantic-ai's search_tools): its result as returned.
                             rec.status, rec.output = "ok", event.part.content
                         yield ToolOutput(rec)
+                        for raised in state.events:
+                            yield raised
+                        state.events.clear()
                     elif isinstance(event, AgentRunResultEvent):
                         output = event.result.output
                         all_messages = event.result.all_messages()
@@ -1255,7 +1453,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
         yield held
     if req.settings.end_check and req.output_schema is None and state.text.strip():
         # Checked before any guardrail, so a corrected answer is the one the guardrail checks.
-        corrected, spent = await _end_check(state, model, system_prompt, all_messages, len(passages))
+        corrected, spent = await _end_check(state, model, instructions(), all_messages, len(passages))
         usage = TokenUsage(
             usage.input_tokens + spent.input_tokens,
             usage.output_tokens + spent.output_tokens,
@@ -1280,12 +1478,12 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
     fired: GuardrailFired | None = None
     noted: GuardrailFired | None = None
     # Skills loaded during the reply add their guardrails to the check of the answer.
-    always_count = sum(1 for s in req.settings.skills if s.loading == "always")
-    for s in state.loaded[always_count:]:
+    always_count = sum(1 for s in req.settings.skills if s.loading == "always" and s.program is None)
+    for s in [*state.loaded[always_count:], *state.started]:
         rules.extend(skillset.guardrails_of(s))
         # The answer is checked against them, so the turn records them as checked.
         checked.extend(skillset.guardrails_of(s))
-    for entry, how in list(zip(state.loads, state.hows, strict=True))[always_count + restored :]:
+    for entry, how in list(zip(state.loads, state.hows, strict=True))[always_count + state.restored :]:
         yield skillset.event(entry, how)
     if guarded and state.text:
         # A guarded answer is checked once complete when any rule applies; an agent guarded only by a skill that never
@@ -1307,7 +1505,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
                     state.withheld = state.text
                 corrected = ""
                 try:
-                    fixer = Agent[None, str](model, deps_type=type(None), output_type=str, instructions=system_prompt)
+                    fixer = Agent[None, str](model, deps_type=type(None), output_type=str, instructions=instructions())
                     again = await fixer.run(
                         f"Your answer touched a blocked topic ({hit.topic}). Answer the question again without it, "
                         "using only what you already found.",

@@ -19,7 +19,11 @@ rules: [../../CLAUDE.md](../../CLAUDE.md#folder-guides).
 | `context` | Context in spec 15 section 3.1 order; untrusted content in labelled data blocks whose closing delimiter is escaped |
 | `models`, `aliases` | `build_model(settings)` (direct provider key; an alias starting `claude-` selects Anthropic) or `ModelsServiceModels` by alias; a job's own alias (`guardrail-check`, memory extraction) falls back to the turn's model only on "no such alias" |
 | `guard` | Blocked-topic guardrails: one structured classification before and after the answer; a failed check raises `GuardrailUnavailable` and the turn fails closed |
-| `skills` | The skill index, always-on bodies and the `load_skill` built-in, with per-turn caps |
+| `skills` | The skill index, always-on bodies and the `load_skill` built-in, with per-turn caps; loading a skill replaces the one carried from an earlier reply |
+| `steps` | Skills that run step by step: the program a skill version stores (models in `ops_contracts.skill_run`), the problems that stop one from running, and the running-skill record's moves (start, pass, fail, exit, sub-skill) |
+| `expr` | A step's rule check: a whitelist walk over `ast.parse`, reading `result` and `inputs`; nothing is compiled or executed |
+| `step_tools` | The built-ins `switch_skill`, `step_done` and `exit`, counted apart from the cap on kernel tools |
+| `prompt_writer` | `Brief`, `Patterns`, `head(name, brief)` (the agent's stable instructions) and `tail`, written before every model request: the current step, the skill's rules, the never rules last |
 | `search` | `search_tools`: finds only tools the agent is granted |
 | `present`, `kinds`, `layout` | The built-in `present` tool and the widget catalogue: every tree is rebuilt from closed field lists, so no HTML, script or link leaves the kernel |
 | `pii` | Masks what a turn shows and returns; re-exports `ops_pii` |
@@ -33,8 +37,13 @@ rules: [../../CLAUDE.md](../../CLAUDE.md#folder-guides).
 - A provider error fails the turn with a message that says so; there is no fallback chain between providers
   (`src/ops_agent_kernel/models.py:1`).
 - The model sees real values so it can chain calls on an account id; only what is shown and returned is masked.
+- The running-skill record is returned on `TurnResult.run` whichever way a turn ends, and on `Interrupt.run` at a pause;
+  the caller hands it back as `TurnRequest.carried_run`. A rule check runs once on the tool result as it arrives; the
+  returned record is masked with the rest of the result, the one on an interrupt is not.
+- While a skill's step names a tool, that tool and knowledge search are the only systems offered; tools other steps
+  name wait for their step, and a failed skill's tools stay withheld until it starts again.
 
-Depends on `ops_service_kit` and `ops_pii`. Depended on by `ops_engine`, agents-service and tools-service.
+Depends on `ops_service_kit`, `ops_contracts` and `ops_pii`. Depended on by `ops_engine`, agents-service and tools-service.
 
 ## Run and test
 

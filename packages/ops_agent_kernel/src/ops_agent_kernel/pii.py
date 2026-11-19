@@ -12,13 +12,24 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any, cast
 
+from ops_contracts.skill_run import RunningSkill, SkillProgram, SkillRunState, SubRun
+
 # The patterns and whole-text masking live in ops_pii, which services that are not agents use too (documents' examples);
 # they are re-exported here so every caller of ops_agent_kernel.pii is unchanged.
 from ops_pii import HOLD, StreamMasker, mask
 
 from .types import CitationRef, ToolCallRecord, TurnResult
 
-__all__ = ["HOLD", "StreamMasker", "mask", "masked", "masked_call", "masked_citations", "masked_result"]
+__all__ = [
+    "HOLD",
+    "StreamMasker",
+    "mask",
+    "masked",
+    "masked_call",
+    "masked_citations",
+    "masked_result",
+    "masked_run",
+]
 
 
 def masked(value: Any) -> Any:
@@ -51,4 +62,50 @@ def masked_result(result: TurnResult) -> TurnResult:
         output=masked(result.output),
         tool_calls=[masked_call(c) for c in result.tool_calls],
         citations=masked_citations(result.citations),
+        run=masked_run(result.run) if result.run is not None else None,
     )
+
+
+def _masked_program(p: SkillProgram) -> SkillProgram:
+    steps = [
+        s.model_copy(
+            update={
+                "do": mask(s.do),
+                "check": s.check.model_copy(update={"text": mask(s.check.text)}) if s.check is not None else None,
+            }
+        )
+        for s in p.steps
+    ]
+    return p.model_copy(
+        update={
+            "not_when": mask(p.not_when),
+            "steps": steps,
+            "exit": {k: mask(v) for k, v in p.exit.items()},
+            "returns": [r.model_copy(update={"description": mask(r.description)}) for r in p.returns],
+            "success": [mask(line) for line in p.success],
+        }
+    )
+
+
+def _masked_frame[F: (RunningSkill, SubRun)](f: F) -> F:
+    return f.model_copy(
+        update={
+            "step_text": mask(f.step_text),
+            "inputs": {k: mask(v) for k, v in f.inputs.items()},
+            "results": {k: r.model_copy(update={"value": masked(r.value)}) for k, r in f.results.items()},
+            "program": _masked_program(f.program),
+            "rules": mask(f.rules),
+        }
+    )
+
+
+def masked_run(run: SkillRunState) -> SkillRunState:
+    """The running-skill record as it is shown, journalled and carried to the next reply: every text a person or a
+    system wrote in it is masked (inputs, step results, the step texts and rules). Ids, names and exits are not."""
+    running = run.running
+    if running is not None:
+        running = _masked_frame(running)
+        if running.sub is not None:
+            running = running.model_copy(update={"sub": _masked_frame(running.sub)})
+    history = [h.model_copy(update={"returns": masked(h.returns)}) for h in run.history]
+    return SkillRunState(running=running, history=history)
