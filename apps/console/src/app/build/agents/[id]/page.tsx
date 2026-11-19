@@ -217,7 +217,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
   const editable = canBuild && !locked;
   const check = useAgentPublishCheck(agent.id, agent.version, canBuild && newest?.state === 'draft');
   const preview = useAgentPublishPreview(agent.id, agent.version, canBuild && newest?.state === 'draft');
-  const purposeProblem: PublishBlocker[] = purposeMissing ? [{ kind: 'missing_field', id: null, position: { field: 'brief.purpose', step: null, index: null }, message: 'Say what this agent is for.' }] : [];
+  const purposeProblem: PublishBlocker[] = purposeMissing ? [{ kind: 'missing_field', id: null, position: { field: 'brief.purpose', step: null, index: null }, message: 'Purpose is empty. Say what this agent is for.' }] : [];
   const problems = [...purposeProblem, ...(check.data?.problems ?? [])];
   const goTo = (field: string) => {
     setTab('settings');
@@ -344,7 +344,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
               </Button>
             )}
             {newest?.state === 'draft' && agent.canPublish !== false && (
-              <Button variant="outline" onClick={() => setPublishOpen(true)} disabled={dirty} title={dirty ? 'Saving your changes first' : undefined} data-testid="request-agent-publish">
+              <Button variant="outline" onClick={() => (purposeMissing ? goTo('brief.purpose') : setPublishOpen(true))} disabled={dirty && !purposeMissing} title={dirty && !purposeMissing ? 'Saving your changes first' : undefined} data-testid="request-agent-publish">
                 <Rocket className="size-4" /> {preview.data && !preview.data.reviewRequired ? 'Publish' : 'Request publish'}
               </Button>
             )}
@@ -437,7 +437,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
                   </AlertDescription>
                 </Alert>
               )}
-              <BuilderFieldset canEdit={locked ? false : agent.canEdit}>
+              {/* What opens something to read (the model button, the uses link, Model and limits) stays outside the read-only fieldsets: a disabled fieldset disables every button in it. */}
               <div className="flex flex-wrap items-center gap-2" data-testid="agent-slim-row">
                 <Button type="button" variant="outline" size="sm" className="max-w-full" onClick={() => (setLimitsOpen(true), requestAnimationFrame(() => document.getElementById('ag-model')?.scrollIntoView({ block: 'center' })))} data-testid="agent-model-button">
                   <span className="truncate">{draft.model || 'No model'}</span>
@@ -446,6 +446,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
                   {!canBuild ? `v${agent.version}` : update.isPending ? 'Saving…' : saveError ? `Not saved: ${saveError}` : dirty ? (valid ? 'Saving soon…' : 'Fix the highlighted fields to save') : update.isSuccess ? `Draft v${agent.version} saved` : `v${agent.version}`}
                 </span>
               </div>
+              <BuilderFieldset canEdit={locked ? false : agent.canEdit}>
               {briefEdit !== null && agent.brief === null && (
                 <Alert data-testid="agent-brief-notice">
                   <Info />
@@ -471,12 +472,15 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
                 footer={assist.footer}
                 textareaRef={assist.textareaRef}
               />
+              </BuilderFieldset>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <AgentUsesLink uses={agent.uses} onOpen={() => setUsesOpen(true)} />
                 {editable && <PromptModeToggle mode={mode} onChoose={setModeAsked} disabled={dirty || update.isPending} />}
               </div>
+              <BuilderFieldset canEdit={locked ? false : agent.canEdit}>
               <IdentitySection draft={draft} set={set} teamId={agent.teamId} models={modelAliases.data ?? []} errors={errors} channels={agent.controls.channels} agentId={agent.id} showJob={mode === 'full'} showModel={false} />
               <WidgetsSection draft={draft} set={set} />
+              </BuilderFieldset>
               <AgentModelLimitsSection
                 model={draft.model}
                 patterns={draft.patterns}
@@ -486,12 +490,13 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
                 open={limitsOpen}
                 onOpenChange={setLimitsOpen}
               >
+                <BuilderFieldset canEdit={locked ? false : agent.canEdit}>
                 <MemorySection draft={draft} set={set} />
                 <SkillMenuSection draft={draft} set={set} attached={skills.data?.pins.length ?? 0} />
                 <GuardrailsSection draft={draft} set={set} shown={agent.controls.guardrails} />
                 <LimitsSection draft={draft} set={set} models={modelAliases.data ?? []} tools={tools.data ?? []} />
+                </BuilderFieldset>
               </AgentModelLimitsSection>
-              </BuilderFieldset>
               <AgentUsesSheet open={usesOpen} onOpenChange={setUsesOpen} uses={agent.uses}>
                 <BuilderFieldset canEdit={locked ? false : agent.canEdit}>
                   <ToolsSection draft={draft} set={set} stale={agent.staleToolIds} />
