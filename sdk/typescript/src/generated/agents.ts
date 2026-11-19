@@ -1822,6 +1822,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/references": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * References Search
+         * @description What the agent (`forAgent`) or the skill (`forSkill`) can mention, grouped by kind: tools, knowledge bases,
+         *     skills, agents and workflows of its team. Exactly one of the two is given (400 `validation_failed`).
+         *
+         *     Searching (`search`, `limit` items a group; with `kind` one group, continued by `cursor`) is for people who may
+         *     edit it: agents: edit or skills: edit in its team (403 `forbidden`). With `ids` (`kind:id`, repeated) it answers
+         *     the labels of what a saved text already names, for anyone who may read: one that is not found, not offered any
+         *     more or not visible is absent. Either way a kind whose view right the caller lacks in that team is left out, and
+         *     another team's skill or agent is never listed. An item says whether the agent holds it (`held`) and, when it
+         *     does not, what inserting it adds (`adds`).
+         */
+        get: operations["agents_references_search"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/resources/plan": {
         parameters: {
             query?: never;
@@ -6197,6 +6225,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[ReferenceSearch] */
+        Envelope_ReferenceSearch_: {
+            data: components["schemas"]["ReferenceSearch"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[ResumeOut] */
         Envelope_ResumeOut_: {
             data: components["schemas"]["ResumeOut"];
@@ -8680,6 +8717,56 @@ export interface components {
              * @enum {string}
              */
             kind: "tool" | "knowledge" | "skill" | "agent" | "workflow";
+        };
+        /** ReferenceGroup */
+        ReferenceGroup: {
+            /** Items */
+            items: components["schemas"]["ReferenceItem"][];
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "tool" | "knowledge" | "skill" | "agent" | "workflow";
+            /** Label */
+            label: string;
+            /** Nextcursor */
+            nextCursor?: string | null;
+        };
+        /**
+         * ReferenceItem
+         * @description One thing a brief or a step can mention with @.
+         */
+        ReferenceItem: {
+            /** Adds */
+            adds?: string | null;
+            /** Disabled */
+            disabled?: string | null;
+            /** Held */
+            held?: boolean | null;
+            /** Hint */
+            hint?: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "tool" | "knowledge" | "skill" | "agent" | "workflow";
+            /** Label */
+            label: string;
+            /**
+             * Needsapproval
+             * @default false
+             */
+            needsApproval: boolean;
+        };
+        /**
+         * ReferenceSearch
+         * @description Only kinds the caller may view, and only groups that have an item.
+         */
+        ReferenceSearch: {
+            /** Groups */
+            groups: components["schemas"]["ReferenceGroup"][];
         };
         /** RemoveCell */
         RemoveCell: {
@@ -22865,6 +22952,115 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_PublishReview_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    agents_references_search: {
+        parameters: {
+            query?: {
+                forAgent?: string | null;
+                forSkill?: string | null;
+                search?: string;
+                kind?: ("tool" | "knowledge" | "skill" | "agent" | "workflow") | null;
+                cursor?: string | null;
+                limit?: number;
+                ids?: string[] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ReferenceSearch_"];
                 };
             };
             /** @description Invalid request */

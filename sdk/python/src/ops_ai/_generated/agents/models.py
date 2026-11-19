@@ -1369,6 +1369,17 @@ class RefOut(TypedDict, closed=True):
     kind: Literal["tool", "knowledge", "skill", "agent", "workflow"]
 
 
+class ReferenceItem(TypedDict, closed=True):
+    adds: NotRequired[str | None]
+    disabled: NotRequired[str | None]
+    held: NotRequired[bool | None]
+    hint: NotRequired[str | None]
+    id: str
+    kind: Literal["tool", "knowledge", "skill", "agent", "workflow"]
+    label: str
+    needsApproval: NotRequired[bool]
+
+
 class RemoveCell(TypedDict, closed=True):
     action: str
     area: str
@@ -3422,6 +3433,17 @@ class ReadRecord(TypedDict, closed=True):
     values: dict[str, JsonValue]
 
 
+class ReferenceGroup(TypedDict, closed=True):
+    items: list[ReferenceItem]
+    kind: Literal["tool", "knowledge", "skill", "agent", "workflow"]
+    label: str
+    nextCursor: NotRequired[str | None]
+
+
+class ReferenceSearch(TypedDict, closed=True):
+    groups: list[ReferenceGroup]
+
+
 class RunDecision(TypedDict, closed=True):
     action: str
     at: str | None
@@ -3986,6 +4008,11 @@ class EnvelopePublicForm(TypedDict, closed=True):
 
 class EnvelopePublishReview(TypedDict, closed=True):
     data: PublishReview
+    success: Literal[True]
+
+
+class EnvelopeReferenceSearch(TypedDict, closed=True):
+    data: ReferenceSearch
     success: Literal[True]
 
 

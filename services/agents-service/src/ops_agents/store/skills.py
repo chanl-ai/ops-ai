@@ -21,6 +21,7 @@ from ops_service_kit.errors import Conflict
 from ops_service_kit.http import Json, JsonList, Out
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
+from ops_store.dialect import json_text
 from ops_store.listing import LISTED
 from ops_store.rows import rows as read_rows
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, team_owned_via
@@ -207,6 +208,35 @@ class SkillRegistry(VersionedRegistry[SkillRow, SkillVersionRow]):
         q = q.order_by(t.slug).offset(offset).limit(limit)
         async with self.tx() as c:
             return await read_rows(c, q, SkillRow)
+
+    async def search_team(
+        self, team: str, search: str, offset: int, limit: int, *, ids: list[str] | None = None, skip: str | None = None
+    ) -> list[tuple[str, str, str]]:
+        """(id, name, use-when) of `team`'s published, live skills whose published name or slug holds every word of
+        `search`, by name, cut in the query; `ids` answers exactly those of them. `skip` leaves one skill out (the
+        one being edited). Another team's skill is never answered, whatever team the caller acts in."""
+        t, v = registry_skills.c, registry_skill_versions.c
+        name = json_text(v.content, "name")
+        q = (
+            sa.select(t.id, name.label("name"), json_text(v.content, "useWhen").label("use_when"))
+            .select_from(registry_skills)
+            .join(registry_skill_versions, sa.and_(t.id == v.skill_id, t.published_version == v.version))
+            .where(
+                t.team_id == team,
+                t.deprecated_reason.is_(None),
+                t.id != skip if skip else sa.true(),
+                team_visible(registry_skills),
+                team_visible(registry_skill_versions),
+            )
+        )
+        if ids is not None:
+            q = q.where(t.id.in_(ids))
+        else:
+            q = q.where(*(sa.or_(contains(name, w), contains(t.slug, w)) for w in search.split()))
+        q = q.order_by(name, t.id).offset(offset).limit(limit)
+        async with self.tx() as c:
+            found = (await c.execute(q)).all()
+        return [(str(i), str(n or ""), str(u or "")) for i, n, u in found]
 
     async def owner_team(self, skill_id: str, conn: AsyncConnection | None = None) -> str | None:
         """The team that owns it, whoever is acting; None when there is none. Only for deciding a refusal by the

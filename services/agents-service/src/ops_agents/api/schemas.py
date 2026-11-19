@@ -1569,6 +1569,37 @@ class SkillUsage(Out):
     attached_by: str
 
 
+class ReferenceItem(Out):
+    """One thing a brief or a step can mention with @."""
+
+    kind: Literal["tool", "knowledge", "skill", "agent", "workflow"]
+    id: str
+    label: str
+    hint: str | None = None
+    # For an agent: whether it holds this already. For a skill: whether the skill names this tool or knowledge
+    # base; None for a kind a skill does not hold.
+    held: bool | None = None
+    # What inserting it grants, in words ("Adds Dispute status lookup to this agent"); None when nothing is added.
+    adds: str | None = None
+    needs_approval: bool = False
+    # Why it cannot be inserted, when it cannot.
+    disabled: str | None = None
+
+
+class ReferenceGroup(Out):
+    kind: Literal["tool", "knowledge", "skill", "agent", "workflow"]
+    label: str
+    items: list[ReferenceItem]
+    # Passed back as `cursor` with this group's `kind` for the next items; None when there are no more.
+    next_cursor: str | None = None
+
+
+class ReferenceSearch(Out):
+    """Only kinds the caller may view, and only groups that have an item."""
+
+    groups: list[ReferenceGroup]
+
+
 class BlockerPosition(Out):
     """Where a publish problem is: the field (`steps`, `notWhen`, `useWhen`, `brief.never`), and the step (from 1)
     or list index when it has one."""
