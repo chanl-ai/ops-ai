@@ -132,19 +132,32 @@ class UsageLedger(RuntimeStore):
         """What the thread has spent, with what the specialists it asked spent on their own threads. A specialist's
         calls are recorded once, on its thread, and counted here, so a chain's spend is charged to the thread it
         started on and never twice."""
-        m = model_call_records.c
+        m, t = model_call_records.c, graph_threads.c
+        children = sa.select(t.id).where(t.parent_thread_id == thread_id)
         spent = [sa.func.coalesce(sa.func.sum(x), 0) for x in (m.calls, m.input_tokens, m.output_tokens, m.cost_micros)]
-        q = sa.select(*spent).where(m.thread_id.in_([thread_id, *await self._asked(thread_id)]))
+        per_thread = (
+            sa.select(
+                m.thread_id,
+                *(s.label(n) for s, n in zip(spent, ("calls", "tokens_in", "tokens_out", "micros"), strict=True)),
+            )
+            .where(sa.or_(m.thread_id == thread_id, m.thread_id.in_(children)))
+            .group_by(m.thread_id)
+            .subquery()
+        )
+        # One statement: each thread's sums with its meta, which says whether a child thread is a specialist's.
+        q = sa.select(
+            per_thread.c.thread_id,
+            per_thread.c.calls,
+            per_thread.c.tokens_in,
+            per_thread.c.tokens_out,
+            per_thread.c.micros,
+            t.meta,
+        ).select_from(per_thread.outerjoin(graph_threads, t.id == per_thread.c.thread_id))
         async with self.tx() as c:
-            summed: tuple[Any, ...] = tuple((await c.execute(q)).one())
-        return Totals(int(summed[0]), int(summed[1]), int(summed[2]), _amount(int(summed[3])))
-
-    async def _asked(self, thread_id: str) -> list[str]:
-        """The threads of the specialists `thread_id`'s agent asked."""
-        t = graph_threads.c
-        async with self.tx() as c:
-            found = (await c.execute(sa.select(t.id, t.meta).where(t.parent_thread_id == thread_id))).all()
-        return [str(child) for child, meta in found if _asked_by(meta) == thread_id]
+            found: list[tuple[Any, ...]] = [tuple(r) for r in (await c.execute(q)).all()]
+        counted = [r for r in found if r[0] == thread_id or _asked_by(r[5]) == thread_id]
+        calls, tokens_in, tokens_out, micros = (sum(int(r[i]) for r in counted) for i in (1, 2, 3, 4))
+        return Totals(calls, tokens_in, tokens_out, _amount(micros))
 
     async def totals_by_run(self, thread_id: str) -> dict[str | None, Totals]:
         return await self.calls.sums(thread_id, by_run=True)
