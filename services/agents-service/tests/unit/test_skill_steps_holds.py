@@ -113,22 +113,28 @@ async def test_a_failed_skill_holds_the_write_of_the_sub_skill_it_never_reached(
     await reply(ask, alone, fresh)
     assert [c for c, _ in fresh.calls] == ["refund_charge"], fresh.calls
 
-    # Two failed skills hold the refund. Each, started again, is re-proving its own check, so the other's hold does
-    # not stop it: the tool is never locked for the whole conversation.
+    # A tool has one holder, the first skill that failed while naming it. A skill that fails later takes no hold on
+    # it, and the holder, started again and passing the step that calls it, releases it.
     both = Systems(lookup_charge=_amount, refund_charge={"refunded": True})
     gave_up = Script(("switch_skill", {"slug": "pay-out"}), ("exit", {"name": "failed"}), "I stopped.")
     one, _ = await reply(ask, gave_up, both)
     failed = Script(("switch_skill", {"slug": "check-then-pay"}), ("lookup_charge", {"chargeId": "CH-1"}), "No.")
     held, _ = await reply(replace(carrying(ask, run_of(one)), turn_id="t2", user_turn="Refund CH-1."), failed, both)
-    assert set(run_of(held).held_by_failed) == {"sk_pay", "sk_check"}, run_of(held)
+    holds = {k: v.tools for k, v in run_of(held).held_by_failed.items()}
+    assert holds == {"sk_pay": ["refund_charge"], "sk_check": ["lookup_charge"]}, holds
     retry = Script(("switch_skill", {"slug": "pay-out"}), ("refund_charge", {"chargeId": "CH-2"}), "CH-2 is refunded.")
-    await reply(replace(carrying(ask, run_of(held)), turn_id="t3", user_turn="Pay out CH-2."), retry, both)
+    freed, _ = await reply(replace(carrying(ask, run_of(held)), turn_id="t3", user_turn="Pay out CH-2."), retry, both)
     assert [c for c, _ in both.calls] == ["lookup_charge", "refund_charge"], both.calls
+    assert set(run_of(freed).held_by_failed) == {"sk_check"}, run_of(freed)
 
 
 async def test_a_failed_skill_still_holds_its_write_after_more_skills_ended_than_the_record_lists() -> None:
-    skills = pay_out_after_a_check({"action": "retry", "retries": 0})
-    ask = TurnRequest("t1", "th1", agent(skills, max_steps=12), [LOOKUP, REFUND, NOTE], user_turn="Refund CH-1.")
+    steps = program({"do": "Say sorry."}, {"do": "Refund it.", "use": {"kind": "tool", "id": "refund_charge"}})
+    goodwill = stepped("sk_goodwill", 1, "Goodwill", "goodwill", steps)
+    skills = [*pay_out_after_a_check({"action": "retry", "retries": 0}), goodwill]
+    # Personal data is masked in the record each reply carries on, as it is for an agent by default.
+    settings = agent(skills, redact_pii=True, max_steps=12)
+    ask = TurnRequest("t1", "th1", settings, [LOOKUP, REFUND, NOTE], user_turn="Refund CH-1.")
     systems = Systems(lookup_charge=_amount, refund_charge={"refunded": True})
     failing = Script(("switch_skill", {"slug": "check-then-pay"}), ("lookup_charge", {"chargeId": "CH-1"}), "No.")
     result, _ = await reply(ask, failing, systems)
@@ -146,6 +152,17 @@ async def test_a_failed_skill_still_holds_its_write_after_more_skills_ended_than
         assert all("refund_charge" not in offered for offered in model.offered), (n, model.offered)
     assert "sk_check" not in [h.skill_id for h in run.history], "the failed skill's entry has left the list"
     assert [c for c, _ in systems.calls] == ["lookup_charge"], systems.calls
+
+    # Another skill that names the refund fails on a step before it, then starts again: failing gave it no hold of
+    # its own on a tool already held, so it is stopped when it reaches the refund.
+    gave_up = Script(("switch_skill", {"slug": "goodwill"}), ("exit", {"name": "failed"}), "I stopped.")
+    result, _ = await reply(replace(carrying(ask, run), turn_id="t8", user_turn="A goodwill refund."), gave_up, systems)
+    again = Script(
+        ("switch_skill", {"slug": "goodwill"}), ("step_done", {}), ("refund_charge", {"chargeId": "CH-1"}), "No."
+    )
+    result, _ = await reply(replace(carrying(ask, run_of(result)), turn_id="t9", user_turn="Again."), again, systems)
+    assert all("refund_charge" not in offered for offered in again.offered), again.offered
+    assert run_of(result).running is None and [c for c, _ in systems.calls] == ["lookup_charge"], systems.calls
 
 
 async def test_a_step_does_not_start_a_skill_without_an_input_it_requires() -> None:

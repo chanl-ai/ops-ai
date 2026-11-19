@@ -43,6 +43,7 @@ rules: [../../CLAUDE.md](../../CLAUDE.md#folder-guides).
 - While a skill's step names a tool, that tool and knowledge search are the only systems offered; tools other steps
   name wait for their step, and a failed skill's tools stay withheld until it starts again and passes the step that
   calls each, in every later reply of the thread (`SkillRunState.held_by_failed`, outside the capped history). A
+  tool has one holder, the first skill that failed while naming it; a skill that fails later takes no hold on it. A
   skill whose current step names a held tool ends as failed at once and the model is told which skill to start.
   A step that runs a skill hands it the inputs it declares, from the running skill's inputs and then the result of
   the step before; a required one missing fails the step.

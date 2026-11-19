@@ -248,14 +248,17 @@ def _end(
     holds: bool = True,
 ) -> None:
     """Ends the running skill. One that ends as failed holds its step tools from then on, unless `holds` is off:
-    a skill stopped because another failed skill holds its tool has failed no check of its own."""
+    a skill stopped because another failed skill holds its tool has failed no check of its own. A tool has one
+    holder, the first skill that failed while naming it: a skill that fails later takes no hold on it, so failing
+    is never a way to a tool another skill's failed check holds."""
     r = run.running
     assert r is not None
     tools = _tools(r, skills) if holds else set[str]()
-    if name == "failed" and tools:
-        kept = run.held_by_failed.get(r.skill_id)
-        both = sorted(tools | set(kept.tools if kept is not None else []))
-        run.held_by_failed[r.skill_id] = HeldTools(slug=r.slug, name=r.name, tools=both)
+    taken = {t for sid, h in run.held_by_failed.items() if sid != r.skill_id for t in h.tools}
+    kept = run.held_by_failed.get(r.skill_id)
+    mine = sorted((tools - taken) | set(kept.tools if kept is not None else []))
+    if name == "failed" and mine:
+        run.held_by_failed[r.skill_id] = HeldTools(slug=r.slug, name=r.name, tools=mine)
     run.history.append(
         EndedSkill(
             skill_id=r.skill_id,
@@ -378,20 +381,11 @@ def _failed(run: SkillRunState, skills: Sequence[Skill], told: list[str]) -> Non
     _end(run, ends, skills)
 
 
-def _own(run: SkillRunState) -> set[str]:
-    """The tools the running skill holds itself since it failed. Started again, it is proving its own check once
-    more, so no other skill's hold on one of these stops it: two failed skills that name the same tool would
-    otherwise lock it for the whole conversation."""
-    r = run.running
-    kept = run.held_by_failed.get(r.skill_id) if r is not None else None
-    return set(kept.tools) if kept is not None else set()
-
-
 def _held_for(run: SkillRunState) -> HeldTools | None:
     """The failed skill that holds the current step's tool, when it is not the skill running."""
     r = run.running
     tool = target(run)
-    if r is None or tool is None or tool in _own(run):
+    if r is None or tool is None:
         return None
     return next((h for sid, h in run.held_by_failed.items() if sid != r.skill_id and tool in h.tools), None)
 
@@ -541,7 +535,7 @@ def withheld(run: SkillRunState, skills: Sequence[Skill]) -> set[str]:
     out: set[str] = set() if r is None else _tools(r, skills) - {target(run)}
     for skill_id, kept in run.held_by_failed.items():
         if r is None or r.skill_id != skill_id:
-            out |= set(kept.tools) - _own(run)
+            out |= set(kept.tools)
     return out
 
 
