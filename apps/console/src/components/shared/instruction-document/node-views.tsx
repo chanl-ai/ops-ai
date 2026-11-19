@@ -129,8 +129,16 @@ export function StepView({ node, editor, getPos, updateAttributes }: ReactNodeVi
 }
 
 /** A step's check. The save decides whether it is a rule the service runs or a sentence the model judges. */
-export function CheckView({ node }: ReactNodeViewProps) {
+export function CheckView({ node, updateAttributes }: ReactNodeViewProps) {
   const by = node.attrs.by as 'rule' | 'model' | null;
+  // The label describes the text the save classified: an edit clears it, and the next save sets it again.
+  const text = node.textContent;
+  const before = React.useRef(text);
+  React.useEffect(() => {
+    if (before.current === text) return;
+    before.current = text;
+    if (by) updateAttributes({ by: null });
+  }, [text, by, updateAttributes]);
   return (
     <NodeViewWrapper data-check className="clear-left ml-1 flex flex-wrap items-baseline gap-x-2 border-l-2 pl-3">
       <span contentEditable={false} className="font-semibold select-none">
