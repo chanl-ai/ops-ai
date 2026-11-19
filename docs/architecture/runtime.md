@@ -45,6 +45,25 @@ resumes the kernel with `DeferredToolResults`.
 | The kernel builds its agent per turn | No hidden state survives a process restart |
 | State holds references to attachments and model outputs | A checkpoint stores the whole state per superstep ([durability-failure-and-audit.md](durability-failure-and-audit.md)) |
 
+## Skills that run step by step
+
+A skill version with `steps` is started, never loaded as text. The kernel keeps one running-skill record per
+conversation (`ops_contracts.skill_run.SkillRunState`) and moves it as tool results arrive.
+
+| Part | What happens | Where |
+|---|---|---|
+| Start | The model calls `switch_skill`, or a person picks the skill from the chat menu. A skill already running ends as `switched`; nothing stacks | `packages/ops_agent_kernel/src/ops_agent_kernel/step_tools.py` |
+| One step at a time | While a step names a tool, that tool and knowledge search are the only systems offered. A rule check (`result.amount <= 500`) runs in code on the tool's result; a sentence check is confirmed by the model with `step_done` | `packages/ops_agent_kernel/src/ops_agent_kernel/steps.py`, `expr.py` |
+| A step that runs a skill | The kernel starts it from the agent's own pins and returns to the parent step when it ends; one level only | `steps.py` |
+| The prompt | The stable start is the agent's instructions (written from its brief when it has one). The current step, the skill's notes and the brief's never rules are written again before every model request, never rules last, in both prompt modes | `packages/ops_agent_kernel/src/ops_agent_kernel/prompt_writer.py` |
+| Between replies | Each reply journals the record as a `skill_run` event; the chat message carries it as `skillRun`, and the next turn reads it from the newest reply that has one (`TurnRequest.carried_run`) | `services/agents-service/src/ops_agents/graphs/common.py`, `graphs/agent_wrapper.py`, `api/chat_threads.py` |
+| An approval pause | The paused turn keeps the record and the tools held for that reply in its checkpoint; the resumed turn goes on at the same step, and a rejected call ends the skill as failed | `graphs/common.py` (`pending_approval`) |
+| Holds | A failed check or a denied call keeps the later steps' tools from every other skill until the holder passes that step; a hold is dropped when the agent no longer pins that version of the holder | `packages/ops_agent_kernel/CLAUDE.md`, "Contract with callers" |
+
+A skill without steps behaves as before, except that loading one on-match skill replaces the one carried from the
+reply before. Tools that are not reads run one at a time on every agent; `patterns.parallelReads: false` also asks the
+model for one tool call at a time, and `patterns.thinking` sets how hard the model thinks.
+
 ## Which model a turn runs on
 
 An agent names a model alias when it is published; the publish request is refused when models-service does not list
