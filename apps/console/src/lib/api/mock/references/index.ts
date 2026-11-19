@@ -39,6 +39,9 @@ const ITEMS: ReferenceItem[] = [
   row('workflow', 'refund_approval', 'Refund approval', false),
 ];
 
+/** Whether the team offers what a `kind:id` token names; the skills mock's publish check asks. */
+export const isOffered = (token: string) => ITEMS.some((i) => `${i.kind}:${i.id}` === token);
+
 const grouped = (items: ReferenceItem[], limit: number): ReferenceGroup[] =>
   (Object.keys(GROUP_LABEL) as RefKind[])
     .map((kind) => {
