@@ -2,7 +2,7 @@
 
 Status: current, 2026-11-11. Code cited at commit 81c9883a. This page states the product and library each part of
 Ops AI is built on today, with where it lives in code and the page that describes it. It holds the current outcome of
-every record in [decisions/](decisions/); those records keep the options and scoring that led there.
+every record in [decisions/](decisions/README.md); those records keep the options and scoring that led there.
 
 ## Choices by area
 
@@ -10,7 +10,7 @@ every record in [decisions/](decisions/); those records keep the options and sco
 |---|---|---|---|---|
 | Implementation language | Python for every service and package; TypeScript for the console and the embed app | Yes | `services/`, `packages/`, `apps/console`, `apps/embed` | [service map](service-map.md) |
 | Workflow and agent execution | One engine, `ops_engine`, compiling definitions to LangGraph graphs run on PostgreSQL; no Temporal | Yes | `packages/ops_engine/src/ops_engine/compiler.py`, `packages/ops_engine/src/ops_engine/worker.py` | [runtime](runtime.md), [workflow runner](workflow-runner.md) |
-| Checkpoints | Own asyncpg checkpointer, row-level security per tenant | Yes | `packages/ops_checkpointer/src/ops_checkpointer/saver.py` | [durability, failure and audit](durability-failure-and-audit.md) |
+| Checkpoints | Own checkpointer on SQLAlchemy Core, the same statements on PostgreSQL and SQL Server, row-level security per tenant and team | Yes | `packages/ops_checkpointer/src/ops_checkpointer/saver.py` | [durability, failure and audit](durability-failure-and-audit.md) |
 | Fencing | A thread is fenced by its lease generation: a stale owner's checkpoint, journal, status, timer and tool writes are refused | Yes | `packages/ops_engine/src/ops_engine/journal.py:32` | [durability, failure and audit](durability-failure-and-audit.md) |
 | Timers | A `timers` table and a poller in PostgreSQL, fired through agents-service's timers route | Yes | `services/agents-service/src/ops_agents/api/routers/timers.py` | [human in the loop](human-in-the-loop.md) |
 | Agent loop | Pydantic AI in Python; the AI SDK (`ai` 7) for chat message parts in the console | Yes | `services/agents-service/src/ops_agents/api/routers/chat.py:22`; `apps/console/package.json:47` | [runtime](runtime.md), [agent guardrails](agent-guardrails.md) |
@@ -25,7 +25,7 @@ every record in [decisions/](decisions/); those records keep the options and sco
 | Definitions | Declarative definitions stored as records, drafted, reviewed and published by pointer; a thread pins the version it started on | Yes | `packages/ops_engine/src/ops_engine/definition.py` | [definitions and versions](definitions-and-versions.md) |
 | Assurance | Every asset (workflow, agent, skill, tool module) follows one draft, review and publish lifecycle through one Reviews queue | Yes | `services/agents-service/src/ops_agents/api/routers/reviews.py`, `publish_requests.py` | [definitions and versions](definitions-and-versions.md), [human in the loop](human-in-the-loop.md) |
 | Chat | In-console chat on agents-service's agent run API; record cards and widgets in the conversation | Yes | `services/agents-service/src/ops_agents/api/routers/chat.py`; `apps/console/src/components/chat/` | [chat widgets](chat-widgets.md), [embedded chat](embedded-chat.md) |
-| Deployment | Services run as `ops-host` processes on a VM, Compose or Kubernetes; promotion moves a version pointer | Yes | `deploy/host`, `deploy/compose`, `deploy/k8s` | [service map](service-map.md), [operations](operations.md) |
+| Deployment | One image per service on Compose or Kubernetes; where one machine runs several services, the process host in `deploy/host` starts them from one image (staging runs it); promotion moves a version pointer | Yes; the VM target is designed | `deploy/host`, `deploy/compose`, `deploy/k8s` | [service map](service-map.md), [operations](operations.md) |
 | Logging | structlog JSON lines on stdout with ids and redaction | Yes | `packages/ops_service_kit/src/ops_service_kit/logging.py` | [logging and data writes](logging-and-data-writes.md) |
 
 ## Rules that follow from these choices

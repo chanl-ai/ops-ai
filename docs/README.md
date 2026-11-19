@@ -3,7 +3,7 @@
 Status: current. Every document below is a draft for review unless its own status line says otherwise.
 
 These documents design an operational AI platform for banks and describe the console in
-`apps/console/` that shows it. Backend code runs for all six services (`services/platform-service`, `services/agents-service`, `services/tools-service`, `services/models-service`, `services/kb-service`, `services/files-service`). Reviews, Cases and work items move into the planned `ops_hitl` package, hosted by agents-service. `architecture/README.md` is the entry page for the system as built.
+`apps/console/` that shows it. Backend code runs as eight services under `services/` (platform, agents, tools, models, kb, files, documents and runner). Reviews, Cases and work items move into the planned `ops_hitl` package, hosted by agents-service. `architecture/README.md` is the entry page for the system as built.
 
 ## Map
 
@@ -11,6 +11,10 @@ These documents design an operational AI platform for banks and describe the con
 | Area | Start at | What it holds |
 |---|---|---|
 | Welcome | `welcome.md` | The site's first page: what Ops AI is for and where a developer starts |
+| Deploy and operate | `deploy-and-operate.md` | The operator's tab: choose a deployment, install, the database, upgrade, back up and monitor |
+| Security | `security/README.md` | The security reviewer's tab: isolation, sign-in, approvals and audit, data handling, model calls |
+| Reference | `reference/README.md` | The HTTP API, the SDKs, the CLI and MCP, and the changelog |
+| Contributing | `contributing.md` | How Ops AI is built: architecture, standards, services, packages, the use-case catalogue, designs, agent skills, releases |
 | Background | `background/problem-statement.md` | Why bank AI workflows stall and what the platform needs |
 | Architecture | `architecture/README.md` | The system as built: services, runtime, human in the loop, identity, data, operations, and the decision records in `architecture/decisions/` |
 | Design, by area | The design table below | Proposed and approved designs with their wireframes and mocks: workflows and agents, tools, human tasks, cases, chat, data, and the prior-art research behind them |
@@ -27,6 +31,7 @@ Each page opens with the problem it solves and says what is built. Images sit be
 
 | Path | Topic |
 |---|---|
+| `design/README.md` | Index of design proposals and research |
 | `design/workflows/workflows-and-agents.md` | Agents and workflows as two ways of running work on shared services: stories, entities, state machines, the run, review and trigger APIs, the Node SDK, capability packs, portability, scale, security and the slice plan |
 | `design/workflows/workflow-nodes.md` | Node types and instances, typed ports, the catalogue, files owning reading, the court order notice as a worked example, and the runner options weighed |
 | `design/workflows/canvas.md` | The workflow canvas mock the editor is built to: step list, step sheets, checks, shortcuts, themes and phone width |
@@ -63,23 +68,26 @@ shared list: the shareable guide built from `guide/*.md` is meant to present the
 | A relative link, or a code span naming a file (`services/x/y.py:42`) | A link to the page here, or to the file on GitHub |
 
 A link to a page or file that does not exist fails the site build, and so does a diagram SVG that no longer matches
-its data file. The sidebar is the list `SITE` in `apps/docs/src/lib/nav.mjs`: four tabs (Docs, API reference,
-Architecture, Contributing), each with groups in the order a reader needs them. A page appears there once `SITE`
+its data file. The sidebar is the list `SITE` in `apps/docs/src/lib/nav.mjs`: five tabs (Docs, Deploy and operate,
+Security, Reference, Contributing), each with groups in the order a reader needs them. Internals (architecture,
+standards, services, packages, use cases, designs, plans) go only in Contributing. On a Docs, Security or Reference
+page, `apps/docs/scripts/check-public-pages.mjs` refuses repository paths, `file:line` references, local ports and
+make targets in code; its allowlist of older pages may only shrink. A page appears there once `SITE`
 names it or a folder it takes whole, and a page it does not place fails the site build. Edit a diagram in `diagrams/<name>.yaml`, then run `pnpm --filter docs diagrams` to export its SVG.
 
 ## Reading order
 
 | Reader | Read in this order |
 |---|---|
-| Engineer | `background/problem-statement.md` → `architecture/overview.md` → `architecture/service-map.md` → the topic spec for the area you work on → `plan/implementation-plan.md` |
-| Architect | `background/problem-statement.md` → `architecture/overview.md` → `architecture/platform-choices.md` (the current choice per area; `architecture/decisions/` keeps the options behind each) → [tool system design](design/tools/tool-system.md) → `architecture/service-map.md` |
-| Risk reviewer | `background/problem-statement.md` → `architecture/overview.md` (traceability, failure modes) → [ADR-0012 Assurance: governance and testing as one system](architecture/decisions/assurance.md) → ADR-0005 |
+| Engineer | `background/problem-statement.md` → `architecture/README.md` → `architecture/service-map.md` → the topic spec for the area you work on → `contributing.md` |
+| Architect | `background/problem-statement.md` → `architecture/enterprise-architecture.md` → `architecture/platform-choices.md` (the current choice per area; `architecture/decisions/` keeps the options behind each) → [tool system design](design/tools/tool-system.md) → `architecture/service-map.md` |
+| Risk reviewer | `background/problem-statement.md` → `architecture/enterprise-architecture.md` → `architecture/delivery.md` (what is proven, open questions) → [ADR-0012 Assurance: governance and testing as one system](architecture/decisions/assurance.md) → ADR-0005 |
 
 ## Requirements
 
 | # | Requirement | Where it is met |
 |---|---|---|
-| 1 | Implement the problem statement: seven reasons, three decisions and the model-traffic mandate, four components, edit classes, ten knowledge requirements | Every spec; traceability in `architecture/overview.md` |
+| 1 | Implement the problem statement: seven reasons, three decisions and the model-traffic mandate, four components, edit classes, ten knowledge requirements | Every spec, through the problem statement's item ids |
 | 2 | Deliver the email-to-workflow reference flow: mailbox, understand, route to case, queue and SLA, drafted actions with per-action approval | [agents and workflows](console/agents-and-workflows.md), [tool system design](design/tools/tool-system.md) |
 | 3 | Fix the architecture first, with each decision stating options, criteria, evidence and what would change it | `architecture/decisions/` |
 | 4 | Build on open source (Temporal and peers) so existing implementations can plug in | ADR-0001, ADR-0007 |
@@ -89,18 +97,17 @@ names it or a folder it takes whole, and a page it does not place fails the site
 | 8 | Apply lessons from earlier agent platforms; the agents are internal and not voice or customer facing | The decision records, each with the lessons it applies |
 | 9 | Treat the console as the UI reference; each spec states what each screen needs from the backend | "UI mapping" section of each spec |
 | 10 | The bank runs no workflow or agent runtime today, so the runtime choice is greenfield; existing agents stay behind adapters | ADR-0001 |
-| 11 | Judge every decision on the marginal effort of the next workflow, not only the first | `architecture/overview.md` (throughput), each spec's "Marginal effort" section |
+| 11 | Judge every decision on the marginal effort of the next workflow, not only the first | `architecture/decisions/README.md` (the scoring weights), each spec's "Marginal effort" section |
 | 12 | Staff chat with agents inside the platform, with MCP Apps for in-chat data views | [chat in the console](console/chat.md), ADR-0009 |
 | 13 | First workflow: the lending servicing inbox (hardship, payoff statements, address changes), with no money movement, so it fits the `low` and `medium` tiers | `architecture/service-map.md` | Services, packages, layering, cross-service contracts and deployment targets (VM, Compose, Kubernetes) |
 
 ## Architecture
 
-Start at `architecture/README.md`; it gives the reading order and what is proven.
+Start at `architecture/README.md`; it gives the map, one request end to end and where to read next.
 
 | Path | Topic |
 |---|---|
-| `architecture/README.md` | Entry page: what Ops AI is, reading order by chapter, what is proven and by which evidence |
-| `architecture/overview.md` | The rule, the system picture, seven services, three run kinds, what runs today, evaluation criteria, open questions |
+| `architecture/README.md` | Entry page: the services and their ports, one request end to end, where to read next by topic, and the pages a security review starts from |
 | `architecture/words-and-entities.md` | Glossary (graph, thread, run, interrupt, lease, fence, timer) and the entity relationships |
 | `architecture/api.md` | API families and calls, which exist in code, request conventions, the event schema |
 | `architecture/runtime.md` | Inside agents-service: kernel, graphs, compiled definitions, the LangGraph adapter, process types, engine seam, libraries |
@@ -110,7 +117,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `architecture/tool-lifecycle.md` | A tool from connect to import, review, access, grant, call, write approval and display; built versus target; the per-operation approval policy |
 | `architecture/mcp.md` | MCP both ways: the server per team and person, the client for outside servers, built-in tools, sign-in, audit, rate limits and masking; one owner per job; built versus not built |
 | `architecture/workflow-runner.md` | Workflow runner: LangGraph with a step journal, Postgres queue and workers; the ops_engine split from agents through ports; resilience, scale, console, versioning, proof |
-| `architecture/channels-and-deployments.md` | Deployments, the adapter contract, identity and keys per channel, busy-thread input, the mailbox adapter |
+| `architecture/channels-and-deployments.md` | Deployments on the widget, API and MCP channels, the Email received trigger, the adapter contract, identity and keys per channel, busy-thread input |
 | `architecture/chat-widgets.md` | Widgets an agent shows in chat: templates it fills, layouts it composes from a catalogue, overrides, buttons that need a tool |
 | `architecture/identity-and-tenancy.md` | Sign-in seam, delegation, process principals, tools gateway, row-level security, prototype shortcuts |
 | `architecture/roles-and-permissions.md` | Who may do what: the roles grid, team policies, approvals, the access rules and the exceptions register |
@@ -134,32 +141,21 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `architecture/standards/security.md` | Standards: security (`SC1` to `SC6`): two gateways, audit in the same transaction, write-only secrets, dependencies, nothing committed that identifies a customer |
 | `architecture/standards/testing.md` | Standards: tests (`TS1` to `TS8`): failure modes first, a budget per change, seen failing once, public seams, use cases per layer |
 | `architecture/standards/delivery.md` | Standards: delivery, deploy and upgrade (`DL1` to `DL9`): branch and pull request, one gate, a separate reviewer, staging on every merge, proven upgrades |
-| `architecture/migration/README.md` | The migration to the standards: goal, phases, sizes and calendar, what is replaced and kept, the rules every lane follows, how to verify |
-| `architecture/migration/components.md` | Phase 0: the eight shared components, their files, target interfaces, three builder tracks, checks and branches |
-| `architecture/migration/pilot.md` | Phase 1: documents, files, models and runner on every component; the coverage gap measured and published |
 | `architecture/migration/api-changes.md` | Every API change the migration makes, per service, with what a caller must change; read by the console and SDK steps |
-| `architecture/migration/baseline-rises.md` | Every exception list (baseline) that holds more rows on the migration branch than on develop, with counts; the work list for bringing them down |
-| `architecture/migration/lane-platform.md` | Phase 2: platform-service's store and request layers replaced wholesale; the page shell as one call |
-| `architecture/migration/lane-kb.md` | Phase 2: kb-service's four lists in SQL, typed rows, the `kb.changed` event |
-| `architecture/migration/lane-tools.md` | Phase 2: tools-service's sixteen tables policed, hand filters onto `team_visible()`, the catalogue events |
-| `architecture/migration/lane-agents.md` | Phase 2: agents-service's 43 store files on the base, 21 tables policed, lists and labels in SQL from local copies |
-| `architecture/migration/agents-registry-tenancy.md` | The agents registry, graph version and channel tables: where each row's tenant comes from, key changes, the two migrations |
-| `architecture/migration/lane-console.md` | Phase 3: the console's data layer onto the list contract and the fields the lanes return |
-| `architecture/migration/test-pruning.md` | Where the service test suites spend time, parallel runs, and every test deleted as redundant with its surviving cover |
 | `architecture/definitions-and-versions.md` | Draft to publish, pointers, the pin per thread, what happens without it, migrate |
 | `architecture/durability-failure-and-audit.md` | Leases, sweeper, fencing, re-execution, idempotency, side-effect classes, journal, checkpoint growth and pruning |
-| `architecture/data.md` | Tables per service, the checkpointer package, designed stores, retention |
+| `architecture/data.md` | How data is stored: the store rules, the generated inventory of every repository and its tables, the databases and their isolation, the checkpointer, retention and growth |
 | `architecture/operations.md` | Running it, environments, health, the acceptance gate, what to watch, runbooks |
 | `architecture/enterprise-architecture.md` | One-page picture for an enterprise: identity, observability and secrets bands, the platform, both gateways, and how to build, develop and deploy it, with status per part |
-| `architecture/data-model.md` | Every table, grouped by owning service, with keys, links, status per table and the database portability rules; companion to the architecture page |
-| `architecture/delivery.md` | What is proven, what is next, known gaps, the open decisions with defaults |
+| `architecture/data-model.md` | Every table, grouped by owning service, with keys, links and status per table; the database rules are on the data page |
+| `architecture/delivery.md` | What is proven and by which evidence, what is still open, known gaps, open decisions with defaults, and the open questions for the bank |
 
 ## Index
 
 | Path | Topic |
 |---|---|
 | `background/problem-statement.md` | Why bank AI workflows stall, what the platform needs, the reference flow. Item IDs every spec traces to |
-| `architecture/overview.md` | Reference architecture, layering, evaluation criteria, throughput, end-to-end flow, traceability, failure modes, open questions |
+| `architecture/decisions/README.md` | Index of the decision records with each one's status and where its current answer lives, and the weights the records score options against |
 | `architecture/decisions/durable-execution-runtime.md` | Temporal and the graph interpreter |
 | `architecture/decisions/implementation-language.md` | Python for execution and the control plane, TypeScript for the UI |
 | `architecture/decisions/workflow-definition-format.md` | Declarative definition format, templates, portability |
@@ -178,10 +174,8 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `architecture/decisions/fencing-and-timers.md` | Fencing the thread by lease generation; timers as a port with a fire endpoint; Temporal tests before a Temporal adapter |
 | `architecture/decisions/database-support.md` | ADR-0017, decided: PostgreSQL and SQL Server 2025 (Azure SQL first in intent), MySQL dropped, and the rule every change follows |
 | `architecture/decisions/template-copy-updates.md` | ADR-0018, proposed: a team's copy of a template takes updates field by field against a stored base, never rewriting a published version |
-| `plan/implementation-plan.md` | Phases, teams, workstreams, stop condition |
 | `console/chat.md` | Chat: the AI Elements blocks behind chat-blocks.tsx, untrusted replies, widget shapes and the registry, x-ops-shape, adding data not components |
 | `console/agents-and-workflows.md` | User guide: what an agent is made of, chatting, agents as workflow steps, workflows as tools, when to use which |
-| `plan/banker-demo.md` | Banker demo stage scripts: the court order notice from the fake mailbox to a held account, and the two agents answering from seeded knowledge bases; before-the-room checks, model switch, failure tables |
 | `deploy/fly.md` | Ops AI on Fly: one app per image in your Fly org, the shared Postgres, creating, deploying, connecting the model, logs, rolling back and the monthly cost |
 | `deploy/database.md` | The database for a DBA: roles and who runs what, the baseline for a fresh install, guarded upgrades between releases, drift, the start check, roll back and the proof |
 | `deploy/kubernetes.md` | Ops AI on Kubernetes: the Kustomize base per service and overlays, probes, per-service Secrets, the migrate Job, an outside PostgreSQL, install, upgrade and the kind proof |
@@ -193,14 +187,18 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `deploy/release.md` | Releasing with gitflow: `release/X.Y.Z` cut from develop, tested on staging, merged into main with a merge commit, tagged and merged back; hotfixes; what each push or tag starts; the checks after; the branch protection to set |
 | `deploy/release-package.md` | The release package a client team installs from: `make release-package`, what it holds, the proof from the tarball alone, the facts that shape it and what pushing the images would need |
 | `deploy/security-scanning.md` | Every security scan (CodeQL, Scorecard, the dependency check, the release image scan), the SBOM, signatures and build provenance on each release, the settings the owner switches on, and how to verify a release |
+| `deploy/upgrade.md` | Upgrade an install to a new release with the script or by hand, how the schema check behaves, and roll back |
+| `deploy/backup-and-restore.md` | Back up and restore the database, the stored files and the keys, with the script or by hand |
+| `deploy/monitoring.md` | Check an install's health, read its logs, what to watch and how it scales |
 | `deploy/install-guide.md` | Generated from `guide/install.md` and `guide/operate.md` and shipped in the release package as INSTALL.md: install with install.sh, then status, logs, upgrade, back up, restore and scaling |
 | `deploy/install.md` | `./install.sh` from a clone: what it asks, what it does, the other commands (upgrade, backup, restore, status, logs, uninstall), what is proven, and the by-hand appendix |
 | `deploy/client-install-guide.html` | The client architecture and install guide as one shareable page, generated from `guide/` by `scripts/docs/build_guide.mjs` |
-| `guide/README.md` | The client guide's index: the twelve sections in order and what each holds |
+| `guide/README.md` | The client guide's index: its sections in order and what each holds |
+| `guide/quickstart.md` | Quickstart: install on one machine with the install script and the test model, sign in with `opsai`, run a first workflow and call it from Python |
 | `guide/overview.md` | What Ops AI does, for whom, the platform map and the ideas it rests on |
 | `guide/system-components.md` | Every container: purpose, port, what it stores and what it calls |
 | `guide/how-work-flows.md` | A chat turn with a tool approval, a workflow with a human task, and a court order notice emailed to a team mailbox |
-| `guide/build-with-ops-ai.md` | Developer landing: the simple-first ladder, the two public bridges, and the Example folders |
+| `guide/build-with-ops-ai.md` | Developer landing: the example folders in order, how agents and workflows call each other, and the same operations on every surface |
 | `guide/workflows.md` | Author, validate, publish and test-run workflows from the Python SDK, TypeScript SDK and `opsai workflows` |
 | `guide/agents.md` | Author, publish and chat with agents from the SDK and `opsai agents` |
 | `guide/examples/README.md` | Examples for builders: who each page is for, how to connect, and how to read the examples |
@@ -217,12 +215,21 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `guide/models.md` | The AI gateway: aliases, keys, budgets, data sensitivity and the test model |
 | `guide/deployment-options.md` | Compose, Kubernetes, single- and multi-tenant, the network and sizing |
 | `guide/install.md` | What to arrange before an install, then the install script's steps, included from `deploy/install.md` |
+| `guide/install-cli.md` | The `opsai` command on its own: install from a clone, behind a company package mirror, or offline from a wheelhouse |
 | `guide/operate.md` | Health, logs, upgrade and roll back, back up and restore, scaling, what to watch, key rotation |
 | `guide/azure-sql.md` | Azure SQL: the scripts ready for review and what is still to come |
-| `guide/apps.md` | Apps: the Apps menu, turning an App on, team and personal Accounts, App credentials and Secrets, Tools, Resources, approvals, a run waiting for a person, turning an App off |
+| `guide/apps.md` | Tools and apps: what an app, a tool and an account are, sandbox and live, reads and writes, where tools come from, who may do what |
+| `guide/apps-setup.md` | Set up an app: its states, turning it on, the first time for a plugin's app, auth configs and secrets, a run waiting for a person, turning it off |
 | `guide/whats-built-today.md` | Built, partial or planned, capability by capability |
+| `guide/knowledge.md` | Knowledge: bases, sources, presets and sync settings, and what is not enforced yet |
+| `guide/human-tasks.md` | Human tasks and approvals: pausing for a person, task types, approval settings and their defaults |
+| `guide/cases.md` | Cases: the record of one piece of work, opened by a workflow or the API, and what a case page shows |
+| `guide/teams-and-access.md` | Teams and access: teams as the data boundary, the built-in roles, the roles grid and its limits |
 | `guide/support.md` | The support contact (placeholder) |
 | `guide/skills/ops-run.md` | Developer skill for Claude Code and GitHub Copilot (ops-run): run the stack on a laptop, in the devcontainer or on a shared VM, on the fake or OpenAI; generated into `.claude/skills/ops-run/SKILL.md` and `.github/prompts/ops-run.prompt.md` by `scripts/agent_skills.py` |
+| `guide/skills/ops-docs-write.md` | Developer skill for Claude Code and GitHub Copilot (ops-docs-write): write a user page for the public docs site to the page pattern; generated into `.claude/skills/ops-docs-write/SKILL.md` and `.github/prompts/ops-docs-write.prompt.md` by `scripts/agent_skills.py` |
+| `guide/skills/ops-docs-review.md` | Developer skill for Claude Code and GitHub Copilot (ops-docs-review): review a docs page as a new developer, operator, bank reviewer, writer and designer; generated into `.claude/skills/ops-docs-review/SKILL.md` and `.github/prompts/ops-docs-review.prompt.md` by `scripts/agent_skills.py` |
+| `guide/skills/ops-docs-edit.md` | Developer skill for Claude Code and GitHub Copilot (ops-docs-edit): apply review findings and tighten a docs page; generated into `.claude/skills/ops-docs-edit/SKILL.md` and `.github/prompts/ops-docs-edit.prompt.md` by `scripts/agent_skills.py` |
 | `guide/skills/ops-sample-team.md` | Developer skill for Claude Code and GitHub Copilot (ops-sample-team): install the sample team and walk the demo; generated into `.claude/skills/ops-sample-team/SKILL.md` and `.github/prompts/ops-sample-team.prompt.md` by `scripts/agent_skills.py` |
 | `guide/skills/ops-tool-module.md` | Developer skill for Claude Code and GitHub Copilot (ops-tool-module): add a tool module, its secret and its host; generated into `.claude/skills/ops-tool-module/SKILL.md` and `.github/prompts/ops-tool-module.prompt.md` by `scripts/agent_skills.py` |
 | `guide/skills/ops-workflow-step.md` | Developer skill for Claude Code and GitHub Copilot (ops-workflow-step): add a workflow step type; generated into `.claude/skills/ops-workflow-step/SKILL.md` and `.github/prompts/ops-workflow-step.prompt.md` by `scripts/agent_skills.py` |
@@ -234,21 +241,18 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `guide/skills/ops-mirror.md` | Developer skill for Claude Code and GitHub Copilot (ops-mirror): work behind a company mirror; generated into `.claude/skills/ops-mirror/SKILL.md` and `.github/prompts/ops-mirror.prompt.md` by `scripts/agent_skills.py` |
 | `guide/skills/ops-commit.md` | Developer skill for Claude Code and GitHub Copilot (ops-commit): pass the commit checks with a What's new entry; generated into `.claude/skills/ops-commit/SKILL.md` and `.github/prompts/ops-commit.prompt.md` by `scripts/agent_skills.py` |
 | `guide/skills/ops-database.md` | Developer skill for Claude Code and GitHub Copilot (ops-database): switch the database; generated into `.claude/skills/ops-database/SKILL.md` and `.github/prompts/ops-database.prompt.md` by `scripts/agent_skills.py` |
-| `guide/vendor-onboarding-plugin.md` | Building a plugin from the vendor-onboarding example in `examples/plugins/`: what is YAML and what is Python, the function's tests, installing it through the public APIs today, and the gaps found |
-| `guide/plugins.md` | Building a plugin: the manifest and request templates, Python tools, knowledge sources, `opsai plugin validate` and `test`, trying it on a local stack against a fake, installing it, turning it on, the platform and team OAuth apps, and per-person sign-in |
+| `guide/plugins.md` | Building a plugin: the manifest and request templates, paging, sign-in steps, settings, Python tools, knowledge sources, `opsai plugin validate` and `test`, and trying it on a local stack against a fake |
+| `guide/plugins-install.md` | Installing a plugin (plugins folder, a built image's pins, a laptop and a box), turning it on for a team, the platform and team OAuth apps, several accounts, package apps and plugin updates |
 | `guide/build-your-first-tool.md` | Build your first tool: a REST Tool on an App, a request with a form body, Mock then Real, to an agent that uses it; Mock and Real compared; what is not built yet |
 | `console/page-plan.md` | Console pages and the rules every page follows |
 | `console/standards.md` | Console UI standard: tokens, layout primitives, compose-from-shadcn, designed states, responsive, one-screen create, and the review checks |
 | `console/ui-qa.md` | UI QA pass: one section at a time in a browser, checking what works, how easy it is and how it looks, with a findings table |
-| `console/channels-preview.md` | The channels design mock at /preview/channels: the gallery, every connection, connect a mailbox as a page and a dialog, the trigger sheet that picks it, and the server routes the real build needs |
 | `console/approved/channels/README.md` | The approved Channels screens, at 1280 and 400 px, which the real pages are built to |
 | `console/approved/human-tasks/README.md` | The approved Human Tasks queue and task screens (layout A), at 1280 and 400 px, which /reviews is built to |
 | `console/proposed/files/README.md` | The file page and Extract screens, at 1280 and 400 px, waiting for approval |
-| `console/proposed/reuse-c266/README.md` | Start run, run and case pages before and after a change, side by side |
 | `console/proposed/tasks/README.md` | The Human Task page beside wireframes A and B of the v2 design, at 1280 and 400 px, waiting for approval |
 | `console/proposed/table-columns/README.md` | The shared data table's columns sized by kind, before beside after for Workflows, Runs, Files and Members at 1280 and 400 px |
 | `console/proposed/run-status/README.md` | Run status from where a run ended and from the runs it started: failed and waiting runs before beside after, and the End step's Counts as, at 1280 and 400 px |
-| `console/settings-tree.md` | The settings tree design mock at /preview/settings: the pages, the patterns, the dialogs with their mother pages, and the field kit |
 | `console/strategy.md` | Console strategy: thin UI over a generated SDK, per-page audit with verdicts, the agentic core slice, chat on the thread calls, what to stop |
 | `console/tools-design.md` | Design of the tool module screens |
 | `console/embedding-the-chat.md` | How a bank embeds the chat: widget deployment, the bank's session endpoint, the script tag, events, errors, security properties and a local test (built and planned parts marked) |
@@ -503,13 +507,15 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/tools-service/an-app-that-fails-says-why.md` | uc-617: An app that fails says why: an expired account, a run waiting for a person's account, an unknown host |
 | `usecases/tools-service/turning-an-app-off-names-its.md` | uc-618: Turning an app off names its users, a leaver loses their accounts, and Replace rotates a key |
 | `usecases/agents-service/a-new-team-s-assistant-answers.md` | uc-619: A new team's assistant answers from its knowledge and files |
+| `packages/README.md` | Index of the shared libraries that have a page |
 | `packages/usecase-runner/overview.md` | Use case runner: modules, verdict, exit codes, tests |
 | `architecture/dependencies.md` | Every third-party Python package in the lock, and each service's, with version, licence, native code and network behaviour (generated by `make sbom`, checked by `make verify`) |
 | `diagrams/README.md` | The architecture diagrams: one YAML data file each, the SVG exported from it for GitHub, and the data format the docs site draws them from |
 | `architecture/make.md` | How make is organised: root orchestration, fragments by concern, the service verb set, env names, ports, one stack per machine and `make review`, the daily commands |
 | `architecture/cloud-boxes.md` | Warm cloud boxes: one Fly Sprite with its own checkout and stack behind one address; the box-up, box-check, box-sleep, box-stop and box-reset commands |
 | `architecture/embedded-chat.md` | Embedded chat for customers: the design, the identity options and the recommendation |
-| `services/agents-service/overview.md` | Agents service: modules, graphs on four calls, settings, proofs, where it differs from the specs |
+| `services/README.md` | The eight services as cards, the sections every service page holds, and the commands that work in every service folder |
+| `services/agents-service/overview.md` | Agents service: what it owns, ports, isolation, secrets, calls and events; how to run it alone; graphs, cases, activity, channels, memory and attachments; where it differs from the specs |
 | `services/agents-service/design.md` | Agents service design for Human Tasks: the flow from pause to decision, the reviews routes with `group=case`, the data they read, the decide sequence |
 | `services/agents-service/chat-streaming.md` | Chat streaming: the SSE events, `replace`, and the audit record of a withdrawn answer |
 | `services/agents-service/experiments/own-checkpointer.md` | E0: own LangGraph checkpointer on asyncpg with tenant row-level security |
@@ -537,7 +543,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `services/platform-service/overview.md` | platform-service: sign-in, sessions, members, invites, API keys and audit; the only token issuer, verified elsewhere through ops_identity |
 | `services/tools-service/design.md` | tools-service design: the flow, the API, the data and the sequences; the console's screens are the Apps menu (guide/apps.md) |
 | `services/documents-service/design.md` | documents-service design: the flow, six screens as wireframes, the API, the data, the sequences, the workflows that use it and the sample documents |
-| `services/tools-service/overview.md` | tools-service: the tool-module registry, calls resolved and validated through it, executors, and the executions log |
+| `services/tools-service/overview.md` | Tools service: what it owns, isolation, secrets, calls and events, its coupling to agents-service code; the registry, egress, accounts, the gateway, executors, catalogue events and the call log |
 | `services/files-service/overview.md` | files-service on :8750: uploads, proxy routes, dedupe, downloads, scan hook, retention and legal holds over local, S3 and Azure Blob stores; its client |
 | `services/files-service/tests.md` | files-service failure modes and the test guarding each |
 | `services/runner-service/overview.md` | runner-service on :8770: code tools' Python on WASM, its walls, `ops.call` back through tools-service |
@@ -550,15 +556,35 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `packages/ops_service_kit/logging.md` | Logging: one JSON line per event on stdout, its fields and ids, what is redacted, the rules and checks |
 | `sdk/python.md` | Python SDK: connect with an API key, run workflows and decide their tasks, the client's resources and errors |
 | `sdk/typescript.md` | TypeScript SDK: the same client for Node, typed from the API reference |
-| `sdk/changelog-next-major.md` | Draft changelog of the coming SDK major version: each changed route and the nouns and commands that follow |
+| `sdk/changelog-next-major.md` | For contributors: the SDK 1.0.0 route-by-route record, each changed route and the code that follows it; its breaking block is generated |
+| `sdk/changelog.md` | SDK 1.0.0 changelog for callers: what changes for every caller, the SDK nouns and CLI commands, and each route's change |
 | `sdk/upgrading.md` | Upgrading to SDK 1.0.0: list paging and the 50-row cap, unknown body fields refused, the error format, each with before and after code |
+| `reference/http-api.md` | HTTP API: the address, sign-in headers, list paging, the error body, and links into each area's generated routes |
+| `reference/cli.md` | The opsai command line: sign-in, the options every command takes, every area and its verbs, exit codes |
+| `reference/mcp.md` | MCP: a team's tools and MCP links for outside assistants, sign-in, test runs, held writes, the install switch |
+| `security/tenancy-and-isolation.md` | Security: how organisations and teams are kept apart in the services and the database, and the limits |
+| `security/identity-and-sign-in.md` | Security: OIDC and SAML sign-in, group rules, company sign-in required, passwords, sessions and step-up |
+| `security/access-approvals-and-audit.md` | Security: roles, which writes wait for a person, approval tokens, publish reviews, and what is recorded |
+| `security/data-handling-and-masking.md` | Security: personal data masked for people by default, where data is stored, retention and its limits |
+| `security/model-calls.md` | Security: every model call through the AI gateway, keys, budgets, clearance, and what the call log keeps |
+| `security/egress-and-connections.md` | Security: the tool gateway, the HTTPS allow-list and new-address policy, connections and credentials |
 | `guide/ops-assistant.md` | The Ops Assistant: checklist, Connect card, Think harder, Save read-back, reused reads, suggestion chips, memories |
 | `guide/whats-new.md` | What's new: every change a person would notice, newest first, built from the changelog |
 | `guide/use-cases/card-disputes.md` | Use case: card disputes, from the request to the approved credit, with SDK code |
 | `guide/use-cases/chat-and-human-tasks.md` | Use case: start the day from the chat home and decide Human Tasks, with SDK code |
-| `plan/implementation-plan.md` |
-| `plan/ai-gateway-console.md` | AI gateway console feature: prior art, placement under Govern, pages, contract, open questions (plan only) |
-| `plan/agent-completions-through-models-service.md` | Agent turns on their own alias through models-service: what exists, what changes, uc-028, decisions, slices (research note) |
+| `guide/use-cases/answer-from-documents.md` | Use case: put a manual into a knowledge base and get cited answers, in the console, CLI and SDK |
+| `guide/use-cases/approve-a-write.md` | Use case: make an app's writes wait for the person in the chat or a reviewer; the settings and the rules that always hold |
+| `guide/use-cases/connect-an-app.md` | Use case: turn Salesforce on, give its tools to an agent, and work a case in chat |
+| `guide/integrations/overview.md` | Integrations: the apps Ops AI ships with and the sign-in kinds |
+| `guide/integrations/salesforce.md` | Salesforce: turn it on, what it brings, settings, permissions asked, sign-in errors, limits |
+| `guide/integrations/github.md` | GitHub: turn it on, what it brings, settings, permissions asked, sign-in errors, limits |
+| `guide/integrations/sharepoint.md` | SharePoint and OneDrive: turn it on, what it brings, settings, permissions asked, sign-in errors, limits |
+| `guide/integrations/confluence.md` | Confluence: turn it on, what it brings, settings, permissions asked, sign-in errors, limits |
+| `guide/integrations/website.md` | Website: turn it on, what it brings, settings, permissions asked, sign-in errors, limits |
+| `guide/integrations/sign-in-oauth.md` | Sign in with OAuth: team or personal sign-in, your own OAuth app |
+| `guide/integrations/sign-in-keys.md` | Sign in with an API key, username and password, or bearer token; each person's own key |
+| `guide/integrations/sign-in-certificates.md` | Sign in with a certificate: signed assertion, signed service account, mutual TLS |
+| `guide/integrations/build-a-plugin.md` | Build a plugin: a four-file example, validate, test, install |
 
 File names are topics. Specs keep their number (01–17; 05 and 06 unused) and decision records their ADR id in the
 title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.

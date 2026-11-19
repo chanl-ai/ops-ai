@@ -1,15 +1,30 @@
 # Security scanning and signed releases
 
-Status: current. Each row names the workflow that runs the check; the badges show its latest result on the main branch.
+Status: current. Each check runs in the repository's public workflows; the badges show the latest result on the main
+branch.
 
-Every change to Ops AI is scanned for vulnerable code and dependencies before it merges, and every release ships with
-a list of what is inside it, a scan that stops a release with a fixable critical flaw, a signature and a record of
-how it was built. A security team can check each of these for itself with the commands on this page.
+Check for yourself that the Ops AI images you run are the ones the project built, and see what every change and release
+is scanned for. Every change is scanned for vulnerable code and dependencies before it merges, and every release ships
+with a list of what is inside it, a scan that stops a release with a fixable critical flaw, a signature and a record of
+how it was built.
 
 [![CodeQL](https://github.com/chanl-ai/ops-ai/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/chanl-ai/ops-ai/actions/workflows/codeql.yml)
 [![Dependency check](https://github.com/chanl-ai/ops-ai/actions/workflows/dependency-check.yml/badge.svg?branch=main)](https://github.com/chanl-ai/ops-ai/actions/workflows/dependency-check.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/chanl-ai/ops-ai/badge)](https://scorecard.dev/viewer/?uri=github.com/chanl-ai/ops-ai)
 [![Leak scan](https://github.com/chanl-ai/ops-ai/actions/workflows/leak-scan.yml/badge.svg)](https://github.com/chanl-ai/ops-ai/actions/workflows/leak-scan.yml)
+
+## Verify a release
+
+Replace `<version>` with the release number, for example `1.0.0`, and `<image>` with one of platform, agents, tools,
+models, kb, files, documents, runner, opa, proxy, console or db-scripts.
+
+| Check | Command |
+|---|---|
+| The image is signed by this repository's release workflow | `cosign verify --certificate-identity-regexp '^https://github.com/chanl-ai/ops-ai/.github/workflows/release-images.yml@' --certificate-oidc-issuer https://token.actions.githubusercontent.com ghcr.io/chanl-ai/ops-ai/<image>:<version>` |
+| The image was built by this repository's workflow | `gh attestation verify oci://ghcr.io/chanl-ai/ops-ai/<image>:<version> --repo chanl-ai/ops-ai` |
+| Its contents | Download `ops-ai-<image>-<version>.cdx.json` from the release; any CycloneDX tool reads it, for example `trivy sbom ops-ai-<image>-<version>.cdx.json` or Sonatype Nexus Lifecycle |
+| An SDK file is signed | `cosign verify-blob --bundle <file>.sigstore.json --certificate-identity-regexp '^https://github.com/chanl-ai/ops-ai/.github/workflows/sdk-publish.yml@' --certificate-oidc-issuer https://token.actions.githubusercontent.com <file>` |
+| An SDK file was built here | `gh attestation verify <file> --repo chanl-ai/ops-ai` |
 
 ## The checks
 
@@ -29,42 +44,14 @@ Every action in these workflows is pinned to a full commit SHA, and each workflo
 names the one permission it needs. Trivy is installed as a release binary checked against a fixed SHA-256, because
 the release tags of its GitHub Actions were rewritten to malicious commits in March 2026 (GHSA-69fq-xp46-6x23).
 
-## Switched on in the repository settings
+## Limits
 
-These are settings, not files, and the repository owner turns them on.
-
-| Setting | Status |
-|---|---|
-| Dependabot alerts and security updates | **unverified**: owner to switch on |
-| Secret scanning with push protection | **unverified**: owner to switch on |
-| Private vulnerability reporting (used by `SECURITY.md`) | **unverified**: owner to switch on |
-| Sonatype OSS Index account: secrets `OSSINDEX_USER` (the account's email) and `OSSINDEX_TOKEN` | **unverified**: without them the dependency check runs on OSV only and says so in its log |
-| Snyk open source and container monitoring | Not set up; needs an account linked to the organisation |
-
-## Verify a release yourself
-
-Replace `<version>` with the release number, for example `0.1.0`, and `<image>` with one of platform, agents, tools,
-models, kb, files, documents, runner, opa, proxy, console or db-scripts.
-
-| Check | Command |
-|---|---|
-| The image is signed by this repository's release workflow | `cosign verify --certificate-identity-regexp '^https://github.com/chanl-ai/ops-ai/.github/workflows/release-images.yml@' --certificate-oidc-issuer https://token.actions.githubusercontent.com ghcr.io/chanl-ai/ops-ai/<image>:<version>` |
-| The image was built by this repository's workflow | `gh attestation verify oci://ghcr.io/chanl-ai/ops-ai/<image>:<version> --repo chanl-ai/ops-ai` |
-| Its contents | Download `ops-ai-<image>-<version>.cdx.json` from the release; any CycloneDX tool reads it, for example `trivy sbom ops-ai-<image>-<version>.cdx.json` or Sonatype Nexus Lifecycle |
-| An SDK file is signed | `cosign verify-blob --bundle <file>.sigstore.json --certificate-identity-regexp '^https://github.com/chanl-ai/ops-ai/.github/workflows/sdk-publish.yml@' --certificate-oidc-issuer https://token.actions.githubusercontent.com <file>` |
-| An SDK file was built here | `gh attestation verify <file> --repo chanl-ai/ops-ai` |
-
-The image SBOM and scan cover the linux/amd64 image; the linux/arm64 image is built from the same commit and
-Dockerfile. The scan runs after the push, so a release that fails it has images in the registry that carry no
-signature: verifying them fails, which is the signal not to deploy them.
-
-## Run the checks locally
-
-| Check | Command |
-|---|---|
-| Dependency check | `python3 scripts/deps_audit.py vulns` (needs Docker or `osv-scanner`; set `OSSINDEX_USER` and `OSSINDEX_TOKEN` for OSS Index) |
-| Its tests | `uv run pytest -q scripts/tests/test_deps_audit.py` |
-| Release steps without publishing | Run the release-images workflow by hand with `proof` set: it builds for linux/amd64, pushes to a registry inside the runner, and runs the SBOM, scan, signing and provenance steps |
+- The image SBOM and scan cover the linux/amd64 image; the linux/arm64 image is built from the same commit.
+- A release that fails its scan still has images in the registry, unsigned. Verifying them fails, which is the signal
+  not to deploy them.
+- Dependabot alerts, secret scanning with push protection and private vulnerability reporting are repository settings
+  the owner turns on; their state is not shown here. Without an OSS Index account the dependency check uses OSV only
+  and says so in its log.
 
 ## Sources
 

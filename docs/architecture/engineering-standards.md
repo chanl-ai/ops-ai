@@ -4,7 +4,7 @@ Status: target state. Every rule is the bar code must meet; code that misses one
 cites the rule id. This page is the index: the rules themselves, each with the reason, a real example from this
 repository of code that breaks it, the pattern to follow (also from this repository) and the check that enforces it,
 live on the pages under [standards/](standards/). What the system does is decided by the rest of this folder
-([overview](overview.md), [service map](service-map.md), [data](data.md), [identity and tenancy](identity-and-tenancy.md),
+([architecture](README.md), [service map](service-map.md), [data](data.md), [identity and tenancy](identity-and-tenancy.md),
 [roles and permissions](roles-and-permissions.md), [logging and data writes](logging-and-data-writes.md), the
 [decision records](decisions/)); where a standards page and one of those disagree, that page wins and the standard is
 corrected.

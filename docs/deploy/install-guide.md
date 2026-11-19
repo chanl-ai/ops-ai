@@ -9,12 +9,13 @@ Status: current. How to install, run and maintain Ops AI on your own machines. T
 <!-- The steps below are included from docs/deploy/install.md, the install script's guide, when the page and
 INSTALL.md are built; edit them there. -->
 
-One script installs Ops AI on a machine with Docker from a clone of the repository, asks a few questions, checks the
-result, and later upgrades, backs up, restores and reports on the same install ([Operate](#operate)). It pulls the
-published images by default; a release's offline image file, or a build from source, serves a machine with no
-registry access.
+Install Ops AI for a team on your own infrastructure. On one machine, the install script does every step and checks the
+result; on a cluster, or when you run each step yourself, the same images start from Compose or Kubernetes files.
+Version 1.0.0 is the current release, and its images are published at `ghcr.io/chanl-ai/ops-ai`.
 
-The published images are at `ghcr.io/chanl-ai/ops-ai`.
+> [!NOTE]
+> To try Ops AI on a laptop rather than install it for a team, use the [Quickstart](https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/quickstart.md): it runs from a
+> clone with a test model and a sample team.
 
 ### Before you start
 
@@ -30,17 +31,16 @@ The published images are at `ghcr.io/chanl-ai/ops-ai`.
 ### Install
 
 ```bash
-git clone https://github.com/chanl-ai/ops-ai.git
+git clone --branch v1.0.0 https://github.com/chanl-ai/ops-ai.git
 cd ops-ai
 ./install.sh
 ```
 
-The host needs Docker 24 or newer, Docker Compose 2.22 or newer, curl, tar, 4 GB of memory for containers and 15 GB
-of free disk. Python is not needed: the steps that use it run inside the images. The preflight names anything missing
-and stops.
+The script installs the version of the tag you cloned. The machine needs Docker Engine 24 or newer, Docker Compose
+2.22 or newer, curl, tar, 4 GB of memory for the containers and 15 GB of free disk; Python is not needed. A preflight
+names anything missing and stops before it changes anything.
 
-It asks these questions. Each has a default, a flag, and a key for an answers file (`--answers <file>`, one
-`KEY=value` per line), so CI can run it unattended with `--yes`.
+It asks these questions. Each has a default, a flag, and a key for an answers file.
 
 | Question | Default | Flag | Answers key |
 |---|---|---|---|
@@ -49,462 +49,276 @@ It asks these questions. Each has a default, a flag, and a key for an answers fi
 | Compose project name | `ops-ai` | `--project` | `PROJECT` |
 | Organisation name | My organisation | `--org` | `ORG_NAME` |
 | First admin's email and name | `admin@example.com`, First Admin | `--admin-email`, `--admin-name` | `ADMIN_EMAIL`, `ADMIN_NAME` |
-| First admin's password (12+ characters) | generated, kept in `ops-ai.env` | `--admin-password-file` | `ADMIN_PASSWORD` |
-| Database | `builtin`: a PostgreSQL 17 container with pgvector, for a trial | `--database builtin` or `--database postgresql://user:pass@host:5432/db` | `DATABASE` |
-| Database mode (own PostgreSQL only) | `auto`: the migrate job applies the schema with the given login | `--db-mode auto` or `--db-mode dba` | `DB_MODE` |
-| Model | `test`: the built-in test model | `--model test` or `--model <OpenAI-compatible base URL>/v1` with `--model-name` and `--model-key-file` | `MODEL`, `MODEL_NAME`, `MODEL_API_KEY` |
-| Image version | the checkout's version tag, else `deploy/release/version` | `--version` | `VERSION` |
+| First admin's password, 12 characters or more | Generated and kept in `ops-ai.env` | `--admin-password-file` | `ADMIN_PASSWORD` |
+| Database | `builtin`: a PostgreSQL 17 container, for a trial | `--database builtin` or `--database postgresql://user:pass@host:5432/db` | `DATABASE` |
+| Who applies the schema (your own PostgreSQL only) | `auto`: the install applies it with the login you gave | `--db-mode auto` or `--db-mode dba` | `DB_MODE` |
+| Model | `test`: the built-in test model, which calls no provider | `--model <OpenAI-compatible base URL>/v1` with `--model-name` and `--model-key-file` | `MODEL`, `MODEL_NAME`, `MODEL_API_KEY` |
+| Image version | The tag you cloned | `--version` | `VERSION` |
 
-What it does, in order:
+To run it unattended, put the answers in a file, one `KEY=value` per line, and add `--yes`. Flags win over the file.
 
-1. Pulls `ghcr.io/chanl-ai/ops-ai/<image>:<version>` (linux/amd64 and linux/arm64). `--build` builds them from the
-   checkout's HEAD instead; `--offline <images.tar.gz>` loads a release package's image file.
-2. Writes `ops-ai.env` (mode 600) from `deploy/compose/app.env.example` and generates every key with the platform
-   image's `generate_keys.py`. No secret is printed.
-3. In `dba` mode, copies the release's PostgreSQL scripts to `./dba/postgres` (from the `db-scripts` image), writes
-   `./dba/1-server.sql` with each service login's password, prints three `psql` commands for the DBA, waits, and checks
-   each service's schema version before going on. The DBA runs them as the server admin; the schema is owned by
-   `ops_migrator`, and no container gets a login that may change it.
-4. Starts the database, migrations and services, connects the model, then starts the agents, worker, console and proxy,
-   waiting for every health check. A provider key is saved as the account's model provider key `MODEL_PROVIDER_KEY`
-   through models-service's API, never in `ops-ai.env`; models-service reads it by that name.
-5. Runs the check: health through the published port, the console's sign-in page, a sign-in as the first admin, one
-   read from every service through the proxy, and agents' health (a model is connected). Then it prints the URL and
-   how to sign in.
+```bash
+./install.sh --answers install-answers.env --yes
+```
 
-Running `./install.sh` again on a working install checks it, says "nothing changed" and changes nothing. On an install
-that is not running, it reuses `ops-ai.env` and its keys and starts it. It never makes new keys over existing ones:
-`OPS_SECRETS_KEY` unlocks the stored credentials.
+When it finishes it prints the address and how to sign in as the first admin.
+
+### What it does
+
+<!-- site: steps -->
+1. **Gets the images** for linux/amd64 or linux/arm64 from `ghcr.io/chanl-ai/ops-ai`. `--offline <images.tar.gz>`
+   loads them from a [release package](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/release-package.md) instead, for a machine with no registry access.
+2. **Writes the settings file** `ops-ai.env`, readable only by its owner, and generates every key into it. No secret is
+   printed.
+3. **Waits for your DBA** in `dba` mode: it writes the database scripts and each login's password to `./dba/`, prints
+   the three `psql` commands to run, and checks the schema before it goes on ([Database](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/database.md)).
+4. **Starts everything** and waits for each health check. A model key you give is stored in Ops AI's credential
+   store, never in `ops-ai.env`.
+5. **Checks the install**: health through the published port, the sign-in page, a sign-in as the first admin, and one
+   read from every service.
+
+Running `./install.sh` again on a working install checks it and changes nothing. It never replaces existing keys,
+because the secrets key in `ops-ai.env` unlocks every stored credential.
 
 ### The other commands
 
+Run them from the folder the install ran in.
+
 | Command | What it does |
 |---|---|
-| `./install.sh status` | Version, image source, database and model; each container's state; the check |
+| `./install.sh status` | Version, image source, database and model, each container's state, then the check |
 | `./install.sh logs [service]` | The last 200 lines, followed on a terminal |
-| `./install.sh backup [--out DIR]` | One `.tar.gz` in `./backups/` (mode 600): a `pg_dump` of the database, the files and knowledge volumes, and `ops-ai.env` |
-| `./install.sh restore <file>` | Stops the services, recreates the database from the dump, puts the volumes back, starts and checks. Refuses a backup made with another `OPS_SECRETS_KEY` |
-| `./install.sh upgrade [--version V]` | At the same version: checks and changes nothing. Otherwise: backs up, gets the new images, applies the schema (auto) or writes `./dba/upgrade-<from>-to-<to>/` for the DBA and waits, restarts, checks, and on a failed check restores the backup on the old version |
-| `./install.sh uninstall` | Asks, then removes the containers; asks again before deleting the volumes. Keeps `ops-ai.env` |
+| `./install.sh backup [--out DIR]` | One archive of the database, the stored files and `ops-ai.env` ([Back up and restore](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/backup-and-restore.md)) |
+| `./install.sh restore <file>` | Puts a backup back and checks ([Back up and restore](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/backup-and-restore.md)) |
+| `./install.sh upgrade [--version V]` | Backs up, moves to version V, checks, and rolls back on a failed check ([Upgrade](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/upgrade.md)) |
+| `./install.sh uninstall` | Asks, then removes the containers; asks again before deleting the data. Keeps `ops-ai.env` |
 
-In `dba` mode, `backup`, `restore` and `upgrade` need an admin login that may dump the database, given as a file:
-`--admin-url-file <file holding postgresql://admin:password@host:5432/db>`. A runtime login cannot dump it (row-level
-security); without the file the script stops and says to ask the DBA.
+In `dba` mode, `backup`, `restore` and `upgrade` need a database admin login that may dump the database, in a file:
+`--admin-url-file <file>` holding `postgresql://admin:password@host:5432/db`. The services' own logins cannot dump it.
 
-### Feature flags
+### Turn on a feature flag
 
-A feature that is not yet fully released ships behind a flag, off until the install turns it on. There is no admin
-screen: `OPS_FLAGS` in `ops-ai.env` names the flags that are on, separated by commas, and every service reads it at
-start. Change it, then restart the services (`./install.sh` on a running install applies a changed `ops-ai.env`).
+A feature that is not yet released to every install ships behind a flag and is off. To turn one on, list it in
+`ops-ai.env` and run `./install.sh` again to apply the change.
 
 ```bash
-OPS_FLAGS=mcp_gateway
+OPS_FLAGS=mcp_gateway,tool_search
 ```
 
 | Flag | Turns on |
 |---|---|
-| `mcp_gateway` | The address outside assistants (Claude, Cursor, Copilot) use to reach a team's tools, `/mcp/{env}/{team}`, and the console's MCP channel. Off, `/mcp` answers 404 `feature_off` |
-| `tool_search` | Agents with more tools than `OPS_TOOL_SEARCH_ABOVE` search for the one they need |
-| `area_tabs` | The console's area tabs in the top bar, with the sidebar listing one area at a time. Off, one sidebar lists every area as a section |
+| `mcp_gateway` | The MCP address outside assistants (Claude, Cursor, Copilot) use to reach a team's tools, and the console's MCP channel |
+| `tool_search` | Agents with many tools search for the one they need |
+| `plugin_updates` | Each team keeps the plugin version it took and reviews an upgrade before its tools change |
+| `area_tabs` | The console shows one area at a time, picked from the top bar |
 
-The list above is a copy for reading; the registry is `packages/ops_service_kit/src/ops_service_kit/flags.py`, and
-`docker compose`, the Kubernetes overlay (`ops-origin`) and Fly (`[env]`) each pass `OPS_FLAGS` to every service. A name
-the registry does not hold stops every service at start with "unknown flag … in OPS_FLAGS; known flags: …", so a typo
-never reads as off. The console reads the flags from platform-service's `GET /v1/me` and hides a feature whose flag is
-off.
+A name Ops AI does not know stops every service at start with the list of known flags, so a typo never reads as off.
 
-For developers:
+### Set the embedding model
 
-| Step | What to do |
+Knowledge search by meaning uses one embedding model per install, set in `ops-ai.env`.
+
+| Setting | Default | What it does |
+|---|---|---|
+| `OPS_EMBEDDING_ALIAS` | `bank-embed` | The model alias of kind embedding; bind it to your provider's embedding model the way [Connect a model](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/compose.md#connect-a-model) binds a chat model |
+| `OPS_EMBEDDING_WIDTH` | `1536` | The vector width. Above 1,998 every service refuses to start, since no vector index holds it |
+
+Changing either one embeds the stored knowledge again; no source is read again. Without an embedding model, search runs
+on keywords alone and says so in each result. Your own PostgreSQL needs the `vector` extension (pgvector 0.5 or newer)
+offered; the built-in database has it.
+
+### Install from a company registry
+
+When the machine reaches only your own registry, mirror the images there and point the script at it:
+
+| Setting | What it moves | Default |
+|---|---|---|
+| `OPS_IMAGE_REGISTRY`, in the shell that runs the script | Where the Ops AI images are pulled from | `ghcr.io/chanl-ai/ops-ai` |
+| `OPS_BASE_IMAGE_PREFIX`, in `ops-ai.env` | A registry prefix ending in `/` for third-party images, such as PostgreSQL and the policy engine | Docker Hub |
+
+A machine with no registry at all uses `--offline` with a release package's image file.
+
+### Limits
+
+- Proven on Docker Desktop for macOS; a run on a Linux server is not yet recorded.
+- An upgrade across two releases that change the schema has not run yet: 1.0.0 is the first release.
+
+### Other ways to install
+
+| Way | Use it when |
 |---|---|
-| Add a flag | One entry in `FLAGS` and its name in `FlagName` (`flags.py`): name, a one-line description, and when to remove it. `packages/ops_service_kit/tests/test_flags.py` fails an entry with no description or removal note. Regenerate `services/platform-service/openapi.json` and run `make sdk`, so the console's types carry the name |
-| Read it in a service | `settings.feature_flags.on("<name>")`; a name the registry does not hold raises |
-| Read it in the console | `useFlag('<name>')`, or `flag: '<name>'` on a list entry filtered by `useFlagged` (`apps/console/src/hooks/flag-queries.ts`); both are off while the answer loads |
-| Remove it | The release that fully ships the feature deletes the entry, every check that reads it and this table's row, so an install never sets a flag to get a shipped feature |
+| [Docker Compose by hand](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/compose.md) | You run each step yourself on one machine |
+| [Kubernetes](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/kubernetes.md) | Your platform team runs a cluster |
+| [Release package](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/release-package.md) | The machines have no internet access |
 
-### Embedding model
+### The command line on its own
 
-Knowledge search by meaning embeds every piece with one model per environment, set in `ops-ai.env` for every service:
-
-| Setting | Default | Notes |
-|---|---|---|
-| `OPS_EMBEDDING_ALIAS` | `bank-embed` | A models-service alias of kind `embedding`; bind it to the provider's model with the connect-model command |
-| `OPS_EMBEDDING_WIDTH` | `1536` | The width vectors are asked at. Above 1,998 every service stops at start, since no vector index on PostgreSQL or Azure SQL holds it; OpenAI's `text-embedding-3-large` is asked at 1,998 or fewer |
-
-Changing either embeds every piece again from what is stored; no file or page is read again. kb-service embeds with
-its own models-service key, `OPS_MODELS_KEY_KB` (issue it with the connect-model command's `--key-id purpose:kb`);
-without it every search runs on keywords and each result names the meaning lane as skipped (`no_embedding_model`).
-
-Meaning search stores each piece's vector in PostgreSQL with pgvector (`vector` 0.5 or newer, for its HNSW index).
-`builtin`, compose and CI run `pgvector/pgvector:pg17`. A database of your own needs the extension offered
-(`SELECT * FROM pg_available_extensions WHERE name = 'vector'`; Azure Database for PostgreSQL lists it under
-`azure.extensions`); the knowledge chain creates it, and a migration on a server without it stops with PostgreSQL's
-error naming the extension. A local stack started on the older `postgres:17-alpine` image
-moves with `make db-move-image`, which dumps every database, starts the new image on a new volume and restores.
-
-### What is proven and what is not
-
-| Claim | Evidence |
-|---|---|
-| Clone to signed in, images pulled from GHCR | `install_proof.sh` steps 1 to 3, run with `SIGNED_IN=1` (a registry login) while the packages are internal; the anonymous run waits for them to be public (**unverified**) |
-| Every console page loads | `docs/usecases/lib/stg_click_walk.mjs`, steps 4 and 7 |
-| A rerun and a same-version upgrade change nothing | steps 5 and 6: `ops-ai.env` checksum and container ids unchanged |
-| Backup and restore | step 7: a table and a file made after the backup are gone after the restore |
-| A failed upgrade rolls back | step 8b: a release whose console exits; exit 1, back on the old version, status passes |
-| DBA mode, provider key through Settings > Model providers | step 9: PostgreSQL 17 with TLS and an admin that is not a superuser; the three printed commands; backup and restore with `--admin-url-file` |
-| An upgrade across two releases that changes the schema | **unverified**: 0.1.0 is the first release. The auto path is the migrate job `compose.md` already proves; the DBA path renders Alembic's offline SQL from the recorded revisions (`deploy/install/install_api.py`) |
-| A Linux server | **unverified**: the proof ran on Docker Desktop for macOS |
-
-Images and the version: `deploy/release/version` names the version a checkout installs. A version tag `v<version>`
-runs `.github/workflows/release-images.yml`, which builds every image for both platforms with
-`deploy/release/images.sh` and pushes `<version>` and `latest`. The same script builds the release package's images
-(`release-package.md`) and `--build`.
-
-### Behind a company mirror
-
-A company that serves packages from its own mirror (Sonatype Nexus, Artifactory or similar) can build and install Ops AI
-without a download from the open internet. Every download in this repository goes through one setting below; a setting
-left empty keeps the public address. Every locked version is at least 30 days old, which is the age most mirrors
-require, with two named exceptions in `pnpm-workspace.yaml` until 2026-10-30 (streamdown 2.7.0 and remend 1.4.0).
-
-| Setting | What it moves | Where it is read |
-|---|---|---|
-| `UV_DEFAULT_INDEX` | Python packages: the PyPI "simple" index of the mirror, ending in `/simple` | uv; `scripts/install_via_mirror.sh`; Docker build argument of the same name |
-| `NPM_CONFIG_REGISTRY` | npm packages, including the console's fonts (they are npm packages, not a Google Fonts fetch) | pnpm; Docker build argument of the same name |
-| `COREPACK_NPM_REGISTRY` | the pnpm release `package.json` names, which corepack downloads | corepack; Docker build argument of the same name |
-| `UV_PYTHON_DOWNLOADS` | uv never fetches a Python by itself (`python-downloads = "manual"` in `pyproject.toml`); use the image's or the system's Python 3.12 | uv |
-| `UV_PYTHON_INSTALL_MIRROR` | an explicit `uv python install 3.12`, used only by the Dockerfile's database-scripts stage | Docker build argument |
-| `OPS_RUNNER_WASM_URL` | the 26 MB CPython-for-WASI file the code-tools runner needs; its SHA-256 is still checked | `python -m ops_runner.fetch`; Docker build argument |
-| `PLAYWRIGHT_DOWNLOAD_HOST` | browser downloads for `playwright install`; only the UI use-case tests need a browser, so it is optional (`PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` skips it) | Playwright |
-| `OPS_BASE_IMAGE_PREFIX` | a registry prefix ending in `/` for every third-party image: PostgreSQL, OPA, the mail test servers, and the Dockerfile's base images (`IMAGE_REGISTRY` build argument) | `deploy/compose/*.yaml`, `deploy/compose/build.yaml`, `deploy/fly/Dockerfile` |
-| `OPS_IMAGE_REGISTRY` | where `install.sh` pulls the Ops AI release images, when they are mirrored (default `ghcr.io/chanl-ai/ops-ai`) | `install.sh` |
-| `APT_MIRROR`, `APK_MIRROR` | Debian and Alpine package sources used while building images | Docker build arguments |
-| `TIKTOKEN_CACHE_DIR` | not a mirror setting: tiktoken downloads its encoding file on first use from a public blob store; vendor the file and point this at it (`docs/architecture/dependencies.md`) | tiktoken, at run time |
-
-The Compose build passes each setting through (`deploy/compose/build.yaml`); a plain `docker build` takes them as
-`--build-arg`. A URL with a user name and password is visible in `docker history` of the build stage that uses it, so
-give the build an anonymous read-only repository.
-
-#### Developer workspaces
-
-The devcontainer (`.devcontainer/`) and the shared-host template (`deploy/devhost/`) take the same settings. In a
-devcontainer, set them in the shell that opens it or in `.devcontainer/.env.local`; the compose file passes them to the
-image build and to the workspace, where `make install` reads the mirror whenever `UV_DEFAULT_INDEX` is set. On the shared
-host, push the template with `--variable 'mirror_settings={...}'` and `--variable base_image_prefix=...`
-(`deploy/devhost/README.md`). Node comes from the Node image, not from nodejs.org, and the devcontainer's Node feature
-(a download from GitHub's registry) is gone.
-
-#### Installing the locked versions through the mirror
-
-`uv sync --frozen` downloads each file from the address `uv.lock` records (`files.pythonhosted.org`), which a mirror does
-not serve. `make install-mirror` reads only the versions and hashes from the lock and fetches the files from
-`UV_DEFAULT_INDEX`, rejecting any file that is not the locked one; pnpm already reads its registry from
-`NPM_CONFIG_REGISTRY`. It sets `UV_NO_CONFIG`, because `exclude-newer` in `pyproject.toml` needs upload times and a
-mirror whose index sends none (Nexus's PyPI proxy is one) then offers no version of anything.
-
-```
-export UV_DEFAULT_INDEX=https://nexus.example.com/repository/pypi-proxy/simple
-export NPM_CONFIG_REGISTRY=https://nexus.example.com/repository/npm-proxy/
-export COREPACK_NPM_REGISTRY=$NPM_CONFIG_REGISTRY
-make deps-doctor           # which locked versions the mirror does not serve
-make deps-relock MIRROR=1  # only when it named some: lock inside what it does serve, then run fast tests
-make install-mirror
-```
-
-`make deps-doctor` asks the mirror for every locked package and prints the package, the locked version, the HTTP status
-of that version's file and the newest version the mirror serves, for the packages it does not serve. Credentials in a
-registry URL are masked in all output. It exits 1 when any package is blocked and writes `.mirror/constraints.txt` and
-`.mirror/npm-overrides.json`. `make deps-relock MIRROR=1` locks every package to its locked version except those, then
-installs and runs the fast tests (`scripts/deps_smoke.sh`). Its `uv.lock` and `pnpm-workspace.yaml` are for that
-machine: they name the mirror's file URLs, so do not commit them.
-
-| Check | Evidence |
-|---|---|
-| A clean install of both lockfiles through Nexus, on a network that reaches only Nexus, then 180 fast tests | `make qa-mirror` (`deploy/mirror-test/`), a nightly lane of the QA runner |
-| Every locked version is at least 30 days old | `scripts/deps_audit.py age`, in the lane: Nexus's free edition has no age rule, so the lane enforces it |
-| No critical advisory (CVSS 9.0 or higher) and no AGPL or GPL licence outside `deploy/mirror-test/audit-baseline.txt` | `scripts/deps_audit.py vulns` (osv-scanner; Sonatype OSS Index too when `OSSINDEX_TOKEN` and `OSSINDEX_USER` are set) and `licenses` |
-| `deps-doctor` names a package the mirror blocks, and the relock succeeds | Run by hand on 2026-10-27 against the lane's Nexus with six 1.17.0 blocked by a routing rule (`deploy/mirror-test/nexus.sh block`): the doctor named it (403, newest served 1.16.0), the relock moved six to 1.16.0, the install and 180 tests passed. Not part of the nightly lane |
-| A mirror that is not Nexus | **unverified**: the proof runs the current sonatype/nexus3 only |
-
-### By hand
-
-Every step the script runs can also be run by hand: the Compose files and settings in
-[Ops AI on Docker Compose](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/compose.md), the DBA's scripts in
-[The database](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/database.md), and a Kubernetes install in [Ops AI on Kubernetes](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/kubernetes.md).
-
-### Install behind a company mirror or offline
-
-The `opsai` command line (package `ops-ai`, `sdk/python`) needs Python 3.11 or newer and two packages, `httpx` and
-`typing-extensions`, plus their small dependencies. It does not need the repository's developer workspace, so it does
-not need the packages `make install` pulls in for contributors (`datamodel-code-generator`, `pyright`, `moto` and
-others), some of which a mirror may not serve. `make install` is for contributors who run the services and the full
-test suite; to use the command, run `make install-cli`.
-
-```
-make install-cli          # uv tool install ./sdk/python, or pip install --user when uv is missing
-opsai --help                # prints "usage: ops [-h] area ..."
-```
-
-`make chat` and the other targets in `make/cli.mk` run the `ops` on your PATH, then `.venv/bin/ops` when the workspace
-is installed. When neither exists they print `make: the opsai command is not installed; run 'make install-cli' ...` and
-stop; they never sync the workspace.
-
-The command is called `opsai`. `ops` is a common name, so the package keeps an `ops` command for one release only,
-and it prints a note that `opsai` is the name. `make install-cli` installs `ops` only when no other tool called `ops` is
-on PATH, and prints which it did.
-
-#### Sonatype Nexus
-
-Create or choose a PyPI group or proxy repository. Its index is
-`https://<nexus-host>/repository/<repo-name>/simple/` (the trailing `/simple/` matters; the repository's own address
-is not an index). Set it for the installer you use. `make install-cli` reads either set of names and translates the pip
-names for uv, so one set is enough.
-
-| Setting | For | Notes |
-|---|---|---|
-| `UV_DEFAULT_INDEX` (or `UV_INDEX_URL`) | uv | The index replaces PyPI |
-| `PIP_INDEX_URL` | pip, and uv when no `UV_*` index is set | `PIP_EXTRA_INDEX_URL` adds a second index |
-| `PIP_TRUSTED_HOST` / `UV_INSECURE_HOST` | a host without valid TLS | Prefer a CA bundle below |
-| `SSL_CERT_FILE` (also `PIP_CERT`) | a company CA certificate, PEM file | `UV_NATIVE_TLS=1` makes uv use the operating system's certificate store instead |
-
-```
-export UV_DEFAULT_INDEX=https://nexus.example.com/repository/pypi-group/simple/
-export SSL_CERT_FILE=/etc/ssl/company-ca.pem
-make install-cli
-opsai --help
-```
-
-The installer runs uv from outside the repository, so the repository's `[tool.uv]` settings are not read (its
-`exclude-newer` needs upload times, which Nexus's PyPI proxy does not send, so every version would look too new). Your
-own `uv.toml` (index, credentials, certificates) is read.
-
-Credentials stay out of URLs in shared files, because a URL with a password appears in logs, `ps` and shell history.
-Use one of:
-
-- uv: name the index and give the credentials in the environment, with the name in capitals:
-  `UV_DEFAULT_INDEX=nexus=https://nexus.example.com/repository/pypi-group/simple/`,
-  `UV_INDEX_NEXUS_USERNAME=<user>`, `UV_INDEX_NEXUS_PASSWORD=<password or token>`.
-- A `~/.netrc` file (`machine nexus.example.com login <user> password <token>`, mode 600), which uv and pip both read.
-- pip: `pip install keyring` and store the password there (`keyring set https://nexus.example.com <user>`), then
-  `pip` asks keyring for it.
-
-#### What the Nexus admin may need to allow
-
-If Nexus Firewall or an IQ policy blocks packages, `make install-cli` needs exactly these, at any version that meets the
-range. The versions in the second column are the newest at the time of writing and the ones the offline proof ran with;
-a version a policy holds back for being new can be replaced by an older one, down to the range's lower bound.
-
-| Package | Version range the CLI accepts | Newest tested |
-|---|---|---|
-| httpx | 0.27 up to, not including, 1.0 | 0.28.1 |
-| typing-extensions | 4.12 or newer | 4.16.0 |
-| httpcore | any that httpx accepts (1.x) | 1.0.9 |
-| h11 | 0.16 or the range httpcore names | 0.16.0 |
-| anyio | any that httpx accepts (4.x) | 4.16.0 |
-| idna | any that anyio and httpx accept | 3.20 |
-| certifi | any | 2026.10.23 |
-
-Installing from a checkout (`make install-cli` without `WHEELS`) also builds the package, which downloads the build tool
-and its own dependencies: `hatchling`, `packaging`, `pathspec`, `pluggy`, `trove-classifiers`. The wheelhouse below
-carries a built wheel, so it needs none of these on the machine that installs.
-
-#### Offline: a wheelhouse
-
-On a machine with internet, write every wheel the command needs into `dist/wheelhouse/`, with a `requirements.txt`
-that pins them:
-
-```
-make wheelhouse                                   # macOS arm64 and x86_64, Linux x86_64, Windows; Python 3.11 and 3.12
-make wheelhouse PLATFORMS='manylinux2014_x86_64' PYTHONS='3.12'      # a narrower set
-```
-
-Copy the folder to the target machine (a share, a USB drive, an archive) and install without any network:
-
-```
-make install-cli WHEELS=dist/wheelhouse           # uv tool install --no-index --find-links, or pip --no-index
-opsai --help
-```
-
-The installer needs `uv` or `pip` on the target machine; `uv` is not part of the wheelhouse.
-
-As an alternative to copying the folder, upload the wheels to a Nexus hosted PyPI repository and install from it as
-above. Create the hosted repository (format `pypi`, type `hosted`), add it to the group the developers use, and upload:
-
-```
-python -m pip install twine
-twine upload --repository-url https://nexus.example.com/repository/pypi-hosted/ \
-  -u <user> -p "$NEXUS_PASSWORD" dist/wheelhouse/*.whl
-```
-
-Install from it by naming the package instead of building the checkout (the hosted repository holds the wheels, not the
-build tool, so building from the checkout would need the proxy):
-
-```
-export UV_DEFAULT_INDEX=https://nexus.example.com/repository/pypi-hosted/simple/
-make install-cli FROM_INDEX=1
-```
-
-Use an account that may write to the repository, and take the password from the environment or `~/.pypirc`, not a
-shared file. Upload `ops_ai-*.whl` and the dependency wheels; Nexus ignores files it already has unless the repository's
-deployment policy forbids redeploys.
-
-#### Check the result
-
-```
-opsai --help                # lists the areas (chat, kb, apps, ...) when the command is installed
-command -v opsai          # where the tool environment put it
-```
-
-If `opsai` is not found after the install, the tool folder is not on PATH: run `uv tool update-shell` and open a new
-shell, or add `~/.local/bin` (pip --user on Linux and macOS) to PATH.
-
-#### Rerun the Nexus proof
-
-`make nexus-proof` starts Sonatype Nexus Repository (Docker image `sonatype/nexus3`), makes a PyPI proxy, a hosted and a
-group repository through its REST API, installs the command from the group in a `python:3.12-slim` container that can
-reach only Nexus, then uploads a wheelhouse to the hosted repository with twine and installs from it with the proxy
-turned off. It removes the containers when it ends. It needs Docker, about 3 GB of memory and a few minutes for Nexus to
-start.
+To script Ops AI from a machine that does not run it, install only the `opsai` command, including behind a company
+package mirror or with no network: [Install the command line](https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/install-cli.md).
 
 ## Operate
 
-How to check, upgrade, back up, restore and scale an Ops AI install. The install script's commands come first; the
-manual commands after them are the fallback, and the ones Kubernetes uses.
+Keep an install healthy once it runs: check it and read its logs, move it to a new release, back it up, and rotate its
+keys. The install script's commands come first on each page; the Compose and Kubernetes commands follow for installs
+made by hand.
 
-Run the script's commands from the clone the install ran in; they read its settings from `ops-ai.env` there. In the
-manual commands, `$C` is the Compose command for your install, for example
-`docker compose -p ops-ai -f deploy/compose/app.yaml -f deploy/compose/dba.yaml --env-file ops-ai.env`, and `ops-ai`
-is the Kubernetes namespace.
+### Check the install
 
-### Status and health
+```bash
+./install.sh status
+```
 
-| Check | With the script | By hand: Compose | By hand: Kubernetes | Healthy |
-|---|---|---|---|---|
-| Everything at once | `./install.sh status`: version, image source, database and model, each container's state, then the install's check | | | The check passes |
-| Every container | | `$C ps` | `kubectl -n ops-ai get pods` | Each service `Up (healthy)` or `Running` and ready; the migrate job exited 0 |
-| The entry point | | `curl -fsS https://<your host>/api/platform/v1/health` | Same | `{"status":"ok"}` |
-| Sign-in | Open your address and sign in | | | The console opens |
+It prints the version, image source, database and model, each container's state, then runs the install check: health
+through the published port, the sign-in page, a sign-in as the first admin, and one read from every service.
 
-| Service | Health route | What it proves |
-|---|---|---|
-| platform | `/v1/health` | Process up |
-| agents | `/health` | Process up, database reachable, and a model connected: it answers 503 until one is |
-| worker | a database query | Process up and database reachable |
-| tools | `/health` | Process up, and the policy engine serves the gateway's own policy: it answers 503 `policy_drift` otherwise |
-| models, kb, files, documents | `/health` | Process up |
-| console | `/login` | The console serves |
-| proxy | `/api/platform/v1/health` | The proxy reaches platform |
-
-### Logs
-
-| Task | With the script | By hand: Compose | By hand: Kubernetes |
+| Check | Compose | Kubernetes | Healthy |
 |---|---|---|---|
-| One service | `./install.sh logs agents`: the last 200 lines, followed on a terminal | `$C logs -f agents` | `kubectl -n ops-ai logs deploy/agents -f` |
+| Every container | `$C ps` | `kubectl -n ops-ai get pods` | Each service healthy or ready; the schema job exited 0 |
+| The entry point | `curl -fsS https://<your host>/api/platform/v1/health` | Same | `{"status":"ok"}` |
+| Sign-in | Open your address and sign in | Same | The console opens |
+
+Here `$C` is your Compose command, for example `docker compose -p ops-ai -f deploy/compose/app.yaml --env-file
+ops-ai.env`.
+
+| Container | Unhealthy means |
+|---|---|
+| agents | The database is unreachable, or no model is connected: it answers 503 until one is |
+| tools | The policy engine does not serve the gateway's own policy: it answers 503 `policy_drift` |
+| worker | The database is unreachable |
+| any other service | The process is down |
+| proxy | It cannot reach the platform service |
+
+### Read the logs
+
+| Task | Script | Compose | Kubernetes |
+|---|---|---|---|
+| One service | `./install.sh logs agents` | `$C logs -f agents` | `kubectl -n ops-ai logs deploy/agents -f` |
 | Every service | `./install.sh logs` | `$C logs --since 1h` | `kubectl -n ops-ai logs deploy/<service> --since 1h` |
 | The schema job | `./install.sh logs migrate` | `$C logs migrate` | `kubectl -n ops-ai logs job/migrate` |
 
-Every service writes plain text lines to standard output, one event per line with `key=value` fields, for your log
-collector to pick up. Structured JSON output is planned.
+Each line is one JSON object with the time, level, event, service, and the request, tenant and team ids. Secret values
+are masked before the line is written.
 
-### Upgrade and roll back
+### What to watch
 
-```
-./install.sh upgrade --version <new version>
-```
-
-At the same version it checks and changes nothing. Otherwise it backs up, gets the new images, applies the schema
-(or, in DBA mode, writes the upgrade scripts to `./dba/` and waits for your DBA), restarts, checks, and on a failed
-check restores the backup on the old version. In DBA mode it needs an admin login that may dump the database, as a
-file: `--admin-url-file <file>`.
-
-By hand, and on Kubernetes:
-
-| Step | Who | What |
+| Signal | Why it matters | Healthy |
 |---|---|---|
-| 1 | DBA | Back up the database ([below](#back-up-and-restore)) |
-| 2 | Operator | Get the new release's images |
-| 3 | DBA | Apply the new release's database upgrade script as the schema owner, then its grants script. Each step checks the version it starts from and stops before any change when the database is somewhere else |
-| 4 | Operator | Start the new images. Every service checks the database's schema version and refuses to start on one older than itself |
+| The work queue | Runs waiting to be claimed mean the workers are busy or down | Claimed within a second or two |
+| Crashed and recovered runs | Each crash runs a step and its model calls again | Rare, each followed by a recovery |
+| Tool calls left running | The gateway stopped mid-write, so the effect on your system is unknown | None; each needs a person to check the system it called |
+| Overdue human tasks | People are not keeping up with the queue | Within the deadlines your workflows set |
+| Model spend against budgets | A spent key stops new work | Below each key's cap |
+| Database size and write load | Saved run state grows with open work | Steady; vacuum on a schedule |
+| Clock | Leases and timers use the database's clock | Hosts within a few seconds of it |
 
-| Fact | Consequence |
+### Scale
+
+| Part | How it scales |
 |---|---|
-| A service refuses a schema it does not know | An older release cannot start on a newer schema, so two releases cannot be mixed by mistake |
-| Migrations do not roll back on their own | To go back, restore the backup from before the upgrade, or run the release's downgrade script where every step has one, and start the previous images |
-| An index added to a very large table holds writes while it builds | The upgrade script names such indexes; on a table over about a million rows, build the index by hand first with `CREATE INDEX CONCURRENTLY` and the upgrade then finds it |
-| A drift check compares a live database with what its release expects | It lists every missing, extra or changed object |
-| Runs in flight keep their version | A waiting run resumes on the new release with the workflow or agent version it started on |
-| The script has not yet upgraded across two releases that change the schema | The first release has no earlier one to upgrade from |
+| Workflow runs | Add worker processes. Each runs 4 runs at once from the shared queue; a run waiting for a person holds no worker |
+| The APIs | Every service except files and knowledge is stateless, so more replicas can run behind the proxy or a Service |
+| Files and knowledge | One replica each, since their bytes are on a volume one replica writes |
+| Crash recovery | A run's lease expires 15 seconds after its worker stops, and another worker continues from its last saved step |
 
-### Back up and restore
+### Upgrade with the script
 
+```bash
+git fetch --tags && git checkout v<new version>
+./install.sh upgrade
 ```
+
+The script backs up, gets the new images, applies the schema, restarts, and checks. If the check fails, it restores the
+backup on the old version and exits with an error. At the version already running, it checks and changes nothing.
+`--version V` picks a version other than the checkout's.
+
+In `dba` mode it writes the upgrade scripts to `./dba/upgrade-<from>-to-<to>/`, waits for your DBA to apply them, and
+needs `--admin-url-file <file>` to take the backup.
+
+### Upgrade by hand
+
+<!-- site: steps -->
+1. **Back up** the database and the stored files ([Back up and restore](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/backup-and-restore.md)).
+2. **Upgrade the database.** Your DBA applies the new release's `upgrade-roles.sql`, then `upgrade.sql` as the schema
+   owner, then the new release's `grants.sql` ([Database](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/database.md#upgrade)).
+3. **Start the new images.**
+
+| Install | Command |
+|---|---|
+| Compose | Set `OPS_IMAGE_TAG` to the new version, then `docker compose -p ops-ai -f deploy/compose/app.yaml --env-file ops-ai.env up -d` (add `-f deploy/compose/dba.yaml` in DBA mode). Without a DBA, the schema job applies the upgrade before the services start |
+| Kubernetes | Set the new tag in the overlay, then `kubectl -n ops-ai delete job migrate` and `kubectl apply -k <overlay>`, since a finished Job cannot change |
+
+### How it behaves
+
+- Every service checks the database's schema version at start and refuses one it does not match, naming the upgrade
+  that is missing. Two releases cannot be mixed by mistake.
+- Each step of `upgrade.sql` checks the version it starts from and stops before any change when the database is
+  somewhere else, so running it twice is refused.
+- Some steps move rows that the running release still writes. Stop the services before the database step, and start
+  only the new release after it.
+
+### Roll back
+
+Migrations do not roll back on their own. Either restore the backup taken before the upgrade, or have your DBA run the
+release's `downgrade.sql` where every step has one; then start the previous images. The script does this for you when
+its check fails.
+
+### Back up and restore with the script
+
+```bash
 ./install.sh backup
 ./install.sh restore backups/<file>.tar.gz
 ```
 
-A backup is one `.tar.gz` in `./backups/`, readable only by its owner: a dump of the database, the files and
-knowledge volumes, and `ops-ai.env`. A restore stops the services, recreates the database from the dump, puts the
-volumes back, starts and checks; it refuses a backup made with another `OPS_SECRETS_KEY`. In DBA mode both need
-`--admin-url-file <file>`, since a service's login cannot dump the database under its tenant policies.
+A backup is one archive in `./backups/`, readable only by its owner, holding a dump of the database, the files and
+knowledge volumes, and `ops-ai.env`. `--out DIR` writes it elsewhere. A restore stops the services, recreates the
+database from the dump, puts the volumes back, starts everything and runs the install check. It refuses a backup made
+with another secrets key.
+
+In `dba` mode both commands need `--admin-url-file <file>`: the services' own logins cannot dump the database under
+its tenant policies.
 
 > [!IMPORTANT]
 > A backup holds `ops-ai.env` and its keys. Keep it as safe as the database: `OPS_SECRETS_KEY` unlocks every stored
-> credential, and without it a restored installation cannot call your systems.
+> credential, and without it a restored install cannot call your systems.
 
-By hand, back up the database with your usual PostgreSQL tools, or on Azure with the automated backups and
-point-in-time restore. Back up as the server admin: the tenant policies apply to the schema's owner too, so `pg_dump`
-as the schema owner stops with a row-level security error.
+### Back up and restore by hand
 
-```
+Back up the database as the server admin, with your usual PostgreSQL tools or, on Azure, automated backups and
+point-in-time restore. A dump as the schema owner stops with a row-level security error, because the tenant policies
+apply to the owner too.
+
+```bash
 docker run --rm -e PGPASSWORD=<admin password> -v "$PWD/backup:/backup" postgres:17 \
   pg_dump -Fc -f /backup/ops.dump "host=<host> port=5432 user=<admin> dbname=ops sslmode=require"
 docker run --rm -v ops-ai_files-data:/data -v "$PWD/backup:/out" alpine tar czf /out/files-data.tgz -C /data .
 docker run --rm -v ops-ai_kb-data:/data -v "$PWD/backup:/out" alpine tar czf /out/kb-data.tgz -C /data .
 ```
 
-To restore by hand into a new database:
+Keep a copy of the settings file, or at least `OPS_SECRETS_KEY`, with each backup.
 
-```
-$C stop
-psql -v ON_ERROR_STOP=1 "host=<host> port=5432 user=<admin> dbname=postgres sslmode=require" -c "CREATE DATABASE ops_restored OWNER ops_migrator"
+To restore into a new database, stop the services, then:
+
+```bash
+psql -v ON_ERROR_STOP=1 "host=<host> port=5432 user=<admin> dbname=postgres sslmode=require" \
+  -c "CREATE DATABASE ops_restored OWNER ops_migrator"
 docker run --rm -e PGPASSWORD=<admin password> -v "$PWD/backup:/backup" postgres:17 \
   pg_restore --exit-on-error -d "host=<host> port=5432 user=<admin> dbname=ops_restored sslmode=require" /backup/ops.dump
 docker run --rm -v ops-ai_files-data:/data -v "$PWD/backup:/in" alpine sh -c "rm -rf /data/* && tar xzf /in/files-data.tgz -C /data"
 docker run --rm -v ops-ai_kb-data:/data -v "$PWD/backup:/in" alpine sh -c "rm -rf /data/* && tar xzf /in/kb-data.tgz -C /data"
 ```
 
-Then point each service's database setting at `ops_restored` and start everything again. On Kubernetes, back up the
-files and kb volumes with your cluster's volume snapshots. When files are stored in S3 or Azure Blob, use that store's
-own versioning or replication.
+Point each service's database setting at `ops_restored`, keep the same keys in the settings file, and start
+everything again.
 
-### Remove
+### What to back up where
 
-`./install.sh uninstall` asks, then removes the containers, and asks again before deleting the volumes. It keeps
-`ops-ai.env`.
-
-### Scaling
-
-| Part | How it scales | Status |
+| Install | Database | Files and knowledge bytes |
 |---|---|---|
-| Workflow runs | Add worker processes; each claims runs from the shared queue and runs 4 at once. A run waiting for a person holds no worker | Built |
-| The APIs | Each service is stateless apart from files and kb, so more replicas can run behind the proxy or a Kubernetes Service | Built for every service except files and kb |
-| files and kb | Their bytes are on a volume one replica can write, so they run one replica each | Partial |
-| Crash recovery | A run's lease expires 15 seconds after its worker stops, and another worker continues it from its last saved step | Built |
-| One tenant's load starving another's | Per-tenant caps on running runs | Planned |
+| Script or Compose | `pg_dump` as the server admin | The `files-data` and `kb-data` volumes |
+| Kubernetes | `pg_dump` as the server admin | Volume snapshots of the files and kb claims |
+| Files in S3 or Azure Blob | As above | The store's own versioning or replication |
 
-### What to watch
-
-| Signal | Why it matters | Healthy |
-|---|---|---|
-| The work queue | Rows waiting to be claimed mean the workers are busy or down | Claimed within a second or two |
-| Crashed and recovered runs | Each crash re-runs a step and its model calls | Rare, each followed by a recovery |
-| Tool calls left running | The gateway stopped mid-write, so the effect on your system is unknown | None; each one needs a person to check the system it called |
-| Overdue tasks | People are not keeping up with the queue | Within the deadlines your workflows set |
-| Model spend against budgets | A spent key stops new work | Below each key's cap |
-| Database size and write load | Saved run state grows with open work | Steady; prune and vacuum on a schedule |
-| Clock | Leases and timers use the database's clock; hosts must agree with it | Skew well under 15 seconds |
-
-### Rotating keys
+### Rotate keys
 
 | Key | Steps |
 |---|---|
@@ -512,5 +326,17 @@ own versioning or replication.
 | A service's signing key | Give the service a new key and key id, add its public key to every other service's trusted list beside the old one, restart the others, then the service; then remove the old key id and restart the others again |
 | Sign-in token key (`OPS_PLATFORM_SIGNING_KEY`) | Set a new key and key id and restart every service; people may need to sign in again |
 | Secrets key (`OPS_SECRETS_KEY`) | Changing it makes every stored credential unreadable, so each must be entered again. A rotation that re-encrypts them is planned |
-| A provider's model key | The Security admin replaces it in the credential store; no restart |
+| A provider's model key | A Security admin replaces it in the credential store; no restart |
 | Database passwords | Change each login's password, update its setting, restart that service |
+
+### Remove
+
+`./install.sh uninstall` asks, then removes the containers, and asks again before deleting the data. It keeps
+`ops-ai.env`. By hand: `docker compose ... down` keeps the volumes and `down -v` deletes them; on Kubernetes,
+`kubectl delete -k <overlay>` removes the volume claims with it.
+
+### Limits
+
+- An upgrade across two releases that change the schema has not run yet: 1.0.0 is the first release.
+- Metrics are planned; health checks and logs are built.
+- Ops AI schedules no backups; run the backup from your scheduler or use your database's own.

@@ -11,12 +11,16 @@ import { repoIndex } from './repo.mjs';
  * Tabs, then groups, then entries. An entry is a page path relative to docs/ (a string, or { page, title, icon }), a
  * folder taken whole ({ folder, title, icon }), or the rest of a folder ({ rest }): every page under it that no other
  * entry places, keeping its subfolders. Icons are lucide names. Groups with `open` start expanded.
+ *
+ * Docs, Deploy and operate, Security and Reference are for people using Ops AI; how the code is built goes in
+ * Contributing. `public: true` marks the tabs whose pages scripts/check-public-pages.mjs holds to the user-page rules.
  */
 export const SITE = [
   {
     tab: 'Docs',
     icon: 'book-open',
-    description: 'Install, learn and build',
+    description: 'Learn Ops AI and build with it',
+    public: true,
     groups: [
       {
         group: 'Get started',
@@ -25,18 +29,9 @@ export const SITE = [
         entries: [
           { page: 'welcome.md', title: 'Welcome', icon: 'house' },
           { page: 'background/problem-statement.md', title: 'Why Ops AI', icon: 'lightbulb' },
+          { page: 'guide/quickstart.md', icon: 'zap' },
+          { page: 'guide/install-cli.md', title: 'Install the CLI', icon: 'square-terminal' },
           { page: 'guide/whats-built-today.md', icon: 'list-checks' },
-          { page: 'guide/install.md', icon: 'download' },
-          { page: 'guide/whats-new.md', icon: 'sparkles' },
-        ],
-      },
-      {
-        group: 'Use cases',
-        icon: 'briefcase',
-        open: true,
-        entries: [
-          { page: 'guide/use-cases/card-disputes.md', title: 'Card disputes', icon: 'credit-card' },
-          { page: 'guide/use-cases/chat-and-human-tasks.md', title: 'Start the day from chat', icon: 'message-square' },
         ],
       },
       {
@@ -46,21 +41,31 @@ export const SITE = [
         entries: [
           { page: 'guide/overview.md', icon: 'layout-grid' },
           { page: 'guide/how-work-flows.md', icon: 'workflow' },
-          { page: 'guide/build-with-ops-ai.md', icon: 'blocks' },
-          { page: 'guide/apps.md', icon: 'app-window' },
-          { page: 'guide/build-your-first-tool.md', icon: 'wrench' },
-          { page: 'guide/plugins.md', icon: 'puzzle' },
-          { page: 'guide/vendor-onboarding-plugin.md', icon: 'package-plus' },
-          { page: 'guide/workflows.md', icon: 'git-branch' },
           { page: 'guide/agents.md', icon: 'bot' },
-          { page: 'guide/ops-assistant.md', icon: 'message-square' },
-          { page: 'guide/workflow-example-coverage.md', icon: 'table' },
-          { page: 'guide/agent-example-coverage.md', icon: 'table' },
-          { page: 'guide/developer-surface-coverage.md', icon: 'table' },
-          { page: 'guide/system-components.md', icon: 'boxes' },
-          { page: 'guide/models.md', icon: 'cpu' },
-          { page: 'guide/data-and-database.md', icon: 'database' },
-          { page: 'guide/security-and-governance.md', icon: 'shield-check' },
+          { page: 'guide/workflows.md', icon: 'git-branch' },
+          { page: 'guide/apps.md', title: 'Tools and apps', icon: 'app-window' },
+          { page: 'guide/ops-assistant.md', title: 'Chat and channels', icon: 'message-square' },
+          { page: 'guide/knowledge.md', title: 'Knowledge', icon: 'library' },
+          { page: 'guide/human-tasks.md', title: 'Human tasks and approvals', icon: 'user-check' },
+          { page: 'guide/cases.md', title: 'Cases', icon: 'folder-open' },
+          { page: 'guide/teams-and-access.md', title: 'Teams and access', icon: 'users' },
+          { page: 'guide/security-and-governance.md', title: 'Governance', icon: 'shield-check' },
+          { page: 'guide/models.md', title: 'Models', icon: 'cpu' },
+          { page: 'console/embedding-the-chat.md', title: 'Chat on your own pages', icon: 'messages-square' },
+        ],
+      },
+      {
+        group: 'Guides by use case',
+        icon: 'briefcase',
+        open: true,
+        entries: [
+          { page: 'guide/use-cases/card-disputes.md', title: 'Card disputes', icon: 'credit-card' },
+          { page: 'guide/use-cases/chat-and-human-tasks.md', title: 'Start the day from chat', icon: 'message-square' },
+          { page: 'guide/use-cases/answer-from-documents.md', title: 'Answer from your documents', icon: 'library' },
+          { page: 'guide/use-cases/approve-a-write.md', title: 'Hold a write for approval', icon: 'hand' },
+          { page: 'guide/use-cases/connect-an-app.md', title: 'Connect an app to an agent', icon: 'plug-zap' },
+          { page: 'guide/build-with-ops-ai.md', icon: 'blocks' },
+          { page: 'guide/build-your-first-tool.md', icon: 'wrench' },
         ],
       },
       {
@@ -77,45 +82,60 @@ export const SITE = [
         ],
       },
       {
-        group: 'Build',
-        icon: 'blocks',
+        group: 'Integrations',
+        icon: 'plug',
         open: true,
         entries: [
-          { page: 'console/agents-and-workflows.md', icon: 'bot' },
-          {
-            group: 'Workflows',
-            icon: 'git-branch',
-            entries: ['design/workflows/workflows-and-agents.md', 'design/workflows/workflow-nodes.md', 'design/workflows/canvas.md'],
-          },
-          {
-            group: 'Tools and connections',
-            icon: 'wrench',
-            entries: ['design/tools/tool-system.md', 'design/tools/mcp-server.md'],
-          },
-          { page: 'design/human-tasks/task-page.md', title: 'Human tasks', icon: 'user-check' },
-          { page: 'design/cases/case-page.md', title: 'Cases', icon: 'folder-kanban' },
-          {
-            group: 'Chat and channels',
-            icon: 'message-square',
-            entries: ['console/embedding-the-chat.md', 'design/chat/embedded-chat-screens.md'],
-          },
+          { page: 'guide/integrations/overview.md', title: 'Integrations', icon: 'plug' },
+          { page: 'guide/apps-setup.md', title: 'Set up an app', icon: 'settings' },
+          { page: 'guide/integrations/salesforce.md', title: 'Salesforce', icon: 'cloud' },
+          { page: 'guide/integrations/github.md', title: 'GitHub', icon: 'github' },
+          { page: 'guide/integrations/sharepoint.md', title: 'SharePoint and OneDrive', icon: 'folder-open' },
+          { page: 'guide/integrations/confluence.md', title: 'Confluence', icon: 'book-open-text' },
+          { page: 'guide/integrations/website.md', title: 'Website', icon: 'globe' },
+          { page: 'guide/integrations/sign-in-oauth.md', title: 'Sign in with OAuth', icon: 'log-in' },
+          { page: 'guide/integrations/sign-in-keys.md', title: 'Sign in with a key or password', icon: 'key-round' },
+          { page: 'guide/integrations/sign-in-certificates.md', title: 'Sign in with a certificate', icon: 'file-badge' },
+          { page: 'guide/integrations/build-a-plugin.md', title: 'Build a plugin', icon: 'package-plus' },
+        ],
+      },
+    ],
+  },
+  {
+    tab: 'Deploy and operate',
+    icon: 'server',
+    description: 'Install, upgrade and run Ops AI',
+    groups: [
+      {
+        group: 'Choose a deployment',
+        icon: 'map',
+        open: true,
+        entries: [
+          { page: 'deploy-and-operate.md', title: 'Deploy and operate', icon: 'server' },
+          { page: 'guide/deployment-options.md', icon: 'map' },
+          { page: 'guide/README.md', title: 'Client guide', icon: 'book-marked' },
         ],
       },
       {
-        group: 'Deploy',
-        icon: 'server',
+        group: 'Install',
+        icon: 'download',
         open: true,
         entries: [
-          { page: 'guide/deployment-options.md', icon: 'map' },
-          { page: 'guide/README.md', title: 'Client guide', icon: 'book-marked' },
-          { page: 'deploy/install-guide.md', title: 'Install and operate, one page', icon: 'clipboard-list' },
-          { page: 'deploy/install.md', title: 'The install script', icon: 'terminal' },
+          { page: 'guide/install.md', icon: 'download' },
+          { page: 'deploy/install.md', title: 'Install with the script', icon: 'terminal' },
           { page: 'deploy/compose.md', title: 'Docker Compose', icon: 'container' },
           { page: 'deploy/kubernetes.md', title: 'Kubernetes', icon: 'ship-wheel' },
+          { page: 'deploy/release-package.md', title: 'Release package', icon: 'package' },
+        ],
+      },
+      {
+        group: 'Database',
+        icon: 'database',
+        open: true,
+        entries: [
           { page: 'deploy/database.md', title: 'Database', icon: 'database-zap' },
           { page: 'guide/azure-sql.md', icon: 'database' },
-          { page: 'deploy/release-package.md', title: 'Release package', icon: 'package' },
-          { page: 'deploy/security-scanning.md', title: 'Security scanning', icon: 'scan-search' },
+          { page: 'guide/data-and-database.md', title: 'Where data is kept', icon: 'database' },
         ],
       },
       {
@@ -123,42 +143,48 @@ export const SITE = [
         icon: 'activity',
         open: true,
         entries: [
-          { page: 'guide/operate.md', icon: 'activity' },
+          { page: 'guide/operate.md', title: 'Operate', icon: 'activity' },
+          { page: 'guide/system-components.md', icon: 'boxes' },
+          { page: 'deploy/monitoring.md', title: 'Monitor', icon: 'activity' },
+          { page: 'deploy/upgrade.md', title: 'Upgrade', icon: 'circle-arrow-up' },
+          { page: 'deploy/backup-and-restore.md', title: 'Back up and restore', icon: 'archive' },
+          { page: 'guide/plugins-install.md', title: 'Install and pin plugins', icon: 'package-plus' },
+          { page: 'deploy/security-scanning.md', title: 'Security scanning', icon: 'scan-search' },
           { page: 'guide/support.md', icon: 'life-buoy' },
         ],
       },
     ],
   },
   {
-    tab: 'Use cases',
-    icon: 'list-checks',
-    description: 'What people do with Ops AI, each step tested in code',
+    tab: 'Security',
+    icon: 'shield-check',
+    description: 'How Ops AI keeps teams, data and model calls under control',
+    public: true,
     groups: [
-      { group: 'Start here', icon: 'flag', open: true, entries: [{ page: 'usecases/use-case-areas.md', title: 'Use cases', icon: 'list-checks' }] },
-      { group: 'Agents', icon: 'bot', open: true, entries: [{ rest: 'usecases/agents' }] },
-      { group: 'Workflows', icon: 'git-branch', open: true, entries: [{ rest: 'usecases/workflows' }] },
-      { group: 'Knowledge', icon: 'library', open: true, entries: [{ rest: 'usecases/knowledge' }] },
-      { group: 'Tools and apps', icon: 'wrench', open: true, entries: [{ rest: 'usecases/tools-and-apps' }] },
-      { group: 'People and access', icon: 'shield', open: true, entries: [{ rest: 'usecases/people-and-access' }] },
+      {
+        group: 'Security review',
+        icon: 'shield-check',
+        open: true,
+        entries: [
+          { page: 'security/README.md', title: 'Security', icon: 'shield' },
+          { page: 'security/tenancy-and-isolation.md', icon: 'building-2' },
+          { page: 'security/identity-and-sign-in.md', icon: 'key-round' },
+          { page: 'security/access-approvals-and-audit.md', icon: 'user-check' },
+          { page: 'security/data-handling-and-masking.md', icon: 'eye-off' },
+          { page: 'security/model-calls.md', icon: 'cpu' },
+          { page: 'security/egress-and-connections.md', icon: 'globe-lock' },
+        ],
+      },
     ],
   },
   {
-    tab: 'API reference',
+    tab: 'Reference',
     icon: 'code',
-    description: 'Every route of every service',
+    description: 'HTTP API, SDKs, CLI, MCP and changes',
+    public: true,
     groups: [
-      { group: 'Start here', icon: 'flag', open: true, entries: [{ page: 'architecture/api.md', title: 'Conventions', icon: 'braces' }] },
-      {
-        group: 'SDKs',
-        icon: 'package',
-        open: true,
-        entries: [
-          { page: 'sdk/python.md', title: 'Python', icon: 'file-code' },
-          { page: 'sdk/typescript.md', title: 'TypeScript', icon: 'file-code-2' },
-          { page: 'sdk/upgrading.md', title: 'Upgrading to 1.0.0', icon: 'circle-arrow-up' },
-          { page: 'sdk/changelog-next-major.md', title: '1.0.0 changelog', icon: 'history' },
-        ],
-      },
+      { group: 'Start here', icon: 'flag', open: true, entries: [{ page: 'reference/README.md', title: 'Reference', icon: 'braces' }, { page: 'reference/http-api.md', icon: 'globe' }, { page: 'reference/cli.md', title: 'The opsai command line', icon: 'square-terminal' }, { page: 'reference/mcp.md', title: 'MCP', icon: 'plug' }] },
+      { group: 'Plugins', icon: 'puzzle', entries: [{ page: 'guide/plugins.md', title: 'Plugin manifest reference', icon: 'puzzle' }] },
       {
         group: 'HTTP API',
         icon: 'globe',
@@ -170,36 +196,163 @@ export const SITE = [
           { folder: 'services/kb-service/api', title: 'Knowledge', icon: 'library' },
           { folder: 'services/files-service/api', title: 'Files', icon: 'file' },
           { folder: 'services/documents-service/api', title: 'Documents', icon: 'file-text' },
-          { folder: 'services/models-service/api', title: 'Models (internal)', icon: 'cpu' },
+        ],
+      },
+      {
+        group: 'SDKs',
+        icon: 'package',
+        open: true,
+        entries: [
+          { page: 'sdk/python.md', title: 'Python', icon: 'file-code' },
+          { page: 'sdk/typescript.md', title: 'TypeScript', icon: 'file-code-2' },
+          { page: 'sdk/upgrading.md', title: 'Upgrading to 1.0.0', icon: 'circle-arrow-up' },
+        ],
+      },
+      {
+        group: 'Changelog',
+        icon: 'history',
+        open: true,
+        entries: [
+          { page: 'guide/whats-new.md', icon: 'sparkles' },
+          { page: 'sdk/changelog.md', title: 'SDK 1.0.0 changelog', icon: 'history' },
         ],
       },
     ],
   },
   {
-    tab: 'Architecture',
-    icon: 'layers',
-    description: 'How the platform is built and why',
-    groups: [
-      { group: 'Platform', icon: 'layout-grid', open: true, entries: [{ rest: 'architecture' }, 'diagrams/README.md'] },
-      { group: 'Decision records', icon: 'scale', entries: [{ rest: 'architecture/decisions' }] },
-      { group: 'Services', icon: 'server', entries: [{ rest: 'services' }] },
-      { group: 'Design', icon: 'pen-tool', entries: [{ rest: 'design' }] },
-    ],
-  },
-  {
     tab: 'Contributing',
     icon: 'hammer',
-    description: 'Console screens, use cases and the team’s environments',
+    description: 'How Ops AI is built, tested and released',
     groups: [
-      { group: 'About these docs', icon: 'info', open: true, entries: [{ page: 'README.md', title: 'All documents', icon: 'list' }] },
-      { group: 'Console', icon: 'monitor', entries: [{ rest: 'console' }] },
-      { group: 'Use cases', icon: 'list-checks', entries: [{ rest: 'usecases' }] },
-      { group: 'Libraries', icon: 'package', entries: [{ rest: 'packages' }] },
+      {
+        group: 'Start here',
+        icon: 'flag',
+        open: true,
+        entries: [
+          { page: 'contributing.md', title: 'Contributing', icon: 'hammer' },
+          { page: 'README.md', title: 'All documents', icon: 'list' },
+        ],
+      },
+      {
+        group: 'Architecture',
+        icon: 'layers',
+        open: true,
+        entries: [
+          {
+            group: 'Overview',
+            icon: 'layout-grid',
+            entries: [
+              'architecture/README.md',
+              'architecture/enterprise-architecture.md',
+              'architecture/service-map.md',
+              'architecture/platform-choices.md',
+              'architecture/words-and-entities.md',
+              'architecture/dependencies.md',
+              'architecture/delivery.md',
+              'diagrams/README.md',
+            ],
+          },
+          {
+            group: 'Runtime and workflows',
+            icon: 'workflow',
+            entries: [
+              'architecture/runtime.md',
+              'architecture/workflow-runner.md',
+              'architecture/definitions-and-versions.md',
+              'architecture/workflows-as-tools.md',
+              'architecture/templates.md',
+              'architecture/agent-guardrails.md',
+              'architecture/human-in-the-loop.md',
+              'architecture/durability-failure-and-audit.md',
+            ],
+          },
+          {
+            group: 'Identity and access',
+            icon: 'key-round',
+            entries: [
+              'architecture/identity-and-tenancy.md',
+              'architecture/roles-and-permissions.md',
+              'architecture/saml-sign-in.md',
+              'architecture/app-accounts.md',
+            ],
+          },
+          {
+            group: 'Tools, channels and chat',
+            icon: 'wrench',
+            entries: [
+              'architecture/api.md',
+              'architecture/tool-lifecycle.md',
+              'architecture/integrations.md',
+              'architecture/mcp.md',
+              'architecture/channels-and-deployments.md',
+              'architecture/chat-widgets.md',
+              'architecture/embedded-chat.md',
+              'architecture/console-areas.md',
+            ],
+          },
+          {
+            group: 'Data',
+            icon: 'database',
+            entries: ['architecture/data.md', 'architecture/data-model.md', 'architecture/knowledge-base.md', 'architecture/logging-and-data-writes.md'],
+          },
+          {
+            group: 'Operations',
+            icon: 'activity',
+            entries: ['architecture/operations.md', 'architecture/make.md', 'architecture/cloud-boxes.md'],
+          },
+          { group: 'Decision records', icon: 'scale', entries: [{ rest: 'architecture/decisions' }] },
+          // Anything added to architecture/ without a group above still shows, here, rather than failing the build.
+          { rest: 'architecture' },
+        ],
+      },
+      {
+        group: 'Engineering standards',
+        icon: 'ruler',
+        entries: [
+          { page: 'architecture/engineering-standards.md', title: 'Engineering standards', icon: 'ruler' },
+          { rest: 'architecture/standards' },
+          { group: 'Migration to the standards', icon: 'route', entries: ['architecture/migration/api-changes.md'] },
+        ],
+      },
+      { group: 'Services', icon: 'server', entries: [{ rest: 'services' }] },
+      { group: 'Packages', icon: 'package', entries: ['packages/README.md', { rest: 'packages' }] },
+      {
+        group: 'Use-case test catalogue',
+        icon: 'list-checks',
+        entries: [
+          { rest: 'usecases' },
+          {
+            group: 'Example coverage',
+            icon: 'table',
+            entries: ['guide/workflow-example-coverage.md', 'guide/agent-example-coverage.md', 'guide/developer-surface-coverage.md'],
+          },
+        ],
+      },
+      {
+        group: 'Design proposals',
+        icon: 'pen-tool',
+        entries: [
+          'design/README.md',
+          { page: 'sdk/changelog-next-major.md', title: 'SDK 1.0.0 route-by-route record', icon: 'history' },
+          { page: 'console/agents-and-workflows.md', title: 'Agents and workflows in the console', icon: 'monitor' },
+          { rest: 'design' },
+          { group: 'Console', icon: 'monitor', entries: [{ rest: 'console' }] },
+        ],
+      },
       { group: 'Agent skills', icon: 'sparkles', entries: [{ rest: 'guide/skills' }] },
       {
-        group: 'Team environments',
-        icon: 'cloud',
-        entries: ['deploy/release.md', 'deploy/devhost.md', 'deploy/fly.md', 'deploy/fly-staging.md', 'deploy/docs-site.md', 'deploy/demo-mailbox.md'],
+        group: 'Release process',
+        icon: 'tag',
+        entries: [
+          'deploy/release.md',
+          { page: 'deploy/install-guide.md', title: 'Install guide, one page (generated)', icon: 'clipboard-list' },
+          'deploy/docs-site.md',
+          {
+            group: 'Team environments',
+            icon: 'cloud',
+            entries: ['deploy/devhost.md', 'deploy/fly.md', 'deploy/fly-staging.md', 'deploy/demo-mailbox.md'],
+          },
+        ],
       },
     ],
   },
@@ -218,6 +371,19 @@ function* walkEntries(entries) {
 /** The pages the Docs tab names one by one: the reader-facing journey, held to the opening rule in check-links. */
 export function docsTabPages() {
   return SITE[0].groups.flatMap((g) => [...walkEntries(g.entries)]).flatMap((e) => (e.page ? [e.page] : []));
+}
+
+/**
+ * The pages (relative to docs/) that the tabs marked `public` show, resolving folder and rest entries over
+ * `pagePaths`. A page another tab places by name stays with that tab.
+ */
+export function publicPages(pagePaths) {
+  const named = new Map();
+  for (const t of SITE) for (const g of t.groups) for (const e of walkEntries(g.entries)) if (e.page) named.set(e.page, t);
+  return pagePaths.filter((p) => {
+    const owner = named.get(p) ?? SITE.find((t) => t.groups.some((g) => [...walkEntries(g.entries)].some((e) => (e.folder && under(p, e.folder)) || (e.rest && under(p, e.rest)))));
+    return Boolean(owner?.public);
+  });
 }
 
 const allEntries = () => SITE.flatMap((t) => t.groups.flatMap((g) => [...walkEntries(g.entries)]));

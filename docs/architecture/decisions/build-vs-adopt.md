@@ -27,7 +27,7 @@ and the release gate. The table gives the choice per component, with what phase 
 | Tracing and LLM observability | Yes | OpenTelemetry; Langfuse (MIT core, acquired by ClickHouse 2026-01-16, [ClickHouse][langfuse]) | Correlation of run, case and gateway ids | OpenTelemetry ids across run, case and gateways | Langfuse or equivalent if the bank wants prompt-level analysis |
 | Policy engine | Yes | OPA | Policies | Yes | |
 | Secrets | Yes | Bank's store; OpenBao or Vault | none | Yes | |
-| Cases, queues, SLAs | Generic in principle | ServiceNow, Salesforce Service Cloud, Pega (if the bank already runs one) | Thin case model in PostgreSQL owned by the platform, with optional sync to the bank's case system as a tool module | Yes: cases, queues, SLA timers, per-action approval | Sync to an external case system if [open question 9](../overview.md#open-questions) requires it |
+| Cases, queues, SLAs | Generic in principle | ServiceNow, Salesforce Service Cloud, Pega (if the bank already runs one) | Thin case model in PostgreSQL owned by the platform, with optional sync to the bank's case system as a tool module | Yes: cases, queues, SLA timers, per-action approval | Sync to an external case system if [open question 9](../delivery.md#open-questions) requires it |
 | Mailbox intake | Mostly | Microsoft Graph delta query, polled every 60 s per folder; the bank's existing mail security scanning | Intake adapter: delta tokens per folder, de-duplication by message id, archive to WORM, hand-off to a run | Yes, polling only | Graph change notifications through an inbound endpoint or Azure Event Hubs after the bank's network review; further intake types (portal uploads, scanned post) on the same pattern |
 | Identity | Yes | Bank IdP, SPIFFE/SPIRE or platform equivalent | Workflow and platform identity registration, approval-token signer | Yes (ADR-0005 phase line) | User delegation |
 | Chat surface | Partly | See ADR-0009 | See ADR-0009 | No | ADR-0009 |
@@ -42,7 +42,7 @@ measured in hours (`03` 5.6.3). Either way, Graph access to shared mailboxes use
 permissions; the `.Shared` delegated scopes do not support notifications ([Graph][graph-notif]).
 Granting an application access to specific mailboxes only is an Exchange administration task, which
 is the one step in adding a mailbox that depends on another team (see
-[evaluation criteria](../overview.md#evaluation-criteria)). The same constraint applies
+[evaluation criteria](README.md#how-options-are-scored)). The same constraint applies
 to SharePoint change notifications for knowledge sources, so phase 1 SharePoint sources also poll
 delta (`02` 5.5).
 
@@ -53,7 +53,7 @@ the [reference flow](../../background/problem-statement.md#reference-flow-email-
 to be in the same transactional boundary as the run. If the case lived only in an external product,
 every decision would cross an integration that can fail between "approved" and "executed". The case
 model stays small (case, queue, assignee, SLA, drafted actions, decisions) and syncs outward when the
-bank requires its case system to remain the record ([open question 9](../overview.md#open-questions)).
+bank requires its case system to remain the record ([open question 9](../delivery.md#open-questions)).
 
 ## Consequences
 

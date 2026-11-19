@@ -39,7 +39,7 @@ it and its paid features may move into that vendor's platform; the MIT licence m
 keep running the open-source gateway regardless. LiteLLM loses on supply chain because of the March
 2026 compromise; the mitigation is building from source at a pinned commit, which applies to any
 choice. Envoy and Kong are strongest if the bank already standardises on them as API gateways
-([open question 11](../overview.md#open-questions)).
+([open question 11](../delivery.md#open-questions)).
 
 ## Decision
 
@@ -70,7 +70,7 @@ Yes, with a small scope. The table separates what the first email workflow needs
 | Per-workflow key and hard budget, held by the key-and-budget service | Yes | | Cost per workflow is a registry field (Component 1) and a runaway loop is capped; workers holding keys would break ADR-0004's "workers hold no credentials" |
 | Platform purpose keys and budgets for ingestion, playground and eval | Yes | | Embeddings for the first knowledge base and every gate eval run call models before any workflow is live |
 | Metadata log to SIEM: workflow, version, alias, model, tokens, cost, latency, status | Yes | | Audit and the cost column need it; prompt bodies can stay in the run journal |
-| Redaction of the email template's known sensitive fields | Yes, if the approved model endpoint is not cleared for that data | Otherwise later | Depends on [open question 13](../overview.md#open-questions) |
+| Redaction of the email template's known sensitive fields | Yes, if the approved model endpoint is not cleared for that data | Otherwise later | Depends on [open question 13](../delivery.md#open-questions) |
 | Retries and timeouts | Yes | | Cheap and expected |
 | Failover between providers | | Yes | Failover to an untested model is worse than a manual-handling fallback; it needs evidence per alias first |
 | Guardrail library, semantic cache | | Yes | Optimisations once traffic exists |
@@ -84,7 +84,7 @@ re-test for every published workflow. Until the last caller moves, the egress ru
 switched on, so the mandate and the discovery report rest on policy rather than on the network.
 The model-call history from before the switch would also be missing from the gateway log Audit
 reads. The day-one scope above is a few days of configuration on an adopted gateway plus the
-key-and-budget service (a small service, estimated in the [implementation plan](../../plan/implementation-plan.md)); retrofitting
+key-and-budget service (a small service); retrofitting
 grows with every workflow published without it.
 
 ## Consequences
@@ -109,7 +109,7 @@ prevent its March 2026 compromise, and the bank's vendor review will ask about i
 
 | Phase 1 | Later |
 |---|---|
-| Self-hosted Portkey OSS gateway behind the key-and-budget service; aliases, per-workflow and platform purpose keys and budgets generated from the registry; metadata log to SIEM; egress lock; redaction if required by [open question 13](../overview.md#open-questions) | Failover with evidence per alias, guardrail library, semantic cache, discovery of unregistered traffic, chargeback |
+| Self-hosted Portkey OSS gateway behind the key-and-budget service; aliases, per-workflow and platform purpose keys and budgets generated from the registry; metadata log to SIEM; egress lock; redaction if required by [open question 13](../delivery.md#open-questions) | Failover with evidence per alias, guardrail library, semantic cache, discovery of unregistered traffic, chargeback |
 
 ## Sources
 

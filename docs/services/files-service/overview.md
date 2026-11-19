@@ -1,44 +1,71 @@
-# Files
+# Files service
 
-Status: first slice built. files-service runs on :8750 (`make up` starts it as `files`) with its own
-PostgreSQL tables and migration chain, tenant and team scoped routes, platform tokens verified locally, and a typed
-client for other services (`packages/ops_files_client`). The local backend works on the dev stack through proxy
-routes; S3 and Azure Blob sign upload and download URLs and move bytes through obstore, covered by unit tests on
-fakes. The sync library (`FileService`) stays for the in-process callers that have not moved yet. Design:
-this page.
+Status: current, checked against the code on 2026-11-18. Built: uploads, downloads, dedupe, the scan hook, legal holds, retention for knowledge snapshots and per-tenant storage settings on the local, S3 and Azure Blob backends. Partial: S3 and Azure against real accounts. Not built: multipart uploads and a scanning engine.
+
+The files service holds every file byte in the platform. Other services store and pass a file's id, never its bytes or
+where it is kept. A browser sends bytes straight to object storage on a short-lived signed address, and this service
+records the file, proves its type from its bytes, refuses a download until a scan clears it, and keeps it for as long as
+its retention class or a legal hold requires.
+
+## At a glance
 
 | Item | Detail |
 |---|---|
-| Purpose | Every file byte in the platform goes through this service. Other services store and pass `file_id`s, never bytes or storage keys. Bytes travel from the browser to object storage on a short-lived presigned URL; the service holds metadata. |
-| Owns | File metadata in its tables (`files`, `file_blobs`, `file_versions`, `file_references`, `file_legal_holds`, `file_idempotency`; chain `alembic_version_files`) and the objects in the files bucket or container. |
-| Depends on | An object store (Amazon S3 or S3-compatible with Object Lock, or Azure Blob Storage with version-level immutability), a malware scanner (ClamAV, Defender or ICAP behind `Scanner`), `services/shared` once it exists. |
-| Console contract | `apps/console/src/lib/types/files.ts`. `ops_files.models` mirrors it in snake_case and accepts the camelCase JSON. |
+| Owns | File metadata, the blobs behind them, references from other records, legal holds, read requests, the tenant's storage settings and their credentials, and the objects in the configured bucket or container |
+| Port | 8750 (`OPS_FILES_PORT`) |
+| Code | `services/files-service` (`ops_files`), with the storage adapters in `packages/ops_storage` and the client other services use in `packages/ops_files_client` |
+| Database | Own migration chain (`alembic_version_files`, `services/files-service/migrations`). Tables: `files`, `file_blobs`, `file_versions`, `file_references`, `file_legal_holds`, `file_idempotency`, `file_read_requests`, `storage_settings`, `storage_settings_audit`, `storage_credentials`, `files_outbox` |
+| Isolation | Every transaction runs as `ops_files_tenant` (`services/files-service/src/ops_files/store/files.py:175`); a file of another team is reported as missing. Tests: `services/files-service/tests/test_isolation.py`; use case uc-094 |
+| Secrets it holds | Storage credentials, sealed with AES-256-GCM under `OPS_SECRETS_KEY` and never returned (`services/files-service/src/ops_files/secrets.py`); a per-process key that signs local download addresses |
+| Calls out to | The object store a tenant's storage settings name (local disk, Amazon S3 or S3-compatible with Object Lock, Azure Blob Storage with version-level immutability); agents-service for its events. A malware scanner reports back on the scan hook |
+| Called by | The console (uploads, the Files pages, storage settings); agents-service (chat and mailbox attachments); kb-service (source files and snapshots); documents-service (bytes to read) |
+| Events it sends | `file.deleted` and `file.read_requested` to agents-service through `files_outbox` and the `files_relay` process, at least once; delivered rows are pruned after 7 days (`services/files-service/src/ops_files/__main__.py:106-114`) |
+| Events it receives | None. A scanner's verdict arrives on `POST /v1/files/scan-results` |
+| When something is down | A file waits as pending until the scan hook reports, and a download is refused (423) until it is clean. A storage settings save that cannot write, read and delete a probe object is refused naming the purpose, so a wrong target never takes uploads (`services/files-service/src/ops_files/settings.py`) |
+| Routes | API reference tab, HTTP API › Files, built from `services/files-service/openapi.json` |
+| Console contract | `apps/console/src/lib/types/files.ts`; `ops_files.models` mirrors it in snake_case and accepts the camelCase JSON |
 
-What is read from a file (extractions, document types) is documents-service's, which reads bytes through this
-service's client as the caller's team (`docs/services/documents-service/overview.md`). files-service calls no other
-service when it deletes a file.
+What is read from a file (readings, extractions, document types) belongs to documents-service, which reads bytes
+through this service's client as the caller's team. Trust rules for every service are in
+[identity and tenancy](../../architecture/identity-and-tenancy.md).
 
-The service map that applies to every service is `docs/architecture/service-map.md`; trust rules are in
-`docs/architecture/identity-and-tenancy.md`.
-
-## Run the checks
-
-Needs Python 3.12 and uv. Docker runs the optional LocalStack and Azurite containers; without them those
-cases skip with a reason.
-
-```bash
-cd services/files-service
-uv sync
-docker run -d --name ops-files-localstack -p 4566:4566 -e SERVICES=s3 -e S3_SKIP_SIGNATURE_VALIDATION=0 localstack/localstack:3.8
-docker run -d --name ops-files-azurite -p 10000:10000 mcr.microsoft.com/azure-storage/azurite azurite-blob --blobHost 0.0.0.0 --skipApiVersionCheck --loose
-uv run ruff check
-uv run pyright
-uv run pytest -rs
+```mermaid
+sequenceDiagram
+  participant B as Browser
+  participant F as files-service
+  participant O as Object store
+  B->>F: POST /v1/files/uploads (name, type, size)
+  F-->>B: signed PUT address
+  B->>O: PUT the bytes
+  B->>F: POST /v1/files/uploads/{id}/complete
+  F->>O: read back: size, type from the bytes, sha256
+  F-->>B: the file, or the existing one when the bytes match
 ```
 
-The failure modes the tests guard, and which backend runs each, are in `docs/services/files-service/tests.md`.
+## Run and test it alone
 
-## Hosted service
+| Task | Command |
+|---|---|
+| Serve on :8750 in the foreground | `make -C services/files-service run`; on the stack, `make restart SVC=files` |
+| Apply its migrations | `make -C services/files-service migrate` |
+| Tests on the test database | `make -C services/files-service test` (`T=` names files) |
+| Lint, strict types, tests and the OpenAPI gate | `make -C services/files-service verify` |
+| Regenerate `openapi.json` | `make -C services/files-service openapi` |
+| Upload, complete, scan hook, download, hold and delete end to end | `make usecase-test UC=uc-093`; another team's file is 404 everywhere, `UC=uc-094` |
+
+The S3 and Azure cases run against LocalStack and Azurite when those containers are up, and skip with a reason when
+they are not:
+
+```bash
+docker run -d --name ops-files-localstack -p 4566:4566 -e SERVICES=s3 -e S3_SKIP_SIGNATURE_VALIDATION=0 localstack/localstack:3.8
+docker run -d --name ops-files-azurite -p 10000:10000 mcr.microsoft.com/azure-storage/azurite azurite-blob --blobHost 0.0.0.0 --skipApiVersionCheck --loose
+```
+
+The failure modes the tests guard, and which backend runs each, are on the [files tests](tests.md) page.
+
+## What each route enforces
+
+The typed contract is in the API reference tab; this table adds the rule each route holds.
 
 | Route | What it does |
 |---|---|
@@ -60,13 +87,7 @@ The failure modes the tests guard, and which backend runs each, are in `docs/ser
 | `OPS_FILES_PUBLIC_URL` | The service's public base, path included (e.g. `https://ops.example/api/files`), when a proxy serves it under a path it strips; upload and download URLs are built on it. Unset, the request's own base |
 | `OPS_FILES_SCANNING` | `hook` by default (pending until the scan hook), `off` (dev only, set by `make up`: clean at completion, files 5.3.1; files-service refuses it outside dev), `eicar` (inline EICAR engine) |
 
-```bash
-make up && make health              # files on :8750 beside the other services
-make usecase-test UC=uc-093         # upload, complete, get, scan hook, download, hold, delete
-make usecase-test UC=uc-094         # another team's file is 404 everywhere
-```
-
-## What exists
+## Modules
 
 | Module | What it does |
 |---|---|
@@ -132,22 +153,19 @@ make usecase-test UC=uc-094         # another team's file is 404 everywhere
 
 ## Not built yet
 
-| Gap | Note |
+| Gap | State |
 |---|---|
-| Callers moved onto the service | Knowledge intake (kb-service `ops_kb.files`) still runs its own store; it moves to `FilesClient` and maps or migrates its existing ids. Chat attachments have moved (see Decisions) |
-| S3 and Azure from settings | `__main__` builds the local backend only; the adapters take S3 and Azure when a caller builds them |
-| Multipart and resumable uploads, Uppy in the console upload component | Not started (design step 6) |
-| Retention run, upload expiry, abort sweep, scan reconciliation loops | Not started; the service has no `loops()` yet |
-| ClamAV, Defender and GuardDuty adapters | The hook route is built; the engines are not |
-| A tenant-wide Platform admin role for legal holds | Holds need an admin of the file's team until platform-service has that role |
-| Checksum header on uploads to Object Lock buckets | Real S3 requires one per PUT; moto does not, so it is untested |
-| New versions of a file | `versions` holds version 1 only |
-| Asynchronous scanning | The scanner runs inline in `complete_upload` when configured; `record_scan` is the hook for an engine that reports later |
-| Previews, evidence export, storage settings and connection test from `files.ts` | Not started |
-| Expiry sweep (delete after `delete_after` for non-WORM classes) | Not started |
-| Azure immutability and legal hold against a real account | **Unverified**: Azurite does not implement them, so `AzureBlobObjectStore.set_retention`, `set_legal_hold` and the version-by-version delete have not run |
-| Azure user delegation SAS against a real account | **Unverified**: Azurite has no Entra ID; tests use an account-key SAS |
-| Upload and digest read the object twice when a scanner is configured | Acceptable at current sizes; one pass can feed both later |
+| Multipart and resumable uploads, Uppy in the console upload component | not built |
+| Deletes on their date for every other retention class, upload expiry, an abort sweep, scan reconciliation | not built: the `files_retention` process deletes released knowledge snapshots only (`services/files-service/src/ops_files/retention.py`) |
+| ClamAV, Defender and GuardDuty adapters | not built: the scan hook route is built; the engines are not |
+| A tenant-wide platform admin role for legal holds | not built: holds need an admin of the file's team |
+| Checksum header on uploads to Object Lock buckets | not built: real S3 requires one per PUT; moto does not, so it is untested |
+| New versions of a file | not built: `file_versions` holds version 1 only |
+| Asynchronous scanning | not built: the scanner runs inline in `complete_upload` when configured; `record_scan` is the hook for an engine that reports later |
+| Previews and evidence export from `files.ts` | not built |
+| Azure immutability and legal hold against a real account | partial: Azurite does not implement them, so `AzureBlobObjectStore.set_retention`, `set_legal_hold` and the version-by-version delete have not run |
+| Azure user delegation SAS against a real account | partial: Azurite has no Entra ID; tests use an account-key SAS |
+| Upload and digest read the object twice when a scanner is configured | acceptable at current sizes; one pass can feed both later |
 
 ## Licences
 

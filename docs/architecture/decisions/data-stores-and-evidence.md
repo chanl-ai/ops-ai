@@ -35,7 +35,7 @@ immutable with retention and legal hold. Knowledge needs vector search scoped by
 WORM storage: S3 Object Lock in compliance mode means no user, including root, can delete or shorten
 retention, legal holds have no expiry, and Object Lock has been assessed for SEC 17a-4, CFTC and
 FINRA environments ([S3 Object Lock][s3-lock]). The bank's on-prem equivalent must offer the same
-three properties; which product it is depends on the bank ([open question 5](../overview.md#open-questions)).
+three properties; which product it is depends on the bank ([open question 5](../delivery.md#open-questions)).
 
 ### Vector store
 

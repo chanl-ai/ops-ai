@@ -68,7 +68,7 @@ lessons on public endpoints.
 | Tools and knowledge | Through the data gateway with the workflow's module scopes, exactly as in the email workflow |
 | Models | Through the AI gateway with the workflow's key and budget |
 | Writes | A write proposed in chat becomes a drafted action. If the user is entitled and the risk tier allows self-approval, the user's confirmation in the chat signs the approval token; otherwise it goes to the review queue like any other action |
-| Audit | Same run journal, gateway logs and audit export as workflows; chat transcripts follow the retention rule set by [open question 4](../overview.md#open-questions) |
+| Audit | Same run journal, gateway logs and audit export as workflows; chat transcripts follow the retention rule set by [open question 4](../delivery.md#open-questions) |
 | Testing | The chat template has a suite like any workflow; the mock's agent Test sheet runs against a draft |
 
 **How MCP Apps are governed.**
