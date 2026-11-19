@@ -30,11 +30,12 @@ import { useCanBuild } from '@/hooks/me-queries';
 import { useDeleteSkill, useDeprecateSkill, useDuplicateSkill, useExportSkills, useRequestSkillReview, useSkill } from '@/hooks/skill-queries';
 import { useTabParam } from '@/hooks/use-tab-param';
 import { plural, relativeTime } from '@/lib/format';
+import type { Carried } from '@/lib/kept-edits';
 import type { SkillDetail } from '@/lib/types/skills';
 
 import { ActivityTab } from './_parts/activity-tab';
 import { ResourcesTab } from './_parts/resources-tab';
-import { SkillEditor } from './_parts/skill-editor';
+import { type Form as SkillForm, SkillEditor } from './_parts/skill-editor';
 import { TestsTab } from './_parts/tests-tab';
 import { VersionsTab } from './_parts/versions-tab';
 
@@ -68,6 +69,9 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
   const close = (open: boolean) => !open && setPanel('instructions');
   // Adding a file or restoring a version saves a draft, and the form is drawn again from it: unsaved text would go.
   const [unsaved, setUnsaved] = React.useState(false);
+  // The editor is drawn again for each saved version; after a save someone else made first, it hands its unsaved text
+  // here so the form drawn on their version starts with it.
+  const carried = React.useRef<Carried<SkillForm> | null>(null);
   const waits = unsaved && (panel === 'resources' || panel === 'versions');
   const request = useRequestSkillReview(s.id);
   const deprecate = useDeprecateSkill(s.id);
@@ -282,7 +286,7 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
                 </>
               }
             >
-              <SkillEditor key={`${newest.version}-${newest.savedAt}`} skill={s} canEdit={canBuild} onDirtyChange={setUnsaved} />
+              <SkillEditor key={`${newest.version}-${newest.savedAt}`} skill={s} canEdit={canBuild} onDirtyChange={setUnsaved} carried={carried} />
             </RecordLayout>
             </BuilderFieldset>
           </div>

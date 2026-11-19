@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-19",
+  "title": "Reloading a skill keeps what you typed",
+  "description": "When someone else saves a skill before you, Reload now shows their version with your unsaved changes kept on top, ready to save. It used to drop them.",
+  "tag": "fix"
+}

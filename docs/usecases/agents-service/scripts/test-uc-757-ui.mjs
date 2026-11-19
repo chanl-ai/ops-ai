@@ -46,7 +46,8 @@ await withUiStack(
       // So is a link's prefetch (`_rsc`) the browser drops when the page is left before it answers.
       const dropped = (r) => (r.method() === 'POST' && /\/chat\/threads\/[^/]+\/messages$/.test(r.url())) || (/[?&]_rsc=/.test(r.url()) && r.failure()?.errorText === 'net::ERR_ABORTED');
       page.on('requestfailed', (r) => !dropped(r) && failed.push(`${who}: ${r.method()} ${r.url()} ${r.failure()?.errorText}`));
-      page.on('response', (r) => r.status() >= 400 && failed.push(`${who}: ${r.status()} ${r.request().method()} ${r.url()}`));
+      // The save refused because someone else saved first (409) is the step under test.
+      page.on('response', (r) => r.status() >= 400 && !(r.status() === 409 && r.request().method() === 'PUT' && /\/v1\/skills\/[^/]+\/draft$/.test(r.url())) && failed.push(`${who}: ${r.status()} ${r.request().method()} ${r.url()}`));
     };
     const signIn = async (email) => {
       const page = await (await browser.newContext({ viewport: { width: 1440, height: 1000 } })).newPage();
@@ -104,6 +105,36 @@ await withUiStack(
         drawn.chips === 1 && drawn.marks === 1 && ['tool', 'agent', 'workflow'].includes(kept.use?.kind) && kept.do?.includes(`@${kept.use.kind}:${kept.use.id}`) && /^Look the charge up/.test(kept.do),
         { drawn, kept },
       );
+      // Someone else saves first: James's save is refused, and Reload keeps what he typed on top of their version.
+      // The form is drawn again from the version just saved; typing starts once it has.
+      // The button is also off while the save is in flight, so the saved toast is waited for first.
+      await page.getByText(/Saved draft v1/).first().waitFor({ timeout: 60_000 });
+      await page.waitForFunction(() => document.querySelector('[data-testid="save-skill-draft"]')?.disabled === true, null, { timeout: 60_000 });
+      await page.waitForTimeout(800);
+      await page.getByTestId('skill-document').getByRole('group', { name: 'Step 3' }).click();
+      await page.keyboard.press('End');
+      await page.keyboard.type(' Then thank them.');
+      await made(`/v1/skills/${skill.id}/publish-requests`, { note: 'use case' });
+      await made(`/v1/skills/${skill.id}/draft`, { name: `Card dispute renamed ${RUN}`, baseVersion: 1 }, 'PUT');
+      await page.getByTestId('save-skill-draft').click();
+      await page.getByTestId('save-skill-draft-confirm').click();
+      const staleAlert = page.getByTestId('skill-stale-base');
+      const refusedStale = await staleAlert.waitFor({ timeout: 60_000 }).then(() => true, () => false);
+      await page.getByTestId('skill-stale-reload').click();
+      await staleAlert.waitFor({ state: 'detached', timeout: 60_000 }).catch(() => undefined);
+      await page.getByTestId('skill-document').getByRole('group', { name: 'Step 3' }).waitFor({ timeout: 60_000 });
+      const afterReload = await page.getByTestId('skill-document').innerText();
+      const fields = await page.locator('input').evaluateAll((els) => els.map((el) => el.value));
+      check(
+        '10 after someone else saves first, Reload shows their version and keeps the unsaved text',
+        refusedStale && /Then thank them\./.test(afterReload) && fields.includes(`Card dispute renamed ${RUN}`),
+        { refusedStale, afterReload, fields },
+      );
+      const onTop = armed(page.waitForResponse((r) => r.request().method() === 'PUT' && r.url() === `${agents}/v1/skills/${skill.id}/draft`, { timeout: 60_000 }));
+      await page.getByTestId('save-skill-draft').click();
+      await page.getByTestId('save-skill-draft-confirm').click();
+      const top = (await (await onTop).json()).data ?? {};
+      check('10 the kept text then saves on top of their version', top.name === `Card dispute renamed ${RUN}` && /Then thank them\./.test(top.content?.steps?.[2]?.do ?? ''), { name: top.name, step: top.content?.steps?.[2] });
       await shootBothWidths(page, AREA, 'uc-757-skill-admin', async () => {
         await page.waitForTimeout(600);
         await page.getByTestId('skill-results-section').scrollIntoViewIfNeeded().catch(() => undefined);
