@@ -92,6 +92,8 @@ SKIP_IS_FINE: Call = ("switch_skill", {"slug": "skip-is-fine"})
 ESCALATE: Call = ("exit", {"name": "escalate"})
 SKIP: Call = ("exit", {"name": "skip"})
 SKIP_OK: Call = ("exit", {"name": "skip", "returns": {"ok": True}})
+LOOK_THEN_LETTER: Call = ("switch_skill", {"slug": "look-then-letter"})
+RUNS_WAIT: Call = ("switch_skill", {"slug": "runs-wait-then-look"})
 # The rule on a step that runs the look-ok skill, by the name of the skill that has that step.
 PARENT_RULES = {
     "ok_true": "result.ok is true",
@@ -209,10 +211,33 @@ def book(if_not: dict[str, Any], version: int = 1) -> list[Skill]:
                 {
                     "do": "Say sorry.",
                     "use": {"kind": "skill", "id": "sk_sorry"},
-                    "check": {"text": "result.exit == 'done'", "by": "rule"},
+                    "check": {"text": "result.ok is true", "by": "rule"},
                     "ifNot": once,
                 },
                 {"do": "Note it.", "use": {"kind": "tool", "id": "add_note"}},
+            ),
+        ),
+        stepped("sk_look_then_letter", 1, "Look then letter", "look-then-letter", program(looked, letter)),
+        stepped(
+            "sk_wait_then_note",
+            1,
+            "Wait then note",
+            "wait-then-note",
+            program({"do": "Wait."}, letter, exit={"skip": "Go on without the note."}),
+        ),
+        stepped(
+            "sk_runs_wait",
+            1,
+            "Runs wait then look",
+            "runs-wait-then-look",
+            program(
+                {
+                    "do": "Note it.",
+                    "use": {"kind": "skill", "id": "sk_wait_then_note"},
+                    "check": {"text": 'result.exit == "done"', "by": "rule"},
+                    "ifNot": once,
+                },
+                {"do": "Look it up.", "use": {"kind": "tool", "id": "lookup_charge"}},
             ),
         ),
         stepped(
@@ -478,9 +503,17 @@ THREADS = [
         "refund_charge is held because runs-look failed its check; start runs-look again.",
     ),
     Thread(
-        "the check on the result of a skill a step ran fails",
-        [[RUNS_SORRY, ("exit", {"name": "escalate"})], [note("CH-2")]],
+        "a skill a step ran ends as done and the step's rule on its result fails",
+        [[RUNS_SORRY, DONE], [note("CH-2")]],
         [],
+    ),
+    # An exit the model calls fails the step and takes no hold (rule 8): the model can call it before the skill
+    # reaches a tool another skill holds, so a hold here could lock the two. Q fails and holds the note; the parent's
+    # skill leaves at once; Q then passes.
+    Thread(
+        "an exit called at once takes no hold, so two skills do not lock",
+        [[LOOK_THEN_LETTER, look("CH-1")], [RUNS_WAIT, SKIP], [LOOK_THEN_LETTER, look("CH-2"), note("CH-2")]],
+        ["lookup_charge", "lookup_charge", "add_note"],
     ),
     Thread(
         "a rule on a step with no tool fails",

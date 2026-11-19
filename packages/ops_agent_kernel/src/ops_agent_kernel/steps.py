@@ -511,7 +511,8 @@ def _sub_ended(
     wants another ending to go on writes `result.exit in ["done", "skip"]`. So no exit carries a step past a
     check that did not pass inside the sub-skill, however often it is called. A sub-skill that ended as failed is
     always a failed attempt of the step. Neither takes a hold here: a check that failed inside took one where it
-    failed. A rule of the step's own that does not hold is a failed check like any other, and takes one.
+    failed. A rule of the step's own that does not hold on a done ending is a failed check like any other, and
+    takes one; on any other ending the step fails and takes none.
 
     The step's result holds what the sub-skill handed back only when it ended as done. With any other exit the model
     names the results itself at any step, so a rule such as `result.ok` would pass on its word; they are left out.
@@ -531,7 +532,11 @@ def _sub_ended(
     names_exit = name == "done" or (check is not None and not _holds(check, {"exit": "failed"}, r, []))
     if check is not None and ruled and not (_holds(check, value, r, told) and names_exit):
         r.results[str(r.step)] = _kept(value, False)
-        _hold(run, skills)
+        # Only a done ending takes a hold here: every tool of the sub-skill was then free, so the check can be run
+        # again. An exit can be called before the sub-skill reaches a tool another skill holds, and a hold taken
+        # then could lock the two skills for good.
+        if name == "done":
+            _hold(run, skills)
         _failed(run, skills, told)
         return
     _passed(run, skills, value, told)
