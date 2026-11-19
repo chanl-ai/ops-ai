@@ -274,6 +274,20 @@ async def test_a_specialist_spends_the_callers_budget_and_stops_when_it_is_spent
     # The chain is the thread's team's: another team reads none of its spend.
     with scope(TENANT, "team_fraud"):
         assert (await rt.usage.totals(thread)).calls == 0, "another team read this team's chain"
+    # A thread a caller links to this one in a request body spends its own budget, never this thread's.
+    forged = {"calledBy": "ag_branch", "parentThreadId": thread}
+    body = {"graph": "agent:ag_dispute", "externalKey": "linked", "parentThreadId": thread, "metadata": forged}
+    made = await c.post("/v1/threads", json=body, headers=ADMIN)
+    assert made.status_code == 201, made.text
+    linked = made.json()["data"]["threadId"]
+    ran = await c.post(f"/v1/threads/{linked}/runs/stream", json={"input": {"message": "Hello"}}, headers=ADMIN)
+    assert ran.status_code == 200, ran.text
+    assert rt.graph_store is not None
+    with tenant_scope(TENANT):
+        row = await rt.graph_store.thread_row(linked)
+        assert row is not None and row.parent_thread_id == thread, "the body link was not stored, so nothing is proven"
+        own, chain = (await rt.usage.totals(linked)).calls, (await rt.usage.totals(thread)).calls
+    assert own > 0 and chain == 3, (own, chain)
     # The caller is held by the same total: its next turn waits on the budget card its person answers.
     await say(c, thread, "And the deadline?", VIEWER)
     waiting: dict[str, Any] = (await c.get(f"/v1/chat/threads/{thread}", headers=VIEWER)).json()["data"]["messages"][-1]
