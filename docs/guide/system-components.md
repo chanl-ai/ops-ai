@@ -2,10 +2,10 @@
 
 Status: current. Checked against the release's Compose file, images and services.
 
-Ops AI ships as eleven long-running containers and one one-shot job. Seven are Python services built from one base
-image, plus the workflow worker (the agents image with another command), the web console, a policy engine (Open Policy
-Agent) and one entry point (Caddy). PostgreSQL is yours and runs outside them. Kubernetes runs the same images as the
-same workloads.
+Ops AI ships as twelve long-running containers and one one-shot job: eight Python services built from one base image,
+the workflow worker (the agents image with another command), the web console, a policy engine (Open Policy Agent) and
+one entry point (Caddy). PostgreSQL is yours and runs outside them. Kubernetes runs the same images as the same
+workloads.
 
 <!-- diagram: deployment -->
 ```mermaid
@@ -18,6 +18,7 @@ flowchart TB
     W["worker"]
     AG & W --> MO["models<br/>8730"]
     TO --> OPA["opa<br/>8181"]
+    TO --> RU["runner<br/>8770"]
     AG ~~~ W
   end
   NET --> PG[("PostgreSQL<br/>one login per service")]:::store
@@ -28,7 +29,7 @@ flowchart TB
 ```
 
 *One machine with Docker Compose. The proxy is the only container that publishes a port; the worker, models-service
-and the policy engine are never reached from a browser. Every service checks sign-in tokens itself against
+the code runner and the policy engine are never reached from a browser. Every service checks sign-in tokens itself against
 platform-service's public keys, and each has its own database login.*
 
 ## The containers
@@ -40,7 +41,8 @@ platform-service's public keys, and each has its own database login.*
 | platform | Sign-in and sessions, tenants, teams, members, roles, API keys, team policies, the audit log. The only issuer of sign-in tokens | 8710; 8711 for API key checks, private | Tenants, teams, users, members, roles, sessions, API keys, sign-in providers and domains, password hashes, audit entries | Your identity provider (OIDC or SAML); your mail server for invites and password resets |
 | agents | Agents, workflows and their versions, chat, runs, reviews and human tasks, cases, channels (mailboxes, the API, chat widgets), service events | 8700 | Definitions and versions, threads, runs, workflow steps, saved run state, reviews and decisions, cases, mailboxes, budgets, agent memories | tools, models, kb, files, documents, platform |
 | worker | Runs workflow steps from the work queue, resumes runs after a decision, fires timers, reads team mailboxes | none | Same database as agents | Same as agents |
-| tools | The data gateway: tool modules and their operations, connections, the approval check, the outbound allow-list, stored credentials, the call log, an MCP endpoint for AI assistants | 8720 | Tool modules and versions, connections and their tokens, credentials (encrypted), allow-list, call log | Your systems (only hosts on the allow-list); opa; models, for the optional check before sending; platform, for team policies |
+| tools | The data gateway: tool modules and their operations, connections, the approval check, the outbound allow-list, stored credentials, the call log, an MCP endpoint for AI assistants | 8720 | Tool modules and versions, connections and their tokens, credentials (encrypted), allow-list, call log | Your systems (only hosts on the allow-list); opa; runner, for code tools; models, for the optional check before sending; platform, for team policies |
+| runner | Runs a code tool's Python function in a WebAssembly sandbox with a memory cap, a time limit, no network, no files and no secrets. The function reaches other systems only by calling a tool back through tools | 8770, private | Nothing | tools, and only tools calls it |
 | models | The AI gateway: aliases, model keys, budgets, rate limits, the call log | 8730, private | Provider connections, aliases and their versions, model keys and spend, a metadata-only call log | Your model endpoint; tools, to read the provider's key from the credential store |
 | kb | Knowledge bases: sources, ingestion, search with page and section citations | 8740 | Sources, items and versions, searchable chunks | files, agents |
 | files | File bytes: upload, download, type judged from the bytes, malware scan hook, retention class, legal hold | 8750 | File records, versions, references, holds, storage settings; the bytes on its volume or in S3 or Azure Blob | agents, to report events such as a deleted file |
@@ -48,7 +50,7 @@ platform-service's public keys, and each has its own database login.*
 | opa | Open Policy Agent with the gateway's policy built in | 8181, private | Nothing; tools loads the approval key into it at start | Nothing |
 | migrate | One-shot job: applies every service's schema in order, then creates the first tenant, its Security team and the first admin | none | Nothing | PostgreSQL |
 
-Every image runs as a non-root user (uid 10001). The seven Python images share one base layer of about 626 MB; the
+Every image runs as a non-root user (uid 10001). The Python images share one base layer of about 626 MB; the
 console image is about 440 MB.
 
 ## Rules every service follows

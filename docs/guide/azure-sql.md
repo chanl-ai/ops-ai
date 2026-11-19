@@ -38,7 +38,7 @@ sqlcmd -b -U ops_migrator -d ops -i grants.sql
 | Item | Why it matters | Status |
 |---|---|---|
 | Applying the scripts to an Azure SQL database and comparing the result with the services' table definitions | No script has yet run on a server | Planned |
-| Running the services on Azure SQL and SQL Server | Database code that is specific to PostgreSQL remains in each service and is being moved into the dialect layer | In progress |
+| Running the services on Azure SQL and SQL Server | Database code that is specific to PostgreSQL remains in each service and is being moved into the dialect layer | Partial |
 | Saved run state for workflows and chats | Its three tables are written with PostgreSQL-specific code and are not in the SQL Server scripts | Planned |
 | Knowledge search | PostgreSQL full-text search has no SQL Server equivalent in the scripts yet | Planned |
 | Sign-in data | The platform service still sets the tenant with PostgreSQL statements and uses four lookup functions that run before the tenant is known | Planned |

@@ -4,14 +4,15 @@ Status: current. Each flow below is exercised end to end by the release's automa
 
 Three flows cover most of what Ops AI does: a person chats with an agent that wants to change something, a workflow
 pauses for a person and resumes days later, and an email becomes cases that people decide. In each one the same three
-rules hold: a write waits for an approval bound to its exact input, every outside call leaves through a gateway, and a
-run's state is saved after every step so a crash or a restart loses nothing. Developers who want runnable folders start
-at [build-with-ops-ai.md](build-with-ops-ai.md).
+rules hold: a write that needs approval waits for a token bound to its exact input, every outside call leaves through a
+gateway, and a run's state is saved after every step so a crash or a restart loses nothing. To run the flows yourself,
+start at [Build with Ops AI](build-with-ops-ai.md).
 
 ## A chat turn with a tool approval
 
 A member of the operations team asks the team's agent to place a hold on an account. Reading is free; the hold is a
-write, so the agent drafts it and a person approves it before anything reaches the core system.
+write, and this team has set holds to wait for a reviewer, so the agent drafts it and a person approves it before
+anything reaches the core system.
 
 ```mermaid
 sequenceDiagram

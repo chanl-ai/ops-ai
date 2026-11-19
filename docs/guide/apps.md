@@ -7,18 +7,17 @@ An App is something outside Ops AI that your agents and workflows work with. Eac
 or a workflow step can take with it, and some also bring Resources: agents, skills, workflows and document types your
 team can add as its own copies. An App signs in with an Account: the team's, or a person's own.
 
-## The Apps menu
+## Where Apps live in the console
 
-Open **Data Hub › Apps** in the sidebar. Four tabs sit at the top of every page in the menu.
-
-| Tab | What it holds |
+| Where | What it holds |
 |---|---|
-| Apps | Every App your team can use. Search by name, and narrow the list with **Connected only** or **Available only**. Built in Apps, such as Files and Document types, are always on and tagged **Built in** |
-| Credentials | **App credentials**, the OAuth apps your Apps sign in with, and **Secrets**, the values Tools send, such as API keys |
-| My accounts | The Apps you connected with your own Account. Disconnect one here |
-| Tools | Every Tool your team can use, and **Tool calls**, the log of every call they made |
+| **Data Gateway › Apps**, view **Team setup** | Every App your team can use, under the tabs All, Connected and Available, with filters for state, category and kind. Built-in Apps, such as Files and Document types, are always on. Admins change setup here; members see it read-only |
+| **Data Gateway › Apps**, view **Mine** (also **My apps** in your user menu) | Your own sign-ins: one card for each App your team turned on, with one action: Connect, Reconnect or Add another account |
+| An App's page | Its tabs: Accounts, Tools, Auth configs (builders and admins), Resources, Logs (with the call log permission) and Settings (builders and admins) |
+| **Data Gateway › Tools** | Every Tool your team can use |
+| **Data Gateway › Secrets** | The values Tools send, such as API keys |
 
-**Add custom app** on the Apps tab adds an App the catalog does not list: its address and the key or sign-in it uses.
+**Add custom app** on Team setup adds an App the catalog does not list: its address and the key or sign-in it uses.
 
 ## An App's state
 
@@ -41,9 +40,9 @@ Beside `appState`, the API answers `appGroup`, who acts next: `on` (it works), `
 picker group and act on it; none works it out again. On an App each person signs in to, a person's state is their own
 sign-in, and an auth config's name and id are shown only to builders and admins.
 
-Before 9 November 2026 the API answered `not_installed` for an App that was installed and off for the team; that
-state is now `off`, and `not_installed` means the plugin itself is missing. Code that reads `appState` from the SDK
-should match `off` where it matched `not_installed`.
+> [!NOTE]
+> `off` means installed and not on for the team; `not_installed` means the plugin itself is missing. Earlier versions
+> answered `not_installed` for both, so code that matched it for an App that is off should match `off`.
 
 ## Turn an App on
 
@@ -52,7 +51,7 @@ setting and opens no sign-in; connecting is its own button, and it is optional f
 
 | Step | What happens |
 |---|---|
-| 1. On **Connectors › Team setup**, press **Turn on** on the App's card (the App's page has the same button) | The Turn on window opens |
+| 1. On **Apps › Team setup**, press **Turn on** on the App's card (the App's page has the same button) | The Turn on window opens |
 | 2. For an App that asks where you sign in (Salesforce), pick the place: login.salesforce.com, test.salesforce.com, or your company's address (My Domain), typed as its host | Saved on the App's auth config |
 | 3. Pick whose account Tools use: each person's, the team's, or each person's with the team's for runs nobody started | Asked once, when the App is first turned on |
 | 4. Keep **Give the team's assistant this app's read tools** ticked, or untick it | The assistant gets the read Tools when the App is saved |
@@ -62,9 +61,9 @@ setting and opens no sign-in; connecting is its own button, and it is optional f
 An App is **Connected** only once an Account has signed in or a test has passed; saving settings alone does not count.
 The same rule holds everywhere an App's settings are saved: **Settings › Set up**, a new auth config and the Turn on
 window each save and stop, and never start a sign-in. A sign-in starts only from a button that says Connect or Sign
-in: **Connect** on the App's page once it is on, **Sign in** on an Account's row, or **Connect** on **Connectors › Mine**.
+in: **Connect** on the App's page once it is on, **Sign in** on an Account's row, or **Connect** on **Apps › Mine**.
 
-A member who opens an App the team has not turned on, from **Connectors › Mine**, reads **Not set up for your team
+A member who opens an App the team has not turned on, from **Apps › Mine**, reads **Not set up for your team
 yet** with the admins to ask, and stays on Mine. Only someone who may turn the App on is offered **Turn on**, which
 opens the App's page.
 
@@ -82,7 +81,7 @@ Connect window asks for more than the steps above.
 | Security admin | Lists the App's hosts, so its sign-in and calls may leave | **Settings › Security › Egress**, Add host (and Add range for a host on a private network) |
 | Team admin | Presses **Turn on** | The window shows the App's settings (such as its API address), whose account calls use (the team's, each person's, or each person's with the team's as backup), the OAuth app (Ops AI's, or your own with its client ID and secret and the return address to register), and its sign-in address. **Turn on** saves them and opens no sign-in; **Connect my account** or **Connect the team account** after it opens the App's sign-in page |
 
-The App's page is **Data Hub › Apps** then the App's name, at `/integrations/apps/plugin:<plugin id>`. One Connect is
+The App's page is **Data Gateway › Apps** then the App's name, at `/integrations/apps/plugin:<plugin id>`. One Connect is
 enough to use it everywhere: test runs and live runs both sign in with the account you connected.
 
 ## Accounts: the team's and your own
@@ -95,8 +94,9 @@ The App's page lists its Accounts.
 | Your account | Your own sign-in. Tools you run, and agents acting for you, use it. Press **Connect my account** to add it |
 | Sandbox account | Marked **Sandbox**. Test runs use it: an agent's Test panel, a draft, and **Real** on a Tool's page. Live runs never do. Press **Add a sandbox account** to add one, for example a Salesforce sandbox org |
 
-Without a sandbox account, a test run signs in with the live account. It can read, but every write it makes waits for
-a person to approve it first, so testing never changes live data unseen.
+Without a sandbox account, a test run signs in with the live account. A test run from a Tool's page then asks the
+person running it before each write, so testing never changes live data unseen (on by default; a team admin can turn it
+off).
 
 - **Add account** on an auth config adds a second Account of the same App, under its own name, for example a second
   region. It starts from where the default Account signs in. A step or a call names it to use it.
@@ -106,14 +106,10 @@ a person to approve it first, so testing never changes live data unseen.
 - On the App's **Settings**, **Everyone signs in with their own account** decides whether each person connects their own
   Account. Off, every call runs as the team Account.
 
-## Connectors
+## Your own sign-ins
 
-**Connectors** in the sidebar shows your own sign-ins.
-
-| Page | What it holds |
-|---|---|
-| My connectors | One card for each App your team turned on: what it can do, who it signs in as, and one action (Connect, Reconnect or Add another account). An App your team has off still has a card, with **Ask an admin** |
-| Team setup | The admin view of the same Apps. Admins change setup here; members see it read-only |
+**Apps › Mine** has one card for each App your team turned on: what it can do, who it signs in as, and one action
+(Connect, Reconnect or Add another account). An App your team has off still has a card, with **Ask an admin**.
 
 - **Add another account** signs in through the same setup, so a personal and an office login sit side by side. Signing in
   again as a login already linked updates that account and says **Already connected as ...**.
@@ -123,7 +119,7 @@ a person to approve it first, so testing never changes live data unseen.
 
 ## Auth configs and Secrets
 
-An App's **Auth configs** tab, and **Auth configs** in the sidebar, list the OAuth app each App signs in with: **Ops AI**,
+An App's **Auth configs** tab lists the OAuth app each App signs in with: **Ops AI**,
 kept by Ops AI, or your team's own app. To bring your own app (a Salesforce connected app, a GitHub OAuth app):
 
 | Step | Where |
@@ -138,13 +134,13 @@ offline_access)** scopes; without the second, people are signed out when the fir
 Ops AI builds the callback URL from its console address (`OPS_CONSOLE_URL`), so it must match the address people open.
 Changing the client ID or permissions makes the accounts on it sign in again.
 
-**Credentials › Secrets** lists the values Tools send, such as an API key in a header. A value is encrypted, never shown
+**Data Gateway › Secrets** lists the values Tools send, such as an API key in a header. A value is encrypted, never shown
 again, and removed from whatever an App answers. A Security admin adds, rotates and deletes Secrets.
 
 ## Tools
 
-The App's **Tools** tab lists the Tools it brings by their titles. The Apps menu's **Tools** tab lists every Tool of the
-team, and **New tool** makes one of your own:
+The App's **Tools** tab lists the Tools it brings by their titles. **Data Gateway › Tools** lists every Tool of the team,
+and **New tool** makes one of your own ([Build your first tool](build-your-first-tool.md) walks through it):
 
 1. Name it and pick the App it calls. The App gives the address and the sign-in, so each request is a path on the App,
    such as `/accounts/{id}`.
@@ -162,24 +158,27 @@ The App's **Resources** tab lists the agents, skills, workflows and document typ
 team's own copy and opens it. A Resource your team has added reads **Added · Open**, which opens that copy. Your copy is
 yours to change; the App's version stays as it was.
 
-## Usage
+## Logs
 
-The App's **Usage** tab lists this team's runs of the App's Tools, newest first. **As** says whom each ran as: a person's
-email, or **Team account**.
+The App's **Logs** tab lists this team's calls of the App's Tools, newest first, with whom each ran as: a person or the
+team account. It is shown to people who may read the call log.
 
 ## Approvals
 
-A write waits for a person by default, unless its Tool is set to run at once. A team admin can make more writes wait in
-**Settings › Policies**, three ways:
+A write runs at once by default. A team admin makes writes wait for a person in **Governance › Policies**, at three
+levels; the most specific level that is set wins:
 
-| Policy | What waits |
+| Level | What waits |
 |---|---|
-| Tool writes need approval | Every write any Tool makes |
-| Apps whose writes need approval | Writes from the Apps you pick; search for an App and add it |
-| A Tool's own approval switch, on its page under **Access and approval** | Writes of that one Tool |
+| The team | Every write any Tool makes |
+| An App | Writes from the Apps you pick; search for an App and add it |
+| One Tool, on its page under **Access and approval** | Writes of that one Tool |
+
+At each level the answer is one of: don't ask, ask the person in the chat, or ask a reviewer. A plugin's Tool can ask
+first on its own. Every write over MCP waits for a person, whatever the settings say.
 
 A write that waits becomes a Human Task. The person who asked does not decide it unless a team admin turns on **Requester
-may decide** in Settings › Policies (off by default). Who may decide at all is the approve permission on a role. See
+may decide** in Governance › Policies (off by default). Who may decide at all is the approve permission on a role. See
 [Approval settings](security-and-governance.md#approval-settings).
 
 ## A run waiting for a person
@@ -204,6 +203,6 @@ header and its Settings, and **Turn on** there puts it back as it was, with no w
 | Turn an App on or off, connect its team Account, add a custom App | A team admin |
 | Connect your own Account, Make my default, Disconnect your own | Anyone in the team |
 | Run a waiting run as the team Account | People allowed to run as the team Account; team admins by default |
-| Edit an App credential | A team admin |
+| Add or edit an auth config | A team admin |
 | Add, rotate or delete a Secret | A Security admin |
 | Change the approval policies | People who manage the team's reviews |

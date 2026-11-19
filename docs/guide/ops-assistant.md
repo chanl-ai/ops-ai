@@ -60,4 +60,4 @@ numbers. It does not replace a correct answer with "nothing found".
   default for calls that name no account.
 - An App your team has off shows a card with **Ask an admin**.
 
-See [Apps](apps.md#connectors) for Connectors, where you manage your sign-ins.
+Your sign-ins are managed on **Apps › Mine** ([Apps](apps.md#your-own-sign-ins)).

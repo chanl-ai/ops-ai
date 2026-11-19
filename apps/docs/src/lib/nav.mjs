@@ -25,8 +25,8 @@ export const SITE = [
         entries: [
           { page: 'welcome.md', title: 'Welcome', icon: 'house' },
           { page: 'background/problem-statement.md', title: 'Why Ops AI', icon: 'lightbulb' },
+          { page: 'guide/quickstart.md', icon: 'zap' },
           { page: 'guide/whats-built-today.md', icon: 'list-checks' },
-          { page: 'guide/install.md', icon: 'download' },
           { page: 'guide/whats-new.md', icon: 'sparkles' },
         ],
       },
@@ -46,21 +46,37 @@ export const SITE = [
         entries: [
           { page: 'guide/overview.md', icon: 'layout-grid' },
           { page: 'guide/how-work-flows.md', icon: 'workflow' },
-          { page: 'guide/build-with-ops-ai.md', icon: 'blocks' },
-          { page: 'guide/apps.md', icon: 'app-window' },
-          { page: 'guide/build-your-first-tool.md', icon: 'wrench' },
-          { page: 'guide/plugins.md', icon: 'puzzle' },
-          { page: 'guide/vendor-onboarding-plugin.md', icon: 'package-plus' },
-          { page: 'guide/workflows.md', icon: 'git-branch' },
-          { page: 'guide/agents.md', icon: 'bot' },
-          { page: 'guide/ops-assistant.md', icon: 'message-square' },
-          { page: 'guide/workflow-example-coverage.md', icon: 'table' },
-          { page: 'guide/agent-example-coverage.md', icon: 'table' },
-          { page: 'guide/developer-surface-coverage.md', icon: 'table' },
           { page: 'guide/system-components.md', icon: 'boxes' },
-          { page: 'guide/models.md', icon: 'cpu' },
           { page: 'guide/data-and-database.md', icon: 'database' },
           { page: 'guide/security-and-governance.md', icon: 'shield-check' },
+          { page: 'guide/models.md', icon: 'cpu' },
+        ],
+      },
+      {
+        group: 'Develop',
+        icon: 'code',
+        open: true,
+        entries: [
+          { page: 'guide/build-with-ops-ai.md', icon: 'blocks' },
+          { page: 'guide/workflows.md', icon: 'git-branch' },
+          { page: 'guide/agents.md', icon: 'bot' },
+          { page: 'guide/build-your-first-tool.md', icon: 'wrench' },
+          { page: 'guide/plugins.md', icon: 'puzzle' },
+          { page: 'guide/plugins-install.md', icon: 'package-plus' },
+          {
+            group: 'Example coverage',
+            icon: 'table',
+            entries: ['guide/workflow-example-coverage.md', 'guide/agent-example-coverage.md', 'guide/developer-surface-coverage.md'],
+          },
+        ],
+      },
+      {
+        group: 'Apps and chat',
+        icon: 'app-window',
+        open: true,
+        entries: [
+          { page: 'guide/apps.md', icon: 'app-window' },
+          { page: 'guide/ops-assistant.md', icon: 'message-square' },
         ],
       },
       {
@@ -94,6 +110,8 @@ export const SITE = [
         open: true,
         entries: [
           { page: 'guide/deployment-options.md', icon: 'map' },
+          { page: 'guide/install.md', icon: 'download' },
+          { page: 'guide/install-cli.md', icon: 'square-terminal' },
           { page: 'guide/README.md', title: 'Client guide', icon: 'book-marked' },
           { page: 'deploy/install-guide.md', title: 'Install and operate, one page', icon: 'clipboard-list' },
           { page: 'deploy/install.md', title: 'The install script', icon: 'terminal' },
@@ -142,6 +160,8 @@ export const SITE = [
         entries: [
           { page: 'sdk/python.md', title: 'Python', icon: 'file-code' },
           { page: 'sdk/typescript.md', title: 'TypeScript', icon: 'file-code-2' },
+          { page: 'sdk/upgrading.md', title: 'Upgrading to 1.0.0', icon: 'circle-arrow-up' },
+          { page: 'sdk/changelog-next-major.md', title: '1.0.0 changelog', icon: 'history' },
         ],
       },
       {
@@ -184,7 +204,7 @@ export const SITE = [
       {
         group: 'Team environments',
         icon: 'cloud',
-        entries: ['deploy/devhost.md', 'deploy/fly.md', 'deploy/fly-staging.md', 'deploy/docs-site.md', 'deploy/demo-mailbox.md'],
+        entries: ['deploy/release.md', 'deploy/devhost.md', 'deploy/fly.md', 'deploy/fly-staging.md', 'deploy/docs-site.md', 'deploy/demo-mailbox.md'],
       },
     ],
   },

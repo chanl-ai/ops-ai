@@ -194,11 +194,12 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `deploy/install-guide.md` | Generated from `guide/install.md` and `guide/operate.md` and shipped in the release package as INSTALL.md: install with install.sh, then status, logs, upgrade, back up, restore and scaling |
 | `deploy/install.md` | `./install.sh` from a clone: what it asks, what it does, the other commands (upgrade, backup, restore, status, logs, uninstall), what is proven, and the by-hand appendix |
 | `deploy/client-install-guide.html` | The client architecture and install guide as one shareable page, generated from `guide/` by `scripts/docs/build_guide.mjs` |
-| `guide/README.md` | The client guide's index: the twelve sections in order and what each holds |
+| `guide/README.md` | The client guide's index: its sections in order and what each holds |
+| `guide/quickstart.md` | Quickstart: run the stack on a laptop with the test model, run a first workflow from a folder and call it from Python |
 | `guide/overview.md` | What Ops AI does, for whom, the platform map and the ideas it rests on |
 | `guide/system-components.md` | Every container: purpose, port, what it stores and what it calls |
 | `guide/how-work-flows.md` | A chat turn with a tool approval, a workflow with a human task, and a court order notice emailed to a team mailbox |
-| `guide/build-with-ops-ai.md` | Developer landing: the simple-first ladder, the two public bridges, and the Example folders |
+| `guide/build-with-ops-ai.md` | Developer landing: the example folders in order, how agents and workflows call each other, and the same operations on every surface |
 | `guide/workflows.md` | Author, validate, publish and test-run workflows from the Python SDK, TypeScript SDK and `opsai workflows` |
 | `guide/agents.md` | Author, publish and chat with agents from the SDK and `opsai agents` |
 | `guide/workflow-example-coverage.md` | Generated: every built node type and the Example that teaches it |
@@ -209,6 +210,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `guide/models.md` | The AI gateway: aliases, keys, budgets, data sensitivity and the test model |
 | `guide/deployment-options.md` | Compose, Kubernetes, single- and multi-tenant, the network and sizing |
 | `guide/install.md` | What to arrange before an install, then the install script's steps, included from `deploy/install.md` |
+| `guide/install-cli.md` | The `opsai` command on its own: install from a clone, behind a company package mirror, or offline from a wheelhouse |
 | `guide/operate.md` | Health, logs, upgrade and roll back, back up and restore, scaling, what to watch, key rotation |
 | `guide/azure-sql.md` | Azure SQL: the scripts ready for review and what is still to come |
 | `guide/apps.md` | Apps: the Apps menu, turning an App on, team and personal Accounts, App credentials and Secrets, Tools, Resources, approvals, a run waiting for a person, turning an App off |
@@ -226,8 +228,8 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `guide/skills/ops-mirror.md` | Developer skill for Claude Code and GitHub Copilot (ops-mirror): work behind a company mirror; generated into `.claude/skills/ops-mirror/SKILL.md` and `.github/prompts/ops-mirror.prompt.md` by `scripts/agent_skills.py` |
 | `guide/skills/ops-commit.md` | Developer skill for Claude Code and GitHub Copilot (ops-commit): pass the commit checks with a What's new entry; generated into `.claude/skills/ops-commit/SKILL.md` and `.github/prompts/ops-commit.prompt.md` by `scripts/agent_skills.py` |
 | `guide/skills/ops-database.md` | Developer skill for Claude Code and GitHub Copilot (ops-database): switch the database; generated into `.claude/skills/ops-database/SKILL.md` and `.github/prompts/ops-database.prompt.md` by `scripts/agent_skills.py` |
-| `guide/vendor-onboarding-plugin.md` | Building a plugin from the vendor-onboarding example in `examples/plugins/`: what is YAML and what is Python, the function's tests, installing it through the public APIs today, and the gaps found |
-| `guide/plugins.md` | Building a plugin: the manifest and request templates, Python tools, knowledge sources, `opsai plugin validate` and `test`, trying it on a local stack against a fake, installing it, turning it on, the platform and team OAuth apps, and per-person sign-in |
+| `guide/plugins.md` | Building a plugin: the manifest and request templates, paging, sign-in steps, settings, Python tools, knowledge sources, `opsai plugin validate` and `test`, and trying it on a local stack against a fake |
+| `guide/plugins-install.md` | Installing a plugin (plugins folder, a built image's pins, a laptop and a box), turning it on for a team, the platform and team OAuth apps, several accounts, package apps and plugin updates |
 | `guide/build-your-first-tool.md` | Build your first tool: a REST Tool on an App, a request with a form body, Mock then Real, to an agent that uses it; Mock and Real compared; what is not built yet |
 | `console/page-plan.md` | Console pages and the rules every page follows |
 | `console/standards.md` | Console UI standard: tokens, layout primitives, compose-from-shadcn, designed states, responsive, one-screen create, and the review checks |

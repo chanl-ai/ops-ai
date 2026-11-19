@@ -37,8 +37,9 @@ is the Kubernetes namespace.
 | Every service | `./install.sh logs` | `$C logs --since 1h` | `kubectl -n ops-ai logs deploy/<service> --since 1h` |
 | The schema job | `./install.sh logs migrate` | `$C logs migrate` | `kubectl -n ops-ai logs job/migrate` |
 
-Every service writes plain text lines to standard output, one event per line with `key=value` fields, for your log
-collector to pick up. Structured JSON output is planned.
+Every service writes one JSON object per event to standard output, with the service, the request, tenant and team ids, and
+secret values redacted, for your log collector to pick up ([logging](../architecture/logging-and-data-writes.md)).
+Metrics are planned.
 
 ## Upgrade and roll back
 
