@@ -34,8 +34,8 @@ export type SkillInputsForm = z.infer<typeof skillInputsSchema>;
 const fromForm = (f: SkillInputsForm): SkillInputField[] => f.inputs.map((i) => ({ name: i.name, type: 'string', description: i.description.trim(), required: i.required }));
 
 /**
- * What a skill asks for when it starts. A required input stops the skill from starting until it is given, whether the
- * agent starts it or a person picks it in chat. The values are passed up on every valid change and saved with the rest
+ * What a skill asks for when it starts. The list is stored with the draft; an agent's reply does not read it yet, so
+ * a required input does not hold a skill back. The values are passed up on every valid change and saved with the rest
  * of the draft; `onValidity` tells the page to hold the save while a field is wrong.
  */
 export function SkillInputsSection({ value, onChange, onValidity, disabled }: { value: SkillInputField[]; onChange: (next: SkillInputField[]) => void; onValidity: (valid: boolean) => void; disabled?: boolean }) {
@@ -54,7 +54,7 @@ export function SkillInputsSection({ value, onChange, onValidity, disabled }: { 
   }, [watch, onChange, onValidity]);
 
   return (
-    <SettingsSection title="Inputs" description="What the skill needs before it starts. It does not start while a required input is missing; the agent asks the person for it first.">
+    <SettingsSection title="Inputs" description="The values this skill takes when it starts. They are saved with the draft. Agents do not check them yet: a skill still starts when a required input is missing.">
       <fieldset disabled={disabled} className="flex flex-col gap-2" data-testid="skill-inputs-section">
         {inputs.fields.length === 0 && <p className="text-sm text-muted-foreground">No inputs. The skill uses what the agent already knows. Add an input only when the caller must pass something in.</p>}
         {inputs.fields.map((f, i) => (
