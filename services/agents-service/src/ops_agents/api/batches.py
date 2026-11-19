@@ -63,7 +63,10 @@ async def start_pending(db: AsyncEngine, *, limit: int = PER_TICK) -> int:
                 except Unprocessable as e:
                     # The upload checked every row against this version, so this is a row stored before that check:
                     # the batch stops instead of meeting the same refusal on every tick.
-                    await store.stop(batch_id, f"Stopped: row {row.row}'s input was refused. {e.message}")
+                    field = str((e.details or {}).get("path") or "input")
+                    await store.stop(
+                        batch_id, f"Stopped: row {row.row}'s {field} does not match the workflow's inputs."
+                    )
                     log.warning("batch_stopped", batch=batch_id, reason="input_refused", row=row.row)
                     break
                 await store.started(batch_id, row.row, row.attempt, run.id)

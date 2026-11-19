@@ -290,11 +290,16 @@ async def _deliver(
             )
         except Unprocessable as e:
             # The payload does not match this listener's input schema: it starts no run, the other listeners still
-            # hear the event, and the Background page shows why.
-            log.warning("event_input_refused", workflow=stored.workflow_id, name=name, key=key, reason=e.message)
+            # hear the event, and the Background page shows which field. The message can quote the value sent, so it
+            # is kept out of the log and the job.
+            field = str((e.details or {}).get("path") or "its input")
+            log.warning("event_input_refused", workflow=stored.workflow_id, name=name, key=key, field=field)
             if event.team_id:
                 await jobs.record(
-                    "event_workflows", f"Did not run {title}: {e.message}", "failed", team_id=str(event.team_id)
+                    "event_workflows",
+                    f"Did not run {title}: the event's {field} does not match its input schema",
+                    "failed",
+                    team_id=str(event.team_id),
                 )
             continue
         run_ids.append(run.id)
