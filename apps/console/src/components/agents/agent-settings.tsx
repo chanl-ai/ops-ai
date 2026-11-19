@@ -307,18 +307,27 @@ const UNSURE: Record<AgentGuardrails['whenUnsure'], string> = {
 /** A cap as a number field: empty is no cap, so a real agent is not held to a small menu of choices. */
 function CapField({ id, label, value, onChange, hint, placeholder, decimal }: { id: string; label: string; value: number | null; onChange: (v: number | null) => void; hint: string; placeholder: string; decimal?: boolean }) {
   // A cost cap takes cents; a count cap is a whole number of at least one.
-  const parse = (raw: string) => (decimal ? Math.max(0.01, Math.round(Number(raw) * 100) / 100) : Math.max(1, Math.floor(Number(raw))));
+  const least = decimal ? 0.01 : 1;
+  const parse = (raw: string) => (decimal ? Math.round(Number(raw) * 100) / 100 : Math.floor(Number(raw)));
+  // What is typed while it is not a cap the agent can hold (zero, a negative): shown with its error, and not saved.
+  const [refused, setRefused] = React.useState<string | null>(null);
   return (
-    <FormField id={id} label={label} hint={hint}>
+    <FormField id={id} label={label} hint={hint} error={refused === null ? undefined : `Enter ${least} or more, or leave it empty for no cap.`}>
       <Input
         id={id}
         type="number"
-        min={decimal ? 0.01 : 1}
-        step={decimal ? 0.01 : 1}
+        min={least}
+        step={least}
         inputMode={decimal ? 'decimal' : 'numeric'}
         placeholder={placeholder}
-        value={value ?? ''}
-        onChange={(e) => onChange(e.target.value.trim() === '' ? null : parse(e.target.value))}
+        value={refused ?? value ?? ''}
+        aria-invalid={refused !== null}
+        onChange={(e) => {
+          const raw = e.target.value.trim();
+          if (raw !== '' && !(parse(raw) >= least)) return setRefused(e.target.value);
+          setRefused(null);
+          onChange(raw === '' ? null : parse(raw));
+        }}
         className="bg-card"
       />
     </FormField>
