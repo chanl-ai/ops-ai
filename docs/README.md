@@ -548,8 +548,18 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `packages/ops_service_kit/logging.md` | Logging: one JSON line per event on stdout, its fields and ids, what is redacted, the rules and checks |
 | `sdk/python.md` | Python SDK: connect with an API key, run workflows and decide their tasks, the client's resources and errors |
 | `sdk/typescript.md` | TypeScript SDK: the same client for Node, typed from the API reference |
-| `sdk/changelog-next-major.md` | Draft changelog of the coming SDK major version: each changed route and the nouns and commands that follow |
+| `sdk/changelog-next-major.md` | For contributors: the SDK 1.0.0 route-by-route record, each changed route and the code that follows it; its breaking block is generated |
+| `sdk/changelog.md` | SDK 1.0.0 changelog for callers: what changes for every caller, the SDK nouns and CLI commands, and each route's change |
 | `sdk/upgrading.md` | Upgrading to SDK 1.0.0: list paging and the 50-row cap, unknown body fields refused, the error format, each with before and after code |
+| `reference/http-api.md` | HTTP API: the address, sign-in headers, list paging, the error body, and links into each area's generated routes |
+| `reference/cli.md` | The opsai command line: sign-in, the options every command takes, every area and its verbs, exit codes |
+| `reference/mcp.md` | MCP: a team's tools and MCP links for outside assistants, sign-in, test runs, held writes, the install switch |
+| `security/tenancy-and-isolation.md` | Security: how organisations and teams are kept apart in the services and the database, and the limits |
+| `security/identity-and-sign-in.md` | Security: OIDC and SAML sign-in, group rules, company sign-in required, passwords, sessions and step-up |
+| `security/access-approvals-and-audit.md` | Security: roles, which writes wait for a person, approval tokens, publish reviews, and what is recorded |
+| `security/data-handling-and-masking.md` | Security: personal data masked for people by default, where data is stored, retention and its limits |
+| `security/model-calls.md` | Security: every model call through the AI gateway, keys, budgets, clearance, and what the call log keeps |
+| `security/egress-and-connections.md` | Security: the tool gateway, the HTTPS allow-list and new-address policy, connections and credentials |
 | `guide/ops-assistant.md` | The Ops Assistant: checklist, Connect card, Think harder, Save read-back, reused reads, suggestion chips, memories |
 | `guide/whats-new.md` | What's new: every change a person would notice, newest first, built from the changelog |
 | `guide/use-cases/card-disputes.md` | Use case: card disputes, from the request to the approved credit, with SDK code |
