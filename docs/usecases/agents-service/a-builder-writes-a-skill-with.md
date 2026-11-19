@@ -20,7 +20,8 @@ agent follows each procedure one step at a time and a chat goes on from the step
 ## In this example
 
 In this example we will freeze an account in three steps: read the account (a rule checks the result), confirm the
-caller (a second skill, run as a step) and place the freeze (a write that waits for a person). It assumes a tool module
+caller (a second skill, run as a step) and place the freeze (a write that waits for a person, checked by a rule on
+what the bank answered). It assumes a tool module
 with a read and a write on a mock bank, published for the team, and platform sign-in with the seeded people.
 
 ## Stories
@@ -48,16 +49,16 @@ with a read and a write on a mock bank, published for the team, and platform sig
 | 1 | James grants a tool to an agent that has no brief | The reply has `brief: null`, `promptMode: null` and the same `instructions` |
 | 2 | James saves a brief on a second agent, renames it, then tries to save `instructions` alone | `promptMode` is `brief` and the instructions start with `# Who you are` and the agent's name; the rename rewrites them; the last save is refused, 422 `brief_owns_prompt` |
 | 3 | The brief mentions a tool the agent lacks; James asks what blocks the publish, tries to publish, then adds the tool twice | The check lists `missing_reference` for that tool at `brief.howToAnswer`; the publish is refused, 422 `cannot_publish`; the first insert adds the tool and the second adds nothing and saves no version |
-| 4 | James saves and publishes a one-step skill and a three-step skill that runs it, then adds the three-step skill to the agent | The first step's check is marked `rule`; the insert adds the skill, the skill it runs and the write tool it names |
+| 4 | James saves and publishes a one-step skill and a three-step skill that runs it, then adds the three-step skill to the agent. He also saves a write step with no rule check, and a step that only names a tool in its sentence | The read's and the write's checks are marked `rule`; the insert adds the skill, the skill it runs and the write tool it names. The write step with no rule is refused, 400 `write_needs_rule`; the step that only names a tool runs none and the publish check blocks on it (`bad_step`) |
 | 5 | James asks to publish and Maya approves | The check is clear, the agent is live and `uses` counts 2 tools and 2 skills |
-| 6 | James chats: starts the skill, makes the read, asks an unrelated question, confirms the caller, asks for the freeze | The replies' `skillRun` reads step 1, step 2 inside the second skill, the same again, step 3, and step 3 while the write waits for a person; the bank has received no freeze. A second skill, with each tool named inside its step's sentence, ends as blocked on an account that owes money and goes on to step 2 on one that does not; the write its test chat waits on is listed in Human Tasks |
-| 7 | The SDK creates and publishes the two skills | The stored steps run a tool, a skill and a tool, and the first check is a rule |
+| 6 | James chats: asks for the freeze before any skill is started, then starts the skill, makes the read, asks an unrelated question, confirms the caller, asks for the freeze | The freeze asked for first is refused: no person is asked and the bank receives nothing. The replies' `skillRun` then reads step 1, step 2 inside the second skill, the same again, step 3, and step 3 while the write waits for a person; the bank has received no freeze. A rejected freeze ends the skill as failed with `why: denied`. A second skill, with each tool picked inside its step's sentence, ends as blocked on an account that owes money, the record giving the rule, the ending's meaning, step 1 and `inReply: true`; the next reply can start it again, and it goes on to step 2 on an account with money; the write its test chat waits on is listed in Human Tasks |
+| 7 | The SDK creates and publishes the two skills, then saves a write step with no rule check | The stored steps run a tool, a skill and a tool, the read's and the write's checks are rules, and the save without one is refused, 400 `write_needs_rule` |
 | 8 | The SDK applies an agent definition with a brief, asks the publish check, adds the tool and the skill, publishes | One problem before, none after, and the agent is live |
-| 9 | `opsai skills apply` and `publish`, `opsai agents apply`, `publish-check`, `add-reference`, `publish` | The same result from files, with the publish waiting for review or live |
-| 10 | James opens the three-step skill in the console | The page draws the three steps as one document |
+| 9 | `opsai skills apply` and `publish`, `opsai agents apply`, `publish-check`, `add-reference`, `publish` | The same result from files, with the publish waiting for review or live; a file whose write step has no rule check is refused |
+| 10 | James opens the three-step skill in the console, types `@` in the middle of step 2 and picks a tool | The page draws the three steps as one document; the tool is drawn once with a "runs" mark and saved as the step's `use` |
 | 12 | On the agent page James types `@` in the brief | The menu lists a tool the agent lacks and says what picking it adds |
 | 13 | James picks the tool | The tool is added to the agent and the brief saves |
-| 17 | James opens the test chat | The panel shows the skill and the step it is on |
+| 17 | James opens the test chat, then a chat whose reply ended a skill on a reviewer's rejection | The panel shows the skill and the step it is on; the chat view shows, once under that reply, that the skill stopped at step 3 because a reviewer rejected the action |
 
 ## Acceptance layers
 
@@ -75,7 +76,7 @@ between replies every reply starts with no skill running: with `carried_run` lef
 the trail `(1, False), (None, None), (None, None), (None, False), (None, False)`, 13 of 14 checks passed. Step 3 is the
 second: it pairs the refused publish with the publish that goes through once the tool is added.
 
-Step 6 also runs a skill whose steps name their tools inside the sentence, as the console writes them, on the agent
-page's test chat. With the stored steps read without the tool each sentence names, the read on an account that owes
-money left the skill on step 1 and the next reply asked for the write: 17 of 19 checks passed. The account with money
-going on to step 2 is the paired check, so the skill does not end as blocked for any other reason.
+Step 6 also runs a skill whose steps hold the tool picked inside each sentence, as the console saves them, on the
+agent page's test chat. The account with money going on to step 2 is the paired check, so the skill does not end as
+blocked for any other reason. The freeze asked for before any skill is started is paired with the same call reaching a
+reviewer once the skill is on step 3.

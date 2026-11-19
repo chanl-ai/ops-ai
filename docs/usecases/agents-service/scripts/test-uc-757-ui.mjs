@@ -1,7 +1,8 @@
 // uc-757 ui layer: docs/usecases/agents-service/a-builder-writes-a-skill-with.md, steps 10 and up. A builder opens a skill
 // page and an agent page, types @ in the brief, adds a tool the agent lacks from the menu, sees what it adds, the save
 // lands, and the test panel shows the step tracker; a reviewer reads both pages read-only. Platform sign-in (James
-// builds, Maya reviews), the demo stack's fake model. The tracker line draws what the Runtime reports on a reply
+// builds, Maya reviews), the demo stack's fake model. A tool picked in the middle of a step's sentence is saved as the
+// step's tool, and the chat view shows a skill a reviewer's rejection ended. The tracker line draws what the Runtime reports on a reply
 // (`skillRun`); the model here does not run a skill, so the thread read is given that field at the network edge and the
 // server side of it is proved by the api script.
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, evidenceDir, finish, shootBothWidths, withUiStack } from '@ops-ai/usecase-runner/harness';
@@ -42,7 +43,9 @@ await withUiStack(
       page.on('pageerror', (e) => errors.push(`${who}: ${e.message}`));
       page.on('console', (m) => m.type() === 'error' && !/Failed to load resource/.test(m.text()) && errors.push(`${who}: ${m.text()}`));
       // A reply's stream is closed by the browser when the page is resized or left after the reply ended; that is not a failure.
-      page.on('requestfailed', (r) => !(r.method() === 'POST' && /\/chat\/threads\/[^/]+\/messages$/.test(r.url())) && failed.push(`${who}: ${r.method()} ${r.url()} ${r.failure()?.errorText}`));
+      // So is a link's prefetch (`_rsc`) the browser drops when the page is left before it answers.
+      const dropped = (r) => (r.method() === 'POST' && /\/chat\/threads\/[^/]+\/messages$/.test(r.url())) || (/[?&]_rsc=/.test(r.url()) && r.failure()?.errorText === 'net::ERR_ABORTED');
+      page.on('requestfailed', (r) => !dropped(r) && failed.push(`${who}: ${r.method()} ${r.url()} ${r.failure()?.errorText}`));
       page.on('response', (r) => r.status() >= 400 && failed.push(`${who}: ${r.status()} ${r.request().method()} ${r.url()}`));
     };
     const signIn = async (email) => {
@@ -82,6 +85,25 @@ await withUiStack(
       const endings = page.getByTestId('skill-results-section');
       await endings.scrollIntoViewIfNeeded();
       check('10 the endings section says when another skill\'s step passes', /passes only if this skill ends as done/.test(await endings.innerText()), await endings.innerText());
+      // A tool picked in the middle of a step's sentence becomes the tool the step runs, drawn once with a "runs" mark.
+      const two = page.getByTestId('skill-document').getByRole('group', { name: 'Step 2' });
+      await two.click();
+      await page.keyboard.press('End');
+      await page.keyboard.type(' with @');
+      const picker = page.getByTestId('caret-menu');
+      await picker.getByRole('option').first().waitFor({ timeout: 60_000 });
+      await page.keyboard.press('Enter');
+      await two.getByTestId('runs-mark').waitFor({ timeout: 30_000 }).catch(() => undefined);
+      const drawn = { chips: await two.getByTestId('reference-chip').count(), marks: await two.getByTestId('runs-mark').count() };
+      const stored = armed(page.waitForResponse((r) => r.request().method() === 'PUT' && r.url() === `${agents}/v1/skills/${skill.id}/draft`, { timeout: 60_000 }));
+      await page.getByTestId('save-skill-draft').click();
+      await page.getByTestId('save-skill-draft-confirm').click();
+      const kept = (await (await stored).json()).data?.content?.steps?.[1] ?? {};
+      check(
+        '10 a tool picked mid-sentence is saved as the step\'s tool and drawn once',
+        drawn.chips === 1 && drawn.marks === 1 && ['tool', 'agent', 'workflow'].includes(kept.use?.kind) && kept.do?.includes(`@${kept.use.kind}:${kept.use.id}`) && /^Look the charge up/.test(kept.do),
+        { drawn, kept },
+      );
       await shootBothWidths(page, AREA, 'uc-757-skill-admin', async () => {
         await page.waitForTimeout(600);
         await page.getByTestId('skill-results-section').scrollIntoViewIfNeeded().catch(() => undefined);
@@ -137,13 +159,19 @@ await withUiStack(
       check('16 with no model chosen, a change to Thinking still saves', saidHigh === 'high', saidHigh);
 
       // 17. The test panel shows the step tracker after a reply.
+      // A live agent of the demo: the agent written above is a draft, and only a test chat reaches a draft.
+      const plain = await made('/chat/threads', { agentId: 'ag_advisor', kbIds: [] });
+      await (await fetch(`${agents}/chat/threads/${plain.id}/messages`, { method: 'POST', headers: { ...J, Accept: 'text/event-stream' }, body: JSON.stringify({ content: 'Freeze my account.' }) })).text();
       await page.route(/\/chat\/threads\/[^/?]+$/, async (route) => {
         if (route.request().method() !== 'GET') return route.continue();
         const res = await route.fetch();
         const body = await res.json();
         const t = body.data ?? body;
         const last = [...(t.messages ?? [])].reverse().find((m) => m.role === 'assistant');
-        if (last) last.skillRun = { running: { skillId: skill.id, version: 1, name: skill.name, step: 2, stepsTotal: 4, stepText: 'Look the charge up', sub: null }, history: [], holds: [] };
+        // An ordinary chat's reply carries a skill a reviewer's rejection ended in that reply, as the api script reads it.
+        const rejected = { skillId: 'sk_freeze', version: 1, name: 'Freeze an account', ended: 'failed', atStep: 3, returns: {}, inReply: true, why: 'denied', check: null, meaning: null };
+        const running = { skillId: skill.id, version: 1, name: skill.name, step: 2, stepsTotal: 4, stepText: 'Look the charge up', sub: null };
+        if (last) last.skillRun = route.request().url().endsWith(`/${plain.id}`) ? { running: null, history: [rejected], holds: [] } : { running, history: [], holds: [] };
         return route.fulfill({ response: res, json: body.data ? { ...body, data: t } : t });
       });
       await page.getByTestId('test-agent-button').click();
@@ -157,6 +185,18 @@ await withUiStack(
         await page.waitForTimeout(800);
         await page.getByTestId('agent-test-panel').scrollIntoViewIfNeeded().catch(() => undefined);
       });
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      // The chat view draws the same record: under the reply, the skill a reviewer's rejection ended reads as stopped.
+      await page.goto(`${consoleUrl}/chat/${plain.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      const ended = page.getByTestId('skill-ended');
+      await ended.first().waitFor({ timeout: 120_000 }).catch(() => undefined);
+      const line = (await ended.count()) ? await ended.first().innerText() : '';
+      check(
+        '17 the chat view shows a rejected write as the skill stopping, once',
+        (await ended.count()) === 1 && (await ended.first().getAttribute('data-ended')) === 'failed' && /stopped at step 3: a reviewer rejected the action/.test(line) && (await page.getByTestId('skill-tracker').count()) === 0,
+        line,
+      );
+      await shootBothWidths(page, AREA, 'uc-757-chat-ended-admin', async () => {});
       await page.setViewportSize({ width: 1440, height: 1000 });
 
       // 18. A reviewer reads both pages and cannot edit.

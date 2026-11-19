@@ -91,11 +91,26 @@ with bank_stack() as s:
     got = sorted((i["kind"], i["id"]) for i in brought["added"])
     check(
         "4 a skill with steps is published and adding it brings the skill it runs and the tool it needs",
-        checks == ["rule", None, None]
+        checks == ["rule", None, "rule"]
         and got == sorted([("skill", freeze["id"]), ("skill", confirm["id"]), ("tool", write)]),
         (checks, got),
     )
-    # A second skill, written the way the console writes one: each step's tool is named inside its sentence.
+    # A step that changes something is refused without a rule check, and a tool a sentence only names is not the
+    # step's tool: the publish check blocks on it.
+    body = hold_skill(RUN, "api", read, write)
+    bare = {**body, "name": f"Bare hold api {RUN}", "steps": [body["steps"][0], {"do": "Place it.", "use": body["steps"][1]["use"]}]}
+    unruled = s.api.post("/v1/skills", json=bare, headers=me)
+    named = {**body, "name": f"Named hold api {RUN}", "steps": [{"do": body["steps"][0]["do"]}]}
+    only_named = made(s.api.post("/v1/skills", json=named, headers=me))
+    stops = [(p["kind"], p["id"]) for p in only_named["publishCheck"]["problems"]]
+    check(
+        "4 a write step with no rule check is refused, and a tool a sentence only names blocks the publish",
+        code_of(unruled) == (400, "write_needs_rule")
+        and only_named["content"]["steps"][0].get("use") is None
+        and stops == [("bad_step", f"tool:{read}")],
+        (code_of(unruled), only_named["content"]["steps"], stops),
+    )
+    # A second skill, saved the way the console saves one: each step's tool is picked inside its sentence.
     hold = made(s.api.post("/v1/skills", json=hold_skill(RUN, "api", read, write), headers=me))
     made(s.api.post(f"/v1/skills/{hold['id']}/publish-requests", json={"note": "use case"}, headers=me))
     made(s.api.post(f"/v1/agents/{aid}/references", json={"kind": "skill", "id": hold["id"]}, headers=me))
@@ -120,6 +135,20 @@ with bank_stack() as s:
     )
 
     # 6. A chat starts the skill and each reply goes on from the step the last one reached.
+    thread = data(s.api.post("/chat/threads", json={"agentId": aid, "kbIds": []}, headers=me))["id"]
+    # Before any skill is started, the write its steps own is refused: no person is asked and nothing reaches the bank.
+    early = s.api.post(
+        f"/chat/threads/{thread}/messages",
+        json={"content": "call " + write + " " + json.dumps({"accountId": ACCOUNT})},
+        headers={**me, **STREAM},
+        timeout=120,
+    )
+    asked_early = [e for e in sse(early.text) if e.get("type") == "widget" and e["widget"].get("kind") == "approval"]
+    check(
+        "6 a write its skill owns is refused before the skill is started",
+        early.status_code == 200 and not asked_early and not holds(s.bank),
+        (early.status_code, len(asked_early), len(holds(s.bank))),
+    )
     thread = data(s.api.post("/chat/threads", json={"agentId": aid, "kbIds": []}, headers=me))["id"]
 
     used: list[list[Any]] = []
@@ -200,10 +229,13 @@ with bank_stack() as s:
     say("call step_done {}")
     waits = say(f"call {write} {account}")
     refused = decide({"type": "reject", "reason": "Not this account."})
-    ends = [h.get("ended") for h in refused.get("history") or []]
+    ends = [(h.get("ended"), h.get("why"), h.get("inReply")) for h in refused.get("history") or []]
     check(
-        "6 a rejected write ends the skill as failed",
-        waits.get("step") == 3 and refused.get("running") is None and ends[-1:] == ["failed"] and len(holds(s.bank)) == 1,
+        "6 a rejected write ends the skill as failed, and the record says a person denied it in this reply",
+        waits.get("step") == 3
+        and refused.get("running") is None
+        and ends[-1:] == [("failed", "denied", True)]
+        and len(holds(s.bank)) == 1,
         (waits.get("step"), refused.get("running"), ends, len(holds(s.bank))),
     )
 
@@ -220,6 +252,13 @@ with bank_stack() as s:
     say(f"call {read} {owing}")
     blocked_run = last_reply().get("skillRun") or {}
     ends = [h.get("ended") for h in blocked_run.get("history") or []]
+    last = (blocked_run.get("history") or [{}])[-1]
+    why = (last.get("why"), last.get("check"), last.get("meaning"), last.get("atStep"), last.get("inReply"))
+    # The ending is final for the reply it happened in: the skill is not started again there.
+    again = s.api.post(
+        f"/chat/threads/{thread}/messages", json={"content": f"call switch_skill {hold_slug}"}, headers={**me, **STREAM}, timeout=120
+    )
+    restarted = (last_reply().get("skillRun") or {}).get("running")
     after = s.api.post(
         f"/chat/threads/{thread}/messages", json={"content": f"call {write} {owing}"}, headers={**me, **STREAM}, timeout=120
     )
@@ -227,9 +266,16 @@ with bank_stack() as s:
     asked = [e for e in sse(after.text) if e.get("type") == "widget" and e["widget"].get("kind") == "approval"]
     check(
         "6 a rule on an account that owes money ends the skill as blocked, and the write is not asked for after it",
-        on_one.get("step") == 1 and blocked_run.get("running") is None and ends[-1:] == ["blocked"] and not reached and not asked,
-        (on_one.get("step"), blocked_run.get("running"), ends, len(reached), len(asked)),
+        on_one.get("step") == 1
+        and blocked_run.get("running") is None
+        and ends[-1:] == ["blocked"]
+        and why == ("check", "result.balance > 0", "The account has nothing to hold.", 1, True)
+        and not reached
+        and not asked,
+        (on_one.get("step"), blocked_run.get("running"), ends, why, len(reached), len(asked)),
     )
+    # A new reply may start the skill again: the ending held for its own reply only.
+    check("6 the next reply can start the blocked skill again", again.status_code == 200 and (restarted or {}).get("step") == 1, restarted)
     thread = test_chat()
     say(f"call switch_skill {hold_slug}")
     funded = say(f"call {read} {account}")

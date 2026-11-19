@@ -5,6 +5,10 @@ from __future__ import annotations
 
 from typing import Any
 
+# What the bank answers a hold with. A step that changes something carries a rule on its result, and an ending for
+# when the rule does not hold: left to the default, the step would offer the write again.
+PLACED: dict[str, Any] = {"check": {"text": 'result.hold == "placed"'}, "ifNot": {"action": "exit", "exit": "failed"}}
+
 
 def confirm_skill(run: int, layer: str) -> dict[str, Any]:
     """A one-step skill another skill runs as a step; its check is a sentence, so the agent confirms it."""
@@ -24,7 +28,8 @@ def confirm_skill(run: int, layer: str) -> dict[str, Any]:
 
 
 def freeze_skill(run: int, layer: str, read: str, write: str, confirm_id: str) -> dict[str, Any]:
-    """Three steps: a read with a rule check, a skill, then a write that waits for a person's approval."""
+    """Three steps: a read with a rule check, a skill, then a write that waits for a person's approval and is checked
+    by a rule on what the bank answered."""
     return {
         "name": f"Freeze an account {layer} {run}",
         "ownerTeam": "team_ops",
@@ -39,7 +44,7 @@ def freeze_skill(run: int, layer: str, read: str, write: str, confirm_id: str) -
                 "ifNot": {"action": "retry", "retries": 1},
             },
             {"do": "Confirm the caller.", "use": {"kind": "skill", "id": confirm_id}},
-            {"do": "Freeze the account.", "use": {"kind": "tool", "id": write}},
+            {"do": "Freeze the account.", "use": {"kind": "tool", "id": write}, **PLACED},
         ],
         "exit": {"refused": "The caller could not be confirmed."},
         "success": ["The caller was confirmed before the freeze."],
@@ -47,8 +52,8 @@ def freeze_skill(run: int, layer: str, read: str, write: str, confirm_id: str) -
 
 
 def hold_skill(run: int, layer: str, read: str, write: str) -> dict[str, Any]:
-    """Two steps as a builder types them in the console, each tool named inside its sentence and nothing in front of
-    the step: a read whose rule ends the skill as blocked on an account that owes money, then the write."""
+    """Two steps as the console saves them, each tool picked inside its sentence and stored as the step's tool: a read
+    whose rule ends the skill as blocked on an account that owes money, then the write."""
     return {
         "name": f"Hold on a balance {layer} {run}",
         "ownerTeam": "team_ops",
@@ -57,10 +62,15 @@ def hold_skill(run: int, layer: str, read: str, write: str) -> dict[str, Any]:
         "steps": [
             {
                 "do": f"Look up the account with @tool:{read} and read its balance.",
+                "use": {"kind": "tool", "id": read},
                 "check": {"text": "result.balance > 0"},
                 "ifNot": {"action": "exit", "exit": "blocked"},
             },
-            {"do": f"Place a hold on the account with @tool:{write} for the reason given."},
+            {
+                "do": f"Place a hold on the account with @tool:{write} for the reason given.",
+                "use": {"kind": "tool", "id": write},
+                **PLACED,
+            },
         ],
         "exit": {"blocked": "The account has nothing to hold."},
     }

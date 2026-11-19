@@ -46,6 +46,12 @@ with bank_stack() as s:
     freeze = answer(ops_cli("builder", "skills", "apply", freeze_file))
     live_skill = answer(ops_cli("builder", "skills", "publish", str(freeze["id"]), "--note", "use case"))
 
+    # A write step with no rule check is refused, and the command says which rule it broke.
+    body = freeze_skill(RUN, "cli", read, write, str(confirm["id"]))
+    bare = {**body, "name": f"Bare freeze cli {RUN}", "steps": [*body["steps"][:2], {"do": "Freeze it.", "use": body["steps"][2]["use"]}]}
+    code, said = ops_cli("builder", "skills", "apply", written("bare", bare))
+    check("9 opsai is refused a write step with no rule check", code != 0 and "write_needs_rule" in json.dumps(said, default=str), (code, said))
+
     name = f"Freeze desk cli {RUN}"
     agent_file = written("agent", {"name": name, "role": "Freezes accounts", "brief": brief(read)})
     agent = answer(ops_cli("builder", "agents", "apply", agent_file))

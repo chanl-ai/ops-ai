@@ -9,6 +9,7 @@ import time
 from apps_walk import signed_sdk
 from brief_steps import brief, confirm_skill, freeze_skill
 from main_chains import bank_stack, publish_bank_module
+from ops_ai.errors import OpsError
 from usecase_harness import check, finish
 
 RUN = int(time.time())
@@ -28,9 +29,25 @@ with bank_stack() as s:
     check(
         "7 the SDK saves a skill with steps and publishes it",
         [s_.get("use", {}).get("kind") for s_ in steps] == ["tool", "skill", "tool"]
-        and steps[0]["check"]["by"] == "rule"
+        and [(s_.get("check") or {}).get("by") for s_ in steps] == ["rule", None, "rule"]
         and published.get("publishedVersion") == 1,
         (steps, published.get("publishedVersion")),
+    )
+
+    # A step that changes something is refused without a rule check, and a tool a sentence names is not run.
+    body = freeze_skill(RUN, "sdk", read, write, confirm["id"])
+    bare = {**body, "name": f"Bare freeze sdk {RUN}", "steps": [*body["steps"][:2], {"do": "Freeze it.", "use": body["steps"][2]["use"]}]}
+    refused: tuple[int | None, str | None] = (None, None)
+    try:
+        ops.skills.create(bare)
+    except OpsError as error:
+        refused = (error.status, error.code)
+    named = ops.skills.create({**body, "name": f"Named freeze sdk {RUN}", "steps": [{"do": f"Read it with @tool:{read}."}]})
+    stops = [(p["kind"], p["id"]) for p in named["publishCheck"]["problems"]]
+    check(
+        "7 the SDK is refused a write step with no rule check, and a tool a sentence only names blocks the publish",
+        refused == (400, "write_needs_rule") and named["content"]["steps"][0].get("use") is None and stops == [("bad_step", f"tool:{read}")],
+        (refused, named["content"]["steps"], stops),
     )
 
     name = f"Freeze desk sdk {RUN}"
