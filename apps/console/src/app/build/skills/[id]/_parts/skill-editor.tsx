@@ -9,6 +9,7 @@ import { FormField } from '@/components/shared/form-field';
 import { SettingsSection } from '@/components/shared/settings-section';
 import { TagInput } from '@/components/shared/tag-input';
 import { SkillDocumentEditor } from '@/components/skills/skill-document-editor';
+import { SkillInputsSection } from '@/components/skills/skill-inputs-section';
 import { EDIT_CLASS, EditClassBadge, MarkdownPreview } from '@/components/skills/skill-meta';
 import { inText, refusedSave } from '@/components/skills/skill-problems';
 import { SkillResultsSection, type SkillEndingValue } from '@/components/skills/skill-results-section';
@@ -29,7 +30,7 @@ import { PageSaveActions } from '@/components/shared/page-save-actions';
 import type { InstructionDocumentHandle, StepValue } from '@/components/shared/instruction-document';
 import { plural } from '@/lib/format';
 import type { PublishBlocker } from '@/lib/types/references';
-import type { SkillDetail, SkillEditClass, SkillLoading, SkillPartContent } from '@/lib/types/skills';
+import type { SkillDetail, SkillEditClass, SkillInputField, SkillLoading, SkillPartContent } from '@/lib/types/skills';
 
 import { PartsSection, partsError } from './parts-section';
 
@@ -45,9 +46,10 @@ interface Form {
   parts: SkillPartContent[];
   steps: StepValue[];
   ending: SkillEndingValue;
+  inputs: SkillInputField[];
 }
 
-const formOf = (sk: SkillDetail): Form => ({ name: sk.content.name, when: { useWhen: sk.content.useWhen, notWhen: sk.content.notWhen ?? '' }, loading: sk.content.loading, instructions: sk.content.instructions, toolIds: sk.content.tools.map((t) => t.toolId), knowledgeBases: sk.content.knowledgeBases, guardrails: sk.content.guardrails, refusal: sk.content.refusal ?? '', parts: sk.content.parts ?? [], steps: sk.content.steps ?? [], ending: { exit: sk.content.exit ?? {}, returns: sk.content.returns ?? [], success: sk.content.success ?? [] } });
+const formOf = (sk: SkillDetail): Form => ({ name: sk.content.name, when: { useWhen: sk.content.useWhen, notWhen: sk.content.notWhen ?? '' }, loading: sk.content.loading, instructions: sk.content.instructions, toolIds: sk.content.tools.map((t) => t.toolId), knowledgeBases: sk.content.knowledgeBases, guardrails: sk.content.guardrails, refusal: sk.content.refusal ?? '', parts: sk.content.parts ?? [], steps: sk.content.steps ?? [], ending: { exit: sk.content.exit ?? {}, returns: sk.content.returns ?? [], success: sk.content.success ?? [] }, inputs: sk.content.inputs ?? [] });
 const NONE: PublishBlocker[] = [];
 const same = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x));
 
@@ -68,10 +70,12 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange }: { skill: Skil
   const [note, setNote] = React.useState('');
   const [endingValid, setEndingValid] = React.useState(true);
   const [whenValid, setWhenValid] = React.useState(true);
+  const [inputsValid, setInputsValid] = React.useState(true);
   // The when and endings forms keep their own field state, so a discard remounts them on the saved values.
   const [discards, setDiscards] = React.useState(0);
   const setEnding = React.useCallback((ending: SkillEndingValue) => setForm((f) => ({ ...f, ending })), []);
   const setWhen = React.useCallback((when: SkillWhen) => setForm((f) => ({ ...f, when })), []);
+  const setInputs = React.useCallback((inputs: SkillInputField[]) => setForm((f) => ({ ...f, inputs })), []);
   const whenForm = React.useRef<SkillWhenHandle>(null);
   const stepsDoc = React.useRef<InstructionDocumentHandle>(null);
   // A save refused because a newer version exists: what the service said. Cleared by Reload.
@@ -87,7 +91,7 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange }: { skill: Skil
   // The document editor and the save bar sit outside what a disabled fieldset reaches, so they read this.
   const readOnly = !!locked || !canEdit;
   const changed = {
-    wording: form.name !== saved.name || form.when.useWhen !== saved.when.useWhen || form.when.notWhen.trim() !== saved.when.notWhen.trim() || form.loading !== saved.loading || form.instructions !== saved.instructions || JSON.stringify([form.parts, form.steps, form.ending]) !== JSON.stringify([saved.parts, saved.steps, saved.ending]),
+    wording: form.name !== saved.name || form.when.useWhen !== saved.when.useWhen || form.when.notWhen.trim() !== saved.when.notWhen.trim() || form.loading !== saved.loading || form.instructions !== saved.instructions || JSON.stringify([form.parts, form.steps, form.ending, form.inputs]) !== JSON.stringify([saved.parts, saved.steps, saved.ending, saved.inputs]),
     scope: !same(form.toolIds, saved.toolIds) || !same(form.knowledgeBases, saved.knowledgeBases) || !same(form.guardrails, saved.guardrails) || form.refusal.trim() !== saved.refusal.trim(),
   };
   const dirty = changed.wording || changed.scope;
@@ -101,7 +105,7 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange }: { skill: Skil
   const errors = { name: form.name.trim() ? undefined : 'Name the skill.', parts: partsError(form.parts) };
   const found = React.useMemo(() => (newest.state === 'draft' ? inText(sk.publishCheck.problems ?? NONE) : NONE), [newest.state, sk.publishCheck.problems]);
   const problems = React.useMemo(() => (refused ? [...found, refused] : found), [found, refused]);
-  const discard = () => (setForm(saved), setEndingValid(true), setWhenValid(true), setRefused(null), setFailed(null), setDiscards((n) => n + 1));
+  const discard = () => (setForm(saved), setEndingValid(true), setWhenValid(true), setInputsValid(true), setRefused(null), setFailed(null), setDiscards((n) => n + 1));
   const tools = options.data?.tools ?? [];
   const toolOf = (id: string) => tools.find((t) => t.toolId === id) ?? sk.content.tools.find((t) => t.toolId === id);
   const target = newest.state === 'draft' ? `draft v${newest.version}` : `draft v${newest.version + 1}`;
@@ -110,7 +114,7 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange }: { skill: Skil
   const submit = async () => {
     setFailed(null);
     try {
-      const d = await save.mutateAsync({ name: form.name, useWhen: form.when.useWhen, loading: form.loading, instructions: form.instructions, toolIds: form.toolIds, knowledgeBases: form.knowledgeBases, guardrails: form.guardrails, refusal: form.refusal.trim(), parts: form.parts, ...(stepped ? { steps: form.steps, notWhen: form.when.notWhen.trim(), exit: form.ending.exit, returns: form.ending.returns, success: form.ending.success } : {}), note: note.trim() || undefined, baseVersion: newest.version });
+      const d = await save.mutateAsync({ name: form.name, useWhen: form.when.useWhen, loading: form.loading, instructions: form.instructions, toolIds: form.toolIds, knowledgeBases: form.knowledgeBases, guardrails: form.guardrails, refusal: form.refusal.trim(), parts: form.parts, ...(stepped ? { inputs: form.inputs, steps: form.steps, notWhen: form.when.notWhen.trim(), exit: form.ending.exit, returns: form.ending.returns, success: form.ending.success } : {}), note: note.trim() || undefined, baseVersion: newest.version });
       toast.success(`Saved draft v${d.versions[0].version}`, { description: `${EDIT_CLASS[d.versions[0].editClass].hint} Run the tests before requesting review.` });
     } catch (e) {
       // In review and deprecated are 409 as well; only a newer version offers a reload.
@@ -302,6 +306,8 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange }: { skill: Skil
         </div>
       </SettingsSection>
 
+      {/* A skill with parts takes its inputs on each part. */}
+      {stepped && <SkillInputsSection key={`inputs-${discards}`} value={saved.inputs} onChange={setInputs} onValidity={setInputsValid} disabled={readOnly} />}
       {stepped && <SkillResultsSection key={discards} value={saved.ending} onChange={setEnding} onValidity={setEndingValid} disabled={readOnly} />}
 
       {!readOnly && (
@@ -313,7 +319,7 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange }: { skill: Skil
             // Saving asks for a version note and says what this kind of edit needs before it goes live.
             <Popover open={noting} onOpenChange={(open) => (open ? void askNote() : setNoting(false))}>
               <PopoverTrigger asChild>
-                <Button size="sm" disabled={!dirty || !!errors.name || !!errors.parts || !endingValid || save.isPending} data-testid="save-skill-draft">
+                <Button size="sm" disabled={!dirty || !!errors.name || !!errors.parts || !endingValid || !inputsValid || save.isPending} data-testid="save-skill-draft">
                   Save {target}
                 </Button>
               </PopoverTrigger>

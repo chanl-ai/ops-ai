@@ -77,6 +77,8 @@ export interface SkillContent {
   refusal?: string;
   /** Jobs picked on their own from the chat's / menu, each loaded with the instructions as the shared overview. */
   parts?: SkillPartContent[];
+  /** What the skill asks for when it starts; absent when it takes none. A skill with parts takes them on each part. */
+  inputs?: SkillInputField[];
   /** When not to use the skill. */
   notWhen?: string;
   /** Numbered steps the agent follows in order; a skill has steps or parts, never both. */
@@ -326,6 +328,8 @@ export interface SkillDraftPatch {
   guardrails?: string[];
   refusal?: string;
   parts?: SkillPartContent[];
+  /** What the skill asks for when it starts. */
+  inputs?: SkillInputField[];
   /** When not to use the skill. */
   notWhen?: string;
   /** Numbered steps the agent follows in order; a skill has steps or parts, never both. */
