@@ -30,8 +30,8 @@ def say(api: Any, thread: str, text: str) -> list[dict[str, Any]]:
 with agents() as api:
     none = api.post("/chat/threads", json={"kbIds": []}, headers=TEAM)
     check(
-        "1 no default yet: a chat without an agent is refused",
-        none.status_code == 409 and none.json()["error"]["code"] == "no_default_agent",
+        "1 no default yet: a chat without an agent starts on the team's Ops Assistant",
+        none.status_code == 201 and none.json()["data"]["agentName"] == "Ops Assistant",
         none.text[:200],
     )
 
@@ -71,6 +71,35 @@ with agents() as api:
         "5 a reload credits each reply to the agent that wrote it",
         names == ["Branch Concierge", "Card Dispute Resolver"],
         names,
+    )
+
+    ask = 'call agent__ag_dispute {"question": "Can I dispute a card charge?"}'
+    held = data(api.get("/v1/agents/ag_branch", headers=TEAM))["toolIds"]
+    saved = data(api.patch("/v1/agents/ag_branch", json={"toolIds": [*held, "agent:ag_dispute"]}, headers=TEAM))
+    published = api.post(
+        "/v1/agents/ag_branch/publish-requests", json={"version": saved["version"], "note": "go"}, headers=TEAM
+    )
+    job = data(api.post("/v1/agents/ag_branch/jobs", json={"key": "uc-128", "message": ask}, headers=TEAM))
+    logged = sse(
+        api.get(
+            f"/v1/threads/{job['threadId']}/runs/{job.get('runId')}/events", params={"follow": "false"}, headers=TEAM
+        ).text
+    )
+    refused = [e["data"] for e in logged if e["type"] == "agent_call_refused"]
+    check(
+        "7 a scheduled run with no person is refused its granted agent, and the thread's log says so",
+        published.status_code == 201
+        and refused == [{"agentId": "ag_branch", "withheld": ["ag_dispute"], "code": "no_caller"}]
+        and '"answered"' not in str(logged).replace("'", '"'),
+        {"publish": published.status_code, "job": job, "refused": refused},
+    )
+
+    again = data(api.post("/chat/threads", json={"agentId": "ag_branch", "kbIds": []}, headers=TEAM))
+    ended = [e["call"] for e in say(api, again["id"], ask) if e.get("type") == "tool_end"]
+    check(
+        "8 the same agent in a person's chat still asks it",
+        [(c["name"], (c.get("output") or {}).get("status")) for c in ended] == [("agent__ag_dispute", "answered")],
+        ended,
     )
 
 src = ROOT / "services" / "agents-service" / "src" / "ops_agents"

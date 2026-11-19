@@ -1,9 +1,11 @@
 """Specialist agents as tools: the team's default agent asks another agent by calling `agent__<id>`, and that
 agent answers with its own turn: its knowledge, tools, guardrails and approvals, for the same person.
 
-Who may be asked is decided per turn: only the team's default agent is offered specialists, only those the turn's person
-may chat with (chat.run on the specialist's team), and never on a specialist's own turn, so a specialist cannot ask
-another (depth 1). A turn with no person (an unattended run, or a turn resumed after a decision) asks no one.
+Who may be asked is decided per turn, for the turn's verified caller (`TURN_PERSON`: a person, or the service
+identity a run was started under): the agents the caller holds chat.run on, among the agent's own `agent:<id>` grants
+and, for the team's default agent, every specialist. Never on a specialist's own turn, so a specialist cannot ask
+another (depth 1). A turn with no caller (a scheduled run, or a turn resumed after a decision) asks no one, and the
+thread's event log says which grants were withheld.
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ from ops_service_kit.http import Json
 from ops_service_kit.ids import new_id, now_iso
 
 from ..graphs.common import AGENT_TOOL_PREFIX
+from ..store.events import EventLog
 from ..store.team_defaults import TeamDefaults
 from .agent_registry import registry
 from .auth import caller_of
@@ -52,10 +55,36 @@ class AgentCalls:
 
     async def offers(self, agent_id: str) -> list[ToolGrant]:
         try:
-            thread_id = str((get_config().get("configurable") or {}).get("thread_id") or "")
+            configurable = get_config().get("configurable") or {}
         except RuntimeError:
             return []  # not inside a graph run, so there is no turn to offer specialists to
+        thread_id = str(configurable.get("thread_id") or "")
+        if TURN_PERSON.get() is None and thread_id:
+            await self._log_withheld(agent_id, thread_id, configurable.get("run_id"))
         return await self.offers_in(agent_id, thread_id)
+
+    def _granted(self, agent_id: str) -> list[str]:
+        """The agents `agent_id` holds as `agent:<id>` grants."""
+        caller = self.rt.catalog.agent(agent_id)
+        return [
+            str(t).removeprefix("agent:")
+            for t in (caller.tools if caller is not None else [])
+            if str(t).startswith("agent:")
+        ]
+
+    async def _log_withheld(self, agent_id: str, thread_id: str, run_id: object) -> None:
+        """Records, on the turn's thread, the agent grants a turn with no caller was not offered."""
+        withheld = self._granted(agent_id)
+        thread = await graph_store(self.rt).thread_row(thread_id) if withheld else None
+        if thread is None:
+            return
+        await EventLog(graph_store(self.rt).engine).append(
+            thread_id=thread_id,
+            team_id=thread.team_id,
+            run_id=str(run_id) if run_id else None,
+            type_="agent_call_refused",
+            data={"agentId": agent_id, "withheld": withheld, "code": "no_caller"},
+        )
 
     def _grant(self, a: Any) -> ToolGrant:
         return ToolGrant(
@@ -67,21 +96,17 @@ class AgentCalls:
         )
 
     async def offers_in(self, agent_id: str, thread_id: str) -> list[ToolGrant]:
-        """Specialists `agent_id` may ask: its `agent:<id>` grants, and every specialist when it is the team's default
-        and the turn has a person. A specialist's own turn asks no one."""
+        """Specialists `agent_id` may ask on a turn with a caller: its `agent:<id>` grants, and every specialist when
+        it is the team's default. A specialist's own turn, and a turn with no caller, ask no one."""
         thread = await graph_store(self.rt).thread_row(thread_id) if thread_id else None
-        if thread is None or thread.meta_object().get("calledBy"):
-            return []
         person = TURN_PERSON.get()
+        if thread is None or person is None or thread.meta_object().get("calledBy"):
+            return []
+        who = caller_of(person)
         out: list[ToolGrant] = []
         seen: set[str] = set()
-        caller = self.rt.catalog.agent(agent_id)
-        granted = [
-            str(t).removeprefix("agent:")
-            for t in (caller.tools if caller is not None else [])
-            if str(t).startswith("agent:")
-        ]
-        if person is not None and await TeamDefaults(self.rt.db).agent(thread.team_id) == agent_id:
+        granted = self._granted(agent_id)
+        if await TeamDefaults(self.rt.db).agent(thread.team_id) == agent_id:
             granted = list(dict.fromkeys([*[a.id for a in self.rt.catalog.agents if a.id != agent_id], *granted]))
         # Only the agents of the thread's tenant: the catalogue holds every tenant's.
         owners = await registry(self.rt).tenant_owners({sid for sid in granted if sid != agent_id})
@@ -91,9 +116,11 @@ class AgentCalls:
             a = self.rt.catalog.agent(sid)
             if a is None:
                 continue
-            if person is not None and (team := owners[sid]):
+            # An agent with no team is open to every person of the tenant; a service or a key holds only what its
+            # token lists, so it is checked there too.
+            if (team := owners[sid]) or who.kind != "person":
                 try:
-                    can(caller_of(person), "chat", "run", team=team, what=a.name)
+                    can(who, "chat", "run", team=team or None, what=a.name)
                 except Forbidden:
                     continue
             seen.add(sid)

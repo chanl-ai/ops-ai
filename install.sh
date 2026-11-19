@@ -605,7 +605,8 @@ install() {
 get_images_stub() {
   local s
   for s in OPS_PLATFORM_SIGNING_KEY OPS_REVIEW_KEY OPS_SECRETS_KEY OPS_DATABASE_URL OPS_DATABASE_URL_PLATFORM; do printf '%s=stub\n' "$s" >>"$ENV_FILE"; done
-  for s in $SERVICES; do printf 'OPS_SVC_KEY_%s=stub\n' "$(upper "$s")" >>"$ENV_FILE"; done
+  # Read from the compose file, not $SERVICES: the runner has a service key but no database of its own.
+  for s in $(grep -o 'OPS_SVC_KEY_[A-Z]*' "$COMPOSE_DIR/app.yaml" | sort -u); do printf '%s=stub\n' "$s" >>"$ENV_FILE"; done
   get_images
 }
 

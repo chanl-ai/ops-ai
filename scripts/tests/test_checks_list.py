@@ -37,7 +37,8 @@ def plan(tmp_path: Path, *changed: str) -> dict[str, str]:
     out = subprocess.run(
         ["bash", "scripts/ci-plan.sh", str(listing)],
         cwd=ROOT,
-        env=CLEAN_ENV,
+        # The runner's own GITHUB_REF would make every plan full on a release or hotfix branch.
+        env={**CLEAN_ENV, "GITHUB_REF": ""},
         capture_output=True,
         text=True,
         check=True,
