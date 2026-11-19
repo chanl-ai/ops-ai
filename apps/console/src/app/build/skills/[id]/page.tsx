@@ -75,7 +75,8 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
   const remove = useDeleteSkill();
   const exportSkills = useExportSkills();
   const download = useDownloadFile();
-  const canBuild = useCanBuild();
+  // The service checks skills: edit on every save, publish request and pin (routers/skills.py).
+  const canBuild = useCanBuild('skills');
   const [dialog, setDialog] = React.useState<'review' | 'deprecate' | 'delete' | null>(null);
   const newest = s.versions[0];
   const live = s.usage.filter((u) => u.agentAvailability === 'published');
@@ -177,7 +178,7 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
         }
       >
           <div className="flex flex-col gap-4">
-            <ReadOnlyNotice noun="skills" />
+            <ReadOnlyNotice noun="skills" area="skills" />
             {s.pendingReview && (
               <Alert data-testid="skill-pending-review">
                 <Inbox />
@@ -215,7 +216,7 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
                 </AlertDescription>
               </Alert>
             )}
-            <BuilderFieldset>
+            <BuilderFieldset area="skills">
             <RecordLayout
               rail={
                 <>
@@ -281,7 +282,7 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
                 </>
               }
             >
-              <SkillEditor key={`${newest.version}-${newest.savedAt}`} skill={s} onDirtyChange={setUnsaved} />
+              <SkillEditor key={`${newest.version}-${newest.savedAt}`} skill={s} canEdit={canBuild} onDirtyChange={setUnsaved} />
             </RecordLayout>
             </BuilderFieldset>
           </div>
@@ -301,7 +302,7 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
             }
           >
             {/* A sheet is drawn outside the page's fieldset, so it gets its own. */}
-            <BuilderFieldset>
+            <BuilderFieldset area="skills">
               <div className="flex flex-col gap-4">
                 {waits && (
                   <Alert data-testid="skill-sheet-unsaved">

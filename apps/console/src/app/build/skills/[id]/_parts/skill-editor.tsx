@@ -53,9 +53,10 @@ const same = (a: string[], b: string[]) => a.length === b.length && a.every((x) 
 /**
  * The newest version as a form: when to use the skill, its notes and steps as one document, then its settings. Saving
  * edits the open draft, or opens a new draft on top of the published version; nothing reaches an agent until a
- * publisher approves it. The unsaved bar says which edit class the change is.
+ * publisher approves it. The unsaved bar says which edit class the change is. A person who may not change the team's
+ * skills (`canEdit` false) reads the same form with every field off and no save.
  */
-export function SkillEditor({ skill: sk, onDirtyChange }: { skill: SkillDetail; onDirtyChange?: (dirty: boolean) => void }) {
+export function SkillEditor({ skill: sk, canEdit, onDirtyChange }: { skill: SkillDetail; canEdit: boolean; onDirtyChange?: (dirty: boolean) => void }) {
   const save = useSaveSkillDraft(sk.id);
   const current = useSkill(sk.id);
   const [noting, setNoting] = React.useState(false);
@@ -80,6 +81,8 @@ export function SkillEditor({ skill: sk, onDirtyChange }: { skill: SkillDetail; 
   const stepped = form.parts.length === 0;
   const newest = sk.versions[0];
   const locked = newest.state === 'in_review' ? `v${newest.version} is waiting in Reviews.` : sk.status === 'deprecated' ? 'The skill is deprecated. Duplicate it to change it.' : undefined;
+  // The document editor and the save bar sit outside what a disabled fieldset reaches, so they read this.
+  const readOnly = !!locked || !canEdit;
   const changed = {
     wording: form.name !== saved.name || form.when.useWhen !== saved.when.useWhen || form.when.notWhen.trim() !== saved.when.notWhen.trim() || form.loading !== saved.loading || form.instructions !== saved.instructions || JSON.stringify([form.parts, form.steps, form.ending]) !== JSON.stringify([saved.parts, saved.steps, saved.ending]),
     scope: !same(form.toolIds, saved.toolIds) || !same(form.knowledgeBases, saved.knowledgeBases) || !same(form.guardrails, saved.guardrails) || form.refusal.trim() !== saved.refusal.trim(),
@@ -163,10 +166,10 @@ export function SkillEditor({ skill: sk, onDirtyChange }: { skill: SkillDetail; 
           </AlertDescription>
         </Alert>
       )}
-      <SkillWhenSection key={`when-${discards}`} value={saved.when} onChange={setWhen} onValidity={setWhenValid} useWhenMax={limit} needsUseWhen={form.loading === 'on_match'} showNotWhen={stepped} notWhenProblem={problems.find((p) => p.position?.field === 'notWhen')?.message} disabled={!!locked} controls={whenForm} />
+      <SkillWhenSection key={`when-${discards}`} value={saved.when} onChange={setWhen} onValidity={setWhenValid} useWhenMax={limit} needsUseWhen={form.loading === 'on_match'} showNotWhen={stepped} notWhenProblem={problems.find((p) => p.position?.field === 'notWhen')?.message} disabled={readOnly} controls={whenForm} />
       {stepped ? (
         <SettingsSection title="Notes and steps" description="Notes hold for the whole skill. Steps run in order: each can name a tool, a check on what came back, and what happens when the check fails.">
-          <SkillDocumentEditor skillId={sk.id} name={form.name} value={{ instructions: form.instructions, steps: form.steps }} onChange={(doc) => (setRefused(null), setForm((f) => ({ ...f, ...doc })))} readOnly={!!locked} problems={problems} controls={stepsDoc} />
+          <SkillDocumentEditor skillId={sk.id} name={form.name} value={{ instructions: form.instructions, steps: form.steps }} onChange={(doc) => (setRefused(null), setForm((f) => ({ ...f, ...doc })))} readOnly={readOnly} problems={problems} controls={stepsDoc} />
         </SettingsSection>
       ) : (
         <SettingsSection title="Instructions" description="Markdown with four sections: Steps, Rules, Examples and Output format.">
@@ -180,7 +183,7 @@ export function SkillEditor({ skill: sk, onDirtyChange }: { skill: SkillDetail; 
               </ToggleGroupItem>
             </ToggleGroup>
             {mode === 'edit' ? (
-              <Textarea value={form.instructions} disabled={!!locked} onChange={(e) => setForm({ ...form, instructions: e.target.value })} className="min-h-96 bg-card font-mono text-xs leading-relaxed" aria-label="Instructions" data-testid="instructions-editor" />
+              <Textarea value={form.instructions} disabled={readOnly} onChange={(e) => setForm({ ...form, instructions: e.target.value })} className="min-h-96 bg-card font-mono text-xs leading-relaxed" aria-label="Instructions" data-testid="instructions-editor" />
             ) : (
               <div className="min-h-96 rounded-md border bg-card p-4" data-testid="instructions-preview">
                 <MarkdownPreview text={form.instructions} />
@@ -190,15 +193,15 @@ export function SkillEditor({ skill: sk, onDirtyChange }: { skill: SkillDetail; 
         </SettingsSection>
       )}
 
-      <PartsSection parts={form.parts} onChange={(parts) => setForm({ ...form, parts })} disabled={!!locked} />
+      <PartsSection parts={form.parts} onChange={(parts) => setForm({ ...form, parts })} disabled={readOnly} />
 
       <SettingsSection title="Name and loading" description="On match: the model loads the skill when a message fits the use-when line; keep it specific. Always on: the skill is added to every turn of every agent that pins it, after the agent’s own instructions, for shared wording such as a disclosure or tone guide.">
         <div className="flex flex-col gap-4">
           <FormField id="si-name" label="Name" error={errors.name}>
-            <Input id="si-name" value={form.name} disabled={!!locked} onChange={(e) => setForm({ ...form, name: e.target.value })} className="bg-card" />
+            <Input id="si-name" value={form.name} disabled={readOnly} onChange={(e) => setForm({ ...form, name: e.target.value })} className="bg-card" />
           </FormField>
           <FormField id="si-loading" label="Loading">
-            <Select value={form.loading} disabled={!!locked} onValueChange={(v) => setForm({ ...form, loading: v as SkillLoading })}>
+            <Select value={form.loading} disabled={readOnly} onValueChange={(v) => setForm({ ...form, loading: v as SkillLoading })}>
               <SelectTrigger id="si-loading" className="w-48 bg-card" data-testid="skill-loading-select">
                 <SelectValue />
               </SelectTrigger>
@@ -228,7 +231,7 @@ export function SkillEditor({ skill: sk, onDirtyChange }: { skill: SkillDetail; 
                       <code className="flex-1 truncate font-mono text-xs">{t?.name ?? id}</code>
                       <span className="text-xs text-muted-foreground">{t?.module}</span>
                       {t && <AccessBadge access={t.access} />}
-                      <Button variant="ghost" size="icon" className="size-7" disabled={!!locked} aria-label={`Remove ${t?.name ?? id}`} onClick={() => setForm({ ...form, toolIds: form.toolIds.filter((x) => x !== id) })}>
+                      <Button variant="ghost" size="icon" className="size-7" disabled={readOnly} aria-label={`Remove ${t?.name ?? id}`} onClick={() => setForm({ ...form, toolIds: form.toolIds.filter((x) => x !== id) })}>
                         <X className="size-3.5" />
                       </Button>
                     </div>
@@ -251,7 +254,7 @@ export function SkillEditor({ skill: sk, onDirtyChange }: { skill: SkillDetail; 
                   ),
                 }))}
               onSelect={(v) => setForm({ ...form, toolIds: [...form.toolIds, v] })}
-              disabled={!!locked}
+              disabled={readOnly}
               className="w-72"
             />
           </div>
@@ -261,7 +264,7 @@ export function SkillEditor({ skill: sk, onDirtyChange }: { skill: SkillDetail; 
               {(options.data?.knowledgeBases ?? sk.content.knowledgeBases).map((k) => {
                 const on = form.knowledgeBases.includes(k);
                 return (
-                  <button key={k} type="button" disabled={!!locked} aria-pressed={on} onClick={() => setForm({ ...form, knowledgeBases: on ? form.knowledgeBases.filter((x) => x !== k) : [...form.knowledgeBases, k] })} className="rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-60">
+                  <button key={k} type="button" disabled={readOnly} aria-pressed={on} onClick={() => setForm({ ...form, knowledgeBases: on ? form.knowledgeBases.filter((x) => x !== k) : [...form.knowledgeBases, k] })} className="rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-60">
                     <Badge variant={on ? 'default' : 'outline'} className="cursor-pointer font-normal">
                       {k}
                     </Badge>
@@ -271,17 +274,17 @@ export function SkillEditor({ skill: sk, onDirtyChange }: { skill: SkillDetail; 
             </div>
           </div>
           <FormField id="si-guardrails" label="Guardrails" hint="Added to the turn while the skill is loaded. They only restrict; they never widen access.">
-            <TagInput id="si-guardrails" value={form.guardrails} onChange={(g) => setForm({ ...form, guardrails: g })} disabled={!!locked} placeholder="Add a guardrail and press Enter" className="bg-card" />
+            <TagInput id="si-guardrails" value={form.guardrails} onChange={(g) => setForm({ ...form, guardrails: g })} disabled={readOnly} placeholder="Add a guardrail and press Enter" className="bg-card" />
           </FormField>
           <FormField id="si-refusal" label="When a guardrail refuses, say" hint="What the person reads instead of the answer. Offer the next step the skill can take.">
-            <Textarea id="si-refusal" rows={2} value={form.refusal} onChange={(e) => setForm({ ...form, refusal: e.target.value })} disabled={!!locked || !form.guardrails.length} placeholder="e.g. I can't promise a deferral, but I can start a hardship request now." className="bg-card" data-testid="skill-refusal" />
+            <Textarea id="si-refusal" rows={2} value={form.refusal} onChange={(e) => setForm({ ...form, refusal: e.target.value })} disabled={readOnly || !form.guardrails.length} placeholder="e.g. I can't promise a deferral, but I can start a hardship request now." className="bg-card" data-testid="skill-refusal" />
           </FormField>
         </div>
       </SettingsSection>
 
-      {stepped && <SkillResultsSection key={discards} value={saved.ending} onChange={setEnding} onValidity={setEndingValid} disabled={!!locked} />}
+      {stepped && <SkillResultsSection key={discards} value={saved.ending} onChange={setEnding} onValidity={setEndingValid} disabled={readOnly} />}
 
-      {!locked && (
+      {!readOnly && (
         <PageSaveActions
           dirty={dirty}
           saving={save.isPending}
