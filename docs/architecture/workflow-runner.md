@@ -98,6 +98,7 @@ open, because the write it approves reads nothing from the run, is a failed step
 | Concern | Design |
 |---|---|
 | Runs leave the request | `POST /v1/runs` writes the run and a start row in one transaction and returns 202 |
+| Run input | Every start path (API, start form, hosted form, batch row, agent tool call, Start workflow step, service event, email) writes its run through `ops_engine.starts.start`, which holds the input to the trigger's `inputSchema`: defaults, required fields, text read as the declared number, whole number or true/false, then JSON Schema. A refusal is 422 `invalid_input` with `details.path` and `details.reason`. An Email received trigger declares no input schema, because the service builds its envelope. `packages/ops_engine/tests/test_run_entry.py` fails when anything else calls `RunStore.create` |
 | Queue | `engine_work`: start, resume (review decision, timer, child end, sweeper), retry, cancel; claimed with `FOR UPDATE SKIP LOCKED`, then the thread lease |
 | Workers | N processes, each running several runs; sweeper and timer poller live here |
 | Tenancy | Each claimed run gets a tenant-scoped saver; per-tenant running cap; 429 with retry-after past the queued limit |

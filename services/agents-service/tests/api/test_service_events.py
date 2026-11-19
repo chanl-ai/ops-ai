@@ -310,3 +310,18 @@ async def test_tool_catalogue_events_keep_the_copy_by_revision_and_tombstone(sta
         assert r.status_code == 202, r.text
         with isolation.scope(TENANT, "team_ops"):
             assert [t.name for t in await ToolCopies(rt.db).visible("team_ops")] == want, event
+
+
+async def test_a_payload_a_listeners_input_schema_refuses_starts_no_run_and_the_event_is_still_taken(
+    stack: Stack,
+) -> None:
+    c, rt = stack
+    needs_reason = event_workflow()
+    needs_reason["nodes"][0]["parameters"]["inputSchema"] = {
+        "type": "object",
+        "required": ["reason"],
+        "properties": {"reason": {"type": "string", "title": "Reason"}},
+    }
+    rt.event_workflows = [needs_reason]
+    got = await emit(c, "fil_20")
+    assert got["runIds"] == [] and got["status"] == "unhandled", got

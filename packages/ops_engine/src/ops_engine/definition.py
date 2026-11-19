@@ -32,7 +32,7 @@ from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.narrow import json_object
 
 from .node_types import TypeRegistry
-from .starts import file_shape
+from .starts import TRIGGER_GROUP_PREFIX, file_shape
 
 MAPPING_PREFIX = "$."
 # Between whole-value paths: `$.a ?? $.b` reads the first that is not empty.
@@ -251,6 +251,24 @@ def _unmarked_file_inputs(d: WorkflowDefinition, registry: TypeRegistry) -> list
     return out
 
 
+def _invalid_input_schemas(d: WorkflowDefinition) -> list[Json]:
+    """`input_schema_invalid`: a trigger's `inputSchema` that is not JSON Schema (a `type` JSON Schema does not have,
+    `required` that is not a list). A run's input is held to this schema when it starts, so one that cannot be read
+    would refuse every start."""
+    out: list[Json] = []
+    for n in d.nodes:
+        schema = n.parameters.get("inputSchema")
+        if not n.type.startswith(TRIGGER_GROUP_PREFIX) or not isinstance(schema, dict) or not schema:
+            continue
+        try:
+            cast(Any, jsonschema.Draft202012Validator).check_schema(schema)
+        except jsonschema.SchemaError as e:
+            where = ".".join(str(p) for p in e.absolute_path) or "the schema"
+            msg = f"The input schema is not valid JSON Schema at {where}: {e.message}."
+            out.append(_check(n.id, "input_schema_invalid", msg, "inputSchema"))
+    return out
+
+
 def _check(node: str | None, code: str, message: str, field: str | None = None) -> Json:
     return {"node": node, "level": "error", "code": code, "message": message, "field": field}
 
@@ -381,6 +399,7 @@ def validate(d: WorkflowDefinition, registry: TypeRegistry) -> list[Json]:
                 checks.append(_check(node_id, "unconnected_port", f"Out port {port} of {node_id} leads nowhere."))
     checks.extend(_approval_order(d, known))
     checks.extend(_unmarked_file_inputs(d, registry))
+    checks.extend(_invalid_input_schemas(d))
     for n in d.nodes:
         t = registry.find(n.type, n.type_version)
         sources = {c.source.node for c in d.connections if c.target.node == n.id}

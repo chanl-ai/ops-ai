@@ -9,15 +9,30 @@ adapter; the console does not change.
 
 Form widgets come from the schema: `format: "file"` (see `file_shape`), `format: "email"`, `x-widget: "textarea"`, an
 `enum` or a `oneOf` of `{const, title}`, and a property's `title` as its label.
+
+`start` is the one way a run is written. It holds the run's input to the schema its trigger declares (`input_schema`)
+with `typed_values`, the one rule for a start's values, so every source of a run (an API call, a hosted form, a batch
+row, an agent's tool call, a Start workflow step, a service event) is checked the same way and no caller chooses to
+skip it. `tests/test_run_entry.py` fails when anything else calls `RunStore.create`.
 """
 
 from __future__ import annotations
 
+import math
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, TypedDict, cast
+
+import jsonschema
+import jsonschema.exceptions
 
 from ops_service_kit.http import Json, JsonValue
+
+from .store import DefinitionRow, RunRow, RunStore
+
+if TYPE_CHECKING:
+    from .node_types import TypeRegistry
 
 FileShape = Literal["id", "one", "many"]
 # The Request trigger parameter that keeps a workflow out of every start picker: other workflows start it.
@@ -45,6 +60,13 @@ class StartSpec:
             return dict(self.form)
         raw = parameters.get(self.form_parameter or "")
         return dict(cast(Json, raw)) if isinstance(raw, Mapping) and raw else {"type": "object"}
+
+    def input_schema(self, parameters: Mapping[str, JsonValue]) -> Json | None:
+        """The schema a run's input must match: the one the trigger's `form_parameter` holds, or None when it holds
+        none. A fixed `form` is not it: its adapter turns the form into the input the real source produces (a test
+        email becomes the envelope a mailbox delivers), so the form describes the dialog and not the run's input."""
+        raw = parameters.get(self.form_parameter or "")
+        return dict(cast(Json, raw)) if isinstance(raw, Mapping) and raw else None
 
     def view(self, parameters: Mapping[str, JsonValue]) -> Json:
         schema = self.schema(parameters)
@@ -126,3 +148,179 @@ def form_values(schema: Mapping[str, JsonValue], values: Mapping[str, JsonValue]
         if _empty(out.get(k))
     ]
     return out, missing
+
+
+class InputRefusedError(ValueError):
+    """A start's values its schema refuses. `field` is the schema property (a dotted path below the top), `reason`
+    what is wrong with it, `missing` the labels of required fields left empty, and `code` the API's error code."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        field: str | None,
+        reason: str,
+        missing: tuple[str, ...] = (),
+        code: str = "invalid_input",
+    ) -> None:
+        super().__init__(message)
+        self.field, self.reason, self.missing, self.code = field, reason, missing, code
+
+
+_INTEGER = re.compile(r"[+-]?\d+")
+_NUMBER = re.compile(r"[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?")
+_BOOLEANS = {"true": True, "false": False}
+_KINDS = {str: "text", bool: "true or false", int: "a number", float: "a number", list: "a list", dict: "an object"}
+_WANTED = {
+    "number": "a number",
+    "integer": "a whole number",
+    "boolean": "true or false",
+    "string": "text",
+    "array": "a list",
+    "object": "an object",
+    "null": "empty",
+}
+
+
+def _types(field: Mapping[str, JsonValue]) -> set[str]:
+    t = field.get("type")
+    return {t} if isinstance(t, str) else {str(x) for x in t} if isinstance(t, list) else set()
+
+
+def _read(types: set[str], text: str) -> JsonValue:
+    """Text as the declared type when it reads exactly as one, else the text unchanged. A field that takes text keeps
+    it: only the schema knows a postcode `01234` from the number 1234."""
+    if "string" in types or not types:
+        return text
+    t = text.strip()
+    if types & {"integer", "number"} and _INTEGER.fullmatch(t):
+        return int(t)
+    if "number" in types and _NUMBER.fullmatch(t) and math.isfinite(float(t)):
+        return float(t)
+    if "boolean" in types and t.lower() in _BOOLEANS:
+        return _BOOLEANS[t.lower()]
+    return text
+
+
+def _typed(field: Mapping[str, JsonValue], value: JsonValue) -> JsonValue:
+    """`value` with each text read as its declared type, through objects and lists. A property left empty (null, or
+    blank text where the field takes no text) is left out, as a form or a spreadsheet cell sends an empty field."""
+    if isinstance(value, str):
+        return _read(_types(field), value)
+    props = field.get("properties")
+    if isinstance(value, dict) and isinstance(props, Mapping):
+        out: Json = {}
+        for name, item in value.items():
+            spec = cast(Json, props).get(name)
+            if not isinstance(spec, Mapping):
+                out[name] = item
+                continue
+            types = _types(cast(Json, spec))
+            blank = isinstance(item, str) and not item.strip() and bool(types) and "string" not in types
+            if (item is None and "null" not in types) or blank:
+                continue
+            out[name] = _typed(cast(Json, spec), item)
+        return out
+    items = field.get("items")
+    if isinstance(value, list) and isinstance(items, Mapping):
+        return [_typed(cast(Json, items), v) for v in value]
+    return value
+
+
+def _refusal(schema: Mapping[str, JsonValue], err: Any) -> InputRefusedError:
+    path = [str(p) for p in err.absolute_path]
+    if err.validator == "required" and (found := re.match(r"'(.+?)' is a required property", str(err.message))):
+        path.append(found.group(1))
+    field = ".".join(path) or None
+    top = cast(Json, cast(Json, schema.get("properties") or {}).get(path[0]) or {}) if path else {}
+    label = str(top.get("title") or path[0]) if len(path) == 1 else field or "The input"
+    if err.validator == "type":
+        value: Any = err.validator_value
+        wanted = cast(list[Any], value if isinstance(value, list) else [value])
+        names = " or ".join(_WANTED.get(str(w), str(w)) for w in wanted)
+        sent = cast(type[Any], type(err.instance))
+        got = "empty" if err.instance is None else _KINDS.get(sent, "another kind of value")
+        reason = f"must be {names}, and {got} was sent"
+    elif err.validator == "required":
+        reason = "is required"
+    else:
+        reason = str(err.message)
+        return InputRefusedError(f"{label}: {reason}.", field=field, reason=reason)
+    return InputRefusedError(f"{label} {reason}.", field=field, reason=reason)
+
+
+def typed_values(schema: Mapping[str, JsonValue], values: Mapping[str, JsonValue]) -> Json:
+    """A start's values as a run takes them, or InputRefusedError naming the field and the reason. The one rule for a
+    start's values, in this order: defaults and required fields (`form_values`); text that reads exactly as its
+    field's declared number, whole number or true/false becomes that; then the schema is held as JSON Schema. Running
+    it again on its own result changes nothing, so a caller that must refuse before it writes anything else (a hosted
+    form before it counts against its daily cap, a batch before it stores a row) calls it too."""
+    out, missing = form_values(schema, values)
+    if missing:
+        required = cast(list[JsonValue], schema.get("required") or [])
+        empty = [str(k) for k in required if _empty(out.get(str(k)))]
+        raise InputRefusedError(
+            f"{', '.join(missing)} {'is' if len(missing) == 1 else 'are'} required.",
+            field=empty[0] if empty else missing[0],
+            reason="is required",
+            missing=tuple(missing),
+        )
+    out = cast(Json, _typed(schema, out))
+    try:
+        cast(Any, jsonschema.Draft202012Validator).check_schema(dict(schema))
+    except jsonschema.SchemaError as e:
+        # A schema saved before `input_schema_invalid` was checked at save: nothing can be held to it, so nothing runs.
+        reason = f"the trigger's input schema is not valid JSON Schema ({e.message})"
+        raise InputRefusedError(
+            f"No run starts: {reason}.", field=None, reason=reason, code="input_schema_invalid"
+        ) from e
+    err: Any = cast(Any, jsonschema.exceptions).best_match(
+        cast(Any, jsonschema.Draft202012Validator(dict(schema))).iter_errors(out)
+    )
+    if err is not None:
+        raise _refusal(schema, err)
+    return out
+
+
+def input_schema(definition: Mapping[str, JsonValue] | None, registry: TypeRegistry) -> Json | None:
+    """The schema the definition's trigger declares for a run's input (`StartSpec.input_schema`), or None."""
+    node = trigger_node(definition)
+    if node is None:
+        return None
+    t = registry.find(str(node.get("type")), int(cast("str | int | float", node.get("typeVersion") or 1)))
+    if t is None or t.start is None:
+        return None
+    return t.start.input_schema(cast(Mapping[str, JsonValue], node.get("parameters") or {}))
+
+
+def run_input(
+    definition: Mapping[str, JsonValue] | None, values: Mapping[str, JsonValue], registry: TypeRegistry
+) -> Json:
+    """`values` as a run on `definition` takes them (`typed_values` on its trigger's schema), unchanged when the
+    trigger declares none."""
+    schema = input_schema(definition, registry)
+    return dict(values) if schema is None else typed_values(schema, values)
+
+
+class NewRun(TypedDict):
+    """The run `start` writes: the columns `RunStore.create` takes, with the input still as its source sent it."""
+
+    id: str
+    team_id: str
+    workflow_id: str
+    version: int
+    digest: str
+    run_key: str
+    mode: Literal["live", "test"]
+    input: Json
+    created_by: str
+    started_via: str | None
+    started_by_approver: bool
+    after_seconds: float
+
+
+async def start(runs: RunStore, stored: DefinitionRow, run: NewRun, registry: TypeRegistry) -> tuple[RunRow, bool]:
+    """Writes `run` on `stored` with its input held to the trigger's schema, or returns the run that already has its
+    key (`RunStore.create`). InputRefusedError when the input does not match, and then nothing is written."""
+    typed = run_input(stored.definition, run["input"], registry)
+    return await runs.create({**run, "input": typed})

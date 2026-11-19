@@ -1295,15 +1295,12 @@ async def start_engine_run(rt: Rt, me: Starter, body: EngineRunInput) -> JSONRes
     one workflow starts that one only, on the version it pins when it pins one.
     No request transaction: the run and its work row keep start_run's own transaction, which a worker claims from."""
     stored = await startable(rt, me, body.workflow_id, body.version, body.mode)
-    form = start_form(stored.definition, REGISTRY)
-    # A Schedule trigger's input schema is held to the same check as Fire now (POST /v1/runs/start).
-    payload = run_starts.filled(form, body.input) if form and form.get("kind") in ("form", "schedule") else body.input
     run, created = await start_run(
         runs(rt),
         stored,
         team_id=me.team_id,
         mode=body.mode,
-        input=payload,
+        input=body.input,
         run_key=body.run_key,
         created_by=started_by(me),
         started_by_approver=approves_own_writes(me),

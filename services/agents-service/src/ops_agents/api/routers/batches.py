@@ -29,6 +29,7 @@ from ...store.batches import MAX_ROWS, Batches, BatchOut, BatchRowOut
 from ...store.tenancy import current_tenant
 from ..auth import Principal, principal, require_builder, started_by
 from ..deps import Runtime, runtime
+from ..engine_runs import checked_input
 from ..envelope import ok
 from .engine import startable
 
@@ -145,7 +146,16 @@ async def start_batch(rt: Rt, me: Me, workflow_id: str, body: BatchIn) -> JSONRe
             f"No column in {info.name} names an input. Name the first row's columns {titles}.",
             code="batch_no_matching_columns",
         )
-    mapped: list[Json] = [{mapping[c]: v for c, v in r.items() if c in mapping and v != ""} for r in rows]
+    mapped: list[Json] = []
+    for n, r in enumerate(rows, start=1):
+        try:
+            mapped.append(checked_input(stored, {mapping[c]: v for c, v in r.items() if c in mapping and v != ""}))
+        except Unprocessable as e:
+            raise Unprocessable(
+                f"Row {n} of {info.name}: {e.message} No run was started.",
+                code=e.code,
+                details={**(e.details or {}), "row": n},
+            ) from e
     if body.dry_run:
         dry = {"rows": len(mapped), "mapping": mapping, "ignored": ignored, "sample": mapped[:SAMPLE]}
         return ok(dry)

@@ -16,6 +16,7 @@ from typing import TypedDict, cast
 from ops_engine import default_registry
 from ops_engine.definition import WorkflowDefinition, parse, validate
 from ops_engine.store import DefinitionStore, RunRow, RunStore, WorkflowOwnedError
+from ops_service_kit.errors import Unprocessable
 from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
@@ -275,19 +276,29 @@ async def _deliver(
             continue
         n = len(tried) + 1
         created_by, via = starter(str(event.source), name, event.actor)
-        run, _ = await start_run(
-            runs,
-            stored,
-            team_id=str(event.team_id),
-            mode="live",
-            input=cast(Json, event.payload),
-            run_key=run_key if n == 1 else f"{run_key}:{n}",
-            created_by=created_by,
-            started_via=via,
-        )
+        title = stored.name or stored.workflow_id
+        try:
+            run, _ = await start_run(
+                runs,
+                stored,
+                team_id=str(event.team_id),
+                mode="live",
+                input=cast(Json, event.payload),
+                run_key=run_key if n == 1 else f"{run_key}:{n}",
+                created_by=created_by,
+                started_via=via,
+            )
+        except Unprocessable as e:
+            # The payload does not match this listener's input schema: it starts no run, the other listeners still
+            # hear the event, and the Background page shows why.
+            log.warning("event_input_refused", workflow=stored.workflow_id, name=name, key=key, reason=e.message)
+            if event.team_id:
+                await jobs.record(
+                    "event_workflows", f"Did not run {title}: {e.message}", "failed", team_id=str(event.team_id)
+                )
+            continue
         run_ids.append(run.id)
         attempts = max(attempts, n)
-        title = stored.name or stored.workflow_id
         # An account-level notice has no team, so no team's Activity shows it; the Background page counts it.
         if event.team_id:
             await jobs.record(

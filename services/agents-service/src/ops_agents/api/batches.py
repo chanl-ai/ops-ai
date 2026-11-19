@@ -10,6 +10,7 @@ from collections.abc import Iterable
 from itertools import groupby
 
 from ops_engine.store import DefinitionStore, RunStore
+from ops_service_kit.errors import Unprocessable
 from ops_service_kit.logging import get_logger
 from ops_store import background, isolation
 
@@ -48,16 +49,23 @@ async def start_pending(db: AsyncEngine, *, limit: int = PER_TICK) -> int:
                 if stored is None:
                     await store.stop(batch_id, "Stopped: the workflow version this batch runs is gone.")
                     break
-                run, _ = await start_run(
-                    runs,
-                    stored,
-                    team_id=team,
-                    mode=row.mode,
-                    input=dict(row.input),
-                    run_key=run_key(batch_id, row.row, row.attempt),
-                    created_by=row.created_by,
-                    started_via=BATCH_VIA,
-                )
+                try:
+                    run, _ = await start_run(
+                        runs,
+                        stored,
+                        team_id=team,
+                        mode=row.mode,
+                        input=dict(row.input),
+                        run_key=run_key(batch_id, row.row, row.attempt),
+                        created_by=row.created_by,
+                        started_via=BATCH_VIA,
+                    )
+                except Unprocessable as e:
+                    # The upload checked every row against this version, so this is a row stored before that check:
+                    # the batch stops instead of meeting the same refusal on every tick.
+                    await store.stop(batch_id, f"Stopped: row {row.row}'s input was refused. {e.message}")
+                    log.warning("batch_stopped", batch=batch_id, reason="input_refused", row=row.row)
+                    break
                 await store.started(batch_id, row.row, row.attempt, run.id)
                 started += 1
     return started
