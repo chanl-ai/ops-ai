@@ -308,6 +308,8 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           node: "true"
+          # The install proof walks every console page headless (deploy/release/install_proof.sh step 4).
+          browser: "true"
       - name: The version file matches the branch
         env:
           BRANCH: ${{ github.head_ref || github.ref_name }}
