@@ -192,7 +192,7 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `deploy/install.md` | `./install.sh` from a clone: what it asks, what it does, the other commands (upgrade, backup, restore, status, logs, uninstall), what is proven, and the by-hand appendix |
 | `deploy/client-install-guide.html` | The client architecture and install guide as one shareable page, generated from `guide/` by `scripts/docs/build_guide.mjs` |
 | `guide/README.md` | The client guide's index: its sections in order and what each holds |
-| `guide/quickstart.md` | Quickstart: run the stack on a laptop with the test model, run a first workflow from a folder and call it from Python |
+| `guide/quickstart.md` | Quickstart: install on one machine with the install script and the test model, sign in with `opsai`, run a first workflow and call it from Python |
 | `guide/overview.md` | What Ops AI does, for whom, the platform map and the ideas it rests on |
 | `guide/system-components.md` | Every container: purpose, port, what it stores and what it calls |
 | `guide/how-work-flows.md` | A chat turn with a tool approval, a workflow with a human task, and a court order notice emailed to a team mailbox |
@@ -210,8 +210,13 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `guide/install-cli.md` | The `opsai` command on its own: install from a clone, behind a company package mirror, or offline from a wheelhouse |
 | `guide/operate.md` | Health, logs, upgrade and roll back, back up and restore, scaling, what to watch, key rotation |
 | `guide/azure-sql.md` | Azure SQL: the scripts ready for review and what is still to come |
-| `guide/apps.md` | Apps: the Apps menu, turning an App on, team and personal Accounts, App credentials and Secrets, Tools, Resources, approvals, a run waiting for a person, turning an App off |
+| `guide/apps.md` | Tools and apps: what an app, a tool and an account are, sandbox and live, reads and writes, where tools come from, who may do what |
+| `guide/apps-setup.md` | Set up an app: its states, turning it on, the first time for a plugin's app, auth configs and secrets, a run waiting for a person, turning it off |
 | `guide/whats-built-today.md` | Built, partial or planned, capability by capability |
+| `guide/knowledge.md` | Knowledge: bases, sources, presets and sync settings, and what is not enforced yet |
+| `guide/human-tasks.md` | Human tasks and approvals: pausing for a person, task types, approval settings and their defaults |
+| `guide/cases.md` | Cases: the record of one piece of work, opened by a workflow or the API, and what a case page shows |
+| `guide/teams-and-access.md` | Teams and access: teams as the data boundary, the built-in roles, the roles grid and its limits |
 | `guide/support.md` | The support contact (placeholder) |
 | `guide/skills/ops-run.md` | Developer skill for Claude Code and GitHub Copilot (ops-run): run the stack on a laptop, in the devcontainer or on a shared VM, on the fake or OpenAI; generated into `.claude/skills/ops-run/SKILL.md` and `.github/prompts/ops-run.prompt.md` by `scripts/agent_skills.py` |
 | `guide/skills/ops-docs-write.md` | Developer skill for Claude Code and GitHub Copilot (ops-docs-write): write a user page for the public docs site to the page pattern; generated into `.claude/skills/ops-docs-write/SKILL.md` and `.github/prompts/ops-docs-write.prompt.md` by `scripts/agent_skills.py` |

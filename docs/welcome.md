@@ -26,17 +26,14 @@ cannot answer, so the pilot stays a pilot, or the team builds approvals, version
 ## Start here
 
 <!-- site: cards -->
-1. **[Quickstart](guide/quickstart.md)**: Run Ops AI on your laptop and run your first workflow in about ten minutes.
-2. **[Build with Ops AI](guide/build-with-ops-ai.md)**: The example folders in order, from one message to an agent that starts a workflow.
-3. **[How work flows](guide/how-work-flows.md)**: How a request becomes a run, a task for a person and a record.
-4. **[Install on a server](guide/install.md)**: Install for a team with one script, on Docker Compose or Kubernetes.
+1. **[Quickstart](guide/quickstart.md)**: install Ops AI on one machine and run a first workflow in about ten minutes.
+2. **[How work flows](guide/how-work-flows.md)**: how a request becomes a run, a task for a person and a record.
+3. **[Agents](guide/agents.md)** and **[Workflows](guide/workflows.md)**: the two ways Ops AI runs work.
+4. **[Human tasks and approvals](guide/human-tasks.md)**: how a person stays in charge of the steps that matter.
 
 ## For a security or architecture review
 
-| Question | Read |
-|---|---|
-| What runs, and what does each part store and call? | [System components](guide/system-components.md) |
-| How are sign-in, roles, approvals, secrets and outbound calls controlled? | [Security and governance](guide/security-and-governance.md) |
-| Where is data kept, how are teams kept apart, and what is audited? | [Data and database](guide/data-and-database.md) |
-| Which model calls leave, and under what limits? | [Models](guide/models.md) |
-| What is built today and what is planned? | [What's built today](guide/whats-built-today.md) |
+Isolation, sign-in, approvals and audit, data handling and model calls are answered in one place for a reviewer.
+
+<!-- site: cards -->
+- **[Security](security.md)**: how Ops AI keeps teams, data and model calls under control, with the limits stated.

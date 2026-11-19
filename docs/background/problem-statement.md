@@ -1,6 +1,6 @@
-# Problem statement
+# Why Ops AI
 
-Status: draft for review.
+Status: draft for review. The numbered items on this page are cited by the design pages.
 
 Enterprises want AI agents to take over routine back-office work: reading a servicing inbox, looking up
 the customer, drafting the reply or the record change, and handing it to a person to approve. The
@@ -137,5 +137,11 @@ Banks usually have prototype agents already. The platform takes them in piece by
 ## Stop condition
 
 If the second workflow is not materially faster to deliver than the first, the programme stops and
-the approach is re-examined. The implementation plan (`docs/plan/implementation-plan.md`) defines
-the measurement.
+the approach is re-examined. The implementation plan defines the measurement.
+
+## Next
+
+<!-- site: cards -->
+- **[Quickstart](../guide/quickstart.md)**: run Ops AI on one machine and run a first workflow.
+- **[How work flows](../guide/how-work-flows.md)**: the reference flow as it runs today.
+- **[Security](../security.md)**: the governance answers for a reviewer.

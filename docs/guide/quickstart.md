@@ -1,104 +1,129 @@
 # Quickstart
 
-Status: current. The commands are the ones the repository's own quick start runs.
+Status: current. The command line is not on a public package index yet, so this page installs it from the clone.
 
-Run every service, the console and a built-in test model on your own machine, then build and run a workflow from a
-folder and call it from Python. It takes about ten minutes and needs no model key and no network beyond the first
-download. To install Ops AI on a server for a team instead, read [Install](install.md).
+Get Ops AI running on one machine, then build and run a workflow from the command line, in about ten minutes. The
+install uses a built-in test model, so you need no model key. To install for a team on a server, read
+[Install](install.md) instead; the steps are the same with more questions answered.
 
 ## What you need
 
 | Tool | Used for |
 |---|---|
-| [uv](https://docs.astral.sh/uv/) | The services and the `opsai` command, on Python 3.12, which uv downloads when it is missing |
-| Node 22 or newer and pnpm 10 (`npm install -g pnpm@10`) | The console |
-| Docker with Compose, running | PostgreSQL, the policy engine and two test mail servers |
-| Optional: [Tesseract](https://tesseract-ocr.github.io/) | Reading scanned files; without it `make health` shows documents as `degraded` |
+| Docker 24 or newer, with Compose 2.22 or newer | Running Ops AI and its database |
+| 4 GB of memory for containers and 15 GB of disk | The services, the database and the images |
+| [uv](https://docs.astral.sh/uv/), or Python 3.11 or newer with pip | The `opsai` command line |
 
-One stack runs per machine. It uses ports 3016, 3017, 3020, 8700 to 8770, 8799, 8181, 5477, 3025, 3143, 1025 and 8025,
-so stop anything else on them first.
-
-## Start the stack
+## Install and sign in
 
 <!-- site: steps -->
-1. **Clone and install.** `make install` runs `pnpm install` and `uv sync`, once per clone.
+1. **Install.** Clone the repository and run the installer. `--yes` takes the default answer to every question: the
+   built-in database, the test model and a generated admin password.
 
    ```bash
    git clone https://github.com/chanl-ai/ops-ai.git && cd ops-ai
-   make install
+   ./install.sh --yes
    ```
 
-2. **Start everything.** `make up` starts the database, applies every migration, starts each service, the worker and
-   the console, and installs a sample team on a new database. With no `OPENAI_API_KEY` set, every model alias answers
-   from the test model.
+   When it ends, it prints the address to open and how to sign in as the first admin, `admin@example.com`. The
+   generated password is the `OPS_BOOTSTRAP_ADMIN_PASSWORD` line of `ops-ai.env` in the same folder; change it after
+   the first sign-in, then delete that line. `./install.sh status` prints the address again.
+
+2. **Open the console.** Open that address and sign in as the first admin.
+
+3. **Install the command line and sign in.** From the clone:
 
    ```bash
-   make up
-   make health
+   uv tool install ./sdk/python
+   opsai login --base-url <the address> --email admin@example.com
    ```
 
-   `make health` lists each service with its port and state.
-
-3. **Sign in.** Open <http://localhost:3016> and sign in as `w.kamau@harborpine.example` with the development password
-   `northfield-demo`. The bank, its people and its customers are fictional sample data.
+   `opsai login` asks for the password and keeps the session in a profile, so later commands need no sign-in. See
+   [Install the command line](install-cli.md) for pip, a company mirror or a machine with no network.
 
 ## Run your first workflow
 
+This workflow takes a support request, maps its fields onto one shape and ends. It has no model, tool or person in it.
+
 <!-- site: steps -->
-1. **Write a local profile.** Each example folder has a `setup.py` that signs in and writes `.ops-profile.json` into
-   the folder: the service addresses, the team and a sign-in. Run it again when the sign-in expires.
+1. **Write the workflow.** Save this as `workflow.yaml`:
 
-   ```bash
-   uv run python examples/workflows/01-normalize-a-request/setup.py
+   ```yaml
+   schemaVersion: 2
+   id: normalize_support_request
+   name: Normalize a support request
+   nodes:
+   - id: start
+     type: ops.trigger.request
+     typeVersion: 1
+     name: Support request
+     parameters:
+       inputSchema:
+         type: object
+         required: [customerEmail, subject, message]
+         properties:
+           customerEmail: {type: string}
+           subject: {type: string}
+           message: {type: string}
+   - id: map
+     type: ops.data.set
+     typeVersion: 1
+     name: Canonical fields
+     parameters:
+       values:
+         customer.email: $.input.customerEmail
+         title: $.input.subject
+         body: $.input.message
+   - id: done
+     type: ops.flow.end
+     typeVersion: 1
+     name: Accepted
+     parameters:
+       outcome: accepted
+   connections:
+   - {from: {node: start, port: payload}, to: {node: map, port: in}}
+   - {from: {node: map, port: out}, to: {node: done, port: in}}
    ```
 
-2. **Validate, save and run the workflow.** `OPS_CONFIG` points the `opsai` command at that profile; without it the
-   command reads `~/.config/ops-ai/config.json`.
+2. **Check it, save it and run it.**
 
    ```bash
-   cd examples/workflows/01-normalize-a-request
-   OPS_CONFIG=.ops-profile.json uv run opsai workflows validate resources/workflow.yaml
-   OPS_CONFIG=.ops-profile.json uv run opsai workflows apply resources/workflow.yaml
-   OPS_CONFIG=.ops-profile.json uv run opsai workflows run normalize_support_request --input fixtures/valid.json --test --wait
-   cd ../../..
+   opsai workflows validate workflow.yaml
+   opsai workflows apply workflow.yaml
+   opsai workflows run normalize_support_request --wait \
+     --input '{"customerEmail": "ada@example.test", "subject": "Card", "message": "Where is my refund?"}'
    ```
 
-3. **Call it from Python.** The profile gives the client everything it needs, so `OpsAI()` takes no arguments.
+   The run ends `succeeded` with the outcome `accepted`. A request without `customerEmail` is refused at the start.
 
-   ```bash
-   OPS_CONFIG=$PWD/examples/workflows/01-normalize-a-request/.ops-profile.json uv run python -c "
+3. **See it in the console.** Open **Build › Workflows › Runs** and pick the run: each step shows its input and output.
+
+4. **Call it from Python.** The same profile signs the client in.
+
+   ```python
    from ops_ai import OpsAI
+
    ops = OpsAI()
-   run = ops.workflows.run('normalize_support_request', mode='test', wait=True,
-       input={'customerEmail': 'ada@example.test', 'subject': 'Card', 'message': 'Where is my refund?'})
-   print(run['status'], run.get('outcome'))
-   "
+   run = ops.workflows.run("normalize_support_request", wait=True,
+       input={"customerEmail": "ada@example.test", "subject": "Card", "message": "Where is my refund?"})
+   print(run["status"], run.get("outcome"))
    ```
 
-   It prints `succeeded accepted`. Open the run in the console under **Agent Builder › Workflows › Runs**.
-
-## Chat with an agent
-
-```bash
-make chat-agents AS=builder
-make chat AS=builder AGENT='Branch Policy' SAY='What is the daily cash withdrawal limit at a branch?'
-```
-
-The answer streams to the terminal with a link to the same conversation in the console. On the test model the reply
-repeats what the agent retrieved, which shows the knowledge search and its citations.
+A new run is a test run unless you ask for a live one with `--live`. Publishing a version, for live runs, is on
+[Workflows](workflows.md).
 
 ## Use a real model or stop
 
 | Task | Do |
 |---|---|
-| Answer with a real model | Put `OPENAI_API_KEY` in a `.env` file at the repository root (git ignores it; `.env.example` lists the settings) and run `make up` again |
-| Stop and keep the data | `make down KEEP_DB=1` |
-| Call the API directly | The console at port 3016 does not serve the API. Each service serves its own part: platform 8710, agents 8700, tools 8720, kb 8740, files 8750, documents 8760, with one reference page for all of them at <http://localhost:8799> |
+| Answer with a real model | Run `./install.sh --model <OpenAI-compatible base URL ending in /v1> --model-name <model> --model-key-file <file>`; the key is stored in Ops AI's secrets, not in a file |
+| Stop and keep the data | `./install.sh uninstall`, and answer no when it asks to delete the data |
+| See what is running | `./install.sh status` |
 
 ## Next
 
 <!-- site: cards -->
-- **[Build with Ops AI](build-with-ops-ai.md)**: the example folders in the order to try them, from one message to an agent that starts a workflow.
-- **[Workflows](workflows.md)**: author, validate, publish and test-run a workflow from the SDK or the command line.
-- **[Agents](agents.md)**: author, publish and chat with an agent.
+- **[Agents](agents.md)**: write an agent, publish it and chat with it.
+- **[Workflows](workflows.md)**: publish, test from fixtures, and the step types.
+- **[Build with Ops AI](build-with-ops-ai.md)**: the example folders in order, from one message to an agent that starts a workflow.
 - **[How work flows](how-work-flows.md)**: what happens inside a chat turn, a workflow run and an email that becomes a case.

@@ -92,3 +92,10 @@ AI gateway.*
 | Case | The record of one piece of work for people: what it is about, what it waits on, what happened |
 | Tool | One operation on one of your systems, such as "get account" or "place hold", with its access class (read or write) and approval policy |
 | Alias | A name such as `default` that points at a provider's model; changing the alias changes the model without changing an agent |
+
+## Next
+
+<!-- site: cards -->
+- **[Quickstart](quickstart.md)**: run Ops AI on one machine.
+- **[How work flows](how-work-flows.md)**: a chat turn, a workflow run and an email to case, step by step.
+- **[Agents](agents.md)** and **[Workflows](workflows.md)**: the two ways to run work.
