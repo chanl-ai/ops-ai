@@ -100,7 +100,7 @@ opsai --help
 ```
 
 To build the folder for other operating systems or Python versions than the one you are on, or to upload it to a Nexus
-hosted repository, see [Behind a company mirror](../deploy/install.md#behind-a-company-mirror).
+hosted repository, see [Install from a company registry](../deploy/install.md#install-from-a-company-registry).
 
 ## Next
 
