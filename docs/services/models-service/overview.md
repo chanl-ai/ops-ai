@@ -21,7 +21,7 @@ hold a model key, never a provider's credential.
 | Called by | agents-service for every agent turn, kb-service for embeddings and its AI steps, documents-service for model reads, tools-service for the check before sending; each on its own key (`scripts/stack.sh:132`, `:194`, `:206`, `:211`) |
 | Events | None sent or received |
 | When something is down | An unreachable or failing provider is answered with its own code and logged as an `error` row ("Provider failures" below); a refusal is never retried here |
-| Design | [ADR on the AI gateway](../../architecture/decisions/ai-gateway.md) and the [console plan](../../plan/ai-gateway-console.md) |
+| Design | [ADR on the AI gateway](../../architecture/decisions/ai-gateway.md) |
 | Routes | API reference tab, HTTP API › Models (internal), built from `services/models-service/openapi.json`; `make -C services/models-service openapi-check` fails when it drifts, and every test checks each JSON response against it (`ops_service_kit.contract`) |
 
 ```mermaid

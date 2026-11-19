@@ -84,7 +84,7 @@ re-test for every published workflow. Until the last caller moves, the egress ru
 switched on, so the mandate and the discovery report rest on policy rather than on the network.
 The model-call history from before the switch would also be missing from the gateway log Audit
 reads. The day-one scope above is a few days of configuration on an adopted gateway plus the
-key-and-budget service (a small service, estimated in the [implementation plan](../../plan/implementation-plan.md)); retrofitting
+key-and-budget service (a small service); retrofitting
 grows with every workflow published without it.
 
 ## Consequences

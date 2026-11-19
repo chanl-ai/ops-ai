@@ -273,11 +273,11 @@ export const SITE = [
         entries: [
           { page: 'architecture/engineering-standards.md', title: 'Engineering standards', icon: 'ruler' },
           { rest: 'architecture/standards' },
-          { group: 'Migration to the standards', icon: 'route', entries: [{ rest: 'architecture/migration' }] },
+          { group: 'Migration to the standards', icon: 'route', entries: ['architecture/migration/api-changes.md'] },
         ],
       },
       { group: 'Services', icon: 'server', entries: [{ rest: 'services' }] },
-      { group: 'Packages', icon: 'package', entries: [{ rest: 'packages' }] },
+      { group: 'Packages', icon: 'package', entries: ['packages/README.md', { rest: 'packages' }] },
       {
         group: 'Use-case test catalogue',
         icon: 'list-checks',
@@ -294,6 +294,7 @@ export const SITE = [
         group: 'Design proposals',
         icon: 'pen-tool',
         entries: [
+          'design/README.md',
           { rest: 'design' },
           { group: 'Console', icon: 'monitor', entries: [{ rest: 'console' }] },
         ],

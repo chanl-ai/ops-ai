@@ -93,7 +93,7 @@ After that, by topic:
 | The API | [API conventions](api.md), the API reference tab | Call families, request rules and the event schema |
 | Operate | [Operations](operations.md), [make](make.md), [dependencies](dependencies.md), [cloud boxes](cloud-boxes.md) | Running, watching and changing a stack |
 | Proof and decisions | [Delivery](delivery.md), [platform choices](platform-choices.md), [decision records](decisions/README.md) | What is proven by which check, what is open, and why each choice was made |
-| Standards | [Engineering standards](engineering-standards.md), [migration plan](migration/README.md) | The rules code is held to, each with its check |
+| Standards | [Engineering standards](engineering-standards.md), [API changes in the standards migration](migration/api-changes.md) | The rules code is held to, each with its check; the migration onto them is finished, and the one page still read by the API-change checks is the API changes list |
 
 ## For a security review
 
