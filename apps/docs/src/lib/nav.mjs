@@ -94,7 +94,6 @@ export const SITE = [
         entries: [
           { page: 'deploy-and-operate.md', title: 'Deploy and operate', icon: 'server' },
           { page: 'guide/deployment-options.md', icon: 'map' },
-          { page: 'guide/system-components.md', icon: 'boxes' },
           { page: 'guide/README.md', title: 'Client guide', icon: 'book-marked' },
         ],
       },
@@ -104,11 +103,10 @@ export const SITE = [
         open: true,
         entries: [
           { page: 'guide/install.md', icon: 'download' },
-          { page: 'deploy/install.md', title: 'The install script', icon: 'terminal' },
+          { page: 'deploy/install.md', title: 'Install with the script', icon: 'terminal' },
           { page: 'deploy/compose.md', title: 'Docker Compose', icon: 'container' },
           { page: 'deploy/kubernetes.md', title: 'Kubernetes', icon: 'ship-wheel' },
           { page: 'deploy/release-package.md', title: 'Release package', icon: 'package' },
-          { page: 'deploy/install-guide.md', title: 'Install and operate, one page', icon: 'clipboard-list' },
         ],
       },
       {
@@ -125,7 +123,11 @@ export const SITE = [
         icon: 'activity',
         open: true,
         entries: [
-          { page: 'guide/operate.md', title: 'Upgrade, back up and monitor', icon: 'activity' },
+          { page: 'guide/operate.md', title: 'Operate', icon: 'activity' },
+          { page: 'guide/system-components.md', icon: 'boxes' },
+          { page: 'deploy/monitoring.md', title: 'Monitor', icon: 'activity' },
+          { page: 'deploy/upgrade.md', title: 'Upgrade', icon: 'arrow-up-circle' },
+          { page: 'deploy/backup-and-restore.md', title: 'Back up and restore', icon: 'archive' },
           { page: 'guide/plugins-install.md', title: 'Install and pin plugins', icon: 'package-plus' },
           { page: 'deploy/security-scanning.md', title: 'Security scanning', icon: 'scan-search' },
           { page: 'guide/support.md', icon: 'life-buoy' },
@@ -318,6 +320,7 @@ export const SITE = [
         icon: 'tag',
         entries: [
           'deploy/release.md',
+          { page: 'deploy/install-guide.md', title: 'Install guide, one page (generated)', icon: 'clipboard-list' },
           'deploy/docs-site.md',
           {
             group: 'Team environments',
