@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import Any
+from typing import cast
 
 from ops_agent_kernel.events import TurnFinished
 from ops_agent_kernel.kernel import run_turn
@@ -12,7 +12,7 @@ from ops_agents.activities.tool_directory import grants_for
 from ops_agents.activities.tools import fill
 from ops_agents.graphs.common import needs_step_up
 from ops_service_kit.errors import ApiError, ServiceUnavailable
-from ops_service_kit.http import Json
+from ops_service_kit.http import Json, JsonList
 from ops_service_kit.ids import new_id
 
 from ..store.agent_registry import AgentRow
@@ -51,7 +51,7 @@ async def one_test_turn(
     *,
     row: AgentRow,
     collections: tuple[str, ...] | None = None,
-) -> dict[str, Any]:
+) -> Json:
     """The same one-turn harness POST /v1/agents/{id}/test uses. Eval-runs call this per case."""
     if rt.ports is None:
         raise ServiceUnavailable(rt.model_error or "No model is configured.", code="model_unavailable")
@@ -79,7 +79,7 @@ async def one_test_turn(
         kb_names = {k.id: k.name for k in await rt.kbs().bases()} if req.kb_ids or result.citations else {}
     except ApiError:
         kb_names = {}
-    out: dict[str, Any] = {
+    out: Json = {
         "reply": result.text,
         "toolCalls": [
             {
@@ -106,7 +106,8 @@ async def one_test_turn(
         "model": req.settings.model_alias,
         "knowledgeBases": [{"id": k, "name": kb_names.get(k, k)} for k in req.kb_ids],
         "tools": [_held(rt, g) for g in req.tools],
-        "skills": result.skills,
+        # The kernel's LoadedSkill is a TypedDict of JSON values.
+        "skills": cast(JsonList, result.skills),
         "guardrails": [{"name": g.get("name"), "version": g.get("version")} for g in result.guardrails_checked],
         "searched": bool(req.kb_ids),
     }

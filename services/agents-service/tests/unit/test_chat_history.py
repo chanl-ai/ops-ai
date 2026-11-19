@@ -53,6 +53,7 @@ async def test_a_long_thread_reads_older_turns_as_one_summary_made_once_per_ten_
 
     short, made = await compacted(thread(20), None, summarize)
     assert len(short) == 20 and made is None and asked == []
+    first: list[dict[str, Any]]
     first, made = await compacted(thread(25), None, summarize)
     assert made == {"upto": 10, "text": "summary of 10 messages"} and len(first) == 16
     assert (

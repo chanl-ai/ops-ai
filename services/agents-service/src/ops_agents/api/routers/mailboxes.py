@@ -210,10 +210,12 @@ async def _views(rt: Runtime, rows: list[MailboxRow]) -> list[Json]:
     for m in rows:
         mine = [r for r in bound.get(m.address.lower(), []) if r.team_id == m.team_id]
         times = [read[k] for r in mine if (k := f"email:{r.workflow_id}") in read]
-        view = MailboxView(
-            **{k: v for k, v in m.values().items() if k in MailboxView.model_fields},
-            workflows=[BoundWorkflow(id=r.workflow_id, name=r.name, version=r.version) for r in mine],
-            last_read_at=max(times) if times else None,
+        view = MailboxView.model_validate(
+            {
+                **{k: v for k, v in m.values().items() if k in MailboxView.model_fields},
+                "workflows": [BoundWorkflow(id=r.workflow_id, name=r.name, version=r.version) for r in mine],
+                "last_read_at": max(times) if times else None,
+            }
         )
         out.append(view.model_dump(mode="json", by_alias=True))
     return out

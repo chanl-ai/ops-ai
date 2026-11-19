@@ -278,8 +278,8 @@ async def test_a_call_carrying_an_object_reads_without_it(stack: Stack) -> None:
     """A webhook step's story line read "payload case id case_2379…, customer id CUS-1001, account …": the object the
     call carries flattened into the sentence."""
     _, rt = stack
-    payload = {"caseId": "case_2379bac6ca62", "customerId": "CUS-1001", "account": "CHQ-2219", "amount": 2140.55}
-    call = {"tool": "notify_webhook", "input": {"hook": "holds", "event": "hold.placed", "payload": payload}}
+    payload: Json = {"caseId": "case_2379bac6ca62", "customerId": "CUS-1001", "account": "CHQ-2219", "amount": 2140.55}
+    call: Json = {"tool": "notify_webhook", "input": {"hook": "holds", "event": "hold.placed", "payload": payload}}
     with tenant_scope(TENANT):
         told = await describe_call(rt, call, currency=None, money_key=None)
     assert told["sentence"] == "Notify webhook: hook holds, event hold.placed", told
@@ -289,7 +289,10 @@ async def test_a_record_change_shows_each_field_it_writes(stack: Stack) -> None:
     """An approver of a record change saw nothing of what would change: the object of changed fields was dropped from
     the card. Each field is a row, though never part of the sentence."""
     _, rt = stack
-    call = {"tool": "crm_update", "input": {"object": "Case", "fields": {"Status": "Escalated", "Priority": "High"}}}
+    call: Json = {
+        "tool": "crm_update",
+        "input": {"object": "Case", "fields": {"Status": "Escalated", "Priority": "High"}},
+    }
     with tenant_scope(TENANT):
         told = await describe_call(rt, call, currency=None, money_key=None)
     rows = {f["label"]: f["value"] for f in told["fields"]}

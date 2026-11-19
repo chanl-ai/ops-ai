@@ -11,7 +11,6 @@ it is no longer in Files."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
 
 from ops_agent_kernel.types import AttachedFile
 from ops_agents.activities import attachments
@@ -40,7 +39,7 @@ class TurnFiles:
     cite, and the sentences the reply ends with for the person."""
 
     files: list[AttachedFile] = field(default_factory=list[AttachedFile])
-    passages: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
+    passages: list[Json] = field(default_factory=list[Json])
     notes: list[str] = field(default_factory=list[str])
 
 
@@ -76,10 +75,10 @@ class ChatAttachmentReader:
                 continue
             found_passages, was_cut = attachments.passages(found.name, file_id, pages, budget)
             budget -= sum(len(p.text) for p in found_passages)
-            out.passages += [
+            out.passages.extend(
                 {"documentId": p.document_id, "title": p.title, "section": p.section, "page": p.page, "text": p.text}
                 for p in found_passages
-            ]
+            )
             if was_cut:
                 cut.append(found.name)
         if cut:

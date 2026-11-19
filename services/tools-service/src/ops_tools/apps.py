@@ -1941,7 +1941,7 @@ async def app_credential(apps: Apps, who: Caller, credential_id: str) -> Credent
     return {
         **await _row(apps, who, cred, card, accounts, reads=await _reads(apps, who, [found])),
         "accountsList": listed,
-        "redirectUri": kinds.get("redirectUri"),
+        "redirectUri": cast(str | None, kinds.get("redirectUri")),
         "updated": cred.updated_at.isoformat() if cred else None,
         "settings": values,
         "modes": _modes_of(values, modes),

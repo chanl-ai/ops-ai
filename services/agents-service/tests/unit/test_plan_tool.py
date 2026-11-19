@@ -233,7 +233,7 @@ def test_the_chat_keeps_one_plan_part_on_top_and_hands_an_open_plan_to_the_next_
         )
     parts = builder.message.parts or []
     assert [p.id for p in parts] == ["wp_plan", "wp_c1"], [p.id for p in parts]
-    carried = history_entry(builder.message)
+    carried: dict[str, Any] = history_entry(builder.message)
     assert carried["plan"]["steps"][1]["status"] == "blocked" and "reads" in carried, carried
     # An approval pause keeps the plan through the run's saved state.
     call = PendingCall("c", "k", "a", "t", "s", "write", {}, "h")

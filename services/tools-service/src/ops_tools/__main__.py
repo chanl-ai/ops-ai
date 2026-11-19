@@ -7,7 +7,6 @@ import asyncio
 import json
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 import httpx
 import uvicorn
@@ -20,6 +19,7 @@ from ops_files_client import FilesClient
 from ops_identity import Auth, ServiceClient
 from ops_identity.fastapi import DEV_TENANT
 from ops_service_kit.credentials import credential_store
+from ops_service_kit.http import Json
 from ops_service_kit.logging import configure_logging, get_logger
 from ops_service_kit.model_calls import ModelCalls
 from ops_service_kit.settings import Settings, require_keys
@@ -90,7 +90,7 @@ MIGRATIONS = Path(__file__).resolve().parents[2] / "migrations"
 log = get_logger("ops_tools")
 
 
-async def _seed(settings: Settings, seed: dict[str, Any], catalog: list[dict[str, Any]] | None) -> None:
+async def _seed(settings: Settings, seed: Json, catalog: list[Json] | None) -> None:
     engine = open_database(settings.database_url)
     # The dev seed's modules belong to the tenant dev sign-in acts in.
     added = await load(ModuleStore(engine), seed, tenant_id=DEV_TENANT, now=datetime.now(UTC), catalog=catalog)

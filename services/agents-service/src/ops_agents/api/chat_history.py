@@ -6,10 +6,11 @@ from __future__ import annotations
 
 import json
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, cast
 
 from ops_agent_kernel.plan import from_part as plan_from_part
 from ops_contracts.chat import ChatMessage
+from ops_service_kit.http import Json, JsonList
 
 # The kernel's own tools: presenting, loading a skill and searching are not reads of a system.
 KERNEL_TOOLS = frozenset({"present", "load_skill", "search_tools", "search_knowledge", "plan"})
@@ -19,29 +20,28 @@ PLAN_PART = "wp_plan"
 READ_CHARS = 700
 
 
-def read_line(name: str, given: dict[str, Any], output: Any) -> str:
+def read_line(name: str, given: Json, output: Any) -> str:
     line = f"{name} {json.dumps(given, ensure_ascii=False)} answered {json.dumps(output, ensure_ascii=False)}"
     return line if len(line) <= READ_CHARS else line[: READ_CHARS - 1] + "…"
 
 
-def history_entry(m: ChatMessage) -> dict[str, Any]:
-    entry: dict[str, Any] = {"role": m.role, "content": m.content}
+def history_entry(m: ChatMessage) -> Json:
+    entry: Json = {"role": m.role, "content": m.content}
     if m.role != "assistant":
         return entry
     if m.skills:
-        entry["skills"] = [
-            {
-                "skillId": s.skill_id,
-                "version": s.version,
-                "name": s.name,
-                "matched": s.matched,
-                **({"part": s.part} if s.part else {}),
-                **({"how": s.how} if s.how else {}),
-                **({"inputs": s.inputs} if s.inputs else {}),
-            }
-            for s in m.skills
-        ]
-    reads = [
+        skills: JsonList = []
+        for s in m.skills:
+            skill: Json = {"skillId": s.skill_id, "version": s.version, "name": s.name, "matched": s.matched}
+            if s.part:
+                skill["part"] = s.part
+            if s.how:
+                skill["how"] = s.how
+            if s.inputs:
+                skill["inputs"] = {**s.inputs}
+            skills.append(skill)
+        entry["skills"] = skills
+    reads: JsonList = [
         read_line(c.name, c.input, c.output)
         for c in m.tool_calls or []
         if c.status == "success" and c.name not in KERNEL_TOOLS and c.output is not None
@@ -50,7 +50,8 @@ def history_entry(m: ChatMessage) -> dict[str, Any]:
         entry["reads"] = reads
     drawn = next((p for p in m.parts or [] if p.id == PLAN_PART), None)
     if drawn is not None and (left := plan_from_part(drawn.wire())) is not None:
-        entry["plan"] = left
+        # A plan is a TypedDict of JSON values, stored on the history as it is.
+        entry["plan"] = cast(Json, left)
     return entry
 
 
@@ -67,16 +68,16 @@ SUMMARY_PROMPT = (
 
 
 async def compacted(
-    history: list[dict[str, Any]],
-    held: dict[str, Any] | None,
+    history: list[Json],
+    held: Json | None,
     summarize: Callable[[str], Awaitable[str]],
-) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+) -> tuple[list[Json], Json | None]:
     """The history the turn reads, and the summary to keep on the thread when a new one was made (None otherwise). The
     summary is built from the messages' text only, never their reads, skills or plans."""
     if len(history) <= COMPACT_AFTER:
         return history, None
     upto = (len(history) - COMPACT_STEP) // COMPACT_STEP * COMPACT_STEP
-    made: dict[str, Any] | None = None
+    made: Json | None = None
     if held is not None and held.get("upto") == upto and held.get("text"):
         text = str(held["text"])
     else:

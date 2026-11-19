@@ -9,9 +9,11 @@ A field a setting turns on or off (the signing pair once `clientAuth` is `privat
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
 from urllib.parse import urlsplit
+
+from ops_service_kit.http import Json, JsonValue
 
 
 @dataclass(frozen=True)
@@ -31,15 +33,15 @@ class Field:
     # PEM text, many lines long: the dialog gives it a multi-line box and a file to read it from.
     pem: bool = False
 
-    def required_for(self, settings: dict[str, Any]) -> bool:
+    def required_for(self, settings: Mapping[str, JsonValue]) -> bool:
         if self.required_when and all(settings.get(k) == v for k, v in self.required_when):
             return True
         if self.optional_when and all(settings.get(k) == v for k, v in self.optional_when):
             return False
         return self.required
 
-    def view(self) -> dict[str, Any]:
-        out: dict[str, Any] = {
+    def view(self) -> Json:
+        out: Json = {
             "name": self.name,
             "label": self.label,
             "secret": self.secret,
@@ -79,13 +81,13 @@ class Kind:
     def field(self, name: str) -> Field | None:
         return next((f for f in (*self.fields, *COMMON, *CERTIFICATE) if f.name == name), None)
 
-    def requires(self, settings: dict[str, Any], *, each_person: bool = False) -> list[Field]:
+    def requires(self, settings: Mapping[str, JsonValue], *, each_person: bool = False) -> list[Field]:
         """The fields this kind needs with these plain settings (defaults applied), secret or not. `each_person`: the
         fields asked of the team where each person gives their own (`person_fields`) are left out."""
         own: set[str] = set(self.person_fields) if each_person else set()
         return [f for f in (*self.fields, *COMMON) if f.required_for(settings) and f.name not in own]
 
-    def view(self) -> dict[str, Any]:
+    def view(self) -> Json:
         return {
             "id": self.id,
             "label": self.label,
@@ -256,7 +258,7 @@ def kind_of(kind_id: str) -> Kind:
     return BY_ID[kind_id]
 
 
-def views() -> dict[str, Any]:
+def views() -> Json:
     return {
         "kinds": [k.view() for k in KINDS],
         "common": [f.view() for f in COMMON],
