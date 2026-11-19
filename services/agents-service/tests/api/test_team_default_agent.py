@@ -30,6 +30,7 @@ from ops_identity import Auth, Identity, ServiceAuth, service_verifiers
 from ops_identity import Principal as Caller
 from ops_metering import Budget
 from ops_service_kit.settings import Settings
+from ops_store.isolation import scope
 from tests.api.test_action_roles import ADMIN, OUTSIDER, REVIEWER, VIEWER, introspect
 from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model, sse_events
 from tests.engine.test_lifecycle_rights import TENANT, jwks, person
@@ -270,6 +271,9 @@ async def test_a_specialist_spends_the_callers_budget_and_stops_when_it_is_spent
         assert (second["status"], second["code"]) == ("budget_reached", "chain_budget_reached"), second
         assert [step.split("@")[0] for step in second["path"]] == ["ag_branch", "ag_dispute"], second
         assert (await rt.usage.totals(thread)).calls == 3, "the stopped specialist spent from the chain"
+    # The chain is the thread's team's: another team reads none of its spend.
+    with scope(TENANT, "team_fraud"):
+        assert (await rt.usage.totals(thread)).calls == 0, "another team read this team's chain"
     # The caller is held by the same total: its next turn waits on the budget card its person answers.
     await say(c, thread, "And the deadline?", VIEWER)
     waiting: dict[str, Any] = (await c.get(f"/v1/chat/threads/{thread}", headers=VIEWER)).json()["data"]["messages"][-1]

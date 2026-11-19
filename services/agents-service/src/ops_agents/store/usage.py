@@ -18,6 +18,7 @@ from ops_store import Guarantee
 from ops_store.dialect import db_now, upsert
 from ops_store.rows import one
 from ops_store.schema import TENANT_SCOPED, system
+from ops_store.team_scope import team_visible
 
 from .base import metadata
 from .graphs import graph_threads
@@ -133,7 +134,7 @@ class UsageLedger(RuntimeStore):
         calls are recorded once, on its thread, and counted here, so a chain's spend is charged to the thread it
         started on and never twice."""
         m, t = model_call_records.c, graph_threads.c
-        children = sa.select(t.id).where(t.parent_thread_id == thread_id)
+        children = sa.select(t.id).where(t.parent_thread_id == thread_id, team_visible(graph_threads))
         spent = [sa.func.coalesce(sa.func.sum(x), 0) for x in (m.calls, m.input_tokens, m.output_tokens, m.cost_micros)]
         per_thread = (
             sa.select(
@@ -144,15 +145,20 @@ class UsageLedger(RuntimeStore):
             .group_by(m.thread_id)
             .subquery()
         )
-        # One statement: each thread's sums with its meta, which says whether a child thread is a specialist's.
-        q = sa.select(
-            per_thread.c.thread_id,
-            per_thread.c.calls,
-            per_thread.c.tokens_in,
-            per_thread.c.tokens_out,
-            per_thread.c.micros,
-            t.meta,
-        ).select_from(per_thread.outerjoin(graph_threads, t.id == per_thread.c.thread_id))
+        # One statement: each thread's sums with its meta, which says whether a child thread is a specialist's. Only
+        # the acting team's threads are joined, so a thread of another team, the first one included, counts nothing.
+        q = (
+            sa.select(
+                per_thread.c.thread_id,
+                per_thread.c.calls,
+                per_thread.c.tokens_in,
+                per_thread.c.tokens_out,
+                per_thread.c.micros,
+                t.meta,
+            )
+            .select_from(per_thread.join(graph_threads, t.id == per_thread.c.thread_id))
+            .where(team_visible(graph_threads))
+        )
         async with self.tx() as c:
             found: list[tuple[Any, ...]] = [tuple(r) for r in (await c.execute(q)).all()]
         counted = [r for r in found if r[0] == thread_id or _asked_by(r[5]) == thread_id]
