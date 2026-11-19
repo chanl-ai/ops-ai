@@ -135,7 +135,7 @@ async def test_the_default_asks_only_specialists_the_person_may_chat_with_and_as
     assert rt.graph_store is not None
     children = [
         t
-        for t in await rt.graph_store.threads("agent_wrapper")
+        for t in [r.model_dump() for r in await rt.graph_store.thread_rows("agent_wrapper")]
         if cast(dict[str, Any], t["meta"] or {}).get("calledBy")
     ]
     assert [(t["meta"]["agentId"], t["meta"]["calledBy"], t["meta"]["startedFor"]) for t in children] == [

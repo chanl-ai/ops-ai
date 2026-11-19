@@ -15,7 +15,7 @@ from ops_service_kit.http import JsonList
 
 RUN: dict[str, Any] = {"id": "wfrun_1", "workflow_id": "w", "updated_at": "now", "waiting": None}
 # Named, so the view reads no definition.
-TITLES: dict[str, Any] = {"workflow": "w", "steps": {}}
+TITLES: engine_reviews.Titles = {"workflow": "w", "steps": {}}
 
 
 def decided(node: str, option: str) -> dict[str, Any]:

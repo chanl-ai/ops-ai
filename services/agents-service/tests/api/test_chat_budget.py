@@ -242,9 +242,9 @@ async def test_a_caller_cannot_forge_a_threads_allotment_or_owner(dev_platform: 
         budget = await rt.usage.budget(tid)
         caps.append(budget.max_calls if budget else None)
         assert rt.graph_store is not None
-        row = await rt.graph_store.thread(tid)
+        row = await rt.graph_store.thread_row(tid)
         assert row is not None
-        meta = cast(dict[str, Any], row["meta"])
+        meta = cast(dict[str, Any], row.meta)
         assert meta["ownerEmail"] == "usr_owner@harborpine.example", meta
         assert meta["budgetAllotment"]["maxCalls"] == PLATFORM_CONVERSATION_CALLS, meta
     assert caps == [PLATFORM_CONVERSATION_CALLS, PLATFORM_CONVERSATION_CALLS]

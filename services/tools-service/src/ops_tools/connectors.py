@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Literal, cast
 from pydantic import Field
 
 from ops_service_kit.errors import ServiceUnavailable
-from ops_service_kit.http import Json, Out
+from ops_service_kit.http import Json, JsonValue, Out
 
 from .app_rows import AppCard, CardToolRow
 from .app_states import AppGroup, AppState
@@ -143,7 +143,9 @@ def can_do(tools: list[ReviewedTool]) -> str:
     return " · ".join(parts) or "No tools switched on yet"
 
 
-async def _reviewed(apps: Apps, who: Caller, tools: Sequence[Mapping[str, object]]) -> list[ReviewedTool]:
+async def _reviewed(
+    apps: Apps, who: Caller, tools: Sequence[CardToolRow] | Sequence[Mapping[str, JsonValue]]
+) -> list[ReviewedTool]:
     """Each tool with whether its write waits, from the gateway's rule: its own setting, its app, the team."""
     if apps.write_approvals is None:
         return [cast(ReviewedTool, {**t, "reviewed": t["access"] != "read" and bool(t["waits"])}) for t in tools]

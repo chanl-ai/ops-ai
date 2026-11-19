@@ -36,6 +36,7 @@ from ops_store import isolation
 
 from ...store.agent_registry import AgentRow
 from ...store.evals import EvalStore
+from ...store.graphs import StoredThread
 from ...store.template_copies import TemplateCopies
 from ..account_names import require_team_accounts
 from ..agent_registry import (
@@ -630,8 +631,8 @@ async def list_versions(rt: Rt, _: Reader, __: Tx, agent_id: str) -> JSONRespons
     return ok(out)
 
 
-def _meta(thread: Json) -> Json:
-    return cast(Json, thread["meta"] or {})
+def _meta(thread: StoredThread) -> Json:
+    return thread.meta_object()
 
 
 @router.get("/{agent_id}/runs", response_model=Envelope[list[AgentRun]])
@@ -641,19 +642,19 @@ async def recent_runs(
     """The agent's newest threads in the selected team: chats with it and runs of its own `agent:<id>` graph."""
     await registry(rt).row(agent_id)
     assert rt.graph_store is not None
-    own = await rt.graph_store.threads(f"agent:{agent_id}")
-    chats = [t for t in await rt.graph_store.threads("agent_wrapper") if _meta(t).get("agentId") == agent_id]
-    rows = sorted([*own, *chats], key=lambda t: str(t["created_at"]), reverse=True)[:limit]
+    own = await rt.graph_store.thread_rows(f"agent:{agent_id}")
+    chats = [t for t in await rt.graph_store.thread_rows("agent_wrapper") if _meta(t).get("agentId") == agent_id]
+    rows = sorted([*own, *chats], key=lambda t: t.created_at, reverse=True)[:limit]
     return ok(
         [
             {
-                "threadId": t["id"],
-                "kind": "chat" if t["graph"] == "agent_wrapper" else "graph",
+                "threadId": t.id,
+                "kind": "chat" if t.graph == "agent_wrapper" else "graph",
                 "title": str(_meta(t).get("title") or ""),
-                "status": t["status"],
-                **({"version": t["version"]} if t["version"] is not None else {}),
-                "startedAt": t["created_at"],
-                "updatedAt": t["updated_at"],
+                "status": t.status,
+                **({"version": t.version} if t.version is not None else {}),
+                "startedAt": t.created_at,
+                "updatedAt": t.updated_at,
             }
             for t in rows
         ]
@@ -847,7 +848,7 @@ async def create_job(rt: Rt, me: Me, agent_id: str, body: JobInput) -> JSONRespo
         delay = (due - datetime.now(UTC)).total_seconds()
     store = graph_store(rt)
     thread_id = new_id("gth")
-    row, created = await store.find_or_create_thread(
+    row, created = await store.open_thread(
         thread_id,
         f"agent:{agent_id}",
         {
@@ -860,6 +861,6 @@ async def create_job(rt: Rt, me: Me, agent_id: str, body: JobInput) -> JSONRespo
         external_key=f"job:{agent_id}:{body.key}",
     )
     if not created:
-        return ok({"threadId": row["id"], "duplicate": True, "key": body.key})
-    armed = await arm_job(rt, row["id"], delay=delay, key=body.key)
-    return ok({"threadId": row["id"], "key": body.key, **armed}, status=201)
+        return ok({"threadId": row.id, "duplicate": True, "key": body.key})
+    armed = await arm_job(rt, row.id, delay=delay, key=body.key)
+    return ok({"threadId": row.id, "key": body.key, **armed}, status=201)

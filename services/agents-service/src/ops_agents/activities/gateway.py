@@ -14,7 +14,7 @@ from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
-from typing import Any, NotRequired, Protocol, TypedDict, cast
+from typing import NotRequired, Protocol, TypedDict, cast
 
 import httpx
 
@@ -146,6 +146,25 @@ class Fence(TypedDict):
     generation: int
 
 
+class ToolApproval(TypedDict, total=False):
+    """A tool's write approval policy as tools-service answers it: how many people approve, and whether approving asks
+    for a step-up."""
+
+    approvers: JsonValue
+    stepUp: JsonValue
+
+
+class ToolPolicy(TypedDict):
+    """tools-service's answer for one tool (GET /v1/tools/{name}), as this service reads it: its access class, its
+    write approval policy, how long one call may take and what it returns. Not checked here: each reader reads a key
+    as it reads any other answer, so an approval that is not an object fails at its first read."""
+
+    access: JsonValue
+    approval: NotRequired[ToolApproval | None]
+    deadlineSeconds: NotRequired[JsonValue]
+    outputSchema: NotRequired[JsonValue]
+
+
 class GatewayClient:
     def __init__(self, tools: ServiceClient) -> None:
         """`tools` calls tools-service as this service, naming the tenant of the run it calls for; tools-service takes
@@ -165,7 +184,7 @@ class GatewayClient:
         """The tool's access class as tools-service's registry has it; "unknown" when it is not registered."""
         return str((await self.tool_policy(tool))["access"])
 
-    async def tool_policy(self, tool: str) -> dict[str, Any]:
+    async def tool_policy(self, tool: str) -> ToolPolicy:
         """The tool's access class and write approval policy (`approval`: approvers, stepUp) as
         tools-service's registry has them; access "unknown" and no policy when it is not registered."""
         try:

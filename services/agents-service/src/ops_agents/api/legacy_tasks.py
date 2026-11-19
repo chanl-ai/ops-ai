@@ -11,16 +11,19 @@ from __future__ import annotations
 import json
 from functools import cache
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from ops_engine.compiler import resolve
 from ops_engine.store import DefinitionRow
-from ops_service_kit.http import Json, JsonList
+from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.narrow import json_list, json_object
 
 from .deps import Runtime
 from .engine_lifecycle import definitions
 from .task_view import TaskReads, typed_task
+
+if TYPE_CHECKING:
+    from .engine_reviews import EngineReview
 
 # What a review carries (read, reply, write, decision), to the seeded general type that draws it: data, a bridge for
 # reviews older than typed steps, which every new review step replaces by naming its own type.
@@ -41,7 +44,7 @@ async def legacy_task(
     rt: Runtime,
     run: Json,
     payload: Json,
-    view: Json,
+    view: EngineReview,
     *,
     live: Any = NOT_READ,
     reads: TaskReads | None = None,
@@ -78,17 +81,17 @@ async def _from_live_version(
     return ref, cast(Json, params)
 
 
-def _from_shape(payload: Json, view: Json) -> tuple[Json, Json]:
+def _from_shape(payload: Json, view: EngineReview) -> tuple[Json, Json]:
     title = str(view.get("question") or view.get("title") or "")
     facts: JsonList = cast(JsonList, view.get("actionFields") or []) or [
         {"label": e.get("label"), "value": e.get("detail")} for e in cast(list[Json], view.get("evidence") or [])
     ]
-    decided: Json = {"onApprove": view["consequence"]} if view.get("consequence") else {}
+    decided: Json = {"onApprove": said} if (said := view.get("consequence")) else {}
     if isinstance(read := view.get("read"), dict):
         # A read check by its read (engine_reviews.document_read), wherever the workflow put it in the summary; the
         # console draws the read's fields from the review's own `read`.
         found = read
-        params: Json = {"title": title, "document": found.get("fileId"), "fields": found.get("schema")}
+        params: Json = {"title": title, "document": found.get("fileId"), "fields": cast(JsonValue, found.get("schema"))}
         return {"id": legacy_types()["read"]}, params | decided
     if isinstance(reply := view.get("reply"), dict):
         sent = reply

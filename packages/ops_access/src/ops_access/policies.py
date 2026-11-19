@@ -7,10 +7,10 @@ token; services read them there with `policy(p, key)`."""
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any, TypedDict, cast
 
 from ops_identity import Principal
-from ops_service_kit.http import Json, JsonValue
+from ops_service_kit.http import Json
 from ops_service_kit.narrow import json_object
 
 
@@ -408,17 +408,27 @@ def publish_mode(modes: dict[str, Any], team: str, area: str) -> str:
 ANSWERS = ("none", "person", "reviewer")
 
 
-def _level(value: object) -> tuple[str | None, JsonValue]:
+class EffectiveAnswer(TypedDict):
+    """Whether a call waits and who answers it, as `effective_answer` decides: `answer` is "none", "person" or
+    "reviewer"; `reviewerRole` is passed on as the tool or a level holds it."""
+
+    waits: bool
+    answer: str
+    reviewerRole: str | None
+    source: str
+
+
+def _level(value: object) -> tuple[str | None, str | None]:
     """The (answer, reviewerRole) one level of the chain holds; answer None when the level says nothing (as a level
-    that is not an object says nothing)."""
+    that is not an object says nothing). A saved level's role is a string or null, as `check_value` keeps it."""
     held = json_object(value)
     answer = held.get("answer")
     if held.get("ask") is False:
         answer = "none"
-    return (answer if answer in ANSWERS else None), held.get("reviewerRole")
+    return (answer if answer in ANSWERS else None), cast(str | None, held.get("reviewerRole"))
 
 
-def effective_answer(*, tool: dict[str, Any], app: Any, team: Any, channel: str, test_account: bool) -> dict[str, Any]:
+def effective_answer(*, tool: dict[str, Any], app: Any, team: Any, channel: str, test_account: bool) -> EffectiveAnswer:
     """Whether a call waits, and who answers, for one tool: the single rule every service reads.
 
     The most specific level wins: the tool's `approvalMode`, then the app's entry of `appChangesByApp`, then the team's

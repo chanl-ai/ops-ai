@@ -288,7 +288,25 @@ def ok(data: Any, status: int = 200) -> JSONResponse:
     return JSONResponse({"success": True, "data": data}, status_code=status)
 
 
-def error_body(status: int, code: str, message: str) -> dict[str, Any]:
+class ErrorJSON(TypedDict):
+    """`ErrorBody` as `error_body` builds it. `details` is added by whoever has some, any value `ErrorBody.details`
+    documents (an error's details, a validation error list, a refused call's reasons)."""
+
+    code: str
+    message: str
+    status: int
+    requestId: str
+    details: NotRequired[object]
+
+
+class ErrorBodyJSON(TypedDict):
+    """`ErrorEnvelope` as `error_body` builds it."""
+
+    success: Literal[False]
+    error: ErrorJSON
+
+
+def error_body(status: int, code: str, message: str) -> ErrorBodyJSON:
     # The request's own id, so a reported error leads to its log lines; minted when built outside a request.
     request_id = current_request_id() or new_id("req")
     return {"success": False, "error": {"code": code, "message": message, "status": status, "requestId": request_id}}
