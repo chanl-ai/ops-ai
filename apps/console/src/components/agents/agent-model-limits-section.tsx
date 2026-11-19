@@ -24,7 +24,8 @@ export const THINKING: { value: Thinking; label: string; hint: string }[] = [
 ];
 
 export const agentLimitsSchema = z.object({
-  model: z.string().trim().min(1, 'Choose a model.'),
+  // Empty until a model is chosen: an agent made from the SDK or the command line has none, and how it thinks still saves.
+  model: z.string().trim(),
   thinking: z.enum(['default', 'low', 'medium', 'high']),
   parallelReads: z.boolean(),
 });

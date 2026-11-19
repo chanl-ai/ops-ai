@@ -111,6 +111,12 @@ await withUiStack(
       // 16. The model and limits form stays closed until opened; the leave guard holds unsaved text.
       await page.getByTestId('agent-model-limits-toggle').click();
       check('16 model and limits opens to the model, thinking and the rules and limits', (await page.getByTestId('agent-model-limits').isVisible()) && (await page.getByTestId('agent-rules-and-limits').isVisible()));
+      // This agent has no model chosen, as every agent made from the SDK or the command line: how it thinks still saves.
+      const thought = page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().endsWith(`/v1/agents/${agent.id}`), { timeout: 60_000 });
+      await page.locator('#ag-thinking').click();
+      await page.getByRole('option', { name: 'High' }).click();
+      const saidHigh = (await (await thought).json()).data?.patterns?.thinking;
+      check('16 with no model chosen, a change to Thinking still saves', saidHigh === 'high', saidHigh);
 
       // 17. The test panel shows the step tracker after a reply.
       await page.route(/\/chat\/threads\/[^/?]+$/, async (route) => {
@@ -141,6 +147,12 @@ await withUiStack(
       await maya.getByTestId('agent-brief').waitFor({ timeout: 120_000 });
       await maya.getByTestId('read-only-notice').waitFor({ timeout: 60_000 });
       check('18 a reviewer sees the agent page as view only, with no Edit as plain text link', (await maya.getByTestId('agent-prompt-mode').count()) === 0);
+      await maya.getByTestId('agent-uses-link').click();
+      const sheet = await maya.getByTestId('agent-uses-sheet').waitFor({ timeout: 15_000 }).then(() => true, () => false);
+      await maya.keyboard.press('Escape');
+      await maya.getByTestId('agent-model-limits-toggle').click();
+      const limits = await maya.getByTestId('agent-model-limits').waitFor({ timeout: 15_000 }).then(() => true, () => false);
+      check('18 a reviewer can open what the agent uses and its model and limits, with the fields off', sheet && limits && (await maya.locator('#ag-thinking').isDisabled()), { sheet, limits });
       await shootBothWidths(maya, AREA, 'uc-757-agent-member', async () => {});
       await maya.goto(`${consoleUrl}/build/skills/${skill.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await maya.getByTestId('skill-document').waitFor({ timeout: 120_000 });
