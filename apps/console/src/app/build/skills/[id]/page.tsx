@@ -3,7 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { Activity, Archive, BookOpen, Copy, Download, FlaskConical, History, Inbox, MoreHorizontal, Paperclip, Send, Sparkles, Trash2, Users, Wrench } from 'lucide-react';
+import { Activity, Archive, TriangleAlert, BookOpen, Copy, Download, FlaskConical, History, Inbox, MoreHorizontal, Paperclip, Send, Sparkles, Trash2, Users, Wrench } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { openLink } from '@/components/files/file-actions';
@@ -66,6 +66,9 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
   const [panel, setPanel] = useTabParam(PANELS, 'instructions');
   const sheet = panel in SHEETS ? SHEETS[panel as keyof typeof SHEETS] : null;
   const close = (open: boolean) => !open && setPanel('instructions');
+  // Adding a file or restoring a version saves a draft, and the form is drawn again from it: unsaved text would go.
+  const [unsaved, setUnsaved] = React.useState(false);
+  const waits = unsaved && (panel === 'resources' || panel === 'versions');
   const request = useRequestSkillReview(s.id);
   const deprecate = useDeprecateSkill(s.id);
   const duplicate = useDuplicateSkill();
@@ -278,7 +281,7 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
                 </>
               }
             >
-              <SkillEditor key={`${newest.version}-${newest.savedAt}`} skill={s} />
+              <SkillEditor key={`${newest.version}-${newest.savedAt}`} skill={s} onDirtyChange={setUnsaved} />
             </RecordLayout>
             </BuilderFieldset>
           </div>
@@ -299,10 +302,21 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
           >
             {/* A sheet is drawn outside the page's fieldset, so it gets its own. */}
             <BuilderFieldset>
-              {panel === 'tests' && <TestsTab skill={s} />}
-              {panel === 'versions' && <VersionsTab skill={s} onExport={runExport} />}
-              {panel === 'activity' && <ActivityTab skill={s} />}
-              {panel === 'resources' && <ResourcesTab skill={s} />}
+              <div className="flex flex-col gap-4">
+                {waits && (
+                  <Alert data-testid="skill-sheet-unsaved">
+                    <TriangleAlert />
+                    <AlertTitle>Save your changes first</AlertTitle>
+                    <AlertDescription>The skill has changes that are not saved. A change here saves a draft and would drop them, so these controls wait until you save or discard.</AlertDescription>
+                  </Alert>
+                )}
+                <fieldset disabled={waits} className="contents">
+                  {panel === 'tests' && <TestsTab skill={s} />}
+                  {panel === 'versions' && <VersionsTab skill={s} onExport={runExport} />}
+                  {panel === 'activity' && <ActivityTab skill={s} />}
+                  {panel === 'resources' && <ResourcesTab skill={s} />}
+                </fieldset>
+              </div>
             </BuilderFieldset>
           </DetailSheet>
 

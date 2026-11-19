@@ -10,7 +10,7 @@ import { SettingsSection } from '@/components/shared/settings-section';
 import { TagInput } from '@/components/shared/tag-input';
 import { SkillDocumentEditor } from '@/components/skills/skill-document-editor';
 import { EDIT_CLASS, EditClassBadge, MarkdownPreview } from '@/components/skills/skill-meta';
-import { refusedSave } from '@/components/skills/skill-problems';
+import { inText, refusedSave } from '@/components/skills/skill-problems';
 import { SkillResultsSection, type SkillEndingValue } from '@/components/skills/skill-results-section';
 import { SkillWhenSection, type SkillWhen, type SkillWhenHandle } from '@/components/skills/skill-when-section';
 import { AccessBadge } from '@/components/status-badges';
@@ -55,7 +55,7 @@ const same = (a: string[], b: string[]) => a.length === b.length && a.every((x) 
  * edits the open draft, or opens a new draft on top of the published version; nothing reaches an agent until a
  * publisher approves it. The unsaved bar says which edit class the change is.
  */
-export function SkillEditor({ skill: sk }: { skill: SkillDetail }) {
+export function SkillEditor({ skill: sk, onDirtyChange }: { skill: SkillDetail; onDirtyChange?: (dirty: boolean) => void }) {
   const save = useSaveSkillDraft(sk.id);
   const current = useSkill(sk.id);
   const [noting, setNoting] = React.useState(false);
@@ -85,10 +85,14 @@ export function SkillEditor({ skill: sk }: { skill: SkillDetail }) {
     scope: !same(form.toolIds, saved.toolIds) || !same(form.knowledgeBases, saved.knowledgeBases) || !same(form.guardrails, saved.guardrails) || form.refusal.trim() !== saved.refusal.trim(),
   };
   const dirty = changed.wording || changed.scope;
+  // The page holds back what would redraw this form (a file added, a version restored) while there is unsaved text.
+  React.useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
   const editClass: SkillEditClass = changed.scope ? 're_approval' : 're_test';
   const limit = options.data?.limits.useWhenMaxChars ?? 1024;
   const errors = { name: form.name.trim() ? undefined : 'Name the skill.', parts: partsError(form.parts) };
-  const found = (newest.state === 'draft' && sk.publishCheck.problems) || NONE;
+  const found = React.useMemo(() => (newest.state === 'draft' ? inText(sk.publishCheck.problems ?? NONE) : NONE), [newest.state, sk.publishCheck.problems]);
   const problems = React.useMemo(() => (refused ? [...found, refused] : found), [found, refused]);
   const discard = () => (setForm(saved), setEndingValid(true), setWhenValid(true), setRefused(null), setDiscards((n) => n + 1));
   const tools = options.data?.tools ?? [];

@@ -25,9 +25,11 @@ test('problems are written under the step they name, joined when a step has two'
   ]);
 });
 
-test('a save the service refuses for one step becomes a problem on that step, and any other refusal does not', () => {
-  assert.deepEqual(refusedSave({ status: 400, code: 'bad_check', message: 'Step 3: reslt is not a value a check can read.', details: { step: 3 } }), on(3, 'bad_check', 'Step 3: reslt is not a value a check can read.'));
-  assert.equal(refusedSave({ status: 400, code: 'bad_check', message: 'No step named.' }), null);
+test('a save the service refuses for one step becomes a problem on that step, whatever its code, and any other refusal does not', () => {
+  // The service's codes for a step are its own (bad_check, unknown_exit, bad_goto, sub_skill_cycle, unknown_reference).
+  for (const code of ['bad_check', 'unknown_exit', 'sub_skill_cycle', 'unknown_reference'])
+    assert.deepEqual(refusedSave({ status: 400, code, message: 'Step 3 cannot run.', details: { step: 3 } }), on(3, 'bad_step', 'Step 3 cannot run.'), code);
+  assert.equal(refusedSave({ status: 400, code: 'validation_failed', message: 'steps.0.do: Field required' }), null);
   assert.equal(refusedSave({ status: 409, code: 'stale_base', message: 'v7 was saved after v6.', details: { step: 3 } }), null);
   assert.equal(refusedSave(new Error('offline')), null);
 });

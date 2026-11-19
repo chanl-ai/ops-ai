@@ -27,12 +27,20 @@ export function placeProblems(problems: readonly PublishBlocker[]): PlacedProble
   return [...lines.values()].map(({ messages, ...at }) => ({ ...at, message: messages.join(' ') }));
 }
 
-const STEP_CODES: readonly string[] = ['bad_step', 'bad_check', 'bad_exit', 'sub_skill_not_held'];
-
-/** A save the service refused because of one step (400 with the step's number), as a problem on that step. */
+/**
+ * A save the service refused because of one step, as a problem on that step. The service answers 400 with the step's
+ * number and its own code for what is wrong (a bad check, an ending it does not have, a skill that runs itself); the
+ * sentence is what the person reads, so the code is not matched here.
+ */
 export function refusedSave(error: unknown): PublishBlocker | null {
-  const e = error as { status?: number; code?: string; message?: string; details?: Record<string, unknown> };
+  const e = error as { status?: number; message?: string; details?: Record<string, unknown> };
   const step = e?.details?.step;
-  if (e?.status !== 400 || !e.code || !STEP_CODES.includes(e.code) || typeof step !== 'number') return null;
-  return { kind: e.code as PublishBlocker['kind'], id: null, position: { field: 'steps', step, index: null }, message: e.message ?? '' };
+  if (e?.status !== 400 || typeof step !== 'number') return null;
+  return { kind: 'bad_step', id: null, position: { field: 'steps', step, index: null }, message: e.message ?? '' };
 }
+
+/** Publish blockers the page already says in its own alerts, so the document's list leaves them out. */
+const SAID_ELSEWHERE: readonly PublishBlocker['kind'][] = ['deprecated', 'already_published', 'review_open'];
+
+/** The problems a builder fixes in the skill's text. */
+export const inText = (problems: readonly PublishBlocker[]): PublishBlocker[] => problems.filter((p) => !SAID_ELSEWHERE.includes(p.kind));
