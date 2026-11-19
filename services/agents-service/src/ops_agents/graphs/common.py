@@ -5,13 +5,14 @@ from __future__ import annotations
 import base64
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
-from typing import Any, Protocol, TypedDict, cast
+from typing import Any, NotRequired, Protocol, TypedDict, cast
 
 from langgraph.config import get_config, get_stream_writer
 
 from ops_agent_kernel.events import (
     CitationsReady,
     SkillLoaded,
+    SkillRunChanged,
     StatusChanged,
     TextDelta,
     TextReplaced,
@@ -38,6 +39,7 @@ from ops_agents.activities.attachments import ATTACHMENT_KB
 from ops_agents.activities.catalog import AgentDefinition, Catalog
 from ops_agents.activities.tool_directory import CatalogTools, ToolDirectory, grants_for
 from ops_agents.activities.tools import ReplySender
+from ops_contracts.skill_run import SkillRunState
 from ops_metering import Usage
 from ops_service_kit.http import Json, JsonValue
 
@@ -373,8 +375,14 @@ async def _kernel_turn(node: str, req: TurnRequest, ports: KernelPorts) -> TurnR
                 # The run journal's record of each load (spec 11 5.3.7), with the part and how it entered the reply.
                 extra = {k: x for k, x in (("part", part), ("how", how), ("inputs", inputs)) if x}
                 emit("skill_loaded", node, {"skillId": sid, "version": v, "name": name, "matched": matched, **extra})
+            case SkillRunChanged(run=run):
+                emit("skill_run", node, run.model_dump(mode="json", by_alias=True))
             case TurnFinished(result=r):
                 result = r
+                # The record the next reply goes on from, whichever way the turn ended; an ended skill is kept too.
+                carried = req.carried_run is not None or req.resume is not None
+                if r.run is not None and (carried or r.run != SkillRunState()):
+                    emit("skill_run", node, r.run.model_dump(mode="json", by_alias=True))
                 # The audit record of what a guardrail kept from the person (withheld, never shown) or took back
                 # after it streamed (retracted, what they saw before the replacement); the conversation shows neither.
                 for kind, text in (("withheld", r.withheld), ("retracted", r.retracted)):
@@ -424,6 +432,10 @@ class PendingApproval(TypedDict):
     history: str
     loaded_skills: list[LoadedSkill]
     plan: Plan | None
+    # The running-skill record at the pause and the tools held for the rest of that reply; absent on a pause stored
+    # before skills had steps.
+    run: NotRequired[Json | None]
+    held: NotRequired[dict[str, list[str]]]
 
 
 def pending_approval(i: Interrupt) -> PendingApproval:
@@ -443,6 +455,8 @@ def pending_approval(i: Interrupt) -> PendingApproval:
         "history": base64.b64encode(i.history).decode(),
         "loaded_skills": i.loaded_skills,
         "plan": i.plan,
+        "run": i.run.model_dump(mode="json", by_alias=True) if i.run is not None else None,
+        "held": {k: [*v] for k, v in i.held.items()},
     }
 
 
@@ -474,4 +488,6 @@ def interrupt_from_state(d: Json) -> Interrupt:
         base64.b64decode(v["history"]),
         list(v.get("loaded_skills") or []),
         v.get("plan"),
+        SkillRunState.model_validate(run) if (run := v.get("run")) else None,
+        {k: [*held] for k, held in (v.get("held") or {}).items()},
     )

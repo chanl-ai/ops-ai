@@ -35,7 +35,7 @@ from ops_agents.activities.tool_directory import CatalogTools, OperationRef
 from ops_agents.activities.tools import fill
 from ops_agents.domain.accounts import chosen_accounts
 from ops_contracts.chat import EffectiveSettings
-from ops_contracts.skill_run import SkillProgram
+from ops_contracts.skill_run import SkillProgram, SkillRunState
 from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.ids import new_id
 
@@ -58,11 +58,21 @@ EARLIER_READS = 8
 
 
 def _earlier(source: Sequence[Mapping[str, JsonValue]]) -> tuple[list[Json], list[str]]:
-    """The skills the last reply loaded and the reads of the last two replies, for a follow-up to build on."""
+    """The skills the last reply loaded and the reads of the last two replies, for a follow-up to build on. A skill
+    with steps that started is not among them: the running-skill record carries it (`_carried_run`)."""
     replies = [m for m in source if m.get("role") == "assistant"]
     carried = list(cast(list[Json], replies[-1].get("skills") or [])) if replies else []
     reads = [str(r) for m in replies[-2:] for r in cast(JsonList, m.get("reads") or [])]
-    return carried, reads[-EARLIER_READS:]
+    return [c for c in carried if c.get("how") != "started"], reads[-EARLIER_READS:]
+
+
+def _carried_run(source: Sequence[Mapping[str, JsonValue]]) -> SkillRunState | None:
+    """The running-skill record of the newest reply that has one, so a reply that failed before it could write its
+    own does not hide where the skill is."""
+    for m in reversed(source):
+        if m.get("role") == "assistant" and m.get("skillRun"):
+            return SkillRunState.model_validate(m["skillRun"])
+    return None
 
 
 def _with_turn_skills(settings: AgentSettings, turn: Json | None) -> AgentSettings:
@@ -203,6 +213,7 @@ def build(
             carried_skills=carried,
             earlier_reads=reads,
             carried_plan=open_plan,
+            carried_run=_carried_run(cast(list[Json], source)),
             user_turn=state["message"],
             kb_ids=_granted(state, grants),
             all_team_knowledge=a.all_team_knowledge,
