@@ -844,6 +844,10 @@ def _kept_run(kept: SkillRunState, stepped: list[Skill]) -> SkillRunState:
         pinned = next((s for s in stepped if (s.skill_id, s.version) == at and s.program is not None), None)
         if pinned is not None and pinned.program is not None:
             frame.program, frame.rules = pinned.program, pinned.instructions
+    # Only the holder releases a hold, by starting again. A skill the agent no longer has cannot start, so what it
+    # held is free: the model is never pointed at a skill it cannot call.
+    has = {s.skill_id for s in stepped}
+    run.held_by_failed = {k: v for k, v in run.held_by_failed.items() if k in has}
     return run
 
 

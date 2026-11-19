@@ -246,18 +246,21 @@ def _end(
     returns: dict[str, JsonValue] | None = None,
     *,
     holds: bool = True,
+    checked: bool = True,
 ) -> None:
-    """Ends the running skill. One that ends as failed holds its step tools from then on, unless `holds` is off:
-    a skill stopped because another failed skill holds its tool has failed no check of its own. A tool has one
-    holder, the first skill that failed while naming it: a skill that fails later takes no hold on it, so failing
-    is never a way to a tool another skill's failed check holds."""
+    """Ends the running skill. One that ends as failed after a check did not pass or a person denied its call
+    (`checked`) holds its step tools from then on; one the model ended itself does not, since giving up proves
+    nothing about the tool. `holds` off keeps nothing at all, not for the rest of the reply either: a skill
+    stopped because another failed skill holds its tool has failed no check of its own. A tool has one holder,
+    the first skill that failed while naming it: a skill that fails later takes no hold on it, so failing is never
+    a way to a tool another skill's failed check holds."""
     r = run.running
     assert r is not None
     tools = _tools(r, skills) if holds else set[str]()
     taken = {t for sid, h in run.held_by_failed.items() if sid != r.skill_id for t in h.tools}
     kept = run.held_by_failed.get(r.skill_id)
     mine = sorted((tools - taken) | set(kept.tools if kept is not None else []))
-    if name == "failed" and mine:
+    if name == "failed" and checked and mine:
         run.held_by_failed[r.skill_id] = HeldTools(slug=r.slug, name=r.name, tools=mine)
     run.history.append(
         EndedSkill(
@@ -349,8 +352,9 @@ def _enter(run: SkillRunState, n: int, skills: Sequence[Skill], told: list[str])
     )
 
 
-def _failed(run: SkillRunState, skills: Sequence[Skill], told: list[str]) -> None:
-    """The current step did not pass: its "if not" decides. With none, it is tried once more."""
+def _failed(run: SkillRunState, skills: Sequence[Skill], told: list[str], *, checked: bool = True) -> None:
+    """The current step did not pass: its "if not" decides. With none, it is tried once more. `checked` is off
+    when the model gave up on a skill the step runs, which is no failed check (see `_end`)."""
     r = run.running
     assert r is not None
     f = _frame(r)
@@ -378,7 +382,7 @@ def _failed(run: SkillRunState, skills: Sequence[Skill], told: list[str]) -> Non
     if goto is not None:
         _enter(run, goto, skills, told)
         return
-    _end(run, ends, skills)
+    _end(run, ends, skills, checked=checked)
 
 
 def _held_for(run: SkillRunState) -> HeldTools | None:
@@ -437,7 +441,13 @@ def _passed(run: SkillRunState, skills: Sequence[Skill], value: Any, told: list[
 
 
 def _sub_ended(
-    run: SkillRunState, skills: Sequence[Skill], name: str, returns: dict[str, JsonValue], told: list[str]
+    run: SkillRunState,
+    skills: Sequence[Skill],
+    name: str,
+    returns: dict[str, JsonValue],
+    told: list[str],
+    *,
+    gave_up: bool = False,
 ) -> None:
     """A sub-skill ended: the step that started it gets its exit and results as that step's result, and the step's
     own check runs on them. A sub-skill that failed is a failed attempt of the step."""
@@ -448,7 +458,7 @@ def _sub_ended(
     check = _step(r).check
     if name == "failed" or (check is not None and _is_rule(check) and not _holds(check, value, r, told)):
         r.results[str(r.step)] = _kept(value, False)
-        _failed(run, skills, told)
+        _failed(run, skills, told, checked=not (gave_up and name == "failed"))
         return
     _passed(run, skills, value, told)
 
@@ -654,9 +664,9 @@ def leave(run: SkillRunState, skills: Sequence[Skill], name: str, returns: Json)
     assert run.running is not None
     told: list[str] = []
     if run.running.sub is not None:
-        _sub_ended(run, skills, name, clean, told)
+        _sub_ended(run, skills, name, clean, told, gave_up=True)
     else:
-        _end(run, name, skills, clean)
+        _end(run, name, skills, clean, checked=False)
     _stop_if_held(run, skills, told)
     return Moved(run, " ".join([*told, said(before, run)]))
 

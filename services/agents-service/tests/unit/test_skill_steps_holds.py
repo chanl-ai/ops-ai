@@ -113,19 +113,42 @@ async def test_a_failed_skill_holds_the_write_of_the_sub_skill_it_never_reached(
     await reply(ask, alone, fresh)
     assert [c for c, _ in fresh.calls] == ["refund_charge"], fresh.calls
 
-    # A tool has one holder, the first skill that failed while naming it. A skill that fails later takes no hold on
-    # it, and the holder, started again and passing the step that calls it, releases it.
+    # Giving up is not a failed check: a skill the model ends as failed takes no hold. The pay-out skill and a
+    # goodwill skill each give up, then the check fails and holds the refund; started again, both are ended at once.
+    free_step = program({"do": "Say sorry."}, {"do": "Refund it.", "use": {"kind": "tool", "id": "refund_charge"}})
+    goodwill = stepped("sk_goodwill", 1, "Goodwill", "goodwill", free_step)
+    wide = replace(ask, settings=agent([*skills, goodwill], max_steps=12))
     both = Systems(lookup_charge=_amount, refund_charge={"refunded": True})
-    gave_up = Script(("switch_skill", {"slug": "pay-out"}), ("exit", {"name": "failed"}), "I stopped.")
-    one, _ = await reply(ask, gave_up, both)
+    gave_up = Script(
+        ("switch_skill", {"slug": "pay-out"}),
+        ("exit", {"name": "failed"}),
+        ("switch_skill", {"slug": "goodwill"}),
+        ("exit", {"name": "failed"}),
+        "I stopped.",
+    )
+    one, _ = await reply(wide, gave_up, both)
+    assert run_of(one).held_by_failed == {}, run_of(one)
     failed = Script(("switch_skill", {"slug": "check-then-pay"}), ("lookup_charge", {"chargeId": "CH-1"}), "No.")
-    held, _ = await reply(replace(carrying(ask, run_of(one)), turn_id="t2", user_turn="Refund CH-1."), failed, both)
+    held, _ = await reply(replace(carrying(wide, run_of(one)), turn_id="t2", user_turn="Refund CH-1."), failed, both)
     holds = {k: v.tools for k, v in run_of(held).held_by_failed.items()}
-    assert holds == {"sk_pay": ["refund_charge"], "sk_check": ["lookup_charge"]}, holds
-    retry = Script(("switch_skill", {"slug": "pay-out"}), ("refund_charge", {"chargeId": "CH-2"}), "CH-2 is refunded.")
-    freed, _ = await reply(replace(carrying(ask, run_of(held)), turn_id="t3", user_turn="Pay out CH-2."), retry, both)
-    assert [c for c, _ in both.calls] == ["lookup_charge", "refund_charge"], both.calls
-    assert set(run_of(freed).held_by_failed) == {"sk_check"}, run_of(freed)
+    assert holds == {"sk_check": ["lookup_charge", "refund_charge"]}, holds
+    retry = Script(
+        ("switch_skill", {"slug": "pay-out"}),
+        ("switch_skill", {"slug": "goodwill"}),
+        ("step_done", {}),
+        ("refund_charge", {"chargeId": "CH-1"}),
+        "Nothing was refunded.",
+    )
+    last, _ = await reply(replace(carrying(wide, run_of(held)), turn_id="t3", user_turn="Pay it out."), retry, both)
+    assert why in json.dumps(retry.returned[0]) and why in json.dumps(retry.returned[2]), retry.returned
+    assert all("refund_charge" not in offered for offered in retry.offered), retry.offered
+    assert run_of(last).running is None and [c for c, _ in both.calls] == ["lookup_charge"], both.calls
+
+    # An agent that no longer has the skill that failed is not pointed at it: its hold is gone when the turn starts.
+    without = replace(carrying(ask, run_of(result)), settings=agent([skills[1]], max_steps=12), turn_id="t5")
+    paid = Script(("switch_skill", {"slug": "pay-out"}), ("refund_charge", {"chargeId": "CH-1"}), "CH-1 is refunded.")
+    await reply(without, paid, both)
+    assert [c for c, _ in both.calls][1:] == ["refund_charge"], both.calls
 
 
 async def test_a_failed_skill_still_holds_its_write_after_more_skills_ended_than_the_record_lists() -> None:
