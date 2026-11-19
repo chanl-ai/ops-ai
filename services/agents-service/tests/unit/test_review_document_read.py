@@ -77,7 +77,7 @@ def _no_task_type(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(engine_reviews, "legacy_task", none)
 
 
-TITLES: dict[str, Any] = {
+TITLES: engine_reviews.Titles = {
     "workflow": "Mailed document",
     "steps": {"check": "Check the read", "ack": "Send the acknowledgement"},
 }
@@ -92,7 +92,7 @@ RUN: dict[str, Any] = {
 
 
 async def test_a_read_check_carries_the_file_each_fields_label_confidence_and_quote() -> None:
-    review = await engine_reviews.view(RT, {**RUN, "waiting": {"payload": CHECK}}, case_id="", titles=TITLES)
+    review: Any = await engine_reviews.view(RT, {**RUN, "waiting": {"payload": CHECK}}, case_id="", titles=TITLES)
     read = review["read"]
     assert (read["fileId"], read["fileName"], read["floor"], read["editable"]) == (
         "file_scan",
@@ -124,7 +124,7 @@ async def test_a_read_check_carries_each_fields_boxes_so_the_task_page_can_draw_
     address = {**fields["address"], "boxes": [box, {"page": "one"}]}
     records = [{**READ["records"][0], "fields": {**fields, "address": address}}]
     check: dict[str, Any] = {**CHECK, "draft": {**CHECK["draft"], "read": {**READ, "records": records}}}
-    review = await engine_reviews.view(RT, {**RUN, "waiting": {"payload": check}}, case_id="", titles=TITLES)
+    review: Any = await engine_reviews.view(RT, {**RUN, "waiting": {"payload": check}}, case_id="", titles=TITLES)
     got = review["read"]["records"][0]["fields"]
     # A box the page cannot place (no numeric page) is dropped rather than drawn at the top left.
     assert (got["address"]["boxes"], got["name"]["boxes"]) == ([box], [])
@@ -132,14 +132,14 @@ async def test_a_read_check_carries_each_fields_boxes_so_the_task_page_can_draw_
 
 async def test_a_read_check_whose_step_names_the_file_under_file_shows_that_name() -> None:
     check: dict[str, Any] = {**CHECK, "draft": {"file": "TEST012.pdf", "read": READ}}
-    review = await engine_reviews.view(RT, {**RUN, "waiting": {"payload": check}}, case_id="", titles=TITLES)
+    review: Any = await engine_reviews.view(RT, {**RUN, "waiting": {"payload": check}}, case_id="", titles=TITLES)
     assert review["read"]["fileName"] == "TEST012.pdf"
 
 
 async def test_a_field_the_document_type_marks_key_is_marked_key_in_the_check() -> None:
     schema = [{**READ["schema"][0], "keyField": True}, READ["schema"][1]]
     check = {**CHECK, "draft": {**CHECK["draft"], "read": {**READ, "schema": schema}}}
-    review = await engine_reviews.view(RT, {**RUN, "waiting": {"payload": check}}, case_id="", titles=TITLES)
+    review: Any = await engine_reviews.view(RT, {**RUN, "waiting": {"payload": check}}, case_id="", titles=TITLES)
     assert [(f["key"], f["keyField"]) for f in review["read"]["schema"]] == [("name", True), ("address", False)]
 
 
@@ -160,7 +160,7 @@ async def test_a_read_combined_with_another_source_shows_each_sources_value_and_
     }
     one = {**READ, "records": READ["records"][:1]}
     check: dict[str, Any] = {**CHECK, "draft": {"document": "levy_notice_scan.pdf", "read": one, "facts": combined}}
-    review = await engine_reviews.view(RT, {**RUN, "waiting": {"payload": check}}, case_id="", titles=TITLES)
+    review: Any = await engine_reviews.view(RT, {**RUN, "waiting": {"payload": check}}, case_id="", titles=TITLES)
     read = review["read"]
     fields = read["records"][0]["fields"]
     assert read["sources"] == ["document", "email"]
@@ -173,14 +173,14 @@ async def test_a_read_combined_with_another_source_shows_each_sources_value_and_
 
 
 async def test_a_read_of_one_source_has_no_sources() -> None:
-    review = await engine_reviews.view(RT, {**RUN, "waiting": {"payload": CHECK}}, case_id="", titles=TITLES)
+    review: Any = await engine_reviews.view(RT, {**RUN, "waiting": {"payload": CHECK}}, case_id="", titles=TITLES)
     assert review["read"]["sources"] == [] and "bySource" not in review["read"]["records"][0]["fields"]["name"]
 
 
 async def test_a_decided_check_keeps_the_corrected_values_it_was_approved_with() -> None:
     fixed = [{"values": {"name": "Priya Natarajan", "address": "18 Oak Avenue, Toronto ON M4V 1A5"}}]
     decided: dict[str, Any] = {"payload": CHECK, "resume": {"decision": "approved", "edited": fixed}, "at": "now"}
-    review = await engine_reviews.view(RT, RUN, decided, case_id="", titles=TITLES)
+    review: Any = await engine_reviews.view(RT, RUN, decided, case_id="", titles=TITLES)
     assert review["status"] == "approved"
     assert review["read"]["corrected"] == [fixed[0]["values"]]
     # The read's own values stay as read, so the sheet shows what was corrected from what.
@@ -230,7 +230,7 @@ async def test_an_acknowledgement_shows_the_reply_and_the_case_each_started_run_
 ) -> None:
     monkeypatch.setattr(engine_reviews, "CaseStore", Cases)
     monkeypatch.setattr(engine_reviews, "policy_of", _policy)
-    review = await engine_reviews.view(RT, {**RUN, "waiting": {"payload": ACK}}, case_id="", titles=TITLES)
+    review: Any = await engine_reviews.view(RT, {**RUN, "waiting": {"payload": ACK}}, case_id="", titles=TITLES)
     assert review["reply"] == {
         "to": "clerk@court.example",
         "mailbox": "intake@harborpine.test",
@@ -255,6 +255,6 @@ async def test_a_review_with_no_read_and_no_reply_has_neither() -> None:
         "step_id": "wfrun_1:check:1",
         "draft": {"record": {"name": "Marcus Bell"}},
     }
-    review = await engine_reviews.view(RT, {**RUN, "waiting": {"payload": payload}}, case_id="", titles=TITLES)
+    review: Any = await engine_reviews.view(RT, {**RUN, "waiting": {"payload": payload}}, case_id="", titles=TITLES)
     assert ("read" in review, "reply" in review) == (False, False)
     assert review["customer"] == "Marcus Bell"

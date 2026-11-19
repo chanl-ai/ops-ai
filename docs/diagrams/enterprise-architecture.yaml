@@ -8,7 +8,7 @@ layout: free
 width: 1260
 height: 990
 bands:
-  - {'y': 24, color: indigo, number: 1, label: IDENTITY, text: Enterprise IdP (Entra ID · Okta · Keycloak) → platform-service issues tokens → every service verifies them locally}
+  - {'y': 24, color: indigo, number: 1, label: IDENTITY, text: Enterprise IdP over OIDC or SAML → platform-service issues tokens → every service verifies them locally}
   - {'y': 60, color: violet, number: 2, label: OBSERVABILITY, text: Structured events and run journals → OpenTelemetry collector → APM and trace store}
   - {'y': 96, color: teal, number: 3, label: SECRETS, text: Vault · Key Vault · Secrets Manager → OPS_* environment → one settings class per process}
 groups:
@@ -34,7 +34,7 @@ nodes:
   - {id: api, x: 251, 'y': 344, w: 160, h: 30, label: REST API, color: green, status: built}
   - {id: wid, x: 251, 'y': 380, w: 160, h: 30, label: Mailbox, color: green, status: partial}
   - {id: wdg, x: 251, 'y': 416, w: 160, h: 30, label: Widget, color: green, status: built}
-  - {id: mcpe, x: 251, 'y': 452, w: 160, h: 30, label: MCP endpoint, color: green, status: planned}
+  - {id: mcpe, x: 251, 'y': 452, w: 160, h: 30, label: MCP endpoint, color: green, status: partial}
   - {id: agt, x: 457, 'y': 222, w: 170, h: 52, label: Agents, note: instruction · model · tools, color: indigo, status: built}
   - {id: run, x: 457, 'y': 284, w: 170, h: 52, label: Agent run API, note: stream · wait · background, color: indigo, status: partial}
   - {id: job, x: 457, 'y': 346, w: 170, h: 52, label: Agent jobs, note: trigger · goal · report, color: indigo, status: planned}
@@ -49,7 +49,7 @@ nodes:
   - {id: kb, x: 575, 'y': 538, w: 100, h: 100, label: Knowledge, note: "sources\ncited passages", color: amber, status: built}
   - {id: fil, x: 683, 'y': 538, w: 100, h: 100, label: Files, note: "retention\nlegal hold", color: amber, status: partial}
   - {id: wrk, x: 791, 'y': 538, w: 100, h: 100, label: Work feed, note: "one list of\nall work", color: slate, status: planned}
-  - {id: db, x: 457, 'y': 718, w: 236, h: 52, label: SQL database, note: 'PostgreSQL today · SQL Server, Azure SQL', color: amber, status: dependency}
+  - {id: db, x: 457, 'y': 718, w: 236, h: 52, label: SQL database, note: 'PostgreSQL today · SQL Server planned', color: amber, status: dependency}
   - {id: obj, x: 705, 'y': 718, w: 200, h: 52, label: Object storage, note: S3 · Azure Blob · local disk, color: amber, status: dependency}
   - {id: brg, x: 560, 'y': 171, w: 340, h: 0, label: '⇄ pink lines: agents inside workflows, workflows as tools', color: rose, ghost: true}
   - {id: eg1, x: 920, 'y': 239, w: 0, h: 0, hidden: true}
@@ -70,7 +70,7 @@ nodes:
   - {id: b3, x: 450, 'y': 862, w: 170, h: 84, label: Verify, note: "make verify\nlint · types · tests · layers", color: green}
   - {id: b4, x: 646, 'y': 862, w: 170, h: 84, label: Prove, note: "make usecase-test\nscripted model, end to end", color: green}
   - {id: b5, x: 842, 'y': 862, w: 170, h: 84, label: Release, note: "migrate once\nnew beside old", color: green, status: planned}
-  - {id: b6, x: 1038, 'y': 862, w: 170, h: 84, label: Deploy, note: "one process · one VM\nsplit services", color: green, status: planned}
+  - {id: b6, x: 1038, 'y': 862, w: 170, h: 84, label: Deploy, note: "Compose · Kubernetes\none VM", color: green, status: partial}
 edges:
   - {from: ops.r, to: con.l, color: slate}
   - {from: rev.r, to: con.l, color: slate}

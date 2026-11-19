@@ -1490,6 +1490,7 @@ version = "0.1.0"
 source = { editable = "packages/ops_agent_kernel" }
 dependencies = [
     { name = "jsonschema" },
+    { name = "ops-contracts" },
     { name = "ops-pii" },
     { name = "ops-service-kit" },
     { name = "pydantic-ai-slim", extra = ["anthropic", "openai"] },
@@ -1498,6 +1499,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "jsonschema", specifier = ">=4.23" },
+    { name = "ops-contracts", editable = "packages/contracts" },
     { name = "ops-pii", editable = "packages/ops_pii" },
     { name = "ops-service-kit", editable = "packages/ops_service_kit" },
     { name = "pydantic-ai-slim", extras = ["anthropic", "openai"], specifier = ">=2.51,<3" },

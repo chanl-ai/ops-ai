@@ -133,8 +133,8 @@ class ThreadRow(BaseModel):
 
 class StoredThread(BaseModel):
     """A `graph_threads` row, every column, as stored: `meta` and `overrides` are whatever JSON the row holds, for the
-    reads that never refused a row (`thread`, `threads`, `open_thread`). `meta_object` is the object view; access and
-    list rules read a strict `ThreadRow` instead."""
+    reads that never refused a row (`thread_row`, `thread_rows`, `open_thread`). `meta_object` is the object view;
+    access and list rules read a strict `ThreadRow` instead."""
 
     id: str
     graph: str
@@ -267,13 +267,6 @@ class GraphStore(RuntimeStore):
                 graph_threads.c.external_key == external_key, mine(graph_threads), team_visible(graph_threads)
             )
             return await one(c, q.limit(1), StoredThread)
-
-    async def find_or_create_thread(
-        self, thread_id: str, graph: str, meta: Json, team_id: str, now: str, *, external_key: str
-    ) -> tuple[dict[str, Any], bool]:
-        """`open_thread` with the row as a mapping, for the callers that still read a thread by key."""
-        row, created = await self.open_thread(thread_id, graph, meta, team_id, now, external_key=external_key)
-        return row.model_dump(), created
 
     async def open_thread(
         self,
@@ -409,11 +402,6 @@ class GraphStore(RuntimeStore):
         async with self.tx() as c:
             return await one(c, q, StoredThread)
 
-    async def thread(self, thread_id: str) -> dict[str, Any] | None:
-        """`thread_row` as a mapping, for the callers that still read a thread by key."""
-        row = await self.thread_row(thread_id)
-        return row.model_dump() if row is not None else None
-
     async def thread_rows(self, graph: str | None) -> list[StoredThread]:
         q = (
             graph_threads.select()
@@ -424,10 +412,6 @@ class GraphStore(RuntimeStore):
             q = q.where(graph_threads.c.graph == graph)
         async with self.tx() as c:
             return await rows(c, q, StoredThread)
-
-    async def threads(self, graph: str | None) -> list[dict[str, Any]]:
-        """`thread_rows` as mappings, for the callers that still read a thread by key."""
-        return [r.model_dump() for r in await self.thread_rows(graph)]
 
     async def thread_page(
         self, graph: str, labels: Mapping[str, str], other: str, wanted: Sequence[str], *, offset: int, limit: int

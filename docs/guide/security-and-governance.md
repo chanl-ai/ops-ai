@@ -41,18 +41,18 @@ delete, run, decide, manage). Every check in every service goes through that gri
 |---|---|
 | The six built-in roles, seeded per tenant, and the grid behind them | Built |
 | A page that shows each role's grid and why an action is refused | Built |
-| Example: W2 start refused without the cell, then passed with it | Built ([12-roles-refuse-a-start](../../examples/workflows/12-roles-refuse-a-start/)) |
+| Example: a workflow start refused for a person without permission, then made by a person who has it | Built ([12-roles-refuse-a-start](../../examples/workflows/12-roles-refuse-a-start/)) |
 | Custom roles built from the grid | Planned |
 
 ## Approvals
 
 | Rule | Status |
 |---|---|
-| A write waits for a person by default, unless its Tool is set to run at once. A team can also make every write wait, or the writes of the Apps it picks, in Settings › Policies ([Apps](apps.md#approvals)). Every setting is listed in [Approval settings](#approval-settings). A write that waits needs an approval token, minted only after a person decides | Built |
+| A write runs at once by default. A team admin makes writes wait for the person in the chat or for a reviewer, for the whole team, for the Apps it picks or for one Tool, in Governance › Policies; the most specific level wins ([Apps](apps.md#approvals)). Every write over MCP waits for a person. Every setting is listed in [Approval settings](#approval-settings). A write that waits needs an approval token, minted only after a person decides | Built |
 | The token is bound to the tool, the run's step and the hash of the exact input the approver saw; any change to the input voids every approval of it | Built |
 | A token lives 15 minutes; a late resume renews it from the recorded approvals of that exact call for up to 24 hours, so a reviewer is never asked twice | Built |
 | Each operation's policy sets how many distinct people must approve and whether each needs a fresh sign-in; the same person cannot approve twice | Built |
-| Whether the person who asked may also decide is a setting (`requesterMayDecide`, off by default), changed by a team admin in Settings › Policies | Built |
+| Whether the person who asked may also decide is a setting (`requesterMayDecide`, off by default), changed by a team admin in Governance › Policies | Built |
 | Publishing an agent, workflow, skill, guardrail, task type or widget needs a second person's review, unless the team's publish policy says otherwise; a major change to a tool module needs the Security team's review | Built |
 | Approval tokens are signed with a shared key that the agents and tools services both hold. Signing with an asymmetric key that only the reviews code holds | Planned |
 
@@ -88,13 +88,13 @@ flowchart TB
 |---|---|---|
 | Registry | Operations come from tool modules: imported from OpenAPI 3.0 or 3.1, discovered from an MCP server, or written by a builder. A module's major change opens a Security review; calls keep the published shape until the new version is published | Built |
 | Connections | How the platform signs in to a system, one account at a time: API key, basic or bearer, OAuth client credentials, OAuth authorization code with PKCE, either OAuth kind proving the app with a signed client assertion instead of a secret, a signed service-account JWT grant (DocuSign, Google), client certificate (mutual TLS). The signing key is sealed like a client secret and never read back; reads show the certificate's thumbprint and expiry. Tokens are stored encrypted and refreshed one at a time | Built |
-| Each person signing in to a system with their own account | A run would use only the token of the person it acts for | Planned |
-| Test and live runs | Live runs and chats use an app's default account; test runs use its test account when it has one. A write on a test account never waits, whatever the team holds; a test run's write on a live account meets the rules a live write meets A test run with a saved mock answer for its input gets that answer instead | Built |
-| Ask before changes | A newly added app has every tool on. In a chat with a person, each write of an app asks that person first with Allow, Deny and Allow for this chat; only the person who asked answers it. The asking is on by default; a team admin turns it off per app (`appsChangeWithoutAsking`, on the app's Tools tab or in Settings › Policies). A test account never asks. Writes any approval holds go to a reviewer as before; workflows and agent runs with nobody in them are not asked; a tool the team turned off is refused with Turn on <tool> for an admin and Ask an admin for anyone else | Built |
+| Each person signing in to a system with their own account | Tools a person runs, and agents acting for them, use that person's own account of the App; a run waiting for an account it does not have becomes a Human Task ([Apps](apps.md#accounts-the-teams-and-your-own)) | Built |
+| Test and live runs | Live runs and chats use an app's default account; test runs use its test account when it has one. A write on a test account never waits, whatever the team holds; a test run's write on a live account meets the rules a live write meets. A test run with a saved mock answer for its input gets that answer instead | Built |
+| Ask before changes | A newly added app has every tool on. When a team asks the person in the chat, each write of an app asks that person first with Allow, Deny and Allow for this chat; only the person who asked answers it. A write on a test account never asks. Writes any approval holds go to a reviewer as before; workflows and agent runs with nobody in them are not asked; a tool the team turned off is refused with Turn on <tool> for an admin and Ask an admin for anyone else | Built |
 | Outbound allow-list | HTTPS only, to hosts on your tenant's list. Every address a host resolves to is checked inside the connection, so DNS cannot be used to redirect a call. Private ranges are allowed only when listed; loopback, link-local and cloud metadata addresses never. No redirects are followed and no cookies kept. The list starts empty: nothing is reachable until a Security admin adds a host | Built |
 | Your internal certificate authority | Trusted for outbound calls when you provide its certificate | Built |
 | MCP for AI assistants | Your team's read tools served over MCP through the same gateway, to a person or an API key of that team | Partial: reads only, as test runs |
-| Code tools | Transforms and formulas run in a bounded child process with no network or files; no general code runtime | Partial |
+| Code tools | A code tool's Python function runs in the runner service's sandbox (WebAssembly) with a memory cap, a time limit, no network, no files and no secrets; it reaches other systems only by calling a tool back through this gateway. Writing one in the console is planned | Partial |
 
 ## Secrets
 
@@ -134,6 +134,6 @@ Details and status are in [Data and database](data-and-database.md#the-audit-tra
 | Service calls | Each service signs its calls with its own Ed25519 key, and a callee accepts only the calls that caller is allowed to make. An id placed in a call's path (a file the model names to `read_file`, a tool name) is sent as one encoded path segment, and an id holding a slash or made of dots names no file, so it cannot reach another route |
 | File content given to the model | An attached file's pages and knowledge passages go in labelled data blocks the model is told never to follow. Text in them that opens or closes a data block, in any letter case or spacing, is escaped, so a file cannot end its block early or forge a knowledge passage |
 | Oversized files | The reader and the page images share the same limits: at most 2,000 pages, a page drawn at most 16 million pixels (a larger page at a lower resolution), an image frame over 50 million pixels never decoded, and 60 seconds per page in a background read |
-| Plugins in an image | Each pin is a full commit plus the sha256 digest of the plugin's folder; the build refuses a pin with no digest or a download that differs from it ([Plugins](plugins.md#plugins-in-a-built-image)) |
+| Plugins in an image | Each pin is a full commit plus the sha256 digest of the plugin's folder; the build refuses a pin with no digest or a download that differs from it ([Plugins](plugins-install.md#plugins-in-a-built-image)) |
 | Policy engine | The gateway writes its policy into the policy engine at start and reports unhealthy if the engine serves a different one; token expiry is judged by the gateway's clock |
 | Telemetry | None. Nothing in the platform calls home |

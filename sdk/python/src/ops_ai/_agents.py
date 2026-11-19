@@ -120,6 +120,12 @@ class Agents:
         wanted = held + [t for t in tools if t not in held]
         return self._raw.agents.agents_update_agent(id, {"toolIds": wanted})
 
+    def references(self, search: str = "", *, for_agent: str, **query: Any) -> Any:
+        """What the agent's brief can mention with @, grouped by kind; each item says whether the agent holds it.
+        `ids` (`kind:id` each) answers the labels of what a saved text names."""
+        asked = {k: v for k, v in {"search": search or None, **query}.items() if v is not None}
+        return self._raw.agents.agents_references_search(for_agent=for_agent, **asked)
+
     def pause(self, id: str) -> Any:
         return self._raw.agents.agents_set_paused(id, {"paused": True})
 
@@ -259,6 +265,10 @@ class AsyncAgents:
         held = list((await self.get(id)).get("toolIds") or [])
         wanted = held + [t for t in tools if t not in held]
         return await self._raw.agents.agents_update_agent(id, {"toolIds": wanted})
+
+    async def references(self, search: str = "", *, for_agent: str, **query: Any) -> Any:
+        asked = {k: v for k, v in {"search": search or None, **query}.items() if v is not None}
+        return await self._raw.agents.agents_references_search(for_agent=for_agent, **asked)
 
     async def pause(self, id: str) -> Any:
         return await self._raw.agents.agents_set_paused(id, {"paused": True})

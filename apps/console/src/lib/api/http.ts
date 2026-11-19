@@ -41,6 +41,7 @@ import { createCaseRecordsHttp } from './case-records-http';
 import { createWidgetsHttp } from './widgets-http';
 import { createAssuranceHttp } from './assurance-http';
 import { createMcpLinksHttp } from './mcp-links-http';
+import { createReferencesHttp } from './references-http';
 import { createWikiHttp } from './wiki-http';
 import { fetchWithIdentity } from './request-identity';
 
@@ -178,8 +179,8 @@ export function createRegistryToolsDirectory(baseUrl: string): Pick<OpsApi['tool
   };
 }
 
-export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' | 'workflows' | 'engine' | 'channels' | 'skills' | 'widgets' | 'widgetDeployments' | 'batches' | 'caseRecords' | 'activity' | 'overview' | 'assurance'> {
-  const { agents, workflows, engine, channels, skills, widgets, widgetDeployments, batches, caseRecords, activity, overview, assurance } = createHttpApi(`${baseUrl}/v1`);
+export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' | 'workflows' | 'engine' | 'channels' | 'skills' | 'references' | 'widgets' | 'widgetDeployments' | 'batches' | 'caseRecords' | 'activity' | 'overview' | 'assurance'> {
+  const { agents, workflows, engine, channels, skills, references, widgets, widgetDeployments, batches, caseRecords, activity, overview, assurance } = createHttpApi(`${baseUrl}/v1`);
   const { bulkUpdate: _au, bulkRemove: _ar, ...agentCalls } = agents;
   const { bulkUpdate: _wu, ...workflowCalls } = workflows;
   const notServed = (what: string) => () => Promise.reject(new ApiError(`${what} is not available on this backend yet.`, 501));
@@ -188,6 +189,7 @@ export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' |
     workflows: workflowCalls,
     engine,
     channels,
+    references,
     widgets,
     widgetDeployments,
     batches,
@@ -327,6 +329,7 @@ export function createHttpApi(baseUrl: string): OpsApi {
     activity: createActivityHttp(get),
     assurance: createAssuranceHttp(get, send, qs),
     mcpLinks: createMcpLinksHttp(get, send),
+    references: createReferencesHttp(get),
     wiki: createWikiHttp(get, send, qs),
     tools: {
       list: (p) => get(`/tools?${qs(p)}`),

@@ -144,7 +144,7 @@ async def test_the_default_asks_only_specialists_the_person_may_chat_with_and_as
     assert rt.graph_store is not None
     children = [
         t
-        for t in await rt.graph_store.threads("agent_wrapper")
+        for t in [r.model_dump() for r in await rt.graph_store.thread_rows("agent_wrapper")]
         if cast(dict[str, Any], t["meta"] or {}).get("calledBy")
     ]
     assert [(t["meta"]["agentId"], t["meta"]["calledBy"], t["meta"]["startedFor"]) for t in children] == [
@@ -177,7 +177,7 @@ ASK_DISPUTE = 'call agent__ag_dispute {"question": "Can I dispute a card charge?
 async def called(rt: Runtime) -> list[str]:
     """The specialists that ran a turn of their own, by the agent that asked."""
     assert rt.graph_store is not None
-    metas = [cast(dict[str, Any], t["meta"] or {}) for t in await rt.graph_store.threads("agent_wrapper")]
+    metas = [t.meta_object() for t in await rt.graph_store.thread_rows("agent_wrapper")]
     return [f"{m['calledBy']}>{m['agentId']}" for m in metas if m.get("calledBy")]
 
 
@@ -216,7 +216,8 @@ async def test_an_agent_already_on_the_chain_is_not_asked_again(stack: Stack, mo
     assert sorted(await called(rt)) == ["ag_branch>ag_dispute", "ag_branch>ag_dispute", "ag_dispute>ag_fraud"]
     assert rt.graph_store is not None
     threads = [
-        (str(t["id"]), cast(dict[str, Any], t["meta"] or {})) for t in await rt.graph_store.threads("agent_wrapper")
+        (str(t["id"]), cast(dict[str, Any], t["meta"] or {}))
+        for t in [r.model_dump() for r in await rt.graph_store.thread_rows("agent_wrapper")]
     ]
     deepest = next(m for _, m in threads if m.get("calledBy") == "ag_dispute")["chain"]
     assert ([s.split("@")[0] for s in deepest["path"]], deepest["depth"], deepest["rootThreadId"]) == (
@@ -254,7 +255,7 @@ async def test_a_run_with_no_person_reaches_only_its_own_teams_agents_and_workfl
     # A scheduled run acts as its agent: it asks the agent it was granted in its own team, and no other.
     assert await called(rt) == ["ag_branch>ag_dispute"]
     assert rt.graph_store is not None
-    rows = await rt.graph_store.threads("agent_wrapper")
+    rows = [r.model_dump() for r in await rt.graph_store.thread_rows("agent_wrapper")]
     (asked_row,) = [t for t in rows if cast(dict[str, Any], t["meta"] or {}).get("calledBy")]
     asked_meta = cast(dict[str, Any], asked_row["meta"])
     assert asked_meta["chain"]["startedFor"] == "agent:ag_branch", asked_meta
@@ -434,7 +435,7 @@ async def test_a_chain_record_sent_by_a_caller_is_not_the_threads_chain(stack: S
     assert rt.graph_store is not None
     chains = [
         cast(dict[str, Any], cast(dict[str, Any], t["meta"])["chain"])
-        for t in await rt.graph_store.threads("agent_wrapper")
+        for t in [r.model_dump() for r in await rt.graph_store.thread_rows("agent_wrapper")]
         if cast(dict[str, Any], t["meta"] or {}).get("calledBy")
     ]
     # Asked, though the forged record names the specialist as already on the path, and recorded from the turn itself.

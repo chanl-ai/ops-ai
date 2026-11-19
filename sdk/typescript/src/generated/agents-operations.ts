@@ -427,6 +427,23 @@ export const agentsOperations = {
     ],
     "stream": false
   },
+  "agents_references_search": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/references",
+    "pathParams": [],
+    "query": [
+      "forAgent",
+      "forSkill",
+      "search",
+      "kind",
+      "cursor",
+      "limit",
+      "ids"
+    ],
+    "stream": false
+  },
   "agents_render_skill": {
     "body": "json",
     "headers": [],

@@ -1,4 +1,5 @@
 # The deployment view: one machine with Docker Compose behind one origin, against the bank's database and model.
+# Kubernetes (deploy/k8s) runs the same images as the same workloads.
 # Drawn by the docs site (apps/docs) and exported to deployment.svg with `pnpm --filter docs diagrams`.
 title: "Ops AI on one machine: Docker Compose behind one origin"
 width: 980
@@ -26,12 +27,13 @@ bands:
               - { label: agents, note: ":8700, /api/agents/" }
               - { label: worker, note: "workflow steps, no port" }
               - { label: tools, note: ":8720, /api/tools/" }
-              - { id: models, label: models, note: ":8730, not routed" }
+              - { id: models, label: models, note: ":8730, provider keys only" }
               - { label: kb, note: ":8740, /api/kb/" }
               - { label: files, note: ":8750, /api/files/" }
               - { label: documents, note: ":8760, /api/documents/" }
           - boxes:
-              - { label: opa, note: ":8181, tools only" }
+              - { label: runner, note: ":8770, code tools, called by tools" }
+              - { label: opa, note: ":8181, called by tools" }
               - { label: migrate, note: "one-shot, before the rest" }
   - groups:
       - id: network

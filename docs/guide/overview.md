@@ -6,8 +6,8 @@ Status: current. Checked against the code of this release.
 
 Ops AI is an operational AI platform. A bank's or other regulated business's operations teams use it to hand routine
 back-office work to software: reading a court notice and opening a case, triaging a complaint email, placing a hold on
-an account, answering a staff question from the team's own procedures. A person approves anything that moves money or
-changes a record in another system, and every step leaves a record an auditor can read.
+an account, answering a staff question from the team's own procedures. The team decides which writes to its
+other systems wait for a person, such as anything that moves money, and every step leaves a record an auditor can read.
 
 It runs on your own infrastructure, against a database your DBA controls and a model endpoint you choose. Nothing
 calls home.
@@ -72,7 +72,7 @@ AI gateway.*
 | Idea | What it means for you |
 |---|---|
 | Agents and workflows are two ways of running work | An agent decides its own next step inside the limits it was given. A workflow runs fixed steps and survives a crash without repeating a write. Each works without the other, and they meet only through their public APIs: a workflow step can call an agent, and an agent can start a published workflow as a tool |
-| A person approves every write | A write to one of your systems needs an approval token bound to the exact input the reviewer saw. Changing one character of the input after approval voids it |
+| A person approves the writes that matter | A team chooses which writes wait for a person: every write, the writes of some apps, or one tool's. A write that waits needs an approval token bound to the exact input the reviewer saw; changing one character of the input after approval voids it |
 | Two gateways are the only way out | Tool calls go through the data gateway, which checks the approval, the policy and an allow-list of hosts. Model calls go through the AI gateway, which checks the caller's key, budget and the data's sensitivity |
 | Use cases are configuration | A new process is workflows, document types, agents, tools and settings that a builder configures and publishes. No use case needs new code or a new screen. The court order notice used in this guide is one worked example among several |
 | A team is the data boundary | Agents, workflows, knowledge and the work they produce belong to a team. Roles decide what a person may do inside the teams they belong to |
@@ -92,3 +92,10 @@ AI gateway.*
 | Case | The record of one piece of work for people: what it is about, what it waits on, what happened |
 | Tool | One operation on one of your systems, such as "get account" or "place hold", with its access class (read or write) and approval policy |
 | Alias | A name such as `default` that points at a provider's model; changing the alias changes the model without changing an agent |
+
+## Next
+
+<!-- site: cards -->
+- **[Quickstart](quickstart.md)**: run Ops AI on one machine.
+- **[How work flows](how-work-flows.md)**: a chat turn, a workflow run and an email to case, step by step.
+- **[Agents](agents.md)** and **[Workflows](workflows.md)**: the two ways to run work.

@@ -1,6 +1,6 @@
 # Ops AI data model
 
-Status: current. Every table Ops AI keeps, by the service that owns it.
+Status: current, checked against the code on 2026-11-18. Every table Ops AI keeps, by the service that owns it.
 
 Every table Ops AI keeps, grouped by the service that owns it, with its keys, its links and whether it is in code today. It is the companion to the [Ops AI architecture](enterprise-architecture.md) page, whose service map and database sections it expands.
 
@@ -487,7 +487,7 @@ erDiagram
 |---|---|---|
 | `tool_modules` | A connected business system | built |
 | `module_operations, module_versions` | Its operations and their versions, each with an approval policy. An operation imported from OpenAPI keeps the JSON Schema of its first success response, so a workflow step shows its output fields before it runs | built |
-| `security_reviews, module_approvals` | A module's review before publish, decided by the Security team for a security change and by the module's team otherwise, and its approvals | built |
+| `module_approvals` | Which workflows may call which operations of a module until when. A module's review before publish is a publish request in agents-service's Reviews, decided by the Security team for a security change and by the module's team otherwise; `module_versions` keeps the request's id, who decided and the reason (tools 0019, 0020) | built |
 | `module_egress_hosts, egress_hosts, egress_ranges, egress_audit` | The hosts and address ranges a module may reach, and each check made | built |
 | `gateway_calls, gateway_fences` | Every call with its verified caller and outcome, the kind of run (test or live) and the account it used, the route that took it (the API or MCP) and the name an MCP client gives itself, reconciled by key; fences reject stale approvals | built |
 | `connections, app_credentials, connection_audit` | An app's accounts, one row each: how the platform signs in to one system, its credentials bound to the system's address, and whether it is a sandbox account (which test runs use); a team's own OAuth client, kept once; secret parts are rows of `tool_secrets` | built |
@@ -785,21 +785,5 @@ erDiagram
 
 ## Databases
 
-The platform connects to a SQL database the enterprise runs, usually a managed instance. Each service may use its own database or share a server. Development uses PostgreSQL in a local container; unit tests use SQLite.
-
-| Database | Status | Tenant isolation |
-|---|---|---|
-| PostgreSQL 15 to 17 | built (runs today) | Tenant filter in the store layer, with row-level security as a second check. Today row-level security covers run, checkpoint, workflow, chat attachment, chat search, widget deployment and identity tables |
-| Azure SQL, SQL Server 2022 | planned | Tenant filter in the store layer, with a row-level security policy on from the first release |
-| MySQL 8.0 and 8.4 | planned | Tenant filter in the store layer |
-
-| Rule | What it means for the schema |
-|---|---|
-| Store operations | Repositories call a small set of operations (current time, claim one row, upsert, lock a row, tenant and system transactions), each rendered per database |
-| JSON columns | JSONB on PostgreSQL, JSON on MySQL, NVARCHAR(MAX) with a JSON check on Azure SQL. Queries filter on columns; a JSON field that needs filtering becomes a column |
-| Keys | Bounded text with a binary collation, so `Msg-1` and `msg-1` stay distinct. Keys built from outside text are indexed through a SHA-256 column |
-| Leases | Row locks with a generation number, which work on all three databases |
-| Migrations | One portable baseline per service, with database-specific parts such as row-level security kept in one helper |
-
-> [!NOTE]
-> **Why three databases and a store-layer filter.** Banks run the database they already license, and adding a new engine to a bank's estate takes months of approval. Row-level security exists only on some engines, so the tenant filter that must hold everywhere lives in the store layer, and each database's own row-level checks stay on as a second line where they exist.
+Which databases Ops AI runs on, how tenants are kept apart on each, and the rules every table follows to run on
+both are on the [data](data.md#databases) page.

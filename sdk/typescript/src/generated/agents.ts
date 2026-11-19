@@ -1822,6 +1822,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/references": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * References Search
+         * @description What the agent (`forAgent`) or the skill (`forSkill`) can mention, grouped by kind: tools, knowledge bases,
+         *     skills, agents and workflows of its team. Exactly one of the two is given (400 `validation_failed`).
+         *
+         *     Searching (`search`, `limit` items a group; with `kind` one group, continued by `cursor`) is for people who may
+         *     edit it: agents: edit or skills: edit in its team (403 `forbidden`). With `ids` (`kind:id`, repeated) it answers
+         *     the labels of what a saved text already names, for anyone who may read: one that is not found, not offered any
+         *     more or not visible is absent. Either way a kind whose view right the caller lacks in that team is left out, and
+         *     another team's skill or agent is never listed. An item says whether the agent holds it (`held`) and, when it
+         *     does not, what inserting it adds (`adds`).
+         */
+        get: operations["agents_references_search"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/resources/plan": {
         parameters: {
             query?: never;
@@ -3617,7 +3645,7 @@ export interface components {
             outcome: string | null;
             /** Outcometext */
             outcomeText?: string | null;
-            ref: components["schemas"]["Ref"];
+            ref: components["schemas"]["Ref-Output"];
             source: components["schemas"]["Source"];
             /**
              * Status
@@ -4390,6 +4418,19 @@ export interface components {
              * @enum {string}
              */
             when: "before" | "after";
+        };
+        /**
+         * BlockerPosition
+         * @description Where a publish problem is: the field (`steps`, `notWhen`, `useWhen`, `brief.never`), and the step (from 1)
+         *     or list index when it has one.
+         */
+        BlockerPosition: {
+            /** Field */
+            field: string;
+            /** Index */
+            index?: number | null;
+            /** Step */
+            step?: number | null;
         };
         /** BoundWorkflow */
         BoundWorkflow: {
@@ -6184,6 +6225,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[ReferenceSearch] */
+        Envelope_ReferenceSearch_: {
+            data: components["schemas"]["ReferenceSearch"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[ResumeOut] */
         Envelope_ResumeOut_: {
             data: components["schemas"]["ResumeOut"];
@@ -7386,6 +7436,45 @@ export interface components {
             /** Reviewers */
             reviewers?: string | null;
         };
+        /**
+         * IfNot
+         * @description What happens when a step's check fails: ask again, go to another step, or end the skill with an exit.
+         */
+        IfNot: {
+            /**
+             * Action
+             * @default retry
+             * @enum {string}
+             */
+            action: "retry" | "goto" | "exit";
+            /** Exit */
+            exit?: string | null;
+            /**
+             * Retries
+             * @default 1
+             */
+            retries: number;
+            /** Step */
+            step?: number | null;
+        };
+        /** IfNotOut */
+        IfNotOut: {
+            /**
+             * Action
+             * @default retry
+             * @enum {string}
+             */
+            action: "retry" | "goto" | "exit";
+            /** Exit */
+            exit?: string | null;
+            /**
+             * Retries
+             * @default 1
+             */
+            retries: number;
+            /** Step */
+            step?: number | null;
+        };
         /** InboxInput */
         InboxInput: {
             /**
@@ -8369,6 +8458,22 @@ export interface components {
             title: string;
         };
         /**
+         * PublishBlocker
+         * @description One thing that blocks a publish. `id` names the reference for a reference problem, as `<kind>:<id>`.
+         */
+        PublishBlocker: {
+            /** Id */
+            id?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "missing_field" | "missing_reference" | "unavailable_reference" | "bad_step" | "bad_check" | "bad_exit" | "sub_skill_not_held" | "prompt_rule_in_text" | "review_open" | "already_published" | "deprecated" | "too_long";
+            /** Message */
+            message: string;
+            position?: components["schemas"]["BlockerPosition"] | null;
+        };
+        /**
          * PublishDecisionFields
          * @description What the team's publish policy said when the request was made; absent on requests made before it.
          */
@@ -8579,8 +8684,22 @@ export interface components {
             /** Runid */
             runId?: string | null;
         };
+        /**
+         * Ref
+         * @description Something a text or a step names: a tool, a knowledge base, a skill, an agent or a workflow, by its id. An
+         *     agent or a workflow is named by its bare id; a grant stores them as `agent:<id>` and `workflow:<id>`.
+         */
+        "Ref-Input": {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "tool" | "knowledge" | "skill" | "agent" | "workflow";
+        };
         /** Ref */
-        Ref: {
+        "Ref-Output": {
             /** Id */
             id: string;
             /**
@@ -8588,6 +8707,66 @@ export interface components {
              * @enum {string}
              */
             kind: "run" | "thread" | "chat" | "review" | "email" | "case" | "workflow" | "process";
+        };
+        /** RefOut */
+        RefOut: {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "tool" | "knowledge" | "skill" | "agent" | "workflow";
+        };
+        /** ReferenceGroup */
+        ReferenceGroup: {
+            /** Items */
+            items: components["schemas"]["ReferenceItem"][];
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "tool" | "knowledge" | "skill" | "agent" | "workflow";
+            /** Label */
+            label: string;
+            /** Nextcursor */
+            nextCursor?: string | null;
+        };
+        /**
+         * ReferenceItem
+         * @description One thing a brief or a step can mention with @.
+         */
+        ReferenceItem: {
+            /** Adds */
+            adds?: string | null;
+            /** Disabled */
+            disabled?: string | null;
+            /** Held */
+            held?: boolean | null;
+            /** Hint */
+            hint?: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "tool" | "knowledge" | "skill" | "agent" | "workflow";
+            /** Label */
+            label: string;
+            /**
+             * Needsapproval
+             * @default false
+             */
+            needsApproval: boolean;
+        };
+        /**
+         * ReferenceSearch
+         * @description Only kinds the caller may view, and only groups that have an item.
+         */
+        ReferenceSearch: {
+            /** Groups */
+            groups: components["schemas"]["ReferenceGroup"][];
         };
         /** RemoveCell */
         RemoveCell: {
@@ -8662,6 +8841,49 @@ export interface components {
             attempts: number;
             /** Backoffseconds */
             backoffSeconds: number[];
+        };
+        /**
+         * ReturnField
+         * @description One value a skill hands back when it ends.
+         */
+        ReturnField: {
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Name */
+            name: string;
+            /**
+             * Required
+             * @default true
+             */
+            required: boolean;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "text" | "number" | "yes_no";
+        };
+        /** ReturnFieldOut */
+        ReturnFieldOut: {
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Name */
+            name: string;
+            /**
+             * Required
+             * @default true
+             */
+            required: boolean;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "text" | "number" | "yes_no";
         };
         /**
          * ReviewDecisionInput
@@ -9318,6 +9540,10 @@ export interface components {
         };
         /** SkillContent */
         SkillContent: {
+            /** Exit */
+            exit?: {
+                [key: string]: string;
+            };
             /** Guardrails */
             guardrails: string[];
             /** Inputs */
@@ -9333,14 +9559,25 @@ export interface components {
             loading: "on_match" | "always";
             /** Name */
             name: string;
+            /**
+             * Notwhen
+             * @default
+             */
+            notWhen: string;
             /** Parts */
             parts?: components["schemas"]["SkillPart"][];
             /** Refusal */
             refusal?: string | null;
             /** Resources */
             resources: components["schemas"]["SkillResource"][];
+            /** Returns */
+            returns?: components["schemas"]["ReturnFieldOut"][];
             /** Slug */
             slug: string;
+            /** Steps */
+            steps?: components["schemas"]["SkillStepOut"][];
+            /** Success */
+            success?: string[];
             /** Tools */
             tools: components["schemas"]["SkillToolRef"][];
             /** Usewhen */
@@ -9348,6 +9585,10 @@ export interface components {
         };
         /** SkillCreateInput */
         SkillCreateInput: {
+            /** Exit */
+            exit?: {
+                [key: string]: string;
+            };
             /** Guardrails */
             guardrails?: string[];
             /** Inputs */
@@ -9364,6 +9605,11 @@ export interface components {
             loading: "on_match" | "always";
             /** Name */
             name: string;
+            /**
+             * Notwhen
+             * @default
+             */
+            notWhen: string;
             /**
              * Origin
              * @default blank
@@ -9384,6 +9630,8 @@ export interface components {
              * @default false
              */
             requestReview: boolean;
+            /** Returns */
+            returns?: components["schemas"]["ReturnField"][];
             /**
              * Reviewnote
              * @default
@@ -9391,6 +9639,10 @@ export interface components {
             reviewNote: string;
             /** Slug */
             slug?: string | null;
+            /** Steps */
+            steps?: components["schemas"]["SkillStep"][];
+            /** Success */
+            success?: string[];
             /** Toolids */
             toolIds?: string[];
             /**
@@ -9476,6 +9728,10 @@ export interface components {
         SkillDraftPatch: {
             /** Baseversion */
             baseVersion: number;
+            /** Exit */
+            exit?: {
+                [key: string]: string;
+            } | null;
             /** Guardrails */
             guardrails?: string[] | null;
             /** Inputs */
@@ -9488,6 +9744,8 @@ export interface components {
             loading?: ("on_match" | "always") | null;
             /** Name */
             name?: string | null;
+            /** Notwhen */
+            notWhen?: string | null;
             /**
              * Note
              * @default
@@ -9497,6 +9755,12 @@ export interface components {
             parts?: components["schemas"]["SkillPartInput"][] | null;
             /** Refusal */
             refusal?: string | null;
+            /** Returns */
+            returns?: components["schemas"]["ReturnField"][] | null;
+            /** Steps */
+            steps?: components["schemas"]["SkillStep"][] | null;
+            /** Success */
+            success?: string[] | null;
             /** Toolids */
             toolIds?: string[] | null;
             /** Usewhen */
@@ -9682,6 +9946,8 @@ export interface components {
              * @enum {string}
              */
             editClass: "free" | "re_test" | "re_approval";
+            /** Problems */
+            problems?: components["schemas"]["PublishBlocker"][];
         };
         /** SkillRenderInput */
         SkillRenderInput: {
@@ -9740,6 +10006,25 @@ export interface components {
             name: string;
             /** Size */
             size?: number | null;
+        };
+        /** SkillStep */
+        SkillStep: {
+            check?: components["schemas"]["StepCheck"] | null;
+            /** Do */
+            do: string;
+            ifNot?: components["schemas"]["IfNot"] | null;
+            use?: components["schemas"]["Ref-Input"] | null;
+        };
+        /**
+         * SkillStepOut
+         * @description One step: what to do, what it runs, what must hold after it and what happens when it does not.
+         */
+        SkillStepOut: {
+            check?: components["schemas"]["StepCheckOut"] | null;
+            /** Do */
+            do: string;
+            ifNot?: components["schemas"]["IfNotOut"] | null;
+            use?: components["schemas"]["RefOut"] | null;
         };
         /** SkillToolRef */
         SkillToolRef: {
@@ -9949,6 +10234,24 @@ export interface components {
             startedAt: string;
             /** Status */
             status: string;
+        };
+        /**
+         * StepCheck
+         * @description What must hold before a step is done. `by` is set when the skill is saved: a rule is run on the step's result
+         *     in code, a sentence is confirmed by the model.
+         */
+        StepCheck: {
+            /** By */
+            by?: ("rule" | "model") | null;
+            /** Text */
+            text: string;
+        };
+        /** StepCheckOut */
+        StepCheckOut: {
+            /** By */
+            by?: ("rule" | "model") | null;
+            /** Text */
+            text: string;
         };
         /** StepUpInput */
         StepUpInput: {
@@ -22647,6 +22950,115 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_PublishReview_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    agents_references_search: {
+        parameters: {
+            query?: {
+                forAgent?: string | null;
+                forSkill?: string | null;
+                search?: string;
+                kind?: ("tool" | "knowledge" | "skill" | "agent" | "workflow") | null;
+                cursor?: string | null;
+                limit?: number;
+                ids?: string[] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ReferenceSearch_"];
                 };
             };
             /** @description Invalid request */

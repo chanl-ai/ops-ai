@@ -113,6 +113,7 @@ from .routers import guardrails as guardrail_routes
 from .routers import knowledge_usage as knowledge_usage_routes
 from .routers import mailboxes as mailbox_routes
 from .routers import memories as memory_routes
+from .routers import references as reference_routes
 from .routers import routing as routing_routes
 from .routers import run_resume as run_resume_routes
 from .routers import skills as skill_routes
@@ -544,6 +545,7 @@ def create_app(
     mount(assurance_routes.router, "Assurance")
     mount(guardrail_routes.router, "Agents")
     mount(skill_routes.router, "Agents")
+    mount(reference_routes.router, "Agents")
     mount(widget_routes.router, "Agents")
     mount(model_alias_catalog.router, "Agents")
     mount(prompt_variables.router, "Agents")

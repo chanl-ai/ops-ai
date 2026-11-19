@@ -1258,7 +1258,8 @@
           "approversNeeded": 1,
           "blockers": [],
           "canRequest": true,
-          "editClass": "re_test"
+          "editClass": "re_test",
+          "problems": []
         },
         "publishedVersion": null,
         "runs": [],
@@ -1591,7 +1592,15 @@
             "v1 is already published; save a change to open a draft."
           ],
           "canRequest": false,
-          "editClass": "re_test"
+          "editClass": "re_test",
+          "problems": [
+            {
+              "id": null,
+              "kind": "already_published",
+              "message": "v1 is already published; save a change to open a draft.",
+              "position": null
+            }
+          ]
         },
         "publishedVersion": 1,
         "runs": [],
@@ -1705,7 +1714,8 @@
           "approversNeeded": 1,
           "blockers": [],
           "canRequest": true,
-          "editClass": "re_test"
+          "editClass": "re_test",
+          "problems": []
         },
         "publishedVersion": null,
         "runs": [],

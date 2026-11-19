@@ -45,6 +45,11 @@ export class Agents {
     return this.raw.agents.agents_update_agent({ path: { agent_id: id }, body: { toolIds: wanted } as never });
   }
 
+  /** What the agent's brief can mention with @, grouped by kind; each item says whether the agent holds it. `ids` (`kind:id` each) answers the labels of what a saved text names. */
+  references(search: string, forAgent: string, query: { kind?: string; cursor?: string; limit?: number; ids?: string[] } = {}) {
+    return this.raw.agents.agents_references_search({ query: { ...query, forAgent, search: search || undefined } as never });
+  }
+
   validate(definition: Record<string, unknown>) {
     const missing = (['name', 'role'] as const).filter((key) => !definition[key]);
     return {

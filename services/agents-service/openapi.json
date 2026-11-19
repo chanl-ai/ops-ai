@@ -158,7 +158,7 @@
             "title": "Outcometext"
           },
           "ref": {
-            "$ref": "#/components/schemas/Ref"
+            "$ref": "#/components/schemas/Ref-Output"
           },
           "source": {
             "$ref": "#/components/schemas/Source"
@@ -2775,6 +2775,43 @@
           "when"
         ],
         "title": "BlockedBy",
+        "type": "object"
+      },
+      "BlockerPosition": {
+        "additionalProperties": false,
+        "description": "Where a publish problem is: the field (`steps`, `notWhen`, `useWhen`, `brief.never`), and the step (from 1)\nor list index when it has one.",
+        "properties": {
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step"
+          }
+        },
+        "required": [
+          "field"
+        ],
+        "title": "BlockerPosition",
         "type": "object"
       },
       "BoundWorkflow": {
@@ -8038,6 +8075,25 @@
         "title": "Envelope[Received]",
         "type": "object"
       },
+      "Envelope_ReferenceSearch_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ReferenceSearch"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[ReferenceSearch]",
+        "type": "object"
+      },
       "Envelope_ResumeOut_": {
         "additionalProperties": false,
         "properties": {
@@ -11024,6 +11080,105 @@
           "pauses"
         ],
         "title": "HeldTool",
+        "type": "object"
+      },
+      "IfNot": {
+        "additionalProperties": false,
+        "description": "What happens when a step's check fails: ask again, go to another step, or end the skill with an exit.",
+        "properties": {
+          "action": {
+            "default": "retry",
+            "enum": [
+              "retry",
+              "goto",
+              "exit"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "exit": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z][a-z0-9_]{0,31}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit"
+          },
+          "retries": {
+            "default": 1,
+            "maximum": 3.0,
+            "minimum": 0.0,
+            "title": "Retries",
+            "type": "integer"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "maximum": 30.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step"
+          }
+        },
+        "title": "IfNot",
+        "type": "object"
+      },
+      "IfNotOut": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "default": "retry",
+            "enum": [
+              "retry",
+              "goto",
+              "exit"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "exit": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z][a-z0-9_]{0,31}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit"
+          },
+          "retries": {
+            "default": 1,
+            "maximum": 3.0,
+            "minimum": 0.0,
+            "title": "Retries",
+            "type": "integer"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "maximum": 30.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step"
+          }
+        },
+        "title": "IfNotOut",
         "type": "object"
       },
       "InboxInput": {
@@ -14105,6 +14260,61 @@
         "title": "PublicForm",
         "type": "object"
       },
+      "PublishBlocker": {
+        "additionalProperties": false,
+        "description": "One thing that blocks a publish. `id` names the reference for a reference problem, as `<kind>:<id>`.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "kind": {
+            "enum": [
+              "missing_field",
+              "missing_reference",
+              "unavailable_reference",
+              "bad_step",
+              "bad_check",
+              "bad_exit",
+              "sub_skill_not_held",
+              "prompt_rule_in_text",
+              "review_open",
+              "already_published",
+              "deprecated",
+              "too_long"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BlockerPosition"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "message"
+        ],
+        "title": "PublishBlocker",
+        "type": "object"
+      },
       "PublishDecisionFields": {
         "additionalProperties": false,
         "description": "What the team's publish policy said when the request was made; absent on requests made before it.",
@@ -14805,7 +15015,35 @@
         "title": "Received",
         "type": "object"
       },
-      "Ref": {
+      "Ref-Input": {
+        "additionalProperties": false,
+        "description": "Something a text or a step names: a tool, a knowledge base, a skill, an agent or a workflow, by its id. An\nagent or a workflow is named by its bare id; a grant stores them as `agent:<id>` and `workflow:<id>`.",
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,126}[A-Za-z0-9_])?$",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "tool",
+              "knowledge",
+              "skill",
+              "agent",
+              "workflow"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id"
+        ],
+        "title": "Ref",
+        "type": "object"
+      },
+      "Ref-Output": {
         "additionalProperties": false,
         "properties": {
           "id": {
@@ -14832,6 +15070,177 @@
           "id"
         ],
         "title": "Ref",
+        "type": "object"
+      },
+      "RefOut": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,126}[A-Za-z0-9_])?$",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "tool",
+              "knowledge",
+              "skill",
+              "agent",
+              "workflow"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id"
+        ],
+        "title": "RefOut",
+        "type": "object"
+      },
+      "ReferenceGroup": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "tool",
+              "knowledge",
+              "skill",
+              "agent",
+              "workflow"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextcursor"
+          }
+        },
+        "required": [
+          "kind",
+          "label",
+          "items"
+        ],
+        "title": "ReferenceGroup",
+        "type": "object"
+      },
+      "ReferenceItem": {
+        "additionalProperties": false,
+        "description": "One thing a brief or a step can mention with @.",
+        "properties": {
+          "adds": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adds"
+          },
+          "disabled": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled"
+          },
+          "held": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Held"
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hint"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "tool",
+              "knowledge",
+              "skill",
+              "agent",
+              "workflow"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "needsApproval": {
+            "default": false,
+            "title": "Needsapproval",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "label"
+        ],
+        "title": "ReferenceItem",
+        "type": "object"
+      },
+      "ReferenceSearch": {
+        "additionalProperties": false,
+        "description": "Only kinds the caller may view, and only groups that have an item.",
+        "properties": {
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceGroup"
+            },
+            "title": "Groups",
+            "type": "array"
+          }
+        },
+        "required": [
+          "groups"
+        ],
+        "title": "ReferenceSearch",
         "type": "object"
       },
       "RemoveCell": {
@@ -15039,6 +15448,79 @@
           "backoffSeconds"
         ],
         "title": "RetryView",
+        "type": "object"
+      },
+      "ReturnField": {
+        "additionalProperties": false,
+        "description": "One value a skill hands back when it ends.",
+        "properties": {
+          "description": {
+            "default": "",
+            "maxLength": 300,
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "title": "Name",
+            "type": "string"
+          },
+          "required": {
+            "default": true,
+            "title": "Required",
+            "type": "boolean"
+          },
+          "type": {
+            "enum": [
+              "text",
+              "number",
+              "yes_no"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "type"
+        ],
+        "title": "ReturnField",
+        "type": "object"
+      },
+      "ReturnFieldOut": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "default": "",
+            "maxLength": 300,
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "title": "Name",
+            "type": "string"
+          },
+          "required": {
+            "default": true,
+            "title": "Required",
+            "type": "boolean"
+          },
+          "type": {
+            "enum": [
+              "text",
+              "number",
+              "yes_no"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "type"
+        ],
+        "title": "ReturnFieldOut",
         "type": "object"
       },
       "ReviewDecisionInput": {
@@ -17222,6 +17704,13 @@
       "SkillContent": {
         "additionalProperties": false,
         "properties": {
+          "exit": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Exit",
+            "type": "object"
+          },
           "guardrails": {
             "items": {
               "type": "string"
@@ -17259,6 +17748,11 @@
             "title": "Name",
             "type": "string"
           },
+          "notWhen": {
+            "default": "",
+            "title": "Notwhen",
+            "type": "string"
+          },
           "parts": {
             "items": {
               "$ref": "#/components/schemas/SkillPart"
@@ -17284,9 +17778,30 @@
             "title": "Resources",
             "type": "array"
           },
+          "returns": {
+            "items": {
+              "$ref": "#/components/schemas/ReturnFieldOut"
+            },
+            "title": "Returns",
+            "type": "array"
+          },
           "slug": {
             "title": "Slug",
             "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/SkillStepOut"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "success": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Success",
+            "type": "array"
           },
           "tools": {
             "items": {
@@ -17317,6 +17832,14 @@
       "SkillCreateInput": {
         "additionalProperties": false,
         "properties": {
+          "exit": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "maxProperties": 8,
+            "title": "Exit",
+            "type": "object"
+          },
           "guardrails": {
             "items": {
               "type": "string"
@@ -17356,6 +17879,12 @@
             "title": "Name",
             "type": "string"
           },
+          "notWhen": {
+            "default": "",
+            "maxLength": 1024,
+            "title": "Notwhen",
+            "type": "string"
+          },
           "origin": {
             "default": "blank",
             "enum": [
@@ -17390,6 +17919,14 @@
             "title": "Requestreview",
             "type": "boolean"
           },
+          "returns": {
+            "items": {
+              "$ref": "#/components/schemas/ReturnField"
+            },
+            "maxItems": 12,
+            "title": "Returns",
+            "type": "array"
+          },
           "reviewNote": {
             "default": "",
             "title": "Reviewnote",
@@ -17406,6 +17943,24 @@
               }
             ],
             "title": "Slug"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/SkillStep"
+            },
+            "maxItems": 30,
+            "title": "Steps",
+            "type": "array"
+          },
+          "success": {
+            "items": {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Success",
+            "type": "array"
           },
           "toolIds": {
             "items": {
@@ -17684,6 +18239,21 @@
             "title": "Baseversion",
             "type": "integer"
           },
+          "exit": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "maxProperties": 8,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit"
+          },
           "guardrails": {
             "anyOf": [
               {
@@ -17764,6 +18334,18 @@
             ],
             "title": "Name"
           },
+          "notWhen": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notwhen"
+          },
           "note": {
             "default": "",
             "title": "Note",
@@ -17795,6 +18377,53 @@
               }
             ],
             "title": "Refusal"
+          },
+          "returns": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ReturnField"
+                },
+                "maxItems": 12,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Returns"
+          },
+          "steps": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SkillStep"
+                },
+                "maxItems": 30,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Steps"
+          },
+          "success": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxLength": 300,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "maxItems": 8,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Success"
           },
           "toolIds": {
             "anyOf": [
@@ -18239,6 +18868,13 @@
             ],
             "title": "Editclass",
             "type": "string"
+          },
+          "problems": {
+            "items": {
+              "$ref": "#/components/schemas/PublishBlocker"
+            },
+            "title": "Problems",
+            "type": "array"
           }
         },
         "required": [
@@ -18425,6 +19061,97 @@
           "addedBy"
         ],
         "title": "SkillResource",
+        "type": "object"
+      },
+      "SkillStep": {
+        "additionalProperties": false,
+        "properties": {
+          "check": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StepCheck"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "do": {
+            "maxLength": 600,
+            "minLength": 1,
+            "title": "Do",
+            "type": "string"
+          },
+          "ifNot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IfNot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "use": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Ref-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "do"
+        ],
+        "title": "SkillStep",
+        "type": "object"
+      },
+      "SkillStepOut": {
+        "additionalProperties": false,
+        "description": "One step: what to do, what it runs, what must hold after it and what happens when it does not.",
+        "properties": {
+          "check": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StepCheckOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "do": {
+            "title": "Do",
+            "type": "string"
+          },
+          "ifNot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IfNotOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "use": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RefOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "do"
+        ],
+        "title": "SkillStepOut",
         "type": "object"
       },
       "SkillToolRef": {
@@ -19046,6 +19773,69 @@
           "finishedAt"
         ],
         "title": "StepAttempt",
+        "type": "object"
+      },
+      "StepCheck": {
+        "additionalProperties": false,
+        "description": "What must hold before a step is done. `by` is set when the skill is saved: a rule is run on the step's result\nin code, a sentence is confirmed by the model.",
+        "properties": {
+          "by": {
+            "anyOf": [
+              {
+                "enum": [
+                  "rule",
+                  "model"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "By"
+          },
+          "text": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "StepCheck",
+        "type": "object"
+      },
+      "StepCheckOut": {
+        "additionalProperties": false,
+        "properties": {
+          "by": {
+            "anyOf": [
+              {
+                "enum": [
+                  "rule",
+                  "model"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "By"
+          },
+          "text": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "StepCheckOut",
         "type": "object"
       },
       "StepUpInput": {
@@ -45702,6 +46492,298 @@
         "summary": "Decide Publish Request",
         "tags": [
           "Reviews"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/references": {
+      "get": {
+        "description": "What the agent (`forAgent`) or the skill (`forSkill`) can mention, grouped by kind: tools, knowledge bases,\nskills, agents and workflows of its team. Exactly one of the two is given (400 `validation_failed`).\n\nSearching (`search`, `limit` items a group; with `kind` one group, continued by `cursor`) is for people who may\nedit it: agents: edit or skills: edit in its team (403 `forbidden`). With `ids` (`kind:id`, repeated) it answers\nthe labels of what a saved text already names, for anyone who may read: one that is not found, not offered any\nmore or not visible is absent. Either way a kind whose view right the caller lacks in that team is left out, and\nanother team's skill or agent is never listed. An item says whether the agent holds it (`held`) and, when it\ndoes not, what inserting it adds (`adds`).",
+        "operationId": "agents_references_search",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "forAgent",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Foragent"
+            }
+          },
+          {
+            "in": "query",
+            "name": "forSkill",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Forskill"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Search",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "tool",
+                    "knowledge",
+                    "skill",
+                    "agent",
+                    "workflow"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 8,
+              "maximum": 25,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 100,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ReferenceSearch_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "References Search",
+        "tags": [
+          "Agents"
         ],
         "x-ops-public": "sdk"
       }

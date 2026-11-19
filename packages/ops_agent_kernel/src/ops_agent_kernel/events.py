@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
+from ops_contracts.skill_run import SkillRunState
+
 from .types import CitationRef, Interrupt, ToolCallRecord, TurnResult
 
 # checking: a guarded answer is written and being checked; nothing of it is shown until it passes.
@@ -70,6 +72,14 @@ class SkillLoaded:
     inputs: dict[str, str] | None = field(default=None, compare=False)
 
 
+@dataclass(frozen=True)
+class SkillRunChanged:
+    """The running-skill record moved: a skill started, a step passed or failed, or the skill ended. For a live
+    view of the step; the record a conversation carries on is the one on the turn's result."""
+
+    run: SkillRunState
+
+
 KernelEvent = (
     StatusChanged
     | TextDelta
@@ -78,6 +88,7 @@ KernelEvent = (
     | ToolOutput
     | CitationsReady
     | SkillLoaded
+    | SkillRunChanged
     | Interrupted
     | TurnFinished
 )

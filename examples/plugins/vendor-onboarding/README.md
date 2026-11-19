@@ -1,8 +1,9 @@
 # Vendor onboarding: an example Ops AI plugin
 
 A plugin a developer can copy: it checks a new supplier against a company registry, scores its risk in Python, asks
-an agent for notes and stops for a person to approve. The full guide, including what changes when the plugin system
-lands and the gaps found, is [docs/guide/vendor-onboarding-plugin.md](../../../docs/guide/vendor-onboarding-plugin.md).
+an agent for notes and stops for a person to approve. It uses a proposed manifest
+format that Ops AI does not read; [Building a plugin](../../../docs/guide/plugins.md) describes the plugin format that is
+built.
 
 YAML declares and wires; Python holds logic.
 

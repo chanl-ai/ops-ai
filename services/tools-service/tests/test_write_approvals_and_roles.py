@@ -18,7 +18,7 @@ from typing import Any, cast
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from ops_access import Access
+from ops_access import Access, EffectiveAnswer
 from ops_identity import Principal
 from ops_tools.modules.policy import WriteApprovals, approves_own_writes
 from ops_tools.store.modules import ModuleStore
@@ -118,7 +118,7 @@ class TeamAsksPerson(WriteApprovals):
     async def levels(self, tenant_id: str, team_id: str | None) -> tuple[Any, dict[str, Any]]:
         return {"ask": True, "answer": "person", "reviewerRole": None}, {}
 
-    async def answer(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+    async def answer(self, *args: Any, **kwargs: Any) -> EffectiveAnswer:
         got = await super().answer(*args, **kwargs)
         self.asked.append((kwargs["channel"], got["answer"]))
         return got

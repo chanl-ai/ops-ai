@@ -1,10 +1,10 @@
 # Chat streaming
 
-Status: current, 2026-10-18.
+Status: current, checked against the code on 2026-11-18.
 
 A chat reply reaches the console as server-sent events from `POST /chat/threads/{id}/messages` with
 `Accept: text/event-stream`. Each frame is `data: <json>` followed by a blank line. The event types are
-`ChatStreamEvent` in `packages/contracts/src/ops_contracts/chat.py:617`, mirrored in
+`ChatStreamEvent` in `packages/contracts/src/ops_contracts/chat.py:683`, mirrored in
 `apps/console/src/lib/types/chat.ts`. A reload rebuilds the same message from the thread's journal
 (`api/chat_threads.py`, `AssistantBuilder`), so what streamed and what is stored are one translation.
 
@@ -26,7 +26,7 @@ A chat reply reaches the console as server-sent events from `POST /chat/threads/
 
 An agent with guardrails streams its answer as it is written, then checks it. When the check finds a blocked topic,
 `replace` sends the guardrail's message (or the answer rewritten without the topic) and the console shows that
-instead (`apps/console/src/hooks/chat-queries.ts:146`). A guardrail with "Hold until checked" on does not
+instead (`apps/console/src/hooks/chat-queries.ts:147`). A guardrail with "Hold until checked" on does not
 stream: the answer is shown only after it passes. A turn that ends before its check ran replaces the text with
 nothing.
 

@@ -457,8 +457,8 @@ async def _ref_team(rt: Runtime, kind: str, ref: str) -> str | None:
         run = await RunStore(EngineTransactions(rt.db)).row(run_id)
         if run is not None:
             return run.team_id or None
-    thread = await graph_store(rt).thread(run_id)
-    return str(thread["team_id"]) if thread is not None and thread.get("team_id") else None
+    thread = await graph_store(rt).thread_row(run_id)
+    return thread.team_id if thread is not None and thread.team_id else None
 
 
 @router.post("/{case_id}/events", response_model=Envelope[CaseDetail], status_code=201)

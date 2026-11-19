@@ -36,7 +36,7 @@ from ..store.review_sources import ReviewSources
 from ..store.reviews import DecisionOut, ReviewStore
 from ..store.timers import TimerStore
 from . import engine_reviews, publish_reviews
-from .agent_registry import registry
+from .agent_registry import ReviewPolicy, ReviewView, registry
 from .auth import (
     Principal,
     caller_of,
@@ -102,6 +102,79 @@ class ThreadPayload(TypedDict, total=False):
     step_up: bool
 
 
+class ChatReview(TypedDict):
+    """A paused thread step as the console's `Review` (review_view), in reply order, then who it is assigned to and
+    whether the caller may decide it, which the list and the routes add."""
+
+    origin: Json
+    id: JsonValue
+    title: str
+    customer: JsonValue
+    workflowId: JsonValue
+    workflowName: JsonValue
+    agentSlug: JsonValue
+    kind: str
+    risk: str
+    confidence: float
+    proposal: str
+    actionTool: JsonValue
+    currency: str
+    policy: ReviewPolicy
+    slaMinutes: int | None
+    approvals: list[str]
+    status: str
+    createdAt: JsonValue
+    reasoning: list[str]
+    evidence: list[Json]
+    stepUp: bool
+    amount: float | None
+    options: list[Json] | None
+    optionsError: str | None
+    calls: dict[str, ThreadCall] | None
+    error: JsonValue
+    consequence: str | None
+    actionFields: list[dict[str, str]]
+    decidingTeam: dict[str, str | None] | None
+    assignee: NotRequired[JsonValue]
+    caseTitle: NotRequired[str | None]
+    canDecide: NotRequired[bool]
+
+
+# One review as GET /reviews/{id} and a decision answer it: a paused thread step, a run's review step, a publish
+# request, or a decided thread review (its stored review, so JSON).
+Review = ChatReview | engine_reviews.EngineReview | ReviewView | Json
+# A review as the list reads it: also a run's review step as all_rows lists it, until expand builds it.
+Listed = Review | engine_reviews.EngineRow
+
+
+class ReviewStats(TypedDict):
+    unassigned: int
+    medianDecisionMinutes: int
+    medianDecisionTrendMinutes: int
+    approvedAsProposedRate: float
+    decidedToday: int
+
+
+class ReviewPage(TypedDict):
+    """One page of Human Tasks (list_reviews), in reply order: the rows, where the page sits, the view's facets,
+    the count per view and the queue's stats."""
+
+    data: list[Listed]
+    pagination: Json
+    facets: dict[str, dict[str, int]]
+    viewCounts: dict[str, int]
+    stats: ReviewStats
+
+
+class QueuePlace(TypedDict):
+    """Where a review sits in a view (queue_place): None for position, previous and next when it is not in it."""
+
+    position: int | None
+    total: int
+    previous: str | None
+    next: str | None
+
+
 class RunStep(TypedDict):
     """One step of a Cases run (`RunStep` in apps/console/src/lib/types/cases.ts), from its runs' journals."""
 
@@ -135,6 +208,16 @@ class Paged[T](TypedDict):
 
     data: list[T]
     pagination: Json
+
+
+class RunPage(TypedDict):
+    """One page of Cases runs (list_runs), in reply order: the rows, where the page sits, and the view's facets and
+    counts."""
+
+    data: list[Json]
+    pagination: Json
+    facets: dict[str, dict[str, int]]
+    viewCounts: dict[str, int]
 
 
 STEP_KIND = {
@@ -411,12 +494,12 @@ RUN_VIEWS: dict[str, Callable[[SummaryRow, datetime], bool]] = {
 }
 
 
-def _facets(rows: Sequence[Mapping[str, object]], columns: list[str]) -> dict[str, dict[str, int]]:
+def _facets(rows: Sequence[SummaryRow] | Sequence[Listed], columns: list[str]) -> dict[str, dict[str, int]]:
     out: dict[str, dict[str, int]] = {c: {} for c in columns}
     for r in rows:
         for c in columns:
-            if r.get(c) is not None:
-                out[c][str(r[c])] = out[c].get(str(r[c]), 0) + 1
+            if (value := r.get(c)) is not None:
+                out[c][str(value)] = out[c].get(str(value), 0) + 1
     return out
 
 
@@ -442,9 +525,10 @@ async def summary_rows(rt: Runtime, now: datetime, only: str | None = None) -> l
     journal, timers per thread) for every thread made the list cost seconds with a thousand threads; `list_runs`
     builds them for the page only."""
     resolvable = await _resolvable(rt)
+    # As mappings: each summary row carries its thread as stored ("thread"), and the reads below take it by key.
     threads = [
         t
-        for t in await graph_store(rt).threads(None)
+        for t in [r.model_dump() for r in await graph_store(rt).thread_rows(None)]
         if not is_chat_graph(t["graph"]) and t["graph"] in resolvable and (only is None or t["id"] == only)
     ]
     runs = await graph_store(rt).run_summaries(only)
@@ -512,7 +596,7 @@ async def _open_sla_due(rt: Runtime, thread_ids: list[str]) -> dict[str, str]:
 
 async def list_runs(
     rt: Runtime, *, view: str, filters: dict[str, list[str]], search: str | None, page_no: int, size: int
-) -> dict[str, Any]:
+) -> RunPage:
     now = datetime.now(UTC)
     if view not in RUN_VIEWS:
         raise ValidationFailed(f"Unknown view {view}.")
@@ -535,7 +619,7 @@ async def list_runs(
         except (NotFound, Conflict) as e:
             # Its graph cannot be compiled (a version removed, a digest changed): leave it out, not the whole list.
             log.warning("case_row_skipped", thread=r["id"], graph=r["workflowId"], error=e.code)
-    return {**paged, "data": full, "facets": facets, "viewCounts": counts}
+    return {"data": full, "pagination": paged["pagination"], "facets": facets, "viewCounts": counts}
 
 
 async def get_run(rt: Runtime, thread_id: str) -> Json:
@@ -573,9 +657,7 @@ async def known_for(
     return Known(await _open_sla_due(rt, ids), approvals, versions or {})
 
 
-async def review_view(
-    rt: Runtime, row: Json, interrupt: Json, now: datetime, known: Known | None = None
-) -> dict[str, Any]:
+async def review_view(rt: Runtime, row: Json, interrupt: Json, now: datetime, known: Known | None = None) -> ChatReview:
     """A paused review step as a console `Review`; `status` is pending until a decision is recorded. `known`: what a
     list read once for all its rows; one review reads its own."""
     known = known or await known_for(rt, [str(row["id"])])
@@ -757,13 +839,13 @@ async def read_then_ask(rt: Runtime) -> ReviewReads:
     return reads
 
 
-async def build_reviews(rt: Runtime, reads: ReviewReads) -> tuple[list[dict[str, Any]], Held]:
+async def build_reviews(rt: Runtime, reads: ReviewReads) -> tuple[list[Listed], Held]:
     """Every review the selected team may see, each with who it is assigned to. A workflow step is the row
     engine_reviews.all_rows makes, enough to count, filter and page on; `engine_reviews.expand` builds the full review
     of the rows a caller shows. Also each waiting thread review's thread and step payload, so the list says who may
     decide each without reading its thread again."""
     now = datetime.now(UTC)
-    out: list[dict[str, Any]] = []
+    out: list[Listed] = []
     held: Held = {}
     threads = reads.threads
     known = await known_for(rt, [str(row["id"]) for row, waiting, _ in threads if waiting], reads.versions)
@@ -776,10 +858,15 @@ async def build_reviews(rt: Runtime, reads: ReviewReads) -> tuple[list[dict[str,
     # Agent and workflow publish requests are reviews too: one list, counted and filtered with the rest.
     rows = out + await publish_reviews.all_views(rt) + await engine_reviews.build_rows(rt, reads.engine)
     assigned = await ReviewAssignments(rt.db).current([str(r["id"]) for r in rows])
-    return [r | {"assignee": assigned.get(str(r["id"]), r.get("assignee"))} for r in rows], held
+    listed: list[Listed] = []
+    for r in rows:
+        with_who = r.copy()
+        with_who["assignee"] = assigned.get(str(r["id"]), r.get("assignee"))
+        listed.append(with_who)
+    return listed, held
 
 
-async def all_reviews(rt: Runtime) -> tuple[list[dict[str, Any]], Held]:
+async def all_reviews(rt: Runtime) -> tuple[list[Listed], Held]:
     """`build_reviews` after its reads, for a caller that holds no transaction of its own."""
     return await build_reviews(rt, await read_then_ask(rt))
 
@@ -835,10 +922,12 @@ async def _thread_reviews(
     return out, resolved.versions
 
 
-async def with_assignee(rt: Runtime, review: dict[str, Any]) -> dict[str, Any]:
+async def with_assignee(rt: Runtime, review: Review) -> Review:
     """One review with who it is assigned to now."""
     assigned = await ReviewAssignments(rt.db).current([str(review["id"])])
-    return review | {"assignee": assigned.get(str(review["id"]), review.get("assignee"))}
+    out = review.copy()
+    out["assignee"] = assigned.get(str(review["id"]), review.get("assignee"))
+    return out
 
 
 def _elapsed_minutes(start: str, end: str) -> float:
@@ -846,12 +935,12 @@ def _elapsed_minutes(start: str, end: str) -> float:
     return (b - a).total_seconds() / 60 if a and b else 0.0
 
 
-REVIEW_VIEWS: dict[str, Callable[[dict[str, Any]], bool]] = {
+REVIEW_VIEWS: dict[str, Callable[[Listed], bool]] = {
     # Open and assigned to the caller; list_reviews puts the caller's names in.
     "mine": lambda r: False,
     "open": lambda r: r["status"] in ("pending", "in_review"),
     # A review whose step set no SLA (slaMinutes None) is never overdue.
-    "overdue": lambda r: r["status"] in ("pending", "in_review") and (r.get("slaMinutes") or 0) < 0,
+    "overdue": lambda r: r["status"] in ("pending", "in_review") and cast(float, r.get("slaMinutes") or 0) < 0,
     "resolved": lambda r: r["status"] in ("approved", "rejected", "returned"),
     "all": lambda r: True,
 }
@@ -860,7 +949,7 @@ REVIEW_VIEWS: dict[str, Callable[[dict[str, Any]], bool]] = {
 GROUPS = frozenset({"case"})
 
 
-def by_case(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def by_case(rows: list[Listed]) -> list[Listed]:
     """Rows grouped by case: each case's rows together, the case whose soonest deadline is soonest first, then
     the rows inside a case by their own deadline. A row on no case is its own group. Rows with no deadline (`dueAt`
     is set on workflow steps only) sort last, keeping the order they came in, so the list and the place agree."""
@@ -869,20 +958,20 @@ def by_case(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for i, r in enumerate(rows):
         group = str(r.get("caseId") or r["id"])
         first.setdefault(group, i)
-        due = r.get("dueAt")
+        due = cast(str | None, r.get("dueAt"))
         if due and (group not in soonest or due < soonest[group]):
             soonest[group] = due
 
-    def key(item: tuple[int, dict[str, Any]]) -> tuple[bool, str, int, bool, str, int]:
+    def key(item: tuple[int, Listed]) -> tuple[bool, str, int, bool, str, int]:
         i, r = item
         group = str(r.get("caseId") or r["id"])
-        due = r.get("dueAt")
+        due = cast(str | None, r.get("dueAt"))
         return (group not in soonest, soonest.get(group, ""), first[group], not due, due or "", i)
 
     return [r for _, r in sorted(enumerate(rows), key=key)]
 
 
-def _grouped(rows: list[dict[str, Any]], group: str | None) -> list[dict[str, Any]]:
+def _grouped(rows: list[Listed], group: str | None) -> list[Listed]:
     if group is None:
         return rows
     if group not in GROUPS:
@@ -903,7 +992,7 @@ async def list_reviews(
     teams: list[str],
     approver: Principal | None = None,
     reads: ReviewReads | None = None,
-) -> dict[str, Any]:
+) -> ReviewPage:
     """`me` is every name the caller is recorded by (email, name); Assigned to me lists open reviews assigned to one.
     `group="case"` orders the view by case and names each row's case from `teams`, the teams the caller reads in.
     With `approver`, each row of the page says whether they may decide it now (`canDecide`). `reads` (from
@@ -911,7 +1000,7 @@ async def list_reviews(
     if view not in REVIEW_VIEWS:
         raise ValidationFailed(f"Unknown view {view}.")
 
-    def mine(r: dict[str, Any]) -> bool:
+    def mine(r: Listed) -> bool:
         return REVIEW_VIEWS["open"](r) and r.get("assignee") in me
 
     views = REVIEW_VIEWS | {"mine": mine}
@@ -919,22 +1008,25 @@ async def list_reviews(
     counts = {name: sum(1 for r in rows if match(r)) for name, match in views.items() if name != "all"}
     today = datetime.now(UTC).date()
     decided = [r for r in rows if r.get("decidedAt")]
-    minutes = sorted(_elapsed_minutes(r["createdAt"], r["decidedAt"]) for r in decided)
-    stats = {
+    # A decided row's decidedAt is set (the filter above), so get() reads it as indexing did.
+    minutes = sorted(_elapsed_minutes(cast(str, r["createdAt"]), cast(str, r.get("decidedAt"))) for r in decided)
+    stats: ReviewStats = {
         "unassigned": sum(1 for r in rows if REVIEW_VIEWS["open"](r) and not r.get("assignee")),
         "medianDecisionMinutes": round(minutes[len(minutes) // 2]) if minutes else 0,
         "medianDecisionTrendMinutes": 0,
         "approvedAsProposedRate": round(sum(1 for r in decided if r["status"] == "approved") / len(decided), 2)
         if decided
         else 0,
-        "decidedToday": sum(1 for r in decided if r["decidedAt"][:10] == today.isoformat()),
+        "decidedToday": sum(1 for r in decided if cast(str, r.get("decidedAt"))[:10] == today.isoformat()),
     }
     in_view = [r for r in rows if views[view](r)]
     if search:
         # A typed task's title comes from its task, so a search reads the full reviews it matches against.
         needle = search.lower()
         in_view = await engine_reviews.expand(rt, in_view)
-        in_view = [r for r in in_view if needle in r["title"].lower() or needle in r["id"].lower()]
+        in_view = [
+            r for r in in_view if needle in cast(str, r["title"]).lower() or needle in cast(str, r["id"]).lower()
+        ]
     facets = _facets(in_view, ["risk", "workflowId", "kind", "agentSlug", "status"])
     for column, wanted in filters.items():
         if wanted:
@@ -943,18 +1035,28 @@ async def list_reviews(
     shown["data"] = await engine_reviews.expand(rt, shown["data"])
     if group == "case":
         # One read for the page; a case of a team the caller is not in is left out, so its row has no title.
-        ids = sorted({str(r["caseId"]) for r in shown["data"] if r.get("caseId")})
+        ids = sorted({str(r.get("caseId")) for r in shown["data"] if r.get("caseId")})
         named = await CaseStore(rt.db).summaries(ids, teams)
-        shown["data"] = [
-            r | {"caseTitle": case.subject if (case := named.get(str(r.get("caseId")))) else None}
-            for r in shown["data"]
-        ]
+        titled: list[Listed] = []
+        for r in shown["data"]:
+            with_case = r.copy()
+            with_case["caseTitle"] = case.subject if (case := named.get(str(r.get("caseId")))) else None
+            titled.append(with_case)
+        shown["data"] = titled
     if approver is not None:
-        shown["data"] = [
-            r | {"canDecide": await _may_decide(rt, approver, str(r["id"]), r.get("status"), held)}
-            for r in shown["data"]
-        ]
-    return {**shown, "facets": facets, "viewCounts": counts, "stats": stats}
+        decidable: list[Listed] = []
+        for r in shown["data"]:
+            with_say = r.copy()
+            with_say["canDecide"] = await _may_decide(rt, approver, str(r["id"]), r.get("status"), held)
+            decidable.append(with_say)
+        shown["data"] = decidable
+    return {
+        "data": shown["data"],
+        "pagination": shown["pagination"],
+        "facets": facets,
+        "viewCounts": counts,
+        "stats": stats,
+    }
 
 
 async def _may_decide(rt: Runtime, approver: Principal, review_id: str, status: object, held: Held) -> bool:
@@ -975,7 +1077,7 @@ async def _may_decide(rt: Runtime, approver: Principal, review_id: str, status: 
 
 async def queue_place(
     rt: Runtime, review_id: str, view: str = "open", group: str | None = None, reads: ReviewReads | None = None
-) -> dict[str, Any]:
+) -> QueuePlace:
     """Where a review sits in a view, in the order Human Tasks lists it: its position, the total, and the reviews either
     side, so a task's page says "5 of 24" and steps through the queue without the console fetching it."""
     if view not in REVIEW_VIEWS:
@@ -1000,7 +1102,7 @@ async def queue_place(
     }
 
 
-async def get_review(rt: Runtime, thread_id: str) -> dict[str, Any]:
+async def get_review(rt: Runtime, thread_id: str) -> Review:
     """One thread's review, chat-agent threads included: decide serves every review-owned interrupt. A publish
     request's id (AGP-…, WFP-…) answers with that request."""
     if publish_reviews.is_request_id(thread_id):
@@ -1017,9 +1119,10 @@ async def get_review(rt: Runtime, thread_id: str) -> dict[str, Any]:
 async def _thread_step(rt: Runtime, thread_id: str) -> tuple[Json, Json | None, DecisionOut | None]:
     """A graph thread's row, the step it waits on (None once decided) and its decision; not found when it holds no
     review."""
-    row = await graph_store(rt).thread(thread_id)
-    if row is None:
+    found = await graph_store(rt).thread_row(thread_id)
+    if found is None:
         raise NotFound("Review")
+    row = found.model_dump()
     _, graph = await resolve(rt, thread_id)
     waiting = pending(await graph.aget_state(config(thread_id)))
     d = (await _decisions(rt, [thread_id])).get(thread_id)
@@ -1030,24 +1133,28 @@ async def _thread_step(rt: Runtime, thread_id: str) -> tuple[Json, Json | None, 
     raise NotFound("Review")
 
 
-async def review_for(rt: Runtime, approver: Principal, thread_id: str) -> dict[str, Any]:
+async def review_for(rt: Runtime, approver: Principal, thread_id: str) -> Review:
     """`get_review` with who it is assigned to and whether `approver` may decide it now (`canDecide`). A graph thread's
     review takes two transactions: the thread and its step, then, once tools-service has answered with none open, the
     review built from them."""
     if publish_reviews.is_request_id(thread_id) or engine_reviews.is_engine_id(thread_id):
         review = await with_assignee(rt, await get_review(rt, thread_id))
         waiting = review.get("status") in ("pending", "in_review")
-        return review | {"canDecide": waiting and await can_decide(rt, approver, str(review["id"]))}
+        review["canDecide"] = waiting and await can_decide(rt, approver, str(review["id"]))
+        return review
     async with isolation.request_transaction():
         row, step, d = await _thread_step(rt, thread_id)
         if step is None:
             assert d is not None
-            return await with_assignee(rt, _decided(d)) | {"canDecide": False}
+            decided = await with_assignee(rt, _decided(d))
+            decided["canDecide"] = False
+            return decided
     await ask_outside(rt, ReviewReads([(row, step, d)], {}, None))
     async with isolation.request_transaction():
         review = await with_assignee(rt, await review_view(rt, row, step, datetime.now(UTC)))
         held = {str(row["id"]): HeldStep(ThreadRow.model_validate(row), cast(Json, step["payload"]))}
-        return review | {"canDecide": await _may_decide(rt, approver, str(review["id"]), review["status"], held)}
+        review["canDecide"] = await _may_decide(rt, approver, str(review["id"]), review["status"], held)
+        return review
 
 
 async def decide(
@@ -1061,7 +1168,7 @@ async def decide(
     amount: float | None = None,
     inputs: Json | None = None,
     for_chat: bool = False,
-) -> dict[str, Any]:
+) -> Review:
     """Decides as `approver`, from the teams where they hold reviews.decide (any team for dev); a write whose app
     asks before changes is decided by the person who asked instead, and `for_chat` (their "Allow for this chat")
     stops later writes of that app in the chat from asking. Records the decision,
@@ -1087,9 +1194,10 @@ async def decide(
     from .routers.reviews import record_approval  # noqa: PLC0415 - the router imports this module
 
     store = graph_store(rt)
-    row = await store.thread(thread_id)
-    if row is None:
+    found = await store.thread_row(thread_id)
+    if found is None:
         raise NotFound("Review")
+    row = found.model_dump()
     _, graph = await resolve(rt, thread_id)
     waiting = pending(await graph.aget_state(config(thread_id)))
     recorded = (await _decisions(rt, [thread_id])).get(thread_id)
@@ -1151,7 +1259,8 @@ async def decide(
     if call and rt.gateway:
         approval = await record_approval(rt, approver, thread_id, step_up_token, call=call)
         if approval["approvalToken"] is None:
-            return await get_review(rt, thread_id) | {"status": "in_review", "approvals": approval["approvers"]}
+            approvers = cast(JsonValue, approval["approvers"])
+            return cast(Json, await get_review(rt, thread_id)) | {"status": "in_review", "approvals": approvers}
         resume["approval_token"] = approval["approvalToken"]
     review = await review_view(rt, row, interrupt, datetime.now(UTC))
     # Recorded before the resume: the decision stands even if the resume fails, and a retry resumes once.
@@ -1161,7 +1270,7 @@ async def decide(
         decision=recorded_as,
         reason=reason,
         by=approver.email,
-        review=review | {"resume": resume},
+        review=cast(Json, review | {"resume": resume}),
         step_up_ref=verified_step_up,
     )
     recorded = (await _decisions(rt, [thread_id]))[thread_id]
@@ -1212,9 +1321,10 @@ async def can_decide(rt: Runtime, approver: Principal, review_id: str) -> bool:
         if engine_reviews.is_engine_id(review_id):
             await engine_reviews.check_decider(rt, approver, review_id)
             return True
-        row = await graph_store(rt).thread(review_id)
-        if row is None:
+        found = await graph_store(rt).thread_row(review_id)
+        if found is None:
             return False
+        row = found.model_dump()
         waiting = pending(await (await resolve(rt, review_id))[1].aget_state(config(review_id)))
         if not waiting:
             return False

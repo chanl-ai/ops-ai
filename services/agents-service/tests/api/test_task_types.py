@@ -21,6 +21,7 @@ from ops_agents.store.base import metadata
 from ops_agents.store.task_types import TaskTypeStore
 from ops_agents.store.tenancy import tenant_scope
 from ops_engine.store import metadata as engine_metadata
+from ops_service_kit.http import JsonList
 from tests.engine.test_lifecycle_rights import ADMIN, BUILDER, VIEWER, person
 
 from .role_app import ok, role_app
@@ -97,35 +98,35 @@ async def test_a_type_the_screen_cannot_draw_is_refused(c: AsyncClient) -> None:
 
 
 def test_a_missing_param_warns_and_shows_its_fallback_and_a_wrong_kind_is_an_error() -> None:
-    record = next(s for s in tt.seeds() if s["id"] == "write_approval")
+    record: Any = next(s for s in tt.seeds() if s["id"] == "write_approval")
     issues = tt.check_params(record, {"facts": "not a list"})
     assert {(i["field"], i["severity"]) for i in issues} == {
         ("title", "warning"),
         ("call", "warning"),
         ("facts", "error"),
     }
-    bound = tt.bind(record, {"call": {"tool": "update_vendor_bank"}})
+    bound: Any = tt.bind(record, {"call": {"tool": "update_vendor_bank"}})
     header = next(r for r in bound["regions"] if r["region"] == "header")
     assert header["data"]["title"] == "Approve this change"
     assert bound["actions"][0]["consequence"] == "The change is made now."
 
 
 def test_a_region_with_nothing_to_show_is_left_out_and_a_whole_template_keeps_its_value() -> None:
-    record = next(s for s in tt.seeds() if s["id"] == "generic_decision")
-    facts = [{"label": "Amount", "value": "3,250.00 CAD"}]
-    bound = tt.bind(record, {"title": "Open the case?", "facts": facts})
+    record: Any = next(s for s in tt.seeds() if s["id"] == "generic_decision")
+    facts: JsonList = [{"label": "Amount", "value": "3,250.00 CAD"}]
+    bound: Any = tt.bind(record, {"title": "Open the case?", "facts": facts})
     assert [r["region"] for r in bound["regions"]] == ["header", "facts"]
     assert bound["regions"][1]["data"]["facts"] == facts
 
 
 def test_the_document_region_carries_each_fields_boxes_flat() -> None:
     """The viewer draws a read's boxes from the document region alone."""
-    record = next(s for s in tt.seeds() if s["id"] == "document_check")
-    fields = [
+    record: Any = next(s for s in tt.seeds() if s["id"] == "document_check")
+    fields: JsonList = [
         {"key": "amount", "check": True, "boxes": [{"page": 1, "x": 0.1, "y": 0.2, "w": 0.3, "h": 0.04}]},
         {"key": "case_no", "boxes": [{"page": 1, "x": 0.5, "y": 0.1, "w": 0.2, "h": 0.03}]},
     ]
-    bound = tt.bind(record, {"title": "Check 2 key fields", "document": "fil_1", "fields": fields})
+    bound: Any = tt.bind(record, {"title": "Check 2 key fields", "document": "fil_1", "fields": fields})
     doc = next(r for r in bound["regions"] if r["region"] == "document")["data"]
     assert doc["file"] == "fil_1"
     assert doc["boxes"] == [
@@ -141,7 +142,7 @@ async def test_a_newer_seed_version_reaches_a_tenant_that_has_the_old_one() -> N
     async with db.begin() as conn:
         await conn.run_sync(metadata.create_all)
         await conn.run_sync(engine_metadata.create_all)
-    seed = next(s for s in tt.seeds() if s["id"] == "generic_decision")
+    seed: Any = next(s for s in tt.seeds() if s["id"] == "generic_decision")
     with tenant_scope("t1"):
         store = TaskTypeStore(db, "team_ops")
         await store.ensure_seeds([{**seed, "version": 1}])
@@ -181,10 +182,12 @@ async def test_a_typed_step_missing_a_param_saves_with_a_warning_never_a_refusal
 
 def test_dates_and_numbers_read_as_a_person_reads_them() -> None:
     """A raw ISO date or float never reaches a task's text or facts (uc-234 step 8)."""
-    record = next(s for s in tt.seeds() if s["id"] == "tool_access_request")
+    record: Any = next(s for s in tt.seeds() if s["id"] == "tool_access_request")
     until = "2027-01-17T13:17:27.879526+00:00"
-    facts = [{"label": "Until", "value": until}, {"label": "Calls a day", "value": 1200.0}]
-    bound = tt.bind(record, {"title": "Dispute email asks to use Core banking", "until": until, "facts": facts}, worded)
+    facts: JsonList = [{"label": "Until", "value": until}, {"label": "Calls a day", "value": 1200.0}]
+    bound: Any = tt.bind(
+        record, {"title": "Dispute email asks to use Core banking", "until": until, "facts": facts}, worded
+    )
     assert bound["actions"][0]["consequence"] == "The tools can be used until 17 Jan 2027."
     shown_facts = next(r for r in bound["regions"] if r["region"] == "facts")["data"]["facts"]
     assert [f["value"] for f in shown_facts] == ["17 Jan 2027", "1,200"]
@@ -192,7 +195,7 @@ def test_dates_and_numbers_read_as_a_person_reads_them() -> None:
 
 def test_the_document_region_reads_boxes_from_an_extract_steps_fields() -> None:
     """An Extract from file step's `fields` is a dict by key, each with its boxes and needsReview."""
-    record = next(s for s in tt.seeds() if s["id"] == "document_check")
+    record: Any = next(s for s in tt.seeds() if s["id"] == "document_check")
     read: dict[str, Any] = {
         "amount": {
             "value": 3250.0,
@@ -201,7 +204,7 @@ def test_the_document_region_reads_boxes_from_an_extract_steps_fields() -> None:
         },
         "court": {"value": "Nova Scotia Supreme Court", "needsReview": False, "boxes": []},
     }
-    bound = tt.bind(record, {"title": "Check the read", "document": "fil_1", "fields": read})
+    bound: Any = tt.bind(record, {"title": "Check the read", "document": "fil_1", "fields": read})
     doc = next(r for r in bound["regions"] if r["region"] == "document")["data"]
     assert doc["boxes"] == [{"key": "amount", "page": 1, "x": 0.1, "y": 0.2, "w": 0.3, "h": 0.04, "check": True}]
 

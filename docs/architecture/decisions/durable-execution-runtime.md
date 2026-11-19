@@ -38,7 +38,7 @@ writing an adapter).
 
 ### Scored comparison
 
-Criteria and weights are defined in the [architecture overview](../overview.md#evaluation-criteria).
+Criteria and weights are defined in the [decision records index](README.md#how-options-are-scored).
 
 | Option | Durab. 13 | Determ. 8 | HITL 13 | Versioning 13 | Security 9 | On-prem 9 | Licence 9 | Talent 4 | Connectors 4 | Fit 4 | Marginal 14 | **Total** |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -134,7 +134,7 @@ executes, plus a vendor with an SLA. Temporal asks every author to write determi
 - Temporal relicenses the server away from MIT, or the self-hosted server falls materially behind
   Temporal Cloud in features the platform needs.
 - Measured operating cost of a self-hosted Temporal cluster at the bank's volume exceeds what the
-  platform team can staff ([open question 3](../overview.md#open-questions)).
+  platform team can staff ([open question 3](../delivery.md#open-questions)).
 
 ## Phase 1 vs later
 
@@ -143,7 +143,7 @@ executes, plus a vendor with an SLA. Temporal asks every author to write determi
 | Temporal clusters for non-production (`dev`, `test`) and production, PostgreSQL persistence | OpenSearch visibility if search over runs needs it |
 | Interpreter with the node types the email template uses: email trigger, agent block, knowledge query, tool call, condition, `classify_intent`, `extract_fields`, `open_case`, `draft_action`, `per_action_approval` with SLA timer, `send_reply`, error path, end (mapped onto the palette in [Phase-1 node types](#phase-1-node-types)) | Canvas-only node types (loops, parallel fan-out, sub-workflow), continue-as-new upgrade path for long cases |
 | Worker Versioning with Pinned runs from the first release, because retrofitting it means draining every open case | Worker Controller automation, ramp policies |
-| No n8n | n8n or other catalogues as tool modules, per [open question 11](../overview.md#open-questions) |
+| No n8n | n8n or other catalogues as tool modules, per [open question 11](../delivery.md#open-questions) |
 
 ## Sources
 

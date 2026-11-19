@@ -17,9 +17,9 @@ expected:
 evaluation: fixtures/cases.json
 surfaces:
   ui: planned
-  cli: built
+  cli: planned
   python: built
-  typescript: built
+  typescript: planned
 setupSeconds: 40
 teaches:
 - Dataset cases run through POST /v1/agents/{id}/eval-runs

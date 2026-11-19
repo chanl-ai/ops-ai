@@ -25,7 +25,7 @@ Pattern (`services/agents-service/src/ops_agents/api/routers/cases.py:35` and
 def error_responses(overrides=None) -> dict[int | str, dict[str, Any]]:  # the responses= a route declares
 ```
 
-Check: `services/<x>/scripts/check_openapi.py` (seven services) in each service's CI job;
+Check: `services/<x>/scripts/check_openapi.py` (all eight services) in each service's CI job;
 `ops_service_kit.contract.response_checker(app)` attached in tests, so every response is checked against the document.
 
 ### AP2 One envelope for success and one for failure

@@ -165,6 +165,7 @@ packages/ops_access/src/ops_access/policies.py policy-default appChangesByApp={}
 * conflict secret_in_use 0 state
 * conflict security_team 0 state
 * conflict skill_deprecated 0 state
+* conflict skill_in_use_by_skill 0 state
 * conflict skill_pinned 0 state
 * conflict source_paused 0 state
 * conflict stale_base 0 state

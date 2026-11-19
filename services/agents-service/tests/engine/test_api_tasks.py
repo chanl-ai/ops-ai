@@ -62,7 +62,7 @@ async def test_a_posted_task_is_decided_in_human_tasks_and_the_caller_reads_the_
     w.host.ports.task_types = StoredTaskTypes(engine)
     await drain(w)
     with tenant_scope(tenant):
-        review = await engine_reviews.get(rt, created["id"])
+        review: Any = await engine_reviews.get(rt, created["id"])
         assert review["task"]["type"] == {"id": "generic_decision", "version": 1, "name": "Decision"}
         # The missing title shows the type's fallback line rather than hiding the task.
         assert review["task"]["regions"][0] == {"region": "header", "collapsed": False, "data": {"title": "Decision"}}

@@ -14,7 +14,7 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any, Final, NotRequired, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Final, NotRequired, TypedDict, cast
 
 from ops_engine.store import RUN_PREFIX, DefinitionRow, DefinitionStore, RunStore
 from ops_policy import input_hash
@@ -50,6 +50,10 @@ from .task_type_seeds import task_type_store
 from .task_view import TaskReads, typed_task
 from .team_names import deciding_team
 from .tool_access import WritePolicy, policy_of
+
+if TYPE_CHECKING:
+    from .agent_registry import ReviewPolicy
+    from .hitl_facade import Listed
 
 log = get_logger("ops_agents.api.engine_reviews")
 
@@ -280,6 +284,74 @@ class EngineRow(TypedDict):
     caseId: str | None
     _engine_review: tuple[Json, Json | None, str]
     decidedAt: NotRequired[JsonValue]
+    assignee: NotRequired[JsonValue]
+    caseTitle: NotRequired[str | None]
+    canDecide: NotRequired[bool]
+
+
+class EngineReview(TypedDict):
+    """A review step of a run as the console's `Review` (view), in reply order: the keys every view sets, then what
+    a typed task, a described call, a read, a reply or a decision add, then who it is assigned to (expand,
+    hitl_facade.with_assignee) and whether the caller may decide it (the routes)."""
+
+    origin: Json
+    id: str
+    title: str
+    workflowId: JsonValue
+    workflowName: str
+    stepName: str | None
+    runId: str
+    workflowVersion: JsonValue
+    agentSlug: JsonValue
+    kind: str
+    connect: ConnectView | None
+    risk: str
+    confidence: float | None
+    actionTool: str
+    policy: ReviewPolicy
+    slaMinutes: int | None
+    dueAt: str | None
+    approvals: list[str]
+    status: str
+    createdAt: JsonValue
+    reasoning: list[str]
+    evidence: list[dict[str, str]]
+    stepUp: bool
+    options: list[OptionView] | None
+    optionsError: str | None
+    calls: Json | None
+    error: JsonValue
+    caseId: str | None
+    decidingTeam: dict[str, str | None] | None
+    customer: str
+    amount: float | None
+    currency: str | None
+    proposal: str
+    task: NotRequired[Json]
+    consequence: NotRequired[str | None]
+    actionFields: NotRequired[list[dict[str, str]]]
+    sourceFile: NotRequired[str | None]
+    question: NotRequired[str]
+    read: NotRequired[ReadView]
+    reply: NotRequired[ReplyPreview]
+    decidedAt: NotRequired[JsonValue]
+    decisionReason: NotRequired[JsonValue]
+    option: NotRequired[JsonValue]
+    decidedBy: NotRequired[JsonValue]
+    resume: NotRequired[Decision]
+    stepUpRef: NotRequired[None]
+    assignee: NotRequired[JsonValue]
+    caseTitle: NotRequired[str | None]
+    canDecide: NotRequired[bool]
+
+
+class Titles(TypedDict):
+    """The run's workflow by its display name and each step by its own (titles_of); a list adds `live`, the version
+    now serving the workflow (None for none), for a review older than typed steps (legacy_tasks)."""
+
+    workflow: str
+    steps: dict[str, str]
+    live: NotRequired[DefinitionRow | None]
 
 
 # The key of an all_rows row that holds what expand builds its full review from; expand drops it with the row.
@@ -618,7 +690,7 @@ def _read_line(read: ReadView) -> tuple[str, str]:
     return ", ".join(names), f"Read {count} record{'s' if count != 1 else ''}{of}{check}"
 
 
-async def titles_of(rt: Runtime, run: Json) -> dict[str, Any]:
+async def titles_of(rt: Runtime, run: Json) -> Titles:
     """The run's workflow by its display name and each step by its own, from the version the run pinned."""
     pinned = await DefinitionStore(EngineTransactions(rt.db)).row(
         str(run["workflow_id"]), cast(int | None, run.get("version"))
@@ -626,14 +698,14 @@ async def titles_of(rt: Runtime, run: Json) -> dict[str, Any]:
     return _titles(run, pinned)
 
 
-async def titles_by_run(rt: Runtime, runs: list[Json]) -> dict[str, dict[str, Any]]:
+async def titles_by_run(rt: Runtime, runs: list[Json]) -> dict[str, Titles]:
     """titles_of for each run, the versions they pinned read in one query, with the version that now serves each run's
     workflow (`live`, read in one more) for a review older than typed steps (legacy_tasks)."""
     keys = {(str(r["workflow_id"]), int(cast(int, r["version"]))) for r in runs if r.get("version") is not None}
     store = DefinitionStore(EngineTransactions(rt.db))
     pinned = await store.pinned(keys)
     serving = await store.currents({str(r["workflow_id"]) for r in runs})
-    out: dict[str, dict[str, Any]] = {}
+    out: dict[str, Titles] = {}
     for r in runs:
         titles = _titles(r, pinned.get((str(r["workflow_id"]), int(cast(int, r.get("version") or 0)))))
         titles["live"] = serving.get(str(r["workflow_id"]))
@@ -641,7 +713,7 @@ async def titles_by_run(rt: Runtime, runs: list[Json]) -> dict[str, dict[str, An
     return out
 
 
-def _titles(run: Json, row: DefinitionRow | None) -> dict[str, Any]:
+def _titles(run: Json, row: DefinitionRow | None) -> Titles:
     definition = json_object(row.definition if row else None)
     nodes = [json_object(n) for n in json_list(definition.get("nodes")) if isinstance(n, dict)]
     return {
@@ -699,9 +771,9 @@ async def view(
     decided: Json | None = None,
     *,
     case_id: str | None = None,
-    titles: dict[str, Any] | None = None,
+    titles: Titles | None = None,
     reads: TaskReads | None = None,
-) -> dict[str, Any]:
+) -> EngineReview:
     """A review step of a run as a console `Review`: risk and step-up from the operations its options would call,
     as v1's review_view reads them. `case_id` is the case the run is on and `titles` the workflow's and its
     steps' names (titles_of), each looked up when not given; `reads` what a list of typed tasks reads once
@@ -719,11 +791,13 @@ async def view(
     step_up = any(p.step_up for p in policies)
     draft = payload.get("draft")
     call: ProposedCall = calls[0] if calls else {}
-    deadline = review_deadline(payload, await sla_hours(rt), datetime.now(UTC))
+    deadline: Deadline = review_deadline(payload, await sla_hours(rt), datetime.now(UTC))
     connect = await _connect_view(rt, run, payload)
     if connect is not None:
         # A run waiting for a person to connect has no deadline: the time limit never fails a human wait.
-        deadline = deadline | {"minutes": None, "dueAt": None}
+        deadline = deadline.copy()
+        deadline["minutes"] = None
+        deadline["dueAt"] = None
     typed = typed_fields(draft, calls)
     # Each call in words; typed_fields reads the input named amount as the review's amount, so that input is
     # shown as money in the account's currency.
@@ -749,7 +823,7 @@ async def view(
             "inputs": inputs_of.get(name, []),
         }
 
-    out: dict[str, Any] = {
+    out: EngineReview = {
         "origin": {"kind": "workflow"},
         "id": step_id(run, payload),
         "title": str(payload.get("title") or f"Review {run['workflow_id']}"),
@@ -797,11 +871,21 @@ async def view(
         "error": None,
         "caseId": case_id or None,
         "decidingTeam": await deciding_team(rt, cast(str | None, run.get("team_id"))),
-        **typed,
+        "customer": typed["customer"],
+        "amount": typed["amount"],
+        "currency": typed["currency"],
+        "proposal": typed["proposal"],
     }
     if task := await typed_task(rt, json_object(payload), run, reads):
         out["task"] = task
-        out |= _task_words(task, payload)
+        # Each of these keys is already in `out`, so setting them one by one keeps the reply's key order.
+        words = _task_words(task, payload)
+        if "title" in words:
+            out["title"] = words["title"]
+        if "reasoning" in words:
+            out["reasoning"] = words["reasoning"]
+        if "customer" in words:
+            out["customer"] = words["customer"]
         # A typed task's actions say what each choice does; listed under Details they read as things already done.
         out["evidence"] = []
     if described:
@@ -826,15 +910,13 @@ async def view(
         out["reply"] = reply
     if decided is not None:
         resume = decision
-        out |= {
-            "status": _decided_status(decided),
-            "decidedAt": decided.get("at"),
-            "decisionReason": resume.get("reason"),
-            "option": resume.get("option"),
-            "decidedBy": resume.get("by"),
-            "resume": resume,
-            "stepUpRef": None,
-        }
+        out["status"] = _decided_status(decided)
+        out["decidedAt"] = decided.get("at")
+        out["decisionReason"] = resume.get("reason")
+        out["option"] = resume.get("option")
+        out["decidedBy"] = resume.get("by")
+        out["resume"] = resume
+        out["stepUpRef"] = None
     # A review older than typed steps draws through a task type too, from the words built above.
     if "task" not in out and (
         legacy := await legacy_task(rt, run, json_object(payload), out, live=titles.get("live", NOT_READ), reads=reads)
@@ -965,21 +1047,23 @@ async def build_rows(rt: Runtime, reads: RowReads | None) -> list[EngineRow]:
     return out
 
 
-async def expand(rt: Runtime, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+async def expand(rt: Runtime, rows: list[Listed]) -> list[Listed]:
     """Each row all_rows made, as its full review (who it is assigned to kept); every other row as it is. What the
     rows' typed tasks and titles read is read once for all of them."""
-    light = [r for r in rows if BUILD in r]
+    light = [cast(EngineRow, r) for r in rows if BUILD in r]
     if not light:
         return rows
     runs = list({str(r[BUILD][0]["id"]): r[BUILD][0] for r in light}.values())
     named = await titles_by_run(rt, runs)
     payloads = [_payload(r[BUILD][0], r[BUILD][1]) for r in light]
     reads = TaskReads(rt, runs, [str(p.get("step_id")) for p in payloads if p.get("step_id")])
-    built: dict[int, dict[str, Any]] = {}
+    built: dict[int, EngineReview] = {}
     for r in light:
         run, decided, case_id = r[BUILD]
         full = await view(rt, run, decided, case_id=case_id, titles=named[str(run["id"])], reads=reads)
-        built[id(r)] = full | ({"assignee": r["assignee"]} if "assignee" in r else {})
+        if "assignee" in r:
+            full["assignee"] = r["assignee"]
+        built[id(r)] = full
     return [built.get(id(r), r) for r in rows]
 
 
@@ -1015,7 +1099,7 @@ def _decided_status(decided: Json | ResumeRow) -> str:
     return "approved" if approved else "rejected"
 
 
-async def get(rt: Runtime, review_id: str) -> dict[str, Any]:
+async def get(rt: Runtime, review_id: str) -> EngineReview:
     """A review by its step id; a run id names the step the run waits on, else its latest decision."""
     run = await _visible(rt, run_of(review_id))
     waiting = WAITING(run.get("waiting") or {})
@@ -1122,7 +1206,7 @@ async def decide(
     step_up_token: str | None = None,
     inputs: Json | None = None,
     amount: float | None = None,
-) -> dict[str, Any]:
+) -> EngineReview:
     """Records the decision as the run's resume work row; a repeat of the same decision returns the review, a
     different one is refused. The person who started the run decides its review only while requesterMayDecide is on.
 
@@ -1193,7 +1277,9 @@ async def decide(
             rt, approver, run_id, call, step_up_token=step_up_token, team_id=str(run["team_id"])
         )
         if approval is None:
-            return await view(rt, run) | {"status": "in_review"}
+            waiting_on_more = await view(rt, run)
+            waiting_on_more["status"] = "in_review"
+            return waiting_on_more
         # A reference to the recorded approvals, never the token: the worker mints the token from them when it calls
         # the gateway, so no token is stored in the queue, the journal or a run's detail.
         resume["call"] = call
@@ -1336,7 +1422,7 @@ def _check_requirement(name: str, paused: ReviewPayload, confirmed: JsonValue) -
     check(paused, confirmed)
 
 
-async def run_as_team_account(rt: Runtime, me: Principal, review_id: str) -> dict[str, Any]:
+async def run_as_team_account(rt: Runtime, me: Principal, review_id: str) -> EngineReview:
     """Run as the team account: the step waiting for a person's own account goes on with the app's team
     account in its place, for someone the roles grid lets use it, on an app that has one. The run is queued; the view
     of the task is returned as it now stands."""
