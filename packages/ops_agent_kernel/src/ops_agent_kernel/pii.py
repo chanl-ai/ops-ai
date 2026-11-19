@@ -16,7 +16,7 @@ from ops_contracts.skill_run import RunningSkill, SkillProgram, SkillRunState, S
 
 # The patterns and whole-text masking live in ops_pii, which services that are not agents use too (documents' examples);
 # they are re-exported here so every caller of ops_agent_kernel.pii is unchanged.
-from ops_pii import HOLD, StreamMasker, mask
+from ops_pii import HOLD, StreamMasker, holds_placeholder, mask
 
 from .types import CitationRef, ToolCallRecord, TurnResult
 
@@ -29,6 +29,7 @@ __all__ = [
     "masked_citations",
     "masked_result",
     "masked_run",
+    "remarked",
 ]
 
 
@@ -102,6 +103,26 @@ def _masked_frame[F: (RunningSkill, SubRun)](f: F) -> F:
             "rules": mask(f.rules),
         }
     )
+
+
+def remarked(run: SkillRunState) -> SkillRunState:
+    """A record carried from an earlier reply of an agent that masks personal data, with every input that holds a
+    placeholder named as masked whatever the record says: a record stored without the names (an older one, or one
+    changed on the way) would have its rules compare the placeholder."""
+    running = run.running
+    if running is None:
+        return run
+    frames = [running, *([running.sub] if running.sub is not None else [])]
+    marked = [
+        f.model_copy(
+            update={
+                "masked_inputs": sorted({*f.masked_inputs, *(k for k, v in f.inputs.items() if holds_placeholder(v))})
+            }
+        )
+        for f in frames
+    ]
+    top = marked[0].model_copy(update={"sub": marked[1]}) if len(marked) == 2 else marked[0]
+    return run.model_copy(update={"running": top})
 
 
 def masked_run(run: SkillRunState) -> SkillRunState:

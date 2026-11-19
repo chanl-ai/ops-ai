@@ -1098,6 +1098,8 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
     state.tracks = bool(state.stepped) or kept_run is not None
     if kept_run is not None:
         state.run = _kept_run(kept_run, state.stepped)
+        if req.settings.redact_pii and not req.resume:
+            state.run = pii.remarked(state.run)
     if req.resume:
         state.held = {k: list(v) for k, v in req.resume.interrupt.held.items()}
     # A plan the turn goes on with: kept at its pause (an approval), or left open by an earlier turn (a Connect card).
@@ -1139,7 +1141,9 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
                 if missing := steps.missing_inputs(skill, inputs):
                     state.unstarted = step_tools.needs(skill, missing)
                 else:
-                    state.moved(steps.start(state.run, skill, state.stepped, by="menu", inputs=inputs))
+                    told: list[str] = []
+                    state.moved(steps.start(state.run, skill, state.stepped, by="menu", inputs=inputs, told=told))
+                    state.unstarted = " ".join(told)
             continue
         if skill is not None and skill.loading == "on_match" and skill not in state.loaded:
             how = "picked" if entry.get("how") == "picked" else "carried"

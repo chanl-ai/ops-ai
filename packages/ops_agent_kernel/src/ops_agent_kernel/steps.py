@@ -31,7 +31,9 @@ from ops_contracts.skill_run import (
     StepResult,
     SubRun,
 )
+from ops_pii import holds_placeholder
 from ops_service_kit.http import Json
+from ops_service_kit.narrow import json_object
 
 from . import expr
 from .prompt_writer import Now
@@ -254,9 +256,40 @@ def _end(run: SkillRunState, name: str, skills: Sequence[Skill], returns: dict[s
     run.running = None
 
 
+def _text(value: Any) -> str | None:
+    """A step result's field as an input, which is text; None for a value that is not one plain value."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, bool | int | float):
+        return json.dumps(value)
+    return None
+
+
+def _handed(r: RunningSkill, n: int, sub: Skill) -> tuple[dict[str, str], list[str]]:
+    """The inputs the skill step `n` starts gets, by the names it declares, and which of them are masked. An input
+    of the running skill comes first; one it does not have is read by name from the result of the step before."""
+    before = r.results.get(str(n - 1))
+    fields = json_object(before.value) if before is not None else {}
+    inputs: dict[str, str] = {}
+    masked: list[str] = []
+    for name in (i.name for i in sub.inputs):
+        own = r.inputs.get(name, "")
+        if own.strip():
+            inputs[name] = own
+            if name in r.masked_inputs:
+                masked.append(name)
+        elif (found := _text(fields.get(name))) is not None and found.strip():
+            inputs[name] = found
+            # A result a carried record kept is masked: its placeholder is not a value to compare.
+            if holds_placeholder(found):
+                masked.append(name)
+    return inputs, masked
+
+
 def _enter(run: SkillRunState, n: int, skills: Sequence[Skill], told: list[str]) -> None:
     """Puts the running skill on step `n`. A step that runs a skill starts it here, one level deep: a skill the agent
-    does not hold, or one whose own steps run a skill, is a failed attempt of the step."""
+    does not hold, one whose own steps run a skill, or one left without an input it requires is a failed attempt of
+    the step."""
     r = run.running
     assert r is not None
     step = r.program.steps[n - 1]
@@ -272,6 +305,16 @@ def _enter(run: SkillRunState, n: int, skills: Sequence[Skill], told: list[str])
     if any(x.use is not None and x.use.kind == "skill" for x in program.steps):
         _failed(run, skills, told)
         return
+    inputs, masked = _handed(r, n, sub)
+    if missing := missing_inputs(sub, inputs):
+        why = (
+            f"{sub.name} did not start: it needs {', '.join(missing)}, and neither the inputs of {r.name} nor the "
+            f"result of the step before step {n} has {'it' if len(missing) == 1 else 'them'}."
+        )
+        if why not in told:
+            told.append(why)
+        _failed(run, skills, told)
+        return
     r.sub = SubRun(
         skill_id=sub.skill_id,
         version=sub.version,
@@ -281,6 +324,8 @@ def _enter(run: SkillRunState, n: int, skills: Sequence[Skill], told: list[str])
         steps_total=len(program.steps),
         step_text=program.steps[0].do,
         return_to=n,
+        inputs=inputs,
+        masked_inputs=masked,
         program=program,
         rules=sub.instructions,
     )
@@ -392,8 +437,10 @@ def start(
     *,
     by: Literal["menu", "model"],
     inputs: dict[str, str] | None = None,
+    told: list[str] | None = None,
 ) -> SkillRunState:
-    """The record with `skill` running from step 1. A skill that was running ends as switched: nothing stacks."""
+    """The record with `skill` running from step 1. A skill that was running ends as switched: nothing stacks.
+    `told` gets what the model must hear when the first step could not start the skill it runs."""
     program = skill.program
     assert program is not None and program.steps
     run = run.model_copy(deep=True)
@@ -412,7 +459,7 @@ def start(
         program=program,
         rules=skill.instructions,
     )
-    _enter(run, 1, skills, [])
+    _enter(run, 1, skills, [] if told is None else told)
     return run
 
 
@@ -428,16 +475,14 @@ def target(run: SkillRunState) -> str | None:
 def withheld(run: SkillRunState, skills: Sequence[Skill]) -> set[str]:
     """Tools not offered now: every tool a step of the running skill (or of a skill its steps run) calls, except the
     current step's, so a later step's write cannot be called before its own step; and the tools of a skill that ended
-    as failed, until that skill starts again."""
+    as failed, until that skill starts again. A failed skill's tool stays out even as the current step's tool of
+    another skill, so its write cannot run through a skill that skips the check that failed."""
     r = run.running
-    out: set[str] = set()
+    out: set[str] = set() if r is None else _tools(r, skills) - {target(run)}
     newest = {h.skill_id: h for h in run.history}
     for h in newest.values():
         if h.ended == "failed" and (r is None or r.skill_id != h.skill_id):
             out |= set(h.tools)
-    if r is not None:
-        out |= _tools(r, skills)
-    out.discard(target(run) or "")
     return out
 
 

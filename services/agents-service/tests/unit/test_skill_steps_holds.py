@@ -81,9 +81,54 @@ async def test_a_failed_skill_holds_the_write_of_the_sub_skill_it_never_reached(
     assert "add_note" in model.offered[2], "a tool no step names is offered as before"
     assert [c for c, _ in systems.calls] == ["lookup_charge"], systems.calls
 
-    later = Script("Nothing was refunded.")
-    await reply(replace(carrying(ask, run_of(result)), turn_id="t2", user_turn="And now?"), later, systems)
-    assert "refund_charge" not in later.offered[0], "and stays held in the next reply"
+    # The next reply starts the pay-out skill directly: its step names the refund, which the failed skill holds.
+    later = Script(
+        ("switch_skill", {"slug": "pay-out"}), ("refund_charge", {"chargeId": "CH-1"}), "Nothing was refunded."
+    )
+    two, _ = await reply(replace(carrying(ask, run_of(result)), turn_id="t2", user_turn="Pay it out."), later, systems)
+    assert all("refund_charge" not in offered for offered in later.offered), later.offered
+    assert [c for c, _ in systems.calls] == ["lookup_charge"], systems.calls
+
+    # The failed skill starts again and its check passes: the write is its own to call.
+    again = Script(
+        ("switch_skill", {"slug": "check-then-pay"}),
+        ("lookup_charge", {"chargeId": "CH-2"}),
+        ("refund_charge", {"chargeId": "CH-2"}),
+        "CH-2 is refunded.",
+    )
+    await reply(replace(carrying(ask, run_of(two)), turn_id="t3", user_turn="Refund CH-2."), again, systems)
+    assert [c for c, _ in systems.calls][1:] == ["lookup_charge", "refund_charge"], systems.calls
+
+    # A conversation where nothing failed holds nothing: the pay-out skill runs on its own.
+    fresh = Systems(lookup_charge=_amount, refund_charge={"refunded": True})
+    alone = Script(("switch_skill", {"slug": "pay-out"}), ("refund_charge", {"chargeId": "CH-1"}), "CH-1 is refunded.")
+    await reply(ask, alone, fresh)
+    assert [c for c, _ in fresh.calls] == ["refund_charge"], fresh.calls
+
+
+async def test_a_step_does_not_start_a_skill_without_an_input_it_requires() -> None:
+    check, pay = pay_out_after_a_check({"action": "retry", "retries": 0})
+    needs = replace(pay, inputs=(SkillInput("charge_id", required=True), SkillInput("amount", required=True)))
+    ask = TurnRequest("t1", "th1", agent([check, needs], max_steps=12), [LOOKUP, REFUND], user_turn="Refund CH-2.")
+    systems = Systems(lookup_charge=_amount, refund_charge={"refunded": True})
+    # The look-up gives the amount by name and no charge_id, and the skill was started with none to pass on.
+    model = Script(
+        ("switch_skill", {"slug": "check-then-pay"}),
+        ("lookup_charge", {"chargeId": "CH-2"}),
+        ("refund_charge", {"chargeId": "CH-2"}),
+        "I could not refund CH-2.",
+    )
+    result, _ = await reply(ask, model, systems)
+    assert ended(run_of(result)) == [("sk_check", "failed", 2)], run_of(result)
+    assert [c for c, _ in systems.calls] == ["lookup_charge"], systems.calls
+    told = model.returned[1]["note"]
+    assert "needs charge_id," in told, told
+
+    # Started with the charge: the pay-out skill gets it from its parent, and the amount from the step before.
+    start: Call = ("switch_skill", {"slug": "check-then-pay", "inputs": {"charge_id": "CH-2"}})
+    given = Script(start, ("lookup_charge", {"chargeId": "CH-2"}), "Shall I refund CH-2?")
+    started, _ = await reply(ask, given, systems)
+    assert run_of(started).running.sub.inputs == {"charge_id": "CH-2", "amount": "200"}
 
 
 async def test_an_exit_that_stops_a_skill_holds_its_later_write_for_the_rest_of_the_reply() -> None:
@@ -157,6 +202,13 @@ async def test_a_rule_that_reads_a_masked_input_fails_with_the_input_named() -> 
     assert (running.step, running.results["2"].passed) == (2, False), "a placeholder is never compared"
     told = json.dumps(second.returned)
     assert "ssn" in told and "masked" in told, told
+
+    # A record that lost its mark still holds the placeholder: the rule is not run on it either.
+    bare = run_of(one).model_copy(deep=True)
+    bare.running.masked_inputs = []
+    third = Script(("lookup_customer", {}), "I could not check it.")
+    three, _ = await reply(replace(carrying(ask, bare), turn_id="t3", user_turn="Go on."), third, systems)
+    assert run_of(three).running.results["2"].passed is False, "an unmarked placeholder is never compared"
 
 
 async def test_a_step_with_a_tool_offers_no_plan_search_or_plain_skill_and_search_names_no_held_tool() -> None:

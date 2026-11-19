@@ -118,5 +118,6 @@ def handle(name: str, run: SkillRunState, skills: Sequence[Skill], arguments: Js
     inputs = {k: str(v) for k, v in json_object(arguments.get("inputs")).items()}
     if missing := steps.missing_inputs(skill, inputs):
         return Moved(run, needs(skill, missing), ok=False)
-    started = steps.start(run, skill, skills, by="model", inputs=inputs)
-    return Moved(started, steps.said(run, started))
+    told: list[str] = []
+    started = steps.start(run, skill, skills, by="model", inputs=inputs, told=told)
+    return Moved(started, " ".join([*told, steps.said(run, started)]))
