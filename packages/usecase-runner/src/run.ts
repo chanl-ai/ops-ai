@@ -1,7 +1,7 @@
 // Runs one resolved script and returns its exit code and output. Python scripts run in the agents-service uv project,
 // which holds the workspace packages they import; Node scripts run with the repo's node.
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 
 const MODEL_KEYS = ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY'];
@@ -39,11 +39,33 @@ export function defaultPluginsRepo(root: string): string | undefined {
   }
 }
 
+const NEEDS_PLUGINS = /PLUGINS_REPO|ops-ai-plugins/;
+
+function needsPlugins(source: string): boolean {
+  return NEEDS_PLUGINS.test(source);
+}
+
+/**
+ * A script that gets the plugins path through a shared module (several_accounts, templates_stack) never names it
+ * itself. usecase_harness is left out: it defines PLUGINS_REPO for every Python script, so a script that uses it names it.
+ */
+function libraryNeedsPlugins(source: string, scriptPath: string): boolean {
+  const lib = join(dirname(scriptPath), '..', '..', 'lib');
+  if (!existsSync(lib)) return false;
+  return readdirSync(lib)
+    .filter((f) => /\.(py|mjs|js|ts)$/.test(f) && !f.startsWith('usecase_harness'))
+    .some((f) => {
+      const name = f.replace(/\.[^.]+$/, '');
+      return new RegExp(`\\b${name}\\b`).test(source) && needsPlugins(readFileSync(join(lib, f), 'utf8'));
+    });
+}
+
 /** The one line a run stops with when a script reads OPS_PLUGINS_REPO and the repo is not where it defaults to. */
 export function pluginsRepoRefusal(env: NodeJS.ProcessEnv, scriptPath: string): string | undefined {
   const repo = env.OPS_PLUGINS_REPO;
   if (!repo || existsSync(repo)) return undefined;
-  if (!/PLUGINS_REPO|ops-ai-plugins/.test(readFileSync(scriptPath, 'utf8'))) return undefined;
+  const source = readFileSync(scriptPath, 'utf8');
+  if (!needsPlugins(source) && !libraryNeedsPlugins(source, scriptPath)) return undefined;
   return `FAIL the plugins repository is not at ${repo}; clone ops-ai-plugins there or set OPS_PLUGINS_REPO to its folder`;
 }
 

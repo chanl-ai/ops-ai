@@ -129,21 +129,19 @@ export interface SavedRun {
   commit?: string;
 }
 
-export const RUNS_DIR = '.run/usecases';
 
 export function saveRun(root: string, run: SavedRun): void {
-  const dir = join(root, RUNS_DIR);
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, `${run.id}-${run.layer}.json`), `${JSON.stringify(run, null, 2)}\n`);
+  mkdirSync(caseDir(root, run.id), { recursive: true });
+  writeFileSync(caseDir(root, run.id, `${run.layer}.json`), `${JSON.stringify(run, null, 2)}\n`);
 }
 
 /** The run that last passed, kept apart from the latest run, which a later failure overwrites. */
 export function saveGreen(root: string, run: SavedRun): void {
-  writeFileSync(join(root, RUNS_DIR, `${run.id}-${run.layer}.green.json`), `${JSON.stringify(run, null, 2)}\n`);
+  writeFileSync(caseDir(root, run.id, `${run.layer}.green.json`), `${JSON.stringify(run, null, 2)}\n`);
 }
 
 export function loadGreen(root: string, id: string, layer: Layer): SavedRun | undefined {
-  const path = join(root, RUNS_DIR, `${id}-${layer}.green.json`);
+  const path = caseDir(root, id, `${layer}.green.json`);
   return existsSync(path) ? (JSON.parse(readFileSync(path, 'utf8')) as SavedRun) : undefined;
 }
 
@@ -178,7 +176,7 @@ export function parseSteps(markdown: string): Step[] {
 }
 
 export function loadRun(root: string, id: string, layer: Layer): SavedRun | undefined {
-  const path = join(root, RUNS_DIR, `${id}-${layer}.json`);
+  const path = caseDir(root, id, `${layer}.json`);
   return existsSync(path) ? (JSON.parse(readFileSync(path, 'utf8')) as SavedRun) : undefined;
 }
 
