@@ -1,9 +1,35 @@
-# The Ops Assistant
+# Chat and channels
 
-Status: current. What the assistant does in a chat, and how it uses the Apps your team turned on.
+Status: current. Rows marked planned are designed and not built.
 
-The Ops Assistant answers in a chat by looking things up in your team's Apps, then replying with what it read. It acts
-as you, so it reaches only what your own sign-in allows.
+Staff should be able to ask for something in plain words, and other systems should reach the same agents without a
+person in between. A chat is a conversation with an agent or with the team's Ops Assistant, which looks things up in
+your team's apps and replies with what it read. A channel is where that conversation, or a workflow run, comes in.
+
+## Try it
+
+Open **Chat** in the console and ask a question, or from the command line:
+
+```bash
+opsai chat say -m "Which customers have a card dispute open?"
+opsai chat say --agent "Branch policy" --test -m "What is the daily cash limit at a branch?"
+opsai chat say --thread <thread-id> -m "And who owns the first one?"
+```
+
+The reply streams with its sources. The command prints a link to the same conversation in the console. The assistant
+acts as you, so it reaches only what your own sign-in allows.
+
+## Channels
+
+| Channel | What comes in | Status |
+|---|---|---|
+| The console's chat | People chatting with the team's agents and the Ops Assistant | built |
+| A chat on your own pages | The same chat in an iframe on an intranet page ([Chat on your own pages](../console/embedding-the-chat.md)) | built; the installer does not run it yet |
+| A team mailbox | Emails that start a workflow, read once each, over IMAP, Gmail or Microsoft 365; replies go from the mailbox's address | built |
+| The HTTP API | Other systems starting a run or an agent with a team API key | built |
+| MCP | AI assistants calling the team's tools | partial: read tools, as test runs |
+| A due time | A run that starts when a date passes | built. A recurring schedule is planned |
+| A webhook from another system | A signed incoming request that starts a run | planned |
 
 ## A checklist for longer asks
 
@@ -20,7 +46,7 @@ sign in, and the chat carries on at the same step. Nothing is retyped.
 A reply that took a plan or several lookups offers **Think harder**. One press answers the same question again on the
 deeper model. Writing "think harder" in a message, alone or with the question, does the same.
 
-## Saving to an App
+## Saving to an app
 
 Before it changes anything in an App, the assistant reads the change back to you. It writes only after you say **Save**.
 Until then nothing in the App has changed.
@@ -50,7 +76,7 @@ only when your knowledge or a tool result in the chat gives them. When neither d
 information and what it can do instead. When a reply that uses knowledge lacks source numbers, the check adds the
 numbers. It does not replace a correct answer with "nothing found".
 
-## Which App and which account
+## Which app and which account
 
 - A chat uses the Apps your team turned on. The **Connectors** button in the chat box lets you leave an App out of that
   chat, before or during the chat.
@@ -61,3 +87,10 @@ numbers. It does not replace a correct answer with "nothing found".
 - An App your team has off shows a card with **Ask an admin**.
 
 Your sign-ins are managed on **Apps › Mine** ([Apps](apps.md#your-own-sign-ins)).
+
+## Next
+
+<!-- site: cards -->
+- **[Agents](agents.md)**: build the agent people chat with.
+- **[Knowledge](knowledge.md)**: the sources a reply cites.
+- **[Human tasks and approvals](human-tasks.md)**: what happens when a chat asks to change something.

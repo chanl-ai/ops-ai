@@ -17,7 +17,7 @@ use case or test; Partial names what runs and what does not; Planned means desig
 | Testing a draft agent on its own page before publishing | Built |
 | An agent as a workflow step, and a published workflow as an agent's tool | Built |
 | Starting a published agent from code, waiting for it, streaming it or running it in the background | Built: REST API, Python and the command line; TypeScript planned |
-| Chat widgets on your other web pages | Partial: widgets are configured, published and keyed in the console; the app that serves them has no image yet |
+| Chat widgets on your other web pages ([Chat on your own pages](../console/embedding-the-chat.md)) | Partial: widgets are configured, published and keyed in the console, and the embed app is built; the installer does not run it yet |
 | Agents that run on a schedule toward a goal and report back, with no chat | Planned |
 
 ## Workflows, tasks and cases
@@ -69,7 +69,7 @@ use case or test; Partial names what runs and what does not; Planned means desig
 | Tool modules from OpenAPI 3.0 and 3.1, from an MCP server, or written in the console; versions and a Security review for major changes | Built |
 | App accounts, with a sandbox account for test runs: API key, basic, bearer, OAuth client credentials, OAuth authorization code, an app's signed client assertion in place of a secret, a signed service-account grant, client certificate | Built |
 | Each person connecting their own Account of an App, used by the Tools they run and the agents acting for them | Built |
-| Apps in the console: the catalog, Connect in a small window, each App's page with its Accounts, Tools, Auth configs, Resources, Logs and Settings, each person's own sign-ins, and Turn off ([Apps](apps.md)) | Built |
+| Apps in the console: the catalog, Connect in a small window, each App's page with its Accounts, Tools, Auth configs, Resources, Logs and Settings, each person's own sign-ins, and Turn off ([Tools and apps](apps.md)) | Built |
 | A run waiting for a person's own Account is a Human Task: Connect my account, or Run as the team account | Built |
 | Approvals off by default; a team turns them on for every write, the writes of picked Apps, or one Tool | Built |
 | Approval tokens bound to the exact input, approver counts, step-up, rate and amount limits | Built |
@@ -115,5 +115,5 @@ use case or test; Partial names what runs and what does not; Planned means desig
 | The install script: `git clone` and `./install.sh`, with questions, flags or an answers file; then upgrade (rolled back on a failed check), back up, restore, status, logs and uninstall | Built: proven on one machine; a Linux server and an upgrade across two releases that change the schema are still to be run ([Install](install.md)) |
 | Images pulled from `ghcr.io/chanl-ai/ops-ai` for x86-64 and ARM64, or loaded from a release's offline image file, or built from source | Built |
 | DBA mode: the install writes the database scripts, waits for your DBA, and checks the schema before it goes on | Built |
-| Logs: one JSON line per event on standard output, with request ids and secrets redacted ([logging](../architecture/logging-and-data-writes.md)) | Built |
+| Logs: one JSON line per event on standard output, with request ids and secrets redacted | Built |
 | Metrics | Planned |

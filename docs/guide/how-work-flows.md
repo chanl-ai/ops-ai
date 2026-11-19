@@ -141,3 +141,10 @@ Each debtor gets a case whatever happens to the others, and an unmatched debtor 
 
 Other worked examples in the release use the same parts: complaint email triage, a hold requested through the API,
 and a customer summary built from the core system and an agent.
+
+## Next
+
+<!-- site: cards -->
+- **[Human tasks and approvals](human-tasks.md)**: the settings behind each pause.
+- **[Cases](cases.md)**: the record each piece of work leaves.
+- **[Tools and apps](apps.md)**: the data gateway's side of every call.

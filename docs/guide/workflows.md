@@ -1,17 +1,62 @@
 # Workflows
 
-Status: current. The commands and folders below are checked by the example tests; what is planned says so.
+Status: current. Rows marked planned are designed and not built.
 
-A workflow is a versioned graph of typed steps that runs the same way every time. You write it as YAML or JSON, check
-it, save a draft, publish a version and start a test run, all from the command line or an SDK. The console shows and
-edits the same graph, and you do not need it to build one.
+Some work should run the same way every time and leave a record: open a case for each court order, place a hold only
+after a person approves, reply on the channel the request came in on. A workflow is a versioned graph of typed steps
+that does that. Each step's input and output is saved as it runs, so a crash or a restart loses nothing and a write is
+never made twice. Some steps are AI (an agent, a classification, an extraction); the rest are rules, tool calls and
+people deciding.
+
+## Try it
+
+The [Quickstart](quickstart.md#run-your-first-workflow) writes a three-step workflow and runs it. This one adds an AI
+step: it puts a support message into billing or technical, and leaves by `otherwise` below a confidence of 0.6. Save it
+as `route.yaml`:
+
+```yaml
+schemaVersion: 2
+id: route_support_message
+name: Route an inbound support message
+nodes:
+- {id: start, type: ops.trigger.request, typeVersion: 1, name: Message,
+   parameters: {inputSchema: {type: object, required: [text], properties: {text: {type: string}}}}}
+- id: sort
+  type: ops.ai.classify
+  typeVersion: 1
+  name: Classify
+  parameters:
+    text: $.input.text
+    categories:
+    - {name: billing, description: "invoices, charges, refunds"}
+    - {name: technical, description: "login, outage, app"}
+    minConfidence: 0.6
+- {id: billing, type: ops.flow.end, typeVersion: 1, name: Billing, parameters: {outcome: billing}}
+- {id: technical, type: ops.flow.end, typeVersion: 1, name: Technical, parameters: {outcome: technical}}
+- {id: other, type: ops.flow.end, typeVersion: 1, name: Other, parameters: {outcome: other}}
+- {id: failed, type: ops.flow.end, typeVersion: 1, name: Failed, parameters: {outcome: classify_failed, result: failed}}
+connections:
+- {from: {node: start, port: payload}, to: {node: sort, port: in}}
+- {from: {node: sort, port: billing}, to: {node: billing, port: in}}
+- {from: {node: sort, port: technical}, to: {node: technical, port: in}}
+- {from: {node: sort, port: otherwise}, to: {node: other, port: in}}
+- {from: {node: sort, port: error}, to: {node: failed, port: in}}
+```
+
+```bash
+opsai workflows validate route.yaml
+opsai workflows apply route.yaml
+opsai workflows run route_support_message --wait --input '{"text": "I was charged twice this month."}'
+```
+
+The run ends with the outcome `billing`. A model answer outside the categories leaves by `error` and ends as
+`classify_failed`. `opsai workflows types` lists every step type with its ports and settings.
+
+You do not need the console to build a workflow, but it shows and edits the same graph under **Build › Workflows**.
 
 ## Lifecycle
 
-Every command below reads its address and sign-in from a profile. In an example folder, `setup.py` writes
-`.ops-profile.json` and `OPS_CONFIG` names it ([Quickstart](quickstart.md#run-your-first-workflow)); elsewhere the
-command reads `~/.config/ops-ai/config.json`. A command that takes a definition also takes an example folder, and
-reads its `resources/workflow.yaml`.
+Every command reads its address and sign-in from your profile ([Install the command line](install-cli.md#sign-in)).
 
 | Step | Command | What it does |
 |---|---|---|
@@ -19,10 +64,11 @@ reads its `resources/workflow.yaml`.
 | Save a draft | `opsai workflows apply workflow.yaml` | Creates or updates the draft |
 | Publish | `opsai workflows publish <id> --note "Ready"` | Requests the publish; a second person reviews it unless the team's publish policy says otherwise |
 | Run | `opsai workflows run <id> --input input.json --wait` | Starts a test run and waits for it to end; `--live` makes a live run |
-| Test from fixtures | `opsai workflows test <folder>` | Runs every fixture case in an example folder |
+| Test from fixtures | `opsai workflows test <folder>` | Runs every fixture case in a folder |
 | Look at a run | `opsai workflows inspect <run-id>`, `opsai workflows trace <run-id>` | The run, and its timeline step by step |
 | Decide a task | `opsai workflows decide <task-id> approve` | Answers the human task a run waits on |
 | Retry | `opsai workflows retry <run-id>` | Retries a stuck run from its last recorded step |
+| Replay, fork, evaluate | `opsai workflows replay`, `fork`, `eval` | Planned |
 
 From Python; TypeScript has the same method names on `ops.workflows`, taking a parsed object or JSON:
 
@@ -39,18 +85,16 @@ run = ops.workflows.run(draft["workflowId"], input={"customerEmail": "ada@exampl
 
 > [!NOTE]
 > A new run is a test run unless you ask for a live one (`mode="live"`, or `--live`). A test run signs in with the
-> App's sandbox account when it has one, and with its live account otherwise
-> ([Apps](apps.md#accounts-the-teams-and-your-own)).
+> app's sandbox account when it has one, and with its live account otherwise
+> ([Tools and apps](apps.md#accounts-the-teams-and-your-own)).
 
-Replaying a run, forking it from a step and evaluating a workflow against a dataset (`replay`, `fork`, `eval`) are
-planned.
+A run keeps the version it started on. Publishing a new version changes only the runs that start after it.
 
 ## What a definition holds
 
 A definition has an `id`, a `name`, a list of `nodes` and a list of `connections`. Each node has a `type`, a
-`typeVersion`, its `parameters` and a stable `id`; each connection names two node ids and their ports.
-`opsai workflows types` prints every step type with its ports and parameter schema, as `GET /v1/workflows/node-types`
-does, and [workflow example coverage](workflow-example-coverage.md) names the example that teaches each one.
+`typeVersion`, its `parameters` and a stable `id`; each connection joins one node's output port to another's input.
+`opsai workflows types` prints every step type with its ports and parameter schema.
 
 ## When something goes wrong
 
@@ -62,65 +106,24 @@ does, and [workflow example coverage](workflow-example-coverage.md) names the ex
 | A step was refused | `run.error`, and `run.failure.nodeId` names the step | Fix the tool, the mapping or the input |
 | `status=waiting` with a `taskId` | The run waits for a person | Decide it in Human Tasks, or `opsai workflows decide <task-id> approve` |
 
-## Examples
-
-Copy a folder from `examples/workflows/` and pass it to the commands above.
-
-| Folder | What it shows | Status |
-|---|---|---|
-| `01-normalize-a-request` | Map a support request's fields onto one shape | Built |
-| `02-route-a-support-message` | Classify a message onto a queue | Built |
-| `03-email-customer-enrichment` | Enrich a support email from read tools and ask an agent for a recommendation | Built |
-| `04-draft-and-approve-a-reply` | Draft a reply; approving sends it, rejecting or a timeout does not | Built |
-| `05-reconcile-invoice-and-po` | Merge two records and send a disagreement to review | Built |
-| `06-read-a-claim-and-open-a-case` | Read a claim document and open a case | Built |
-| `07-calculate-and-approve-a-hold` | Cap an amount, approve it and place a hold | Built |
-| `08-one-child-per-record` | Start one child workflow per record | Built |
-| `09-wait-for-verification` | Resume when a verification result arrives | Built |
-| `10-schedule-an-sla-follow-up` | Wait until a date, then hand a task to a person | Built |
-| `11-purge-after-file-deleted` | Remove derived data when a file is deleted; the platform starts it, never a person | Built |
-| `12-roles-refuse-a-start` | A person without permission to edit workflows is refused a start that another person may make | Built |
-| `13-transform-a-record` | Map one input field onto an output field | Built |
-| `14-filter-a-list` | Keep the items that match a condition | Built |
-| `15-retrieve-from-knowledge` | Search a handbook and branch on found or not found | Built |
-| `16-send-a-message` | Reply on the channel that started the run | Built |
-| `17-repeat-until-done` | Loop until a condition holds, or stop at the limit | Built |
-| `18-ask-a-person` | Ask a person, and time out | Built |
-| `19-fire-on-a-clock` | Start one run when a due time passes | Built |
-
-### Example 1: normalize a support request
-
-An app posts `customerEmail`, `subject` and `message`; the workflow maps them onto `customer.email`, `title`, `body`
-and `source`, and a request without an email is refused at the start. Its steps are `ops.trigger.request`,
-`ops.data.set` and `ops.flow.end`, with no model, tool or person. The [Quickstart](quickstart.md#run-your-first-workflow)
-runs it.
-
-### Example 2: route a support message
-
-One `ops.ai.classify` step puts a message into billing, technical or cancellation. Below a confidence of 0.6 the run
-leaves by `otherwise` and ends as `other`; a model answer outside the schema ends as `classify_failed`.
-
-```bash
-uv run python examples/workflows/02-route-a-support-message/setup.py
-cd examples/workflows/02-route-a-support-message
-OPS_CONFIG=.ops-profile.json uv run opsai workflows apply .
-OPS_CONFIG=.ops-profile.json uv run opsai workflows run route_support_message --input fixtures/billing.json --wait
-cd ../../..
-```
-
-Each AI step's folder README names why the step exists, its input, instruction, answer schema, model alias and the
-port it leaves by when the model fails.
-
 ## Ways to start a run
 
 | Start | Status |
 |---|---|
 | An API request, or an API key scoped to the team | Built |
-| A hosted form: for team members in the console, or as a signed public link once the embed app's address is set | Built |
+| A hosted form: for team members in the console, or as a signed public link | Built |
 | A batch: one run per row of a CSV or JSON file | Built |
 | A team mailbox | Built |
 | An event from another service | Built |
 | A parent workflow | Built |
-| The Ops Assistant's start card, or an agent's `workflow:<id>` tool | Built |
-| A due time on the platform clock (`ops.trigger.schedule`) | Built |
+| A chat, from the assistant's start card or an agent that has the workflow as a tool | Built |
+| A due time on the platform clock | Built |
 | A recurring schedule, a signed incoming webhook, polling another system | Planned |
+
+## Next
+
+<!-- site: cards -->
+- **[Build with Ops AI](build-with-ops-ai.md)**: nineteen example workflows, from mapping one field to a child workflow per record.
+- **[Human tasks and approvals](human-tasks.md)**: pause a run for a person.
+- **[Cases](cases.md)**: open a case from a run.
+- **[Agents](agents.md)**: add an agent step, or give a workflow to an agent as a tool.
