@@ -54,7 +54,7 @@ export interface InstructionDocumentProps {
 const normal = (value: DocumentValue) => JSON.stringify(fromEditorDoc(toEditorDoc(value)));
 
 const EDITOR_CLASS =
-  'flex flex-col gap-4 p-4 text-sm leading-7 outline-hidden [&_.is-empty]:before:pointer-events-none [&_.is-empty]:before:float-left [&_.is-empty]:before:h-0 [&_.is-empty]:before:text-muted-foreground [&_.is-empty]:before:content-[attr(data-placeholder)]';
+  'flex flex-col gap-4 p-4 text-sm leading-7 outline-hidden [&_.is-empty]:before:pointer-events-none [&_.is-empty]:before:float-left [&_.is-empty]:before:-mr-[100%] [&_.is-empty]:before:w-full [&_.is-empty]:after:block [&_.is-empty]:after:clear-both [&_.is-empty]:after:content-[""] [&_.is-empty]:before:text-muted-foreground [&_.is-empty]:before:content-[attr(data-placeholder)]';
 
 interface OpenMenu {
   trigger: Trigger;

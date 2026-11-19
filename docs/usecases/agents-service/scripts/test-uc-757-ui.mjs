@@ -88,6 +88,17 @@ await withUiStack(
       await brief.waitFor({ timeout: 120_000 });
       await page.getByTestId('agent-uses-link').waitFor({ timeout: 60_000 });
       check('11 the brief has its headings and the uses line is a link', (await brief.getByRole('group').count()) >= 5 && /^Uses /.test(await page.getByTestId('agent-uses-link').innerText()), await page.getByTestId('agent-uses-link').innerText());
+      // An empty block's hint takes its own height at phone width, so a wrapped hint never runs under the next line.
+      const bare = await made('/v1/agents', { name: `Bare desk ${RUN}`, role: 'Has an empty brief' });
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto(`${consoleUrl}/build/agents/${bare.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await brief.locator('.is-empty').first().waitFor({ timeout: 120_000 });
+      const hints = await brief.locator('.is-empty').evaluateAll((els) => els.map((el) => ({ hint: parseFloat(getComputedStyle(el, '::before').height), box: el.getBoundingClientRect().height })));
+      check('11 at 390 wide an empty block is as tall as its hint', hints.length > 0 && hints.every((h) => h.box >= h.hint - 1) && hints.some((h) => h.hint > 30), hints);
+      await page.screenshot({ path: evidenceDir('media', AREA, 'uc-757-empty-brief-admin-390.png'), fullPage: true });
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.goto(`${consoleUrl}/build/agents/${agent.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await page.getByTestId('agent-uses-link').waitFor({ timeout: 60_000 });
       const how = brief.getByRole('group', { name: 'How to answer' });
       await how.click();
       await page.keyboard.press('End');
