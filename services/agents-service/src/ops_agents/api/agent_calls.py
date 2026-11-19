@@ -3,12 +3,14 @@ agent answers with its own turn: its knowledge, tools, guardrails and approvals,
 
 Who may be asked is decided per turn, for the turn's verified caller (`TURN_PERSON`: a person, or the service
 identity a run was started under): the agents the caller holds chat.run on, among the agent's own `agent:<id>` grants
-and, for the team's default agent, every specialist. Never on a specialist's own turn, so a specialist cannot ask
-another (depth 1). A turn with no caller (a scheduled run, or a turn resumed after a decision) asks no one, and the
-thread's event log says which grants were withheld.
+and, for the team's default agent, every specialist. A turn with no person follows the rule every such turn does
+(`child_runs.refused_with_no_person`): a scheduled run acts as its agent and asks the agents of its own team, a chat
+turn resumed after a decision asks no one, and the thread's event log says which grants were withheld.
 
 Each call carries a chain record (`ops_contracts.chain.ChainRecord`), kept on the specialist's thread: who the chain
-runs for, the thread it started on and the agents on it. An agent already on the path is not asked again. A specialist
+runs for, the thread it started on, the agents on it and how deep it may go. The record decides who may be asked next,
+for the offer and for the call: never an agent already on the path, never past its depth (one today, so a specialist
+asks no one). A specialist
 has no budget of its own: its model calls count against the thread the chain started on (store/usage.py), each one
 checked before it runs (api/model_ledger.py). A specialist stopped at that budget returns what it has written, and the
 asking agent reads `budget_reached`.
@@ -37,7 +39,7 @@ from ..store.team_defaults import TeamDefaults
 from .agent_registry import registry
 from .auth import caller_of
 from .chat_threads import CHAT_GRAPH
-from .child_runs import TURN_PERSON, run_child
+from .child_runs import TURN_PERSON, refused_with_no_person, run_child
 from .deps import Runtime
 from .runs import config, graph_store, pending, resolve
 
@@ -88,17 +90,27 @@ class AgentCalls:
         ]
 
     async def _log_withheld(self, agent_id: str, thread_id: str, run_id: object) -> None:
-        """Records, on the turn's thread, the agent grants a turn with no caller was not offered."""
-        withheld = self._granted(agent_id)
-        thread = await graph_store(self.rt).thread_row(thread_id) if withheld else None
+        """Records, on the turn's thread, the agent grants the rule for a turn with no person withheld, and why."""
+        granted = self._granted(agent_id)
+        thread = await graph_store(self.rt).thread_row(thread_id) if granted else None
         if thread is None:
+            return
+        owners = await registry(self.rt).tenant_owners(set(granted))
+        refused = {
+            sid: why.code
+            for sid in granted
+            if sid in owners
+            and (why := refused_with_no_person(thread, owners[sid] or None, f"agent {sid}")) is not None
+        }
+        if not refused:
             return
         await EventLog(graph_store(self.rt).engine).append(
             thread_id=thread_id,
             team_id=thread.team_id,
             run_id=str(run_id) if run_id else None,
             type_="agent_call_refused",
-            data={"agentId": agent_id, "withheld": withheld, "code": "no_caller"},
+            # One thread gives one reason: its person is not known, or the agents are another team's.
+            data={"agentId": agent_id, "withheld": list(refused), "code": next(iter(refused.values()))},
         )
 
     def _grant(self, a: Any) -> ToolGrant:
@@ -110,18 +122,18 @@ class AgentCalls:
             input_schema=QUESTION_SCHEMA,
         )
 
-    def _chain(
-        self, thread: StoredThread, agent_id: str, *, started_for: str, run_id: str | None = None
-    ) -> ChainRecord:
+    def _chain(self, thread: StoredThread, agent_id: str, run_id: str | None = None) -> ChainRecord:
         """The chain the turn of `agent_id` on `thread` is on: the record written when its agent was asked, or, for a
         thread nobody asked, a chain that starts here."""
         meta = thread.meta_object()
         if not meta.get("calledBy"):
             asking = self.rt.catalog.agent(agent_id)
+            person = TURN_PERSON.get()
             return ChainRecord.starting(
                 agent_id=agent_id,
                 version=asking.version if asking is not None else 0,
-                started_for=started_for,
+                # Its person, the service identity it runs under or, with no person, the agent itself.
+                started_for=(person.email or caller_of(person).sub) if person is not None else f"agent:{agent_id}",
                 thread_id=thread.id,
                 run_id=run_id,
             )
@@ -136,15 +148,15 @@ class AgentCalls:
         )
 
     async def offers_in(self, agent_id: str, thread_id: str) -> list[ToolGrant]:
-        """Specialists `agent_id` may ask on a turn with a caller: its `agent:<id>` grants, and every specialist when
-        it is the team's default, less the ones its chain refuses (already on the path, or past its depth). A turn
-        with no caller asks no one."""
+        """Specialists `agent_id` may ask on this turn: its `agent:<id>` grants, and every specialist when it is the
+        team's default, less the ones its chain refuses (already on the path, or past its depth) and the ones the
+        turn's caller may not chat with. A turn with no person follows `refused_with_no_person`."""
         thread = await graph_store(self.rt).thread_row(thread_id) if thread_id else None
-        person = TURN_PERSON.get()
-        if thread is None or person is None:
+        if thread is None:
             return []
-        who = caller_of(person)
-        on = self._chain(thread, agent_id, started_for=person.email or who.sub)
+        person = TURN_PERSON.get()
+        who = caller_of(person) if person is not None else None
+        on = self._chain(thread, agent_id)
         out: list[ToolGrant] = []
         seen: set[str] = set()
         granted = self._granted(agent_id)
@@ -162,9 +174,12 @@ class AgentCalls:
                 on.extended(a.id, a.version)
             except ChainRefusedError:
                 continue
+            if who is None:
+                if refused_with_no_person(thread, owners[sid] or None, f"agent {a.name}") is not None:
+                    continue
             # An agent with no team is open to every person of the tenant; a service or a key holds only what its
             # token lists, so it is checked there too.
-            if (team := owners[sid]) or who.kind != "person":
+            elif (team := owners[sid]) or who.kind != "person":
                 try:
                     can(who, "chat", "run", team=team or None, what=a.name)
                 except Forbidden:
@@ -185,12 +200,7 @@ class AgentCalls:
             caller = parent.graph.removeprefix("agent:")
         person = TURN_PERSON.get()
         callee = self.rt.catalog.agent(agent)
-        on = self._chain(
-            parent,
-            caller,
-            started_for=(person.email or caller_of(person).sub) if person is not None else "",
-            run_id=parent_run_id,
-        )
+        on = self._chain(parent, caller, parent_run_id)
         try:
             chain = on.extended(agent, callee.version if callee is not None else 0)
         except ChainRefusedError as e:
@@ -230,7 +240,8 @@ class AgentCalls:
                 "agent_id": callee.id,
                 "message": str(arguments.get("question") or ""),
                 "history": [],
-                "requested_by": started_for,
+                # Who an approval's card names as the asker; a run with no person has none to name.
+                "requested_by": started_for if person is not None else "",
             }
             run_id = "run_" + hashlib.sha256(key.encode()).hexdigest()[:16]
             await run_child(self.rt, thread_id, graph_input, run_id=run_id)

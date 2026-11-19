@@ -19,13 +19,14 @@ from sqlalchemy.pool import StaticPool
 from ops_agents.api.agent_calls import AgentCalls
 from ops_agents.api.app import create_app
 from ops_agents.api.auth import Principal
-from ops_agents.api.child_runs import acting_for
+from ops_agents.api.child_runs import ChildRuns, acting_for
 from ops_agents.api.deps import Runtime
 from ops_agents.api.ops_tools import ops_assistant_id
 from ops_agents.store.agent_registry import registry_agents
 from ops_agents.store.base import metadata
 from ops_agents.store.events import EventLog
 from ops_agents.store.tenancy import LOCAL_TENANT, tenant_scope
+from ops_agents.store.workflow_registry import registry_workflows
 from ops_contracts import chain
 from ops_engine.store import metadata as engine_metadata
 from ops_identity import Auth, Identity, ServiceAuth, service_verifiers
@@ -38,6 +39,7 @@ from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_mo
 from tests.engine.test_lifecycle_rights import TENANT, jwks, person
 
 URL = "/v1/chat/default-agent"
+EMAIL: dict[str, Any] = {"sender": "a@b.example", "subject": "Dispute", "body": "I did not make this payment."}
 Stack = tuple[AsyncClient, Runtime]
 
 
@@ -230,22 +232,47 @@ async def test_an_agent_already_on_the_chain_is_not_asked_again(stack: Stack, mo
     assert not looped.ok and looped.output["code"] == "agent_on_path", looped.output
 
 
-async def test_an_unattended_run_asks_no_agent_and_logs_why_while_a_persons_chat_still_does(stack: Stack) -> None:
+async def test_a_run_with_no_person_reaches_only_its_own_teams_agents_and_workflows(stack: Stack) -> None:
     c, rt = stack
-    await grant_dispute(c)
-    job = await c.post("/v1/agents/ag_branch/jobs", json={"key": "nightly", "message": ASK_DISPUTE}, headers=ADMIN)
-    assert job.status_code == 201, job.text
-    assert await called(rt) == [], "a run with no person asked a specialist"
-    assert rt.graph_store is not None
-    with tenant_scope(TENANT):
-        events = await EventLog(rt.graph_store.engine).for_threads([job.json()["data"]["threadId"]])
-    refused = [e.data for e in events if e.type == "agent_call_refused"]
-    assert refused == [{"agentId": "ag_branch", "withheld": ["ag_dispute"], "code": "no_caller"}], refused
-    # The same agent, chatting with a person who may chat with the specialist, still asks it.
-    chat = await c.post("/v1/chat/threads", json={"agentId": "ag_branch", "kbIds": []}, headers=VIEWER)
-    assert chat.status_code == 201, chat.text
-    await say(c, chat.json()["data"]["id"], ASK_DISPUTE, VIEWER)
+    await grant(c, "ag_branch", "ag_dispute")
+    await grant(c, "ag_branch", "ag_fraud")
+    await move(rt, "ag_fraud", "team_fraud")
+    job: dict[str, Any] = {}
+    for key, asked in (("nightly", "ag_dispute"), ("weekly", "ag_fraud")):
+        made = await c.post(
+            "/v1/agents/ag_branch/jobs", json={"key": key, "message": ask(asked, "Anything held?")}, headers=ADMIN
+        )
+        assert made.status_code == 201, made.text
+        job = made.json()["data"]
+    # A scheduled run acts as its agent: it asks the agent of its own team, and never the other team's.
     assert await called(rt) == ["ag_branch>ag_dispute"]
+    assert rt.graph_store is not None
+    metas = [cast(dict[str, Any], t["meta"] or {}) for t in await rt.graph_store.threads("agent_wrapper")]
+    assert [m["chain"]["startedFor"] for m in metas if m.get("calledBy")] == ["agent:ag_branch"]
+    with tenant_scope(TENANT):
+        events = await EventLog(rt.graph_store.engine).for_threads([job["threadId"]])
+        refused = [e.data for e in events if e.type == "agent_call_refused"]
+        assert refused == [{"agentId": "ag_branch", "withheld": ["ag_fraud"], "code": "other_team"}], refused
+        # The same rule for a workflow it starts: its own team's, never another team's.
+        runs = ChildRuns(rt)
+        mine = await runs.run(
+            workflow="dispute_email", arguments=EMAIL, key="k-own", parent_thread_id=job["threadId"], parent_run_id=None
+        )
+        assert mine.ok, mine.output
+        async with rt.db.begin() as conn:
+            await conn.execute(registry_workflows.update().values(team_id="team_fraud"))
+        theirs = await runs.run(
+            workflow="dispute_email",
+            arguments=EMAIL,
+            key="k-other",
+            parent_thread_id=job["threadId"],
+            parent_run_id=None,
+        )
+        assert not theirs.ok and theirs.output["code"] == "other_team", theirs.output
+        # A person's chat turn resumed with no person known still asks no one.
+        chat = await c.post("/v1/chat/threads", json={"agentId": "ag_branch", "kbIds": []}, headers=VIEWER)
+        assert chat.status_code == 201, chat.text
+        assert await AgentCalls(rt).offers_in("ag_branch", chat.json()["data"]["id"]) == []
 
 
 async def test_a_service_identity_is_offered_only_the_agents_its_scopes_reach(stack: Stack) -> None:
