@@ -244,6 +244,41 @@ def test_kb_add_file_uploads_for_knowledge_and_adds_it_to_the_base(
     assert json.loads(seen[-1].content) == {"fileIds": ["fil_1"]}
 
 
+def test_skills_apply_saves_the_named_skill_as_a_draft_and_an_export_applies_again(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    step = {"title": "Look up", "use": {"kind": "tool", "id": "lookup"}, "check": {"text": "result.ok", "by": "rule"}}
+    stored = {
+        "id": "sk_1",
+        "name": "Recall",
+        "slug": "recall",
+        "ownerTeam": "Retail",
+        "version": 4,
+        "status": "draft",
+        "content": {"name": "Recall", "useWhen": "", "tools": [{"toolId": "lookup"}], "steps": [step]},
+    }
+
+    def answer(r: httpx.Request) -> httpx.Response:
+        if r.method == "GET" and r.url.path.endswith("/v1/skills"):
+            return _ok({"data": [stored, {"id": "sk_2", "slug": "recall-notes", "version": 9}]})
+        return _ok(stored)
+
+    seen: list[httpx.Request] = []
+    _use(monkeypatch, "skills", _client(seen, answer))
+    assert main(["skills", "export", "sk_1", "--format", "json"]) == 0
+    file = tmp_path / "recall.json"
+    file.write_text(capsys.readouterr().out)
+    exported = json.loads(file.read_text())
+    assert exported["toolIds"] == ["lookup"] and exported["steps"] == [step] and "tools" not in exported
+
+    file.write_text(json.dumps({**{k: v for k, v in exported.items() if k != "id"}, "status": "published"}))
+    assert main(["skills", "apply", str(file), "--note", "tighter check"]) == 0
+    saved = seen[-1]
+    assert (saved.method, saved.url.path) == ("PUT", "/api/agents/v1/skills/sk_1/draft"), "the slug names the skill"
+    body = json.loads(saved.content)
+    assert body == {"name": "Recall", "toolIds": ["lookup"], "steps": [step], "note": "tighter check", "baseVersion": 4}
+
+
 def test_people_invite_sends_nothing_without_send(monkeypatch: pytest.MonkeyPatch) -> None:
     seen: list[httpx.Request] = []
     _use(monkeypatch, "people", _client(seen, lambda _r: _ok({"invited": 1})))
