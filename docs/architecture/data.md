@@ -1,6 +1,10 @@
 # Data
 
-Status: current, updated 2026-10-19. The decided design is [workflows and agents](../design/workflows/workflows-and-agents.md); decision records it does not settle remain options.
+Status: current, checked against the code on 2026-11-18. Designed and not built: journal retention and signed export, and a scheduled checkpoint prune.
+
+How Ops AI stores data: the rules every store follows, the generated list of every repository and the tables it
+defines, the databases it runs on, the checkpointer, retention and growth. Each table's columns, keys and links, by the
+service that owns it, are on the [data model](data-model.md) page.
 
 Store choices are in [ADR-0006](decisions/data-stores-and-evidence.md) (PostgreSQL as system of record, WORM object
 storage for evidence, pgvector for knowledge) and [ADR-0010](decisions/object-storage.md). A service never reads
@@ -14,7 +18,7 @@ another service's tables ([service-map.md](service-map.md)).
 | One door per service | A service reaches its database only through repository classes in its `store/` package; routers and runtime code call them and never import SQLAlchemy | In code: agents-service repositories are in `ops_agents/store/`, tools-service's in `ops_tools/store/`. The `drivers-only-in-stores` contract in `.importlinter` (`uv run lint-imports`, in the commit gate and `make python-verify`) fails a database driver imported elsewhere; it lists no file outside a store |
 | Guarantees declared | Each repository class names what its correctness rests on, `requires: frozenset[Guarantee]`: `CAS`, `TRANSACTION`, `LOCK`, `CLOCK`, `RLS`. A backend lists what it provides; a repository is refused on one that lacks a guarantee (`ops_store.unmet`) | `packages/ops_store` |
 | Conformance per port | Each port whose correctness rests on a guarantee has a suite, run by the owning service on every registered backend: leases (a lapsed owner's write is refused, one of many contenders wins), timer claims (exactly one poller), audit (a change and its entry land together or neither) | `ops_store.conformance`; each suite fails on a test implementation that drops its guarantee |
-| No new Postgres-only code | New SQL outside `ops_store` avoids RETURNING, ON CONFLICT, SKIP LOCKED, advisory locks and JSONB operators; a key column (primary key, unique, indexed or foreign key) has a bounded length; no table, column, index or constraint name exceeds 60 characters | `scripts/check_portable_store.py` in `make python-verify` warns, and does not fail, on anything beyond `portable-baseline.txt` (the first line of that file holds the count; 54 findings on 2026-10-17), whose count may only fall |
+| No new Postgres-only code | New SQL outside `ops_store` avoids RETURNING, ON CONFLICT, SKIP LOCKED, advisory locks and JSONB operators; a key column (primary key, unique, indexed or foreign key) has a bounded length; no table, column, index or constraint name exceeds 60 characters | `scripts/check_portable_store.py` in `make python-verify` warns, and does not fail, on anything beyond `portable-baseline.txt` (the first line of that file holds the count; 27 findings on 2026-11-18), whose count may only fall |
 
 ### Inventory
 
@@ -118,71 +122,30 @@ intent) is the second supported database ([ADR-0017](decisions/database-support.
 database's form of the statements that differ. `ops_store.reference.SqlAuditLog` is a
 reference audit log for a service that has none yet.
 
-## Tables in code
+## Databases
 
-All tables are in one PostgreSQL database (`ops_runtime` on port 5477 locally) and one Alembic history,
-`services/agents-service/migrations` (0001 to 0010, then 0012 to 0014; there is no 0011). platform-service
-(`alembic_version_platform`), models-service (`alembic_version_models`), kb-service (`alembic_version_kb`),
-files-service (`alembic_version_files`) and documents-service (`alembic_version_documents`) keep their own migration
-chains. Each chain's store metadata is its whole schema, held equal to what the chain builds by
-`deploy/database/tests/test_model_parity.py` ([rule](../design/data/database-packages.md)).
-The columns those chains added that change a guarantee:
+The platform connects to a SQL database the enterprise runs, usually a managed instance. Each service may use its own database or share a server. Development uses PostgreSQL in a local container.
 
-| Table | Owner | Holds | Migration |
-|---|---|---|---|
-| `document_type_versions` | documents-service | An immutable version: fields with rules and key fields, date order, templates, checks across fields, whether reads may show the model page images (off unless `documents.manage` turned it on), and how many reads of one layout offer a template | documents 0001, 0003, 0005 to 0007, 0009 |
-| `extractions` | documents-service | Each read, its measured tokens and, for a model read, its layout fingerprint; indexed on (tenant, team, type, status, finished) for template offers | documents 0001, 0008 |
-| `document_type_examples` | documents-service | What corrections teach a type: field, printed line and corrected value, one per read and field; a field keeps its newest 10, a purge of a deleted file removes its reads' examples, and people see line and value masked | documents 0010 |
-| `documents_outbox` | documents-service | `extraction.corrected` events written with the correction; a replaced one is never sent; delivered and replaced rows are pruned after 7 days | documents 0004 |
-| `model_aliases`, `model_call_log` | models-service | An alias version's clearance for images and files (`images`, off by default) and each call's count of non-text parts, refused or sent | models 0001, 0006 |
+| Database | Status | Tenant isolation |
+|---|---|---|
+| PostgreSQL 15 to 17 | built (runs today) | Tenant filter in the store layer, with row-level security as a second check. Today row-level security covers run, checkpoint, workflow, chat attachment, chat search, widget deployment and identity tables |
+| SQL Server 2025 and Azure SQL | partial: CI's `store-mssql` job runs the store, service-kit and identity suites and each service's store and isolation tests on SQL Server 2025, and the schema scripts are ready for a DBA; a full install on it is not yet proven ([Azure SQL](../guide/azure-sql.md)) | Tenant filter in the store layer, with a row-level security policy on from the first release |
 
-| Table | Owner | Holds | Migration |
-|---|---|---|---|
-| `threads`, `messages`, `interrupts`, `tool_calls`, `widgets` | agents-service (chat) | Console chat threads, messages, pending approvals with input hash and step-up, tool cards, widgets | 0001 |
-| `graph_threads` | agents-service | Thread: graph, metadata, `team_id`, status, `version`, `digest`, `external_key` (unique), `deployment_id`, `parent_thread_id` | 0002, 0003, 0010 |
-| `graph_runs` | agents-service | Run journal: kind, status, events (JSON), input, timestamps | 0002, 0005 |
-| `graph_versions` | agents-service | Published definitions: name, version, digest, definition JSON | 0003 |
-| `ops_checkpoints`, `ops_checkpoint_writes` | agents-service, schema shipped by `ops_checkpointer` | LangGraph checkpoints and task writes, keyed by `(tenant_id, team_id, thread_id, checkpoint_ns, checkpoint_id)`; RLS forced. `ix_ops_checkpoints_run` (tenant_id, team_id, (metadata->>'run_id')) serves the delete by run (0071); like the tables it is raw SQL with no metadata until the checkpointer's SQL Server rewrite, so the golden DDL, the ERD and drift do not show it | 0004, 0071 |
-| `ops_checkpoint_fences` | agents-service, `ops_checkpointer` | Highest lease generation seen per thread; RLS forced | 0008 |
-| `thread_leases` | agents-service | Lease per thread with generation; released rows kept so the count never restarts | 0005, 0008 |
-| `timers` | agents-service | SLA timers with fenced claims, attempts and failure | 0007, 0009 |
-| `deployments` | agents-service | Graph, channel, paused, multitask, default `budget` (JSON) for new threads, and `team_id`, the team that owns the deployment (empty for rows made earlier; no permission cell covers a row with no team) | 0010, 0013, 0037 |
-| `channel_messages` | agents-service | Ledger of handled channel messages per deployment and message key | 0010 |
-| `channel_cursors` | agents-service | Mailbox delta link per deployment, saved after the last page | 0010 |
-| `thread_inbox` | agents-service | Input queued for a busy thread, unique per message key, with `seq` and delivery time | 0010 |
-| `review_approvals` | agents-service today; the `ops_hitl` package by design | One approval per person per step, with the input hash it approved | 0006 |
-| `review_decisions` | agents-service today; the `ops_hitl` package by design | One decision per paused interrupt, recorded before the resume: decision, reason, who, the review as shown, attempts, resume run id, `resumed_at`, `step_up_ref` (a fingerprint of the verified step-up a money decision was made under, never the token; 0022) | 0012 |
-| `usage_records` | agents-service; models-service by design | One row per model call: thread, run, node, kind, model alias, calls, input and output tokens, `cost_micros`. Written as each call returns, outside the checkpoint and unfenced | 0013 |
-| `thread_budgets` | agents-service | Caps per thread: `max_calls`, `max_tokens`, `max_cost_micros`; an unset cap does not limit | 0013 |
-| `model_calls` | agents-service | One completed model response per `(thread_id, request_hash)`, replayed when a node re-runs ([durability-failure-and-audit.md](durability-failure-and-audit.md#re-execution)) | 0014 |
-| `task_assists` | agents-service | What task assist wrote for a typed task when its review step paused: one row per `(tenant_id, step_id)`, the step id `run:node:iteration`; a second write for the step is refused, so the first assist stays | 0064, 0068 |
-| `gateway_calls` | tools-service | Call log: tool, access, input hash, thread, step, `sub`, `act`, decision, reasons, approvers, outcome, effect, output; the kind of run (test or production) and the account a call used; `channel`, the route that took the call (`api`, POST /v1/calls, or `mcp`), and `client_name`, the name an MCP client gives itself, a claim shown as one; both null on older rows | 0006; tools 0028, 0030 |
-| `module_operations` | tools-service | A tool module's operations: access (read or write), executor, method, path, headers, body and response templates, input and masked output, rate limit, amount cap, the write approval policy (approvers, their team, step-up), the declared output shape, and `response_schema`, the JSON Schema of the first success response an OpenAPI import gives, so a workflow step shows its output fields before it runs; `needs_person`, only a person's own sign-in signs its calls, beside `tool_modules.sign_in`, the sign-in its module supports, and `scopes`, the ones a person's own sign-in must hold to call it | tools 0002, 0011, 0012, 0014, 0031, 0039, 0040 |
-| `connections` | tools-service | One account of an app: the app it belongs to (`app_id`: `plugin:<id>`, or a custom app's first account's id), whether it is a sandbox (the account a test run uses), auth kind, owning team, status, revision; the plain settings (the system address its credentials are bound to, token and sign-in addresses), the `tool_secrets` names of its secret parts, the OAuth client it signs in with (an `app_credentials` row or Ops AI's app), a plugin's own settings for it; whose account a call signs in with, the team backup, and the last Test connection's result. The database's team policy holds it to its team | tools 0028, 0037, 0038, 0044, 0062 |
-| `connection_tokens`, `oauth_states` | tools-service | Encrypted access and refresh tokens per account and person, stored against the rotation they replaced; sign-ins in progress by state hash with the encrypted PKCE verifier, used once, and the scopes each asked for, which a token answer that names none granted. Each row carries its connection's team, and the database's team policy hides it from every other team's transaction. A person's row may instead hold their own key, password or token, sealed, and records when the system refused it and why, so their next call asks for a new one | tools 0028, 0040, 0044, 0045, 0062 |
-| `connection_audit` | tools-service | Each connection change, secret set, sign-in, sign-out and failed refresh: names only | tools 0028 |
-| `operation_mocks` | tools-service | An operation's mock answers per environment, in order, one default | tools 0029 |
-| `gateway_fences` | tools-service | Highest lease generation seen per thread | 0008 |
+MySQL was dropped ([ADR-0017](decisions/database-support.md)); SQL Server 2022 is not supported because it lacks the json and vector types.
 
-The tools-service tables sit in agents-service's Alembic history and tools-service's tests run inside agents-service.
-Splitting migrations per service is a later step in [service-map.md](service-map.md). Databases that once ran the
-psycopg saver still hold LangGraph's `checkpoints`, `checkpoint_writes`, `checkpoint_blobs` and
-`checkpoint_migrations`; threads there do not carry over, and the tables can be dropped once nothing reads them.
+| Rule | What it means for the schema |
+|---|---|
+| Store operations | Repositories call a small set of operations (current time, claim one row, upsert, lock a row, tenant and system transactions), each rendered per database |
+| JSON columns | JSONB on PostgreSQL, the json type on SQL Server 2025 and Azure SQL. Queries filter on columns; a JSON field that needs filtering becomes a column |
+| Keys | Bounded text with a binary collation, so `Msg-1` and `msg-1` stay distinct. Keys built from outside text are indexed through a SHA-256 column |
+| Leases | Row locks with a generation number, which work on both databases |
+| Migrations | One portable baseline per service, with database-specific parts such as row-level security kept in one helper |
 
-### Catalogue events
+> [!NOTE]
+> **Why two databases and a store-layer filter.** Banks run the database they already license, and adding a new engine to a bank's estate takes months of approval. Row-level security exists only on some engines, so the tenant filter that must hold everywhere lives in the store layer, and each database's own row-level checks stay on as a second line where they exist.
 
-What tools-service's outbox and `GET /v1/tool-catalog` carry for agents-service's tool catalogue copy
-(`packages/ops_store/src/ops_store/outbox.py`).
-Each is written in the transaction of the write it reports (`ops_tools.store.modules.report_module`) and keyed
-`<id>@<revision>`; the resync returns the same payloads. Every event names its tenant and team; none carries a secret,
-a credential or a person's state of an app. Fields are added with defaults; a payload model refuses fields it does not
-name, so a receiver deploys before its sender.
-
-| Event | Key; revision | Fields | Team |
-|---|---|---|---|
-| `tool.module.published`, `tool.module.changed` | module id; module revision | `id`, `name`, `title`, `app`, `ownerTeam`, `status`, `version`, `templateKind` (builtin, plugin, custom), `appCardId`, `deleted`, `truncated` (over 16,384 bytes: no operations, not applied by a receiver); per operation `id`, `name`, `title`, `description` (at most 500 characters), `access`, `requiresApproval`, `enabled` | the module's, or the acting team for a workspace-level one |
-| `tool.team_state.changed`, `via: approval` | `approval:<module>` per team; module revision | `moduleId`, `operations`, `expiresAt`, `deleted` | the granted team |
-| `tool.team_state.changed`, `via: added` | `added:<module>` per team; the team state's own revision | `moduleId`, `operations` (names added), `waits` (added names whose answer waits), `deleted`. Model only: no sender yet | the team |
+The events a service writes to its outbox are listed on each [service page](../services/README.md); the tool
+catalogue's events are on the [tools service](../services/tools-service/overview.md#catalogue-events) page.
 
 ## What the checkpointer package ships
 
