@@ -33,6 +33,12 @@ test('a document comes back from the editor with every reference id, check and i
   // Text typed straight after a chip, or a chip put straight after a word, must not change which item it names.
   const typed = serializeSegments([{ t: 'text', text: 'see' }, { t: 'ref', kind: 'tool', id: 'open_dispute' }, { t: 'text', text: 's.now' }]);
   assert.deepEqual(parseText(typed).filter((s) => s.t === 'ref'), [{ t: 'ref', kind: 'tool', id: 'open_dispute' }]);
+  // A letter or digit of any script counts as a word, as it does where the text is stored: text typed straight
+  // before `@` makes no chip, and a chip put there is written with a space so the service reads it as one too.
+  for (const word of ['café', '顧客', '٣']) {
+    assert.deepEqual(parseText(`${word}@tool:open_dispute`), [{ t: 'text', text: `${word}@tool:open_dispute` }]);
+    assert.equal(serializeSegments([{ t: 'text', text: word }, { t: 'ref', kind: 'tool', id: 'open_dispute' }]), `${word} @tool:open_dispute`);
+  }
 });
 
 test('a renamed item shows its new name on the chip, with the stored text unchanged', () => {

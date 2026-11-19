@@ -74,7 +74,10 @@ export interface DocNode {
   text?: string;
 }
 
-const TOKEN = /(?<![\w@])@(tool|knowledge|skill|agent|workflow):([A-Za-z0-9](?:[A-Za-z0-9_.-]{0,126}[A-Za-z0-9_])?)|\{\{([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\}\}/g;
+// A reference does not start after a letter, digit, underscore or `@`, in any script: the service reads stored text
+// with Unicode word characters (ops_contracts REF_TOKEN), and JavaScript's `\w` is ASCII only.
+const TOKEN = /(?<![\p{L}\p{N}_@])@(tool|knowledge|skill|agent|workflow):([A-Za-z0-9](?:[A-Za-z0-9_.\-]{0,126}[A-Za-z0-9_])?)|\{\{([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\}\}/gu;
+const ENDS_IN_WORD = /[\p{L}\p{N}_@]$/u;
 /** Text that, written straight after a reference, would be read as more of its id. */
 const EXTENDS_ID = /^[.-]*[A-Za-z0-9_]/;
 
@@ -109,7 +112,7 @@ export function serializeSegments(segments: Segment[]): string {
       out += `{{${s.name}}}`;
       afterRef = false;
     } else {
-      if (/[\w@]$/.test(out)) out += ' ';
+      if (ENDS_IN_WORD.test(out)) out += ' ';
       out += refToken(s);
       afterRef = true;
     }
