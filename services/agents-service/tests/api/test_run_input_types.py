@@ -59,6 +59,18 @@ async def test_a_json_number_too_large_to_store_is_refused_naming_the_field(stac
     assert await runs_of(c, WID) == []
 
 
+async def test_a_repeat_of_a_run_key_meets_the_first_run_whatever_input_it_carries(stack: Stack) -> None:  # noqa: F811
+    c, _ = stack
+    await live(c)
+    body = {"workflowId": WID, "runKey": "refund-77", "input": {"amount": 120}}
+    first = await c.post("/v1/runs", json=body, headers=BUILDER)
+    assert first.status_code == 202, first.text
+    # The key is the request: a retry is answered with the run it already started, before its input is read.
+    again = await c.post("/v1/runs", json={**body, "input": {"amount": "a lot"}}, headers=BUILDER)
+    assert again.status_code in (200, 202), again.text
+    assert again.json()["data"]["runId"] == first.json()["data"]["runId"] and not again.json()["data"]["created"]
+
+
 async def test_a_number_sent_as_text_is_stored_as_the_number_and_text_stays_text(stack: Stack) -> None:  # noqa: F811
     c, _ = stack
     await live(c)

@@ -106,7 +106,7 @@ open, because the write it approves reads nothing from the run, is a failed step
 
 ### Run input
 
-A run's input is held to its trigger's `inputSchema` by `ops_engine.starts.typed_values`, in this order. A hosted
+A start whose run key already has a run is answered with that run before its input is read, so a retried request or an event delivered twice meets the first run whatever it carries. Otherwise a run's input is held to its trigger's `inputSchema` by `ops_engine.starts.typed_values`, in this order. A hosted
 form, a batch file and a start form call the same function before they write anything else. The tests are
 `packages/ops_engine/tests/test_start_value_types.py`.
 

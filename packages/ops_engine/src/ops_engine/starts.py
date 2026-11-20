@@ -353,6 +353,11 @@ async def start(
     runs: RunStore, stored: DefinitionRow, run: _new_runs.NewRun, registry: TypeRegistry
 ) -> tuple[RunRow, bool]:
     """Writes `run` on `stored` with its input held to the trigger's schema, or returns the run that already has its
-    key (`store.new_runs.write_run`). InputRefusedError when the input does not match, and then nothing is written."""
+    key. InputRefusedError when the input does not match, and then nothing is written. The key is looked up first: a
+    repeat of a start (a retried request, an event delivered twice) meets the run it already made, whatever input it
+    carries now and whatever the schema has become since; two first starts racing on one key are settled by the
+    write (`store.new_runs.write_run`)."""
+    if (found := await runs.by_key(run["workflow_id"], run["run_key"])) is not None:
+        return found, False
     typed = run_input(stored.definition, run["input"], registry)
     return await _new_runs.write_run(runs.tx, {**run, "input": typed})
