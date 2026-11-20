@@ -14,7 +14,9 @@ Form widgets come from the schema: `format: "file"` (see `file_shape`), `format:
 with `typed_values`, the one rule for a start's values, so every source of a run (an API call, a hosted form, a batch
 row, an agent's tool call, a Start workflow step, a service event) is checked the same way and no caller chooses to
 skip it. The write itself (`store.new_runs.write_run`) is importable by this module alone: the import contract
-`runs-written-by-the-start-entry` in `.importlinter` fails when anything else imports it.
+`runs-written-by-the-start-entry` in `.importlinter` fails when anything else imports it. It is held here under a
+private module name and never as `write_run`, so this module does not hand it on; `tests/test_run_entry.py` fails on
+any other file that names it.
 """
 
 from __future__ import annotations
@@ -30,7 +32,7 @@ import jsonschema.exceptions
 from ops_service_kit.http import Json, JsonValue
 
 from .store import DefinitionRow, RunRow, RunStore
-from .store.new_runs import NewRun, write_run
+from .store import new_runs as _new_runs
 
 if TYPE_CHECKING:
     from .node_types import TypeRegistry
@@ -321,8 +323,10 @@ def run_input(
     return dict(values) if schema is None else typed_values(schema, values)
 
 
-async def start(runs: RunStore, stored: DefinitionRow, run: NewRun, registry: TypeRegistry) -> tuple[RunRow, bool]:
+async def start(
+    runs: RunStore, stored: DefinitionRow, run: _new_runs.NewRun, registry: TypeRegistry
+) -> tuple[RunRow, bool]:
     """Writes `run` on `stored` with its input held to the trigger's schema, or returns the run that already has its
     key (`store.new_runs.write_run`). InputRefusedError when the input does not match, and then nothing is written."""
     typed = run_input(stored.definition, run["input"], registry)
-    return await write_run(runs.tx, {**run, "input": typed})
+    return await _new_runs.write_run(runs.tx, {**run, "input": typed})
