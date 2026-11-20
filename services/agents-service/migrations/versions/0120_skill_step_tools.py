@@ -21,7 +21,7 @@ change are written, with the digest worked out as the stores do (store/agent_reg
 lengths of each step's `do` and check) and `changes` do not depend on `use` and stay. Every tenant's rows are read, so
 both tables' own policies are set aside inside the migration's transaction (on SQL Server each is dropped and made
 again before that transaction ends). Before they are put back every row is read again, and the upgrade stops if any
-step would still change. A second run changes nothing. Stop agents-service before upgrading (docs/deploy/database.md).
+step would still change. A second run changes nothing. Stop agents-service before upgrading (docs/deploy/upgrade.md).
 
 Two other copies of steps are left as they are. A template copy's `base` (template_copies) is the template's body the
 next update merges against: given the stored tools, it would differ from a template without them, and the update
