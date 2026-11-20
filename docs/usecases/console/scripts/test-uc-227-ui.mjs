@@ -37,7 +37,7 @@ await withUiStack(
     const listed = await json(await fetch(`${files}/v1/files?page=1&pageSize=20&search=TEST012`, { headers: J }));
     const file = listed.data.find((f) => f.name === 'TEST012.pdf');
     if (!file) throw new Error(`setup: TEST012.pdf is not in Operations: ${listed.data.map((f) => f.name).join(', ')}`);
-    const fileUrl = `${consoleUrl}/files/${file.id}`;
+    const fileUrl = `${consoleUrl}/data/files/${file.id}`;
 
     // A PDF draws inside a frame only in a full Chrome; Playwright's headless shell leaves the frame blank.
     const browser = await chromium.launch({ channel: process.env.UC227_CHANNEL ?? 'chrome' });
@@ -58,14 +58,14 @@ await withUiStack(
       mkdirSync(SHOTS, { recursive: true });
 
       await step('1 the Files row reads Not read and its name opens the file page', async () => {
-        await page.goto(`${consoleUrl}/files`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await page.goto(`${consoleUrl}/data/files`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await page.getByPlaceholder(/search/i).first().fill('TEST012');
         const link = page.getByTestId(`file-open-${file.id}`);
         await link.waitFor();
         const row = page.locator('tr', { has: link });
         const before = await row.getByText('Not read').count();
         await link.click();
-        await page.waitForURL((u) => u.pathname === `/files/${file.id}`);
+        await page.waitForURL((u) => u.pathname === `/data/files/${file.id}`);
         const title = await page.getByTestId('page-title').first().innerText();
         check('1 the Files row reads Not read and its name opens the file page', before === 1 && title.includes('TEST012.pdf'), { before, title });
       });
@@ -92,7 +92,7 @@ await withUiStack(
         await dialog.getByTestId('extract-submit').click();
         // The toast sits at the top, off the fields it just filled.
         const toastAtTop = await page.locator('[data-sonner-toaster][data-y-position="top"]').getByText('Read TEST012.pdf').waitFor({ timeout: 180_000 }).then(() => true, () => false);
-        const landed = await page.waitForURL((u) => u.pathname === `/files/${file.id}/fields`, { timeout: 180_000 }).then(() => true, () => false);
+        const landed = await page.waitForURL((u) => u.pathname === `/data/files/${file.id}/fields`, { timeout: 180_000 }).then(() => true, () => false);
         if (!landed) throw new Error(`still on ${page.url()}; the dialog says: ${await page.getByTestId('extract-error').innerText().catch(() => '(no error shown)')}`);
         // Extract started the system extract workflow as James, and the page links its run.
         const runId = new URL(page.url()).searchParams.get('run');
@@ -119,7 +119,7 @@ await withUiStack(
         );
         check(
           '3b Extract ran the system extract workflow as James, the page links that run, and it waits for the doubtful field to be checked',
-          run?.workflowId === 'system_extract' && linked === `/workflows/runs/${runId}` && run?.status === 'waiting' && !!run?.waiting,
+          run?.workflowId === 'system_extract' && linked === `/build/runs/${runId}` && run?.status === 'waiting' && !!run?.waiting,
           { runId, linked, workflowId: run?.workflowId, status: run?.status },
         );
       });
@@ -139,7 +139,7 @@ await withUiStack(
         }
         if (finished?.outcome !== 'saved') throw new Error(`the run ended ${finished?.status} / ${finished?.outcome}`);
         const detail = await json(await fetch(`${files}/v1/files/${file.id}`, { headers: J }));
-        await page.goto(`${consoleUrl}/files`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await page.goto(`${consoleUrl}/data/files`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await page.getByPlaceholder(/search/i).first().fill('TEST012');
         const row = page.locator('tr', { has: page.getByTestId(`file-open-${file.id}`) });
         await row.getByTestId('read-as').waitFor({ timeout: 60_000 });
