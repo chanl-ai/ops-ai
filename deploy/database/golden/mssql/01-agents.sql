@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- agents-service, stamped at 0120_skill_step_tools
+-- agents-service, stamped at 0121_engine_working_copies
 CREATE TABLE engine_definitions (
 	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
@@ -30,6 +30,19 @@ GO
 CREATE INDEX ix_engine_definitions_team_created ON engine_definitions (tenant_id, team_id, created_at);
 GO
 CREATE INDEX ix_engine_definitions_team_name ON engine_definitions (tenant_id, team_id, name);
+GO
+CREATE TABLE engine_working_copies (
+	tenant_id VARCHAR(64) NOT NULL, 
+	workflow_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NULL, 
+	definition NVARCHAR(max) NOT NULL, 
+	digest VARCHAR(64) NOT NULL, 
+	base_version INTEGER NOT NULL, 
+	checks NVARCHAR(max) NOT NULL, 
+	updated_at VARCHAR(32) NOT NULL, 
+	updated_by VARCHAR(200) NOT NULL, 
+	CONSTRAINT engine_working_copies_pkey PRIMARY KEY (tenant_id, workflow_id)
+);
 GO
 CREATE TABLE engine_runs (
 	id VARCHAR(64) NOT NULL, 
@@ -1248,6 +1261,12 @@ CREATE SECURITY POLICY ops_security.engine_definitions_tenant
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.engine_definitions AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.engine_working_copies_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.engine_working_copies,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.engine_working_copies AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.engine_working_copies AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE SECURITY POLICY ops_security.engine_runs_isolation
     ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.engine_runs,
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.engine_runs AFTER INSERT,
@@ -1633,5 +1652,5 @@ CREATE TABLE alembic_version (
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version (version_num) VALUES ('0120_skill_step_tools');
+INSERT INTO alembic_version (version_num) VALUES ('0121_engine_working_copies');
 GO

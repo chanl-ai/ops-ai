@@ -65,6 +65,28 @@ sa.Index(
     mssql_where=LIVE,
 )
 
+# The one working copy of a workflow: what its editor saves after each change, in whatever state it is, checks and all.
+# It is never run and never a version; publishing makes the next version from it and removes it (agents 0121).
+engine_working_copies = sa.Table(
+    "engine_working_copies",
+    metadata,
+    sa.Column("tenant_id", sa.String(64), primary_key=True),
+    sa.Column("workflow_id", sa.String(64), primary_key=True),
+    # The workflow's owning team, as on engine_definitions; null for a workflow no team owns.
+    sa.Column("team_id", sa.String(64)),
+    sa.Column("definition", sa.JSON, nullable=False),
+    # The hash of `definition` as stored. With `base_version` it names this copy: a save names the copy it was made
+    # on, and one made on any other is refused, so two people's saves never overwrite each other.
+    sa.Column("digest", sa.String(64), nullable=False),
+    # The newest version when the copy was first saved.
+    sa.Column("base_version", sa.Integer, nullable=False),
+    # The checks of the last save: a working copy may fail them, and publishing refuses while one is an error.
+    sa.Column("checks", sa.JSON, nullable=False),
+    sa.Column("updated_at", sa.String(32), nullable=False),
+    sa.Column("updated_by", sa.String(200), nullable=False),
+    info=TENANT_SCOPED,
+)
+
 # One row per run. The id is also the run's thread id (lease, checkpoints, events) and carries RUN_PREFIX, so the v1
 # sweeper can tell an engine thread from its own and leave it to the engine's worker.
 engine_runs = sa.Table(

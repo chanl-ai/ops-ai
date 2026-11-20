@@ -1671,6 +1671,11 @@ class RunWaiting(TypedDict, closed=True):
     payload: dict[str, JsonValue]
 
 
+class SaveBase(TypedDict, closed=True):
+    digest: str
+    version: int
+
+
 class SavedCaseCheck(TypedDict, closed=True):
     text: NotRequired[str | None]
     tool: NotRequired[str | None]
@@ -1911,6 +1916,12 @@ class StepCheck(TypedDict, closed=True):
 class StepCheckOut(TypedDict, closed=True):
     by: NotRequired[Literal["rule", "model"] | None]
     text: str
+
+
+class StepRefView(TypedDict, closed=True):
+    id: str
+    name: str
+    type: str
 
 
 class StepUpInput(TypedDict, closed=True):
@@ -2308,6 +2319,11 @@ class Version(TypedDict, closed=True):
     version: int
 
 
+class VersionFromCopyInput(TypedDict, closed=True):
+    baseDigest: str
+    baseVersion: int
+
+
 class WaitingTask(TypedDict, closed=True):
     assignee: Assignee | None
     dueAt: str | None
@@ -2408,6 +2424,21 @@ class WorkflowTestRun(TypedDict, closed=True):
     pausesApproved: int
     status: Literal["completed", "stopped"]
     visited: list[str]
+
+
+class WorkingCopyInput(TypedDict, closed=True):
+    baseDigest: str
+    baseVersion: int
+    definition: dict[str, JsonValue]
+
+
+class WorkingCopyView(TypedDict, closed=True):
+    baseVersion: int
+    checks: list[DefinitionCheck]
+    definition: dict[str, JsonValue]
+    digest: str
+    updatedAt: str
+    updatedBy: str
 
 
 class WouldPause(TypedDict, closed=True):
@@ -2887,11 +2918,13 @@ class DefinitionView(TypedDict, closed=True):
     name: str
     paused: bool
     review: OpenPublishRequest | None
+    saveBase: SaveBase
     stage: Literal["draft", "in_review", "live", "paused", "superseded"]
     startForm: NotRequired[StartFormView | None]
     version: int
     versions: list[DefinitionVersion]
     workflowId: str
+    workingCopy: NotRequired[WorkingCopyView | None]
 
 
 class DryRun(TypedDict, closed=True):
@@ -3239,6 +3272,12 @@ class EvalCasesInput(TypedDict, closed=True):
 
 class EvalRunInput(TypedDict, closed=True):
     cases: NotRequired[list[EvalCaseInput] | None]
+
+
+class FieldChangeView(TypedDict, closed=True):
+    after: NotRequired[JsonValue]
+    before: NotRequired[JsonValue]
+    field: str
 
 
 class FieldRead(TypedDict, closed=True):
@@ -3640,6 +3679,13 @@ class SkillStepOut(TypedDict, closed=True):
     use: NotRequired[RefOut | None]
 
 
+class StepChangeView(TypedDict, closed=True):
+    fields: list[FieldChangeView]
+    id: str
+    name: str
+    type: str
+
+
 class StoryCase(TypedDict, closed=True):
     caseId: str
     customer: str | None
@@ -3816,6 +3862,11 @@ class WorkflowGraph(TypedDict, closed=True):
     workflowId: str
 
 
+class WorkingCopySaved(TypedDict, closed=True):
+    saveBase: SaveBase
+    workingCopy: WorkingCopyView
+
+
 class ActivityRow(TypedDict, closed=True):
     actor: ActorView
     at: str
@@ -3980,6 +4031,16 @@ class ChannelPage(TypedDict, closed=True):
     pagination: Pagination
 
 
+class DefinitionDiffView(TypedDict, closed=True):
+    added: list[StepRefView]
+    changed: list[StepChangeView]
+    connected: list[str]
+    disconnected: list[str]
+    moved: list[StepRefView]
+    removed: list[StepRefView]
+    workflow: list[FieldChangeView]
+
+
 class DocumentRead(TypedDict, closed=True):
     corrected: list[dict[str, JsonValue]] | None
     editable: bool
@@ -4018,6 +4079,11 @@ class EnvelopeCaseTypeDetail(TypedDict, closed=True):
 
 class EnvelopeChannelPage(TypedDict, closed=True):
     data: ChannelPage
+    success: Literal[True]
+
+
+class EnvelopeDefinitionDiffView(TypedDict, closed=True):
+    data: DefinitionDiffView
     success: Literal[True]
 
 
@@ -4181,6 +4247,11 @@ class EnvelopeWorkflow(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeWorkingCopySaved(TypedDict, closed=True):
+    data: WorkingCopySaved
+    success: Literal[True]
+
+
 class EnvelopeListGraphInfo(TypedDict, closed=True):
     data: list[GraphInfo]
     success: Literal[True]
@@ -4225,6 +4296,26 @@ class Live(TypedDict, closed=True):
 class Plan(TypedDict, closed=True):
     items: list[PlanItem]
     ready: bool
+
+
+class PublishPreview(TypedDict, closed=True):
+    blockers: list[DefinitionCheck]
+    changes: DefinitionDiffView
+    liveVersion: int | None
+    majorChange: NotRequired[bool | None]
+    policy: NotRequired[Literal["always", "major", "never"] | None]
+    reviewReason: NotRequired[
+        Literal[
+            "policy_always",
+            "security_change",
+            "policy_never",
+            "major_change",
+            "dev_auto_approve",
+            "minor_change",
+        ]
+        | None
+    ]
+    reviewRequired: NotRequired[bool | None]
 
 
 class SkillContent(TypedDict, closed=True):
@@ -4415,6 +4506,11 @@ class EnvelopeLive(TypedDict, closed=True):
 
 class EnvelopePlan(TypedDict, closed=True):
     data: Plan
+    success: Literal[True]
+
+
+class EnvelopePublishPreview(TypedDict, closed=True):
+    data: PublishPreview
     success: Literal[True]
 
 

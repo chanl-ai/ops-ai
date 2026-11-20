@@ -16,6 +16,7 @@ from pydantic import JsonValue
 
 from ops_engine import default_registry
 from ops_engine.definition import WorkflowDefinition, validate
+from ops_engine.diff import diff
 from ops_engine.node_types import list_columns
 from ops_engine.store import DefinitionRow, DefinitionStore, DefinitionVersion
 from ops_engine.store.definitions import ListColumns
@@ -69,15 +70,18 @@ def nodes_of(definition: Json | None) -> dict[str, Json]:
 
 
 def changes(old: Json | None, new: Json) -> list[str]:
-    """What a reviewer reads: steps added, removed or changed against the version that serves the workflow now."""
+    """What a reviewer reads: steps added, removed, changed or moved against the version that serves the workflow now,
+    in the words of the editor's diff (`ops_engine.diff`)."""
     if old is None:
         return ["First version"]
-    before, after = nodes_of(old), nodes_of(new)
-    out = [f"Added step {n.get('name') or i}" for i, n in after.items() if i not in before]
-    out += [f"Removed step {n.get('name') or i}" for i, n in before.items() if i not in after]
-    out += [f"Changed step {n.get('name') or i}" for i, n in after.items() if i in before and before[i] != n]
-    if old.get("connections") != new.get("connections"):
+    d = diff(old, new)
+    out = [f"Added step {s['name']}" for s in d["added"]]
+    out += [f"Removed step {s['name']}" for s in d["removed"]]
+    out += [f"Changed step {s['name']}" for s in d["changed"]]
+    out += [f"Moved step {s['name']}" for s in d["moved"]]
+    if d["connected"] or d["disconnected"]:
         out.append("Changed connections")
+    out += [f"Changed workflow {f['field']}" for f in d["workflow"]]
     return out or ["No step changed"]
 
 

@@ -6053,6 +6053,71 @@
         "title": "DefinitionCheck",
         "type": "object"
       },
+      "DefinitionDiffView": {
+        "additionalProperties": false,
+        "properties": {
+          "added": {
+            "items": {
+              "$ref": "#/components/schemas/StepRefView"
+            },
+            "title": "Added",
+            "type": "array"
+          },
+          "changed": {
+            "items": {
+              "$ref": "#/components/schemas/StepChangeView"
+            },
+            "title": "Changed",
+            "type": "array"
+          },
+          "connected": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Connected",
+            "type": "array"
+          },
+          "disconnected": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Disconnected",
+            "type": "array"
+          },
+          "moved": {
+            "items": {
+              "$ref": "#/components/schemas/StepRefView"
+            },
+            "title": "Moved",
+            "type": "array"
+          },
+          "removed": {
+            "items": {
+              "$ref": "#/components/schemas/StepRefView"
+            },
+            "title": "Removed",
+            "type": "array"
+          },
+          "workflow": {
+            "items": {
+              "$ref": "#/components/schemas/FieldChangeView"
+            },
+            "title": "Workflow",
+            "type": "array"
+          }
+        },
+        "required": [
+          "added",
+          "removed",
+          "changed",
+          "moved",
+          "connected",
+          "disconnected",
+          "workflow"
+        ],
+        "title": "DefinitionDiffView",
+        "type": "object"
+      },
       "DefinitionInput": {
         "additionalProperties": false,
         "description": "Exactly one of `yaml` (YAML or JSON text) and `definition` (the parsed object).",
@@ -6388,6 +6453,9 @@
               }
             ]
           },
+          "saveBase": {
+            "$ref": "#/components/schemas/SaveBase"
+          },
           "stage": {
             "enum": [
               "draft",
@@ -6423,6 +6491,16 @@
           "workflowId": {
             "title": "Workflowid",
             "type": "string"
+          },
+          "workingCopy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkingCopyView"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -6435,7 +6513,8 @@
           "versions",
           "liveVersion",
           "paused",
-          "review"
+          "review",
+          "saveBase"
         ],
         "title": "DefinitionView",
         "type": "object"
@@ -7538,6 +7617,25 @@
         "title": "Envelope[CopyRef]",
         "type": "object"
       },
+      "Envelope_DefinitionDiffView_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/DefinitionDiffView"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[DefinitionDiffView]",
+        "type": "object"
+      },
       "Envelope_DefinitionPublished_": {
         "additionalProperties": false,
         "properties": {
@@ -8297,6 +8395,25 @@
           "data"
         ],
         "title": "Envelope[PublishDecisionFields]",
+        "type": "object"
+      },
+      "Envelope_PublishPreview_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/PublishPreview"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[PublishPreview]",
         "type": "object"
       },
       "Envelope_PublishReview_": {
@@ -9196,6 +9313,25 @@
         "title": "Envelope[Workflow]",
         "type": "object"
       },
+      "Envelope_WorkingCopySaved_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/WorkingCopySaved"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[WorkingCopySaved]",
+        "type": "object"
+      },
       "Envelope_dict_str__list_ToolUser___": {
         "additionalProperties": false,
         "properties": {
@@ -9955,6 +10091,26 @@
           "detail"
         ],
         "title": "Evidence",
+        "type": "object"
+      },
+      "FieldChangeView": {
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "$ref": "#/components/schemas/JsonValue"
+          },
+          "before": {
+            "$ref": "#/components/schemas/JsonValue"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field"
+        ],
+        "title": "FieldChangeView",
         "type": "object"
       },
       "FieldRead": {
@@ -14785,6 +14941,97 @@
         "title": "PublishIn",
         "type": "object"
       },
+      "PublishPreview": {
+        "additionalProperties": false,
+        "description": "What publishing the working copy (or the newest draft, without one) would do.",
+        "properties": {
+          "blockers": {
+            "items": {
+              "$ref": "#/components/schemas/DefinitionCheck"
+            },
+            "title": "Blockers",
+            "type": "array"
+          },
+          "changes": {
+            "$ref": "#/components/schemas/DefinitionDiffView"
+          },
+          "liveVersion": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Liveversion"
+          },
+          "majorChange": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Majorchange"
+          },
+          "policy": {
+            "anyOf": [
+              {
+                "enum": [
+                  "always",
+                  "major",
+                  "never"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy"
+          },
+          "reviewReason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "policy_always",
+                  "security_change",
+                  "policy_never",
+                  "major_change",
+                  "dev_auto_approve",
+                  "minor_change"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewreason"
+          },
+          "reviewRequired": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewrequired"
+          }
+        },
+        "required": [
+          "liveVersion",
+          "changes",
+          "blockers"
+        ],
+        "title": "PublishPreview",
+        "type": "object"
+      },
       "PublishRequestInfo": {
         "additionalProperties": false,
         "properties": {
@@ -17504,6 +17751,26 @@
         "title": "RunWaiting",
         "type": "object"
       },
+      "SaveBase": {
+        "additionalProperties": false,
+        "description": "The copy a save is made on: its version and digest (save-base.ts `baseOf` reads it as `baseVersion` and\n`baseDigest`).",
+        "properties": {
+          "digest": {
+            "title": "Digest",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "digest"
+        ],
+        "title": "SaveBase",
+        "type": "object"
+      },
       "SavedCase": {
         "additionalProperties": false,
         "properties": {
@@ -20189,6 +20456,38 @@
         "title": "StepAttempt",
         "type": "object"
       },
+      "StepChangeView": {
+        "additionalProperties": false,
+        "properties": {
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/FieldChangeView"
+            },
+            "title": "Fields",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "type",
+          "fields"
+        ],
+        "title": "StepChangeView",
+        "type": "object"
+      },
       "StepCheck": {
         "additionalProperties": false,
         "description": "What must hold before a step is done. `by` is set when the skill is saved: a rule is run on the step's result\nin code, a sentence is confirmed by the model.",
@@ -20250,6 +20549,30 @@
           "text"
         ],
         "title": "StepCheckOut",
+        "type": "object"
+      },
+      "StepRefView": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "type"
+        ],
+        "title": "StepRefView",
         "type": "object"
       },
       "StepUpInput": {
@@ -23788,6 +24111,26 @@
         "title": "Version",
         "type": "object"
       },
+      "VersionFromCopyInput": {
+        "additionalProperties": false,
+        "description": "The working copy the person is publishing, as `saveBase` named it when they read it.",
+        "properties": {
+          "baseDigest": {
+            "title": "Basedigest",
+            "type": "string"
+          },
+          "baseVersion": {
+            "title": "Baseversion",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "baseVersion",
+          "baseDigest"
+        ],
+        "title": "VersionFromCopyInput",
+        "type": "object"
+      },
       "WaitingTask": {
         "additionalProperties": false,
         "properties": {
@@ -24832,6 +25175,96 @@
           "endStatus"
         ],
         "title": "WorkflowTestRun",
+        "type": "object"
+      },
+      "WorkingCopyInput": {
+        "additionalProperties": false,
+        "description": "The definition as the editor holds it, and the copy it was made on (`saveBase` of the view last read).",
+        "properties": {
+          "baseDigest": {
+            "title": "Basedigest",
+            "type": "string"
+          },
+          "baseVersion": {
+            "title": "Baseversion",
+            "type": "integer"
+          },
+          "definition": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Definition",
+            "type": "object"
+          }
+        },
+        "required": [
+          "definition",
+          "baseVersion",
+          "baseDigest"
+        ],
+        "title": "WorkingCopyInput",
+        "type": "object"
+      },
+      "WorkingCopySaved": {
+        "additionalProperties": false,
+        "properties": {
+          "saveBase": {
+            "$ref": "#/components/schemas/SaveBase"
+          },
+          "workingCopy": {
+            "$ref": "#/components/schemas/WorkingCopyView"
+          }
+        },
+        "required": [
+          "workingCopy",
+          "saveBase"
+        ],
+        "title": "WorkingCopySaved",
+        "type": "object"
+      },
+      "WorkingCopyView": {
+        "additionalProperties": false,
+        "properties": {
+          "baseVersion": {
+            "title": "Baseversion",
+            "type": "integer"
+          },
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/DefinitionCheck"
+            },
+            "title": "Checks",
+            "type": "array"
+          },
+          "definition": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Definition",
+            "type": "object"
+          },
+          "digest": {
+            "title": "Digest",
+            "type": "string"
+          },
+          "updatedAt": {
+            "title": "Updatedat",
+            "type": "string"
+          },
+          "updatedBy": {
+            "title": "Updatedby",
+            "type": "string"
+          }
+        },
+        "required": [
+          "definition",
+          "digest",
+          "baseVersion",
+          "checks",
+          "updatedAt",
+          "updatedBy"
+        ],
+        "title": "WorkingCopyView",
         "type": "object"
       },
       "WouldPause": {
@@ -61913,6 +62346,214 @@
         "x-ops-public": "sdk"
       }
     },
+    "/v1/workflows/definitions/{workflow_id}/diff": {
+      "get": {
+        "description": "The steps added, removed, changed (every setting that differs, old and new) and moved between two versions of\na workflow, its live version or its working copy.",
+        "operationId": "workflows_diff_definitions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": true,
+            "schema": {
+              "pattern": "^(\\d+|live|working-copy)$",
+              "title": "From",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": true,
+            "schema": {
+              "pattern": "^(\\d+|live|working-copy)$",
+              "title": "To",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_DefinitionDiffView_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Diff Definitions",
+        "tags": [
+          "Workflows"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
     "/v1/workflows/definitions/{workflow_id}/pause": {
       "post": {
         "description": "Stops new live runs of the workflow; runs under way keep going on their version. 409 before any is live; 403\nunless the caller is a builder or admin of the owning team (an admin for a workflow no team owns).",
@@ -62095,6 +62736,194 @@
           }
         },
         "summary": "Pause Definition",
+        "tags": [
+          "Workflows"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/workflows/definitions/{workflow_id}/publish-preview": {
+      "get": {
+        "description": "What a publish of the working copy would change, what stops it (each error check), and whether the team's\npublish policy would wait for a review; a change of step positions alone needs none. Nothing is made or opened.\nNo request transaction: the policy is read from platform-service.",
+        "operationId": "workflows_publish_preview",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_PublishPreview_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Publish Preview",
         "tags": [
           "Workflows"
         ],
@@ -62675,6 +63504,214 @@
         "x-ops-public": "sdk"
       }
     },
+    "/v1/workflows/definitions/{workflow_id}/versions": {
+      "post": {
+        "description": "Makes the next version from the working copy and removes the copy; the version is a draft until its publish\nrequest is approved. 422 `definition_checks` while the copy fails a check, and nothing is made; 409\n`nothing_to_publish` without a working copy; 409 `stale_base` when the copy was saved again after the caller read\nit. No request transaction, as for a new definition.",
+        "operationId": "workflows_version_from_working_copy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionFromCopyInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_DefinitionPublished_"
+                }
+              }
+            },
+            "description": "The copy equals a stored version"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_DefinitionPublished_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Version From Working Copy",
+        "tags": [
+          "Workflows"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
     "/v1/workflows/definitions/{workflow_id}/versions/{version}/shapes": {
       "get": {
         "description": "What each step of a saved version outputs, by port, before it has run: fixed by its type, built from\nits settings, or read from its document type or operation. A mapping picker reads it.\nNo request transaction: the version is read, then documents-service is asked with none open.",
@@ -62866,6 +63903,204 @@
           }
         },
         "summary": "Definition Shapes",
+        "tags": [
+          "Workflows"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/workflows/definitions/{workflow_id}/working-copy": {
+      "put": {
+        "description": "Saves the editor's working copy as it is, failing checks and all, and answers with its checks. It makes no\nversion: publishing does. 409 `stale_base` when `baseVersion` and `baseDigest` are not the newest copy, with who\nsaved it and when: read the workflow again and repeat the change. No request transaction: documents-service is\nasked for field shapes before the write.",
+        "operationId": "workflows_save_working_copy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkingCopyInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_WorkingCopySaved_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Save Working Copy",
         "tags": [
           "Workflows"
         ],

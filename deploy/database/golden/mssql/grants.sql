@@ -9,6 +9,7 @@
 IF USER_ID(N'ops_agents_runtime') IS NULL CREATE USER ops_agents_runtime FOR LOGIN ops_agents_runtime WITH DEFAULT_SCHEMA = dbo;
 GO
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.engine_definitions TO ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.engine_working_copies TO ops_agents_runtime;
 REVOKE DELETE ON dbo.engine_runs FROM ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE ON dbo.engine_runs TO ops_agents_runtime;
 REVOKE DELETE ON dbo.engine_steps FROM ops_agents_runtime;

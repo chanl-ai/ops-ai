@@ -3178,6 +3178,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/workflows/definitions/{workflow_id}/diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Diff Definitions
+         * @description The steps added, removed, changed (every setting that differs, old and new) and moved between two versions of
+         *     a workflow, its live version or its working copy.
+         */
+        get: operations["workflows_diff_definitions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/workflows/definitions/{workflow_id}/pause": {
         parameters: {
             query?: never;
@@ -3193,6 +3214,28 @@ export interface paths {
          *     unless the caller is a builder or admin of the owning team (an admin for a workflow no team owns).
          */
         post: operations["workflows_pause_definition"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/workflows/definitions/{workflow_id}/publish-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Publish Preview
+         * @description What a publish of the working copy would change, what stops it (each error check), and whether the team's
+         *     publish policy would wait for a review; a change of step positions alone needs none. Nothing is made or opened.
+         *     No request transaction: the policy is read from platform-service.
+         */
+        get: operations["workflows_publish_preview"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3264,6 +3307,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/workflows/definitions/{workflow_id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Version From Working Copy
+         * @description Makes the next version from the working copy and removes the copy; the version is a draft until its publish
+         *     request is approved. 422 `definition_checks` while the copy fails a check, and nothing is made; 409
+         *     `nothing_to_publish` without a working copy; 409 `stale_base` when the copy was saved again after the caller read
+         *     it. No request transaction, as for a new definition.
+         */
+        post: operations["workflows_version_from_working_copy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/workflows/definitions/{workflow_id}/versions/{version}/shapes": {
         parameters: {
             query?: never;
@@ -3279,6 +3345,29 @@ export interface paths {
          */
         get: operations["workflows_definition_shapes"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/workflows/definitions/{workflow_id}/working-copy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Save Working Copy
+         * @description Saves the editor's working copy as it is, failing checks and all, and answers with its checks. It makes no
+         *     version: publishing does. 409 `stale_base` when `baseVersion` and `baseDigest` are not the newest copy, with who
+         *     saved it and when: read the workflow again and repeat the change. No request transaction: documents-service is
+         *     asked for field shapes before the write.
+         */
+        put: operations["workflows_save_working_copy"];
         post?: never;
         delete?: never;
         options?: never;
@@ -5436,6 +5525,23 @@ export interface components {
             /** Suggestion */
             suggestion?: string | null;
         };
+        /** DefinitionDiffView */
+        DefinitionDiffView: {
+            /** Added */
+            added: components["schemas"]["StepRefView"][];
+            /** Changed */
+            changed: components["schemas"]["StepChangeView"][];
+            /** Connected */
+            connected: string[];
+            /** Disconnected */
+            disconnected: string[];
+            /** Moved */
+            moved: components["schemas"]["StepRefView"][];
+            /** Removed */
+            removed: components["schemas"]["StepRefView"][];
+            /** Workflow */
+            workflow: components["schemas"]["FieldChangeView"][];
+        };
         /**
          * DefinitionInput
          * @description Exactly one of `yaml` (YAML or JSON text) and `definition` (the parsed object).
@@ -5554,6 +5660,7 @@ export interface components {
             /** Paused */
             paused: boolean;
             review: components["schemas"]["OpenPublishRequest"] | null;
+            saveBase: components["schemas"]["SaveBase"];
             /**
              * Stage
              * @enum {string}
@@ -5566,6 +5673,7 @@ export interface components {
             versions: components["schemas"]["DefinitionVersion"][];
             /** Workflowid */
             workflowId: string;
+            workingCopy?: components["schemas"]["WorkingCopyView"] | null;
         };
         /** DefinitionWarning */
         DefinitionWarning: {
@@ -6012,6 +6120,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[DefinitionDiffView] */
+        Envelope_DefinitionDiffView_: {
+            data: components["schemas"]["DefinitionDiffView"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[DefinitionPublished] */
         Envelope_DefinitionPublished_: {
             data: components["schemas"]["DefinitionPublished"];
@@ -6367,6 +6484,15 @@ export interface components {
         /** Envelope[PublishDecisionFields] */
         Envelope_PublishDecisionFields_: {
             data: components["schemas"]["PublishDecisionFields"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[PublishPreview] */
+        Envelope_PublishPreview_: {
+            data: components["schemas"]["PublishPreview"];
             /**
              * Success
              * @constant
@@ -6789,6 +6915,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[WorkingCopySaved] */
+        Envelope_WorkingCopySaved_: {
+            data: components["schemas"]["WorkingCopySaved"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[dict[str, list[ToolUser]]] */
         Envelope_dict_str__list_ToolUser___: {
             /** Data */
@@ -7090,6 +7225,13 @@ export interface components {
             kind: string;
             /** Label */
             label: string;
+        };
+        /** FieldChangeView */
+        FieldChangeView: {
+            after?: components["schemas"]["JsonValue"];
+            before?: components["schemas"]["JsonValue"];
+            /** Field */
+            field: string;
         };
         /**
          * FieldRead
@@ -8730,6 +8872,25 @@ export interface components {
             /** Version */
             version: number;
         };
+        /**
+         * PublishPreview
+         * @description What publishing the working copy (or the newest draft, without one) would do.
+         */
+        PublishPreview: {
+            /** Blockers */
+            blockers: components["schemas"]["DefinitionCheck"][];
+            changes: components["schemas"]["DefinitionDiffView"];
+            /** Liveversion */
+            liveVersion: number | null;
+            /** Majorchange */
+            majorChange?: boolean | null;
+            /** Policy */
+            policy?: ("always" | "major" | "never") | null;
+            /** Reviewreason */
+            reviewReason?: ("policy_always" | "security_change" | "policy_never" | "major_change" | "dev_auto_approve" | "minor_change") | null;
+            /** Reviewrequired */
+            reviewRequired?: boolean | null;
+        };
         /** PublishRequestInfo */
         PublishRequestInfo: {
             /** Changes */
@@ -9598,6 +9759,17 @@ export interface components {
             payload: {
                 [key: string]: components["schemas"]["JsonValue"];
             };
+        };
+        /**
+         * SaveBase
+         * @description The copy a save is made on: its version and digest (save-base.ts `baseOf` reads it as `baseVersion` and
+         *     `baseDigest`).
+         */
+        SaveBase: {
+            /** Digest */
+            digest: string;
+            /** Version */
+            version: number;
         };
         /** SavedCase */
         SavedCase: {
@@ -10480,6 +10652,17 @@ export interface components {
             /** Status */
             status: string;
         };
+        /** StepChangeView */
+        StepChangeView: {
+            /** Fields */
+            fields: components["schemas"]["FieldChangeView"][];
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Type */
+            type: string;
+        };
         /**
          * StepCheck
          * @description What must hold before a step is done. `by` is set when the skill is saved: a rule is run on the step's result
@@ -10497,6 +10680,15 @@ export interface components {
             by?: ("rule" | "model") | null;
             /** Text */
             text: string;
+        };
+        /** StepRefView */
+        StepRefView: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Type */
+            type: string;
         };
         /** StepUpInput */
         StepUpInput: {
@@ -11633,6 +11825,16 @@ export interface components {
             /** Version */
             version: number;
         };
+        /**
+         * VersionFromCopyInput
+         * @description The working copy the person is publishing, as `saveBase` named it when they read it.
+         */
+        VersionFromCopyInput: {
+            /** Basedigest */
+            baseDigest: string;
+            /** Baseversion */
+            baseVersion: number;
+        };
         /** WaitingTask */
         WaitingTask: {
             assignee: components["schemas"]["Assignee"] | null;
@@ -11981,6 +12183,42 @@ export interface components {
             status: "completed" | "stopped";
             /** Visited */
             visited: string[];
+        };
+        /**
+         * WorkingCopyInput
+         * @description The definition as the editor holds it, and the copy it was made on (`saveBase` of the view last read).
+         */
+        WorkingCopyInput: {
+            /** Basedigest */
+            baseDigest: string;
+            /** Baseversion */
+            baseVersion: number;
+            /** Definition */
+            definition: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+        };
+        /** WorkingCopySaved */
+        WorkingCopySaved: {
+            saveBase: components["schemas"]["SaveBase"];
+            workingCopy: components["schemas"]["WorkingCopyView"];
+        };
+        /** WorkingCopyView */
+        WorkingCopyView: {
+            /** Baseversion */
+            baseVersion: number;
+            /** Checks */
+            checks: components["schemas"]["DefinitionCheck"][];
+            /** Definition */
+            definition: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Digest */
+            digest: string;
+            /** Updatedat */
+            updatedAt: string;
+            /** Updatedby */
+            updatedBy: string;
         };
         /** WouldPause */
         WouldPause: {
@@ -30934,6 +31172,112 @@ export interface operations {
             };
         };
     };
+    workflows_diff_definitions: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+            };
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_DefinitionDiffView_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     workflows_pause_definition: {
         parameters: {
             query?: never;
@@ -30952,6 +31296,109 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_DefinitionView_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    workflows_publish_preview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_PublishPreview_"];
                 };
             };
             /** @description Invalid request */
@@ -31350,6 +31797,122 @@ export interface operations {
             };
         };
     };
+    workflows_version_from_working_copy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VersionFromCopyInput"];
+            };
+        };
+        responses: {
+            /** @description The copy equals a stored version */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_DefinitionPublished_"];
+                };
+            };
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_DefinitionPublished_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     workflows_definition_shapes: {
         parameters: {
             query?: never;
@@ -31369,6 +31932,113 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_DefinitionShapes_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    workflows_save_working_copy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkingCopyInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_WorkingCopySaved_"];
                 };
             };
             /** @description Invalid request */
