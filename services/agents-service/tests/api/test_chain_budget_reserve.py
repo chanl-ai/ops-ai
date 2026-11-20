@@ -106,12 +106,21 @@ async def test_five_asks_at_once_spend_no_more_than_the_cap_and_the_asking_agent
     c, rt = stack
     cap = 8
     assert (await c.put(URL, json={"agentId": "ag_branch"}, headers=ADMIN)).status_code == 200
+    # Room for five tool calls a reply, so the budget is the only thing that stops an ask.
+    saved = await c.patch("/v1/agents/ag_branch", json={"guardrails": {"maxToolCallsPerTurn": 10}}, headers=ADMIN)
+    assert saved.status_code == 200, saved.text
+    body = {"version": saved.json()["data"]["version"], "note": "go"}
+    live = await c.post("/v1/agents/ag_branch/publish-requests", json=body, headers=ADMIN)
+    assert live.status_code == 201 and live.json()["data"]["status"] == "approved", live.text
     thread = (await start(c, VIEWER))["id"]
     assert rt.usage is not None and rt.graph_store is not None
     with tenant_scope(TENANT):
         await rt.usage.set_budget(thread, Budget(max_calls=cap))
     events = await say(c, thread, "Ask all five.", VIEWER)
-    asked = [e["call"]["output"].get("status") for e in events if e.get("type") == "tool_end"]
+    outputs = [e["call"]["output"] for e in events if e.get("type") == "tool_end"]
+    asked = [o.get("status") for o in outputs]
+    # Every ask ran as an ask: none failed for a reason of its own, which would make the count below a smaller one.
+    assert set(asked) <= {"answered", "budget_reached"}, outputs
     with tenant_scope(TENANT):
         own = sum(r.calls for r in await rt.usage.calls.calls(thread))
         rows = [t for t in await rt.graph_store.thread_rows("agent_wrapper") if t.meta_object().get("calledBy")]

@@ -153,8 +153,9 @@ CALL_COLUMNS = (
 
 
 class ModelCallLedger(RuntimeStore):
-    # Replay depends on the first response recorded for a (thread, task, request) winning (CAS); a record and the sum
-    # a budget check reads are each one statement, so no transaction spans them.
+    # Replay depends on the first response recorded for a (thread, task, request) winning (CAS). A record is one
+    # statement, and so is a reservation becoming its record; the transaction that checks a budget and writes the
+    # reservation is the usage ledger's (store/usage.py).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS})
 
     async def record(self, call: ModelCall, *, settles: str | None = None) -> bool:
