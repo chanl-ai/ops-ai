@@ -16,7 +16,7 @@ code are in [identity-and-tenancy.md](identity-and-tenancy.md).
 | Review of a draft | Workflow `human` node | Draft, evidence, citations, the call it gates | A review decision |
 | Question to the chat user | An agent node, owned by no policy | The question | The user, through `runs` |
 | Timeout | The timer poller through `fire()` | `{"decision": "timeout", "timer": "breach" or "maxWait"}` | The runtime alone, from the pinned plan |
-| Budget exhausted | A metered model call on a thread whose budget is spent, before the call (`graphs/metering.py`) | `{kind: "budget_exhausted", node, limit, spent, cap}` | A person through `runs`: approved with a higher `budget` continues; rejected ends the run in error |
+| Budget exhausted | A metered model call on a thread whose budget is spent, before the call (`graphs/metering.py`); calls already admitted and still running count as spent | `{kind: "budget_exhausted", node, limit, spent, cap}` | A person through `runs`: approved with a higher `budget` continues; rejected ends the run in error |
 | Manual handling | `POST /v1/threads/{id}/route-to-people` (definition workflows only); designed also for a run past its retry budget or recursion limit | The reason; remaining steps journaled as `route.skipped` | A person, at the built-in `manual_handling` step |
 
 ## Rules for the human step
