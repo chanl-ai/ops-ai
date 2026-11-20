@@ -10376,6 +10376,11 @@ export interface components {
          *     line: `checked` on the tool's result, or `agent`, decided from the conversation) and the tool its line runs.
          */
         SkillTextLine: {
+            /**
+             * Depth
+             * @default 0
+             */
+            depth: number;
             /** How */
             how?: ("checked" | "agent") | null;
             /**

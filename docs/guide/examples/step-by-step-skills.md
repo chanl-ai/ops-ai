@@ -150,6 +150,12 @@ else:
 Thank them.
 ```
 
+A procedure pasted from a document reads as it looks: `If …:` and `Otherwise:` work like `if …:` and `else:`, list
+items (`•`, `-`, `1.`) are plain lines, and non-breaking or full-width spaces and Windows line endings count as
+ordinary ones. In the console editor, click a mention to replace or remove it, tap a line with a wavy underline to
+read its hint (every hint is also listed under the text), and press Esc then Tab to leave the editor with the
+keyboard. A new skill opens with a short example of one mention line and one path.
+
 | Condition | How it is decided |
 |---|---|
 | Made of words the tool above returns (`found`, `not found`, `status is VIP`, `amount is more than 500`), or written as a rule (`result.balance > 0`) | Checked: a rule runs in code on the tool's result, labelled "checked" in the editor |

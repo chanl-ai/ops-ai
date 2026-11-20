@@ -583,6 +583,8 @@ export interface SkillTextLine {
   how: 'checked' | 'agent' | null;
   /** The line runs this tool (`@tool:id`). */
   tool: string | null;
+  /** How many path levels in the line is, as the service's reader counts its indent. */
+  depth?: number;
 }
 
 /** POST /v1/skills/{id}/text: how a text reads, as a save will read it. Hints never block; errors block a publish. */

@@ -1862,6 +1862,8 @@ class SkillTextLine(Out):
     step: int | None = None
     how: Literal["checked", "agent"] | None = None
     tool: str | None = None
+    # How many path levels in the line is, as the reader counts its indent (the editor draws its guides from it).
+    depth: int = 0
 
 
 class SkillTextReading(Out):

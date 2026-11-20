@@ -52,7 +52,7 @@ export interface SkillsApi {
   /** One zip of SKILL.md folders, stored through the Files API. */
   exportSkills(ids: string[], version?: number): Promise<FileRecord>;
   /** How a skill's text reads as steps, without saving it: the same reader a save runs. */
-  readText(id: string, input: { text: string; loading?: SkillLoading; hasParts?: boolean }): Promise<SkillTextReading>;
+  readText(id: string, input: { text: string; loading?: SkillLoading; hasParts?: boolean; exit?: Record<string, string> }): Promise<SkillTextReading>;
 
   tests: {
     add(id: string, input: SkillTestCaseInput): Promise<SkillTestCase>;

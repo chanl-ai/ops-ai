@@ -224,3 +224,26 @@ def test_a_path_that_reaches_done_early_waits_for_the_results_the_skill_owes() -
     assert (
         done.ok and done.run.history[-1].ended == "done" and done.run.history[-1].returns == {"summary": "Apologised."}
     )
+
+
+def test_a_procedure_pasted_from_a_document_reads_as_its_paths() -> None:
+    nbsp, wide = chr(0xA0) * 4, chr(0x3000) * 4
+    pasted = (
+        "Check what the caller needs:\r\n"
+        "  • their policy number\r\n"
+        "  1. the date of the claim\r\n"
+        "Find the policy with @tool:find_policy\r\n"
+        "If active:\r\n"
+        f"{nbsp}Open the claim with @tool:open_claim\r\n"
+        "Otherwise:\r\n"
+        f'{wide}stop "Policy lapsed"'
+    )
+    r = read(pasted, fields={"@tool:find_policy": {"active": {"type": "boolean"}}})
+    assert r.program is not None and [s.use.id if s.use else None for s in r.program.steps] == [
+        "find_policy",
+        "open_claim",
+    ]
+    branch = r.program.steps[0].branch
+    assert branch and branch.test.by == "rule" and branch.otherwise.exit == "policy_lapsed"
+    assert r.hints == [], "list items and pasted spaces earn no indent hint"
+    assert [m["depth"] for m in r.marks] == [0, 1, 1, 0, 0, 1, 0, 1]

@@ -186,11 +186,11 @@ export function useSkillGeneration() {
  * How a skill's text reads as steps, asked again after each pause in typing, by the same reader a save runs. The last
  * answer stays drawn while the next one loads; `forText` is the text an answer was read from.
  */
-export function useSkillTextReading(id: string, text: string, { loading, hasParts }: { loading: SkillLoading; hasParts: boolean }) {
+export function useSkillTextReading(id: string, text: string, { loading, hasParts, exit }: { loading: SkillLoading; hasParts: boolean; exit?: Record<string, string> }) {
   const settled = useDebounced(text, 300);
   const query = useTeamQuery({
-    queryKey: [...sk.one(id), 'text', settled, loading, hasParts],
-    queryFn: async () => ({ forText: settled, reading: await api.skills.readText(id, { text: settled, loading, hasParts }) }),
+    queryKey: [...sk.one(id), 'text', settled, loading, hasParts, exit],
+    queryFn: async () => ({ forText: settled, reading: await api.skills.readText(id, { text: settled, loading, hasParts, exit }) }),
     placeholderData: (previous) => previous,
     staleTime: 30_000,
     retry: false,

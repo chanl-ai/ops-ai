@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { AtSign, CircleAlert, Eye, GitBranch, Pencil, RefreshCw, Square, TriangleAlert, Users, X } from 'lucide-react';
+import { AtSign, CircleAlert, Eye, GitBranch, Lock, Pencil, RefreshCw, Square, TriangleAlert, Users, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { AddMenu } from '@/components/shared/add-menu';
@@ -10,9 +10,9 @@ import { LeaveGuard } from '@/components/shared/leave-guard';
 import { SettingsSection } from '@/components/shared/settings-section';
 import { TagInput } from '@/components/shared/tag-input';
 import { parseText, refToken } from '@/components/shared/instruction-document/document-model';
-import { SopEditor, type SopEditorHandle } from '@/components/shared/sop-editor';
+import { HOW_SAYS, SopEditor, type SopEditorHandle } from '@/components/shared/sop-editor';
 import { SkillInputsSection } from '@/components/skills/skill-inputs-section';
-import { EDIT_CLASS, EditClassBadge, MarkdownPreview } from '@/components/skills/skill-meta';
+import { EDIT_CLASS, EditClassBadge, MarkdownPreview, WORKED_EXAMPLE } from '@/components/skills/skill-meta';
 import { inText, refusedSave } from '@/components/skills/skill-problems';
 import { SkillResultsSection, type SkillEndingValue } from '@/components/skills/skill-results-section';
 import { SkillWhenSection, type SkillWhen, type SkillWhenHandle } from '@/components/skills/skill-when-section';
@@ -54,7 +54,7 @@ export interface Form {
 
 const formOf = (sk: SkillDetail): Form => ({ name: sk.content.name, when: { useWhen: sk.content.useWhen, notWhen: sk.content.notWhen ?? '' }, loading: sk.content.loading, instructions: sk.content.instructions, toolIds: sk.content.tools.map((t) => t.toolId), knowledgeBases: sk.content.knowledgeBases, guardrails: sk.content.guardrails, refusal: sk.content.refusal ?? '', parts: sk.content.parts ?? [], text: sk.text, ending: { exit: sk.content.exit ?? {}, returns: sk.content.returns ?? [], success: sk.content.success ?? [] }, inputs: sk.content.inputs ?? [] });
 const NONE: PublishBlocker[] = [];
-const EXAMPLE = 'Write the steps the way you would explain them to a new teammate. Type @ to mention a tool or a document.\nif they are a customer:\n    look up their last order with @…\nelse:\n    ask for their email';
+const EXAMPLE = WORKED_EXAMPLE;
 const KINDS = [['tools', 'tool', 'tools'], ['knowledge', 'knowledge source', 'knowledge sources'], ['skills', 'skill', 'skills'], ['agents', 'agent', 'agents'], ['workflows', 'workflow', 'workflows']] as const;
 /** “3 tools · 2 knowledge sources”, from the counts the service read from the text. */
 const usesLine = (uses: Record<(typeof KINDS)[number][0], number> | undefined) => {
@@ -94,7 +94,7 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried }: { sk
   const whenForm = React.useRef<SkillWhenHandle>(null);
   const textDoc = React.useRef<SopEditorHandle>(null);
   const search = useReferenceSearch({ forSkill: sk.id });
-  const reading = useSkillTextReading(sk.id, form.text, { loading: form.loading, hasParts: form.parts.length > 0 });
+  const reading = useSkillTextReading(sk.id, form.text, { loading: form.loading, hasParts: form.parts.length > 0, exit: form.ending.exit });
   const mentioned = React.useMemo(() => [...new Set(parseText(form.text).flatMap((x) => (x.t === 'ref' ? [refToken(x).slice(1)] : [])))], [form.text]);
   const labels = useReferenceLabels({ forSkill: sk.id }, mentioned);
   // A step's first line, from the reader's last answer; line 1 until it has answered.
@@ -227,10 +227,14 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried }: { sk
       {stepped ? (
         <SettingsSection title="Instructions" description="Write the skill the way you would explain it to a new teammate. A line that mentions a tool may use it; an indented “if …:” block is a path, “else:” the other one, and “stop” ends the skill.">
           <div className="flex flex-col gap-2">
-            <div className="rounded-lg border bg-card" data-testid="skill-text-editor">
-              <SopEditor value={form.text} onChange={(text) => (setRefused(null), setForm((f) => ({ ...f, text })))} readOnly={readOnly} reading={reading.reading} readingFor={reading.forText} labels={labels.data} search={(q) => search(q)} controls={textDoc} placeholder={EXAMPLE} />
-              {!readOnly && (
-                <div className="flex flex-wrap items-center gap-2 border-t px-3 py-2">
+            <div className={readOnly ? 'rounded-lg border bg-muted/40' : 'rounded-lg border bg-card'} data-testid="skill-text-editor">
+              {readOnly ? (
+                <p className="flex items-center gap-2 border-b px-3 py-2 text-xs text-muted-foreground" data-testid="sop-read-only">
+                  <Lock className="size-3.5" /> Read only. {locked ?? 'You can read this skill; a builder in its team can change it.'}
+                </p>
+              ) : (
+                // Above the text, so it stays in view on a long skill.
+                <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2" data-testid="sop-cue-bar">
                   <Button variant="ghost" size="sm" onClick={() => textDoc.current?.insert('@')} data-testid="sop-insert-mention">
                     <AtSign className="size-4" /> Mention
                   </Button>
@@ -240,10 +244,27 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried }: { sk
                   <Button variant="ghost" size="sm" onClick={() => textDoc.current?.insert('\nstop "')} data-testid="sop-end-here">
                     <Square className="size-4" /> End here
                   </Button>
-                  <span className="ml-auto text-xs text-muted-foreground">Type @ to mention · “if …:” starts a path · Tab indents</span>
+                  <span className="w-full text-xs text-muted-foreground sm:ml-auto sm:w-auto">Type @ to mention · click a mention to change it · Tab indents, Esc then Tab leaves</span>
+                  <span className="w-full text-xs text-muted-foreground" data-testid="sop-how-legend">
+                    {HOW_SAYS.checked} {HOW_SAYS.agent}
+                  </span>
                 </div>
               )}
+              <SopEditor value={form.text} onChange={(text) => (setRefused(null), setForm((f) => ({ ...f, text })))} readOnly={readOnly} reading={reading.reading} readingFor={reading.forText} labels={labels.data} search={(q) => search(q)} controls={textDoc} placeholder={EXAMPLE} />
             </div>
+            {!!reading.reading?.hints.length && reading.forText === form.text && (
+              <div className="flex flex-col gap-1 rounded-md border px-3 py-2" data-testid="sop-hints">
+                <span className="text-xs font-medium">{plural(reading.reading.hints.length, 'hint')} · nothing here stops a save</span>
+                {reading.reading.hints.map((h, k) => (
+                  <p key={k} className="flex flex-wrap items-baseline gap-x-2 text-xs text-muted-foreground" data-testid="sop-hint">
+                    <span>{h.message}</span>
+                    <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => textDoc.current?.focusLine(h.line)}>
+                      Go to line {h.line}
+                    </Button>
+                  </p>
+                ))}
+              </div>
+            )}
             <p className="text-xs text-muted-foreground tabular-nums" data-testid="skill-text-uses">
               {reading.isError ? 'Couldn’t read the text just now; it still saves.' : `Uses ${usesLine(reading.reading?.uses)} · read from the text, nothing to set up separately`}
             </p>

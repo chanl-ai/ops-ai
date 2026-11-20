@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export type { SopEditorHandle, SopEditorProps } from './sop-editor';
+export { HOW_SAYS } from './how';
 
 /** The plain-text skill editor, loaded in the browser by the pages that draw it, so CodeMirror ships only with them. */
 export const SopEditor = dynamic(() => import('./sop-editor').then((m) => m.SopEditor), {

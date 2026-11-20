@@ -122,6 +122,7 @@ async def check_content(rt: Runtime, fields: Json, *, skill_id: str | None = Non
             )
         if not source.strip():
             raise ValidationFailed("Write the skill's instructions.", code="no_instructions")
+        source = skill_text.normalised(source)
         program = await _program_of_text(
             rt, source, fields, team_id=team_id, skill_id=skill_id, loading=loading, has_parts=has_parts
         )
@@ -821,7 +822,7 @@ def text_of(content: Json) -> str:
     text by the same reader (`skill_text.render`)."""
     source = content.get("source")
     if isinstance(source, str):
-        return source
+        return skill_text.normalised(source)
     return skill_text.render(str(content.get("instructions") or ""), skill_content.program_of(content))
 
 

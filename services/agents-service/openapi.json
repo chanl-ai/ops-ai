@@ -19797,6 +19797,11 @@
         "additionalProperties": false,
         "description": "One line of the text: its kind, the step (from 1) it is part of, how its condition is decided (an `if`\nline: `checked` on the tool's result, or `agent`, decided from the conversation) and the tool its line runs.",
         "properties": {
+          "depth": {
+            "default": 0,
+            "title": "Depth",
+            "type": "integer"
+          },
           "how": {
             "anyOf": [
               {

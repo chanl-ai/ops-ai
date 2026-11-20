@@ -1833,6 +1833,7 @@ class SkillTextInput(TypedDict, closed=True):
 
 
 class SkillTextLine(TypedDict, closed=True):
+    depth: NotRequired[int]
     how: NotRequired[Literal["checked", "agent"] | None]
     kind: Literal["text", "step", "if", "else", "stop", "blank"]
     line: int

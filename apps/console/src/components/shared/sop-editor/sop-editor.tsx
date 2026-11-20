@@ -6,11 +6,12 @@ import { TriangleAlert } from 'lucide-react';
 import { indentLess, indentMore, insertNewlineAndIndent, history, historyKeymap, defaultKeymap } from '@codemirror/commands';
 import { indentUnit } from '@codemirror/language';
 import { EditorState, Prec, RangeSetBuilder, StateEffect, StateField, type Extension } from '@codemirror/state';
-import { Decoration, type DecorationSet, EditorView, highlightActiveLine, hoverTooltip, keymap, lineNumbers, placeholder as placeholderText, ViewPlugin, type ViewUpdate, WidgetType } from '@codemirror/view';
+import { Decoration, type DecorationSet, EditorView, highlightActiveLine, hoverTooltip, keymap, lineNumbers, placeholder as placeholderText, showTooltip, type Tooltip, ViewPlugin, type ViewUpdate, WidgetType } from '@codemirror/view';
 
 import { CaretMenu, type MenuRow, type MenuSection } from '@/components/shared/instruction-document/reference-menu';
 import { chipFor, parseText, refToken } from '@/components/shared/instruction-document/document-model';
 import { KIND_ICON } from '@/components/shared/reference-kinds';
+import { HOW_SAYS } from './how';
 import { badgeVariants } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import type { Ref, ReferenceGroup, ReferenceItem, ReferenceSearch, RefKind } from '@/lib/types/references';
@@ -109,7 +110,7 @@ class HowWidget extends WidgetType {
     el.className = 'ml-2 select-none text-xs text-muted-foreground';
     el.textContent = this.how === 'checked' ? 'checked' : 'agent decides';
     el.dataset.testid = 'sop-condition-how';
-    el.title = this.how === 'checked' ? 'Checked exactly on what the tool returns' : 'The agent decides from the conversation';
+    el.title = HOW_SAYS[this.how];
     return el;
   }
 }
@@ -117,7 +118,10 @@ class HowWidget extends WidgetType {
 const GUIDE = Decoration.mark({ class: 'sop-guide' });
 const indentOf = (text: string) => text.length - text.trimStart().length;
 const levels = (text: string) => Math.floor(text.slice(0, indentOf(text)).replace(/\t/g, UNIT).length / UNIT.length);
-const KEYWORD = { if: /^if\b/, else: /^else\b/, stop: /^stop\b/ } as const;
+const KEYWORD = { if: /^if\b/i, else: /^(?:else|otherwise)\b/i, stop: /^stop\b/ } as const;
+/** The reader's own syntax for a line that opens a path, used until its reading of the text arrives. */
+const OPENS = /^\s*(?:if\s.+|else|otherwise)\s*:\s*$/i;
+const MENTION_AT = /^@(?:tool|knowledge|skill|agent|workflow):[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,126}[A-Za-z0-9_])?/;
 
 /** Mentions, guides, keywords, condition labels and hint underlines, drawn from the text and the service's reading. */
 function decorate(state: EditorState): { all: DecorationSet; atomic: DecorationSet } {
@@ -129,17 +133,19 @@ function decorate(state: EditorState): { all: DecorationSet; atomic: DecorationS
   const atomic = new RangeSetBuilder<Decoration>();
   for (let n = 1; n <= state.doc.lines; n++) {
     const line = state.doc.line(n);
-    const depth = levels(line.text);
+    const mark = marks.get(n);
+    // The reader is the one owner of indent: its depth counts pasted spaces as the save does.
+    const depth = mark?.depth ?? levels(line.text);
     // A wrapped line keeps its indent: the guides take 1.5rem a step, and the wrap hangs under the text.
     if (depth > 0) all.add(line.from, line.from, Decoration.line({ attributes: { style: `padding-left:calc(${depth} * 1.5rem + 0.25rem);text-indent:calc(${depth} * -1.5rem)` } }));
     const lead = indentOf(line.text);
     const body = line.text.slice(lead);
-    const mark = marks.get(n);
     const kw = mark && (mark.kind === 'if' || mark.kind === 'else' || mark.kind === 'stop') ? body.match(KEYWORD[mark.kind as keyof typeof KEYWORD]) : null;
     const pieces: { from: number; to: number; deco: Decoration; atomic?: boolean }[] = [];
     // One guide per indent step, drawn on the leading whitespace itself, so it lines up in any font.
-    for (let k = 0, at = 0; k < depth; k++) {
-      const size = line.text[at] === '\t' ? 1 : UNIT.length;
+    const each = depth ? Math.max(1, Math.floor(lead / depth)) : 0;
+    for (let k = 0, at = 0; k < depth && at < lead; k++) {
+      const size = k === depth - 1 ? lead - at : Math.min(each, lead - at);
       pieces.push({ from: line.from + at, to: line.from + at + size, deco: GUIDE });
       at += size;
     }
@@ -178,11 +184,11 @@ const drawing = ViewPlugin.fromClass(
   { decorations: (p) => p.sets.all, provide: (p) => EditorView.atomicRanges.of((view) => view.plugin(p)?.sets.atomic ?? Decoration.none) },
 );
 
-/** The hover card on a hinted line: what the agent will do with it. Styled as the console's HoverCard. */
-const hints = hoverTooltip((view, pos) => {
-  const drawn = view.state.field(drawnField);
+/** The card on a hinted line: what the agent will do with it. Styled as the console's HoverCard. */
+function hintCard(state: EditorState, pos: number): Tooltip | null {
+  const drawn = state.field(drawnField);
   if (!drawn.current || !drawn.reading) return null;
-  const line = view.state.doc.lineAt(pos);
+  const line = state.doc.lineAt(pos);
   const notes = [...drawn.reading.errors, ...drawn.reading.hints].filter((h) => h.line === line.number);
   if (!notes.length) return null;
   return {
@@ -202,6 +208,19 @@ const hints = hoverTooltip((view, pos) => {
       return { dom };
     },
   };
+}
+
+const hints = hoverTooltip((view, pos) => hintCard(view.state, pos));
+
+/** A tap or click on a hinted line pins its card open: a phone has no hover. It closes on the next edit or a tap elsewhere. */
+const pinHint = StateEffect.define<number | null>();
+const pinnedHint = StateField.define<Tooltip | null>({
+  create: () => null,
+  update: (v, tr) => {
+    for (const e of tr.effects) if (e.is(pinHint)) return e.value === null ? null : hintCard(tr.state, e.value);
+    return tr.docChanged ? null : v;
+  },
+  provide: (f) => showTooltip.from(f),
 });
 
 const theme = EditorView.theme({
@@ -221,14 +240,18 @@ const theme = EditorView.theme({
   '.cm-tooltip': { border: 'none', backgroundColor: 'transparent' },
 });
 
-/** Enter after a line that ends in `:` opens the indented block under it. */
+/** Enter at the end of a line that opens a path (`if …:`, `else:`) opens the indented block under it; after any other
+ * line ending in a colon (“Note:”) it starts a plain line at the same indent. */
 function enter(view: EditorView): boolean {
   const { state } = view;
   const range = state.selection.main;
   if (!range.empty) return false;
   const line = state.doc.lineAt(range.head);
   const before = line.text.slice(0, range.head - line.from);
-  if (!before.trimEnd().endsWith(':')) return insertNewlineAndIndent(view);
+  const drawn = state.field(drawnField);
+  const kind = drawn.current ? drawn.reading?.lines.find((l) => l.line === line.number)?.kind : undefined;
+  const opens = kind ? kind === 'if' || kind === 'else' : OPENS.test(before);
+  if (!opens || !before.trimEnd().endsWith(':')) return insertNewlineAndIndent(view);
   const insert = `\n${before.slice(0, indentOf(before))}${UNIT}`;
   view.dispatch({ changes: { from: range.head, insert }, selection: { anchor: range.head + insert.length }, scrollIntoView: true, userEvent: 'input' });
   return true;
@@ -236,16 +259,17 @@ function enter(view: EditorView): boolean {
 
 type Menu = { kind: 'mention' | 'if'; from: number; to: number; query: string };
 
-/** What the caret is typing into: an `@` mention, or a condition after `if `. */
-function menuAt(state: EditorState): Menu | null {
+/** What the caret is typing into: an `@` mention, or a condition after a freshly typed `if ` (`armed`, the line it was
+ * typed on): moving onto a sentence that starts with “if” opens nothing. */
+function menuAt(state: EditorState, armed: number | null): Menu | null {
   const range = state.selection.main;
   if (!range.empty) return null;
   const line = state.doc.lineAt(range.head);
   const before = line.text.slice(0, range.head - line.from);
   const at = before.match(/(?<![\p{L}\p{N}_@])@([\p{L}\p{N}_ -]{0,40})$/u);
   if (at && !at[1].includes(':')) return { kind: 'mention', from: range.head - at[0].length, to: range.head, query: at[1].trim() };
-  const cond = before.match(/^(\s*if\s+)([^:]*)$/);
-  if (cond) return { kind: 'if', from: line.from + cond[1].length, to: range.head, query: cond[2] };
+  const cond = before.match(/^(\s*if\s+)([^:]*)$/i);
+  if (cond && armed === line.number) return { kind: 'if', from: line.from + cond[1].length, to: range.head, query: cond[2] };
   return null;
 }
 
@@ -265,6 +289,12 @@ export function SopEditor({ value, onChange, readOnly = false, reading, readingF
   const [active, setActive] = React.useState('');
   const menuId = React.useId();
   const menuRef = React.useRef<{ menu: Menu | null; rows: MenuRow[]; active: string; pick: (row: MenuRow) => void }>({ menu: null, rows: [], active: '', pick: () => {} });
+  // The line an `if ` was just typed on: the condition list opens only there.
+  const armed = React.useRef<number | null>(null);
+  // Esc, then Tab within two seconds, leaves the editor; Tab otherwise indents.
+  const escaped = React.useRef(0);
+  // A clicked badge's menu: change what it mentions, or take it out.
+  const [badge, setBadge] = React.useState<{ from: number; to: number } | null>(null);
 
   React.useEffect(() => {
     if (!host.current) return;
@@ -274,16 +304,24 @@ export function SopEditor({ value, onChange, readOnly = false, reading, readingF
         { key: 'ArrowUp', run: () => move(-1) },
         { key: 'Enter', run: () => pickActive() },
         { key: 'Tab', run: () => pickActive() },
-        { key: 'Escape', run: () => (menuRef.current.menu ? (setMenu(null), true) : false) },
+        {
+          key: 'Escape',
+          run: () => {
+            if (menuRef.current.menu) return (setMenu(null), (armed.current = null), true);
+            escaped.current = Date.now();
+            return false;
+          },
+        },
       ]),
     );
     const move = (by: number) => {
       const { menu: m, rows, active: a } = menuRef.current;
       if (!m || !rows.length) return false;
       const i = rows.findIndex((r) => r.key === a);
-      setActive(rows[(i + by + rows.length) % rows.length].key);
+      setActive(rows[i < 0 ? (by > 0 ? 0 : rows.length - 1) : (i + by + rows.length) % rows.length].key);
       return true;
     };
+    const leaving = () => Date.now() - escaped.current < 2000;
     const pickActive = () => {
       const { menu: m, rows, active: a, pick } = menuRef.current;
       const row = m && rows.find((r) => r.key === a);
@@ -302,7 +340,7 @@ export function SopEditor({ value, onChange, readOnly = false, reading, readingF
           history(),
           indentUnit.of(UNIT),
           EditorState.tabSize.of(4),
-          keymap.of([{ key: 'Enter', run: enter }, { key: 'Tab', run: indentMore, shift: indentLess }, ...defaultKeymap, ...historyKeymap]),
+          keymap.of([{ key: 'Enter', run: enter }, { key: 'Tab', run: (v) => !leaving() && indentMore(v), shift: (v) => !leaving() && indentLess(v) }, ...defaultKeymap, ...historyKeymap]),
           EditorView.lineWrapping,
           EditorState.readOnly.of(readOnly),
           EditorView.editable.of(!readOnly),
@@ -310,12 +348,30 @@ export function SopEditor({ value, onChange, readOnly = false, reading, readingF
           drawnField,
           drawing,
           hints,
+          pinnedHint,
+          EditorView.domEventHandlers({
+            click: (e, v) => {
+              const el = (e.target as HTMLElement).closest('[data-testid="sop-mention"],[data-testid="sop-mention-missing"]');
+              if (el && !readOnly) {
+                const from = v.posAtDOM(el);
+                const token = v.state.doc.sliceString(from, from + 140).match(MENTION_AT);
+                if (token) return (setBadge({ from, to: from + token[0].length }), true);
+              }
+              const pos = v.posAtCoords({ x: e.clientX, y: e.clientY });
+              v.dispatch({ effects: pinHint.of(pos === null ? null : pos) });
+              return false;
+            },
+          }),
           theme,
           ...(placeholder ? [placeholderText(placeholder)] : []),
           EditorView.updateListener.of((u) => {
             if (u.docChanged) latest.current.onChange(u.state.doc.toString());
+            const head = u.state.selection.main.head;
+            const here = u.state.doc.lineAt(head);
+            if (u.transactions.some((t) => t.isUserEvent('input.type')) && /^\s*if $/i.test(here.text.slice(0, head - here.from))) armed.current = here.number;
+            else if (armed.current !== null && armed.current !== here.number) armed.current = null;
             if (u.docChanged || u.selectionSet) {
-              const next = u.view.hasFocus || u.docChanged ? menuAt(u.state) : null;
+              const next = u.view.hasFocus || u.docChanged ? menuAt(u.state, armed.current) : null;
               setMenu((m) => (next && m && next.kind === m.kind && next.from === m.from && next.query === m.query ? m : next));
             }
           }),
@@ -348,8 +404,11 @@ export function SopEditor({ value, onChange, readOnly = false, reading, readingF
       const v = view.current;
       if (!v) return;
       const line = v.state.doc.line(Math.min(Math.max(n, 1), v.state.doc.lines));
-      v.dispatch({ selection: { anchor: line.from + indentOf(line.text) }, scrollIntoView: true });
+      const at = line.from + indentOf(line.text);
+      // Centred, so on a phone the line is not left under the keyboard or the bottom edge.
+      v.dispatch({ selection: { anchor: at }, effects: [EditorView.scrollIntoView(at, { y: 'center' }), pinHint.of(at)] });
       v.focus();
+      v.dom.closest('[data-testid="sop-editor"]')?.scrollIntoView({ block: 'nearest' });
     },
     insert: (text) => {
       const v = view.current;
@@ -383,6 +442,7 @@ export function SopEditor({ value, onChange, readOnly = false, reading, readingF
     if (!v) return;
     v.dispatch({ changes: { from: m.from, to: m.to, insert }, selection: { anchor: m.from + insert.length }, userEvent: 'input.complete' });
     setMenu(null);
+    armed.current = null;
     v.focus();
   }, []);
 
@@ -414,9 +474,13 @@ export function SopEditor({ value, onChange, readOnly = false, reading, readingF
     return out;
   }, [menu, found, labels]);
   const rows = React.useMemo(() => sections.flatMap((s) => s.rows.filter((r) => !r.disabled)), [sections]);
+  // The `@` list highlights its first row; the condition list highlights none until an arrow key does, so Enter at the
+  // end of a sentence starting “if” is a new line, never a path made from the typed words.
+  const firstActive = menu?.kind === 'mention';
   React.useEffect(() => {
-    if (rows.length && !rows.some((r) => r.key === active)) setActive(rows[0].key);
-  }, [rows, active]);
+    if (rows.some((r) => r.key === active)) return;
+    setActive(firstActive && rows.length ? rows[0].key : '');
+  }, [rows, active, firstActive]);
 
   const pick = React.useCallback(
     (row: MenuRow) => {
@@ -433,10 +497,48 @@ export function SopEditor({ value, onChange, readOnly = false, reading, readingF
   );
   menuRef.current = { menu, rows, active, pick };
 
+  const badgeRows: MenuSection[] = [
+    {
+      label: 'This mention',
+      rows: [
+        { key: 'replace', label: 'Replace…', trailing: 'pick another', pick: () => {} },
+        { key: 'remove', label: 'Remove', pick: () => {} },
+      ],
+    },
+  ];
+  const onBadge = (row: MenuRow) => {
+    const v = view.current;
+    if (!v || !badge) return;
+    const space = v.state.doc.sliceString(badge.to, badge.to + 1) === ' ' ? 1 : 0;
+    const insert = row.key === 'replace' ? '@' : '';
+    // Typed as `@`, so the mention list opens on the badge's place.
+    v.dispatch({ changes: { from: badge.from, to: badge.to + (row.key === 'remove' ? space : 0), insert }, selection: { anchor: badge.from + insert.length }, userEvent: row.key === 'replace' ? 'input.type' : 'delete' });
+    setBadge(null);
+    v.focus();
+  };
+
   const status = menu?.kind === 'if' ? 'ready' : found.status;
   return (
     <div className="relative" data-testid="sop-editor">
-      <div ref={host} className={cn('min-h-40', readOnly && 'opacity-90')} />
+      <div ref={host} className="min-h-40" />
+      {badge && !menu && (
+        <CaretMenu
+          rect={() => {
+            const c = view.current?.coordsAtPos(badge.from);
+            return c ? new DOMRect(c.left, c.top, 1, c.bottom - c.top) : null;
+          }}
+          label="Change this mention"
+          status="ready"
+          sections={badgeRows}
+          active=""
+          onActive={() => {}}
+          onPick={onBadge}
+          onDismiss={() => setBadge(null)}
+          empty=""
+          error=""
+          id={`${menuId}-badge`}
+        />
+      )}
       {menu && !readOnly && (status !== 'ready' || sections.length > 0 || menu.kind === 'mention') && (
         <CaretMenu
           rect={() => {
