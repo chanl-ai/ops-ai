@@ -87,7 +87,7 @@ function hash(key: string) {
   return ((h >>> 0) % 10_000) / 10_000;
 }
 
-interface StoredContent extends Pick<SkillContent, 'inputs' | 'notWhen' | 'steps' | 'exit' | 'returns' | 'success'> {
+interface StoredContent extends Pick<SkillContent, 'inputs' | 'source' | 'notWhen' | 'steps' | 'exit' | 'returns' | 'success'> {
   name: string;
   slug: string;
   useWhen: string;
@@ -424,6 +424,7 @@ export function createSkillsMock(deps: SkillsDeps) {
     return {
       ...row(sk),
       content: content(sk, newest(sk).content),
+      text: newest(sk).content.source ?? newest(sk).content.instructions,
       versions: sk.versions.map((v) => version(sk, v)),
       tests: sk.tests,
       runs: sk.runs,
@@ -988,6 +989,8 @@ export function createSkillsMock(deps: SkillsDeps) {
         }
         return out;
       }),
+    // The sample API reads nothing: the reader is the service's, so a sample page shows no marks or hints.
+    readText: (sid, input) => respond(() => (find(sid), { hints: [], errors: [], uses: { tools: 0, knowledge: 0, skills: 0, agents: 0, workflows: 0 }, lines: input.text.split('\n').map((_, i) => ({ line: i + 1, kind: 'text' as const, step: null, how: null, tool: null })), phrases: {}, steps: 0, stepLines: [] })),
     exportSkills: (ids, v) =>
       respond(() => {
         if (!ids.length) throw new ApiError('Choose at least one skill.', 400);

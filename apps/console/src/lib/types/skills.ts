@@ -81,6 +81,8 @@ export interface SkillContent {
   inputs?: SkillInputField[];
   /** When not to use the skill. */
   notWhen?: string;
+  /** The skill as written in the text editor; absent on a skill saved as a list of steps. */
+  source?: string;
   /** Numbered steps the agent follows in order; a skill has steps or parts, never both. */
   steps?: StepValue[];
   /** The ways the skill may end beside done and failed: a name and what it means. */
@@ -282,6 +284,8 @@ export interface SkillPublishCheck {
 
 export interface SkillDetail extends Skill {
   content: SkillContent;
+  /** The text the editor shows: `content.source`, or a skill's stored steps written as text by the service. */
+  text: string;
   /** Newest first. */
   versions: SkillVersion[];
   tests: SkillTestCase[];
@@ -336,6 +340,8 @@ export interface SkillDraftPatch {
   notWhen?: string;
   /** Numbered steps the agent follows in order; a skill has steps or parts, never both. */
   steps?: StepValue[];
+  /** The skill written as text: the service reads its steps from it and sets `instructions` to it. */
+  source?: string;
   /** The ways the skill may end beside done and failed: a name and what it means. */
   exit?: Record<string, string>;
   /** What the skill hands back when it ends. */
@@ -557,4 +563,36 @@ export interface SkillOptions {
   tools: SkillToolRef[];
   knowledgeBases: string[];
   limits: SkillRuntimeLimits;
+}
+
+// ── Text editor ─────────────────────────────────────────────────────────────
+
+/** A hint or an error on a line (from 1) of a skill's text. */
+export interface SkillTextNote {
+  line: number;
+  message: string;
+}
+
+/** One line of a skill's text as the service reads it. */
+export interface SkillTextLine {
+  line: number;
+  kind: 'text' | 'step' | 'if' | 'else' | 'stop' | 'blank';
+  /** The step (from 1) the line is part of. */
+  step: number | null;
+  /** An `if` line: checked on the tool's result, or decided by the agent from the conversation. */
+  how: 'checked' | 'agent' | null;
+  /** The line runs this tool (`@tool:id`). */
+  tool: string | null;
+}
+
+/** POST /v1/skills/{id}/text: how a text reads, as a save will read it. Hints never block; errors block a publish. */
+export interface SkillTextReading {
+  hints: SkillTextNote[];
+  errors: (SkillTextNote & { id: string })[];
+  uses: { tools: number; knowledge: number; skills: number; agents: number; workflows: number };
+  lines: SkillTextLine[];
+  /** What to offer after `if ` for each mentioned tool, from what it returns. */
+  phrases: Record<string, string[]>;
+  steps: number;
+  stepLines: number[];
 }

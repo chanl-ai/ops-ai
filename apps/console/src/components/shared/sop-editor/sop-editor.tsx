@@ -1,0 +1,460 @@
+'use client';
+
+import * as React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { TriangleAlert } from 'lucide-react';
+import { indentLess, indentMore, insertNewlineAndIndent, history, historyKeymap, defaultKeymap } from '@codemirror/commands';
+import { indentUnit } from '@codemirror/language';
+import { EditorState, Prec, RangeSetBuilder, StateEffect, StateField, type Extension } from '@codemirror/state';
+import { Decoration, type DecorationSet, EditorView, highlightActiveLine, hoverTooltip, keymap, lineNumbers, placeholder as placeholderText, ViewPlugin, type ViewUpdate, WidgetType } from '@codemirror/view';
+
+import { CaretMenu, type MenuRow, type MenuSection } from '@/components/shared/instruction-document/reference-menu';
+import { chipFor, parseText, refToken } from '@/components/shared/instruction-document/document-model';
+import { KIND_ICON } from '@/components/shared/reference-kinds';
+import { badgeVariants } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
+import type { Ref, ReferenceGroup, ReferenceItem, ReferenceSearch, RefKind } from '@/lib/types/references';
+import type { SkillTextReading } from '@/lib/types/skills';
+
+const UNIT = '    ';
+/** Offered after `if ` once what the tool above returns is listed: conditions the agent decides from the conversation. */
+const OWN_WORDS = ['they want a refund', 'they sound upset', 'they ask for a person', 'they have already tried this'];
+
+export interface SopEditorHandle {
+  /** Puts the caret at the start of a line (from 1) and scrolls it into view. */
+  focusLine(line: number): void;
+  /** Types `text` at the caret, as a person would, so `@` and `if ` open their menus. */
+  insert(text: string): void;
+}
+
+export interface SopEditorProps {
+  value: string;
+  onChange: (text: string) => void;
+  readOnly?: boolean;
+  /** The service's reading of `readingFor`: line kinds, how each condition is decided, hints, and what each tool returns. */
+  reading?: SkillTextReading;
+  readingFor?: string;
+  /** The current names of what the text mentions; undefined while loading. One left out is drawn as missing. */
+  labels?: readonly ReferenceItem[];
+  /** The `@` menu's search. */
+  search: (query: string) => Promise<ReferenceSearch>;
+  placeholder?: string;
+  controls?: React.Ref<SopEditorHandle>;
+  ariaLabel?: string;
+}
+
+interface Drawn {
+  reading?: SkillTextReading;
+  /** The reading belongs to the text as it is now: its line marks still line up. */
+  current: boolean;
+  labels?: readonly ReferenceItem[];
+}
+
+const setDrawn = StateEffect.define<Drawn>();
+const drawnField = StateField.define<Drawn>({
+  create: () => ({ current: false }),
+  update: (v, tr) => {
+    for (const e of tr.effects) if (e.is(setDrawn)) return e.value;
+    return tr.docChanged ? { ...v, current: false } : v;
+  },
+});
+
+const ICONS = new Map<RefKind | 'missing', string>();
+function iconHtml(kind: RefKind | 'missing'): string {
+  if (!ICONS.has(kind)) {
+    const Icon = kind === 'missing' ? TriangleAlert : KIND_ICON[kind];
+    ICONS.set(kind, renderToStaticMarkup(<Icon className="size-3" aria-hidden />));
+  }
+  return ICONS.get(kind)!;
+}
+
+/** A mention as one atomic badge: the console's Badge, by its class names, since a widget is plain DOM. */
+class MentionWidget extends WidgetType {
+  constructor(
+    readonly ref: Ref,
+    readonly label: string,
+    readonly state: 'loading' | 'ok' | 'missing',
+  ) {
+    super();
+  }
+  eq(other: MentionWidget) {
+    return other.label === this.label && other.state === this.state && refToken(other.ref) === refToken(this.ref);
+  }
+  toDOM() {
+    const el = document.createElement('span');
+    const missing = this.state === 'missing';
+    el.className = cn(badgeVariants({ variant: missing ? 'outline' : 'secondary' }), 'mx-0.5 align-baseline font-normal', missing && 'border-destructive text-destructive line-through', this.state === 'loading' && 'text-muted-foreground');
+    el.innerHTML = iconHtml(missing ? 'missing' : this.ref.kind);
+    el.append(document.createTextNode(missing ? this.ref.id : this.label));
+    el.dataset.testid = missing ? 'sop-mention-missing' : 'sop-mention';
+    // A wrapped line's hanging indent is inherited by inline blocks; a badge draws from its own left edge.
+    el.style.textIndent = '0';
+    el.title = missing ? `${this.ref.id} no longer exists` : this.label;
+    return el;
+  }
+  ignoreEvent() {
+    return false;
+  }
+}
+
+class HowWidget extends WidgetType {
+  constructor(readonly how: 'checked' | 'agent') {
+    super();
+  }
+  eq(other: HowWidget) {
+    return other.how === this.how;
+  }
+  toDOM() {
+    const el = document.createElement('span');
+    el.className = 'ml-2 select-none text-xs text-muted-foreground';
+    el.textContent = this.how === 'checked' ? 'checked' : 'agent decides';
+    el.dataset.testid = 'sop-condition-how';
+    el.title = this.how === 'checked' ? 'Checked exactly on what the tool returns' : 'The agent decides from the conversation';
+    return el;
+  }
+}
+
+const GUIDE = Decoration.mark({ class: 'sop-guide' });
+const indentOf = (text: string) => text.length - text.trimStart().length;
+const levels = (text: string) => Math.floor(text.slice(0, indentOf(text)).replace(/\t/g, UNIT).length / UNIT.length);
+const KEYWORD = { if: /^if\b/i, else: /^else\b/i, stop: /^stop\b/i } as const;
+
+/** Mentions, guides, keywords, condition labels and hint underlines, drawn from the text and the service's reading. */
+function decorate(state: EditorState): { all: DecorationSet; atomic: DecorationSet } {
+  const drawn = state.field(drawnField);
+  const marks = drawn.current && drawn.reading ? new Map(drawn.reading.lines.map((l) => [l.line, l])) : new Map();
+  // Hints get the wavy line; a removed mention is already drawn red on its badge.
+  const hinted = new Set(drawn.current && drawn.reading ? drawn.reading.hints.map((h) => h.line) : []);
+  const all = new RangeSetBuilder<Decoration>();
+  const atomic = new RangeSetBuilder<Decoration>();
+  for (let n = 1; n <= state.doc.lines; n++) {
+    const line = state.doc.line(n);
+    const depth = levels(line.text);
+    // A wrapped line keeps its indent: the guides take 1.5rem a step, and the wrap hangs under the text.
+    if (depth > 0) all.add(line.from, line.from, Decoration.line({ attributes: { style: `padding-left:calc(${depth} * 1.5rem + 0.25rem);text-indent:calc(${depth} * -1.5rem)` } }));
+    const lead = indentOf(line.text);
+    const body = line.text.slice(lead);
+    const mark = marks.get(n);
+    const kw = mark && (mark.kind === 'if' || mark.kind === 'else' || mark.kind === 'stop') ? body.match(KEYWORD[mark.kind as keyof typeof KEYWORD]) : null;
+    const pieces: { from: number; to: number; deco: Decoration; atomic?: boolean }[] = [];
+    // One guide per indent step, drawn on the leading whitespace itself, so it lines up in any font.
+    for (let k = 0, at = 0; k < depth; k++) {
+      const size = line.text[at] === '\t' ? 1 : UNIT.length;
+      pieces.push({ from: line.from + at, to: line.from + at + size, deco: GUIDE });
+      at += size;
+    }
+    if (kw) pieces.push({ from: line.from + lead, to: line.from + lead + kw[0].length, deco: Decoration.mark({ class: 'sop-keyword' }) });
+    if (hinted.has(n) && body.trim()) pieces.push({ from: line.from + lead, to: line.to, deco: Decoration.mark({ class: 'sop-hint' }) });
+    let at = line.from;
+    for (const seg of parseText(line.text)) {
+      const size = seg.t === 'text' ? seg.text.length : seg.t === 'var' ? seg.name.length + 4 : refToken(seg).length;
+      if (seg.t === 'ref') {
+        const chip = chipFor(seg, drawn.labels);
+        pieces.push({ from: at, to: at + size, deco: Decoration.replace({ widget: new MentionWidget(seg, chip.label, chip.state) }), atomic: true });
+      }
+      at += size;
+    }
+    // A decoration set is built in document order: marks, then replacements, sorted by where they start.
+    pieces.sort((a, b) => a.from - b.from || Number(!!a.atomic) - Number(!!b.atomic));
+    for (const p of pieces) {
+      all.add(p.from, p.to, p.deco);
+      if (p.atomic) atomic.add(p.from, p.to, p.deco);
+    }
+    if (mark?.kind === 'if' && mark.how) all.add(line.to, line.to, Decoration.widget({ widget: new HowWidget(mark.how), side: 1 }));
+  }
+  return { all: all.finish(), atomic: atomic.finish() };
+}
+
+const drawing = ViewPlugin.fromClass(
+  class {
+    sets: { all: DecorationSet; atomic: DecorationSet };
+    constructor(view: EditorView) {
+      this.sets = decorate(view.state);
+    }
+    update(u: ViewUpdate) {
+      if (u.docChanged || u.transactions.some((t) => t.effects.some((e) => e.is(setDrawn)))) this.sets = decorate(u.state);
+    }
+  },
+  { decorations: (p) => p.sets.all, provide: (p) => EditorView.atomicRanges.of((view) => view.plugin(p)?.sets.atomic ?? Decoration.none) },
+);
+
+/** The hover card on a hinted line: what the agent will do with it. Styled as the console's HoverCard. */
+const hints = hoverTooltip((view, pos) => {
+  const drawn = view.state.field(drawnField);
+  if (!drawn.current || !drawn.reading) return null;
+  const line = view.state.doc.lineAt(pos);
+  const notes = [...drawn.reading.errors, ...drawn.reading.hints].filter((h) => h.line === line.number);
+  if (!notes.length) return null;
+  return {
+    pos: line.from + indentOf(line.text),
+    end: line.to,
+    above: true,
+    create: () => {
+      const dom = document.createElement('div');
+      dom.className = 'z-50 w-80 max-w-[calc(100vw-2rem)] rounded-md border bg-popover p-3 text-sm text-popover-foreground shadow-md';
+      dom.dataset.testid = 'sop-hint-card';
+      for (const n of notes) {
+        const p = document.createElement('p');
+        p.textContent = n.message;
+        p.className = 'leading-snug [&+p]:mt-2';
+        dom.append(p);
+      }
+      return { dom };
+    },
+  };
+});
+
+const theme = EditorView.theme({
+  '&': { fontSize: '0.875rem', backgroundColor: 'transparent' },
+  '&.cm-focused': { outline: 'none' },
+  '.cm-content': { fontFamily: 'inherit', lineHeight: '1.75rem', padding: '0.5rem 0', caretColor: 'var(--foreground)' },
+  '.cm-line': { padding: '0 0.75rem 0 0.25rem' },
+  '.cm-gutters': { backgroundColor: 'transparent', border: 'none', color: 'var(--muted-foreground)', fontSize: '0.75rem' },
+  '.cm-lineNumbers .cm-gutterElement': { padding: '0 0.75rem 0 0.5rem', minWidth: '2.25rem', lineHeight: '1.75rem' },
+  '.cm-activeLine': { backgroundColor: 'color-mix(in oklab, var(--muted) 60%, transparent)' },
+  '.cm-activeLineGutter': { backgroundColor: 'transparent' },
+  '.cm-placeholder': { color: 'var(--muted-foreground)', fontStyle: 'italic', whiteSpace: 'pre-wrap' },
+  '.cm-scroller': { fontFamily: 'inherit' },
+  '.sop-guide': { boxShadow: 'inset 1px 0 0 var(--border)', display: 'inline-block', minWidth: '1.5rem', whiteSpace: 'pre', textIndent: '0' },
+  '.sop-keyword': { color: 'var(--primary)', fontWeight: '600', fontFamily: 'var(--font-mono, ui-monospace, monospace)' },
+  '.sop-hint': { textDecoration: 'underline wavy', textDecorationColor: 'var(--chart-4, #d97706)', textUnderlineOffset: '4px' },
+  '.cm-tooltip': { border: 'none', backgroundColor: 'transparent' },
+});
+
+/** Enter after a line that ends in `:` opens the indented block under it. */
+function enter(view: EditorView): boolean {
+  const { state } = view;
+  const range = state.selection.main;
+  if (!range.empty) return false;
+  const line = state.doc.lineAt(range.head);
+  const before = line.text.slice(0, range.head - line.from);
+  if (!before.trimEnd().endsWith(':')) return insertNewlineAndIndent(view);
+  const insert = `\n${before.slice(0, indentOf(before))}${UNIT}`;
+  view.dispatch({ changes: { from: range.head, insert }, selection: { anchor: range.head + insert.length }, scrollIntoView: true, userEvent: 'input' });
+  return true;
+}
+
+type Menu = { kind: 'mention' | 'if'; from: number; to: number; query: string };
+
+/** What the caret is typing into: an `@` mention, or a condition after `if `. */
+function menuAt(state: EditorState): Menu | null {
+  const range = state.selection.main;
+  if (!range.empty) return null;
+  const line = state.doc.lineAt(range.head);
+  const before = line.text.slice(0, range.head - line.from);
+  const at = before.match(/(?<![\p{L}\p{N}_@])@([\p{L}\p{N}_ -]{0,40})$/u);
+  if (at && !at[1].includes(':')) return { kind: 'mention', from: range.head - at[0].length, to: range.head, query: at[1].trim() };
+  const cond = before.match(/^(\s*if\s+)([^:]*)$/i);
+  if (cond) return { kind: 'if', from: line.from + cond[1].length, to: range.head, query: cond[2] };
+  return null;
+}
+
+/**
+ * A skill written as plain text, like a prompt, on CodeMirror 6. `@` mentions draw as badges and are deleted whole;
+ * an indented `if …:` block is a path; the service's reading (`reading`) adds the checked or agent-decides label to
+ * each condition and a wavy underline with a hover card to each hint. Nothing here reads the text's structure: the
+ * service's reader is the one owner of that, and this draws what it said.
+ */
+export function SopEditor({ value, onChange, readOnly = false, reading, readingFor, labels, search, placeholder, controls, ariaLabel = 'Skill text' }: SopEditorProps) {
+  const host = React.useRef<HTMLDivElement>(null);
+  const view = React.useRef<EditorView | null>(null);
+  const latest = React.useRef({ onChange, search, reading });
+  latest.current = { onChange, search, reading };
+  const [menu, setMenu] = React.useState<Menu | null>(null);
+  const [found, setFound] = React.useState<{ status: 'loading' | 'ready' | 'error'; groups: ReferenceGroup[] }>({ status: 'loading', groups: [] });
+  const [active, setActive] = React.useState('');
+  const menuId = React.useId();
+  const menuRef = React.useRef<{ menu: Menu | null; rows: MenuRow[]; active: string; pick: (row: MenuRow) => void }>({ menu: null, rows: [], active: '', pick: () => {} });
+
+  React.useEffect(() => {
+    if (!host.current) return;
+    const keys: Extension = Prec.highest(
+      keymap.of([
+        { key: 'ArrowDown', run: () => move(1) },
+        { key: 'ArrowUp', run: () => move(-1) },
+        { key: 'Enter', run: () => pickActive() },
+        { key: 'Tab', run: () => pickActive() },
+        { key: 'Escape', run: () => (menuRef.current.menu ? (setMenu(null), true) : false) },
+      ]),
+    );
+    const move = (by: number) => {
+      const { menu: m, rows, active: a } = menuRef.current;
+      if (!m || !rows.length) return false;
+      const i = rows.findIndex((r) => r.key === a);
+      setActive(rows[(i + by + rows.length) % rows.length].key);
+      return true;
+    };
+    const pickActive = () => {
+      const { menu: m, rows, active: a, pick } = menuRef.current;
+      const row = m && rows.find((r) => r.key === a);
+      if (!row) return false;
+      pick(row);
+      return true;
+    };
+    const v = new EditorView({
+      parent: host.current,
+      state: EditorState.create({
+        doc: value,
+        extensions: [
+          keys,
+          lineNumbers(),
+          highlightActiveLine(),
+          history(),
+          indentUnit.of(UNIT),
+          EditorState.tabSize.of(4),
+          keymap.of([{ key: 'Enter', run: enter }, { key: 'Tab', run: indentMore, shift: indentLess }, ...defaultKeymap, ...historyKeymap]),
+          EditorView.lineWrapping,
+          EditorState.readOnly.of(readOnly),
+          EditorView.editable.of(!readOnly),
+          EditorView.contentAttributes.of({ 'aria-label': ariaLabel, 'aria-multiline': 'true', 'data-testid': 'sop-editor-content' }),
+          drawnField,
+          drawing,
+          hints,
+          theme,
+          ...(placeholder ? [placeholderText(placeholder)] : []),
+          EditorView.updateListener.of((u) => {
+            if (u.docChanged) latest.current.onChange(u.state.doc.toString());
+            if (u.docChanged || u.selectionSet) {
+              const next = u.view.hasFocus || u.docChanged ? menuAt(u.state) : null;
+              setMenu((m) => (next && m && next.kind === m.kind && next.from === m.from && next.query === m.query ? m : next));
+            }
+          }),
+        ],
+      }),
+    });
+    view.current = v;
+    return () => {
+      v.destroy();
+      view.current = null;
+    };
+    // The editor is made once; the text from outside is pushed in by the effect below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readOnly]);
+
+  // A value set from outside (a discard, a reload) replaces the text; the editor's own typing already matches it.
+  React.useEffect(() => {
+    const v = view.current;
+    if (v && v.state.doc.toString() !== value) v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: value } });
+  }, [value]);
+
+  React.useEffect(() => {
+    const v = view.current;
+    if (!v) return;
+    v.dispatch({ effects: setDrawn.of({ reading, labels, current: !!reading && readingFor === v.state.doc.toString() }) });
+  }, [reading, readingFor, labels]);
+
+  React.useImperativeHandle(controls, () => ({
+    focusLine: (n) => {
+      const v = view.current;
+      if (!v) return;
+      const line = v.state.doc.line(Math.min(Math.max(n, 1), v.state.doc.lines));
+      v.dispatch({ selection: { anchor: line.from + indentOf(line.text) }, scrollIntoView: true });
+      v.focus();
+    },
+    insert: (text) => {
+      const v = view.current;
+      if (!v) return;
+      const at = v.state.selection.main.head;
+      v.dispatch({ changes: { from: at, insert: text }, selection: { anchor: at + text.length }, userEvent: 'input.type' });
+      v.focus();
+    },
+  }));
+
+  // The @ list: one search per pause in typing; an answer for text since changed is dropped.
+  const mentionQuery = menu?.kind === 'mention' ? menu.query : null;
+  React.useEffect(() => {
+    if (mentionQuery === null) return;
+    let stale = false;
+    setFound((f) => ({ ...f, status: 'loading' }));
+    const timer = setTimeout(() => {
+      latest.current.search(mentionQuery).then(
+        (r) => !stale && setFound({ status: 'ready', groups: r.groups }),
+        () => !stale && setFound({ status: 'error', groups: [] }),
+      );
+    }, 150);
+    return () => {
+      stale = true;
+      clearTimeout(timer);
+    };
+  }, [mentionQuery]);
+
+  const replace = React.useCallback((m: Menu, insert: string) => {
+    const v = view.current;
+    if (!v) return;
+    v.dispatch({ changes: { from: m.from, to: m.to, insert }, selection: { anchor: m.from + insert.length }, userEvent: 'input.complete' });
+    setMenu(null);
+    v.focus();
+  }, []);
+
+  const sections = React.useMemo<MenuSection[]>(() => {
+    if (!menu) return [];
+    if (menu.kind === 'mention')
+      return found.groups.map((g) => ({
+        label: g.label,
+        rows: g.items.map((item) => ({ key: `${item.kind}:${item.id}`, label: item.label, icon: KIND_ICON[item.kind], trailing: item.hint, disabled: item.disabled, pick: () => {} })),
+      }));
+    // After `if `: what the tool above returns, checked exactly, then words the agent decides.
+    const v = view.current;
+    const r = latest.current.reading;
+    let tool: string | null = null;
+    if (v && r) {
+      const here = v.state.doc.lineAt(menu.from).number;
+      for (let n = here - 1; n >= 1 && !tool; n--) tool = r.lines.find((l) => l.line === n)?.tool ?? null;
+    }
+    const q = menu.query.trim().toLowerCase();
+    const fits = (p: string) => !q || p.toLowerCase().includes(q);
+    const name = tool ? (labels?.find((i) => `@${i.kind}:${i.id}` === tool)?.label ?? tool.split(':')[1]) : null;
+    const out: MenuSection[] = [];
+    const returned = (tool && r?.phrases[tool]) || [];
+    const fromTool = returned.filter(fits).map((p) => ({ key: `checked:${p}`, label: p, trailing: 'checked', pick: () => {} }));
+    if (fromTool[0]) out.push({ label: `From ${name}, checked`, rows: fromTool });
+    const own = OWN_WORDS.filter(fits);
+    if (q && !returned.includes(q)) own.unshift(menu.query.trim());
+    if (own.length) out.push({ label: 'In your own words, the agent decides', rows: own.map((p) => ({ key: `agent:${p}`, label: p, trailing: 'agent decides', pick: () => {} })) });
+    return out;
+  }, [menu, found, labels]);
+  const rows = React.useMemo(() => sections.flatMap((s) => s.rows.filter((r) => !r.disabled)), [sections]);
+  React.useEffect(() => {
+    if (rows.length && !rows.some((r) => r.key === active)) setActive(rows[0].key);
+  }, [rows, active]);
+
+  const pick = React.useCallback(
+    (row: MenuRow) => {
+      if (!menu) return;
+      if (menu.kind === 'mention') {
+        const [kind, ...rest] = row.key.split(':');
+        return replace(menu, `${refToken({ kind: kind as RefKind, id: rest.join(':') })} `);
+      }
+      const phrase = row.label.replace(/\s*…$/, '');
+      // A phrase that still needs a value (“status is …”) leaves the caret after it, without the colon.
+      replace(menu, row.label.endsWith('…') ? `${phrase} ` : `${phrase}:`);
+    },
+    [menu, replace],
+  );
+  menuRef.current = { menu, rows, active, pick };
+
+  const status = menu?.kind === 'if' ? 'ready' : found.status;
+  return (
+    <div className="relative" data-testid="sop-editor">
+      <div ref={host} className={cn('min-h-40', readOnly && 'opacity-90')} />
+      {menu && !readOnly && (status !== 'ready' || sections.length > 0 || menu.kind === 'mention') && (
+        <CaretMenu
+          rect={() => {
+            const c = view.current?.coordsAtPos(menu.from);
+            return c ? new DOMRect(c.left, c.top, 1, c.bottom - c.top) : null;
+          }}
+          label={menu.kind === 'mention' ? 'Mention a tool, knowledge, a skill or an agent' : 'Write a condition'}
+          status={status}
+          sections={sections}
+          active={active}
+          onActive={setActive}
+          onPick={pick}
+          onDismiss={() => setMenu(null)}
+          empty={menu.query ? `Nothing called “${menu.query}”. Keep typing, or leave it as plain text.` : 'This team has no tools, knowledge or skills yet. A builder can add them in Apps.'}
+          error="Couldn’t load the list. What you typed is kept; try again in a moment."
+          id={menuId}
+        />
+      )}
+    </div>
+  );
+}
