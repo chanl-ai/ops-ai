@@ -31,6 +31,7 @@ The agents service runs on the scripted model, seeded with Branch Concierge (`ag
 | 9 | Start a run of Branch Concierge capped at 3 model calls, ask it to call Card Dispute Resolver, then send a second message | The tool result names the path Branch Concierge, Card Dispute Resolver; the run's cost is 3 calls (its own two and the specialist's one); the second message waits on `budget_exhausted` for calls |
 | 10 | Continue the budget | The waiting turn finishes and the cost rises above 3 |
 | 11 | Start a run of Branch Concierge capped at 1 model call and ask it to call Card Dispute Resolver | The tool result is `budget_reached`: the specialist made no model call. The run's cost is 2 calls: the cap and the asking agent's one closing answer. The run does not wait on a budget card |
+| 12 | Give Wire Fraud Sentinel `agent:ag_dispute` without publishing, ask it to call Card Dispute Resolver in its Test panel, then in a chat | The Test panel runs the draft: one tool call, answered, on a chain that names the draft's version. The chat runs the published version, which holds no such grant, and makes no call |
 
 A budget is checked before every model call, against the conversation the chain started on. A specialist stopped at
 the cap returns what it has written, the asking agent makes one closing call with no tools, and the next turn of the

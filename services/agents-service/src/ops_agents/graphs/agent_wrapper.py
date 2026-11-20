@@ -158,7 +158,7 @@ def build(
     async def agent(state: AgentState) -> Json:
         await held(state)
         a = agent_of(state)
-        ports, offers = await ports_with_workflows(deps, list(a.tools), agent_id=a.id)
+        ports, offers = await ports_with_workflows(deps, list(a.tools), agent_id=a.id, version=a.version)
         source = state["history"] if "history" in state else state["messages"]
         transcript = [TranscriptMessage(m["role"], m["content"]) for m in source]  # pyright: ignore[reportArgumentType]
         carried, reads = _earlier(cast(list[Json], source))
@@ -277,7 +277,7 @@ def build(
     async def resume(state: AgentState) -> Json:
         await held(state)
         a = agent_of(state, in_flight=True)
-        ports, offers = await ports_with_workflows(deps, list(a.tools), agent_id=a.id)
+        ports, offers = await ports_with_workflows(deps, list(a.tools), agent_id=a.id, version=a.version)
         d = state.get("decision") or {}
         approved = d.get("decision") == "approved"
         now = await allowed_now(state, d)
