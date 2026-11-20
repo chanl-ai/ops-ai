@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { NodeViewContent, NodeViewWrapper, type ReactNodeViewProps } from '@tiptap/react';
+import { NodeViewContent, NodeViewWrapper, useEditorState, type ReactNodeViewProps } from '@tiptap/react';
 import { Ban, BookOpen, Bot, Braces, Lock, LockOpen, Play, Plus, Search, Sparkles, TriangleAlert, Workflow, Wrench, X, type LucideIcon } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
@@ -130,11 +130,23 @@ function LockControl({ locked, readOnly, onChange }: { locked: boolean; readOnly
   );
 }
 
+/** The step's place among the steps, from 1; 0 while it has no place (as it is being removed). */
+function stepNumber(editor: ReactNodeViewProps['editor'], getPos: ReactNodeViewProps['getPos']): number {
+  try {
+    const at = getPos();
+    return at === undefined ? 0 : editor.state.doc.resolve(at).index() + 1;
+  } catch {
+    return 0;
+  }
+}
+
 /** One numbered step: what it uses in front, its line, and a check and an if-not line where they were written. */
 export function StepView({ node, editor, getPos, updateAttributes }: ReactNodeViewProps) {
   const { missing, invalid, warnings, readOnly, resolved } = React.useContext(DocumentContext);
   const pos = getPos();
-  const number = pos === undefined ? 0 : editor.state.doc.resolve(pos).index() + 1;
+  // A step's number is its place among the steps. A step is drawn again only when it changes itself, so the number
+  // is read from the editor's state: a step added or removed above changes it and redraws the label and its error.
+  const number = useEditorState({ editor, selector: () => stepNumber(editor, getPos) });
   const error = invalid.find((i) => i.field === 'steps' && i.step === number);
   const errorId = `${React.useId()}-error`;
   const use = node.attrs.use as Ref | null;
