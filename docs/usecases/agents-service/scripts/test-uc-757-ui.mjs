@@ -196,17 +196,21 @@ await withUiStack(
 
       // 20. Priya saves the agent while James has it open: his next change is not saved over hers, and the page says so.
       const agentSave = (r) => r.request().method() === 'PATCH' && r.url().endsWith(`/v1/agents/${agent.id}`);
-      const hers = await saveAgent(agents, as(await tokenFor(PRIYA)), agent.id, { skillMenu: 'attached' });
+      // She changes the brief's Goal; he then changes its Purpose. The brief is saved whole, so his save must carry her Goal.
+      const opened = (await (await fetch(`${agents}/v1/agents/${agent.id}`, { headers: J })).json()).data;
+      const herGoal = 'Every dispute ends with a dated next step.';
+      const hers = await saveAgent(agents, as(await tokenFor(PRIYA)), agent.id, { skillMenu: 'attached', brief: { ...opened.brief, goal: herGoal } });
       const refused = page.waitForResponse(agentSave, { timeout: 60_000 });
-      await page.locator('#ag-thinking').click();
-      await page.getByRole('option', { name: 'Low' }).click();
+      await brief.getByRole('group', { name: 'Purpose' }).click();
+      await page.keyboard.press('End');
+      await page.keyboard.insertText(' By phone or chat.');
       const refusedWith = (await refused).status();
       const told = await page.getByTestId('agent-stale-base').waitFor({ timeout: 30_000 }).then(() => page.getByTestId('agent-stale-base').innerText(), () => '');
       check('20 a change made after another person saved is refused, and the page says who saved', hers.ok && refusedWith === 409 && /p\.shah@harborpine\.example saved a newer draft/.test(told), { hers: hers.status, refusedWith, told });
       const resent = page.waitForResponse((r) => agentSave(r) && r.ok(), { timeout: 60_000 });
       await page.getByTestId('agent-stale-reload').click();
       const both = (await (await resent).json()).data;
-      check('20 reloading keeps his unsaved change and hers', both?.patterns?.thinking === 'low' && both?.skillMenu === 'attached' && (await page.getByTestId('agent-stale-base').count()) === 0, { thinking: both?.patterns?.thinking, skillMenu: both?.skillMenu });
+      check('20 reloading keeps his unsaved change and hers, in the brief too', / By phone or chat\.$/.test(both?.brief?.purpose ?? '') && both?.brief?.goal === herGoal && both?.skillMenu === 'attached' && (await page.getByTestId('agent-stale-base').count()) === 0, { purpose: both?.brief?.purpose, goal: both?.brief?.goal, skillMenu: both?.skillMenu });
 
       // 21. His own save from elsewhere is no clash to tell him about: the page reads the agent again and saves.
       await page.getByTestId('agent-save-status').filter({ hasText: /saved/i }).waitFor({ timeout: 30_000 });
@@ -216,10 +220,10 @@ await withUiStack(
       page.on('response', note);
       const landed = page.waitForResponse((r) => agentSave(r) && r.ok(), { timeout: 60_000 });
       await page.locator('#ag-thinking').click();
-      await page.getByRole('option', { name: 'High' }).click();
+      await page.getByRole('option', { name: 'Low' }).click();
       const mine = (await (await landed).json()).data;
       page.off('response', note);
-      check('21 after his own save elsewhere the change saves with no message', answers.join() === '409,200' && mine?.patterns?.thinking === 'high' && mine?.skillMenu === 'team' && (await page.getByTestId('agent-stale-base').count()) === 0, { answers, thinking: mine?.patterns?.thinking, skillMenu: mine?.skillMenu });
+      check('21 after his own save elsewhere the change saves with no message', answers.join() === '409,200' && mine?.patterns?.thinking === 'low' && mine?.skillMenu === 'team' && (await page.getByTestId('agent-stale-base').count()) === 0, { answers, thinking: mine?.patterns?.thinking, skillMenu: mine?.skillMenu });
 
       // 17. The test panel shows the step tracker after a reply.
       // A live agent of the demo: the agent written above is a draft, and only a test chat reaches a draft.

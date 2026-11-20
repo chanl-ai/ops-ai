@@ -166,7 +166,17 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
   // Purpose and its instructions as How to answer, and stays as it is until a brief field is edited.
   const mode: PromptMode = agent.promptMode === 'full' ? 'full' : 'brief';
   const [briefEdit, setBriefEdit] = React.useState<AgentBrief | null>(null);
-  const brief = briefEdit ?? agent.brief ?? legacyBrief(agent);
+  const briefSaved = React.useMemo(() => agent.brief ?? legacyBrief(agent), [agent]);
+  // The brief is saved whole, so an edited brief is moved onto a newer copy the same way: the fields this person
+  // changed keep their text and the rest take the newer copy's. Left whole, the next save would send the other
+  // person's fields back as they were before their edit.
+  const briefBefore = React.useRef(briefSaved);
+  React.useEffect(() => {
+    const before = briefBefore.current;
+    briefBefore.current = briefSaved;
+    if (!sameValue(before, briefSaved)) setBriefEdit((b) => b && keptEdits(before, b, briefSaved));
+  }, [briefSaved]);
+  const brief = briefEdit ?? briefSaved;
   const briefDirty = briefEdit !== null && !sameValue(briefEdit, agent.brief ?? null);
   const purposeMissing = mode === 'brief' && briefDirty && !briefEdit!.purpose.trim();
   const errors = { name: draft.name.trim() ? undefined : 'The agent needs a name.', role: mode === 'full' && !draft.role.trim() ? 'Describe the job in one line.' : undefined };
