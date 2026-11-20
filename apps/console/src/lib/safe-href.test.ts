@@ -20,7 +20,7 @@ test('a framed preview loads web addresses only', () => {
 
 test('a card field links only to a path in the console', () => {
   assert.equal(consolePath('/cases/c1'), '/cases/c1');
-  for (const other of ['https://bank.example/a', '//evil.example/x', 'javascript:void(0)', undefined]) {
+  for (const other of ['https://bank.example/a', '//evil.example/x', '/\\evil.example/x', '/\t/evil.example', 'javascript:void(0)', undefined]) {
     assert.equal(consolePath(other), undefined, String(other));
   }
 });
