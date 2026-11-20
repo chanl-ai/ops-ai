@@ -11,7 +11,7 @@ from typing import Any
 
 from brief_steps import brief, confirm_skill, freeze_skill, hold_skill
 from main_chains import ACCOUNT, bank_stack, holds, publish_bank_module
-from usecase_harness import check, data, finish, save_agent, sse
+from usecase_harness import agents, check, data, finish, save_agent, sse
 
 RUN = int(time.time())
 STREAM = {"Accept": "text/event-stream"}
@@ -330,5 +330,55 @@ with bank_stack() as s:
         "6 the write a test chat waits on is in Human Tasks for the reviewer and the asker, and opens",
         listed.status_code == 200 and thread in listed.text and opened.status_code == 200 and thread in mine.text,
         (listed.status_code, thread in listed.text, opened.status_code, mine.status_code, thread in mine.text),
+    )
+
+# 6, continued. A step that asks another agent, on the dev stack, where the team's default agent may ask a specialist.
+# The hand-off is one more tool a skill owns: refused before the skill starts, and run as its step.
+DEV = {"X-Team-Id": "team_ops", "X-Dev-User": "m.okafor@harborpine.example"}
+with agents() as api:
+    asks = {
+        "name": f"Ask the dispute desk {RUN}",
+        "ownerTeam": "team_ops",
+        "useWhen": "The caller asks whether a card charge can be disputed.",
+        "instructions": "",
+        "steps": [
+            {
+                "do": "Ask the dispute desk with @agent:ag_dispute.",
+                "use": {"kind": "agent", "id": "ag_dispute"},
+                "check": {"text": 'result.status == "answered"'},
+                "ifNot": {"action": "exit", "exit": "failed"},
+            }
+        ],
+    }
+    unruled = api.post("/v1/skills", json={**asks, "steps": [{k: v for k, v in asks["steps"][0].items() if k in ("do", "use")}]}, headers=DEV)
+    skill = made(api.post("/v1/skills", json=asks, headers=DEV))
+    made(api.post(f"/v1/skills/{skill['id']}/publish-requests", json={"note": "use case"}, headers=DEV))
+    made(api.post("/v1/agents/ag_branch/references", json={"kind": "skill", "id": skill["id"]}, headers=DEV))
+    held = data(api.get("/v1/agents/ag_branch", headers=DEV))
+    made(api.post("/v1/agents/ag_branch/publish-requests", json={"version": held["version"], "note": "go"}, headers=DEV))
+    api.put("/v1/chat/default-agent", json={"agentId": "ag_branch"}, headers=DEV)
+    chat = data(api.post("/chat/threads", json={"agentId": "ag_branch", "kbIds": []}, headers=DEV))["id"]
+
+    def said(text: str) -> list[tuple[str, Any]]:
+        res = api.post(f"/chat/threads/{chat}/messages", json={"content": text}, headers={**DEV, **STREAM}, timeout=120)
+        if res.status_code != 200:
+            raise SystemExit(f"FAIL chat: {res.status_code} {res.text[:300]}")
+        ended = [e["call"] for e in sse(res.text) if e.get("type") == "tool_end"]
+        return [(c["name"], (c.get("output") or {}).get("status")) for c in ended]
+
+    question = 'call agent__ag_dispute {"question": "Can I dispute a card charge?"}'
+    early = said(question)
+    said("call switch_skill " + json.dumps({"slug": skill["slug"]}))
+    as_step = said(question)
+    record = [m for m in data(api.get(f"/chat/threads/{chat}", headers=DEV))["messages"] if m.get("role") == "assistant"][-1]
+    ends = [h.get("ended") for h in (record.get("skillRun") or {}).get("history") or []]
+    check(
+        "6 a step that asks another agent needs a rule, is refused before its skill starts, and runs as its step",
+        code_of(unruled) == (400, "write_needs_rule")
+        and "agent:ag_dispute" in held["toolIds"]
+        and ("agent__ag_dispute", "answered") not in early
+        and ("agent__ag_dispute", "answered") in as_step
+        and ends[-1:] == ["done"],
+        (code_of(unruled), held["toolIds"], early, as_step, ends),
     )
 finish()

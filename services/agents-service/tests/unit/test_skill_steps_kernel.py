@@ -531,7 +531,7 @@ async def test_a_pause_keeps_the_step_a_denial_ends_the_skill_and_the_record_hol
 
 # --- a skill's write is reached only through its step, and an ending the kernel made is final for the reply ---
 
-PAYMENTS = tool("agent:ag_payments")
+PAYMENTS = tool("agent__ag_payments")
 GATED_REFUND = tool("refund_charge", "write", approval=True)
 
 
@@ -558,7 +558,7 @@ WRITE: Call = ("refund_charge", {"chargeId": "CH-2"})
 # One row per way a model reaches for the write without its step: what it does, and the tools granted.
 REACHES: dict[str, tuple[list[Action], list[ToolGrant]]] = {
     "with no skill running": ([WRITE], [LOOKUP, REFUND, NOTE, PAYMENTS]),
-    "another agent, with no skill running": ([("agent:ag_payments", {})], [LOOKUP, REFUND, NOTE, PAYMENTS]),
+    "another agent, with no skill running": ([("agent__ag_payments", {})], [LOOKUP, REFUND, NOTE, PAYMENTS]),
     "in the model step that starts the skill": ([[START, WRITE]], [LOOKUP, REFUND, NOTE, PAYMENTS]),
     "in the model step that leaves the skill": (
         [START, PASSES, [("exit", {"name": "failed"}), WRITE]],
@@ -574,7 +574,7 @@ REACHES: dict[str, tuple[list[Action], list[ToolGrant]]] = {
 @pytest.mark.parametrize("reach", REACHES, ids=str)
 async def test_a_skills_write_runs_only_as_its_step(reach: str) -> None:
     actions, tools = REACHES[reach]
-    systems = Systems(lookup_charge=_amount, refund_charge={"refunded": True}, **{"agent:ag_payments": {"ok": True}})
+    systems = Systems(lookup_charge=_amount, refund_charge={"refunded": True}, **{"agent__ag_payments": {"ok": True}})
     settings = agent([refund_after_a_check()], max_tool_calls=None, max_steps=12)
     model = Script(*actions, ("search_tools", {"query": "refund"}), "I could not refund it.")
     ask = TurnRequest("t1", "th1", settings, tools, user_turn="Refund CH-2.")
@@ -582,7 +582,7 @@ async def test_a_skills_write_runs_only_as_its_step(reach: str) -> None:
     assert result.status == "completed", f"a refused call must not wait for a person: {result.status}"
     assert [c for c, _ in systems.calls if c != "lookup_charge"] == [], systems.calls
     first = set(model.offered[0])
-    assert not first & {"refund_charge", "agent:ag_payments"}, "a skill's write is not offered before its step"
+    assert not first & {"refund_charge", "agent__ag_payments"}, "a skill's write is not offered before its step"
     assert {"lookup_charge", "add_note"} <= first, "a read, and a write no step runs, stay free"
     assert "refund_charge" not in json.dumps(model.returned[-1]), "search names no tool that waits for its step"
 
@@ -612,3 +612,50 @@ async def test_a_check_that_ends_a_skill_is_final_for_the_reply_and_the_record_s
     two, _ = await reply(replace(carrying(ask, run_of(one)), turn_id="t2", user_turn="CH-2 then."), second, systems)
     assert run_of(two).running.step == 2, run_of(two)
     assert [h.in_reply for h in run_of(two).history] == [False]
+
+
+async def test_an_ending_stays_final_however_many_skills_end_after_it_in_the_reply() -> None:
+    """The record keeps a few past endings. One made in this reply is what keeps its skill from starting again, so
+    it stays on the record until the reply is over, whatever ends after it."""
+    chat = stepped("sk_chat", 1, "Small talk", "small-talk", program({"do": "Say hello."}, {"do": "Say goodbye."}))
+    settings = agent([refund_after_a_check(), chat], max_tool_calls=None, max_steps=40)
+    systems = Systems(lookup_charge=_amount)
+    ask = TurnRequest("t1", "th1", settings, [LOOKUP, REFUND], user_turn="Refund CH-1.")
+    over: Call = ("lookup_charge", {"chargeId": "CH-1"})
+    aside: list[Action] = [("switch_skill", {"slug": "small-talk"}), ("exit", {"name": "failed"})] * 6
+    model = Script(START, over, *aside, START, over, "CH-1 is over the limit.")
+    one, _ = await reply(ask, model, systems)
+    refunds = [e for e in ended(run_of(one)) if e[0] == "sk_refund"]
+    assert refunds == [("sk_refund", "blocked", 1)], f"the blocked skill ran once: {ended(run_of(one))}"
+    # A second lookup of the same charge would be answered from the reply's kept reads, so the refusal is read
+    # from what the second start was told.
+    assert "cannot start again in this reply" in json.dumps(model.returned[-2:]), model.returned[-2:]
+
+    # The next reply starts with the usual few, none marked as this reply's.
+    later, _ = await reply(replace(carrying(ask, run_of(one)), turn_id="t2", user_turn="Thanks."), Script("Ok."))
+    kept = run_of(later).history
+    assert len(kept) == 5 and not any(h.in_reply for h in kept), kept
+
+
+async def test_a_read_a_builder_locked_to_its_step_runs_only_as_that_step() -> None:
+    """A read is free of its skill unless the builder locks it: a look-up that shows a person's record may be one
+    the agent should only make inside the procedure that checks who is asking."""
+    steps = program(
+        {"do": "Look up the charge.", "use": {"kind": "tool", "id": "lookup_charge"}, "locked": True},
+        {"do": "Say what it shows."},
+    )
+    skill = stepped("sk_look", 1, "Look up a charge", "look-up-a-charge", steps)
+    systems = Systems(lookup_charge=_amount)
+    ask = TurnRequest("t1", "th1", agent([skill], max_steps=12), [LOOKUP, NOTE], user_turn="What is CH-2?")
+    look: Call = ("lookup_charge", {"chargeId": "CH-2"})
+    # A repeat of a refused call is answered from the reply's record, so the free try names another charge.
+    free: Call = ("lookup_charge", {"chargeId": "CH-1"})
+    model = Script(free, ("switch_skill", {"slug": "look-up-a-charge"}), look, "It is 200.")
+    result, _ = await reply(ask, model, systems)
+    assert "lookup_charge" not in model.offered[0] and "add_note" in model.offered[0], model.offered[0]
+    assert systems.calls == [look], f"refused with no skill running, run once as the step: {model.returned}"
+    assert run_of(result).running.step == 2
+    # Stored only when on: a step saved without it reads as before.
+    assert "locked" not in program({"do": "Look up.", "use": {"kind": "tool", "id": "x"}}).steps[0].model_dump(
+        exclude_none=True
+    )

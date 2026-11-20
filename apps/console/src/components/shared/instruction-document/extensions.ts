@@ -14,7 +14,7 @@ import { Suggestion, type SuggestionProps, findSuggestionMatch } from '@tiptap/s
 
 import type { Ref } from '@/lib/types/references';
 
-import { type DocNode, parseText, pickSetsUse, refToken, refsInNode, runsIndex } from './document-model';
+import { type DocNode, parseText, pickSetsUse, refToken, refsInNode, runsIndex, splitOwner } from './document-model';
 import { BlockView, CheckView, IfNotView, ReferenceView, StepView, VariableView } from './node-views';
 
 export type Trigger = '@' | '{{' | '/';
@@ -62,7 +62,7 @@ const Steps = Node.create({
 const Step = Node.create({
   name: 'step',
   content: 'line check? ifNot?',
-  addAttributes: () => attr('use'),
+  addAttributes: () => ({ ...attr('use'), locked: { default: false } }),
   renderHTML: () => ['div', 0],
   addNodeView: () => ReactNodeViewRenderer(StepView),
 });
@@ -161,8 +161,16 @@ function enter(editor: Editor): boolean {
   }
   if (name === 'line' && $from.parentOffset < $from.parent.content.size) {
     const { step, line } = state.schema.nodes;
-    // The text after the caret becomes the next step; what the step uses stays with the first half.
-    view.dispatch(state.tr.split($from.pos, 2, [{ type: step, attrs: { use: null } }, { type: line }]).scrollIntoView());
+    // The text after the caret becomes the next step. `use` (and `locked` with it) goes to the half that holds the
+    // reference marked "runs", so the tool is not left on a step whose sentence no longer names it.
+    const d = stepDepth($from);
+    const stepAt = $from.before(d);
+    const { use, locked } = $from.node(d).attrs;
+    const owner = splitOwner(use, refsInNode($from.parent.cut(0, $from.parentOffset)), refsInNode($from.parent.cut($from.parentOffset)));
+    const second = owner === 'second' ? { use, locked } : { use: null, locked: false };
+    const tr = state.tr.split($from.pos, 2, [{ type: step, attrs: second }, { type: line }]);
+    if (owner === 'second') tr.setNodeMarkup(stepAt, undefined, { ...$from.node(d).attrs, use: null, locked: false });
+    view.dispatch(tr.scrollIntoView());
     return true;
   }
   return name === 'line' || name === 'check' ? addStep(editor) : false;
@@ -385,7 +393,16 @@ export function canMarkRuns(editor: Editor, pos: number): boolean {
 export function setStepRuns(editor: Editor, pos: number, ref: Ref | null) {
   const $at = editor.state.doc.resolve(pos);
   const d = stepDepth($at);
-  if (d) editor.view.dispatch(editor.state.tr.setNodeAttribute($at.before(d), 'use', ref));
+  if (!d) return;
+  const tr = editor.state.tr.setNodeAttribute($at.before(d), 'use', ref);
+  // A lock belongs to the tool it was set on.
+  editor.view.dispatch(tr.setNodeAttribute($at.before(d), 'locked', false));
+}
+
+/** Locks the step's tool to this step, or releases it. */
+export function setStepLocked(editor: Editor, pos: number, locked: boolean) {
+  const d = stepDepth(editor.state.doc.resolve(pos));
+  if (d) editor.view.dispatch(editor.state.tr.setNodeAttribute(editor.state.doc.resolve(pos).before(d), 'locked', locked));
 }
 
 const sameRef = (a: Ref | null | undefined, b: Ref) => !!a && a.kind === b.kind && a.id === b.id;
@@ -413,7 +430,7 @@ const Runs = Extension.create({
               line.descendants((child, offset) => {
                 if (child.type.name !== 'reference' || !sameRef(step.attrs.use, child.attrs as Ref) || n++ !== 0) return;
                 // The step opens at `pos`, its line one further, and the line's own text one further again.
-                found.push(Decoration.node(pos + 2 + offset, pos + 2 + offset + child.nodeSize, {}, { runs: true }));
+                found.push(Decoration.node(pos + 2 + offset, pos + 2 + offset + child.nodeSize, {}, { runs: true, locked: !!step.attrs.locked }));
               });
               return false;
             });
@@ -431,7 +448,10 @@ const Runs = Extension.create({
             if (runsIndex(use, refsInNode(step.firstChild)) < 0) return false;
             const to = mapping.mapResult(pos, 1);
             const now = to.deleted ? null : newState.doc.nodeAt(to.pos);
-            if (now?.type.name === 'step' && sameRef(now.attrs.use, use!) && runsIndex(use, refsInNode(now.firstChild)) < 0) tr.setNodeAttribute(to.pos, 'use', null);
+            if (now?.type.name === 'step' && sameRef(now.attrs.use, use!) && runsIndex(use, refsInNode(now.firstChild)) < 0) {
+              tr.setNodeAttribute(to.pos, 'use', null);
+              tr.setNodeAttribute(to.pos, 'locked', false);
+            }
             return false;
           });
           return tr.docChanged ? tr : null;

@@ -98,6 +98,9 @@ await withUiStack(
       await picker.getByRole('option').first().waitFor({ timeout: 60_000 });
       await page.keyboard.press('Enter');
       await two.getByTestId('runs-mark').waitFor({ timeout: 30_000 }).catch(() => undefined);
+      // The builder keeps the tool to this step, whatever kind of tool it is.
+      await two.getByTestId('lock-step-tool').click();
+      const lockOn = await two.getByTestId('lock-step-tool').getAttribute('aria-pressed');
       const drawn = { chips: await two.getByTestId('reference-chip').count(), marks: await two.getByTestId('runs-mark').count() };
       const stored = armed(page.waitForResponse((r) => r.request().method() === 'PUT' && r.url() === `${agents}/v1/skills/${skill.id}/draft`, { timeout: 60_000 }));
       await page.getByTestId('save-skill-draft').click();
@@ -108,13 +111,22 @@ await withUiStack(
         drawn.chips === 1 && drawn.marks === 1 && ['tool', 'agent', 'workflow'].includes(kept.use?.kind) && kept.do?.includes(`@${kept.use.kind}:${kept.use.id}`) && /^Look the charge up/.test(kept.do),
         { drawn, kept },
       );
+      check('10 a tool the builder locks to its step is saved locked', lockOn === 'true' && kept.locked === true, { lockOn, locked: kept.locked });
       // Someone else saves first: James's save is refused, and Reload keeps what he typed on top of their version.
       // The form is drawn again from the version just saved; typing starts once it has.
       // The button is also off while the save is in flight, so the saved toast is waited for first.
       await page.getByText(/Saved draft v1/).first().waitFor({ timeout: 60_000 });
       await page.waitForFunction(() => document.querySelector('[data-testid="save-skill-draft"]')?.disabled === true, null, { timeout: 60_000 });
       await page.waitForTimeout(800);
-      await page.getByTestId('skill-document').getByRole('group', { name: 'Step 3' }).click();
+      // Enter just before the tool: the tool, and its lock, go with it to the new step, and the first half runs none.
+      // The caret is put by a click in the space just left of the chip, as a person would.
+      const chip = await page.getByTestId('skill-document').getByRole('group', { name: 'Step 2' }).getByTestId('reference-chip').boundingBox();
+      await page.mouse.click(chip.x - 2, chip.y + chip.height / 2);
+      await page.keyboard.press('Enter');
+      // A step's spoken label keeps its old number until the step is drawn again, so the new last step is found by place.
+      const stepGroups = page.getByTestId('skill-document').getByRole('group', { name: /^Step \d/ });
+      await stepGroups.nth(3).waitFor({ timeout: 60_000 });
+      await stepGroups.nth(3).click();
       await page.keyboard.press('End');
       // One insert, as a paste is: the check is about what Reload keeps, not about key-by-key typing.
       await page.keyboard.insertText(' Then thank them.');
@@ -139,7 +151,13 @@ await withUiStack(
       await page.getByTestId('save-skill-draft').click();
       await page.getByTestId('save-skill-draft-confirm').click();
       const top = (await (await onTop).json()).data ?? {};
-      check('10 the kept text then saves on top of their version', top.name === `Card dispute renamed ${RUN}` && /Then thank them\./.test(top.content?.steps?.[2]?.do ?? ''), { name: top.name, step: top.content?.steps?.[2] });
+      check('10 the kept text then saves on top of their version', top.name === `Card dispute renamed ${RUN}` && /Then thank them\./.test(top.content?.steps?.[3]?.do ?? ''), { name: top.name, step: top.content?.steps?.[3] });
+      const [, first, second] = top.content?.steps ?? [];
+      check(
+        '10 Enter before a step\'s tool leaves the tool, and its lock, on the step that holds it',
+        first?.use == null && !/@/.test(first?.do ?? '@') && second?.use?.id === kept.use?.id && second?.locked === true && (second?.do ?? '').includes(`@${kept.use?.kind}:${kept.use?.id}`),
+        { first, second },
+      );
       await shootBothWidths(page, AREA, 'uc-757-skill-admin', async () => {
         await page.waitForTimeout(600);
         await page.getByTestId('skill-results-section').scrollIntoViewIfNeeded().catch(() => undefined);

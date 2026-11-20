@@ -39,7 +39,7 @@ from ops_agents.activities.attachments import ATTACHMENT_KB
 from ops_agents.activities.catalog import AgentDefinition, Catalog
 from ops_agents.activities.tool_directory import CatalogTools, ToolDirectory, grants_for
 from ops_agents.activities.tools import ReplySender
-from ops_contracts.skill_run import SkillRunState
+from ops_contracts.skill_run import AGENT_TOOL_PREFIX, WORKFLOW_TOOL_PREFIX, SkillRunState
 from ops_metering import Usage
 from ops_service_kit.http import Json, JsonValue
 
@@ -93,9 +93,6 @@ async def agent_grants(deps: GraphDeps, agent: AgentDefinition) -> list[ToolGran
     return await grants_for(deps.tools or CatalogTools(deps.catalog), list(agent.tools))
 
 
-WORKFLOW_TOOL_PREFIX = "workflow__"
-
-
 class WorkflowRunner(Protocol):
     """The API side of workflows as agent tools (docs/architecture/workflows-as-tools.md), so this layer does not
     import the API."""
@@ -140,7 +137,6 @@ class WorkflowTools:
         )
 
 
-AGENT_TOOL_PREFIX = "agent__"
 MEMORY_TOOL = "search_memory"
 # The Ops tools: the team default agent's reads of the person's cases, Human Tasks, runs and workflows.
 OPS_SERVER = "ops"

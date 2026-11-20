@@ -46,7 +46,9 @@ rules: [../../CLAUDE.md](../../CLAUDE.md#folder-guides).
   - A tool a skill stopped in this reply keeps, or another skill holds, stays out even as the current step's tool.
   - The current step's tool may be called; a tool of another step of the running skill waits for its step.
   - A tool a skill owns (`steps.owned`) runs only as that skill's step. A skill owns every tool its steps run that
-    is not a read, and every `agent:` tool, for as long as it is attached. A read, and a write no step runs, are free.
+    is not a read, every tool that asks another agent (`agent__<id>`, spelled once in `ops_contracts.skill_run`), and
+    every read its builder locked to the step (`SkillStep.locked`), for as long as it is attached. Any other read,
+    and a write no step runs, are free.
   - While a step names a tool, that tool and knowledge search are the only systems offered.
 - The record owns how a skill ended (`EndedSkill`): the exit, the step, `why` (`check`, `denied`, `error`, `held`,
   or `exit` when the model called it), the text of the check that did not pass, the author's meaning for the exit,
@@ -54,6 +56,8 @@ rules: [../../CLAUDE.md](../../CLAUDE.md#folder-guides).
   a pause). The console draws endings from it and adds nothing.
 - An ending the kernel made (every `why` but `exit`) is final for its reply: `switch_skill` and `load_skill` refuse
   that skill until the person's next message (`steps.final`). A menu pick starts it as usual.
+  The record keeps the newest five endings and every ending of the current reply (`steps.trim`), so a final
+  ending is never forgotten inside its reply.
 - Holds (`SkillRunState.holds`, outside the capped history; the rule is written out above `_key` in `steps.py`):
   - A hold is taken the moment a step's check fails or a person denies its call, whatever retries are left and
     however the skill is then left (exit, switch, end of the reply).

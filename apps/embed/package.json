@@ -40,7 +40,7 @@
     "cmdk": "^1.1.1",
     "date-fns": "^4.4.0",
     "embla-carousel-react": "^8.6.0",
-    "lucide-react": "^0.474.0",
+    "lucide-react": "^1.60.0",
     "motion": "^13.4.4",
     "nanoid": "^6.0.2",
     "next": "16.4.5",

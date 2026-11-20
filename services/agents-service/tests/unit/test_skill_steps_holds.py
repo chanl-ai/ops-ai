@@ -862,3 +862,55 @@ async def test_an_input_handed_to_a_sub_skill_is_masked_in_the_record_a_reply_re
     assert SSN not in run_of(result).model_dump_json()
     changes = [e for e in events if type(e).__name__ == "SkillRunChanged"]
     assert changes and all(SSN not in repr(e) for e in changes), changes
+
+
+class Down(Systems):
+    """The refund's system is down: the call comes back failed."""
+
+    async def execute(
+        self, tool: str, arguments: dict[str, Any], *, key: str, approval_token: str | None
+    ) -> ToolOutcome:
+        if tool != "refund_charge":
+            return await super().execute(tool, arguments, key=key, approval_token=approval_token)
+        self.calls.append((tool, arguments))
+        return ToolOutcome(False, {"error": "The payments system did not answer."})
+
+
+AGAIN = "cannot start again in this reply"
+
+
+@pytest.mark.parametrize(
+    "how", ["a reviewer rejected the write", "the step's tool failed", "another skill holds its tool"]
+)
+async def test_an_ending_the_kernel_made_keeps_the_skill_from_starting_again_in_that_reply(how: str) -> None:
+    """A skill stopped by a rejection, a failed call or a held tool stays stopped for the reply. Started again in the
+    same reply it would run its earlier steps a second time and ask for the refused action once more."""
+    check, pay = pay_out_after_a_check({"action": "retry"}, exit={"escalate": "Hand the request to a person."})
+    write: Call = ("refund_charge", {"chargeId": "CH-2"})
+    if how == "another skill holds its tool":
+        # check-then-pay is left by its own exit, which holds the refund; pay-out then ends on its first step.
+        skills, tools, systems = [check, pay], [LOOKUP, REFUND], Systems(lookup_charge=_amount)
+        before: list[Action] = [("switch_skill", {"slug": "check-then-pay"}), ("exit", {"name": "escalate"}), PAY]
+    elif how == "the step's tool failed":
+        # No second try, so the failed call ends the skill rather than offering the step again.
+        once = {
+            "do": "Refund the charge.",
+            "use": {"kind": "tool", "id": "refund_charge"},
+            "ifNot": {"action": "retry", "retries": 0},
+        }
+        skills, tools, systems = [replace(pay, program=program(once))], [LOOKUP, REFUND], Down(lookup_charge=_amount)
+        before = [PAY, write]
+    else:
+        skills, tools, systems = [pay], [LOOKUP, tool("refund_charge", "write", approval=True)], Systems()
+        before = [PAY, write]
+    ask = TurnRequest("t1", "th1", agent(skills, max_steps=12), tools, user_turn="Refund CH-2.")
+    model = Script(*before, PAY, "It was not paid out.")
+    result, _ = await reply(ask, model, systems)
+    if result.status == "interrupted":
+        assert result.interrupt is not None
+        model = Script(PAY, "It was not paid out.")
+        rejected = Resume(result.interrupt, "rejected", reason="Not this charge.")
+        result, _ = await reply(replace(ask, turn_id="t1d", user_turn=None, resume=rejected), model, systems)
+    run = run_of(result)
+    assert [e for e in ended(run) if e[0] == "sk_pay"] == [("sk_pay", "failed", 1)], run
+    assert run.running is None and AGAIN in json.dumps(model.returned[-1]), model.returned

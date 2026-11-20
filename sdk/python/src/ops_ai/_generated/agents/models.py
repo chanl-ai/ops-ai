@@ -447,9 +447,18 @@ class CopiedFrom(TypedDict, closed=True):
 
 
 class CopyRef(TypedDict, closed=True):
-    detachedAt: NotRequired[str | None]
+    detachedAt: str | None
     id: str
-    kind: Literal["agent", "skill", "workflow", "guardrail", "case_type", "task_type"]
+    kind: Literal[
+        "agent",
+        "skill",
+        "workflow",
+        "document_type",
+        "case_type",
+        "task_type",
+        "guardrail",
+        "knowledge_source",
+    ]
     recordId: str
     source: str
     templateId: str
@@ -967,7 +976,7 @@ class Installation(TypedDict, closed=True):
 
 
 class Installed(TypedDict, closed=True):
-    changed: NotRequired[bool]
+    changed: bool
     copies: int
     newerAvailable: bool
     version: int | None
@@ -2083,7 +2092,7 @@ class TemplatePlugin(TypedDict, closed=True):
 
 class TemplateRequires(TypedDict, closed=True):
     bind: list[dict[str, str]]
-    resources: NotRequired[list[str]]
+    resources: list[str]
     tools: list[str]
 
 
@@ -3619,6 +3628,7 @@ class SkillStep(TypedDict, closed=True):
     check: NotRequired[StepCheck | None]
     do: str
     ifNot: NotRequired[IfNot | None]
+    locked: NotRequired[bool | None]
     use: NotRequired[RefInput | None]
 
 
@@ -3626,6 +3636,7 @@ class SkillStepOut(TypedDict, closed=True):
     check: NotRequired[StepCheckOut | None]
     do: str
     ifNot: NotRequired[IfNotOut | None]
+    locked: NotRequired[bool | None]
     use: NotRequired[RefOut | None]
 
 

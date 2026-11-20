@@ -30,6 +30,8 @@ export interface IfNot {
 export interface StepValue {
   do: string;
   use?: Ref | null;
+  /** The tool runs only in this step. Only meaningful with `use`; absent or false otherwise. */
+  locked?: boolean;
   check?: StepCheck | null;
   ifNot?: IfNot | null;
 }
@@ -143,7 +145,7 @@ function stepNode(s: StepValue): DocNode {
   const content: DocNode[] = [textNode('line', s.do)];
   if (s.check) content.push(textNode('check', s.check.text, { by: s.check.by ?? null }));
   if (s.ifNot) content.push({ type: 'ifNot', attrs: { value: s.ifNot } });
-  return { type: 'step', attrs: { use: s.use ?? null }, content };
+  return { type: 'step', attrs: { use: s.use ?? null, locked: !!(s.use && s.locked) }, content };
 }
 
 /** The editor's tree for a document. An empty list or an empty set of steps gets one blank line to type on. */
@@ -167,6 +169,7 @@ function stepValue(node: DocNode): StepValue {
   return {
     do: textOf(parts.find((p) => p.type === 'line')),
     ...(use ? { use } : {}),
+    ...(use && node.attrs?.locked ? { locked: true } : {}),
     ...(check ? { check: { text: textOf(check), ...(by ? { by } : {}) } } : {}),
     ...(ifNot ? { ifNot: ifNot.attrs!.value as IfNot } : {}),
   };
@@ -199,6 +202,17 @@ const sameRef = (a: Ref, b: Ref) => a.kind === b.kind && a.id === b.id;
  * earlier editor, and drawn as a chip in front). Every part of the editor asks here, so none draws the tool twice.
  */
 export const runsIndex = (use: Ref | null | undefined, mentions: readonly Ref[]): number => (use ? mentions.findIndex((m) => sameRef(m, use)) : -1);
+
+/**
+ * Which half of a split step keeps `use`. The reference marked "runs" is the first one in the sentence that names the
+ * tool; the half that holds it keeps `use`. A tool that is not in the sentence (drawn as a chip in front) stays with the
+ * first half. `locked` follows `use`.
+ */
+export const splitOwner = (use: Ref | null | undefined, before: readonly Ref[], after: readonly Ref[]): 'first' | 'second' | null => {
+  if (!use) return null;
+  if (runsIndex(use, before) >= 0) return 'first';
+  return runsIndex(use, after) >= 0 ? 'second' : 'first';
+};
 
 /** What the editor's tree gives of a node, so the model reads it without importing the editor. */
 interface TreeNode {

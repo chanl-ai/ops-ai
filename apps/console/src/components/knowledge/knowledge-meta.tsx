@@ -11,7 +11,6 @@ import {
   FileSpreadsheet,
   FileText,
   FileUp,
-  Github,
   Globe,
   HardDrive,
   LifeBuoy,

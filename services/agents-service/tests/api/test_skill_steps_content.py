@@ -10,13 +10,17 @@ Where the design names no shape, these tests fix one: a refused step answers its
 
 from __future__ import annotations
 
+from dataclasses import dataclass, replace
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
 
 from httpx import AsyncClient
 
+from ops_agent_kernel import steps
 from ops_agents.activities.catalog import load_catalog
 from ops_agents.activities.tool_directory import CatalogTools
+from ops_agents.api.agent_calls import AgentCalls
 from ops_agents.api.agent_registry import definition_of
 from ops_agents.app import skill_content
 from tests.conftest import SEED
@@ -62,8 +66,8 @@ def _step(n: int, **change: Any) -> list[dict[str, Any]]:
     return [{**s, **change} if i == n else s for i, s in enumerate(STEPS, start=1)]
 
 
-def _error(r: Any) -> dict[str, Any]:
-    assert r.status_code == 400, r.text
+def _error(r: Any, status: int = 400) -> dict[str, Any]:
+    assert r.status_code == status, r.text
     return cast(dict[str, Any], r.json()["error"])
 
 
@@ -250,3 +254,65 @@ async def test_a_step_naming_a_tool_the_team_no_longer_offers_blocks_the_publish
         error = _error(await c.post(f"/v1/skills/{sid}/publish-requests", json={"note": ""}))
         assert [p["kind"] for p in error["details"]["problems"]] == ["unavailable_reference"], error
         assert _ok(await c.get(f"/v1/skills/{sid}"))["publishedVersion"] is None
+
+
+async def test_a_step_that_asks_another_agent_is_locked_under_the_name_the_service_grants(tmp_path: Path) -> None:
+    """A step asks another agent as `@agent:<id>`, the agent holds it as `agent:<id>`, and the model calls
+    `agent__<id>`. Read under any other spelling, the kernel owns a tool nobody is granted and the hand-off stays
+    free of its step."""
+    async with _app(str(tmp_path / "db.sqlite")) as c:
+        ask = {"do": "Ask the branch desk.", "use": {"kind": "agent", "id": BRANCH}}
+        body = {**REFUND, "steps": [{"do": "Look up.", "use": LOOKUP}, ask]}
+        # Another agent may change anything, whatever access its tool says: the step needs a rule like a write.
+        error = _error(await c.post("/v1/skills", json=body))
+        assert (error["code"], error["details"]["step"]) == ("write_needs_rule", 2), error
+        ruled = {**ask, "check": {"text": "exists(result.answer)"}, "ifNot": {"action": "exit", "exit": "failed"}}
+        saved = _ok(await c.post("/v1/skills", json={**body, "steps": [body["steps"][0], ruled]}), 201)
+        program = skill_content.program_of(saved["content"])
+        assert program is not None
+
+    # The grant as the service builds it for a chat, and what the kernel then keeps for the step.
+    granted = AgentCalls._grant(cast(Any, None), SimpleNamespace(id=BRANCH, name="Branch desk", role="desk"))  # pyright: ignore[reportPrivateUsage]
+    skill = cast(Any, SimpleNamespace(program=program, slug="refund-a-charge"))
+    access = {"lookup_customer": "read", granted.name: granted.access}
+    assert steps.owned([skill], access) == {granted.name: ["refund-a-charge"]}
+
+
+@dataclass
+class Reclassified:
+    """The fixture catalogue, with the tools in `writes` listed as ones that change something."""
+
+    inner: CatalogTools
+    writes: set[str]
+
+    async def operations(self) -> list[Any]:
+        return [replace(o, access="write") if o.name in self.writes else o for o in await self.inner.operations()]
+
+
+async def test_a_published_skill_that_would_no_longer_save_is_not_attached_and_blocks_its_agents_publish(
+    tmp_path: Path,
+) -> None:
+    """The step checks run when a skill is saved. A version published before one existed, or whose tool has since
+    become a write, is still pinned and attached as it was: the agent's publish check and the attach read the same
+    checks, or old versions run steps a new save would refuse."""
+    async with _app(str(tmp_path / "db.sqlite")) as c:
+        rt = cast(Any, c)._transport.app.state.runtime
+        directory = Reclassified(CatalogTools(rt.catalog), writes=set())
+        rt.tool_directory = directory
+        body = {**REFUND, "steps": [{"do": "Look up the customer.", "use": LOOKUP}]}
+        sid = await _published(c, body)
+        added = _ok(await c.post(f"/v1/agents/{BRANCH}/references", json={"kind": "skill", "id": sid}))
+        at = {"version": added["agentVersion"]}
+        clear = _ok(await c.get(f"/v1/agents/{BRANCH}/publish-check", params=at))
+        assert [p for p in clear["problems"] if p["position"]["field"] == "skills"] == [], clear
+
+        # The look-up becomes a tool that changes something; the published version has no rule on that step.
+        directory.writes.add("lookup_customer")
+        check = _ok(await c.get(f"/v1/agents/{BRANCH}/publish-check", params=at))
+        found = [(p["kind"], p["id"], p["position"]) for p in check["problems"]]
+        assert found == [("bad_check", f"skill:{sid}", {"field": "skills", "step": 1, "index": None})], check
+        assert check["canRequest"] is False
+        refused = _error(await c.post(f"/v1/agents/{BRANCH}/publish-requests", json={**at, "note": ""}), 422)
+        assert refused["code"] == "cannot_publish", refused
+        other = _error(await c.post("/v1/agents/ag_dispute/references", json={"kind": "skill", "id": sid}), 422)
+        assert other["code"] == "skill_needs_fix", other

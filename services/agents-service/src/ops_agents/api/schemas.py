@@ -1509,6 +1509,11 @@ class SkillStepOut(Out):
     use: RefOut | None = None
     check: StepCheckOut | None = None
     if_not: IfNotOut | None = None
+    locked: bool | None = Field(
+        default=None,
+        description="True when the builder locked the step's tool to this step: the agent reaches it only as the "
+        "step, even when it is a read. Absent otherwise; a tool that changes something is kept to its step either way.",
+    )
 
 
 class ReturnFieldOut(Out, ReturnField):

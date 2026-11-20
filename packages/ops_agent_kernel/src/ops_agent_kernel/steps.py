@@ -33,6 +33,7 @@ from ops_contracts.skill_run import (
     StepCheck,
     StepResult,
     SubRun,
+    hands_to_agent,
 )
 from ops_pii import holds_placeholder
 from ops_service_kit.http import Json
@@ -76,6 +77,7 @@ __all__ = [
     "start",
     "step_done",
     "target",
+    "trim",
 ]
 
 
@@ -257,6 +259,13 @@ def _tools(r: RunningSkill, skills: Sequence[Skill]) -> set[str]:
     return out
 
 
+def trim(run: SkillRunState) -> None:
+    """Keeps the newest `HISTORY_MAX` endings, and every ending made in this reply however many came after it: that
+    one is what keeps its skill from starting again (`final`), so it is forgotten only once the reply is over."""
+    cut = len(run.history) - HISTORY_MAX
+    run.history = [h for i, h in enumerate(run.history) if i >= cut or h.in_reply]
+
+
 def _end(
     run: SkillRunState,
     name: str,
@@ -291,7 +300,7 @@ def _end(
             meaning=r.program.exit.get(name),
         )
     )
-    del run.history[:-HISTORY_MAX]
+    trim(run)
     run.running = None
 
 
@@ -698,17 +707,18 @@ def changes(name: str, access: str | None) -> bool:
     """Whether a step's tool is one that changes something: any tool that is not a read (a write, a workflow), and
     any other agent a step hands to, whatever its access says. A tool whose access is not known is taken as one. The
     one test behind the tools a skill owns (`owned`) and the steps a save asks a rule check of."""
-    return name.startswith("agent:") or (access or "write") != "read"
+    return hands_to_agent(name) or (access or "write") != "read"
 
 
 def owned(skills: Sequence[Skill], access: Mapping[str, str]) -> dict[str, list[str]]:
     """The tools reachable only through a step, each with the slugs of the skills whose steps run it: every tool a
-    step of an attached skill runs that changes something (`changes`). `access` is each granted tool's access by
-    name."""
+    step of an attached skill runs that changes something (`changes`), and every read a builder locked to its step.
+    `access` is each granted tool's access by name."""
     out: dict[str, list[str]] = {}
     for s in skills:
+        locked = s.program.locked() if s.program is not None else set[str]()
         for name in sorted(s.program.targets()) if s.program is not None else ():
-            if changes(name, access.get(name)):
+            if name in locked or changes(name, access.get(name)):
                 out.setdefault(name, []).append(s.slug)
     return out
 

@@ -18,7 +18,7 @@ from ops_agent_kernel.types import Skill as KernelSkill
 from ops_contracts.chat import SkillPick
 from ops_service_kit import narrow
 from ops_service_kit.errors import Conflict, NotFound, Unprocessable, ValidationFailed
-from ops_service_kit.http import Json, JsonValue
+from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.logging import get_logger
 
 from ..activities.catalog import AgentDefinition, kernel_skills
@@ -832,7 +832,9 @@ def snapshot(skill_id: str, version: int, content: SkillContent, tokens: int, *,
     )
 
 
-async def pin(rt: Runtime, agent_spec: AgentSpec, skill_id: str, version: int, *, by: str, at: str) -> list[SkillPin]:
+async def pin(
+    rt: Runtime, agent_spec: AgentSpec, skill_id: str, version: int, *, by: str, at: str, fresh: bool = True
+) -> list[SkillPin]:
     """The agent's pins with `skill_id` attached at `version`, or moved to it. Refused (422) unless the version is
     published, the skill is not deprecated, the agent holds every tool and knowledge base it names, and the agent
     stays within 12 skills."""
@@ -847,6 +849,19 @@ async def pin(rt: Runtime, agent_spec: AgentSpec, skill_id: str, version: int, *
         )
     if row.deprecated_reason:
         raise Unprocessable(f"{v.content['name']} is deprecated and takes no new attaches.", code="skill_deprecated")
+    # A version published before a check existed, or whose tool has since become one that changes something, is held
+    # to the checks a save makes now.
+    program = skill_content.program_of(v.content)
+    runs = program is not None and bool(program.targets())
+    # An unreachable tools directory fails the attach as it fails a save, rather than reading every tool as a write.
+    access = {str(t["id"]): str(t["access"]) for t in await known_tools(rt, fresh=fresh)} if runs else {}
+    if program is not None and (broken := skill_content.unrunnable(program, access)[0]):
+        raise Unprocessable(
+            f"{v.content['name']} v{version} cannot be attached as it is: {broken[0]['message']} Fix the skill and "
+            "publish it again.",
+            code="skill_needs_fix",
+            details={"problems": cast(JsonList, broken)},
+        )
     if missing := missing_for(content_of(v.content), agent_spec):
         raise Unprocessable(
             f"The agent does not hold {', '.join(missing)}, which {v.content['name']} v{version} names.",
@@ -874,6 +889,15 @@ async def pin(rt: Runtime, agent_spec: AgentSpec, skill_id: str, version: int, *
                 code="always_budget",
             )
     return [*pins, snapshot(skill_id, version, content_of(v.content), v.tokens, by=by, at=at)]
+
+
+async def pin_problems(rt: Runtime, agent_spec: Json) -> list[Problem]:
+    """What in an agent version's pinned skills stops its publish (`skill_content.pin_problems`), read against the
+    tools directory as it is now."""
+    pins = cast(list[Json], agent_spec.get("skillPins") or [])
+    if not any(p.get("steps") for p in pins):
+        return []
+    return skill_content.pin_problems(pins, await _offered_tools(rt, fresh=True))
 
 
 def check_pins_hold(agent_spec: AgentSpec) -> None:
@@ -1013,7 +1037,9 @@ async def load_seed(rt: Runtime, path: Path) -> None:
         for aid in cast(list[str], s.get("pinnedBy") or []):
 
             async def attach(spec: Json, sid: str = cast(str, s["id"]), at: str = v.saved_at) -> Json:
-                spec["skillPins"] = cast(JsonValue, await pin(rt, cast(AgentSpec, spec), sid, 1, by=SEED_BY, at=at))
+                spec["skillPins"] = cast(
+                    JsonValue, await pin(rt, cast(AgentSpec, spec), sid, 1, by=SEED_BY, at=at, fresh=False)
+                )
                 return spec
 
             try:

@@ -5339,17 +5339,20 @@ export interface components {
             /** Version */
             version: number;
         };
-        /** CopyRef */
+        /**
+         * CopyRef
+         * @description A team's copy of a template: where it came from and the record it made.
+         */
         CopyRef: {
             /** Detachedat */
-            detachedAt?: string | null;
+            detachedAt: string | null;
             /** Id */
             id: string;
             /**
              * Kind
              * @enum {string}
              */
-            kind: "agent" | "skill" | "workflow" | "guardrail" | "case_type" | "task_type";
+            kind: "agent" | "skill" | "workflow" | "document_type" | "case_type" | "task_type" | "guardrail" | "knowledge_source";
             /** Recordid */
             recordId: string;
             /** Source */
@@ -7724,7 +7727,10 @@ export interface components {
                 [key: string]: string;
             }[];
         };
-        /** Installed */
+        /**
+         * Installed
+         * @description The live copies a team holds of one template. A copy never changes by itself.
+         */
         Installed: {
             /**
              * Changed
@@ -8902,7 +8908,7 @@ export interface components {
         /**
          * Ref
          * @description Something a text or a step names: a tool, a knowledge base, a skill, an agent or a workflow, by its id. An
-         *     agent or a workflow is named by its bare id; a grant stores them as `agent:<id>` and `workflow:<id>`.
+         *     agent or a workflow is named by its bare id; `grant` and `tool_name` are its two other spellings.
          */
         "Ref-Input": {
             /** Id */
@@ -10245,6 +10251,8 @@ export interface components {
             /** Do */
             do: string;
             ifNot?: components["schemas"]["IfNot"] | null;
+            /** Locked */
+            locked?: boolean | null;
             use?: components["schemas"]["Ref-Input"] | null;
         };
         /**
@@ -10256,6 +10264,11 @@ export interface components {
             /** Do */
             do: string;
             ifNot?: components["schemas"]["IfNotOut"] | null;
+            /**
+             * Locked
+             * @description True when the builder locked the step's tool to this step: the agent reaches it only as the step, even when it is a read. Absent otherwise; a tool that changes something is kept to its step either way.
+             */
+            locked?: boolean | null;
             use?: components["schemas"]["RefOut"] | null;
         };
         /** SkillToolRef */
@@ -10911,14 +10924,17 @@ export interface components {
             /** Version */
             version: string;
         };
-        /** TemplateRequires */
+        /**
+         * TemplateRequires
+         * @description What a copy of a template needs before it can run.
+         */
         TemplateRequires: {
             /** Bind */
             bind: {
                 [key: string]: string;
             }[];
             /** Resources */
-            resources?: string[];
+            resources: string[];
             /** Tools */
             tools: string[];
         };

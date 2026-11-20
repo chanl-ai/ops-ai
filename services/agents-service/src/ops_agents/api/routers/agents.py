@@ -82,6 +82,7 @@ from ..schemas import (
     WidgetSettings,
 )
 from ..skills import check_pins_hold
+from ..skills import pin_problems as skill_pin_problems
 from ..team_names import team_name
 from ..timers import arm_job
 from ..widgets import published as published_widget
@@ -735,6 +736,13 @@ async def publish_preview(rt: Rt, me: Me, agent_id: str, version: Annotated[int,
     return ok(decision.record())
 
 
+async def _publish_problems(rt: Runtime, spec: Json) -> list[Json]:
+    """What stops a version's publish: what its brief names and the agent lacks, and what in the skills it pins must
+    not run as stored. The check and the publish both read this list."""
+    brief = cast(list[Json], agent_brief.publish_problems(spec))
+    return [*brief, *cast(list[Json], await skill_pin_problems(rt, spec))]
+
+
 @router.get("/{agent_id}/publish-check", response_model=Envelope[AgentPublishCheck])
 async def publish_check(rt: Rt, me: Me, _: Tx, agent_id: str, version: Annotated[int, Query()]) -> JSONResponse:
     """What stops the newest draft from being published, each with the field it is in (`position`): a reference the
@@ -742,7 +750,7 @@ async def publish_check(rt: Rt, me: Me, _: Tx, agent_id: str, version: Annotated
     (422 `cannot_publish`). 422 `not_newest_draft` for any other version."""
     row = await changeable(rt, me, agent_id, "publish")
     require_newest_draft(row, version)
-    problems = agent_brief.publish_problems((await registry(rt).version(agent_id, version)).spec)
+    problems = await _publish_problems(rt, (await registry(rt).version(agent_id, version)).spec)
     return ok({"canRequest": not problems, "problems": problems})
 
 
@@ -755,9 +763,9 @@ async def request_publish(rt: Rt, me: Me, agent_id: str, body: PublishRequestInp
     require_newest_draft(row, body.version)
     v = await reg.version(agent_id, body.version)
     spec = v.spec
-    if problems := agent_brief.publish_problems(spec):
+    if problems := await _publish_problems(rt, spec):
         raise Unprocessable(
-            "This version cannot be published yet: " + " ".join(p["message"] for p in problems),
+            "This version cannot be published yet: " + " ".join(str(p["message"]) for p in problems),
             code="cannot_publish",
             details={"problems": cast(JsonList, problems)},
         )

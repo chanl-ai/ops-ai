@@ -265,6 +265,25 @@ class ConnectorUse(TypedDict, closed=True):
     workflows: NotRequired[int]
 
 
+class CopyRef(TypedDict, closed=True):
+    detachedAt: str | None
+    id: str
+    kind: Literal[
+        "agent",
+        "skill",
+        "workflow",
+        "document_type",
+        "case_type",
+        "task_type",
+        "guardrail",
+        "knowledge_source",
+    ]
+    recordId: str
+    source: str
+    templateId: str
+    version: int
+
+
 class CredentialAccount(TypedDict, closed=True):
     connectedAt: NotRequired[str | None]
     id: str
@@ -393,6 +412,13 @@ class InputChanges(TypedDict, closed=True):
     added: list[str]
     changed: list[str]
     removed: list[str]
+
+
+class Installed(TypedDict, closed=True):
+    changed: bool
+    copies: int
+    newerAvailable: bool
+    version: int | None
 
 
 class InvalidField(TypedDict, closed=True):
@@ -746,22 +772,6 @@ class RenameIn(TypedDict, closed=True):
     name: str
 
 
-class ResourceCopy(TypedDict, closed=True):
-    id: str
-    kind: str
-    recordId: str
-    source: str
-    templateId: str
-    version: int
-
-
-class ResourceInstalled(TypedDict, closed=True):
-    changed: NotRequired[bool]
-    copies: int
-    newerAvailable: bool
-    version: int | None
-
-
 class ReviewDecisionIn(TypedDict, closed=True):
     by: NotRequired[str | None]
     decision: Literal["approved", "rejected", "returned"]
@@ -976,7 +986,7 @@ class TeamPluginIn(TypedDict, closed=True):
 
 class TemplateRequires(TypedDict, closed=True):
     bind: list[dict[str, str]]
-    resources: NotRequired[list[str]]
+    resources: list[str]
     tools: list[str]
 
 
@@ -1305,9 +1315,9 @@ class AppCredential(TypedDict, closed=True):
 class AppResource(TypedDict, closed=True):
     canAdd: bool
     canRemove: NotRequired[bool]
-    copy: NotRequired[ResourceCopy | None]
+    copy: NotRequired[CopyRef | None]
     id: str
-    installed: NotRequired[ResourceInstalled | None]
+    installed: NotRequired[Installed | None]
     kind: Literal[
         "agent",
         "skill",

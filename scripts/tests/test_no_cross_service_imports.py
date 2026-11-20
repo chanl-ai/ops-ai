@@ -1,13 +1,21 @@
 """No service depends on another service's code: services talk over their APIs through
 `ops_identity.ServiceClient` and share code only through packages/. By failure mode: an import of another service's
 package coming back in source or tests; a service call written by hand (its own token minting next to a raw HTTP
-client) instead of through ServiceClient; and a scan that finds nothing because it reads nothing (first run on a file
-that breaks it)."""
+client) instead of through ServiceClient; a shape one service sends and another reads, described differently by the
+two (the reader refuses the sender's new field and answers 500); and a scan that finds nothing because it reads
+nothing (first run on a file that breaks it)."""
 
 from __future__ import annotations
 
 import ast
+import importlib
+import json
+import pkgutil
 from pathlib import Path
+from typing import Any
+
+import ops_contracts
+from ops_contracts.templates import ServiceShape
 
 ROOT = Path(__file__).resolve().parents[2]
 # Each service's own package, which no other service may import.
@@ -146,3 +154,95 @@ def test_the_workflow_runner_and_the_kernel_never_import_the_extraction_checks(t
     planted.write_text("from ops_extract.checks import scored\n")
     assert extract_importers(tmp_path) == {"packages/ops_engine/src/ops_engine/steps.py"}
     assert extract_importers(ROOT) == set()
+
+
+# A shape services send each other is one `ops_contracts` class (a `ServiceShape`), which the sender builds and the
+# reader reads. Each service's committed openapi.json is its app's own document (its scripts/check_openapi.py), so a
+# service that describes such a shape itself, with other fields or under its own name, shows here.
+
+
+def service_shapes() -> list[type[ServiceShape]]:
+    """Every `ServiceShape` in ops_contracts, found by importing each of its modules."""
+    for module in pkgutil.iter_modules(ops_contracts.__path__):
+        importlib.import_module(f"ops_contracts.{module.name}")
+    found: list[type[ServiceShape]] = []
+    todo = list(ServiceShape.__subclasses__())
+    while todo:
+        shape = todo.pop()
+        found.append(shape)
+        todo += shape.__subclasses__()
+    return sorted(found, key=lambda m: m.__name__)
+
+
+def _described(schema: dict[str, Any]) -> tuple[str, list[str], object]:
+    """What a reader depends on in an object schema: each property's type, which are always sent, and whether an
+    unknown field is refused. A nested model is named the same in both documents, whichever section holds it, and a
+    field's default is left out: every field is sent, and a service's document does not print it."""
+    listed: dict[str, dict[str, Any]] = schema.get("properties", {})
+    typed = {name: {k: v for k, v in field.items() if k != "default"} for name, field in listed.items()}
+    properties = json.dumps(typed, sort_keys=True).replace("#/$defs/", "#/components/schemas/")
+    required: list[str] = schema.get("required", [])
+    return properties, sorted(required), schema.get("additionalProperties")
+
+
+def shape_differences(services: Path, shapes: list[type[ServiceShape]]) -> tuple[set[str], set[str]]:
+    """(findings, `<service>: <shape>` for each document that carries a shape as the contract describes it). A
+    finding is a document whose component of a shape's name differs from the contract, or whose component of another
+    name shares most fields with the shape (more than half of the shape's and more than half of its own): the same
+    shape declared a second time, whether or not it has kept up with the contract's fields."""
+    found: set[str] = set()
+    carried: set[str] = set()
+    for path in sorted(services.glob("*/openapi.json")):
+        service = path.parent.name
+        components: dict[str, dict[str, Any]] = json.loads(path.read_text()).get("components", {}).get("schemas", {})
+        for shape in shapes:
+            name = shape.__name__
+            contract = shape.model_json_schema(mode="serialization", by_alias=True)
+            named: set[str] = set(contract["properties"])
+            for component, schema in components.items():
+                fields: set[str] = set(schema.get("properties", {}))
+                if component == name:
+                    if _described(schema) == _described(contract):
+                        carried.add(f"{service}: {name}")
+                    else:
+                        apart = sorted(fields ^ named) or ["the same fields, typed differently"]
+                        found.add(f"{service}: {name} differs from ops_contracts ({', '.join(apart)})")
+                elif 2 * len(fields & named) > max(len(named), len(fields)):
+                    found.add(f"{service}: {component} declares ops_contracts' {name} again")
+    return found, carried
+
+
+def test_the_scan_finds_a_shape_two_services_describe_differently(tmp_path: Path) -> None:
+    (shape,) = [s for s in service_shapes() if s.__name__ == "CopyRef"]
+    sent = shape.model_json_schema(mode="serialization", by_alias=True)
+    # The reader's own copy of the shape, one field behind the sender's; the same under the reader's own name, missing
+    # a field the shape needs as well; and a shape that only shares two common field names, which is not a finding.
+    behind = {**sent, "properties": {k: v for k, v in sent["properties"].items() if k != "detachedAt"}}
+    partial = {**sent, "properties": {k: v for k, v in sent["properties"].items() if k != "recordId"}}
+    other = {"properties": {"id": {"type": "string"}, "version": {"type": "integer"}, "name": {"type": "string"}}}
+    for service, components in (
+        ("agents-service", {"CopyRef": sent}),
+        ("tools-service", {"CopyRef": behind}),
+        ("documents-service", {"TeamCopy": partial, "Draft": other}),
+    ):
+        (tmp_path / service).mkdir()
+        (tmp_path / service / "openapi.json").write_text(json.dumps({"components": {"schemas": components}}))
+    found, carried = shape_differences(tmp_path, [shape])
+    assert found == {
+        "tools-service: CopyRef differs from ops_contracts (detachedAt)",
+        "documents-service: TeamCopy declares ops_contracts' CopyRef again",
+    }
+    assert carried == {"agents-service: CopyRef"}
+
+
+def test_services_describe_a_shared_shape_as_its_contract_does() -> None:
+    shapes = service_shapes()
+    found, carried = shape_differences(ROOT / "services", shapes)
+    assert len(list((ROOT / "services").glob("*/openapi.json"))) >= 6, "the scan reads too few documents"
+    assert found == set(), "a shape services send each other is declared outside ops_contracts:\n" + "\n".join(
+        sorted(found)
+    )
+    unused = {s.__name__ for s in shapes} - {c.split(": ")[1] for c in carried}
+    assert shapes and not unused, (
+        f"no service's document carries {sorted(unused) or 'any shape'}; the scan compares nothing"
+    )

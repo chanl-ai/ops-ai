@@ -5743,6 +5743,7 @@
       },
       "CopyRef": {
         "additionalProperties": false,
+        "description": "A team's copy of a template: where it came from and the record it made.",
         "properties": {
           "detachedAt": {
             "anyOf": [
@@ -5764,9 +5765,11 @@
               "agent",
               "skill",
               "workflow",
-              "guardrail",
+              "document_type",
               "case_type",
-              "task_type"
+              "task_type",
+              "guardrail",
+              "knowledge_source"
             ],
             "title": "Kind",
             "type": "string"
@@ -5794,7 +5797,8 @@
           "recordId",
           "source",
           "templateId",
-          "version"
+          "version",
+          "detachedAt"
         ],
         "title": "CopyRef",
         "type": "object"
@@ -11679,6 +11683,7 @@
       },
       "Installed": {
         "additionalProperties": false,
+        "description": "The live copies a team holds of one template. A copy never changes by itself.",
         "properties": {
           "changed": {
             "default": false,
@@ -11708,7 +11713,8 @@
         "required": [
           "copies",
           "version",
-          "newerAvailable"
+          "newerAvailable",
+          "changed"
         ],
         "title": "Installed",
         "type": "object"
@@ -15362,7 +15368,7 @@
       },
       "Ref-Input": {
         "additionalProperties": false,
-        "description": "Something a text or a step names: a tool, a knowledge base, a skill, an agent or a workflow, by its id. An\nagent or a workflow is named by its bare id; a grant stores them as `agent:<id>` and `workflow:<id>`.",
+        "description": "Something a text or a step names: a tool, a knowledge base, a skill, an agent or a workflow, by its id. An\nagent or a workflow is named by its bare id; `grant` and `tool_name` are its two other spellings.",
         "properties": {
           "id": {
             "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,126}[A-Za-z0-9_])?$",
@@ -19477,6 +19483,17 @@
               }
             ]
           },
+          "locked": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locked"
+          },
           "use": {
             "anyOf": [
               {
@@ -19521,6 +19538,18 @@
                 "type": "null"
               }
             ]
+          },
+          "locked": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "True when the builder locked the step's tool to this step: the agent reaches it only as the step, even when it is a read. Absent otherwise; a tool that changes something is kept to its step either way.",
+            "title": "Locked"
           },
           "use": {
             "anyOf": [
@@ -21513,6 +21542,7 @@
       },
       "TemplateRequires": {
         "additionalProperties": false,
+        "description": "What a copy of a template needs before it can run.",
         "properties": {
           "bind": {
             "items": {
@@ -21541,7 +21571,8 @@
         },
         "required": [
           "tools",
-          "bind"
+          "bind",
+          "resources"
         ],
         "title": "TemplateRequires",
         "type": "object"
