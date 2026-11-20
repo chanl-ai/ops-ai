@@ -71,15 +71,6 @@ if [ "$rollback" = 1 ]; then
   done
   step "rollback (machines updated)"
 else
-  # The release command migrates on a machine of its own while the app's machine would keep serving the old release;
-  # some migrations rewrite rows that release still writes (agents 0120), so the machine is stopped first
-  # (docs/deploy/upgrade.md). A request during the release command can still wake it (fly.toml auto_start_machines).
-  # Only a started machine; one already stopped or suspended runs nothing.
-  for m in $(fly machine list -a "$app" --json | python3 -c \
-    "import json,sys; print(' '.join(x['id'] for x in json.load(sys.stdin) if x.get('state') == 'started'))"); do
-    fly machine stop "$m" -a "$app" --wait-timeout 120s
-  done
-  step "stop (every process)"
   fly deploy "$work/src" -c "$work/src/deploy/fly/fly.toml" -a "$app" --image "$image" --ha=false \
     --wait-timeout 10m
   step "deploy (release command and machine)"
