@@ -7,3 +7,9 @@ export function safeHref(href: string | undefined, { web = false }: { web?: bool
   const allowed = web ? /^https?:\/\//i : /^(\/(?!\/)|https?:\/\/|mailto:)/i;
   return allowed.test(href.trim()) ? href : undefined;
 }
+
+/** A link address kept only when it is a path in this console: card data never sends a click to another host. */
+export function consolePath(href: string | undefined): string | undefined {
+  const kept = safeHref(href);
+  return kept?.startsWith('/') ? kept : undefined;
+}
