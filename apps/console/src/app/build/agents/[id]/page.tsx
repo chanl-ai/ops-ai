@@ -32,7 +32,7 @@ import { RequestAgentPublishDialog } from '@/components/agents/request-agent-pub
 import { useSendMessage } from '@/hooks/chat-queries';
 import { useAddReference } from '@/hooks/references-queries';
 import type { InstructionDocumentHandle } from '@/components/shared/instruction-document';
-import { keptEdits } from '@/lib/kept-edits';
+import { keptEdits, keptEditsByGroup } from '@/lib/kept-edits';
 import { LeaveGuard } from '@/components/shared/leave-guard';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import type { AgentBrief, PromptMode } from '@/lib/types/domain';
@@ -159,7 +159,8 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
   React.useEffect(() => {
     const before = savedBefore.current;
     savedBefore.current = saved;
-    if (before !== saved) setDraft((d) => keptEdits(before, d, saved));
+    // Limits, guardrails and the other grouped settings move setting by setting.
+    if (before !== saved) setDraft((d) => keptEditsByGroup(before, d, saved));
   }, [saved]);
   const set =<K extends keyof AgentDraft>(k: K, v: AgentDraft[K]) => setDraft((d) => followLimits({ ...d, [k]: v }, agent.toolIds, agent.collections));
   // The prompt is a brief unless the builder switched to plain text. A legacy agent (no brief) shows its job line as
