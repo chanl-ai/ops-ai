@@ -5,7 +5,7 @@ import { test } from 'node:test';
 
 import type { ReferenceItem } from '@/lib/types/references';
 
-import { type DocumentValue, chipFor, fromEditorDoc, missingReferences, parseText, pickSetsUse, runsIndex, serializeSegments, toEditorDoc } from './document-model.ts';
+import { type DocumentValue, chipFor, fromEditorDoc, missingReferences, parseText, pickSetsUse, runsIndex, serializeSegments, splitOwner, toEditorDoc } from './document-model.ts';
 
 const item = (kind: ReferenceItem['kind'], id: string, label: string): ReferenceItem => ({ kind, id, label, hint: null, held: true, adds: null, needsApproval: false, disabled: null });
 
@@ -78,4 +78,23 @@ test('a step whose tool is also in its sentence shows it once, and keeps both th
   assert.equal(runsIndex({ kind: 'tool', id: 'send_email' }, mentions('Say goodbye.')), -1);
   // Another tool mentioned in the sentence is not the one the step runs.
   assert.equal(runsIndex(step.use, mentions('Never use @tool:close_case here.')), -1);
+});
+
+test('pressing Enter before the chip that carries the runs mark leaves the tool on the step that holds it', () => {
+  const open = { kind: 'tool', id: 'open_dispute' } as const;
+  const other = { kind: 'tool', id: 'close_case' } as const;
+  // The marked chip moved to the second step: `use` goes with it and the first step has none.
+  assert.equal(splitOwner(open, [], [open]), 'second');
+  // The chip stayed in the first half, or the tool was never in the sentence: the first keeps it.
+  assert.equal(splitOwner(open, [open], [other]), 'first');
+  assert.equal(splitOwner(open, [other], [other]), 'first');
+  assert.equal(splitOwner(null, [open], []), null);
+});
+
+test('a lock survives the editor round trip and is dropped when the step no longer runs a tool', () => {
+  const stored: DocumentValue = { blocks: [{ kind: 'steps', steps: [{ do: 'Look it up.', use: { kind: 'tool', id: 'search_transactions' }, locked: true }, { do: 'Say hello.' }] }] };
+  assert.deepEqual(fromEditorDoc(toEditorDoc(stored)), stored);
+  const cleared = toEditorDoc(stored);
+  cleared.content![0].content![0].attrs!.use = null;
+  assert.deepEqual(fromEditorDoc(cleared).blocks[0], { kind: 'steps', steps: [{ do: 'Look it up.' }, { do: 'Say hello.' }] });
 });

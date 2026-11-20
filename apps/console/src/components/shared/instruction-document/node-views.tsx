@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { NodeViewContent, NodeViewWrapper, type ReactNodeViewProps } from '@tiptap/react';
-import { Ban, BookOpen, Bot, Braces, Lock, Play, Plus, Search, Sparkles, TriangleAlert, Workflow, Wrench, X, type LucideIcon } from 'lucide-react';
+import { Ban, BookOpen, Bot, Braces, Lock, LockOpen, Play, Plus, Search, Sparkles, TriangleAlert, Workflow, Wrench, X, type LucideIcon } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -37,9 +37,11 @@ export interface DocumentContextValue {
   canMarkRuns: (pos: number) => boolean;
   /** Makes the reference at this position what its step runs, or with null stops the step running it. */
   markRuns: (pos: number, ref: Ref | null) => void;
+  /** Locks the tool of the step at this position to that step, or releases it. */
+  setLocked: (pos: number, on: boolean) => void;
 }
 
-export const DocumentContext = React.createContext<DocumentContextValue>({ resolved: undefined, missing: [], invalid: [], warnings: [], readOnly: false, chooseAnother: () => {}, canMarkRuns: () => false, markRuns: () => {} });
+export const DocumentContext = React.createContext<DocumentContextValue>({ resolved: undefined, missing: [], invalid: [], warnings: [], readOnly: false, chooseAnother: () => {}, canMarkRuns: () => false, markRuns: () => {}, setLocked: () => {} });
 
 const toRef = (id: string | null): Ref | null => {
   const at = id?.indexOf(':') ?? -1;
@@ -110,6 +112,24 @@ export function BlockView({ node }: ReactNodeViewProps) {
   );
 }
 
+/** Keeps a step's tool to that step. Read-only, it only says so when on. */
+function LockControl({ locked, readOnly, onChange }: { locked: boolean; readOnly: boolean; onChange: (on: boolean) => void }) {
+  const label = locked ? 'Only in this step: on' : 'Only in this step';
+  if (readOnly) {
+    return locked ? (
+      <Badge variant="secondary" contentEditable={false} data-testid="step-tool-locked">
+        <Lock aria-hidden />
+        Only in this step
+      </Badge>
+    ) : null;
+  }
+  return (
+    <Button type="button" variant="ghost" size="icon" contentEditable={false} className="size-5" aria-label={label} title={label} aria-pressed={locked} data-testid="lock-step-tool" onClick={() => onChange(!locked)}>
+      {locked ? <Lock className="size-3" /> : <LockOpen className="size-3" />}
+    </Button>
+  );
+}
+
 /** One numbered step: what it uses in front, its line, and a check and an if-not line where they were written. */
 export function StepView({ node, editor, getPos, updateAttributes }: ReactNodeViewProps) {
   const { missing, invalid, warnings, readOnly, resolved } = React.useContext(DocumentContext);
@@ -130,10 +150,11 @@ export function StepView({ node, editor, getPos, updateAttributes }: ReactNodeVi
             <span contentEditable={false} className="float-left mr-2 inline-flex items-center gap-1">
               <ReferenceBadge reference={use} resolved={resolved} runs />
               {!readOnly && (
-                <Button type="button" variant="ghost" size="icon" className="size-5" aria-label="Remove what this step uses" onClick={() => updateAttributes({ use: null })}>
+                <Button type="button" variant="ghost" size="icon" className="size-5" aria-label="Remove what this step uses" onClick={() => updateAttributes({ use: null, locked: false })}>
                   <X className="size-3" />
                 </Button>
               )}
+              <LockControl locked={!!node.attrs.locked} readOnly={readOnly} onChange={(on) => updateAttributes({ locked: on })} />
             </span>
           )}
           <NodeViewContent className="min-w-0" />
@@ -261,9 +282,10 @@ export function ReferenceBadge({ reference, resolved, runs = false }: { referenc
  * is marked carries the "runs" mark (a decoration from the Runs extension, set when the step's tool is named here).
  */
 export function ReferenceView({ node, selected, getPos, decorations }: ReactNodeViewProps) {
-  const { resolved, readOnly, canMarkRuns, markRuns } = React.useContext(DocumentContext);
+  const { resolved, readOnly, canMarkRuns, markRuns, setLocked } = React.useContext(DocumentContext);
   const reference: Ref = { kind: node.attrs.kind, id: node.attrs.id };
   const runs = decorations.some((d) => d.spec?.runs);
+  const locked = decorations.some((d) => d.spec?.locked);
   const pos = getPos();
   const canMark = !readOnly && reference.kind !== 'knowledge' && pos !== undefined && canMarkRuns(pos);
   const label = runs ? 'Stop running this' : 'Make this the step’s tool';
@@ -285,6 +307,7 @@ export function ReferenceView({ node, selected, getPos, decorations }: ReactNode
           {runs ? <Ban className="size-3" /> : <Play className="size-3" />}
         </Button>
       )}
+      {runs && pos !== undefined && <LockControl locked={locked} readOnly={readOnly} onChange={(on) => setLocked(getPos()!, on)} />}
     </NodeViewWrapper>
   );
 }

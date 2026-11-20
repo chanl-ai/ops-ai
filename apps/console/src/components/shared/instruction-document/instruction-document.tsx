@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import type { PublishBlocker, Ref, RefKind, ReferenceGroup, ReferenceItem, ReferenceSearch } from '@/lib/types/references';
 
 import { type DocNode, type DocumentValue, fromEditorDoc, missingReferences, refsInNode, runsIndex, toEditorDoc } from './document-model';
-import { LOADS_DOCUMENT, type MenuBridge, type MenuPick, type Trigger, addCheck, addIfNot, addStep, canMarkRuns, instructionExtensions, pickReference, setStepRuns } from './extensions';
+import { LOADS_DOCUMENT, type MenuBridge, type MenuPick, type Trigger, addCheck, addIfNot, addStep, canMarkRuns, instructionExtensions, pickReference, setStepLocked, setStepRuns } from './extensions';
 import { DocumentContext, type DocumentContextValue, FixRows, type InvalidField, KIND_ICON } from './node-views';
 import { CaretMenu, type MenuRow, type MenuSection } from './reference-menu';
 
@@ -299,6 +299,7 @@ export function InstructionDocument({ value, onChange, searchReferences, onInser
       chooseAnother,
       canMarkRuns: (pos) => !!editor && canMarkRuns(editor, pos),
       markRuns: (pos, ref) => editor && setStepRuns(editor, pos, ref),
+      setLocked: (pos, on) => editor && setStepLocked(editor, pos, on),
       addBack: onInsertReference ? (ref) => void latest.current.onInsertReference?.(ref) : undefined,
     }),
     // `onInsertReference` only decides whether Add it back is offered.
