@@ -93,8 +93,16 @@ agents-service and kb-service over HTTP with a service token.
 await client.post("/v1/events", body, tenant=str(item["tenantId"]), team=str(body["teamId"]))
 ```
 
+A shape one service sends and another reads is one class in `ops_contracts` (a `ServiceShape`), which the sender
+builds and the reader reads; a reader that keeps its own model of the shape refuses the sender's next field and
+answers 500 (`packages/contracts/src/ops_contracts/templates.py`: `CopyRef`, `Installed` and `TemplateRequires`, which
+agents-service and documents-service send and tools-service reads into an app's resources).
+
 Check: `.importlinter` contract `services-independent` (`.importlinter:145`) with the departure listed; the list may
-only shrink.
+only shrink. For a `ServiceShape`, `scripts/tests/test_no_cross_service_imports.py` (the `cross-service` check) fails
+when a service's committed `openapi.json` describes it differently, or declares most of its fields under another
+name. A shape that is not yet a `ServiceShape` has no check: a reply one service reads from another as plain JSON
+(`addCell` and `removeCell` in `services/tools-service/src/ops_tools/plugins/templates.py`) is not compared.
 
 ## LY5 Packages never import a service
 

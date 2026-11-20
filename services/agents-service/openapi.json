@@ -5485,6 +5485,7 @@
       },
       "CopyRef": {
         "additionalProperties": false,
+        "description": "A team's copy of a template: where it came from and the record it made.",
         "properties": {
           "detachedAt": {
             "anyOf": [
@@ -5506,9 +5507,11 @@
               "agent",
               "skill",
               "workflow",
-              "guardrail",
+              "document_type",
               "case_type",
-              "task_type"
+              "task_type",
+              "guardrail",
+              "knowledge_source"
             ],
             "title": "Kind",
             "type": "string"
@@ -5536,7 +5539,8 @@
           "recordId",
           "source",
           "templateId",
-          "version"
+          "version",
+          "detachedAt"
         ],
         "title": "CopyRef",
         "type": "object"
@@ -11383,6 +11387,7 @@
       },
       "Installed": {
         "additionalProperties": false,
+        "description": "The live copies a team holds of one template. A copy never changes by itself.",
         "properties": {
           "changed": {
             "default": false,
@@ -11412,7 +11417,8 @@
         "required": [
           "copies",
           "version",
-          "newerAvailable"
+          "newerAvailable",
+          "changed"
         ],
         "title": "Installed",
         "type": "object"
@@ -21128,6 +21134,7 @@
       },
       "TemplateRequires": {
         "additionalProperties": false,
+        "description": "What a copy of a template needs before it can run.",
         "properties": {
           "bind": {
             "items": {
@@ -21156,7 +21163,8 @@
         },
         "required": [
           "tools",
-          "bind"
+          "bind",
+          "resources"
         ],
         "title": "TemplateRequires",
         "type": "object"

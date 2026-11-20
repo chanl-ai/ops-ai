@@ -2102,10 +2102,10 @@ export interface components {
              * @default false
              */
             canRemove: boolean;
-            copy?: components["schemas"]["ResourceCopy"] | null;
+            copy?: components["schemas"]["CopyRef"] | null;
             /** Id */
             id: string;
-            installed?: components["schemas"]["ResourceInstalled"] | null;
+            installed?: components["schemas"]["Installed"] | null;
             /**
              * Kind
              * @enum {string}
@@ -2765,6 +2765,29 @@ export interface components {
              * @default 0
              */
             workflows: number;
+        };
+        /**
+         * CopyRef
+         * @description A team's copy of a template: where it came from and the record it made.
+         */
+        CopyRef: {
+            /** Detachedat */
+            detachedAt: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "agent" | "skill" | "workflow" | "document_type" | "case_type" | "task_type" | "guardrail" | "knowledge_source";
+            /** Recordid */
+            recordId: string;
+            /** Source */
+            source: string;
+            /** Templateid */
+            templateId: string;
+            /** Version */
+            version: number;
         };
         /**
          * CredentialAccount
@@ -3719,6 +3742,23 @@ export interface components {
             changed: string[];
             /** Removed */
             removed: string[];
+        };
+        /**
+         * Installed
+         * @description The live copies a team holds of one template. A copy never changes by itself.
+         */
+        Installed: {
+            /**
+             * Changed
+             * @default false
+             */
+            changed: boolean;
+            /** Copies */
+            copies: number;
+            /** Neweravailable */
+            newerAvailable: boolean;
+            /** Version */
+            version: number | null;
         };
         /** InvalidField */
         InvalidField: {
@@ -4937,35 +4977,6 @@ export interface components {
             /** Name */
             name: string;
         };
-        /** ResourceCopy */
-        ResourceCopy: {
-            /** Id */
-            id: string;
-            /** Kind */
-            kind: string;
-            /** Recordid */
-            recordId: string;
-            /** Source */
-            source: string;
-            /** Templateid */
-            templateId: string;
-            /** Version */
-            version: number;
-        };
-        /** ResourceInstalled */
-        ResourceInstalled: {
-            /**
-             * Changed
-             * @default false
-             */
-            changed: boolean;
-            /** Copies */
-            copies: number;
-            /** Neweravailable */
-            newerAvailable: boolean;
-            /** Version */
-            version: number | null;
-        };
         /**
          * ReviewDecisionIn
          * @description A decision made in Reviews, sent by agents-service.
@@ -5559,14 +5570,17 @@ export interface components {
             /** Signin */
             signIn?: string | null;
         };
-        /** TemplateRequires */
+        /**
+         * TemplateRequires
+         * @description What a copy of a template needs before it can run.
+         */
         TemplateRequires: {
             /** Bind */
             bind: {
                 [key: string]: string;
             }[];
             /** Resources */
-            resources?: string[];
+            resources: string[];
             /** Tools */
             tools: string[];
         };

@@ -115,11 +115,12 @@ check-paths.downgrades = /migrations/versions/.*\.py$$|^scripts/(check_downgrade
 # A use-case script that writes outside the one output root (evidenceDir / evidence_dir, or a temp dir).
 check-run.usecase-outputs = $(PY) scripts/check_usecase_outputs.py
 check-paths.usecase-outputs = ^docs/usecases/.*\.(mjs|js|ts|py|sh)$$|^scripts/check_usecase_outputs\.py$$
-# A test that mints a short-lived person token flakes under load; a service that imports another service.
+# A test that mints a short-lived person token flakes under load; a service that imports another service, or that
+# describes a shape services send each other differently from its ops_contracts class.
 check-run.token-lifetime = $(PYTEST) scripts/tests/test_test_token_lifetime.py
 check-paths.token-lifetime = (^|/)tests/.*\.py$$
 check-run.cross-service = $(PYTEST) scripts/tests/test_no_cross_service_imports.py
-check-paths.cross-service = ^services/[^/]+/(src|tests)/|^scripts/tests/test_no_cross_service_imports\.py$$
+check-paths.cross-service = ^services/[^/]+/(src|tests)/|^services/[^/]+/openapi\.json$$|^packages/contracts/src/|^scripts/tests/test_no_cross_service_imports\.py$$
 # The code rules (environment read in one module, every route authenticated, no print or own logger): agents-service
 # with its layer rules, every other service from scripts/check_service_standards.py (its WAITING list only shrinks).
 check-run.standards = $(PY) services/agents-service/scripts/check_standards.py
