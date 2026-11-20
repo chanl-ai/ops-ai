@@ -38,9 +38,36 @@ class RunModel(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
 
 
+# An agent or a workflow an agent may use is spelled three ways, all owned here: a reference names it by its bare id
+# (`@agent:ag_x`), an agent's grant and the tools directory store it as `agent:ag_x`, and the model calls the tool
+# `agent__ag_x` (a tool name allows no colon). The service builds its grants with `called_as` and the kernel reads
+# them with `hands_to_agent` and `grant_token`, so the two never spell a name apart.
+AGENT_TOOL_PREFIX = "agent__"
+WORKFLOW_TOOL_PREFIX = "workflow__"
+_CALLED: dict[str, str] = {"agent": AGENT_TOOL_PREFIX, "workflow": WORKFLOW_TOOL_PREFIX}
+
+
+def called_as(kind: str, ref_id: str) -> str:
+    """The name of the tool the model calls to ask agent `ref_id` or start workflow `ref_id`."""
+    return f"{_CALLED[kind]}{ref_id}"
+
+
+def hands_to_agent(tool_name: str) -> bool:
+    """Whether a called tool asks another agent."""
+    return tool_name.startswith(AGENT_TOOL_PREFIX)
+
+
+def grant_token(tool_name: str) -> str | None:
+    """The reference a text writes for an agent's or a workflow's tool (`@agent:ag_x`); None for any other tool."""
+    for kind, prefix in _CALLED.items():
+        if tool_name.startswith(prefix):
+            return f"@{kind}:{tool_name.removeprefix(prefix)}"
+    return None
+
+
 class Ref(RunModel):
     """Something a text or a step names: a tool, a knowledge base, a skill, an agent or a workflow, by its id. An
-    agent or a workflow is named by its bare id; a grant stores them as `agent:<id>` and `workflow:<id>`."""
+    agent or a workflow is named by its bare id; `grant` and `tool_name` are its two other spellings."""
 
     kind: RefKind
     id: str = Field(pattern=rf"^{REF_ID}$")
@@ -52,6 +79,14 @@ class Ref(RunModel):
     @property
     def tool_name(self) -> str | None:
         """The name of the tool a step calls for this reference; None for a skill or a knowledge base."""
+        if self.kind == "tool":
+            return self.id
+        return called_as(self.kind, self.id) if self.kind in _CALLED else None
+
+    @property
+    def grant(self) -> str | None:
+        """What an agent's grant and the tools directory store for this reference; None for a skill or a knowledge
+        base."""
         if self.kind == "tool":
             return self.id
         return f"{self.kind}:{self.id}" if self.kind in ("agent", "workflow") else None

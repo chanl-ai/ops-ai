@@ -33,6 +33,7 @@ from ops_contracts.skill_run import (
     StepCheck,
     StepResult,
     SubRun,
+    hands_to_agent,
 )
 from ops_pii import holds_placeholder
 from ops_service_kit.http import Json
@@ -698,7 +699,7 @@ def changes(name: str, access: str | None) -> bool:
     """Whether a step's tool is one that changes something: any tool that is not a read (a write, a workflow), and
     any other agent a step hands to, whatever its access says. A tool whose access is not known is taken as one. The
     one test behind the tools a skill owns (`owned`) and the steps a save asks a rule check of."""
-    return name.startswith("agent:") or (access or "write") != "read"
+    return hands_to_agent(name) or (access or "write") != "read"
 
 
 def owned(skills: Sequence[Skill], access: Mapping[str, str]) -> dict[str, list[str]]:

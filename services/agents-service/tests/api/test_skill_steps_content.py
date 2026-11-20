@@ -11,12 +11,15 @@ Where the design names no shape, these tests fix one: a refused step answers its
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
 
 from httpx import AsyncClient
 
+from ops_agent_kernel import steps
 from ops_agents.activities.catalog import load_catalog
 from ops_agents.activities.tool_directory import CatalogTools
+from ops_agents.api.agent_calls import AgentCalls
 from ops_agents.api.agent_registry import definition_of
 from ops_agents.app import skill_content
 from tests.conftest import SEED
@@ -250,3 +253,25 @@ async def test_a_step_naming_a_tool_the_team_no_longer_offers_blocks_the_publish
         error = _error(await c.post(f"/v1/skills/{sid}/publish-requests", json={"note": ""}))
         assert [p["kind"] for p in error["details"]["problems"]] == ["unavailable_reference"], error
         assert _ok(await c.get(f"/v1/skills/{sid}"))["publishedVersion"] is None
+
+
+async def test_a_step_that_asks_another_agent_is_locked_under_the_name_the_service_grants(tmp_path: Path) -> None:
+    """A step asks another agent as `@agent:<id>`, the agent holds it as `agent:<id>`, and the model calls
+    `agent__<id>`. Read under any other spelling, the kernel owns a tool nobody is granted and the hand-off stays
+    free of its step."""
+    async with _app(str(tmp_path / "db.sqlite")) as c:
+        ask = {"do": "Ask the branch desk.", "use": {"kind": "agent", "id": BRANCH}}
+        body = {**REFUND, "steps": [{"do": "Look up.", "use": LOOKUP}, ask]}
+        # Another agent may change anything, whatever access its tool says: the step needs a rule like a write.
+        error = _error(await c.post("/v1/skills", json=body))
+        assert (error["code"], error["details"]["step"]) == ("write_needs_rule", 2), error
+        ruled = {**ask, "check": {"text": "exists(result.answer)"}, "ifNot": {"action": "exit", "exit": "failed"}}
+        saved = _ok(await c.post("/v1/skills", json={**body, "steps": [body["steps"][0], ruled]}), 201)
+        program = skill_content.program_of(saved["content"])
+        assert program is not None
+
+    # The grant as the service builds it for a chat, and what the kernel then keeps for the step.
+    granted = AgentCalls._grant(cast(Any, None), SimpleNamespace(id=BRANCH, name="Branch desk", role="desk"))  # pyright: ignore[reportPrivateUsage]
+    skill = cast(Any, SimpleNamespace(program=program, slug="refund-a-charge"))
+    access = {"lookup_customer": "read", granted.name: granted.access}
+    assert steps.owned([skill], access) == {granted.name: ["refund-a-charge"]}

@@ -531,7 +531,7 @@ async def test_a_pause_keeps_the_step_a_denial_ends_the_skill_and_the_record_hol
 
 # --- a skill's write is reached only through its step, and an ending the kernel made is final for the reply ---
 
-PAYMENTS = tool("agent:ag_payments")
+PAYMENTS = tool("agent__ag_payments")
 GATED_REFUND = tool("refund_charge", "write", approval=True)
 
 
@@ -558,7 +558,7 @@ WRITE: Call = ("refund_charge", {"chargeId": "CH-2"})
 # One row per way a model reaches for the write without its step: what it does, and the tools granted.
 REACHES: dict[str, tuple[list[Action], list[ToolGrant]]] = {
     "with no skill running": ([WRITE], [LOOKUP, REFUND, NOTE, PAYMENTS]),
-    "another agent, with no skill running": ([("agent:ag_payments", {})], [LOOKUP, REFUND, NOTE, PAYMENTS]),
+    "another agent, with no skill running": ([("agent__ag_payments", {})], [LOOKUP, REFUND, NOTE, PAYMENTS]),
     "in the model step that starts the skill": ([[START, WRITE]], [LOOKUP, REFUND, NOTE, PAYMENTS]),
     "in the model step that leaves the skill": (
         [START, PASSES, [("exit", {"name": "failed"}), WRITE]],
@@ -574,7 +574,7 @@ REACHES: dict[str, tuple[list[Action], list[ToolGrant]]] = {
 @pytest.mark.parametrize("reach", REACHES, ids=str)
 async def test_a_skills_write_runs_only_as_its_step(reach: str) -> None:
     actions, tools = REACHES[reach]
-    systems = Systems(lookup_charge=_amount, refund_charge={"refunded": True}, **{"agent:ag_payments": {"ok": True}})
+    systems = Systems(lookup_charge=_amount, refund_charge={"refunded": True}, **{"agent__ag_payments": {"ok": True}})
     settings = agent([refund_after_a_check()], max_tool_calls=None, max_steps=12)
     model = Script(*actions, ("search_tools", {"query": "refund"}), "I could not refund it.")
     ask = TurnRequest("t1", "th1", settings, tools, user_turn="Refund CH-2.")
@@ -582,7 +582,7 @@ async def test_a_skills_write_runs_only_as_its_step(reach: str) -> None:
     assert result.status == "completed", f"a refused call must not wait for a person: {result.status}"
     assert [c for c, _ in systems.calls if c != "lookup_charge"] == [], systems.calls
     first = set(model.offered[0])
-    assert not first & {"refund_charge", "agent:ag_payments"}, "a skill's write is not offered before its step"
+    assert not first & {"refund_charge", "agent__ag_payments"}, "a skill's write is not offered before its step"
     assert {"lookup_charge", "add_note"} <= first, "a read, and a write no step runs, stay free"
     assert "refund_charge" not in json.dumps(model.returned[-1]), "search names no tool that waits for its step"
 

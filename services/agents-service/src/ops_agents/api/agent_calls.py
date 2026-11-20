@@ -18,12 +18,12 @@ from langgraph.config import get_config
 from ops_access import can
 from ops_agent_kernel.ports import ToolOutcome
 from ops_agent_kernel.types import ToolGrant
+from ops_contracts.skill_run import called_as
 from ops_service_kit import narrow
 from ops_service_kit.errors import Forbidden, NotFound
 from ops_service_kit.http import Json
 from ops_service_kit.ids import new_id, now_iso
 
-from ..graphs.common import AGENT_TOOL_PREFIX
 from ..store.events import EventLog
 from ..store.team_defaults import TeamDefaults
 from .agent_registry import registry
@@ -88,7 +88,7 @@ class AgentCalls:
 
     def _grant(self, a: Any) -> ToolGrant:
         return ToolGrant(
-            name=f"{AGENT_TOOL_PREFIX}{a.id}",
+            name=called_as("agent", a.id),
             server="agents",
             description=f"Ask {a.name}, the {a.role}. It answers from its own knowledge and tools.",
             access="read",
@@ -138,7 +138,7 @@ class AgentCalls:
         if not caller and (parent.graph or "").startswith("agent:"):
             caller = parent.graph.removeprefix("agent:")
         # Checked again here, not only when offered: a model may name a tool it was never given.
-        if f"{AGENT_TOOL_PREFIX}{agent}" not in {g.name for g in await self.offers_in(caller, parent_thread_id)}:
+        if called_as("agent", agent) not in {g.name for g in await self.offers_in(caller, parent_thread_id)}:
             message = "That agent cannot be asked on this turn."
             return ToolOutcome(ok=False, output={"error": message, "code": "specialist_not_offered"})
         person = TURN_PERSON.get()

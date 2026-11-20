@@ -45,7 +45,7 @@ from pydantic_ai.settings import ModelSettings
 from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.usage import UsageLimits
 
-from ops_contracts.skill_run import SkillRunState
+from ops_contracts.skill_run import SkillRunState, grant_token
 from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.ids import action_id, input_hash
 from ops_service_kit.narrow import json_object
@@ -772,7 +772,7 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: 
         takes_ctx=True,
         # Reads may run side by side; anything that can change a system (a write, a workflow, another agent) runs
         # one at a time, in the order the model asked.
-        sequential=grant.access != "read" or grant.name.startswith(("workflow:", "agent:")),
+        sequential=grant.access != "read" or grant_token(grant.name) is not None,
     )
     # Above the agent's tool-search threshold its schema is sent only once a search finds it.
     tool.defer_loading = deferred
@@ -881,7 +881,7 @@ def _names(req: TurnRequest) -> dict[str, str]:
     """What the model knows each reference in a step's text as: a skill by its slug, an agent or a workflow by the
     name of the tool that calls it. A tool is known by its id, as written."""
     names = {f"@skill:{s.skill_id}": s.slug for s in req.settings.skills}
-    names.update({f"@{t.name}": t.name for t in req.tools if t.name.startswith(("agent:", "workflow:"))})
+    names.update({token: t.name for t in req.tools if (token := grant_token(t.name)) is not None})
     return names
 
 

@@ -46,7 +46,7 @@ rules: [../../CLAUDE.md](../../CLAUDE.md#folder-guides).
   - A tool a skill stopped in this reply keeps, or another skill holds, stays out even as the current step's tool.
   - The current step's tool may be called; a tool of another step of the running skill waits for its step.
   - A tool a skill owns (`steps.owned`) runs only as that skill's step. A skill owns every tool its steps run that
-    is not a read, and every `agent:` tool, for as long as it is attached. A read, and a write no step runs, are free.
+    is not a read, and every tool that asks another agent (`agent__<id>`, spelled once in `ops_contracts.skill_run`), for as long as it is attached. A read, and a write no step runs, are free.
   - While a step names a tool, that tool and knowledge search are the only systems offered.
 - The record owns how a skill ended (`EndedSkill`): the exit, the step, `why` (`check`, `denied`, `error`, `held`,
   or `exit` when the model called it), the text of the check that did not pass, the author's meaning for the exit,

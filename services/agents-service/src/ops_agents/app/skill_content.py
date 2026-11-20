@@ -105,7 +105,8 @@ def unruled(program: SkillProgram, access: Mapping[str, str]) -> list[steps.Step
     found: list[steps.StepProblem] = []
     for n, step in enumerate(program.steps, start=1):
         name = step.use.tool_name if step.use is not None else None
-        if name is None or not steps.changes(name, access.get(name)):
+        # The directory lists a tool by its grant id; the kernel judges it by the name it is called by.
+        if step.use is None or name is None or not steps.changes(name, access.get(step.use.grant or "")):
             continue
         if step.check is None or step.check.by != "rule":
             found.append(
@@ -214,7 +215,7 @@ def scope(program: SkillProgram | None) -> tuple[list[str], list[str]]:
     if program is None:
         return [], []
     refs = [ref for _, ref in _named(program)]
-    tools = [name for ref in refs if (name := ref.tool_name) is not None]
+    tools = [name for ref in refs if (name := ref.grant) is not None]
     bases = [ref.id for ref in refs if ref.kind == "knowledge"]
     return list(dict.fromkeys(tools)), list(dict.fromkeys(bases))
 
@@ -276,7 +277,7 @@ async def publish_problems(
         spot: Position = {"field": "steps", "step": p.step, "index": None}
         found.append({"kind": "bad_check", "id": None, "position": spot, "message": p.message})
     for at, ref in named:
-        tool = ref.tool_name
+        tool = ref.grant
         where = f"Step {at['step']}" if at["step"] is not None else "The not-when line"
         if tool is not None and offered is not None and tool not in offered:
             found.append(
