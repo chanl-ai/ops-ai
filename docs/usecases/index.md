@@ -173,7 +173,6 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-410 | tools-service | An assistant lists and runs a team's read tools over MCP with an API key; writes, other teams and production are refused | api, ui | `tools-service/mcp-server.md` |
 | uc-267 | console | Admins see roles, a person's effective access and why an action is refused | ui | `console/access-roles-and-checks.md` |
 | uc-233 | console | Start run is a form generated from the trigger's input schema; a file input uploads or picks files and the run gets their ids | ui | `console/run-with-files.md` |
-| uc-234 | console | A Human Task opens as its own page: the question, the document beside the read values, Details folded, and the decision in a footer row that never covers the body | ui | `console/human-task-page.md` |
 | uc-257 | console | Tables size each column by what it holds: names trimmed to one line with the whole value on hover, numbers right-aligned, a dash for an empty cell, and the name pinned on a phone | ui | `console/table-column-kinds.md` |
 | uc-248 | agents-service | A hold on a customer's account: matched, worked out, approved in time or by a supervisor after the deadline, placed, noted on a case, and the outside system told | ui | `agents-service/a-hold-on-a-customer-s.md` |
 | uc-249 | agents-service | A complaint email: each attachment recognised and its read kept, the complaint read and triaged by an agent, a case by urgency, a hold started, and an approved reply | ui | `agents-service/a-complaint-email-is-triaged-attachments.md` |
@@ -296,3 +295,8 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-workflows-1 | agents-service | A Schedule trigger starts one run when its tick is due, the same tick key starts no second run, and a tick due later stays queued | api, sdk | `(no doc)` |
 | uc-platform-1 | platform-service | A team's running work is counted for that team only, and the delete check names it and stops the deletion | api | `(no doc)` |
 | uc-751 | agents-service | Evals keep saved cases and runs for the team | api, sdk, ui | `agents-service/evals-keep-saved-cases-and-runs.md` |
+| uc-752 | agents-service | An agent answers from a knowledge source with a citation, in mock and real mode | api, sdk, ui | `agents-service/an-agent-answers-from-a-knowledge.md` |
+| uc-753 | tools-service | An agent reads with a tool, asks for approval, and the write runs only after approval, in mock and real mode | api, sdk, cli, ui | `tools-service/an-agent-reads-with-a-tool.md` |
+| uc-754 | tools-service | Approval fails closed: when the approval rules cannot be read, a write that needs approval is refused and never runs | api | `tools-service/approval-fails-closed-when-the-approval.md` |
+| uc-755 | tools-service | A team holding only a workflow grant on another team's tool module uses it through the workflow and cannot edit, publish, run, revoke or delete it | api, ui | `tools-service/a-team-holding-only-a-workflow.md` |
+| uc-756 | agents-service | A shared form filled in signed out starts a workflow with knowledge and a tool, a person approves a step, and the run finishes with a record | api, ui | `agents-service/a-shared-form-filled-in-signed.md` |

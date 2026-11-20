@@ -1,7 +1,7 @@
 # Human Task page
 
 Status: proposed, reworked after review, waiting for the design checker. Design: the
-[Human Task page design](../../../design/human-tasks/task-page.md). Proof: `make usecase-test UC=uc-234 LAYER=ui` and
+[Human Task page design](../../../design/human-tasks/task-page.md). Proof: `make usecase-test UC=uc-460 LAYER=ui` and
 `make usecase-test UC=uc-224 LAYER=ui`.
 
 A row in Human Tasks opens the task at `/reviews/<id>`, a record page on PageLayout: the question as the title, the
@@ -36,4 +36,4 @@ pressed without a reason: the footer gains the reason row and the body gets shor
 | Kinds move to `components/kinds/` | `viewer` and `field_check` added in `components/chat/widgets/kind-view.tsx` | The move touches every chat import; a separate change |
 | A held action's document shows boxes on the values in question | The document shows, without boxes | Boxes come from a read; a held action knows its file but not which read of it holds its values |
 | D shows the received email above the reply, and each case with its amount | The reply, and each case by its subject | The reply step's summary carries the reply and the cases it started, not the received email; the case subject names the debtor |
-| D and C show the decision buttons | Their screenshots are taken as people who may not decide, so the footer says who decides | The person who may decide is found per run; uc-234 step 8 checks C's buttons as that person |
+| D and C show the decision buttons | Their screenshots are taken as people who may not decide, so the footer says who decides | The person who may decide is found per run; uc-460 checks C's buttons as that person |

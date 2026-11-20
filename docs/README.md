@@ -351,7 +351,6 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `usecases/console/tool-access.md` | uc-143: Access › Tool access on tools-service's grants list |
 | `usecases/console/file-extraction.md` | uc-227: a file opens on its own page, Extract reads it with a document type, and Files says how each file was read |
 | `usecases/console/start-run-and-records.md` | uc-228: the start-run dialogs, a run page and a case page, with screenshots for a before-and-after comparison |
-| `usecases/console/human-task-page.md` | uc-234: a Human Task opens as its own page, with the question, the document beside the read values, Details folded and the decision in a footer row below the body |
 | `usecases/console/access-roles-and-checks.md` | uc-267: an admin reads Access › Roles and a built-in role's grid read-only, a member's access beyond their team role on Members, and a person's effective access with the role behind each action |
 | `usecases/console/demo-team-shows-each-once.md` | uc-450: on staging the demo team's Open cases and run picker show each record once, and Dispute Desk finds Marcus Bell's Coastal Air charge at the bank |
 | `usecases/console/pages-wait-for-the-team.md` | uc-505: a sign-in straight to a case loads for the person's own team, and a record in another team says not found, or in another team, with a switch |

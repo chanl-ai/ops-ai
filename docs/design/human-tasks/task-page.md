@@ -1,8 +1,8 @@
 # Human task page
 
 Status: current design. Task types are built and proven by
-[uc-254](../../usecases/agents-service/typed-human-tasks.md); the full-page task view by
-[uc-234](../../usecases/console/human-task-page.md). Where the build still differs from this design is listed in
+[uc-254](../../usecases/agents-service/typed-human-tasks.md); the task beside the queue by
+[uc-460](../../usecases/console/human-tasks-queue.md). Where the build still differs from this design is listed in
 [console/proposed/tasks](../../console/proposed/tasks/README.md).
 
 ## The problem
