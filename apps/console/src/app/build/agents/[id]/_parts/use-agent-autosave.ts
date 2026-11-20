@@ -25,8 +25,9 @@ export function agentPatch(saved: AgentDraft, draft: AgentDraft, brief: AgentBri
  *
  * - after the person's own write (an @ insert, a grant, a skill attached), the newest copy is read and the change is
  *   sent once more, with no message. The page keeps every field the person changed and takes the rest.
- * - after another person's save, `stale` says who saved and when, and nothing is sent until `reload`. The person's
- *   unsaved text stays on the page through the reload and saves on top of the copy they then see.
+ * - after another person's save, `stale` says who saved and when, and nothing is sent until `reload`, which reads
+ *   their copy. The page then moves onto it, keeping only the fields this person changed (the brief field by field),
+ *   and saves those on top.
  */
 export function useAgentAutosave({
   agent,
@@ -80,7 +81,7 @@ export function useAgentAutosave({
         },
         onError: (e) => {
           const refused = staleSave(e);
-          const next = refused && onStaleSave(refused, me);
+          const next = refused && onStaleSave(refused, me, agent.version);
           if (next?.resend && resent.current !== sent) {
             resent.current = sent;
             return void read();

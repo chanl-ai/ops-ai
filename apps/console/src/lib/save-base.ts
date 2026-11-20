@@ -12,6 +12,8 @@ export interface SaveBase {
 export const baseOf = (read: { version: number; digest?: string | null }): SaveBase => ({ baseVersion: read.version, baseDigest: read.digest ?? '' });
 
 export interface StaleSave {
+  /** The newest version's number. */
+  version: number | null;
   savedBy: string;
   savedAt: string;
 }
@@ -20,7 +22,8 @@ export interface StaleSave {
 export function staleSave(e: unknown): StaleSave | null {
   const err = e as { code?: string; details?: Record<string, unknown> } | null;
   if (err?.code !== 'stale_base') return null;
-  return { savedBy: String(err.details?.savedBy ?? ''), savedAt: String(err.details?.savedAt ?? '') };
+  const version = Number(err.details?.version);
+  return { version: Number.isFinite(version) ? version : null, savedBy: String(err.details?.savedBy ?? ''), savedAt: String(err.details?.savedAt ?? '') };
 }
 
 /** Who saved the newer copy and when, as a page says it. */
@@ -31,10 +34,11 @@ export function staleNote(stale: StaleSave): string {
 }
 
 /**
- * What an autosaving page does with a refused save. The person's own write (their @ insert, a grant, a second tab) needs no
- * message: the page reads the newest copy and sends the change again. Another person's save is said, and nothing more
- * is sent until the person chooses.
+ * What an autosaving page does with a refused save. The person's own write to the draft the page read (their @ insert,
+ * a grant, a second tab) needs no message: the page reads the newest copy and sends the change again. Anything else is
+ * said, and nothing more is sent until the person chooses: another person's save, or a newest copy under a different
+ * version number than the one read, which more than this person's last write stands behind.
  */
-export function onStaleSave(stale: StaleSave, me: string | undefined): { resend: true } | { resend: false; note: string } {
-  return me && stale.savedBy === me ? { resend: true } : { resend: false, note: staleNote(stale) };
+export function onStaleSave(stale: StaleSave, me: string | undefined, readVersion: number): { resend: true } | { resend: false; note: string } {
+  return me && stale.savedBy === me && stale.version === readVersion ? { resend: true } : { resend: false, note: staleNote(stale) };
 }
