@@ -60,3 +60,18 @@ async def test_a_required_input_left_out_starts_no_run(path: str, tenants: Calla
                 await t.starts.start(parent, "case", {}, "k:open:1:0")
             assert stopped.value.code == "invalid_input" and "Name" in str(stopped.value)
     assert await t.children() == []
+
+
+async def test_a_stored_schema_that_is_not_json_schema_starts_no_run_and_says_so(tenants: Callable[[], Tenant]) -> None:  # noqa: F811
+    """A version saved before the save check: `required: true` must answer `input_schema_invalid`, not fail on the
+    schema's own shape while reading required fields."""
+    t = tenants()
+    wire = CASE.wire()
+    wire["nodes"][0]["parameters"]["inputSchema"]["required"] = True
+    stored = await t.publish(parse(wire))
+    with tenant_scope(t.id), pytest.raises(Unprocessable) as refused:
+        await start_run(
+            t.runs, stored, team_id=TEAM, mode="live", input={"name": "Ana"}, run_key=None, created_by="b@x"
+        )
+    assert refused.value.code == "input_schema_invalid", refused.value
+    assert await t.children() == []

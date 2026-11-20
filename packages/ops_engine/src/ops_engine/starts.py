@@ -259,10 +259,19 @@ def _refusal(schema: Mapping[str, JsonValue], err: Any) -> InputRefusedError:
 
 def typed_values(schema: Mapping[str, JsonValue], values: Mapping[str, JsonValue]) -> Json:
     """A start's values as a run takes them, or InputRefusedError naming the field and the reason. The one rule for a
-    start's values, in this order: defaults and required fields (`form_values`); text that reads exactly as its
+    start's values, in this order: the schema must itself be JSON Schema, checked before anything reads it; defaults
+    and required fields (`form_values`); text that reads exactly as its
     field's declared number, whole number or true/false becomes that; then the schema is held as JSON Schema. Running
     it again on its own result changes nothing, so a caller that must refuse before it writes anything else (a hosted
     form before it counts against its daily cap, a batch before it stores a row) calls it too."""
+    try:
+        cast(Any, jsonschema.Draft202012Validator).check_schema(dict(schema))
+    except jsonschema.SchemaError as e:
+        # A schema saved before `input_schema_invalid` was checked at save: nothing can be held to it, so nothing runs.
+        reason = f"the trigger's input schema is not valid JSON Schema ({e.message})"
+        raise InputRefusedError(
+            f"No run starts: {reason}.", field=None, reason=reason, code="input_schema_invalid"
+        ) from e
     out, missing = form_values(schema, values)
     if missing:
         required = cast(list[JsonValue], schema.get("required") or [])
@@ -274,14 +283,6 @@ def typed_values(schema: Mapping[str, JsonValue], values: Mapping[str, JsonValue
             missing=tuple(missing),
         )
     out = cast(Json, _typed(schema, out))
-    try:
-        cast(Any, jsonschema.Draft202012Validator).check_schema(dict(schema))
-    except jsonschema.SchemaError as e:
-        # A schema saved before `input_schema_invalid` was checked at save: nothing can be held to it, so nothing runs.
-        reason = f"the trigger's input schema is not valid JSON Schema ({e.message})"
-        raise InputRefusedError(
-            f"No run starts: {reason}.", field=None, reason=reason, code="input_schema_invalid"
-        ) from e
     err: Any = cast(Any, jsonschema.exceptions).best_match(
         cast(Any, jsonschema.Draft202012Validator(dict(schema))).iter_errors(out)
     )
