@@ -21,6 +21,8 @@ from ops_access import Grant
 from ops_access.check import DEFAULT
 from ops_agents.api.app import create_app
 from ops_agents.api.deps import Runtime
+from ops_agents.api.service_events import deliver
+from ops_agents.store.background import heartbeats
 from ops_agents.store.base import metadata
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.tenancy import tenant_scope
@@ -325,3 +327,24 @@ async def test_a_payload_a_listeners_input_schema_refuses_starts_no_run_and_the_
     rt.event_workflows = [needs_reason]
     got = await emit(c, "fil_20")
     assert got["runIds"] == [] and got["status"] == "unhandled", got
+
+
+async def test_a_refused_event_with_no_team_is_on_the_account_admins_background_page(stack: Stack) -> None:
+    c, rt = stack
+    needs_reason = event_workflow()
+    needs_reason["nodes"][0]["parameters"]["inputSchema"] = {
+        "type": "object",
+        "required": ["reason"],
+        "properties": {"reason": {"type": "string", "title": "Reason"}},
+    }
+    rt.event_workflows = [needs_reason]
+    await emit(c, "fil_21")  # publishes the event workflows; the relay's own delivery below carries no team
+    with tenant_scope(TENANT):
+        got = await deliver(
+            rt.db, "sys_file_deleted", name=EVENT, key="fil_22", team_id="", source="files", actor=None,
+            payload={"fileId": "fil_22"},
+        )  # fmt: skip
+    assert got["run_ids"] == [], got
+    [beat] = [b for b in await heartbeats(rt.db).read() if b.process == "event_workflows"]
+    assert "reason does not match its input schema" in (beat.last_error or ""), beat
+    assert "fil_22" in (beat.last_error or ""), "the line says which event"
