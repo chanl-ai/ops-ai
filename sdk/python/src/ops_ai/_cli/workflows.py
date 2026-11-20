@@ -61,6 +61,14 @@ def main(argv: list[str]) -> int:
     export = sub.add_parser("export", help="print a stored definition")
     export.add_argument("id")
     export.add_argument("--format", choices=("yaml", "json"), default="yaml")
+    save_copy = sub.add_parser("save-copy", help="save a definition as the working copy; makes no version")
+    save_copy.add_argument("id")
+    save_copy.add_argument("definition")
+    sub.add_parser("make-version", help="make the next version from the working copy").add_argument("id")
+    diff = sub.add_parser("diff", help="what changed between two versions, live or the working copy")
+    diff.add_argument("id")
+    diff.add_argument("--from", dest="from_", default="live")
+    diff.add_argument("--to", default="working-copy")
     publish = sub.add_parser("publish", help="request or complete publish")
     publish.add_argument("id")
     publish.add_argument("--note", default="")
@@ -153,6 +161,16 @@ def _dispatch(ns: argparse.Namespace) -> int:
         )
     if ns.verb == "export":
         return emit(ns, wf.export(ns.id, format=ns.format), text=wf.export(ns.id, format=ns.format))
+    if ns.verb == "save-copy":
+        saved = wf.save_working_copy(ns.id, definition_in(ns.definition))
+        errors = [c for c in saved["workingCopy"]["checks"] if c.get("level") == "error"]
+        return emit(ns, saved, text=f"{ns.id} working copy saved, {len(errors)} problem(s)")
+    if ns.verb == "make-version":
+        made = wf.make_version(ns.id)
+        return emit(ns, made, text=f"{made.get('workflowId')} v{made.get('version')} made from the working copy")
+    if ns.verb == "diff":
+        changes = wf.diff(ns.id, from_=ns.from_, to=ns.to)
+        return emit(ns, changes, text=_diff_text(changes))
     if ns.verb == "publish":
         review = wf.publish(ns.id, note=ns.note)
         stage = "waiting for review" if review.get("id") and not review.get("liveVersion") else "live"
@@ -233,6 +251,15 @@ def _convert(ns: argparse.Namespace) -> int:
         return 0
     sys.stdout.write(text if text.endswith("\n") else text + "\n")
     return 0
+
+
+def _diff_text(changes: dict[str, Any]) -> str:
+    """One line per step: + added, - removed, ~ changed with each setting, > moved."""
+    lines = [f"+ {s['name']}" for s in changes["added"]] + [f"- {s['name']}" for s in changes["removed"]]
+    for step in changes["changed"]:
+        lines.append(f"~ {step['name']}: " + ", ".join(f["field"] for f in step["fields"]))
+    lines += [f"> {s['name']} moved" for s in changes["moved"]]
+    return "\n".join(lines) or "no step changed"
 
 
 def _check(ns: argparse.Namespace, check: WorkflowCheck) -> int:
