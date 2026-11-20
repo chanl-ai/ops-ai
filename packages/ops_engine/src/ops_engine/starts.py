@@ -168,11 +168,6 @@ class InputRefusedError(ValueError):
         self.field, self.reason, self.missing, self.code = field, reason, missing, code
 
 
-# The digits 0-9 only (re.ASCII): `\d` and `int()` would also take digits of other scripts. No exponent, no
-# thousands separator, and a decimal point needs a digit on both sides.
-_INTEGER = re.compile(r"[+-]?[0-9]+", re.ASCII)
-_WHOLE = re.compile(r"([+-]?[0-9]+)\.0+", re.ASCII)
-_DECIMAL = re.compile(r"[+-]?[0-9]+\.[0-9]+", re.ASCII)
 _BOOLEANS = {"true": True, "false": False}
 MAX_NUMBER_TEXT = 40
 _KINDS = {str: "text", bool: "true or false", int: "a number", float: "a number", list: "a list", dict: "an object"}
@@ -207,13 +202,19 @@ def _read(types: set[str], text: str) -> JsonValue:
     # be the server's error.
     if len(t) > MAX_NUMBER_TEXT or not types & {"integer", "number"}:
         return text
-    if _INTEGER.fullmatch(t):
-        return int(t)
-    if "number" in types and _DECIMAL.fullmatch(t):
-        return float(t)
-    if whole := _WHOLE.fullmatch(t):
-        return int(whole.group(1))
-    return text
+    # Read by hand, with no pattern: the digits 0-9 only (`int()` also takes digits of other scripts), no
+    # exponent, no thousands separator, and a decimal point needs a digit on both sides.
+    sign = t[:1] if t[:1] in ("+", "-") else ""
+    head, point, fraction = t[len(sign) :].partition(".")
+    if not _digits(head) or (point and not _digits(fraction)):
+        return text
+    if not point or ("number" not in types and not fraction.strip("0")):
+        return int(sign + head)
+    return float(t) if "number" in types else text
+
+
+def _digits(text: str) -> bool:
+    return text.isascii() and text.isdigit()
 
 
 def _typed(field: Mapping[str, JsonValue], value: JsonValue) -> JsonValue:
