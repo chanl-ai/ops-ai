@@ -1826,6 +1826,7 @@ class SkillTextError(TypedDict, closed=True):
 
 
 class SkillTextInput(TypedDict, closed=True):
+    exit: NotRequired[dict[str, str]]
     hasParts: NotRequired[bool]
     loading: NotRequired[Literal["on_match", "always"]]
     text: str

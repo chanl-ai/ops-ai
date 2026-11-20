@@ -124,13 +124,15 @@ or `model`.
 ## Write the skill as text
 
 The console's skill page and the `source` field of a draft save take the same skill as plain text, written like a
-prompt. Every line is an instruction to the agent. Three things in it are also enforced:
+prompt. Every line is an instruction to the agent. These things in it are also enforced:
 
 | You write | It becomes |
 |---|---|
 | A line that mentions a tool, an agent, a workflow or a skill (`@tool:find_customer`) | A step that may use it. Plain lines above it are part of that step's instruction |
-| `if <condition>:` with an indented block, then `else:` at the same indent | A path: the step before decides it, and the other block is skipped |
-| `stop "reason"` (or `stop <exit> "reason"`) | An exit that ends the skill with that reason |
+| The same line ending in `(locked)` | The step's tool is offered only on this line, even when it only reads |
+| `if <condition>:` with an indented block, then `else:` at the same indent | A path: the nearest tool line above it in its block decides it, so plain lines between the two stay part of that step, and the other block is skipped |
+| `stop "reason"` (or `stop <exit> "reason"`) | An exit that ends the skill with that reason. A bare `stop <exit>` needs an ending the skill declares (or `done`, `failed`); any other bare `stop …` line is an instruction |
+| `if not <condition>:` with only `try again` (`try again 2 times`) or `go back to step 3` under it | The condition becomes the step's own check: a failure asks again up to that many times, or goes back to that step |
 
 ```text title="customer-lookup.txt"
 Greet them and ask for the email or order number they used.
@@ -153,12 +155,17 @@ Thank them.
 | Made of words the tool above returns (`found`, `not found`, `status is VIP`, `amount is more than 500`), or written as a rule (`result.balance > 0`) | Checked: a rule runs in code on the tool's result, labelled "checked" in the editor |
 | Anything else (`they want a refund`) | The agent decides from the conversation and says which way it went: `step_done` with `holds` true or false. The kernel refuses `step_done` on that step without it. Labelled "agent decides" |
 
-A path that is not taken is not a failure: it takes no hold and counts no attempt. `if not <rule>:` followed by a
-`stop` is a guard, and a value that is missing takes the guarded path, as a failed check does.
+A path that is not taken is not a failure: it takes no hold and counts no attempt. A `stop` that a checked condition
+leads to is a guard, on either side of its `if` (`if not verified: stop …` and `if flagged: stop …` alike): it takes
+the hold, and a value that is missing takes the guarded path, as a failed check does. A `stop` an "agent decides"
+condition leads to ends the skill without a hold. A path that reaches the end before the last line still asks for the
+skill's results before it ends as done.
 
 Nothing in the text stops a save. A line the reader cannot use is a hint on that line; a write tool with no check is a
-hint, not a refusal. Only a mention of something that no longer exists blocks a publish, with the line it is on
-(`position.field` `source`, `position.index` the line). `POST /v1/skills/{id}/text` reads a text without saving it,
+hint, not a refusal. A mention of something that no longer exists blocks a publish, with the line it is on
+(`position.field` `source`, `position.index` the line), and so does a text that makes more than 30 steps: none of its
+tools or paths could be enforced, so it is a `bad_step` problem on the 31st step's line. Each step's prompt carries
+only that step's lines, not the whole text. `POST /v1/skills/{id}/text` reads a text without saving it,
 by the same reader a save runs (`services/agents-service/src/ops_agents/app/skill_text.py`). A skill saved as a list
 of steps is shown as text by that reader and keeps its stored steps until its text is saved.
 
@@ -344,7 +351,7 @@ confirming a caller. A rule on the step can read how the sub-skill ended:
 | `goto` a step that does not exist, or an exit the skill does not list | On save |
 | A step that runs its own skill, or a skill whose steps run a skill | On save |
 | A step that names a tool your team no longer offers | On publish. The error names each problem and the step it is on |
-| A skill written as text mentions something that no longer exists | On publish only; the draft saves. The error names the line |
+| A skill written as text mentions something that no longer exists, or makes more than 30 steps | On publish only; the draft saves. The error names the line |
 
 ## Next steps
 

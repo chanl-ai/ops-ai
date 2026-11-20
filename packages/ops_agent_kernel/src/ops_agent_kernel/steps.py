@@ -209,7 +209,10 @@ def _required(program: SkillProgram) -> tuple[str, ...]:
 
 
 def _owes(f: RunningSkill | SubRun) -> bool:
-    """Every step has passed and the skill still has results to hand back: it waits for exit."""
+    """The skill has reached done and still has results to hand back: it waits for exit. Done is reached after the
+    last step passes, or by a path that ends early (`owing`)."""
+    if f.owing:
+        return True
     last = f.results.get(str(len(f.program.steps)))
     return f.step == len(f.program.steps) and last is not None and last.passed is True
 
@@ -452,6 +455,8 @@ def _failed(
 #    earlier hold, and once the earlier step passes nothing holds the later step's write. Taking the later hold as
 #    well would let two skills lock each other for good.
 # 6. A tool that answers with an error, a skill a step could not start, and an exit the model calls take none.
+#    A `stop` reached from a path takes one only when a rule on the step's tool result chose that path, on either
+#    side of the `if` (`_guards`); a path the model decided takes none.
 # 7. A step that runs a skill passes only when that skill ends as done, unless the step has a rule of its own
 #    (`_sub_ended`). An exit therefore never carries the step past a check that failed inside the skill.
 #
@@ -577,6 +582,10 @@ def _jump(run: SkillRunState, skills: Sequence[Skill], to: Jump, told: list[str]
             _enter(run, to.step, skills, told)
         return
     name = to.exit or "done"
+    if name == "done" and _required(f.program):
+        # Done reached early owes the same results as the last step does.
+        f.owing = True
+        return
     if isinstance(f, SubRun):
         _sub_ended(run, skills, name, {}, told, why=None if name == "done" else "stop")
     else:
@@ -584,9 +593,9 @@ def _jump(run: SkillRunState, skills: Sequence[Skill], to: Jump, told: list[str]
 
 
 def _otherwise(run: SkillRunState, skills: Sequence[Skill], value: Any, told: list[str]) -> None:
-    """The current step's branch test did not hold: the skill takes the other path. A path that ends the skill with
-    an exit other than done is a guard (`if not ...: stop "..."`) and is a failed check: it takes the hold and ends
-    the skill for the reply. Any other path counts no attempt and holds nothing."""
+    """The current step's branch test did not hold: the skill takes the other path. A path a rule chose that ends the
+    skill with an exit other than done is a guard (`if not ...: stop "..."`, `_guards`) and is a failed check: it
+    takes the hold and ends the skill for the reply. Any other path counts no attempt and holds nothing."""
     r = run.running
     assert r is not None
     f = _frame(r)
@@ -594,7 +603,8 @@ def _otherwise(run: SkillRunState, skills: Sequence[Skill], value: Any, told: li
     assert branch is not None
     f.results[str(f.step)] = _kept(value, False)
     to = branch.otherwise
-    if to.exit is not None and to.exit != "done":
+    if _guards(f, to):
+        assert to.exit is not None
         _hold(run, skills)
         if isinstance(f, SubRun):
             _sub_ended(run, skills, to.exit, {}, told, why="check", check=branch.test.text)
@@ -604,8 +614,30 @@ def _otherwise(run: SkillRunState, skills: Sequence[Skill], value: Any, told: li
     _jump(run, skills, to, told)
 
 
+def _guards(f: RunningSkill | SubRun, to: Jump | None) -> bool:
+    """Whether the path `to` of the current step is a guard: an exit other than done reached from a branch whose test
+    is a rule on a tool result. Which side of the `if` the stop is written on does not matter."""
+    step = _step(f)
+    rule = step.branch is not None and _is_rule(step.branch.test) and step.use is not None
+    return rule and to is not None and to.exit is not None and to.exit != "done"
+
+
 def _decide(run: SkillRunState, skills: Sequence[Skill], value: Any, holds: bool, told: list[str]) -> None:
     """The current step is done and its branch test came out as `holds`."""
+    r = run.running
+    assert r is not None
+    f = _frame(r)
+    branch = _step(f).branch
+    assert branch is not None
+    if holds and _guards(f, to := _step(f).next):
+        assert to is not None and to.exit is not None
+        f.results[str(f.step)] = _kept(value, True)
+        _hold(run, skills)
+        if isinstance(f, SubRun):
+            _sub_ended(run, skills, to.exit, {}, told, why="check", check=branch.test.text)
+        else:
+            _end(run, to.exit, skills, why="check", check=branch.test.text)
+        return
     if holds:
         _passed(run, skills, value, told)
     else:
@@ -967,7 +999,10 @@ def leave(run: SkillRunState, skills: Sequence[Skill], name: str, returns: Json)
     if name == "done":
         ran = step.use is None or res is not None
         rule = step.check is not None and _is_rule(step.check)
-        if f.step != len(program.steps) or not ran or (rule and not (res is not None and res.passed is True)):
+        early = _owes(f)
+        if not early and (
+            f.step != len(program.steps) or not ran or (rule and not (res is not None and res.passed is True))
+        ):
             return Moved(
                 run,
                 f"{f.name} is on step {f.step} of {len(program.steps)}: {step.do} It ends as done only after its "

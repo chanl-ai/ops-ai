@@ -1,8 +1,10 @@
 """A skill written as text, read into steps and run by the kernel, by failure mode: the end of an `if` block falling
 into its `else`; an `if` nested inside an `else` jumping to the wrong step; a mention inside a condition becoming a
 step or being checked; a path the agent decides taken on the model's silence, or counted as a failed check that holds
-tools; a guard written as `if not <rule>:` letting a missing value through; and a skill saved as a list of steps not
-reading back to the same steps."""
+tools; a guard written as `if not <rule>:` letting a missing value through; a skill saved as a list of steps not
+reading back to the same steps, retries, locks and jumps back included; a condition on the tool's words left to the
+model; a guard written after a sentence holding nothing; a stop holding only on one side of its `if`; and a path that
+reaches done early skipping the results the skill owes."""
 
 from __future__ import annotations
 
@@ -132,3 +134,93 @@ def test_a_skill_saved_as_steps_reads_back_as_text_and_its_guard_still_holds() -
     run = steps.on_result(run, [skill, other], {"owner": "Ana"}, True).run
     assert run.running is None and run.history[-1].ended == "blocked" and run.history[-1].why == "check"
     assert [h.tools for h in run.holds] == [["place_hold"]]
+    # Retries, a jump back and a builder's lock read back as they were stored.
+    kept = SkillProgram.model_validate(
+        {
+            "steps": [
+                {"do": "Ask for the card number.", "use": {"kind": "tool", "id": "find_card"}, "locked": True},
+                {
+                    "do": "Check the limit.",
+                    "use": {"kind": "tool", "id": "card_limit"},
+                    "check": {"text": "result.limit > 0", "by": "rule"},
+                    "ifNot": {"action": "retry", "retries": 2},
+                },
+                {
+                    "do": "Confirm the amount.",
+                    "check": {"text": "The person confirmed the amount.", "by": "model"},
+                    "ifNot": {"action": "goto", "step": 1},
+                },
+                {"do": "Raise the limit.", "use": {"kind": "tool", "id": "raise_limit"}},
+            ]
+        }
+    )
+    again = read(render("", kept)).program
+    assert again is not None
+    assert [s.model_dump(exclude_none=True, exclude={"do"}) for s in again.steps] == [
+        s.model_dump(exclude_none=True, exclude={"do"}) for s in kept.steps
+    ]
+    # A bare `stop <name>` ends the skill only with an ending the form declares; `stop now` is an instruction.
+    ends = read(
+        "Look them up with @tool:find_customer\nstop now and apologise\nif they are angry:\n    stop escalate\n"
+        'if they want a refund:\n    stop "Hand over to the customer care team in Lisbon"\nelse:\n'
+        '    stop "Hand over to the customer care team in Porto"',
+        exits={"escalate": "Hand over to a person."},
+    )
+    assert ends.program is not None
+    assert ends.program.exit == {
+        "escalate": "Hand over to a person.",
+        "hand_over_to_the_customer_care": "Hand over to the customer care team in Lisbon",
+        "hand_over_to_the_customer_care_2": "Hand over to the customer care team in Porto",
+    }
+    assert [m["kind"] for m in ends.marks][:2] == ["step", "text"]
+
+
+ORDERS: dict[str, Any] = {
+    "@tool:get_order": {"status": {"type": "string", "enum": ["shipped", "pending"]}, "late": {"type": "boolean"}},
+}
+
+
+def test_a_guard_after_a_sentence_reads_the_tool_above_and_holds_on_either_side_of_its_if() -> None:
+    guard = read(
+        "Look the order up with @tool:get_order\nTell them what you found.\nif status is shipped:\n"
+        '    Send the tracking link with @tool:send_link\nelse:\n    stop "Not shipped yet"',
+        fields=ORDERS,
+    ).program
+    assert guard is not None and guard.steps[0].use and guard.steps[0].use.id == "get_order"
+    test = guard.steps[0].branch
+    assert test and (test.test.text, test.test.by) == ('result.status == "shipped"', "rule")
+    # The same guard written on the true side of its `if`.
+    late = read(
+        'Look the order up with @tool:get_order\nif late:\n    stop "Late order"\nSend the tracking link with '
+        "@tool:send_link",
+        fields=ORDERS,
+    ).program
+    assert late is not None
+    for program, result in ((guard, {"status": "pending"}), (late, {"late": True})):
+        skill = _skill(program)
+        run = steps.start(SkillRunState(), skill, [skill], by="model")
+        run = steps.on_result(run, [skill], result, True).run
+        assert run.running is None and run.history[-1].why == "check", run.history[-1]
+        assert [h.tools for h in run.holds] == [["send_link"]], "a rule's stop holds the write after it"
+
+
+def test_a_path_that_reaches_done_early_waits_for_the_results_the_skill_owes() -> None:
+    program = read(
+        "Look the order up with @tool:get_order\nif late:\n    Apologise with @tool:send_apology\nelse:\n"
+        "    Send the tracking link with @tool:send_link",
+        fields=ORDERS,
+    ).program
+    assert program is not None
+    owed = SkillProgram.model_validate(
+        {**program.model_dump(by_alias=True, exclude_none=True), "returns": [{"name": "summary", "type": "text"}]}
+    )
+    skill = _skill(owed)
+    run = steps.start(SkillRunState(), skill, [skill], by="model")
+    run = steps.on_result(run, [skill], {"late": True}, True).run
+    moved = steps.on_result(run, [skill], {"sent": True}, True)
+    assert moved.run.running is not None and "Call exit with the name done" in moved.said, moved.said
+    assert steps.leave(moved.run, [skill], "done", {}).ok is False, "the results are still owed"
+    done = steps.leave(moved.run, [skill], "done", {"summary": "Apologised."})
+    assert (
+        done.ok and done.run.history[-1].ended == "done" and done.run.history[-1].returns == {"summary": "Apologised."}
+    )

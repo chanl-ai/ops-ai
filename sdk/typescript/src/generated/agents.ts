@@ -4578,7 +4578,9 @@ export interface components {
          *     skill goes on (to the step's `next`, or the step after it); when it does not, to `otherwise`. A test that does
          *     not hold is a path the author wrote, not a failed check: it counts no attempt and takes no hold, unless
          *     `otherwise` ends the skill with an exit other than done, which is how a guard is written
-         *     (`if not ...: stop "..."`). A rule test runs in code on the step's result; a sentence is decided by the model,
+         *     (`if not ...: stop "..."`). A stop that a rule test's path reaches takes the hold on either side
+         *     (`if found: stop "..."` as much as `else: stop "..."`); one a sentence test's path reaches takes none, since the
+         *     model decided it. A rule test runs in code on the step's result; a sentence is decided by the model,
          *     which says which way it went (`step_done` with `holds`).
          */
         Branch: {
@@ -10350,6 +10352,10 @@ export interface components {
         };
         /** SkillTextInput */
         SkillTextInput: {
+            /** Exit */
+            exit?: {
+                [key: string]: string;
+            };
             /**
              * Hasparts
              * @default false

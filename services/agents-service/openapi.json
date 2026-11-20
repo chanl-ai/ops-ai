@@ -2987,7 +2987,7 @@
       },
       "Branch": {
         "additionalProperties": false,
-        "description": "A path, written `if <test>:` in a skill's text. Once the step is done its test decides: when it holds the\nskill goes on (to the step's `next`, or the step after it); when it does not, to `otherwise`. A test that does\nnot hold is a path the author wrote, not a failed check: it counts no attempt and takes no hold, unless\n`otherwise` ends the skill with an exit other than done, which is how a guard is written\n(`if not ...: stop \"...\"`). A rule test runs in code on the step's result; a sentence is decided by the model,\nwhich says which way it went (`step_done` with `holds`).",
+        "description": "A path, written `if <test>:` in a skill's text. Once the step is done its test decides: when it holds the\nskill goes on (to the step's `next`, or the step after it); when it does not, to `otherwise`. A test that does\nnot hold is a path the author wrote, not a failed check: it counts no attempt and takes no hold, unless\n`otherwise` ends the skill with an exit other than done, which is how a guard is written\n(`if not ...: stop \"...\"`). A stop that a rule test's path reaches takes the hold on either side\n(`if found: stop \"...\"` as much as `else: stop \"...\"`); one a sentence test's path reaches takes none, since the\nmodel decided it. A rule test runs in code on the step's result; a sentence is decided by the model,\nwhich says which way it went (`step_done` with `holds`).",
         "properties": {
           "otherwise": {
             "$ref": "#/components/schemas/Jump"
@@ -19760,6 +19760,13 @@
       "SkillTextInput": {
         "additionalProperties": false,
         "properties": {
+          "exit": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Exit",
+            "type": "object"
+          },
           "hasParts": {
             "default": false,
             "title": "Hasparts",

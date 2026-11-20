@@ -10,6 +10,7 @@ views return those as empty and the docs page says so.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any, NotRequired, TypedDict, cast
@@ -124,7 +125,9 @@ async def check_content(rt: Runtime, fields: Json, *, skill_id: str | None = Non
         program = await _program_of_text(
             rt, source, fields, team_id=team_id, skill_id=skill_id, loading=loading, has_parts=has_parts
         )
-        fields = {**fields, "instructions": source}
+        # A text read as steps reaches the model one step at a time (`do`), so the instructions keep nothing: a copy
+        # would put every path into every step's prompt. A text with no steps is the instructions.
+        fields = {**fields, "instructions": "" if program is not None and program.steps else source}
         refs = Ref.found_in(source)
         step_tools = list(dict.fromkeys(g for r in refs if (g := r.grant) is not None))
         step_bases = list(dict.fromkeys(r.id for r in refs if r.kind == "knowledge"))
@@ -194,6 +197,16 @@ async def check_content(rt: Runtime, fields: Json, *, skill_id: str | None = Non
         content["source"] = source
     # Stored as written: the registry takes the document as JSON. The program's keys join only when set.
     return {**cast(Json, content), **skill_content.stored(program)}
+
+
+def _kept_keys(fields: Json) -> Json:
+    """The not-when line, endings, results and success lines the form keeps beside a text, checked as a program's
+    keys: they are the form's, so a text that holds no step keeps them."""
+    extra = {k: fields[k] for k in ("notWhen", "exit", "returns", "success") if fields.get(k)}
+    try:
+        return SkillProgram.model_validate(extra).model_dump(mode="json", by_alias=True, exclude_none=True)
+    except Exception as e:
+        raise ValidationFailed(str(e), code="validation_failed") from e
 
 
 class SkillInputSpec(TypedDict):
@@ -736,7 +749,13 @@ def _plain(loading: str, has_parts: bool) -> str | None:
 
 
 async def read_text(
-    rt: Runtime, source: str, *, team_id: str, loading: str = "on_match", has_parts: bool = False
+    rt: Runtime,
+    source: str,
+    *,
+    team_id: str,
+    loading: str = "on_match",
+    has_parts: bool = False,
+    exits: Mapping[str, str] | None = None,
 ) -> skill_text.Reading:
     """The editor's read of a text it has not saved: the same reader a save runs, with what each tool returns and
     which mentions no longer exist."""
@@ -751,7 +770,12 @@ async def read_text(
     labels |= {f"@knowledge:{i}": n for i, n in (bases or {}).items()}
     gone = await skill_content.missing(refs, offered, bases, team_id=team_id, skills=_TeamSkills(rt))
     return skill_text.read(
-        source, fields=await _fields(rt, refs), labels=labels, missing=gone, plain=_plain(loading, has_parts)
+        source,
+        fields=await _fields(rt, refs),
+        labels=labels,
+        missing=gone,
+        plain=_plain(loading, has_parts),
+        exits=exits,
     )
 
 
@@ -762,10 +786,12 @@ async def _program_of_text(
     it. A step that would run a skill that runs this one, or one whose own steps run a skill, keeps the mention as
     words: the kernel starts sub-skills one level deep."""
     refs = Ref.found_in(source)
-    reading = skill_text.read(source, fields=await _fields(rt, refs), plain=_plain(loading, has_parts))
+    kept_keys = _kept_keys(fields)
+    declared = cast(dict[str, str], kept_keys.get("exit") or {})
+    reading = skill_text.read(source, fields=await _fields(rt, refs), plain=_plain(loading, has_parts), exits=declared)
     program = reading.program
     if program is None:
-        return None
+        return SkillProgram.model_validate(kept_keys) if any(kept_keys.get(k) for k in skill_content.KEYS) else None
     team = _TeamSkills(rt)
     kept: list[SkillStep] = []
     for step in program.steps:
@@ -777,7 +803,7 @@ async def _program_of_text(
             kept.append(step.model_copy(update={"use": None}) if loops else step)
             continue
         kept.append(step)
-    extra = {k: fields[k] for k in ("notWhen", "returns", "success") if fields.get(k)}
+    extra = {k: kept_keys[k] for k in ("notWhen", "returns", "success") if kept_keys.get(k)}
     try:
         return SkillProgram.model_validate(
             {

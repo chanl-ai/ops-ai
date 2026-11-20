@@ -20,6 +20,7 @@ from pydantic import ValidationError
 
 from ops_agent_kernel import steps
 from ops_agent_kernel.steps import Ref, SkillProgram
+from ops_service_kit import narrow
 from ops_service_kit.errors import ValidationFailed
 from ops_service_kit.http import Json
 
@@ -354,6 +355,8 @@ async def publish_problems(
                 }
             ], []
         gone = await missing(refs, offered, bases, team_id=team_id, skills=skills)
+        declared = {str(k): str(v) for k, v in narrow.json_object(content.get("exit")).items()}
+        reading = skill_text.read(source, missing=gone, exits=declared)
         found: list[Problem] = [
             {
                 "kind": "missing_reference",
@@ -361,9 +364,18 @@ async def publish_problems(
                 "position": {"field": "source", "step": None, "index": e["line"]},
                 "message": e["message"],
             }
-            for e in skill_text.read(source, missing=gone).errors
+            for e in reading.errors
         ]
-        return found, []
+        unrun: list[Problem] = [
+            {
+                "kind": "bad_step",
+                "id": None,
+                "position": {"field": "source", "step": None, "index": n["line"]},
+                "message": n["message"],
+            }
+            for n in reading.unrun
+        ]
+        return [*found, *unrun], []
     program = program_of(content)
     if program is None:
         return [], []

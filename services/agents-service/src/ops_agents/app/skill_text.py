@@ -7,7 +7,10 @@ The text is a prompt with three things the kernel also enforces:
 - a line that mentions a tool, an agent, a workflow or a skill (`@tool:find_customer`) is a step that may use it;
   plain lines before it are part of that step's instruction;
 - `if <condition>:` with an indented block is a path, and `else:` at the same indent is the other one;
-- `stop "reason"` (or `stop <exit> "reason"`) ends the skill with that reason.
+- `stop "reason"` (or `stop <exit> "reason"`) ends the skill with that reason; a bare `stop <exit>` names an exit the
+  skill declares (or `done`, `failed`), and any other bare `stop …` line is an instruction;
+- under `if not <check>:`, a block of only `try again` (`try again 2 times`) or `go back to step 3` makes the check
+  the step's own, retried or sent back when it fails; a step line ending in `(locked)` keeps even a read tool to it.
 
 Nothing here refuses a text. Free text is valid and saves; what the reader cannot use becomes a hint on its line.
 The only error is a mention of something that no longer exists (`missing`), which blocks a publish, never a save.
@@ -71,6 +74,11 @@ _ELSE = re.compile(r"^else\s*:\s*$")
 _STOP = re.compile(r"^stop(?:\s+([a-z][a-z0-9_]{0,31}))?(?:\s+([\"\u201c'].*[\"\u201d']))?\s*$")
 _QUOTES = "\"'\u201c\u201d\u2018\u2019"
 _IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_RETRY = re.compile(r"^try again(?:\s+(once|[1-3])(?:\s+times?)?)?\.?$")
+_BACK = re.compile(r"^go back to step\s+(\d{1,2})\.?$")
+_LOCKED = re.compile(r"\s*\(locked\)\s*$")
+# Text that can only be an expression: it reads `result.`/`inputs.` or calls a check function.
+_EXPRESSION = re.compile(r"\b(?:result|inputs)\.|\b(?:exists|len)\s*\(")
 _STEP_KINDS: frozenset[RefKind] = frozenset({"tool", "agent", "workflow", "skill"})
 
 
@@ -128,11 +136,14 @@ class Reading:
     phrases: dict[str, list[str]]
     step_lines: list[int]
     refs: list[Ref]
+    # Why a text that has steps runs none of them (more than the kernel takes, or not readable as steps). It blocks
+    # a publish, like a missing mention: the tools it mentions still join the skill, and none would be held to a line.
+    unrun: list[Note] = field(default_factory=list[Note])
 
     def json(self) -> Json:
         return {
             "hints": list(self.hints),
-            "errors": list(self.errors),
+            "errors": [*self.errors, *({**n, "id": "steps"} for n in self.unrun)],
             "uses": dict(self.uses),
             "lines": list(self.marks),
             "phrases": {k: list(v) for k, v in self.phrases.items()},
@@ -155,6 +166,16 @@ class _Stop:
     line: int
     name: str
     meaning: str
+    # Named by the author (`stop blocked "…"`), not made from the reason.
+    named: bool = False
+
+
+@dataclass
+class _Again:
+    """`try again` or `go back to step n` as the whole block of an `if not …:`: the check's own "if not"."""
+
+    line: int
+    rule: IfNot
 
 
 @dataclass
@@ -165,7 +186,7 @@ class _If:
     orelse: list[_Item]
 
 
-_Item = _Text | _Stop | _If
+_Item = _Text | _Stop | _If | _Again
 
 
 def _indent(raw: str) -> int:
@@ -194,10 +215,23 @@ def _slug(reason: str) -> str:
     return name if re.fullmatch(EXIT_NAME, name) else "stopped"
 
 
+def _stop_of(txt: str, declared: frozenset[str]) -> tuple[str | None, str] | None:
+    """(exit name, reason) of a stop line; None for a line that reads as an instruction (`stop now`)."""
+    m = _STOP.match(txt)
+    if m is None:
+        return None
+    name, rest = m.group(1), _unquote(m.group(2) or "")
+    if name and not m.group(2) and name not in declared and name not in BUILT_IN_EXITS:
+        return None
+    return name, rest
+
+
 class _Parser:
-    def __init__(self, text: str, hints: list[Note]) -> None:
+    def __init__(self, text: str, hints: list[Note], declared: frozenset[str], marks: dict[int, Mark]) -> None:
         self.rows = [(n, _indent(raw), raw.strip()) for n, raw in enumerate(text.split("\n"), start=1) if raw.strip()]
         self.hints = hints
+        self.declared = declared
+        self.marks = marks
         self.i = 0
 
     def block(self, level: int) -> list[_Item]:
@@ -233,18 +267,28 @@ class _Parser:
                     }
                 )
                 items.extend(self._inner(line, ind))
-            elif m := _STOP.match(txt):
-                name, rest = m.group(1), _unquote(m.group(2) or "")
-                rest = rest or (name.replace("_", " ") if name and name not in BUILT_IN_EXITS else "")
+            elif (stop := _stop_of(txt, self.declared)) is not None:
+                name, rest = stop
+                ruled = name in BUILT_IN_EXITS or name in self.declared
+                rest = rest or (name.replace("_", " ") if name and not ruled else "")
                 exit_name = name or (_slug(rest) if rest else "failed")
-                items.append(_Stop(line, exit_name, rest[:300]))
+                items.append(_Stop(line, exit_name, rest[:300], named=name is not None))
             else:
+                if _STOP.match(txt):
+                    self.marks[line]["kind"] = "text"
                 items.append(_Text(line, txt))
         return items
 
     def _inner(self, line: int, ind: int) -> list[_Item]:
         if self.i < len(self.rows) and self.rows[self.i][1] > ind:
-            return self.block(self.rows[self.i][1])
+            body = self.block(self.rows[self.i][1])
+            if len(body) == 1 and isinstance(only := body[0], _Text):
+                if m := _RETRY.match(only.text.lower()):
+                    n = 1 if m.group(1) in (None, "once") else int(m.group(1))
+                    return [_Again(only.line, IfNot(action="retry", retries=n))]
+                if (m := _BACK.match(only.text.lower())) and 1 <= int(m.group(1)) <= MAX_STEPS:
+                    return [_Again(only.line, IfNot(action="goto", step=int(m.group(1))))]
+            return body
         self.hints.append({"line": line, "message": "Nothing is indented under this line, so this path does nothing."})
         return []
 
@@ -366,6 +410,8 @@ class _Step:
     test: str | None = None
     otherwise: _Label | None = None
     next: _Label | None = None
+    check: tuple[str, IfNot] | None = None
+    locked: bool = False
 
 
 @dataclass
@@ -375,18 +421,29 @@ class _Compiler:
     hints: list[Note]
     marks: dict[int, Mark]
     out: list[_Step] = field(default_factory=list[_Step])
+    # The endings declared beside the text (the form's results section), then those its stop lines add.
     exits: dict[str, str] = field(default_factory=dict[str, str])
 
     def exit_for(self, stop: _Stop) -> str:
         if stop.name in BUILT_IN_EXITS:
             return stop.name
-        if stop.name not in self.exits and len(self.exits) >= EXITS_MAX:
+        name, meaning = stop.name, stop.meaning or stop.name.replace("_", " ")
+        if not stop.named and name in self.exits and stop.meaning and self.exits[name] != meaning:
+            # Two reasons that start alike are two endings: `stop "Card blocked by the bank"` and `stop "Card blocked
+            # by the owner"` cut to one slug, so the second gets a number.
+            for n in range(2, EXITS_MAX + 2):
+                cut = f"{name[: 32 - len(str(n)) - 1]}_{n}"
+                if cut not in self.exits or self.exits[cut] == meaning:
+                    name = cut
+                    break
+        if name not in self.exits and len(self.exits) >= EXITS_MAX:
             self.hints.append(
                 {"line": stop.line, "message": f"A skill ends {EXITS_MAX} ways at most; this stop ends it as failed."}
             )
             return "failed"
-        self.exits.setdefault(stop.name, stop.meaning or stop.name.replace("_", " "))
-        return stop.name
+        if stop.meaning or name not in self.exits:
+            self.exits[name] = meaning
+        return name
 
     def block(self, items: Sequence[_Item], follow: _Label) -> _Label:
         start = _Label()
@@ -413,7 +470,12 @@ class _Compiler:
             buffer = []
             return idx
 
-        for item in items:
+        for entry in items:
+            if isinstance(entry, _Again):
+                said = "try again" if entry.rule.action == "retry" else f"go back to step {entry.rule.step}"
+                item: _Text | _Stop | _If = _Text(entry.line, said)
+            else:
+                item = entry
             if dead:
                 self.hints.append(
                     {
@@ -442,8 +504,9 @@ class _Compiler:
                     )
                 if sum(len(t) for _, t in buffer) + len(item.text) > DO_MAX:
                     last = flush()
-                lines = [*buffer, (item.line, item.text)]
-                idx = emit(_Step(lines[0][0], [t for _, t in lines], use=runs[0]))
+                locked = _LOCKED.search(item.text) is not None
+                lines = [*buffer, (item.line, _LOCKED.sub("", item.text))]
+                idx = emit(_Step(lines[0][0], [t for _, t in lines], use=runs[0], locked=locked))
                 for n, _ in lines:
                     self.marks[n]["step"] = idx + 1
                 self.marks[item.line]["kind"] = "step"
@@ -461,11 +524,28 @@ class _Compiler:
                     self.out[last].next = _Label(to)
                 dead = True
             else:
-                if (idx := flush()) is not None:
-                    last = idx
                 # A step that runs a skill is decided by that skill's ending, so a path never hangs on it.
                 runs_skill = last is not None and (u := self.out[last].use) is not None and u.kind == "skill"
+                free = (
+                    last is not None
+                    and self.out[last].test is None
+                    and self.out[last].next is None
+                    and self.out[last].check is None
+                )
+                tool_above = last is not None and (u := self.out[last].use) is not None and u.tool_name is not None
+                if buffer and free and not waiting and tool_above and not runs_skill:
+                    # Sentences between a tool's line and the `if` are part of that step: the condition reads the
+                    # nearest tool's result above it in its block, which only its own step has.
+                    assert last is not None
+                    self.out[last].do += [t for _, t in buffer]
+                    for n, _ in buffer:
+                        self.marks[n]["step"] = last + 1
+                    buffer = []
+                if (idx := flush()) is not None:
+                    last = idx
                 free = last is not None and self.out[last].test is None and self.out[last].next is None
+                free = free and last is not None and self.out[last].check is None
+                runs_skill = last is not None and (u := self.out[last].use) is not None and u.kind == "skill"
                 if last is not None and not waiting and free and not runs_skill:
                     host = last
                 else:
@@ -473,6 +553,16 @@ class _Compiler:
                 self.marks[item.line]["step"] = host + 1
                 test, how, swap = self.condition(item, self.out[host])
                 self.marks[item.line]["how"] = how
+                if len(item.body) == 1 and isinstance(again := item.body[0], _Again) and not item.orelse:
+                    if swap or (how == "agent" and re.match(r"^\s*not\s+", item.cond, re.IGNORECASE)):
+                        # `if not <check>:` with only `try again` or `go back to step n`: the check is the step's own.
+                        own = test if swap else re.sub(r"^\s*not\s+", "", test, flags=re.IGNORECASE)
+                        self.out[host].check = (own, again.rule)
+                        self.marks[again.line]["step"] = host + 1
+                        last = host
+                        continue
+                    said = "try again" if again.rule.action == "retry" else f"go back to step {again.rule.step}"
+                    item = _If(item.line, item.cond, [_Text(again.line, said)], [])
                 self.out[host].test = test
                 after = _Label()
                 body = self.block(item.body, after)
@@ -514,33 +604,8 @@ class _Compiler:
                 }
             )
             return cond, "agent", False
-        try:
-            # `if not <rule>:` is the other path of the rule, never `not (rule)`: a rule with no answer (a value
-            # that is not there) holds neither way, so it must take the path the author guards with.
-            inner = re.sub(r"^\s*not\s+", "", cond, flags=re.IGNORECASE)
-            if inner != cond and expr.kind_of(inner) == "rule" and (tool is not None or not expr.reads_result(inner)):
-                return inner, "checked", True
-            if expr.kind_of(cond) == "rule":
-                if expr.reads_result(cond) and tool is None:
-                    self.hints.append(
-                        {
-                            "line": item.line,
-                            "message": (
-                                "This rule reads a result, and the line above runs no tool; the agent decides it "
-                                "instead."
-                            ),
-                        }
-                    )
-                    return f"this holds: {cond.replace('result.', 'the result ')}", "agent", False
-                return cond, "checked", False
-        except expr.CheckError as e:
-            self.hints.append(
-                {
-                    "line": item.line,
-                    "message": f"This reads like a rule but is not a valid one ({e}); the agent decides it instead.",
-                }
-            )
-            return f"this holds: {cond.replace('result.', 'the result ')}", "agent", False
+        # Words the tool returns come first: `status is shipped` is a rule on the result even though it does not
+        # parse as one. The expression parser reads only text that names `result.` or `inputs.` or calls a check.
         rule = _rule_for(cond, fields) if fields else None
         if rule is not None:
             try:
@@ -554,7 +619,51 @@ class _Compiler:
                     return rule, "checked", False
             except expr.CheckError:
                 pass
+        if _EXPRESSION.search(cond):
+            try:
+                # `if not <rule>:` is the other path of the rule, never `not (rule)`: a rule with no answer (a value
+                # that is not there) holds neither way, so it must take the path the author guards with.
+                inner = re.sub(r"^\s*not\s+", "", cond, flags=re.IGNORECASE)
+                if (
+                    inner != cond
+                    and expr.kind_of(inner) == "rule"
+                    and (tool is not None or not expr.reads_result(inner))
+                ):
+                    return inner, "checked", True
+                if expr.kind_of(cond) == "rule":
+                    if expr.reads_result(cond) and tool is None:
+                        self.hints.append(
+                            {
+                                "line": item.line,
+                                "message": (
+                                    "This rule reads a result, and no tool runs on the line above it; the agent "
+                                    "decides it instead."
+                                ),
+                            }
+                        )
+                        return f"this holds: {cond.replace('result.', 'the result ')}", "agent", False
+                    return cond, "checked", False
+            except expr.CheckError as e:
+                self.hints.append(
+                    {
+                        "line": item.line,
+                        "message": (
+                            f"This reads like a rule but is not a valid one ({e}); the agent decides it instead."
+                        ),
+                    }
+                )
+                return f"this holds: {cond.replace('result.', 'the result ')}", "agent", False
         words = set(re.findall(r"[\w=<>]+", cond.lower()))
+        if tool is None and words & _COMPARING:
+            self.hints.append(
+                {
+                    "line": item.line,
+                    "message": (
+                        "No tool runs above this line in its block, so nothing here can be checked and the agent "
+                        "decides it from the conversation. Put the line with the tool just above it to check it."
+                    ),
+                }
+            )
         if tool is not None and words & _COMPARING:
             offer = phrases_of(fields)
             if offer:
@@ -598,12 +707,14 @@ def read(
     labels: Mapping[str, str] | None = None,
     missing: Mapping[str, str] | None = None,
     plain: str | None = None,
+    exits: Mapping[str, str] | None = None,
 ) -> Reading:
     """The text as the kernel will run it. `fields` is what each mentioned tool returns (by its `@kind:id` token),
     from its output schema; `labels` the names of what the text mentions; `missing` the mentions (token to label)
     that no longer exist. With `plain` (a reason), the text is read as plain instructions whatever it holds: a skill
-    that is always on, or written in parts, cannot run step by step."""
-    fields, labels, missing = fields or {}, labels or {}, missing or {}
+    that is always on, or written in parts, cannot run step by step. `exits` are the endings declared beside the text
+    (name to meaning): the program keeps them, and a bare `stop <name>` ends the skill only with one of them."""
+    fields, labels, missing, declared = fields or {}, labels or {}, missing or {}, dict(exits or {})
     hints: list[Note] = []
     marks: dict[int, Mark] = {}
     for n, raw in enumerate(text.split("\n"), start=1):
@@ -620,7 +731,7 @@ def read(
             else "text"
         )
         marks[n] = {"line": n, "kind": kind, "step": None, "how": None, "tool": None}
-    tree = _Parser(text, hints).block(0) if text.strip() else []
+    tree = _Parser(text, hints, frozenset(declared), marks).block(0) if text.strip() else []
     refs = Ref.found_in(text)
     errors: list[Missing] = []
     for n, raw in enumerate(text.split("\n"), start=1):
@@ -652,20 +763,17 @@ def read(
     if plain is not None:
         hints.insert(0, {"line": 1, "message": plain})
         return Reading(None, hints, errors, uses, list(marks.values()), phrases, [], refs)
-    c = _Compiler(fields, labels, hints, marks)
+    c = _Compiler(fields, labels, hints, marks, exits=declared)
     c.block(tree, _Label("done"))
     if len(c.out) > MAX_STEPS:
-        hints.insert(
-            0,
-            {
-                "line": 1,
-                "message": (
-                    f"The text makes more than {MAX_STEPS} steps, so it is read as plain instructions and "
-                    "nothing in it is enforced."
-                ),
-            },
-        )
-        return Reading(None, hints, errors, uses, list(marks.values()), phrases, [], refs)
+        unrun: Note = {
+            "line": c.out[MAX_STEPS].line,
+            "message": (
+                f"The text makes {len(c.out)} steps and a skill runs {MAX_STEPS} at most, so none of its tools or "
+                "paths would be enforced. Your draft is saved; split it into two skills to publish."
+            ),
+        }
+        return Reading(None, hints, errors, uses, list(marks.values()), phrases, [], refs, [unrun])
     total = len(c.out)
     built: list[SkillStep] = []
     for i, s in enumerate(c.out):
@@ -675,7 +783,8 @@ def read(
                 {
                     "line": s.line,
                     "message": (
-                        f"A step's instruction is read up to {DO_MAX} characters; the rest is in the skill's text only."
+                        f"A step's instruction is read up to {DO_MAX} characters; the agent does not see the rest. "
+                        "Split the line into two."
                     ),
                 }
             )
@@ -685,14 +794,26 @@ def read(
             otherwise = _jump(s.otherwise, i, total, default_next=False)
             assert otherwise is not None
             branch = Branch(test=StepCheck(text=s.test), otherwise=otherwise)
-        built.append(SkillStep(do=do, use=s.use, branch=branch, next=_jump(s.next, i, total, default_next=True)))
+        check, if_not = (StepCheck(text=s.check[0]), s.check[1]) if s.check is not None else (None, None)
+        built.append(
+            SkillStep(
+                do=do,
+                use=s.use,
+                check=check,
+                if_not=if_not,
+                branch=branch,
+                next=_jump(s.next, i, total, default_next=True),
+                locked=s.locked or None,
+            )
+        )
     try:
         program = steps.judged(SkillProgram(steps=built, exit=c.exits))
     except (ValidationError, expr.CheckError) as e:
-        hints.insert(
-            0, {"line": 1, "message": f"The text could not be read into steps ({e}); it is read as plain instructions."}
-        )
-        return Reading(None, hints, errors, uses, list(marks.values()), phrases, [], refs)
+        why: Note = {
+            "line": 1,
+            "message": f"The text could not be read into steps ({e}). Your draft is saved; fix it to publish.",
+        }
+        return Reading(None, hints, errors, uses, list(marks.values()), phrases, [], refs, [why])
     for p in steps.problems(program):
         if p.kind != "bad_use":
             line = c.out[p.step - 1].line if p.step else 1
@@ -702,17 +823,30 @@ def read(
 
 def render(instructions: str, program: SkillProgram | None) -> str:
     """A skill saved as a list of steps, written as text that `read` reads back to the same steps: each step's
-    instruction with the tool it runs, then its check as `if not <check>:` with the ending it takes. Notes shared by
-    every step come first. A retry, a jump back and a builder's lock have no words in the text, so a check that
-    retried reads as `stop failed`; the stored steps are kept as they are until the text is saved."""
+    instruction with the line naming its tool last (so its check reads that tool's result), `(locked)` on a step a
+    builder locked, then its check as `if not <check>:` with what a failure does: `try again`, `go back to step n`
+    or the ending it takes. Notes shared by every step come first. A step with no tool and no check joins the step
+    after it, and a jump back counts the steps as the text reads them."""
     lines = list(instructions.strip().split("\n")) if instructions.strip() else []
     if program is None:
         return "\n".join(lines)
+    # Where each stored step lands once read back: a step ends at a tool or a check.
+    read_as: dict[int, int] = {}
+    n = 1
+    for k, step in enumerate(program.steps, start=1):
+        read_as[k] = n
+        if step.use is not None or step.check is not None:
+            n += 1
     for step in program.steps:
-        do = step.do.strip()
-        if step.use is not None and step.use.token not in do:
-            do = f"{do} with {step.use.token}"
-        lines += [ln for ln in do.split("\n") if ln.strip()]
+        do = [ln for ln in step.do.strip().split("\n") if ln.strip()]
+        if step.use is not None:
+            named = [ln for ln in do if step.use.token in ln]
+            do = [ln for ln in do if step.use.token not in ln] + named
+            if not named:
+                do = [*do[:-1], f"{do[-1]} with {step.use.token}"] if do else [f"Use {step.use.token}"]
+            if step.locked:
+                do[-1] = f"{do[-1]} (locked)"
+        lines += do
         check = step.check
         if check is None:
             continue
@@ -721,7 +855,9 @@ def render(instructions: str, program: SkillProgram | None) -> str:
         if rule.action == "exit" and rule.exit and rule.exit not in BUILT_IN_EXITS:
             lines.append(f'    stop {rule.exit} "{program.exit.get(rule.exit, rule.exit)}"')
         elif rule.action == "goto" and rule.step is not None:
-            lines.append(f"    Go back to step {rule.step}.")
+            lines.append(f"    go back to step {read_as.get(rule.step, rule.step)}")
+        elif rule.action == "retry" and rule.retries > 0:
+            lines.append("    try again" if rule.retries == 1 else f"    try again {rule.retries} times")
         else:
             lines.append("    stop failed")
     return "\n".join(lines)

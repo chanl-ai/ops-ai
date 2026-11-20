@@ -151,7 +151,9 @@ class Branch(RunModel):
     skill goes on (to the step's `next`, or the step after it); when it does not, to `otherwise`. A test that does
     not hold is a path the author wrote, not a failed check: it counts no attempt and takes no hold, unless
     `otherwise` ends the skill with an exit other than done, which is how a guard is written
-    (`if not ...: stop "..."`). A rule test runs in code on the step's result; a sentence is decided by the model,
+    (`if not ...: stop "..."`). A stop that a rule test's path reaches takes the hold on either side
+    (`if found: stop "..."` as much as `else: stop "..."`); one a sentence test's path reaches takes none, since the
+    model decided it. A rule test runs in code on the step's result; a sentence is decided by the model,
     which says which way it went (`step_done` with `holds`)."""
 
     test: StepCheck
@@ -252,6 +254,8 @@ class SubRun(RunModel):
     return_to: int
     program: SkillProgram
     rules: str = ""
+    # A path reached done before the last step and the skill still owes its results: it waits for exit.
+    owing: bool = False
 
 
 class RunningSkill(RunModel):
@@ -274,6 +278,8 @@ class RunningSkill(RunModel):
     # The steps and shared notes of the version that started, which the skill finishes on.
     program: SkillProgram
     rules: str = ""
+    # A path reached done before the last step and the skill still owes its results: it waits for exit.
+    owing: bool = False
 
 
 # Why a skill ended when it did not finish: a check did not pass, a person rejected its action, a step could not be

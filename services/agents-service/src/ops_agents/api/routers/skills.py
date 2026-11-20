@@ -150,6 +150,8 @@ class SkillTextInput(In):
     text: str = Field(max_length=24000)
     loading: Literal["on_match", "always"] = "on_match"
     has_parts: bool = False
+    # The endings the form declares beside the text: a bare `stop <name>` ends the skill only with one of them.
+    exit: dict[str, str] = Field(default_factory=dict[str, str])
 
 
 class ReviewInput(In):
@@ -252,7 +254,9 @@ async def read_skill_text(
     async with isolation.request_transaction():
         row = await skills(rt).row(skill_id)
         can(caller_of(caller), "skills", "view", team=row.team_id, what=row.slug, code="forbidden")
-    reading = await read_text(rt, body.text, team_id=row.team_id, loading=body.loading, has_parts=body.has_parts)
+    reading = await read_text(
+        rt, body.text, team_id=row.team_id, loading=body.loading, has_parts=body.has_parts, exits=body.exit
+    )
     return ok(reading.json())
 
 

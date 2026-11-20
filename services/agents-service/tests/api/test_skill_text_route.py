@@ -29,7 +29,7 @@ async def test_a_text_with_a_deleted_tool_saves_and_only_its_publish_is_blocked_
         assert s["text"] == "Be brief.", "a skill saved before the text editor shows its instructions as text"
         reading = _ok(await c.post(f"/v1/skills/{s['id']}/text", json={"text": TEXT}))
         d = _ok(await c.put(f"/v1/skills/{s['id']}/draft", json={"source": TEXT, "baseVersion": 1}))
-        assert d["text"] == TEXT and d["content"]["instructions"] == TEXT.strip()
+        assert d["text"] == TEXT and d["content"]["instructions"] == "", "each step carries its own lines, not all"
         steps = d["content"]["steps"]
         assert [x.get("use", {}).get("id") for x in steps] == ["lookup_customer", "place_wire_hold", "retired_lookup"]
         assert reading["steps"] == len(steps), "the read call and the save read the text the same way"
@@ -42,3 +42,25 @@ async def test_a_text_with_a_deleted_tool_saves_and_only_its_publish_is_blocked_
         fixed = TEXT.replace("@tool:retired_lookup", "@tool:lookup_customer")
         d = _ok(await c.put(f"/v1/skills/{s['id']}/draft", json={"source": fixed, "baseVersion": 1}))
         assert d["publishCheck"]["canRequest"], d["publishCheck"]
+
+
+async def test_a_text_past_the_step_cap_saves_but_cannot_publish_and_a_plain_text_keeps_the_form_keys(
+    tmp_path: Path,
+) -> None:
+    async with _app(str(tmp_path / "db.sqlite")) as c:
+        s = _ok(await c.post("/v1/skills", json=SKILL), 201)
+        long = "\n".join(f"Step {n}: look again with @tool:lookup_customer" for n in range(31))
+        d = _ok(await c.put(f"/v1/skills/{s['id']}/draft", json={"source": long, "baseVersion": 1}))
+        assert d["text"] == long, "the draft saves"
+        blocks = [(p["kind"], p["position"]["index"]) for p in d["publishCheck"]["problems"]]
+        assert blocks == [("bad_step", 31)] and not d["publishCheck"]["canRequest"]
+        kept = {
+            "notWhen": "The person asks about a loan.",
+            "returns": [{"name": "summary", "type": "text", "description": "", "required": True}],
+            "success": ["The person knows their balance."],
+        }
+        d = _ok(
+            await c.put(f"/v1/skills/{s['id']}/draft", json={"source": "Be warm and brief.", "baseVersion": 1, **kept})
+        )
+        assert {k: d["content"].get(k) for k in kept} == kept, "a text with no mention keeps the form's keys"
+        assert d["content"]["instructions"] == "Be warm and brief."
