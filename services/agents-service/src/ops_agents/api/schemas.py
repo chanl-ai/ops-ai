@@ -179,6 +179,33 @@ class WidgetSettings(Out):
     per_turn: int | None = Field(default=None, ge=1)
 
 
+class BriefView(Out):
+    """An agent's brief as replied (`ops_agent_kernel.prompt_writer.Brief` is the request form)."""
+
+    purpose: str
+    goal: str = ""
+    how_to_answer: str = ""
+    never: list[str] = Field(default_factory=list[str])
+    success: list[str] = Field(default_factory=list[str])
+
+
+class PatternsView(Out):
+    """How the agent's turn runs, as replied (`Patterns` is the request form)."""
+
+    thinking: Literal["default", "low", "medium", "high"] = "default"
+    parallel_reads: bool = True
+
+
+class AgentUses(Out):
+    """How many of each kind the agent holds, for the page's one-line summary."""
+
+    tools: int = 0
+    knowledge_bases: int = 0
+    skills: int = 0
+    agents: int = 0
+    workflows: int = 0
+
+
 class Agent(Out):
     id: str
     # The owning team's display name (api/team_names.py), on the detail response only; None when unread.
@@ -224,6 +251,12 @@ class Agent(Out):
     widget_pins: list[WidgetPin] = Field(default_factory=list[WidgetPin])
     widgets: WidgetSettings = Field(default_factory=WidgetSettings)
     memory: MemorySettings = Field(default_factory=MemorySettings)
+    # The agent written as a brief; null on a version saved before the brief, which runs on `instructions` as it is.
+    brief: BriefView | None = None
+    # brief: the prompt is written from the brief. full: the builder's own instructions, with the never rules last.
+    prompt_mode: Literal["brief", "full"] | None = None
+    patterns: PatternsView = Field(default_factory=PatternsView)
+    uses: AgentUses = Field(default_factory=AgentUses)
     controls: AgentControls
     used_in: list[UsedIn]
 
@@ -1474,6 +1507,11 @@ class SkillStepOut(Out):
     use: RefOut | None = None
     check: StepCheckOut | None = None
     if_not: IfNotOut | None = None
+    locked: bool | None = Field(
+        default=None,
+        description="True when the builder locked the step's tool to this step: the agent reaches it only as the "
+        "step, even when it is a read. Absent otherwise; a tool that changes something is kept to its step either way.",
+    )
 
 
 class ReturnFieldOut(Out, ReturnField):
@@ -1625,10 +1663,27 @@ class PublishBlocker(Out):
         "already_published",
         "deprecated",
         "too_long",
+        # Only ever a warning: a tool a step's sentence names and the step does not run.
+        "mention",
     ]
     id: str | None = None
     position: BlockerPosition | None = None
     message: str
+
+
+class AgentPublishCheck(Out):
+    """Whether the newest draft can be published, and each thing that stops it with the field it is in."""
+
+    can_request: bool
+    problems: list[PublishBlocker] = Field(default_factory=list[PublishBlocker])
+
+
+class ReferenceAdded(Out):
+    """What an insert granted the agent: the reference and anything it brought with it (a skill's tools, knowledge
+    bases and the skills its steps run). Empty when the agent already held it; `agent_version` is then unchanged."""
+
+    added: list[ReferenceItem]
+    agent_version: int
 
 
 class SkillPublishCheck(Out):
@@ -1636,6 +1691,8 @@ class SkillPublishCheck(Out):
     # Each problem's sentence, kept for callers that read only these; `problems` says where each one is.
     blockers: list[str]
     problems: list[PublishBlocker] = Field(default_factory=list[PublishBlocker])
+    # What does not block: a tool a step's sentence names and the step does not run.
+    warnings: list[PublishBlocker] = Field(default_factory=list[PublishBlocker])
     edit_class: Literal["free", "re_test", "re_approval"]
     approvers_needed: int
 

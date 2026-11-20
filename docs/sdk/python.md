@@ -91,7 +91,7 @@ custom app's connection id); an account is a connection id.
 | `secrets` | `list()`, `create(name, value)`, `rotate(name, value)`, `rename(name, new_name)`, `delete(name)`; no answer carries a value |
 | `policies` | `get(key)`, `set(key, value)`: the team's policies a Security admin changes, such as `toolWritesNeedApproval` (use `with_team` to act in another team) |
 | `egress` | `list()`, `allow_host(host)`, `allow_range(cidr)`, `remove_host`, `remove_range`; Security admins only |
-| `agents` | `tool_options(search)` (what may be granted), `grant_tools(id, tool_ids)` (kept beside the ones it holds) |
+| `agents` | `tool_options(search)` (what may be granted), `grant_tools(id, tool_ids)` (kept beside the ones it holds), `references(search, for_agent=)` (what a brief can mention with `@`), `add_reference(id, kind, ref_id)` (grants it as a new draft; a skill brings its tools and knowledge bases), `publish_check(id)` (what stops the draft from publishing, each with its field). `apply` carries `brief`, `promptMode` and `patterns`: a file with a `brief` has its role and instructions written from it |
 | `resources` | `list(app)`, `add(resource)` (a copy in the team) |
 | `usage` | `list(**filters)`: this team's tool calls |
 

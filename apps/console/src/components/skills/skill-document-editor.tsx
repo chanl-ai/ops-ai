@@ -4,8 +4,9 @@ import * as React from 'react';
 
 import { InstructionDocument, referencesIn, type DocumentValue, type InstructionDocumentHandle, type StepValue } from '@/components/shared/instruction-document';
 import { useReferenceLabels, useReferenceSearch } from '@/hooks/references-queries';
-import type { PublishBlocker } from '@/lib/types/references';
+import type { PublishBlocker, PublishWarning } from '@/lib/types/references';
 
+import { UNWRITTEN_SECTIONS } from './skill-meta';
 import { NOTES, placeProblems } from './skill-problems';
 
 export interface SkillDocument {
@@ -15,7 +16,7 @@ export interface SkillDocument {
 
 const toValue = (doc: SkillDocument): DocumentValue => ({
   blocks: [
-    { kind: 'field', key: NOTES, label: 'Notes for every step', locked: true, text: doc.instructions, placeholder: 'What holds for the whole skill: tone, rules, what to hand back.' },
+    { kind: 'field', key: NOTES, label: 'Notes for every step', locked: true, text: doc.instructions.trim() === UNWRITTEN_SECTIONS.trim() ? '' : doc.instructions, placeholder: 'What holds for the whole skill: tone, rules, what to hand back. Optional.' },
     { kind: 'steps', steps: doc.steps, placeholder: 'Describe the first step. Type @ to name a tool, a knowledge base or another skill.' },
   ],
 });
@@ -36,6 +37,7 @@ export function SkillDocumentEditor({
   onChange,
   readOnly,
   problems,
+  warnings,
   controls,
 }: {
   skillId: string;
@@ -45,6 +47,8 @@ export function SkillDocumentEditor({
   readOnly?: boolean;
   /** The publish check's problems and a refused save's; one on a step is shown under that step. */
   problems?: PublishBlocker[];
+  /** What the publish check noticed and does not block on; one on a step is shown under that step. */
+  warnings?: PublishWarning[];
   /** Moves the caret to a step, for a problem's "Go to step" link. */
   controls?: React.Ref<InstructionDocumentHandle>;
 }) {
@@ -54,6 +58,7 @@ export function SkillDocumentEditor({
   const labels = useReferenceLabels(context, ids);
   const search = useReferenceSearch(context);
   const invalid = React.useMemo(() => placeProblems(problems ?? []), [problems]);
+  const warned = React.useMemo(() => placeProblems(warnings ?? []), [warnings]);
   return (
     <div data-testid="skill-document">
       <InstructionDocument
@@ -64,6 +69,7 @@ export function SkillDocumentEditor({
         resolved={labels.data}
         missing={problems}
         invalid={invalid}
+        warnings={warned}
         controls={controls}
         readOnly={readOnly}
         footer="add-step"

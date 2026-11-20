@@ -8,7 +8,9 @@ import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useAgentPublishPreview } from '@/hooks/queries';
+import { PublishProblems } from '@/components/agents/publish-problems';
+import { useAgentPublishCheck, useAgentPublishPreview } from '@/hooks/queries';
+import type { Ref } from '@/lib/types/references';
 import type { EvalVersionSummary } from '@/lib/types/evals';
 import type { PublishPreview } from '@/lib/types/publish-preview';
 
@@ -42,6 +44,9 @@ export function RequestAgentPublishDialog({
   onSubmit,
   isPending,
   agentId,
+  onGoTo,
+  onAddBack,
+  adding,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -52,8 +57,15 @@ export function RequestAgentPublishDialog({
   onSubmit: (note: string) => Promise<unknown>;
   isPending: boolean;
   agentId: string;
+  /** Closes the dialog and puts the caret on the heading a problem names. */
+  onGoTo: (field: string) => void;
+  onAddBack: (ref: Ref) => void;
+  adding?: boolean;
 }) {
   const preview = useAgentPublishPreview(agentId, version, open);
+  const check = useAgentPublishCheck(agentId, version, open);
+  const problems = check.data?.problems ?? [];
+  const blocked = check.data ? !check.data.canRequest : false;
   const p = preview.data;
   const live = p ? !p.reviewRequired : false;
   const [note, setNote] = React.useState('');
@@ -84,6 +96,7 @@ export function RequestAgentPublishDialog({
             Cancel
           </Button>
           <LoadingButton
+            disabled={blocked}
             isLoading={isPending || preview.isPending}
             loadingText={preview.isPending ? 'Checking…' : live ? 'Publishing…' : 'Sending…'}
             data-testid="confirm-agent-publish"
@@ -114,6 +127,8 @@ export function RequestAgentPublishDialog({
             <span className="text-muted-foreground">{live ? 'No completed run yet; publishing does not wait for one.' : 'No completed run yet. The request waits for it, and approving is blocked until it finishes.'}</span>
           )}
         </div>
+        {check.isError && <p className="text-sm text-destructive-text">Couldn’t check the brief just now. Close this and try again.</p>}
+        <PublishProblems problems={problems} onGoTo={(f) => (onOpenChange(false), onGoTo(f))} onAddBack={onAddBack} adding={adding} />
         {p && !live && (
           <div className="flex flex-col gap-1 text-sm" data-testid="publish-review-reason">
             <span className="font-medium">Who approves</span>

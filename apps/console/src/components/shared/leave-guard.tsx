@@ -12,13 +12,35 @@ import { useLeaveGuard } from '@/hooks/use-leave-guard';
  * that asks first; closing or reloading the tab gets the browser's own question (`useLeaveGuard`). `failed` says the
  * last save did not go through, which the dialog names.
  *
- * The router has no way to hold a navigation, so the link's click is caught before the router sees it. A button that
- * navigates in code, and the browser's Back, are not held.
+ * The router has no way to hold a navigation, so the link's click is caught before the router sees it. The browser's
+ * Back is held with one extra history entry, pushed the first time the page has unsaved text: Back lands on the page's
+ * own entry, asks, and either steps on to the page before (discard) or puts the entry back (keep editing). A button
+ * that navigates in code is not held.
  */
 export function LeaveGuard({ unsaved, failed }: { unsaved: boolean; failed?: boolean }) {
   const router = useRouter();
   const [to, setTo] = React.useState<string | null>(null);
+  const [backAsked, setBackAsked] = React.useState(false);
   useLeaveGuard(unsaved);
+
+  const unsavedNow = React.useRef(unsaved);
+  unsavedNow.current = unsaved;
+  const entry = React.useRef(false);
+  React.useEffect(() => {
+    if (!unsaved || entry.current) return;
+    entry.current = true;
+    window.history.pushState(window.history.state, '', window.location.href);
+  }, [unsaved]);
+  React.useEffect(() => {
+    const onBack = () => {
+      if (!entry.current) return;
+      if (unsavedNow.current) return setBackAsked(true);
+      entry.current = false;
+      window.history.back();
+    };
+    window.addEventListener('popstate', onBack);
+    return () => window.removeEventListener('popstate', onBack);
+  }, []);
 
   React.useEffect(() => {
     if (!unsaved) return;
@@ -39,7 +61,16 @@ export function LeaveGuard({ unsaved, failed }: { unsaved: boolean; failed?: boo
   }, [unsaved]);
 
   return (
-    <AlertDialog open={to !== null} onOpenChange={(open) => !open && setTo(null)}>
+    <AlertDialog
+      open={to !== null || backAsked}
+      onOpenChange={(open) => {
+        if (open) return;
+        // Keep editing after Back: the page's extra entry is put back so the next Back asks again.
+        if (backAsked) window.history.pushState(window.history.state, '', window.location.href);
+        setTo(null);
+        setBackAsked(false);
+      }}
+    >
       <AlertDialogContent data-testid="leave-guard">
         <AlertDialogHeader>
           <AlertDialogTitle>Discard changes?</AlertDialogTitle>
@@ -50,7 +81,10 @@ export function LeaveGuard({ unsaved, failed }: { unsaved: boolean; failed?: boo
             className={buttonVariants({ variant: 'destructive' })}
             data-testid="leave-guard-discard"
             onClick={() => {
-              if (to !== null) router.push(to);
+              if (backAsked) {
+                entry.current = false;
+                window.history.back();
+              } else if (to !== null) router.push(to);
             }}
           >
             Discard changes

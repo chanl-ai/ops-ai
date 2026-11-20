@@ -99,7 +99,7 @@ export function TestWhy({ message, held }: { message: ChatMessage; held: HeldToo
         <ChainOfThoughtStep icon={Sparkles} status="complete" label={skills.length ? `Loaded ${plural(skills.length, 'skill')}` : 'Loaded no skills'} data-testid="test-step-skills">
           {skills.map((s) => (
             <span key={s.skillId}>
-              Loaded skill <span className="font-medium">{s.name}</span> <span className="font-mono">v{s.version}</span>
+              {s.how === 'started' ? 'Started' : 'Loaded'} skill <span className="font-medium">{s.name}</span> <span className="font-mono">v{s.version}</span>
               {s.matched && <span className="text-muted-foreground"> · {s.matched}</span>}
             </span>
           ))}

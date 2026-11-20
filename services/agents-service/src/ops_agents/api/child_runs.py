@@ -18,7 +18,7 @@ from typing import Any, cast
 from ops_access import can
 from ops_agent_kernel.ports import ToolOutcome
 from ops_agent_kernel.types import ToolGrant
-from ops_agents.graphs.common import WORKFLOW_TOOL_PREFIX
+from ops_contracts.skill_run import called_as
 from ops_engine.store import TERMINAL, DefinitionRow, DefinitionStore, RunStore
 from ops_service_kit import narrow
 from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, ValidationFailed
@@ -306,7 +306,7 @@ class ChildRuns:
             if row is None and workflow in v2:
                 out.append(
                     ToolGrant(
-                        name=f"{WORKFLOW_TOOL_PREFIX}{workflow}",
+                        name=called_as("workflow", workflow),
                         server="workflows",
                         description=engine_tool_description(v2[workflow]),
                         access="workflow",
@@ -320,7 +320,7 @@ class ChildRuns:
                 continue  # unpublished, paused or unknown: the agent is not offered it
             out.append(
                 ToolGrant(
-                    name=f"{WORKFLOW_TOOL_PREFIX}{workflow}",
+                    name=called_as("workflow", workflow),
                     server="workflows",
                     description=workflow_tool_description(row),
                     access="workflow",

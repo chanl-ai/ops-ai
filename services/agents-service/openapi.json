@@ -278,6 +278,32 @@
         "title": "AddCell",
         "type": "object"
       },
+      "AddReference": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "tool",
+              "knowledge",
+              "skill",
+              "agent",
+              "workflow"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id"
+        ],
+        "title": "AddReference",
+        "type": "object"
+      },
       "Agent": {
         "additionalProperties": false,
         "properties": {
@@ -305,6 +331,16 @@
             ],
             "title": "Availability",
             "type": "string"
+          },
+          "brief": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BriefView"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "canDelete": {
             "anyOf": [
@@ -388,9 +424,27 @@
             "title": "Name",
             "type": "string"
           },
+          "patterns": {
+            "$ref": "#/components/schemas/PatternsView"
+          },
           "paused": {
             "title": "Paused",
             "type": "boolean"
+          },
+          "promptMode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "brief",
+                  "full"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Promptmode"
           },
           "protection": {
             "anyOf": [
@@ -497,6 +551,9 @@
             },
             "title": "Usedin",
             "type": "array"
+          },
+          "uses": {
+            "$ref": "#/components/schemas/AgentUses"
           },
           "version": {
             "title": "Version",
@@ -840,6 +897,16 @@
             ],
             "title": "Allteamknowledgebases"
           },
+          "brief": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Brief"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "channels": {
             "anyOf": [
               {
@@ -964,6 +1031,31 @@
             ],
             "title": "Note"
           },
+          "patterns": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Patterns"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "promptMode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "brief",
+                  "full"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Promptmode"
+          },
           "protection": {
             "anyOf": [
               {
@@ -1061,6 +1153,28 @@
           }
         },
         "title": "AgentPatch",
+        "type": "object"
+      },
+      "AgentPublishCheck": {
+        "additionalProperties": false,
+        "description": "Whether the newest draft can be published, and each thing that stops it with the field it is in.",
+        "properties": {
+          "canRequest": {
+            "title": "Canrequest",
+            "type": "boolean"
+          },
+          "problems": {
+            "items": {
+              "$ref": "#/components/schemas/PublishBlocker"
+            },
+            "title": "Problems",
+            "type": "array"
+          }
+        },
+        "required": [
+          "canRequest"
+        ],
+        "title": "AgentPublishCheck",
         "type": "object"
       },
       "AgentPublishRequest": {
@@ -1566,6 +1680,39 @@
           "model"
         ],
         "title": "AgentTestTurn",
+        "type": "object"
+      },
+      "AgentUses": {
+        "additionalProperties": false,
+        "description": "How many of each kind the agent holds, for the page's one-line summary.",
+        "properties": {
+          "agents": {
+            "default": 0,
+            "title": "Agents",
+            "type": "integer"
+          },
+          "knowledgeBases": {
+            "default": 0,
+            "title": "Knowledgebases",
+            "type": "integer"
+          },
+          "skills": {
+            "default": 0,
+            "title": "Skills",
+            "type": "integer"
+          },
+          "tools": {
+            "default": 0,
+            "title": "Tools",
+            "type": "integer"
+          },
+          "workflows": {
+            "default": 0,
+            "title": "Workflows",
+            "type": "integer"
+          }
+        },
+        "title": "AgentUses",
         "type": "object"
       },
       "AgentUsing": {
@@ -2836,6 +2983,94 @@
           "version"
         ],
         "title": "BoundWorkflow",
+        "type": "object"
+      },
+      "Brief": {
+        "additionalProperties": false,
+        "description": "What a builder writes instead of one block of instructions. Persona, tone and glossary are text inside\n`how_to_answer`. `success` is kept for grading and is never sent to the model.",
+        "properties": {
+          "goal": {
+            "default": "",
+            "maxLength": 600,
+            "title": "Goal",
+            "type": "string"
+          },
+          "howToAnswer": {
+            "default": "",
+            "maxLength": 24000,
+            "title": "Howtoanswer",
+            "type": "string"
+          },
+          "never": {
+            "items": {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Never",
+            "type": "array"
+          },
+          "purpose": {
+            "maxLength": 400,
+            "minLength": 1,
+            "title": "Purpose",
+            "type": "string"
+          },
+          "success": {
+            "items": {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Success",
+            "type": "array"
+          }
+        },
+        "required": [
+          "purpose"
+        ],
+        "title": "Brief",
+        "type": "object"
+      },
+      "BriefView": {
+        "additionalProperties": false,
+        "description": "An agent's brief as replied (`ops_agent_kernel.prompt_writer.Brief` is the request form).",
+        "properties": {
+          "goal": {
+            "default": "",
+            "title": "Goal",
+            "type": "string"
+          },
+          "howToAnswer": {
+            "default": "",
+            "title": "Howtoanswer",
+            "type": "string"
+          },
+          "never": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Never",
+            "type": "array"
+          },
+          "purpose": {
+            "title": "Purpose",
+            "type": "string"
+          },
+          "success": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Success",
+            "type": "array"
+          }
+        },
+        "required": [
+          "purpose"
+        ],
+        "title": "BriefView",
         "type": "object"
       },
       "BudgetCaps": {
@@ -6900,6 +7135,25 @@
         "title": "Envelope[AgentEvalRun]",
         "type": "object"
       },
+      "Envelope_AgentPublishCheck_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AgentPublishCheck"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[AgentPublishCheck]",
+        "type": "object"
+      },
       "Envelope_AgentSkills_": {
         "additionalProperties": false,
         "properties": {
@@ -8077,6 +8331,25 @@
           "data"
         ],
         "title": "Envelope[Received]",
+        "type": "object"
+      },
+      "Envelope_ReferenceAdded_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ReferenceAdded"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[ReferenceAdded]",
         "type": "object"
       },
       "Envelope_ReferenceSearch_": {
@@ -13864,6 +14137,54 @@
         "title": "Pagination",
         "type": "object"
       },
+      "Patterns": {
+        "additionalProperties": false,
+        "description": "How the agent's turn runs: how hard the model thinks, and whether reads may run side by side.",
+        "properties": {
+          "parallelReads": {
+            "default": true,
+            "title": "Parallelreads",
+            "type": "boolean"
+          },
+          "thinking": {
+            "default": "default",
+            "enum": [
+              "default",
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Thinking",
+            "type": "string"
+          }
+        },
+        "title": "Patterns",
+        "type": "object"
+      },
+      "PatternsView": {
+        "additionalProperties": false,
+        "description": "How the agent's turn runs, as replied (`Patterns` is the request form).",
+        "properties": {
+          "parallelReads": {
+            "default": true,
+            "title": "Parallelreads",
+            "type": "boolean"
+          },
+          "thinking": {
+            "default": "default",
+            "enum": [
+              "default",
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Thinking",
+            "type": "string"
+          }
+        },
+        "title": "PatternsView",
+        "type": "object"
+      },
       "PauseInput": {
         "additionalProperties": false,
         "properties": {
@@ -14294,7 +14615,8 @@
               "review_open",
               "already_published",
               "deprecated",
-              "too_long"
+              "too_long",
+              "mention"
             ],
             "title": "Kind",
             "type": "string"
@@ -15023,7 +15345,7 @@
       },
       "Ref-Input": {
         "additionalProperties": false,
-        "description": "Something a text or a step names: a tool, a knowledge base, a skill, an agent or a workflow, by its id. An\nagent or a workflow is named by its bare id; a grant stores them as `agent:<id>` and `workflow:<id>`.",
+        "description": "Something a text or a step names: a tool, a knowledge base, a skill, an agent or a workflow, by its id. An\nagent or a workflow is named by its bare id; `grant` and `tool_name` are its two other spellings.",
         "properties": {
           "id": {
             "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,126}[A-Za-z0-9_])?$",
@@ -15103,6 +15425,29 @@
           "id"
         ],
         "title": "RefOut",
+        "type": "object"
+      },
+      "ReferenceAdded": {
+        "additionalProperties": false,
+        "description": "What an insert granted the agent: the reference and anything it brought with it (a skill's tools, knowledge\nbases and the skills its steps run). Empty when the agent already held it; `agent_version` is then unchanged.",
+        "properties": {
+          "added": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceItem"
+            },
+            "title": "Added",
+            "type": "array"
+          },
+          "agentVersion": {
+            "title": "Agentversion",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "added",
+          "agentVersion"
+        ],
+        "title": "ReferenceAdded",
         "type": "object"
       },
       "ReferenceGroup": {
@@ -18881,6 +19226,13 @@
             },
             "title": "Problems",
             "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/PublishBlocker"
+            },
+            "title": "Warnings",
+            "type": "array"
           }
         },
         "required": [
@@ -19098,6 +19450,17 @@
               }
             ]
           },
+          "locked": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locked"
+          },
           "use": {
             "anyOf": [
               {
@@ -19142,6 +19505,18 @@
                 "type": "null"
               }
             ]
+          },
+          "locked": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "True when the builder locked the step's tool to this step: the agent reaches it only as the step, even when it is a read. Absent otherwise; a tool that changes something is kept to its step either way.",
+            "title": "Locked"
           },
           "use": {
             "anyOf": [
@@ -30258,6 +30633,203 @@
         "x-ops-public": "sdk"
       }
     },
+    "/v1/agents/{agent_id}/publish-check": {
+      "get": {
+        "description": "What stops the newest draft from being published, each with the field it is in (`position`): a reference the\nbrief names that the agent does not hold. Nothing is opened or changed; the publish refuses the same list\n(422 `cannot_publish`). 422 `not_newest_draft` for any other version.",
+        "operationId": "agents_publish_check",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "title": "Version",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_AgentPublishCheck_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Publish Check",
+        "tags": [
+          "Agents"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
     "/v1/agents/{agent_id}/publish-preview": {
       "get": {
         "description": "Whether publishing the newest draft would wait for review, and why; nothing is opened or changed.",
@@ -30647,6 +31219,204 @@
           }
         },
         "summary": "Request Publish",
+        "tags": [
+          "Agents"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/agents/{agent_id}/references": {
+      "post": {
+        "description": "Grants the agent what its brief mentions, as one new draft version: a tool, an agent or a workflow joins its\ntools, a knowledge base its knowledge, a skill its skills. A skill brings the tools and knowledge bases it names\nand the skills its steps run. `added` lists everything granted; repeating the call answers `added: []` and saves\nnothing.\n\n403 `forbidden` without agents: edit in the agent's team or the view right of the reference's area; 422\n`unknown_reference` for something the team does not offer; 422 `not_published` for a skill, agent or workflow\nthat is not live; 409 `stale_base` when the draft was saved while this ran (read the agent again and repeat).",
+        "operationId": "agents_add_reference",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddReference"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ReferenceAdded_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Add Reference",
         "tags": [
           "Agents"
         ],

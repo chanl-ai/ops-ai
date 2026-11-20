@@ -30,7 +30,7 @@ import type { Lookups } from '@/lib/api';
 import { plural, relativeTime } from '@/lib/format';
 import type { ToolOptionsPage } from '@/lib/types/query';
 import type { WidgetPin, WidgetSettings } from '@/lib/types/widgets';
-import type { Agent, AgentControls, AgentGuardrails, AgentLimits, AgentPublicKeyOverride, AgentRun, AgentVersion, Channel, GrantableTool, MemorySettings, ModelAlias, SkillMenu } from '@/lib/types/domain';
+import type { Agent, AgentControls, AgentGuardrails, AgentLimits, AgentPatterns, AgentPublicKeyOverride, AgentRun, AgentVersion, Channel, GrantableTool, MemorySettings, ModelAlias, SkillMenu } from '@/lib/types/domain';
 
 import { modelHint, ModelSelect } from './model-select';
 import { teamLabel } from '@/components/shared/team-name';
@@ -56,6 +56,8 @@ export interface AgentDraft {
   widgets: WidgetSettings;
   memory: MemorySettings;
   skillMenu: SkillMenu;
+  /** How the model works through a turn; saved with the version. */
+  patterns: AgentPatterns;
 }
 
 export const draftOf = (a: Agent): AgentDraft => ({
@@ -74,6 +76,7 @@ export const draftOf = (a: Agent): AgentDraft => ({
   widgets: a.widgets ?? { compose: false, perTurn: null },
   memory: a.memory ?? { enabled: true, kinds: ['fact', 'preference', 'episode'] },
   skillMenu: a.skillMenu ?? 'team',
+  patterns: a.patterns ?? { thinking: 'default', parallelReads: true },
 });
 
 /**
@@ -109,6 +112,7 @@ const SECTION: Record<keyof AgentDraft, string> = {
   widgets: 'Widgets',
   memory: 'Memory',
   skillMenu: 'Skills',
+  patterns: 'Model and limits',
 };
 
 /** Section names whose values differ between the saved agent and the draft. */
@@ -130,7 +134,7 @@ type Set = <K extends keyof AgentDraft>(k: K, v: AgentDraft[K]) => void;
 
 /** `models` are the aliases publish accepts; an agent saved on any other alias still shows it, marked, so it can be changed. */
 /** `channels` are the ones the runtime serves (`Agent.controls`); no other is offered. */
-export function IdentitySection({ draft, set, teamId, models, errors, channels, agentId }: { draft: AgentDraft; set: Set; teamId: string | null; models: ModelAlias[]; errors: Partial<Record<'name' | 'role', string>>; channels: Channel[]; /** Shown to copy for the API and the CLI; absent before the agent is saved. */ agentId?: string }) {
+export function IdentitySection({ draft, set, teamId, models, errors, channels, agentId, showJob = true, showModel = true }: { draft: AgentDraft; set: Set; teamId: string | null; models: ModelAlias[]; errors: Partial<Record<'name' | 'role', string>>; channels: Channel[]; /** Shown to copy for the API and the CLI; absent before the agent is saved. */ agentId?: string; /** False while the prompt is written as a brief: its Purpose is the job. */ showJob?: boolean; /** False where the model is chosen under Model and limits. */ showModel?: boolean }) {
   const { teams } = useTeam();
   return (
     <SettingsSection title="Identity" description="Reviewers see the name and job on every run this agent pauses.">
@@ -146,12 +150,16 @@ export function IdentitySection({ draft, set, teamId, models, errors, channels, 
             <CopyField id="ag-id" value={agentId} label="agent ID" />
           </FormField>
         )}
-        <FormField id="ag-role" label="Job" error={errors.role} className="md:col-span-2">
-          <Input id="ag-role" value={draft.role} onChange={(e) => set('role', e.target.value)} className="bg-card" aria-invalid={!!errors.role} />
-        </FormField>
-        <FormField id="ag-model" label="Model" hint={modelHint(models, draft.model)}>
-          <ModelSelect id="ag-model" value={draft.model} onValueChange={(v) => set('model', v)} aliases={models} className="bg-card" />
-        </FormField>
+        {showJob && (
+          <FormField id="ag-role" label="Job" error={errors.role} className="md:col-span-2">
+            <Input id="ag-role" value={draft.role} onChange={(e) => set('role', e.target.value)} className="bg-card" aria-invalid={!!errors.role} />
+          </FormField>
+        )}
+        {showModel && (
+          <FormField id="ag-model" label="Model" hint={modelHint(models, draft.model)}>
+            <ModelSelect id="ag-model" value={draft.model} onValueChange={(v) => set('model', v)} aliases={models} className="bg-card" />
+          </FormField>
+        )}
         <FormField id="ag-channels" label="Can talk on" hint="Where the agent is reachable is set by the deployments of the workflows that use it.">
           <ToggleGroup id="ag-channels" type="multiple" variant="outline" value={draft.channels.filter((c) => channels.includes(c))} onValueChange={(v) => v.length && set('channels', v as Channel[])} className="w-full bg-card">
             {channels.map((c) => {
@@ -299,18 +307,27 @@ const UNSURE: Record<AgentGuardrails['whenUnsure'], string> = {
 /** A cap as a number field: empty is no cap, so a real agent is not held to a small menu of choices. */
 function CapField({ id, label, value, onChange, hint, placeholder, decimal }: { id: string; label: string; value: number | null; onChange: (v: number | null) => void; hint: string; placeholder: string; decimal?: boolean }) {
   // A cost cap takes cents; a count cap is a whole number of at least one.
-  const parse = (raw: string) => (decimal ? Math.max(0.01, Math.round(Number(raw) * 100) / 100) : Math.max(1, Math.floor(Number(raw))));
+  const least = decimal ? 0.01 : 1;
+  const parse = (raw: string) => (decimal ? Math.round(Number(raw) * 100) / 100 : Math.floor(Number(raw)));
+  // What is typed while it is not a cap the agent can hold (zero, a negative): shown with its error, and not saved.
+  const [refused, setRefused] = React.useState<string | null>(null);
   return (
-    <FormField id={id} label={label} hint={hint}>
+    <FormField id={id} label={label} hint={hint} error={refused === null ? undefined : `Enter ${least} or more, or leave it empty for no cap.`}>
       <Input
         id={id}
         type="number"
-        min={decimal ? 0.01 : 1}
-        step={decimal ? 0.01 : 1}
+        min={least}
+        step={least}
         inputMode={decimal ? 'decimal' : 'numeric'}
         placeholder={placeholder}
-        value={value ?? ''}
-        onChange={(e) => onChange(e.target.value.trim() === '' ? null : parse(e.target.value))}
+        value={refused ?? value ?? ''}
+        aria-invalid={refused !== null}
+        onChange={(e) => {
+          const raw = e.target.value.trim();
+          if (raw !== '' && !(parse(raw) >= least)) return setRefused(e.target.value);
+          setRefused(null);
+          onChange(raw === '' ? null : parse(raw));
+        }}
         className="bg-card"
       />
     </FormField>

@@ -38,9 +38,36 @@ class RunModel(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
 
 
+# An agent or a workflow an agent may use is spelled three ways, all owned here: a reference names it by its bare id
+# (`@agent:ag_x`), an agent's grant and the tools directory store it as `agent:ag_x`, and the model calls the tool
+# `agent__ag_x` (a tool name allows no colon). The service builds its grants with `called_as` and the kernel reads
+# them with `hands_to_agent` and `grant_token`, so the two never spell a name apart.
+AGENT_TOOL_PREFIX = "agent__"
+WORKFLOW_TOOL_PREFIX = "workflow__"
+_CALLED: dict[str, str] = {"agent": AGENT_TOOL_PREFIX, "workflow": WORKFLOW_TOOL_PREFIX}
+
+
+def called_as(kind: str, ref_id: str) -> str:
+    """The name of the tool the model calls to ask agent `ref_id` or start workflow `ref_id`."""
+    return f"{_CALLED[kind]}{ref_id}"
+
+
+def hands_to_agent(tool_name: str) -> bool:
+    """Whether a called tool asks another agent."""
+    return tool_name.startswith(AGENT_TOOL_PREFIX)
+
+
+def grant_token(tool_name: str) -> str | None:
+    """The reference a text writes for an agent's or a workflow's tool (`@agent:ag_x`); None for any other tool."""
+    for kind, prefix in _CALLED.items():
+        if tool_name.startswith(prefix):
+            return f"@{kind}:{tool_name.removeprefix(prefix)}"
+    return None
+
+
 class Ref(RunModel):
     """Something a text or a step names: a tool, a knowledge base, a skill, an agent or a workflow, by its id. An
-    agent or a workflow is named by its bare id; a grant stores them as `agent:<id>` and `workflow:<id>`."""
+    agent or a workflow is named by its bare id; `grant` and `tool_name` are its two other spellings."""
 
     kind: RefKind
     id: str = Field(pattern=rf"^{REF_ID}$")
@@ -52,6 +79,14 @@ class Ref(RunModel):
     @property
     def tool_name(self) -> str | None:
         """The name of the tool a step calls for this reference; None for a skill or a knowledge base."""
+        if self.kind == "tool":
+            return self.id
+        return called_as(self.kind, self.id) if self.kind in _CALLED else None
+
+    @property
+    def grant(self) -> str | None:
+        """What an agent's grant and the tools directory store for this reference; None for a skill or a knowledge
+        base."""
         if self.kind == "tool":
             return self.id
         return f"{self.kind}:{self.id}" if self.kind in ("agent", "workflow") else None
@@ -103,6 +138,16 @@ class SkillStep(RunModel):
     use: Ref | None = None
     check: StepCheck | None = None
     if_not: IfNot | None = None
+    # The builder's lock on the step's tool: it is reachable only as this step even when it is a read. A tool that
+    # changes something is kept to its step with or without it. Stored only when on, and only on a step that runs a
+    # tool.
+    locked: bool | None = None
+
+    @model_validator(mode="after")
+    def _lock_needs_a_tool(self) -> SkillStep:
+        if not self.locked or self.use is None or self.use.tool_name is None:
+            self.locked = None
+        return self
 
 
 class ReturnField(RunModel):
@@ -146,6 +191,10 @@ class SkillProgram(RunModel):
     def targets(self) -> set[str]:
         """The tools this program's steps call, by the name each is granted under."""
         return {name for s in self.steps if s.use is not None and (name := s.use.tool_name) is not None}
+
+    def locked(self) -> set[str]:
+        """The tools a builder locked to their step (`SkillStep.locked`), by the name each is granted under."""
+        return {name for s in self.steps if s.locked and s.use is not None and (name := s.use.tool_name) is not None}
 
 
 class StepResult(RunModel):
@@ -199,7 +248,16 @@ class RunningSkill(RunModel):
     rules: str = ""
 
 
+# Why a skill ended when it did not finish: a check did not pass, a person rejected its action, a step could not be
+# done (its tool failed, or the skill it runs could not start), another skill holds its step's tool, or the model
+# called the exit itself.
+EndedWhy = Literal["check", "denied", "error", "held", "exit"]
+
+
 class EndedSkill(RunModel):
+    """How a skill ended, and why: the one record of it. The kernel writes it; the chat draws the ending from it and
+    the kernel reads it to keep a skill it ended from starting again in the same reply."""
+
     skill_id: str
     version: int
     name: str
@@ -212,6 +270,15 @@ class EndedSkill(RunModel):
     tools: list[str] = Field(default_factory=list[str])
     # The results it was ended with, by name.
     returns: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
+    # Set while the record is the one of the reply the skill ended in; cleared when the next reply starts. None of
+    # the four fields below is on a record written before endings carried a reason.
+    in_reply: bool = False
+    # None when it ended as done or switched.
+    why: EndedWhy | None = None
+    # The text of the check that did not pass, when that is why.
+    check: str | None = None
+    # What the skill's author wrote that this exit means; None for done, failed and switched.
+    meaning: str | None = None
 
 
 class Hold(RunModel):

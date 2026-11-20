@@ -50,6 +50,17 @@ export class Agents {
     return this.raw.agents.agents_references_search({ query: { ...query, forAgent, search: search || undefined } as never });
   }
 
+  /** Grants the agent a tool, knowledge base, skill, agent or workflow its brief mentions, as a new draft. `added` is empty when the agent already held it. */
+  addReference(id: string, kind: 'tool' | 'knowledge' | 'skill' | 'agent' | 'workflow', refId: string) {
+    return this.raw.agents.agents_add_reference({ path: { agent_id: id }, body: { kind, id: refId } as never });
+  }
+
+  /** What stops the agent's newest draft from being published, each problem with the field it is in. */
+  async publishCheck(id: string, version?: number) {
+    version ??= (await this.get(id)).version;
+    return this.raw.agents.agents_publish_check({ path: { agent_id: id }, query: { version } as never });
+  }
+
   validate(definition: Record<string, unknown>) {
     const missing = (['name', 'role'] as const).filter((key) => !definition[key]);
     return {
@@ -71,7 +82,11 @@ export class Agents {
       model: definition.model,
       channels: definition.channels,
     };
-    return this.raw.agents.agents_create_agent({ body: body as never });
+    // The create route takes no brief; it is saved on the new agent's draft, as the Python SDK does.
+    const later = Object.fromEntries(['brief', 'promptMode', 'patterns'].filter((k) => definition[k] !== undefined).map((k) => [k, definition[k]]));
+    const made = this.raw.agents.agents_create_agent({ body: body as never });
+    if (!Object.keys(later).length) return made;
+    return made.then((agent: { id: string }) => this.raw.agents.agents_update_agent({ path: { agent_id: agent.id }, body: later as never }));
   }
 
   async publish(id: string, note = '', version?: number) {

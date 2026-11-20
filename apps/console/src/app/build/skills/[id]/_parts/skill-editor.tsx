@@ -29,12 +29,13 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { PageSaveActions } from '@/components/shared/page-save-actions';
 import type { InstructionDocumentHandle, StepValue } from '@/components/shared/instruction-document';
 import { plural } from '@/lib/format';
+import { type Carried, keptEdits } from '@/lib/kept-edits';
 import type { PublishBlocker } from '@/lib/types/references';
 import type { SkillDetail, SkillEditClass, SkillInputField, SkillLoading, SkillPartContent } from '@/lib/types/skills';
 
 import { PartsSection, partsError } from './parts-section';
 
-interface Form {
+export interface Form {
   name: string;
   when: SkillWhen;
   loading: SkillLoading;
@@ -59,13 +60,18 @@ const same = (a: string[], b: string[]) => a.length === b.length && a.every((x) 
  * publisher approves it. The unsaved bar says which edit class the change is. A person who may not change the team's
  * skills (`canEdit` false) reads the same form with every field off and no save.
  */
-export function SkillEditor({ skill: sk, canEdit, onDirtyChange }: { skill: SkillDetail; canEdit: boolean; onDirtyChange?: (dirty: boolean) => void }) {
+export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried }: { skill: SkillDetail; canEdit: boolean; onDirtyChange?: (dirty: boolean) => void; carried?: React.RefObject<Carried<Form> | null> }) {
   const save = useSaveSkillDraft(sk.id);
   const current = useSkill(sk.id);
   const [noting, setNoting] = React.useState(false);
   const options = useSkillOptions();
   const saved = React.useMemo(() => formOf(sk), [sk]);
-  const [form, setForm] = React.useState<Form>(saved);
+  // Drawn again on a newer version after Reload, the form starts from that version with the person's unsaved edits
+  // on top (`carried`, which the page holds across the remount).
+  const [form, setForm] = React.useState<Form>(() => (carried?.current ? keptEdits(carried.current.readBefore, carried.current.edited, saved) : saved));
+  React.useEffect(() => {
+    if (carried) carried.current = null;
+  }, [carried]);
   const [mode, setMode] = React.useState<'edit' | 'preview'>('edit');
   const [note, setNote] = React.useState('');
   const [endingValid, setEndingValid] = React.useState(true);
@@ -104,6 +110,8 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange }: { skill: Skil
   const errors = { name: form.name.trim() ? undefined : 'Name the skill.', parts: partsError(form.parts) };
   const found = React.useMemo(() => (newest.state === 'draft' ? inText(sk.publishCheck.problems ?? NONE) : NONE), [newest.state, sk.publishCheck.problems]);
   const problems = React.useMemo(() => (refused ? [...found, refused] : found), [found, refused]);
+  // A missing list from an older service is none.
+  const warnings = newest.state === 'draft' ? sk.publishCheck.warnings : undefined;
   const discard = () => (setForm(saved), setEndingValid(true), setWhenValid(true), setInputsValid(true), setRefused(null), setFailed(null), setDiscards((n) => n + 1));
   const tools = options.data?.tools ?? [];
   const toolOf = (id: string) => tools.find((t) => t.toolId === id) ?? sk.content.tools.find((t) => t.toolId === id);
@@ -129,11 +137,14 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange }: { skill: Skil
       toast.error('Couldn’t save the draft', { description: (e as Error).message });
     }
   };
-  // The page remounts this form when a newer version arrives; with nothing newer, the form goes back to what is saved.
+  // The page remounts this form when a newer version arrives, and the new form takes the person's unsaved edits from
+  // `carried`. With nothing newer the form stays as it is. Either way nothing the person typed is dropped.
   const reload = async () => {
-    await current.refetch();
+    if (carried) carried.current = { readBefore: saved, edited: form };
+    const read = await current.refetch();
+    const newer = read.data?.versions[0];
+    if (carried && newer && newer.version === newest.version && newer.savedAt === newest.savedAt) carried.current = null;
     setStale(null);
-    discard();
   };
   const askNote = async () => {
     if (whenValid) return setNoting(true);
@@ -149,7 +160,7 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange }: { skill: Skil
           <Users />
           <AlertTitle>Someone else saved this skill</AlertTitle>
           <AlertDescription>
-            <p>{stale} Reloading shows their version and drops the changes you have not saved; copy anything you want to keep first.</p>
+            <p>{stale} Your unsaved changes are kept on this page. Reloading shows their version with your changes on top; save again once you have looked.</p>
             <Button variant="outline" size="sm" onClick={() => void reload()} disabled={current.isFetching} data-testid="skill-stale-reload">
               <RefreshCw className="size-3.5" /> Reload
             </Button>
@@ -193,11 +204,14 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange }: { skill: Skil
       <SkillWhenSection key={`when-${discards}`} value={saved.when} onChange={setWhen} onValidity={setWhenValid} useWhenMax={limit} needsUseWhen={form.loading === 'on_match'} showNotWhen={stepped} notWhenProblem={problems.find((p) => p.position?.field === 'notWhen')?.message} disabled={readOnly} controls={whenForm} />
       {stepped ? (
         <SettingsSection title="Notes and steps" description="Notes hold for the whole skill. Steps run in order: each can name a tool, a check on what came back, and what happens when the check fails.">
-          <SkillDocumentEditor skillId={sk.id} name={form.name} value={{ instructions: form.instructions, steps: form.steps }} onChange={(doc) => (setRefused(null), setForm((f) => ({ ...f, ...doc })))} readOnly={readOnly} problems={problems} controls={stepsDoc} />
+          <SkillDocumentEditor skillId={sk.id} name={form.name} value={{ instructions: form.instructions, steps: form.steps }} onChange={(doc) => (setRefused(null), setForm((f) => ({ ...f, ...doc })))} readOnly={readOnly} problems={problems} warnings={warnings} controls={stepsDoc} />
         </SettingsSection>
       ) : (
         <SettingsSection title="Instructions" description="Markdown with four sections: Steps, Rules, Examples and Output format.">
           <div className="flex flex-col gap-2">
+            <p className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground" data-testid="skill-parts-or-steps">
+              This skill is written in parts, so its steps are hidden. A skill has parts or numbered steps, not both. Remove every part to write steps again.
+            </p>
             <ToggleGroup type="single" value={mode} onValueChange={(v) => v && setMode(v as 'edit' | 'preview')} variant="outline" size="sm" className="self-start" aria-label="Editor mode">
               <ToggleGroupItem value="edit" aria-label="Edit">
                 <Pencil className="size-3.5" /> Edit
