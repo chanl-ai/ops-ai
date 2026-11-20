@@ -10,12 +10,14 @@ per tenant; one the tenant already has, edited or not, is left as it is."""
 
 from __future__ import annotations
 
+import json
 from collections.abc import Awaitable, Callable
 from typing import TypedDict, cast
 
 from ops_engine import default_registry
 from ops_engine.definition import WorkflowDefinition, parse, validate
 from ops_engine.store import DefinitionStore, RunRow, RunStore, WorkflowOwnedError
+from ops_service_kit.errors import Unprocessable
 from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
@@ -198,7 +200,15 @@ async def emit(
     actor: str | None,
     payload: Json,
 ) -> DeliveredEvent:
-    """Records the event and starts or returns its handler's run. Returns the event row."""
+    """Records the event and starts or returns its handler's run. Returns the event row. A payload holding infinity
+    or not-a-number (a JSON body's 1e999) is refused before anything is written: the event's JSON column cannot store
+    it, for a reported event and a posted task alike."""
+    try:
+        json.dumps(payload, allow_nan=False)
+    except ValueError as e:
+        raise Unprocessable(
+            "An event's payload holds a number that is too large or is not a number.", code="payload_not_finite"
+        ) from e
     await ensure_event_workflows(rt)
     return await deliver(
         rt.db,
@@ -222,6 +232,10 @@ def event_beat(db: AsyncEngine) -> background.Beat:
     return _beats[id(db)]
 
 
+class DeliveryFailedError(RuntimeError):
+    """What the shared heartbeat records of a failed delivery: the kind of error alone."""
+
+
 async def deliver(
     db: AsyncEngine,
     handler: str | None,
@@ -240,8 +254,17 @@ async def deliver(
             db, handler, name=name, key=key, team_id=team_id, source=source, actor=actor, payload=payload
         )
     except Exception as e:
-        await event_beat(db).failed(e)
+        # The heartbeat is one row for every tenant, read by each tenant's account admins, so it carries the kind of
+        # error and never its message, which can quote a tenant's records. The event's team reads the failure as its
+        # own failed job; the message is in this service's log and the caller's error.
+        log.warning("event_delivery_failed", name=name, key=key, error=type(e).__name__)
+        if team_id:
+            await BackgroundJobs(db).record(
+                "event_workflows", f"Could not deliver the event {name}: {type(e).__name__}", "failed", team_id=team_id
+            )
+        await event_beat(db).failed(DeliveryFailedError(type(e).__name__))
         raise
+    # A payload a listener's schema refused is likewise the event's team's failed job (`_deliver`), never this line.
     await event_beat(db).ok(len(out["run_ids"]))
     return out
 
@@ -275,19 +298,35 @@ async def _deliver(
             continue
         n = len(tried) + 1
         created_by, via = starter(str(event.source), name, event.actor)
-        run, _ = await start_run(
-            runs,
-            stored,
-            team_id=str(event.team_id),
-            mode="live",
-            input=cast(Json, event.payload),
-            run_key=run_key if n == 1 else f"{run_key}:{n}",
-            created_by=created_by,
-            started_via=via,
-        )
+        title = stored.name or stored.workflow_id
+        try:
+            run, _ = await start_run(
+                runs,
+                stored,
+                team_id=str(event.team_id),
+                mode="live",
+                input=cast(Json, event.payload),
+                run_key=run_key if n == 1 else f"{run_key}:{n}",
+                created_by=created_by,
+                started_via=via,
+            )
+        except Unprocessable as e:
+            # The payload does not match this listener's input schema: it starts no run, the other listeners still
+            # hear the event, and the event's team reads which workflow and field as a failed job, in its Activity and
+            # on its own account admins' Background page. The message can quote the value sent, so it is kept out of
+            # the log and the job. Every caller names a team (the events route, a posted task, a run's reminder).
+            field = str((e.details or {}).get("path") or "its input")
+            log.warning("event_input_refused", workflow=stored.workflow_id, name=name, key=key, field=field)
+            if event.team_id:
+                await jobs.record(
+                    "event_workflows",
+                    f"Did not run {title}: the event's {field} does not match its input schema",
+                    "failed",
+                    team_id=str(event.team_id),
+                )
+            continue
         run_ids.append(run.id)
         attempts = max(attempts, n)
-        title = stored.name or stored.workflow_id
         # An account-level notice has no team, so no team's Activity shows it; the Background page counts it.
         if event.team_id:
             await jobs.record(

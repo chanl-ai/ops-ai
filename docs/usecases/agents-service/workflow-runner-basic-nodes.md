@@ -16,14 +16,15 @@ worker processes (`python -m ops_agents.api.worker`) that it kills. No model key
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | `POST /v1/workflows/definitions` with a YAML v2 definition: request trigger, set fields, if, `get_customer` on the core bank, human review, ends; then `POST /v1/workflows/definitions/{id}/publish-requests` | 201, every check passes; the saved version is a draft until its publish request is approved (dev auto-approve), then live |
-| 2 | `POST /v1/runs` with no worker running | 202; after 2 s the run is still `queued` |
-| 3 | Start a worker | The run reaches the review (`waiting`); `GET /v1/runs/{id}/events` returns started, node steps and waiting_review, and nothing after the last seq |
-| 4 | `GET /reviews/{runId}`, then decide `approved` | The review shows the customer the tool looked up; the run ends `succeeded`, outcome `approved` |
-| 5 | `GET /v1/runs/{id}` | Each step's input, output and port from the journal |
-| 6 | Second run on a worker started with `OPS_ENGINE_FAULT_KILL_AFTER_NODE=lookup` | The worker dies by SIGKILL right after the tool step's row is recorded; the run stays `running` |
-| 7 | Start a new worker | It takes the run over after the lease lapses, reaches the review; a rejection ends it `rejected` |
-| 8 | tools-service `GET /v1/executions?thread=<run>` | `get_customer` called exactly once for the second run |
+| 1 | `POST /v1/workflows/definitions` with a YAML v2 definition: request trigger whose input schema declares `amount` a number, set fields, if `amount` is over 100, `get_customer` on the core bank, human review, ends; then `POST /v1/workflows/definitions/{id}/publish-requests` | 201, every check passes; the saved version is a draft until its publish request is approved (dev auto-approve), then live |
+| 2 | `POST /v1/runs` with `amount` `"a lot"` | 422 `invalid_input`; `details.path` is `amount` and `details.reason` says it must be a number; no run |
+| 3 | `POST /v1/runs` with `amount` `"250"` (text, as a CLI flag or a form sends it) and no worker running | 202; after 2 s the run is still `queued`, and its input holds the number 250 |
+| 4 | Start a worker | The run takes the over-100 branch to the review (`waiting`), not the Small end; `GET /v1/runs/{id}/events` returns started, node steps and waiting_review, and nothing after the last seq |
+| 5 | `GET /reviews/{runId}`, then decide `approved` | The review shows the customer the tool looked up; the run ends `succeeded`, outcome `approved` |
+| 6 | `GET /v1/runs/{id}` | Each step's input, output and port from the journal |
+| 7 | Second run on a worker started with `OPS_ENGINE_FAULT_KILL_AFTER_NODE=lookup` | The worker dies by SIGKILL right after the tool step's row is recorded; the run stays `running` |
+| 8 | Start a new worker | It takes the run over after the lease lapses, reaches the review; a rejection ends it `rejected` |
+| 9 | tools-service `GET /v1/executions?thread=<run>` | `get_customer` called exactly once for the second run |
 
 ## The ui layer
 

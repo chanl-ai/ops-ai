@@ -21,6 +21,7 @@ from ops_engine.store import DefinitionStore, RunStore
 from ops_engine.store.tables import engine_runs, engine_steps
 from ops_service_kit.ids import new_id
 from ops_store.team_scope import acting_as
+from tests.run_rows import write_run
 
 FLOW = parse(
     {
@@ -54,9 +55,10 @@ async def _run(tx: EngineTransactions) -> tuple[str, int]:
         FLOW.id, name="Rows", definition=FLOW.wire(), digest=FLOW.digest(), now="n", by="a@x", stage="live", team="t1"
     )
     run_id = new_id("wfrun")
-    await RunStore(tx).create(
+    await write_run(
+        tx,
         {"id": run_id, "team_id": "t1", "workflow_id": FLOW.id, "version": version, "digest": FLOW.digest()}
-        | {"run_key": run_id, "mode": "live", "input": {"n": 1}, "created_by": "a@x"}
+        | {"run_key": run_id, "mode": "live", "input": {"n": 1}, "created_by": "a@x"},
     )
     return run_id, version
 

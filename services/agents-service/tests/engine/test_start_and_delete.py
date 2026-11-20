@@ -13,8 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.tenancy import tenant_scope, tenant_tx
-from ops_engine.store import DefinitionGoneError, DefinitionStore, RunStore
+from ops_engine.store import DefinitionGoneError, DefinitionStore
 from ops_engine.store.tables import engine_definitions, engine_runs
+from tests.run_rows import write_run
 
 
 @pytest.fixture
@@ -49,7 +50,7 @@ async def test_a_start_after_the_delete_is_refused(engine: AsyncEngine) -> None:
         await publish(tx, wf)
         assert await DefinitionStore(tx).delete_draft(wf) == "deleted"
         with pytest.raises(DefinitionGoneError):
-            await RunStore(tx).create(run_row(wf))
+            await write_run(tx, run_row(wf))
 
 
 async def test_a_delete_waits_for_a_start_holding_the_version_and_then_keeps_it(engine: AsyncEngine) -> None:

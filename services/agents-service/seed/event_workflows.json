@@ -808,7 +808,7 @@
           "event": "app_account.needs_reconnect",
           "inputSchema": {
             "type": "object",
-            "required": ["app", "environment", "state", "reason"],
+            "required": ["app", "state", "reason"],
             "properties": {
               "app": {"type": "string", "title": "App"},
               "environment": {"type": "string", "title": "Environment"},

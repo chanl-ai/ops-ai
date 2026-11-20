@@ -1,9 +1,9 @@
-# 27 findings: code and metadata outside ops_store that would not run on SQL Server (scripts/check_portable_store.py). A row may only fall; raising one needs a maintainer's review on the pull request.
+# 26 findings: code and metadata outside ops_store that would not run on SQL Server (scripts/check_portable_store.py). A row may only fall; raising one needs a maintainer's review on the pull request.
 # Burned down by ops_store.dialect: row lock and SKIP LOCKED -> locked/claim, database clock -> db_now and db_after, dialect insert and ON CONFLICT -> upsert/insert_ignore, advisory lock -> lock_key.
-# packages/ops_engine: 12
+# packages/ops_engine: 11
 2 sql packages/ops_engine/src/ops_engine/store/clock.py database clock
 3 sql packages/ops_engine/src/ops_engine/store/definitions.py row lock
-4 sql packages/ops_engine/src/ops_engine/store/runs.py row lock
+3 sql packages/ops_engine/src/ops_engine/store/runs.py row lock
 1 sql packages/ops_engine/src/ops_engine/store/steps.py row lock
 1 sql packages/ops_engine/src/ops_engine/store/work.py SKIP LOCKED
 1 sql packages/ops_engine/src/ops_engine/store/work.py row lock

@@ -63,3 +63,18 @@ async def test_a_broken_team_account_asks_an_admin_to_reconnect_its_app(
     done = await client.post(f"/reviews/{run_id}/decision", json={"decision": "approve"}, headers=REVIEWER | TEAM)
     assert done.status_code == 200, done.text
     assert (await finish(worker, client, run_id))["outcome"] == "reconnected"
+
+
+async def test_a_notice_sent_before_the_event_carried_its_environment_still_reaches_an_admin(
+    stack: tuple[httpx.AsyncClient, Worker],  # noqa: F811
+) -> None:
+    client, _ = stack
+    key = f"ca_{uuid4().hex[:8]}:refused:2:-"
+    payload = {"connectionId": key.split(":", 1)[0], "app": "Client desk", "sandbox": False, "state": "refused"}
+    payload |= {"reason": "login.multi.test refused the sign-in (invalid_client).", "at": "2026-11-01T09:00:00+00:00"}
+    r = await client.post(
+        "/v1/events",
+        json={"name": EVENT, "key": key, "teamId": "team_ops", "payload": payload},
+        headers=tools_service(),
+    )
+    assert r.status_code == 202 and r.json()["data"]["status"] == "started", r.text

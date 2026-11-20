@@ -29,10 +29,11 @@ from ops_agents.store.task_assists import TaskAssistStore, task_assists
 from ops_agents.store.tenancy import tenant_scope
 from ops_engine.definition import parse
 from ops_engine.ports import AgentResult, PromptRequest
-from ops_engine.store import DefinitionStore, RunStore
+from ops_engine.store import DefinitionStore
 from ops_service_kit.ids import new_id
 from tests.conftest import structured
 from tests.engine.test_worker import CountingTools, drain, worker
+from tests.run_rows import write_run
 from tests.unit.test_agent_step_port import _prompt_port, _streamed  # pyright: ignore[reportPrivateUsage]
 
 FLOW = parse(
@@ -131,7 +132,7 @@ async def _paused(
         run = {"id": run_id, "team_id": "team_a", "workflow_id": FLOW.id, "version": version, "digest": FLOW.digest()}
         # `secret` is in the run's input but on no region: the assist must never read it.
         given = {"name": "Marcus Bell", "facts": facts, "secret": "SIN 123-456-789"}
-        await RunStore(tx).create(run | {"run_key": run_id, "mode": "live", "input": given, "created_by": "a@x"})
+        await write_run(tx, run | {"run_key": run_id, "mode": "live", "input": given, "created_by": "a@x"})
     w = worker(engine, CountingTools(), InMemorySaver())
     w.host.ports.task_types = StoredTaskTypes(engine)
     reviews = reviews or RunReviews(TaskAssist(engine, prompts, Policies(on)), tx)

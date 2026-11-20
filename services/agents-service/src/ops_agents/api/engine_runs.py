@@ -1,14 +1,17 @@
 """The one way a v2 workflow run starts. A person's or an API key's call (`POST /v1/runs`), an agent calling the
 workflow as a tool, a trigger (Email received) and a Start workflow step (`WorkflowStarts`) all come here, so the
-live-version rule and the run key's dedupe hold for every caller. Who may start is the caller's check, made before
-this."""
+live-version rule, the run key's dedupe and the trigger's input schema hold for every caller. The run is written by
+the engine's entry (`ops_engine.starts.start`), which checks the input; this module words its refusals for the API.
+Who may start is the caller's check, made before this."""
 
 from __future__ import annotations
 
 import hashlib
 from typing import Any, Literal
 
+from ops_engine import default_registry, starts
 from ops_engine.ports import RunRefusedError, StartedRun
+from ops_engine.starts import InputRefusedError
 from ops_engine.store import (
     CHILD_PREFIX,
     RUN_PREFIX,
@@ -19,9 +22,37 @@ from ops_engine.store import (
     RunRow,
     RunStore,
 )
-from ops_service_kit.errors import ApiError, Conflict, NotFound
+from ops_service_kit.errors import ApiError, Conflict, NotFound, Unprocessable
 from ops_service_kit.http import Json
 from ops_service_kit.ids import new_id
+
+REGISTRY = default_registry()
+
+
+def refused(e: InputRefusedError) -> Unprocessable:
+    """An input its schema refuses as the API answers it: 422 with `details.path` the schema property, `reason` what
+    is wrong with it, and `missing` the labels of required fields left empty."""
+    details: Json = {"path": e.field, "reason": e.reason}
+    if e.missing:
+        details["missing"] = list(e.missing)
+    return Unprocessable(str(e), code=e.code, details=details)
+
+
+def checked_values(schema: Json, values: Json) -> Json:
+    """A start form's values as a run takes them (`ops_engine.starts.typed_values`), or 422."""
+    try:
+        return starts.typed_values(schema, values)
+    except InputRefusedError as e:
+        raise refused(e) from e
+
+
+def checked_input(stored: DefinitionRow, values: Json) -> Json:
+    """`values` as a run on `stored` takes them, or 422. `start_run` holds every run to this; a caller that must
+    refuse before it writes anything else (a batch before it stores its rows) asks first."""
+    try:
+        return starts.run_input(stored.definition, values, REGISTRY)
+    except InputRefusedError as e:
+        raise refused(e) from e
 
 
 async def live_version(
@@ -54,12 +85,16 @@ async def start_run(
     after_seconds: float = 0,
 ) -> tuple[RunRow, bool]:
     """Writes the run on `stored` (a definition row) with its start work row, or returns the run that already has
-    `run_key`. Returns (run, created). A version paused or superseded since it was read is refused here, under the
-    lock `RunStore.create` takes. `started_by_approver` is `approves_own_writes` of the person starting it, read
-    here because the worker that runs its steps has no principal."""
+    `run_key`. Returns (run, created). An input the trigger's schema refuses answers 422 `invalid_input` naming the
+    field and the reason, and text that reads as a declared number is stored as the number. A version paused or
+    superseded since it was read is refused here, under the lock the run's write takes. `started_by_approver` is
+    `approves_own_writes` of the person starting it, read here because the worker that runs its steps has no
+    principal."""
     run_id = new_id(RUN_PREFIX.rstrip("_"))
     try:
-        return await runs.create(
+        return await starts.start(
+            runs,
+            stored,
             {
                 "id": run_id,
                 "team_id": team_id,
@@ -73,8 +108,11 @@ async def start_run(
                 "started_via": started_via,
                 "started_by_approver": started_by_approver,
                 "after_seconds": after_seconds,
-            }
+            },
+            REGISTRY,
         )
+    except InputRefusedError as e:
+        raise refused(e) from e
     except DefinitionGoneError as e:
         raise NotFound(f"Workflow definition {stored.workflow_id} was not found: {str(e).rstrip('.')}.") from e
     except NotLiveError as e:

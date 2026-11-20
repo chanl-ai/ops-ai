@@ -1,5 +1,6 @@
 """A v2 workflow called as an agent's tool: a run no worker picks up within the wait is reported as not done, never
-as a success the model would read as finished."""
+as a success the model would read as finished; arguments the workflow's input schema refuses start a run, or fail the
+turn instead of telling the agent which field is wrong."""
 
 from __future__ import annotations
 
@@ -20,6 +21,7 @@ from ops_agents.api.deps import Runtime
 from ops_agents.store.base import metadata
 from ops_agents.store.tenancy import LOCAL_TENANT, tenant_scope
 from ops_engine.store import metadata as engine_metadata
+from ops_engine.store.tables import engine_runs
 from ops_service_kit.settings import Settings
 from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model
 
@@ -67,3 +69,29 @@ async def test_a_run_no_worker_finished_in_time_is_not_reported_as_done(
         )
     assert outcome.ok is False, outcome.output
     assert outcome.output["status"] == "queued" and isinstance(outcome.output["runId"], str)
+
+
+async def test_arguments_the_input_schema_refuses_start_no_run_and_tell_the_agent_the_field(
+    stack: tuple[AsyncClient, Runtime],
+) -> None:
+    client, rt = stack
+    schema = "{type: object, required: [amount], properties: {amount: {type: number, title: Amount}}}"
+    typed = BASIC.read_text().replace("name: Request}", f"name: Request, parameters: {{inputSchema: {schema}}}}}")
+    assert "inputSchema" in typed
+    assert (await client.post("/v1/workflows/definitions", json={"yaml": typed})).status_code == 201
+    published = await client.post("/v1/workflows/definitions/refund_check/publish-requests", json={})
+    assert published.status_code == 201 and published.json()["data"]["status"] == "approved", published.text
+    parent = (await client.post("/v1/threads", json={"graph": "agent_wrapper", "metadata": {}})).json()["data"]
+    with tenant_scope(LOCAL_TENANT):
+        outcome = await ChildRuns(rt).run(
+            workflow="refund_check",
+            arguments={"customerId": "C-1", "amount": "a lot"},
+            key="turn_1:call_2",
+            parent_thread_id=parent["threadId"],
+            parent_run_id=None,
+        )
+    assert outcome.ok is False, outcome.output
+    assert outcome.output["code"] == "invalid_input" and "Amount" in outcome.output["error"], outcome.output
+    assert outcome.output["details"]["path"] == "amount", outcome.output
+    async with rt.db.connect() as c:
+        assert (await c.execute(engine_runs.select())).all() == []

@@ -148,3 +148,11 @@ def test_an_email_trigger_with_no_mailbox_saves() -> None:
     d["nodes"][0] = {"id": "start", "type": "ops.trigger.email", "typeVersion": 1, "parameters": {}}
     d["connections"][0]["source"]["port"] = "payload"
     assert "invalid_parameter" not in codes(d)
+
+
+def test_an_input_schema_that_is_not_json_schema_does_not_save() -> None:
+    d = notice({"type": "string", "format": "file"})
+    assert "input_schema_invalid" not in codes(d)
+    d["nodes"][0]["parameters"]["inputSchema"]["required"] = True
+    found = [c for c in validate(parse(d), default_registry()) if c["code"] == "input_schema_invalid"]
+    assert [(c["node"], c["field"]) for c in found] == [("start", "inputSchema")], found

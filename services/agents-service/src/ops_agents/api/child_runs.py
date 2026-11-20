@@ -21,7 +21,7 @@ from ops_agent_kernel.types import ToolGrant
 from ops_agents.graphs.common import WORKFLOW_TOOL_PREFIX
 from ops_engine.store import TERMINAL, DefinitionRow, DefinitionStore, RunStore
 from ops_service_kit import narrow
-from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, ValidationFailed
+from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, Unprocessable, ValidationFailed
 from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.logging import get_logger
@@ -428,6 +428,9 @@ class ChildRuns:
             return ToolOutcome(ok=False, output={"error": e.message, "code": "not_published"})
         except Forbidden as e:
             return ToolOutcome(ok=False, output={"error": e.message, "code": e.code})
+        except Unprocessable as e:
+            # The arguments do not match the workflow's input: the agent reads which field and why, and may call again.
+            return ToolOutcome(ok=False, output={"error": e.message, "code": e.code, "details": e.details})
         waited = 0.0
         while run.status not in (*TERMINAL, "waiting") and waited < ENGINE_WAIT_SECONDS:
             await asyncio.sleep(ENGINE_POLL_SECONDS)

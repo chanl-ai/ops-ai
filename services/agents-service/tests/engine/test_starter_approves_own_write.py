@@ -27,6 +27,7 @@ from ops_engine.store import DefinitionStore, RunStore
 from ops_engine.worker import Worker, WorkerHost
 from ops_service_kit.ids import new_id
 from tests.engine.test_worker import CountingTools, drain
+from tests.run_rows import write_run
 
 NOTE = parse(
     {
@@ -105,7 +106,8 @@ async def _run(engine: AsyncEngine, *, approver: bool, approval: dict[str, Any])
             NOTE.id, name="Note", definition=NOTE.wire(), digest=NOTE.digest(), now="n", by="a@x", stage="live"
         )
         run_id = new_id("wfrun")
-        await RunStore(tx).create(
+        await write_run(
+            tx,
             {
                 "id": run_id,
                 "team_id": "team_a",
@@ -117,7 +119,7 @@ async def _run(engine: AsyncEngine, *, approver: bool, approval: dict[str, Any])
                 "input": {"name": "Called back"},
                 "created_by": "priya@harborpine.example",
                 "started_by_approver": approver,
-            }
+            },
         )
     await drain(_worker(engine, tools, approval))
     with tenant_scope(tenant):
