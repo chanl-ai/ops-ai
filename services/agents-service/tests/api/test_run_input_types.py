@@ -86,3 +86,13 @@ async def test_a_batch_reads_each_cell_as_its_type_and_refuses_the_file_naming_t
     [run] = await runs_of(c, WID)
     got = (await c.get(f"/v1/runs/{run['id']}", headers=BUILDER)).json()["data"]
     assert got["input"] == {"amount": 120, "postcode": "01234"}, got["input"]
+
+
+async def test_digits_too_long_to_read_as_a_number_are_refused_naming_the_field(stack: Stack) -> None:  # noqa: F811
+    """Python refuses to read more than 4,300 digits as a number; that must be the caller's 422, not a 500."""
+    c, _ = stack
+    await live(c)
+    refused = await start(c, {"amount": "9" * 5000})
+    assert refused.status_code == 422, refused.text[:300]
+    error = refused.json()["error"]
+    assert error["code"] == "invalid_input" and error["details"]["path"] == "amount", error

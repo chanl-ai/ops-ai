@@ -170,6 +170,7 @@ class InputRefusedError(ValueError):
 _INTEGER = re.compile(r"[+-]?\d+")
 _NUMBER = re.compile(r"[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?")
 _BOOLEANS = {"true": True, "false": False}
+MAX_NUMBER_TEXT = 40
 _KINDS = {str: "text", bool: "true or false", int: "a number", float: "a number", list: "a list", dict: "an object"}
 _WANTED = {
     "number": "a number",
@@ -193,10 +194,17 @@ def _read(types: set[str], text: str) -> JsonValue:
     if "string" in types or not types:
         return text
     t = text.strip()
-    if types & {"integer", "number"} and _INTEGER.fullmatch(t):
-        return int(t)
-    if "number" in types and _NUMBER.fullmatch(t) and math.isfinite(float(t)):
-        return float(t)
+    # Longer than any number a person sends: left as text, which the schema then refuses naming the field. Python
+    # itself refuses to read more than 4,300 digits, and that must not be the server's error.
+    if len(t) > MAX_NUMBER_TEXT:
+        return text
+    try:
+        if types & {"integer", "number"} and _INTEGER.fullmatch(t):
+            return int(t)
+        if "number" in types and _NUMBER.fullmatch(t) and math.isfinite(float(t)):
+            return float(t)
+    except (ValueError, OverflowError):
+        return text
     if "boolean" in types and t.lower() in _BOOLEANS:
         return _BOOLEANS[t.lower()]
     return text
