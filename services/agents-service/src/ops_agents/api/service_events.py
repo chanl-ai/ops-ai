@@ -10,6 +10,7 @@ per tenant; one the tenant already has, edited or not, is left as it is."""
 
 from __future__ import annotations
 
+import json
 from collections.abc import Awaitable, Callable
 from typing import TypedDict, cast
 
@@ -199,7 +200,15 @@ async def emit(
     actor: str | None,
     payload: Json,
 ) -> DeliveredEvent:
-    """Records the event and starts or returns its handler's run. Returns the event row."""
+    """Records the event and starts or returns its handler's run. Returns the event row. A payload holding infinity
+    or not-a-number (a JSON body's 1e999) is refused before anything is written: the event's JSON column cannot store
+    it, for a reported event and a posted task alike."""
+    try:
+        json.dumps(payload, allow_nan=False)
+    except ValueError as e:
+        raise Unprocessable(
+            "An event's payload holds a number that is too large or is not a number.", code="payload_not_finite"
+        ) from e
     await ensure_event_workflows(rt)
     return await deliver(
         rt.db,
