@@ -19,6 +19,7 @@ from sqlalchemy.pool import StaticPool
 
 from ops_access import Grant
 from ops_access.check import DEFAULT
+from ops_agents.api import service_events
 from ops_agents.api.app import create_app
 from ops_agents.api.deps import Runtime
 from ops_agents.store.base import metadata
@@ -381,3 +382,26 @@ async def test_an_event_payload_with_a_number_that_is_not_finite_is_refused_befo
     r = await c.post("/v1/events", content=body, headers={**service(), "Content-Type": "application/json"})
     assert r.status_code == 422, r.text
     assert r.json()["error"]["code"] == "payload_not_finite", r.text
+
+
+async def test_a_delivery_that_crashes_is_its_teams_failed_job_and_another_tenant_reads_nothing_of_it(
+    stack: Stack, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    c, rt = stack
+    rt.event_workflows = [event_workflow()]
+
+    async def crash(*_: Any, **__: Any) -> None:
+        raise RuntimeError("no row for customer Ana Ruiz, file fil_40")
+
+    monkeypatch.setattr(service_events, "start_run", crash)
+    await emit(c, "fil_40", status=500)
+    own = await c.get("/v1/background", headers=account_admin(TENANT))
+    assert own.status_code == 200, own.text
+    failed = [(j["process"], j["teamId"]) for j in own.json()["data"]["jobs"] if j["outcome"] == "failed"]
+    assert failed == [("event_workflows", "team_ops")], own.text
+    other = await c.get("/v1/background", headers=account_admin("ten_elsewhere"))
+    assert other.status_code == 200, other.text
+    [line] = [p for p in other.json()["data"]["processes"] if p["key"] == "event_workflows"]
+    # The process failed and says so, with the kind of error and nothing a tenant's records put in its message.
+    assert line["state"] != "running" and "RuntimeError" in (line["lastError"] or ""), line
+    assert "Ana Ruiz" not in other.text and "fil_40" not in other.text, other.text

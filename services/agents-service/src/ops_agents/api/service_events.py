@@ -232,6 +232,10 @@ def event_beat(db: AsyncEngine) -> background.Beat:
     return _beats[id(db)]
 
 
+class DeliveryFailedError(RuntimeError):
+    """What the shared heartbeat records of a failed delivery: the kind of error alone."""
+
+
 async def deliver(
     db: AsyncEngine,
     handler: str | None,
@@ -250,10 +254,17 @@ async def deliver(
             db, handler, name=name, key=key, team_id=team_id, source=source, actor=actor, payload=payload
         )
     except Exception as e:
-        await event_beat(db).failed(e)
+        # The heartbeat is one row for every tenant, read by each tenant's account admins, so it carries the kind of
+        # error and never its message, which can quote a tenant's records. The event's team reads the failure as its
+        # own failed job; the message is in this service's log and the caller's error.
+        log.warning("event_delivery_failed", name=name, key=key, error=type(e).__name__)
+        if team_id:
+            await BackgroundJobs(db).record(
+                "event_workflows", f"Could not deliver the event {name}: {type(e).__name__}", "failed", team_id=team_id
+            )
+        await event_beat(db).failed(DeliveryFailedError(type(e).__name__))
         raise
-    # A payload a listener's schema refused is the event's team's failed job (`_deliver`), never this line: the
-    # heartbeat is one row for every tenant, read by each tenant's account admins.
+    # A payload a listener's schema refused is likewise the event's team's failed job (`_deliver`), never this line.
     await event_beat(db).ok(len(out["run_ids"]))
     return out
 
