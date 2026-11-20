@@ -223,10 +223,6 @@ def event_beat(db: AsyncEngine) -> background.Beat:
     return _beats[id(db)]
 
 
-class EventInputRefusedError(ValueError):
-    """A listener's input schema refused an event's payload, so that listener started no run."""
-
-
 async def deliver(
     db: AsyncEngine,
     handler: str | None,
@@ -240,27 +236,22 @@ async def deliver(
 ) -> DeliveredEvent:
     """`emit` without first publishing the shipped event workflows, for the engine worker, which has no Runtime: a
     tenant gets them on its first event through the API, and until then the event is recorded unhandled."""
-    refusals: list[str] = []
     try:
         out = await _deliver(
-            db, handler, refusals, name=name, key=key, team_id=team_id, source=source, actor=actor, payload=payload
+            db, handler, name=name, key=key, team_id=team_id, source=source, actor=actor, payload=payload
         )
     except Exception as e:
         await event_beat(db).failed(e)
         raise
-    if refusals:
-        # A team's refusal is also a job on its Activity; an event with no team has no team's Activity to be on, so
-        # the process's own line on the Background page carries every refusal.
-        await event_beat(db).failed(EventInputRefusedError("; ".join(refusals)))
-    else:
-        await event_beat(db).ok(len(out["run_ids"]))
+    # A payload a listener's schema refused is the event's team's failed job (`_deliver`), never this line: the
+    # heartbeat is one row for every tenant, read by each tenant's account admins.
+    await event_beat(db).ok(len(out["run_ids"]))
     return out
 
 
 async def _deliver(
     db: AsyncEngine,
     handler: str | None,
-    refusals: list[str],
     *,
     name: str,
     key: str,
@@ -301,11 +292,11 @@ async def _deliver(
             )
         except Unprocessable as e:
             # The payload does not match this listener's input schema: it starts no run, the other listeners still
-            # hear the event, and the Background page shows which field (`deliver`). The message can quote the value
-            # sent, so it is kept out of the log and the job.
+            # hear the event, and the event's team reads which workflow and field as a failed job, in its Activity and
+            # on its own account admins' Background page. The message can quote the value sent, so it is kept out of
+            # the log and the job. Every caller names a team (the events route, a posted task, a run's reminder).
             field = str((e.details or {}).get("path") or "its input")
             log.warning("event_input_refused", workflow=stored.workflow_id, name=name, key=key, field=field)
-            refusals.append(f"{title}: the event's {field} does not match its input schema ({name} {key})")
             if event.team_id:
                 await jobs.record(
                     "event_workflows",
