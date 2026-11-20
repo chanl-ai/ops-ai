@@ -19,7 +19,7 @@ from pydantic_ai.output import StructuredDict
 from ops_service_kit.http import Json
 
 from .aliases import preferred
-from .ports import ModelSource
+from .ports import BudgetReachedError, ModelSource
 from .types import Guardrail
 
 NONE = "none"
@@ -87,6 +87,8 @@ async def check(model: Model, rules: list[Guardrail], text: str) -> Hit | None:
     listed = "\n".join(f"- {label}: {scope}" if scope else f"- {label}" for label, _, _, scope in labels)
     try:
         result = await agent.run(f"Blocked topics:\n{listed}\n\nMessage:\n{text}")
+    except BudgetReachedError:
+        raise  # the turn's budget is spent: the turn ends for that reason, which is not an outage of the check
     except Exception as e:  # any failure of the call is a check that did not run
         raise GuardrailUnavailable(f"{type(e).__name__}: {e}") from e
     found: list[Any] = list(Draft202012Validator(schema).iter_errors(result.output))  # pyright: ignore[reportUnknownMemberType]

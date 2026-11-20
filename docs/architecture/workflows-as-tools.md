@@ -23,6 +23,8 @@ page: [runtime.md](runtime.md).
 | The child is its own thread | Its leases, fencing, approval tokens, SLA timers and decide path are unchanged; the parent holds a reference, not its state |
 | No result is invented for a paused child | The parent turn reports the handle; the outcome arrives through the child's own thread |
 | A gated write inside a workflow's agent step is a review | The step stops at an `approval` review of that exact call (the agent wrapper's payload), shown in Cases and Reviews; decide resumes the agent and the step continues to its targets. A parent agent gets the review handle |
+| A chat turn starts a workflow as its person | The turn's person must hold `workflows.run` in the workflow's team, at the offer and again at the start (`child_runs.py`, `TURN_PERSON`) |
+| A turn with no person acts as its agent, in its own team | One rule for workflows and for agents asked as tools (`child_runs.refused_with_no_person`). A scheduled or otherwise unattended run reaches what its thread's team owns and what no team owns; another team's is refused `other_team`. A chat turn whose person is not known (resumed after a decision) reaches nothing, `person_required`. Both teams are the server's: the thread's from its starter's token, the target's from its registry |
 | The graph layer does not import the API | The tool reaches the API through a `WorkflowRunner` port on `GraphDeps`, implemented in the agents service |
 
 ## Open
