@@ -731,6 +731,7 @@ class Apps:
         only: set[str] | None = None,
         ensured: bool = False,
         facts: dict[str, CardFacts] | None = None,
+        rights: str = "view",
     ) -> list[AppCard]:
         """Every app the team has; `listed`: only the Apps grid's (owner, 2026-11-01), the plugins and the apps a person
         added. A built-in app has its own menu, and an account made to hold a custom tool's address (origin "tool") or
@@ -738,7 +739,8 @@ class Apps:
         the built-in apps in a listed answer, for a picker where they belong (approvals: a mailbox reply). `only` keeps
         the cards it names, and reads just the accounts of the apps it names and the modules their cards count, so a
         page of the grid costs the same at any size. `ensured`: the caller wrote the team's defaults and the plugins'
-        modules already. `facts` is filled with each card's team-level state facts, for its card row."""
+        modules already. `facts` is filled with each card's team-level state facts, for its card row. `rights`
+        `OWN` reads them for the person's own connectors, under the rule their own sign-ins take."""
         if (builtins or not listed) and not ensured:
             # A team made before team.created reached this service has no defaults row, so the start-up catch-up never
             # finds it: listing its built-in apps provisions them, as a first tool lookup does.
@@ -750,11 +752,11 @@ class Apps:
             await self.plugins.ensure(who.tenant_id, self.connections.clock())
         team = who.team.id
         if only is None:
-            conns = await self.connections.team_rows(who)
+            conns = await self.connections.team_rows(who, action=rights)
             modules = await self.modules.card_modules(who.tenant_id, team)
         else:
             conns = await self.connections.team_rows(
-                who, sorted(i for i in only if not i.startswith(("builtin:", "module:")))
+                who, sorted(i for i in only if not i.startswith(("builtin:", "module:"))), action=rights
             )
             apps = [a for a in BUILT_IN if f"builtin:{a['id']}" in only]
             used = {u.id for c in conns for u in c.used_by or []}
