@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Archive, Banknote, BookOpen, Building2, Cloud, CloudCog, FolderKanban, Gauge, Github, HardDrive, Headset, Landmark, LifeBuoy, Mail, Plug, Server, StickyNote } from 'lucide-react';
+import { Archive, Banknote, BookOpen, Building2, Cloud, CloudCog, FolderKanban, Gauge, GitBranch, HardDrive, Headset, Landmark, LifeBuoy, Mail, Plug, Server, StickyNote } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 import type { AuthMethod, ConnectionRef, IntegrationKind, IntegrationStatus, Tone } from '@/lib/types/integrations';
@@ -20,7 +20,7 @@ export const KIND: Record<IntegrationKind, { label: string; icon: LucideIcon; ti
   internal_mcp: { label: 'Internal MCP server', icon: Plug, tint: 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300' },
   gdrive: { label: 'Google Drive', icon: HardDrive, tint: 'bg-warning/10 text-warning-text' },
   zendesk: { label: 'Zendesk', icon: LifeBuoy, tint: 'bg-success/10 text-success-text' },
-  github: { label: 'GitHub', icon: Github, tint: 'bg-muted text-foreground' },
+  github: { label: 'GitHub', icon: GitBranch, tint: 'bg-muted text-foreground' },
   notion: { label: 'Notion', icon: StickyNote, tint: 'bg-stone-500/10 text-stone-700 dark:text-stone-300' },
   credit_bureau: { label: 'Credit bureau', icon: Gauge, tint: 'bg-destructive/10 text-destructive-text' },
   internal_api: { label: 'Internal API', icon: Server, tint: 'bg-muted text-foreground' },
