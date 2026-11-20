@@ -77,8 +77,11 @@ def test_paths_compile_to_forward_jumps_and_a_mention_in_a_condition_stays_words
 
 
 def test_free_text_reads_as_no_steps_and_a_deleted_mention_is_the_only_error() -> None:
-    plain = read("Be warm.\nQuote @knowledge:refund_policy when asked.\nelse:\nNever promise dates.")
-    assert plain.program is None and plain.errors == []
+    plain = read(
+        "Be warm.\nStop the call if they are abusive.\n"
+        "Quote @knowledge:refund_policy when asked.\nelse:\nIf unsure, ask."
+    )
+    assert plain.program is None and plain.errors == [], "prose that starts with a keyword stays an instruction"
     gone = read(RETAIL, fields=FIELDS, missing={"@tool:issue_refund": "Issue refund"})
     assert gone.program is not None, "a deleted mention still saves its steps"
     assert [(e["line"], e["id"]) for e in gone.errors] == [(6, "tool:issue_refund")]

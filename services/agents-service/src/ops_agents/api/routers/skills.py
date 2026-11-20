@@ -358,6 +358,9 @@ async def save_skill_draft(rt: Rt, me: Me, skill_id: str, body: SkillDraftPatch)
     }
     merged |= body.model_dump(by_alias=True, exclude_none=True, exclude={"note", "base_version"})
     merged.pop("slug", None)
+    if body.source is None and (body.steps is not None or body.instructions is not None):
+        # Steps or instructions sent without a text replace the text: the stored one would be read over them.
+        merged.pop("source", None)
     content = await check_content(rt, merged, skill_id=skill_id, team_id=owner)
     async with isolation.request_transaction():
         await _editable(rt, me, skill_id, body.base_version)

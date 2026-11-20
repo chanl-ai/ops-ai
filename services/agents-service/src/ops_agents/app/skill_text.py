@@ -64,9 +64,11 @@ _ORDER: list[tuple[tuple[str, ...], str]] = [
     (("at", "most"), "<="),
 ]
 _FLIP = {">": "<=", "<": ">=", ">=": "<", "<=": ">"}
-_IF = re.compile(r"^if\s+(.+?)\s*:\s*$", re.IGNORECASE)
-_ELSE = re.compile(r"^else\s*:\s*$", re.IGNORECASE)
-_STOP = re.compile(r"^stop\b\s*(?:([a-z][a-z0-9_]{0,31})\s*)?(.*)$", re.IGNORECASE)
+# Keywords are lower case and a stop line holds nothing but an exit name and a quoted reason, so prose that starts
+# with "If", "Else" or "Stop" stays an instruction.
+_IF = re.compile(r"^if\s+(.+?)\s*:\s*$")
+_ELSE = re.compile(r"^else\s*:\s*$")
+_STOP = re.compile(r"^stop(?:\s+([a-z][a-z0-9_]{0,31}))?(?:\s+([\"\u201c'].*[\"\u201d']))?\s*$")
 _QUOTES = "\"'\u201c\u201d\u2018\u2019"
 _IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _STEP_KINDS: frozenset[RefKind] = frozenset({"tool", "agent", "workflow", "skill"})
@@ -232,10 +234,9 @@ class _Parser:
                 )
                 items.extend(self._inner(line, ind))
             elif m := _STOP.match(txt):
-                name, rest = m.group(1), _unquote(m.group(2))
-                if name and not rest and name.lower() not in BUILT_IN_EXITS:
-                    rest, name = name, None
-                exit_name = name.lower() if name else _slug(rest) if rest else "failed"
+                name, rest = m.group(1), _unquote(m.group(2) or "")
+                rest = rest or (name.replace("_", " ") if name and name not in BUILT_IN_EXITS else "")
+                exit_name = name or (_slug(rest) if rest else "failed")
                 items.append(_Stop(line, exit_name, rest[:300]))
             else:
                 items.append(_Text(line, txt))
@@ -462,7 +463,10 @@ class _Compiler:
             else:
                 if (idx := flush()) is not None:
                     last = idx
-                if last is not None and not waiting and self.out[last].test is None and self.out[last].next is None:
+                # A step that runs a skill is decided by that skill's ending, so a path never hangs on it.
+                runs_skill = last is not None and (u := self.out[last].use) is not None and u.kind == "skill"
+                free = last is not None and self.out[last].test is None and self.out[last].next is None
+                if last is not None and not waiting and free and not runs_skill:
                     host = last
                 else:
                     host = emit(_Step(item.line, [f"Decide whether {item.cond}."]))

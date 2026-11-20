@@ -117,7 +117,7 @@ class HowWidget extends WidgetType {
 const GUIDE = Decoration.mark({ class: 'sop-guide' });
 const indentOf = (text: string) => text.length - text.trimStart().length;
 const levels = (text: string) => Math.floor(text.slice(0, indentOf(text)).replace(/\t/g, UNIT).length / UNIT.length);
-const KEYWORD = { if: /^if\b/i, else: /^else\b/i, stop: /^stop\b/i } as const;
+const KEYWORD = { if: /^if\b/, else: /^else\b/, stop: /^stop\b/ } as const;
 
 /** Mentions, guides, keywords, condition labels and hint underlines, drawn from the text and the service's reading. */
 function decorate(state: EditorState): { all: DecorationSet; atomic: DecorationSet } {
@@ -244,7 +244,7 @@ function menuAt(state: EditorState): Menu | null {
   const before = line.text.slice(0, range.head - line.from);
   const at = before.match(/(?<![\p{L}\p{N}_@])@([\p{L}\p{N}_ -]{0,40})$/u);
   if (at && !at[1].includes(':')) return { kind: 'mention', from: range.head - at[0].length, to: range.head, query: at[1].trim() };
-  const cond = before.match(/^(\s*if\s+)([^:]*)$/i);
+  const cond = before.match(/^(\s*if\s+)([^:]*)$/);
   if (cond) return { kind: 'if', from: line.from + cond[1].length, to: range.head, query: cond[2] };
   return null;
 }
