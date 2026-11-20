@@ -316,3 +316,21 @@ async def test_a_published_skill_that_would_no_longer_save_is_not_attached_and_b
         assert refused["code"] == "cannot_publish", refused
         other = _error(await c.post("/v1/agents/ag_dispute/references", json={"kind": "skill", "id": sid}), 422)
         assert other["code"] == "skill_needs_fix", other
+
+
+async def test_an_attach_while_the_tools_list_cannot_be_read_fails_as_unavailable_not_as_a_skill_fault(
+    tmp_path: Path,
+) -> None:
+    """With tools-service down no tool's access is known. Read as "every tool changes something", a skill whose step
+    makes a plain look-up is refused for a missing rule, and its builder is sent to fix a skill that is fine."""
+    async with _app(str(tmp_path / "db.sqlite")) as c:
+        rt = cast(Any, c)._transport.app.state.runtime
+        directory = Directory(CatalogTools(rt.catalog), withdrawn=set())
+        rt.tool_directory = directory
+        looks = await _published(c, {**REFUND, "steps": [{"do": "Look up the customer.", "use": LOOKUP}]})
+        talks = await _published(c, {**REFUND, "name": "Greet", "toolIds": [], "steps": [{"do": "Say hello."}]})
+        directory.down = True
+        refused = await c.post(f"/v1/agents/{BRANCH}/references", json={"kind": "skill", "id": looks})
+        assert refused.status_code == 503 and "skill_needs_fix" not in refused.text, refused.text
+        # A skill whose steps run no tool needs nothing from the tools list.
+        _ok(await c.post(f"/v1/agents/{BRANCH}/references", json={"kind": "skill", "id": talks}))
