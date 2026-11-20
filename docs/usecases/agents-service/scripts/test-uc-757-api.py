@@ -342,4 +342,45 @@ with agents() as api:
         and ends[-1:] == ["done"],
         (code_of(unruled), held["toolIds"], early, as_step, ends),
     )
+
+    # The same for a workflow a step starts: Card Dispute Resolver holds the dispute email workflow as a tool.
+    starts = {
+        "name": f"Start the dispute email {RUN}",
+        "ownerTeam": "team_ops",
+        "useWhen": "The caller wants a charge reversed by email.",
+        "instructions": "",
+        "steps": [
+            {
+                "do": "Start it with @workflow:dispute_email.",
+                "use": {"kind": "workflow", "id": "dispute_email"},
+                "check": {"text": 'result.status == "waiting_review"'},
+                "ifNot": {"action": "exit", "exit": "failed"},
+            },
+            {"do": "Tell the caller a person will review it."},
+        ],
+    }
+    bare = [{k: v for k, v in starts["steps"][0].items() if k in ("do", "use")}, starts["steps"][1]]
+    unruled = api.post("/v1/skills", json={**starts, "steps": bare}, headers=DEV)
+    skill = made(api.post("/v1/skills", json=starts, headers=DEV))
+    made(api.post(f"/v1/skills/{skill['id']}/publish-requests", json={"note": "use case"}, headers=DEV))
+    made(api.post("/v1/agents/ag_dispute/references", json={"kind": "skill", "id": skill["id"]}, headers=DEV))
+    held = data(api.get("/v1/agents/ag_dispute", headers=DEV))
+    made(api.post("/v1/agents/ag_dispute/publish-requests", json={"version": held["version"], "note": "go"}, headers=DEV))
+    chat = data(api.post("/chat/threads", json={"agentId": "ag_dispute", "kbIds": []}, headers=DEV))["id"]
+    email = {"sender": "r.osei@example.test", "subject": "Charged twice", "body": "I was charged twice for order 4411."}
+    start = "call workflow__dispute_email " + json.dumps(email)
+    early = said(start)
+    said("call switch_skill " + json.dumps({"slug": skill["slug"]}))
+    as_step = said(start)
+    record = [m for m in data(api.get(f"/chat/threads/{chat}", headers=DEV))["messages"] if m.get("role") == "assistant"][-1]
+    on = ((record.get("skillRun") or {}).get("running") or {}).get("step")
+    check(
+        "6 a step that starts a workflow needs a rule, is refused before its skill starts, and runs as its step",
+        code_of(unruled) == (400, "write_needs_rule")
+        and "workflow:dispute_email" in held["toolIds"]
+        and ("workflow__dispute_email", "waiting_review") not in early
+        and ("workflow__dispute_email", "waiting_review") in as_step
+        and on == 2,
+        (code_of(unruled), held["toolIds"], early, as_step, on),
+    )
 finish()
