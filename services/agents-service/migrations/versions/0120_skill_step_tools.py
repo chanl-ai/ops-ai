@@ -11,8 +11,11 @@ the step guarded becomes callable outside the skill.
 The rule is frozen here, apart from the code that read it: a step that is an object with no `use` (absent or null)
 and a string `do` gets `use` = {"kind", "id"} of the one reference to a tool, agent or workflow among the distinct
 `@kind:id` tokens in its `do` (the token pattern of ops_contracts.skill_run REF_TOKEN). A step naming none or more
-than one, a step that already has `use`, and anything that is not a step are left as they are. A rewritten step keeps
-its keys in order and gains `use`.
+than one, a step that already has `use`, and anything that is not a step are left as they are. So is a step whose
+sentence forbids the one tool it names ("Never use @tool:x here": a negating word before the token in the same
+sentence): stored as the step's tool it would run what it forbids. Such a step is printed for its builder, and the
+publish check then blocks it until they mark the tool or take it out. A rewritten step keeps its keys in order and
+gains `use`. Each version written is printed by table, id and version.
 
 Two tables hold steps: registry_skill_versions (`content.steps`, with `digest`, the sha256 of the canonical JSON of
 `content`) and registry_agent_versions (`spec.skillPins[].steps`, each pin a copy of a skill version, with `digest` of
@@ -63,8 +66,15 @@ REF_TOKEN = re.compile(
 # The references a step runs; a skill or a knowledge base named in the sentence is not one.
 RUNS = ("tool", "agent", "workflow")
 
+# A word before the token, in the same sentence, that makes the sentence forbid the tool rather than ask for it.
+FORBIDS = re.compile(
+    r"\b(never|not|no|without|avoid|avoids|avoiding|don't|dont|cannot|can't|mustn't|shouldn't|won't|isn't|n't)\b[^.!?;]*$",
+    re.IGNORECASE,
+)
+
 Json = dict[str, Any]
-Rewrite = Callable[[Any], tuple[Any, int]]
+# (the body rewritten, the steps that gained a tool, the steps left for their builder as "step N")
+Rewrite = Callable[[Any], tuple[Any, list[str], list[str]]]
 
 
 def _versions(name: str, parent_key: str, body: str) -> sa.Table:
@@ -93,54 +103,64 @@ def _list(value: Any) -> list[Any] | None:
     return cast(list[Any], value) if isinstance(value, list) else None
 
 
-def _use(step: Json) -> Json | None:
-    """The `use` to store on `step`, or None when it is left as it is."""
+def _use(step: Json) -> tuple[Json | None, bool]:
+    """The `use` to store on `step` (None when it is left as it is), and whether it is left because its sentence
+    forbids the one tool it names."""
     do = step.get("do")
     if step.get("use") is not None or not isinstance(do, str):
-        return None
-    named: dict[str, tuple[str, str]] = {}
+        return None, False
+    named: dict[str, tuple[str, str, int]] = {}
     for m in REF_TOKEN.finditer(do):
-        named.setdefault(m.group(0), (m.group(1), m.group(2)))
+        named.setdefault(m.group(0), (m.group(1), m.group(2), m.start()))
     runs = [ref for ref in named.values() if ref[0] in RUNS]
     if len(runs) != 1:
-        return None
-    kind, ref_id = runs[0]
-    return {"kind": kind, "id": ref_id}
+        return None, False
+    kind, ref_id, at = runs[0]
+    if FORBIDS.search(do[:at]):
+        return None, True
+    return {"kind": kind, "id": ref_id}, False
 
 
-def _with_tools(holder: Any) -> tuple[Any, int]:
-    """`holder` (a skill version's content, or one pin) with each step's tool stored, and how many steps gained one.
-    Anything that is not an object, a `steps` that is not a list and a step that is not an object stay as they are."""
+def _with_tools(holder: Any) -> tuple[Any, list[str], list[str]]:
+    """`holder` (a skill version's content, or one pin) with each step's tool stored, the steps that gained one and
+    the steps left for their builder. Anything that is not an object, a `steps` that is not a list and a step that is
+    not an object stay as they are."""
     held = _object(holder)
     steps = _list(held.get("steps")) if held is not None else None
     if held is None or steps is None:
-        return holder, 0
+        return holder, [], []
     out: list[Any] = []
-    gained = 0
-    for step in steps:
+    gained: list[str] = []
+    left: list[str] = []
+    for n, step in enumerate(steps, start=1):
         each = _object(step)
-        use = _use(each) if each is not None else None
+        use, forbidden = _use(each) if each is not None else (None, False)
+        if forbidden:
+            left.append(f"step {n}")
         if each is None or use is None:
             out.append(step)
         else:
             out.append({**each, "use": use})
-            gained += 1
-    return ({**held, "steps": out}, gained) if gained else (holder, 0)
+            gained.append(f"{n}")
+    return ({**held, "steps": out} if gained else holder), gained, left
 
 
-def _pins_with_tools(spec: Any) -> tuple[Any, int]:
-    """An agent version's spec with each step of each skill pin's tool stored."""
+def _pins_with_tools(spec: Any) -> tuple[Any, list[str], list[str]]:
+    """An agent version's spec with each step of each skill pin's tool stored; steps are named with their skill."""
     held = _object(spec)
     pins = _list(held.get("skillPins")) if held is not None else None
     if held is None or pins is None:
-        return spec, 0
+        return spec, [], []
     out: list[Any] = []
-    gained = 0
+    gained: list[str] = []
+    left: list[str] = []
     for pin in pins:
-        rewritten, n = _with_tools(pin)
+        rewritten, got, kept = _with_tools(pin)
+        skill = str((_object(pin) or {}).get("skillId") or "")
         out.append(rewritten)
-        gained += n
-    return ({**held, "skillPins": out}, gained) if gained else (spec, 0)
+        gained += [f"{skill}:{n}" for n in got]
+        left += [f"{skill} {n}" for n in kept]
+    return ({**held, "skillPins": out} if gained else spec), gained, left
 
 
 def _digest(body: Any) -> str:
@@ -166,7 +186,8 @@ def _pages(t: sa.Table, body: str) -> Iterator[list[tuple[str, int, Any]]]:
 
 
 def _fill(t: sa.Table, body: str, rewrite: Rewrite) -> tuple[int, int]:
-    """Stores the tools of every version of `t` that needs one; (versions written, steps that gained a tool)."""
+    """Stores the tools of every version of `t` that needs one; (versions written, steps that gained a tool). Prints
+    each version it writes and each step it leaves for its builder."""
     parent = t.primary_key.columns.keys()[0]
     keyed = sa.and_(t.c[parent] == sa.bindparam("k_parent"), t.c.version == sa.bindparam("k_version"))
     update = t.update().where(keyed).values({body: sa.bindparam(body), "digest": sa.bindparam("digest")})
@@ -174,10 +195,13 @@ def _fill(t: sa.Table, body: str, rewrite: Rewrite) -> tuple[int, int]:
     for rows in _pages(t, body):
         changed: list[Json] = []
         for key, number, held in rows:
-            rewritten, gained = rewrite(held)
+            rewritten, gained, left = rewrite(held)
+            for step in left:
+                print(f"0120_skill_step_tools: left for its builder: {t.name} {key} v{number} {step}")
             if gained:
                 changed.append({"k_parent": key, "k_version": number, body: rewritten, "digest": _digest(rewritten)})
-                steps += gained
+                steps += len(gained)
+                print(f"0120_skill_step_tools: {t.name} {key} v{number}: steps {', '.join(gained)}")
         if changed:
             op.get_bind().execute(update, changed)
             versions += len(changed)
@@ -187,7 +211,7 @@ def _fill(t: sa.Table, body: str, rewrite: Rewrite) -> tuple[int, int]:
 def _left(t: sa.Table, body: str, rewrite: Rewrite) -> int:
     """How many stored steps of `t` still name exactly one tool, agent or workflow in their sentence and have no
     `use`."""
-    return sum(rewrite(held)[1] for rows in _pages(t, body) for _key, _number, held in rows)
+    return sum(len(rewrite(held)[1]) for rows in _pages(t, body) for _key, _number, held in rows)
 
 
 def upgrade() -> None:

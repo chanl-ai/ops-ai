@@ -12,7 +12,7 @@ It reads the team's skills through `TeamSkills` and is given the tools the direc
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal, Protocol, TypedDict
 
@@ -253,6 +253,46 @@ def _mentions(program: SkillProgram) -> tuple[list[Problem], list[Problem]]:
     return problems, warnings
 
 
+def unrunnable(program: SkillProgram, access: Mapping[str, str]) -> tuple[list[Problem], list[Problem]]:
+    """(problems, warnings) for steps that must not run as they are stored: a step that changes something with no
+    rule check, and a step that runs nothing and names exactly one tool. The one list a draft's publish check, an
+    attach and an agent's publish check all read, so a version published before a check existed is held to it too."""
+    found, warnings = _mentions(program)
+    for p in unruled(program, access):
+        spot: Position = {"field": "steps", "step": p.step, "index": None}
+        found.append({"kind": "bad_check", "id": None, "position": spot, "message": p.message})
+    return found, warnings
+
+
+def pin_problems(pins: Sequence[Json], access: Mapping[str, str] | None) -> list[Problem]:
+    """What in the skills an agent version pins stops the agent's publish: `unrunnable` for each pinned copy, named
+    by its skill. `access` is None when the tools directory could not answer, which blocks with one problem."""
+    stepped = [(pin, program) for pin in pins if (program := program_of(pin)) is not None]
+    if access is None and stepped:
+        return [
+            {
+                "kind": "unavailable_reference",
+                "id": None,
+                "position": {"field": "skills", "step": None, "index": None},
+                "message": "Couldn't check the tools this agent's skills name; try again.",
+            }
+        ]
+    found: list[Problem] = []
+    for pin, program in stepped:
+        for p in unrunnable(program, access or {})[0]:
+            step = p["position"]["step"] if p["position"] is not None else None
+            found.append(
+                {
+                    "kind": p["kind"],
+                    "id": f"skill:{pin.get('skillId')}",
+                    "position": {"field": "skills", "step": step, "index": None},
+                    "message": f"{pin.get('name')} v{pin.get('version')}: {p['message']} Fix the skill, publish it and "
+                    "attach the new version.",
+                }
+            )
+    return found
+
+
 async def publish_problems(
     content: Json, offered: Mapping[str, str] | None, *, team_id: str, skills: TeamSkills
 ) -> tuple[list[Problem], list[Problem]]:
@@ -272,10 +312,7 @@ async def publish_problems(
                 "message": "Couldn't check the tools this skill names; try again.",
             }
         ], []
-    found, warnings = _mentions(program)
-    for p in unruled(program, offered or {}):
-        spot: Position = {"field": "steps", "step": p.step, "index": None}
-        found.append({"kind": "bad_check", "id": None, "position": spot, "message": p.message})
+    found, warnings = unrunnable(program, offered or {})
     for at, ref in named:
         tool = ref.grant
         where = f"Step {at['step']}" if at["step"] is not None else "The not-when line"

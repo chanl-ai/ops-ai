@@ -10,6 +10,7 @@ Where the design names no shape, these tests fix one: a refused step answers its
 
 from __future__ import annotations
 
+from dataclasses import dataclass, replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -64,8 +65,8 @@ def _step(n: int, **change: Any) -> list[dict[str, Any]]:
     return [{**s, **change} if i == n else s for i, s in enumerate(STEPS, start=1)]
 
 
-def _error(r: Any) -> dict[str, Any]:
-    assert r.status_code == 400, r.text
+def _error(r: Any, status: int = 400) -> dict[str, Any]:
+    assert r.status_code == status, r.text
     return cast(dict[str, Any], r.json()["error"])
 
 
@@ -275,3 +276,43 @@ async def test_a_step_that_asks_another_agent_is_locked_under_the_name_the_servi
     skill = cast(Any, SimpleNamespace(program=program, slug="refund-a-charge"))
     access = {"lookup_customer": "read", granted.name: granted.access}
     assert steps.owned([skill], access) == {granted.name: ["refund-a-charge"]}
+
+
+@dataclass
+class Reclassified:
+    """The fixture catalogue, with the tools in `writes` listed as ones that change something."""
+
+    inner: CatalogTools
+    writes: set[str]
+
+    async def operations(self) -> list[Any]:
+        return [replace(o, access="write") if o.name in self.writes else o for o in await self.inner.operations()]
+
+
+async def test_a_published_skill_that_would_no_longer_save_is_not_attached_and_blocks_its_agents_publish(
+    tmp_path: Path,
+) -> None:
+    """The step checks run when a skill is saved. A version published before one existed, or whose tool has since
+    become a write, is still pinned and attached as it was: the agent's publish check and the attach read the same
+    checks, or old versions run steps a new save would refuse."""
+    async with _app(str(tmp_path / "db.sqlite")) as c:
+        rt = cast(Any, c)._transport.app.state.runtime
+        directory = Reclassified(CatalogTools(rt.catalog), writes=set())
+        rt.tool_directory = directory
+        body = {**REFUND, "steps": [{"do": "Look up the customer.", "use": LOOKUP}]}
+        sid = await _published(c, body)
+        added = _ok(await c.post(f"/v1/agents/{BRANCH}/references", json={"kind": "skill", "id": sid}))
+        at = {"version": added["agentVersion"]}
+        clear = _ok(await c.get(f"/v1/agents/{BRANCH}/publish-check", params=at))
+        assert [p for p in clear["problems"] if p["position"]["field"] == "skills"] == [], clear
+
+        # The look-up becomes a tool that changes something; the published version has no rule on that step.
+        directory.writes.add("lookup_customer")
+        check = _ok(await c.get(f"/v1/agents/{BRANCH}/publish-check", params=at))
+        found = [(p["kind"], p["id"], p["position"]) for p in check["problems"]]
+        assert found == [("bad_check", f"skill:{sid}", {"field": "skills", "step": 1, "index": None})], check
+        assert check["canRequest"] is False
+        refused = _error(await c.post(f"/v1/agents/{BRANCH}/publish-requests", json={**at, "note": ""}), 422)
+        assert refused["code"] == "cannot_publish", refused
+        other = _error(await c.post("/v1/agents/ag_dispute/references", json={"kind": "skill", "id": sid}), 422)
+        assert other["code"] == "skill_needs_fix", other
