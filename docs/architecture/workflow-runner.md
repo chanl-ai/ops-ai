@@ -115,17 +115,17 @@ form, a batch file and a start form call the same function before they write any
 | 1 Schema | The schema must be JSON Schema (draft 2020-12). One that is not answers 422 `input_schema_invalid` and starts nothing; the save check `input_schema_invalid` keeps a new one from being saved |
 | 2 Finite numbers | A number that is infinity or not a number, at any depth (JSON `1e999` is read as infinity), is refused with 422 `invalid_input` naming the top-level field: no JSON column stores it. This step also runs when the trigger declares no schema |
 | 3 Defaults | A field sent empty takes the schema's `default` |
-| 4 Required | A required field is refused when it is absent, `null`, `""`, text of spaces only, `[]` or `{}`. `0` and `false` are values |
+| 4 Required | A required field is refused when it is absent, `null`, `""`, text of only spaces, tabs or line breaks, `[]` or `{}`. `0` and `false` are values |
 | 5 Empty optional fields | An optional field sent `null`, or sent blank where it takes no text, is left out of the input |
 | 6 Text read as its type | See the table below. Only text is converted; a JSON number is never turned into text and `true` is never a number |
 | 7 JSON Schema | Everything else in the schema (`enum`, `minimum`, nested `required`, `items`) is checked as written. The first failure answers 422 `invalid_input` with `details.path` (the property, dotted below the top level) and `details.reason` |
 
 | Declared type | Text that is read | Stored as | Refused (422 naming the field) |
 |---|---|---|---|
-| `number` | An optional sign, the digits 0-9, and an optional decimal point with digits on both sides. Spaces around it are dropped: `" 12 "`, `"12.50"`, `"-0.5"` | `12`, `12.5`, `-0.5` | An exponent (`"1e3"`), a thousands separator (`"1,200"`), digits of another script, `"nan"`, more than 40 characters |
-| `integer` | As `number`, with no fraction or a fraction of zeros: `"12"`, `"12.0"`. JSON `12.0` is taken the same way | `12` | `"12.5"`, JSON `12.5` |
-| `boolean` | `true` or `false` in any case, spaces dropped: `"TRUE"`, `" false "` | `true`, `false` | `"yes"`, `"1"`, JSON `1` |
-| `string` | Kept exactly as sent, spaces included: `"01234"` stays `"01234"` | the text | A JSON number or boolean |
+| `number` | An optional sign, the digits 0-9, and an optional decimal point with digits on both sides. Spaces, tabs and line breaks around it are dropped: `" 12 "`, `"12\n"`, `"12.50"`, `"-0.5"` | `12`, `12.5`, `-0.5` | An exponent (`"1e3"`), a thousands separator (`"1,200"`), digits of another script, `"nan"`, more than 40 characters |
+| `integer` | As `number`, with no fraction or a fraction of zeros: `"12"`, `"12.0"`. JSON `12.0` is taken the same way, also where the field may be empty (`["integer", "null"]`) | `12` | `"12.5"`, JSON `12.5` |
+| `boolean` | `true` or `false` in any case, with spaces, tabs and line breaks around it dropped: `"TRUE"`, `" false "` | `true`, `false` | `"yes"`, `"1"`, JSON `1` |
+| `string` | Kept exactly as sent, with its spaces, tabs and line breaks: `"01234"` stays `"01234"` | the text | A JSON number or boolean |
 
 A field with no declared type, or one that also allows `string`, is never converted. `opsai runs start --input k=v` sends
 text and relies on these rules; `--input` given JSON keeps the JSON's own types.

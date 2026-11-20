@@ -17,6 +17,7 @@ TYPES: dict[str, Any] = {
         "i": {"type": "integer", "title": "Count"},
         "b": {"type": "boolean", "title": "Urgent"},
         "s": {"type": "string", "title": "Postcode"},
+        "o": {"type": ["integer", "null"], "title": "Seats"},
     },
 }
 REFUSED = object()
@@ -26,6 +27,7 @@ REFUSED = object()
     ("field", "sent", "stored"),
     [
         ("n", " 12 ", 12),  # spaces around a number are a form's or a cell's, not part of it
+        ("n", "\t12\n", 12),  # and so are tabs and line breaks
         ("n", "12.50", 12.5),
         ("n", "-0.5", -0.5),
         ("n", "1e3", REFUSED),  # plain decimals only: no exponent
@@ -38,6 +40,8 @@ REFUSED = object()
         ("i", "12", 12),
         ("i", "12.0", 12),  # a whole number written with a zero fraction, as text
         ("i", 12.0, 12),  # and as JSON: stored the same way
+        ("o", 12.0, 12),  # the same where the whole number may also be empty
+        ("o", "12.0", 12),
         ("i", "12.5", REFUSED),
         ("i", 12.5, REFUSED),
         ("b", "TRUE", True),
@@ -45,6 +49,7 @@ REFUSED = object()
         ("b", "yes", REFUSED),
         ("b", 1, REFUSED),
         ("s", "01234", "01234"),
+        ("s", " 01234\n", " 01234\n"),  # text keeps its spaces and line breaks
         ("s", 1234, REFUSED),  # a number is never turned into text
         ("n", True, REFUSED),
     ],
@@ -59,7 +64,7 @@ def test_text_is_read_as_its_declared_type_by_one_written_rule(field: str, sent:
     assert got == stored and type(got) is type(stored), got
 
 
-@pytest.mark.parametrize("empty", [None, "", "  ", [], {}])
+@pytest.mark.parametrize("empty", [None, "", "  ", "\t\n", [], {}])
 def test_a_required_field_sent_empty_is_refused(empty: Any) -> None:
     schema: dict[str, Any] = {"type": "object", "required": ["s"], "properties": {"s": {"title": "Postcode"}}}
     with pytest.raises(InputRefusedError) as refused:

@@ -193,9 +193,10 @@ def _types(field: Mapping[str, JsonValue]) -> set[str]:
 def _read(types: set[str], text: str) -> JsonValue:
     """Text as the declared type when it reads exactly as one, else the text unchanged, which the schema then refuses
     naming the field. The rules, written for people in docs/architecture/workflow-runner.md ("Run input"): a field
-    that takes text keeps it (only the schema knows a postcode `01234` from the number 1234); spaces around the value
-    are dropped; a number is the digits 0-9 with an optional sign and decimal point, at most MAX_NUMBER_TEXT
-    characters; a whole-number field also takes a zero fraction (`12.0` is 12); true and false in any case."""
+    that takes text keeps it (only the schema knows a postcode `01234` from the number 1234); spaces, tabs and line
+    breaks around the value are dropped; a number is the digits 0-9 with an optional sign and decimal point, at most
+    MAX_NUMBER_TEXT characters; a whole-number field also takes a zero fraction (`12.0` is 12); true and false in any
+    case."""
     if "string" in types or not types:
         return text
     t = text.strip()
@@ -223,10 +224,12 @@ def _digits(text: str) -> bool:
 def _typed(field: Mapping[str, JsonValue], value: JsonValue) -> JsonValue:
     """`value` with each text read as its declared type, through objects and lists. A property left empty (null, or
     blank text where the field takes no text) is left out, as a form or a spreadsheet cell sends an empty field."""
+    types = _types(field)
     if isinstance(value, str):
-        return _read(_types(field), value)
-    if isinstance(value, float) and value.is_integer() and _types(field) == {"integer"}:
-        # JSON Schema takes 12.0 for a whole number; it is stored as 12, as the text "12.0" is.
+        return _read(types, value)
+    if isinstance(value, float) and value.is_integer() and "integer" in types and "number" not in types:
+        # JSON Schema takes 12.0 for a whole number; it is stored as 12, as the text "12.0" is (`_read`), also where
+        # the field may be empty (`["integer", "null"]`).
         return int(value)
     props = field.get("properties")
     if isinstance(value, dict) and isinstance(props, Mapping):
@@ -236,9 +239,9 @@ def _typed(field: Mapping[str, JsonValue], value: JsonValue) -> JsonValue:
             if not isinstance(spec, Mapping):
                 out[name] = item
                 continue
-            types = _types(cast(Json, spec))
-            blank = isinstance(item, str) and not item.strip() and bool(types) and "string" not in types
-            if (item is None and "null" not in types) or blank:
+            wanted = _types(cast(Json, spec))
+            blank = isinstance(item, str) and not item.strip() and bool(wanted) and "string" not in wanted
+            if (item is None and "null" not in wanted) or blank:
                 continue
             out[name] = _typed(cast(Json, spec), item)
         return out
