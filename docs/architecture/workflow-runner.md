@@ -98,11 +98,36 @@ open, because the write it approves reads nothing from the run, is a failed step
 | Concern | Design |
 |---|---|
 | Runs leave the request | `POST /v1/runs` writes the run and a start row in one transaction and returns 202 |
-| Run input | Every start path (API, start form, hosted form, batch row, agent tool call, Start workflow step, service event, email) writes its run through `ops_engine.starts.start`, which holds the input to the trigger's `inputSchema`: defaults, required fields, text read as the declared number, whole number or true/false, then JSON Schema. A refusal is 422 `invalid_input` with `details.path` and `details.reason`. An Email received trigger declares no input schema, because the service builds its envelope. The write itself, `ops_engine.store.new_runs.write_run`, may be imported by `ops_engine.starts` alone: the import contract `runs-written-by-the-start-entry` (`.importlinter`, run by `uv run lint-imports`) fails on any other importer, and `packages/ops_engine/tests/test_run_entry.py` fails on an insert into the runs table anywhere else |
+| Run input | Every start path (API, start form, hosted form, batch row, agent tool call, Start workflow step, service event, email) writes its run through `ops_engine.starts.start`, which holds the input to the trigger's `inputSchema`: the rules are under "Run input" below. A refusal is 422 `invalid_input` with `details.path` and `details.reason`. An Email received trigger declares no input schema, because the service builds its envelope. The write itself, `ops_engine.store.new_runs.write_run`, may be imported by `ops_engine.starts` alone: the import contract `runs-written-by-the-start-entry` (`.importlinter`, run by `uv run lint-imports`) fails on any other importer, and `packages/ops_engine/tests/test_run_entry.py` fails on an insert into the runs table anywhere else |
 | Queue | `engine_work`: start, resume (review decision, timer, child end, sweeper), retry, cancel; claimed with `FOR UPDATE SKIP LOCKED`, then the thread lease |
 | Workers | N processes, each running several runs; sweeper and timer poller live here |
 | Tenancy | Each claimed run gets a tenant-scoped saver; per-tenant running cap; 429 with retry-after past the queued limit |
 | Stream | Workers append to `thread_events`; the console re-attaches with `after=seq` |
+
+### Run input
+
+A run's input is held to its trigger's `inputSchema` by `ops_engine.starts.typed_values`, in this order. A hosted
+form, a batch file and a start form call the same function before they write anything else. The tests are
+`packages/ops_engine/tests/test_start_value_types.py`.
+
+| Step | Rule |
+|---|---|
+| 1 Schema | The schema must be JSON Schema (draft 2020-12). One that is not answers 422 `input_schema_invalid` and starts nothing; the save check `input_schema_invalid` keeps a new one from being saved |
+| 2 Defaults | A field sent empty takes the schema's `default` |
+| 3 Required | A required field is refused when it is absent, `null`, `""`, text of spaces only, `[]` or `{}`. `0` and `false` are values |
+| 4 Empty optional fields | An optional field sent `null`, or sent blank where it takes no text, is left out of the input |
+| 5 Text read as its type | See the table below. Only text is converted; a JSON number is never turned into text and `true` is never a number |
+| 6 JSON Schema | Everything else in the schema (`enum`, `minimum`, nested `required`, `items`) is checked as written. The first failure answers 422 `invalid_input` with `details.path` (the property, dotted below the top level) and `details.reason` |
+
+| Declared type | Text that is read | Stored as | Refused (422 naming the field) |
+|---|---|---|---|
+| `number` | An optional sign, the digits 0-9, and an optional decimal point with digits on both sides. Spaces around it are dropped: `" 12 "`, `"12.50"`, `"-0.5"` | `12`, `12.5`, `-0.5` | An exponent (`"1e3"`), a thousands separator (`"1,200"`), digits of another script, `"nan"`, more than 40 characters |
+| `integer` | As `number`, with no fraction or a fraction of zeros: `"12"`, `"12.0"`. JSON `12.0` is taken the same way | `12` | `"12.5"`, JSON `12.5` |
+| `boolean` | `true` or `false` in any case, spaces dropped: `"TRUE"`, `" false "` | `true`, `false` | `"yes"`, `"1"`, JSON `1` |
+| `string` | Kept exactly as sent, spaces included: `"01234"` stays `"01234"` | the text | A JSON number or boolean |
+
+A field with no declared type, or one that also allows `string`, is never converted. `opsai runs start --input k=v` sends
+text and relies on these rules; `--input` given JSON keeps the JSON's own types.
 
 ## 6 What the console shows
 

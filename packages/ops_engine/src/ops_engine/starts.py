@@ -19,7 +19,6 @@ skip it. The write itself (`store.new_runs.write_run`) is importable by this mod
 
 from __future__ import annotations
 
-import math
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -169,8 +168,11 @@ class InputRefusedError(ValueError):
         self.field, self.reason, self.missing, self.code = field, reason, missing, code
 
 
-_INTEGER = re.compile(r"[+-]?\d+")
-_NUMBER = re.compile(r"[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?")
+# The digits 0-9 only (re.ASCII): `\d` and `int()` would also take digits of other scripts. No exponent, no
+# thousands separator, and a decimal point needs a digit on both sides.
+_INTEGER = re.compile(r"[+-]?[0-9]+", re.ASCII)
+_WHOLE = re.compile(r"([+-]?[0-9]+)\.0+", re.ASCII)
+_DECIMAL = re.compile(r"[+-]?[0-9]+\.[0-9]+", re.ASCII)
 _BOOLEANS = {"true": True, "false": False}
 MAX_NUMBER_TEXT = 40
 _KINDS = {str: "text", bool: "true or false", int: "a number", float: "a number", list: "a list", dict: "an object"}
@@ -191,24 +193,26 @@ def _types(field: Mapping[str, JsonValue]) -> set[str]:
 
 
 def _read(types: set[str], text: str) -> JsonValue:
-    """Text as the declared type when it reads exactly as one, else the text unchanged. A field that takes text keeps
-    it: only the schema knows a postcode `01234` from the number 1234."""
+    """Text as the declared type when it reads exactly as one, else the text unchanged, which the schema then refuses
+    naming the field. The rules, written for people in docs/architecture/workflow-runner.md ("Run input"): a field
+    that takes text keeps it (only the schema knows a postcode `01234` from the number 1234); spaces around the value
+    are dropped; a number is the digits 0-9 with an optional sign and decimal point, at most MAX_NUMBER_TEXT
+    characters; a whole-number field also takes a zero fraction (`12.0` is 12); true and false in any case."""
     if "string" in types or not types:
         return text
     t = text.strip()
-    # Longer than any number a person sends: left as text, which the schema then refuses naming the field. Python
-    # itself refuses to read more than 4,300 digits, and that must not be the server's error.
-    if len(t) > MAX_NUMBER_TEXT:
-        return text
-    try:
-        if types & {"integer", "number"} and _INTEGER.fullmatch(t):
-            return int(t)
-        if "number" in types and _NUMBER.fullmatch(t) and math.isfinite(float(t)):
-            return float(t)
-    except (ValueError, OverflowError):
-        return text
     if "boolean" in types and t.lower() in _BOOLEANS:
         return _BOOLEANS[t.lower()]
+    # Longer than any number a person sends. Python itself refuses to read more than 4,300 digits, and that must not
+    # be the server's error.
+    if len(t) > MAX_NUMBER_TEXT or not types & {"integer", "number"}:
+        return text
+    if _INTEGER.fullmatch(t):
+        return int(t)
+    if "number" in types and _DECIMAL.fullmatch(t):
+        return float(t)
+    if whole := _WHOLE.fullmatch(t):
+        return int(whole.group(1))
     return text
 
 
@@ -217,6 +221,9 @@ def _typed(field: Mapping[str, JsonValue], value: JsonValue) -> JsonValue:
     blank text where the field takes no text) is left out, as a form or a spreadsheet cell sends an empty field."""
     if isinstance(value, str):
         return _read(_types(field), value)
+    if isinstance(value, float) and value.is_integer() and _types(field) == {"integer"}:
+        # JSON Schema takes 12.0 for a whole number; it is stored as 12, as the text "12.0" is.
+        return int(value)
     props = field.get("properties")
     if isinstance(value, dict) and isinstance(props, Mapping):
         out: Json = {}
