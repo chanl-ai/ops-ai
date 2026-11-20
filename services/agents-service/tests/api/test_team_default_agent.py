@@ -234,6 +234,75 @@ async def test_an_agent_already_on_the_chain_is_not_asked_again(stack: Stack, mo
     assert not looped.ok and looped.output["code"] == "agent_on_path", looped.output
 
 
+async def test_an_asked_agent_asks_no_one_at_the_default_depth(stack: Stack) -> None:
+    c, rt = stack
+    assert (await c.put(URL, json={"agentId": "ag_branch"}, headers=ADMIN)).status_code == 200
+    # Granted, in the person's team and not on the path: only the chain's depth keeps the asked agent from asking it.
+    await grant(c, "ag_dispute", "ag_fraud")
+    thread = (await start(c, VIEWER))["id"]
+    await say(c, thread, ask("ag_dispute", ask("ag_fraud", "Is this card blocked?")), VIEWER)
+    assert await called(rt) == ["ag_branch>ag_dispute"], "a chain went deeper than one call"
+    assert rt.graph_store is not None
+    (asked,) = [r.id for r in await rt.graph_store.thread_rows("agent_wrapper") if r.meta_object().get("calledBy")]
+    with tenant_scope(TENANT), acting_for(viewer()):
+        deeper = await AgentCalls(rt).run(
+            agent="ag_fraud", arguments={"question": "x"}, key="k-deep", parent_thread_id=asked, parent_run_id=None
+        )
+    assert not deeper.ok and deeper.output["code"] == "chain_too_deep", deeper.output
+
+
+async def test_a_guarded_agent_asked_at_the_cap_makes_no_model_call_for_its_guardrail_check(stack: Stack) -> None:
+    c, rt = stack
+    assert (await c.put(URL, json={"agentId": "ag_branch"}, headers=ADMIN)).status_code == 200
+    rule = {"name": "No investment advice", "topics": ["investment advice"], "message": "I can't advise on that."}
+    made = await c.post("/v1/guardrails", json=rule, headers=ADMIN)
+    assert made.status_code == 201, made.text
+    gid = made.json()["data"]["id"]
+    live = await c.post(f"/v1/guardrails/{gid}/publish-requests", json={"version": 1}, headers=ADMIN)
+    assert live.status_code == 201, live.text
+    pins = {"guardrailPins": [{"guardrailId": gid, "version": 1}]}
+    saved = await c.patch("/v1/agents/ag_dispute", json=pins, headers=ADMIN)
+    assert saved.status_code == 200, saved.text
+    body = {"version": saved.json()["data"]["version"], "note": "go"}
+    assert (await c.post("/v1/agents/ag_dispute/publish-requests", json=body, headers=ADMIN)).status_code == 201
+    thread = (await start(c, VIEWER))["id"]
+    assert rt.usage is not None
+    with tenant_scope(TENANT):
+        await rt.usage.set_budget(thread, Budget(max_calls=1))
+    events = await say(c, thread, ASK_DISPUTE, VIEWER)
+    (asked,) = [e["call"]["output"] for e in events if e.get("type") == "tool_end"]
+    with tenant_scope(TENANT):
+        spent = (await rt.usage.totals(asked["threadId"])).calls
+    # Its first model call is the check of the question against its guardrail, which is not streamed: refused at the
+    # cap like any other, and the turn ends for the budget, not as a guardrail outage.
+    assert (asked["status"], asked.get("code"), spent) == ("budget_reached", "chain_budget_reached", 0), asked
+
+
+async def test_an_asked_agents_chain_is_the_same_after_an_approval_pause(stack: Stack) -> None:
+    c, rt = stack
+    assert (await c.put(URL, json={"agentId": "ag_branch"}, headers=ADMIN)).status_code == 200
+    thread = (await start(c, VIEWER))["id"]
+    events = await say(c, thread, ask("ag_fraud", "Place a 24-hour hold on wire W-88213"), VIEWER)
+    (asked,) = [e["call"]["output"] for e in events if e.get("type") == "tool_end"]
+    assert asked["status"] == "waiting_review", asked
+    assert rt.graph_store is not None and rt.usage is not None
+    with tenant_scope(TENANT):
+        before = await rt.graph_store.thread_row(asked["threadId"])
+        spent = (await rt.usage.totals(thread)).calls
+    assert before is not None
+    decision = {"decision": "rejected", "reason": "Not this wire."}
+    ran = await c.post(f"/reviews/{asked['threadId']}/decision", json=decision, headers=REVIEWER)
+    assert ran.status_code == 200, ran.text
+    with tenant_scope(TENANT):
+        after = await rt.graph_store.thread_row(asked["threadId"])
+        chain = cast(dict[str, Any], after.meta_object()["chain"]) if after is not None else {}
+        assert chain == before.meta_object()["chain"] and chain["rootThreadId"] == thread, chain
+        # The resumed turn's model call is spent from the conversation the chain started on.
+        assert (await rt.usage.totals(thread)).calls > spent
+        with acting_for(viewer()):
+            assert await AgentCalls(rt).offers_in("ag_fraud", asked["threadId"]) == []
+
+
 async def test_a_run_with_no_person_reaches_only_its_own_teams_agents_and_workflows(stack: Stack) -> None:
     c, rt = stack
 

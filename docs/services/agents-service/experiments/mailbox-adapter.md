@@ -18,7 +18,7 @@ that mail exists: a graph receives an `email` whose attachments are file referen
 | Delta request fails mid-poll: cursor not saved, replay creates no duplicate case or inbox entry | holds |
 | No Message-ID: key from sha256(sender, received time, subject); its redelivery opens no second case | holds |
 | Paused deployment opens no case (deferred, opened after unpause); replies to existing cases still deliver | holds |
-| Reply on a finished case opens a follow-up thread with `parent_thread_id` | holds |
+| Reply on a finished case is refused with `thread_closed` and opens a new case; nothing links the two | holds |
 | Reply on a waiting case delivers at once and restarts its E5 SLA timers | holds |
 | Two processes: a reply arrives after the case is created, before its first run; or a lease is taken mid-delivery | holds (was a second case) |
 
