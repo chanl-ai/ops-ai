@@ -63,7 +63,14 @@ async def emit_event(rt: Rt, caller: CurrentService, body: EventIn) -> JSONRespo
         raise Forbidden("This service token does not hold the events:emit scope.", code="scope_required")
     if not caller.tenant_id:
         raise Forbidden("A service event names its workspace in the token.", code="tenant_required")
-    if len(json.dumps(body.payload)) > MAX_PAYLOAD_BYTES:
+    try:
+        size = len(json.dumps(body.payload, allow_nan=False))
+    except ValueError as e:
+        # A JSON body's 1e999 is read as infinity, which the event's JSON column cannot store.
+        raise Unprocessable(
+            "An event's payload holds a number that is too large or is not a number.", code="payload_not_finite"
+        ) from e
+    if size > MAX_PAYLOAD_BYTES:
         raise Unprocessable(
             f"An event's payload is at most {MAX_PAYLOAD_BYTES} bytes; refer to a file by its id.",
             code="payload_too_large",

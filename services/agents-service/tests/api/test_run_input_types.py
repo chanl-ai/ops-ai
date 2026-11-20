@@ -48,6 +48,17 @@ async def test_text_for_a_number_is_refused_naming_the_field_and_the_reason(stac
     assert await runs_of(c, WID) == []
 
 
+async def test_a_json_number_too_large_to_store_is_refused_naming_the_field(stack: Stack) -> None:  # noqa: F811
+    c, _ = stack
+    await live(c)
+    body = '{"workflowId": "refund_request", "input": {"amount": 1e999}}'  # read as infinity; PostgreSQL refuses it
+    refused = await c.post("/v1/runs", content=body, headers={**BUILDER, "Content-Type": "application/json"})
+    assert refused.status_code == 422, refused.text
+    error = refused.json()["error"]
+    assert (error["code"], error["details"]["path"]) == ("invalid_input", "amount"), error
+    assert await runs_of(c, WID) == []
+
+
 async def test_a_number_sent_as_text_is_stored_as_the_number_and_text_stays_text(stack: Stack) -> None:  # noqa: F811
     c, _ = stack
     await live(c)

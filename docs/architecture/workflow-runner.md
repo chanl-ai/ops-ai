@@ -113,11 +113,12 @@ form, a batch file and a start form call the same function before they write any
 | Step | Rule |
 |---|---|
 | 1 Schema | The schema must be JSON Schema (draft 2020-12). One that is not answers 422 `input_schema_invalid` and starts nothing; the save check `input_schema_invalid` keeps a new one from being saved |
-| 2 Defaults | A field sent empty takes the schema's `default` |
-| 3 Required | A required field is refused when it is absent, `null`, `""`, text of spaces only, `[]` or `{}`. `0` and `false` are values |
-| 4 Empty optional fields | An optional field sent `null`, or sent blank where it takes no text, is left out of the input |
-| 5 Text read as its type | See the table below. Only text is converted; a JSON number is never turned into text and `true` is never a number |
-| 6 JSON Schema | Everything else in the schema (`enum`, `minimum`, nested `required`, `items`) is checked as written. The first failure answers 422 `invalid_input` with `details.path` (the property, dotted below the top level) and `details.reason` |
+| 2 Finite numbers | A number that is infinity or not a number, at any depth (JSON `1e999` is read as infinity), is refused with 422 `invalid_input` naming the top-level field: no JSON column stores it. This step also runs when the trigger declares no schema |
+| 3 Defaults | A field sent empty takes the schema's `default` |
+| 4 Required | A required field is refused when it is absent, `null`, `""`, text of spaces only, `[]` or `{}`. `0` and `false` are values |
+| 5 Empty optional fields | An optional field sent `null`, or sent blank where it takes no text, is left out of the input |
+| 6 Text read as its type | See the table below. Only text is converted; a JSON number is never turned into text and `true` is never a number |
+| 7 JSON Schema | Everything else in the schema (`enum`, `minimum`, nested `required`, `items`) is checked as written. The first failure answers 422 `invalid_input` with `details.path` (the property, dotted below the top level) and `details.reason` |
 
 | Declared type | Text that is read | Stored as | Refused (422 naming the field) |
 |---|---|---|---|

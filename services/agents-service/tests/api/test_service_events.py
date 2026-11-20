@@ -373,3 +373,11 @@ async def test_a_refused_event_is_a_failed_job_of_its_team_and_another_tenant_re
     assert line["lastError"] is None and line["state"] == "running", line
     assert page["jobs"] == [], page["jobs"]
     assert "fil_22" not in other.text and "Purge a deleted file" not in other.text, other.text
+
+
+async def test_an_event_payload_with_a_number_that_is_not_finite_is_refused_before_it_is_stored(stack: Stack) -> None:
+    c, _ = stack
+    body = '{"name": "file.deleted", "key": "fil_30", "teamId": "team_ops", "payload": {"size": 1e999}}'
+    r = await c.post("/v1/events", content=body, headers={**service(), "Content-Type": "application/json"})
+    assert r.status_code == 422, r.text
+    assert r.json()["error"]["code"] == "payload_not_finite", r.text

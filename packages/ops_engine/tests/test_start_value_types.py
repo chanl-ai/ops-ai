@@ -4,11 +4,11 @@ refused, and what counts as a required field left empty."""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
-from ops_engine.starts import InputRefusedError, typed_values
+from ops_engine.starts import InputRefusedError, run_input, typed_values
 
 TYPES: dict[str, Any] = {
     "type": "object",
@@ -33,6 +33,8 @@ REFUSED = object()
         ("n", "\u0661\u0662", REFUSED),  # digits other than 0-9
         ("n", "9" * 41, REFUSED),  # longer than any number a person sends
         ("n", "nan", REFUSED),
+        ("n", float("inf"), REFUSED),  # JSON 1e999: no database column stores it
+        ("n", float("nan"), REFUSED),
         ("i", "12", 12),
         ("i", "12.0", 12),  # a whole number written with a zero fraction, as text
         ("i", 12.0, 12),  # and as JSON: stored the same way
@@ -63,3 +65,13 @@ def test_a_required_field_sent_empty_is_refused(empty: Any) -> None:
     with pytest.raises(InputRefusedError) as refused:
         typed_values(schema, {"s": empty})
     assert refused.value.field == "s" and refused.value.missing == ("Postcode",)
+
+
+def test_a_number_that_is_not_finite_is_refused_wherever_it_sits_and_without_a_schema() -> None:
+    nested: dict[str, Any] = {"type": "object", "properties": {"rows": {"type": "array"}}}
+    with pytest.raises(InputRefusedError) as refused:
+        typed_values(nested, {"rows": [{"amount": float("-inf")}]})
+    assert (refused.value.field, refused.value.code) == ("rows", "invalid_input")
+    with pytest.raises(InputRefusedError) as refused:
+        run_input(None, {"amount": float("inf")}, cast(Any, None))  # a trigger that declares no input schema
+    assert refused.value.field == "amount"

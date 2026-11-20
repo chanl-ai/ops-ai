@@ -21,6 +21,7 @@ any other file that names it.
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -247,6 +248,24 @@ def _typed(field: Mapping[str, JsonValue], value: JsonValue) -> JsonValue:
     return value
 
 
+def _not_finite(value: JsonValue) -> bool:
+    if isinstance(value, float):
+        return not math.isfinite(value)
+    if isinstance(value, Mapping):
+        return any(_not_finite(v) for v in value.values())
+    return isinstance(value, list) and any(_not_finite(v) for v in value)
+
+
+def _finite(values: Mapping[str, JsonValue]) -> None:
+    """InputRefusedError naming the first value that holds infinity or not-a-number, at any depth. A JSON body's
+    `1e999` is read as infinity and JSON Schema takes it for a number, but no JSON column stores it (PostgreSQL
+    refuses the write), so it is refused here whether or not the trigger declares a schema."""
+    for name, value in values.items():
+        if _not_finite(value):
+            reason = "holds a number that is too large or is not a number"
+            raise InputRefusedError(f"{name} {reason}.", field=str(name), reason=reason)
+
+
 def _refusal(schema: Mapping[str, JsonValue], err: Any) -> InputRefusedError:
     path = [str(p) for p in err.absolute_path]
     if err.validator == "required" and (found := re.match(r"'(.+?)' is a required property", str(err.message))):
@@ -271,8 +290,8 @@ def _refusal(schema: Mapping[str, JsonValue], err: Any) -> InputRefusedError:
 
 def typed_values(schema: Mapping[str, JsonValue], values: Mapping[str, JsonValue]) -> Json:
     """A start's values as a run takes them, or InputRefusedError naming the field and the reason. The one rule for a
-    start's values, in this order: the schema must itself be JSON Schema, checked before anything reads it; defaults
-    and required fields (`form_values`); text that reads exactly as its
+    start's values, in this order: the schema must itself be JSON Schema, checked before anything reads it; every
+    number is finite (`_finite`); defaults and required fields (`form_values`); text that reads exactly as its
     field's declared number, whole number or true/false becomes that; then the schema is held as JSON Schema. Running
     it again on its own result changes nothing, so a caller that must refuse before it writes anything else (a hosted
     form before it counts against its daily cap, a batch before it stores a row) calls it too."""
@@ -284,6 +303,7 @@ def typed_values(schema: Mapping[str, JsonValue], values: Mapping[str, JsonValue
         raise InputRefusedError(
             f"No run starts: {reason}.", field=None, reason=reason, code="input_schema_invalid"
         ) from e
+    _finite(values)
     out, missing = form_values(schema, values)
     if missing:
         required = cast(list[JsonValue], schema.get("required") or [])
@@ -317,10 +337,13 @@ def input_schema(definition: Mapping[str, JsonValue] | None, registry: TypeRegis
 def run_input(
     definition: Mapping[str, JsonValue] | None, values: Mapping[str, JsonValue], registry: TypeRegistry
 ) -> Json:
-    """`values` as a run on `definition` takes them (`typed_values` on its trigger's schema), unchanged when the
-    trigger declares none."""
+    """`values` as a run on `definition` takes them (`typed_values` on its trigger's schema). When the trigger
+    declares none they are unchanged, and still refused when a number in them is not finite."""
     schema = input_schema(definition, registry)
-    return dict(values) if schema is None else typed_values(schema, values)
+    if schema is not None:
+        return typed_values(schema, values)
+    _finite(values)
+    return dict(values)
 
 
 async def start(
