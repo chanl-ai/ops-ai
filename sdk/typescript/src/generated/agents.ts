@@ -8899,7 +8899,7 @@ export interface components {
         /**
          * Ref
          * @description Something a text or a step names: a tool, a knowledge base, a skill, an agent or a workflow, by its id. An
-         *     agent or a workflow is named by its bare id; a grant stores them as `agent:<id>` and `workflow:<id>`.
+         *     agent or a workflow is named by its bare id; `grant` and `tool_name` are its two other spellings.
          */
         "Ref-Input": {
             /** Id */
@@ -10238,6 +10238,8 @@ export interface components {
             /** Do */
             do: string;
             ifNot?: components["schemas"]["IfNot"] | null;
+            /** Locked */
+            locked?: boolean | null;
             use?: components["schemas"]["Ref-Input"] | null;
         };
         /**
@@ -10249,6 +10251,11 @@ export interface components {
             /** Do */
             do: string;
             ifNot?: components["schemas"]["IfNotOut"] | null;
+            /**
+             * Locked
+             * @description True when the builder locked the step's tool to this step: the agent reaches it only as the step, even when it is a read. Absent otherwise; a tool that changes something is kept to its step either way.
+             */
+            locked?: boolean | null;
             use?: components["schemas"]["RefOut"] | null;
         };
         /** SkillToolRef */

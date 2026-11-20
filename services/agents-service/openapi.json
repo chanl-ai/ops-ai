@@ -15345,7 +15345,7 @@
       },
       "Ref-Input": {
         "additionalProperties": false,
-        "description": "Something a text or a step names: a tool, a knowledge base, a skill, an agent or a workflow, by its id. An\nagent or a workflow is named by its bare id; a grant stores them as `agent:<id>` and `workflow:<id>`.",
+        "description": "Something a text or a step names: a tool, a knowledge base, a skill, an agent or a workflow, by its id. An\nagent or a workflow is named by its bare id; `grant` and `tool_name` are its two other spellings.",
         "properties": {
           "id": {
             "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,126}[A-Za-z0-9_])?$",
@@ -19450,6 +19450,17 @@
               }
             ]
           },
+          "locked": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locked"
+          },
           "use": {
             "anyOf": [
               {
@@ -19494,6 +19505,18 @@
                 "type": "null"
               }
             ]
+          },
+          "locked": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "True when the builder locked the step's tool to this step: the agent reaches it only as the step, even when it is a read. Absent otherwise; a tool that changes something is kept to its step either way.",
+            "title": "Locked"
           },
           "use": {
             "anyOf": [

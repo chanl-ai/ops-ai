@@ -635,3 +635,27 @@ async def test_an_ending_stays_final_however_many_skills_end_after_it_in_the_rep
     later, _ = await reply(replace(carrying(ask, run_of(one)), turn_id="t2", user_turn="Thanks."), Script("Ok."))
     kept = run_of(later).history
     assert len(kept) == 5 and not any(h.in_reply for h in kept), kept
+
+
+async def test_a_read_a_builder_locked_to_its_step_runs_only_as_that_step() -> None:
+    """A read is free of its skill unless the builder locks it: a look-up that shows a person's record may be one
+    the agent should only make inside the procedure that checks who is asking."""
+    steps = program(
+        {"do": "Look up the charge.", "use": {"kind": "tool", "id": "lookup_charge"}, "locked": True},
+        {"do": "Say what it shows."},
+    )
+    skill = stepped("sk_look", 1, "Look up a charge", "look-up-a-charge", steps)
+    systems = Systems(lookup_charge=_amount)
+    ask = TurnRequest("t1", "th1", agent([skill], max_steps=12), [LOOKUP, NOTE], user_turn="What is CH-2?")
+    look: Call = ("lookup_charge", {"chargeId": "CH-2"})
+    # A repeat of a refused call is answered from the reply's record, so the free try names another charge.
+    free: Call = ("lookup_charge", {"chargeId": "CH-1"})
+    model = Script(free, ("switch_skill", {"slug": "look-up-a-charge"}), look, "It is 200.")
+    result, _ = await reply(ask, model, systems)
+    assert "lookup_charge" not in model.offered[0] and "add_note" in model.offered[0], model.offered[0]
+    assert systems.calls == [look], f"refused with no skill running, run once as the step: {model.returned}"
+    assert run_of(result).running.step == 2
+    # Stored only when on: a step saved without it reads as before.
+    assert "locked" not in program({"do": "Look up.", "use": {"kind": "tool", "id": "x"}}).steps[0].model_dump(
+        exclude_none=True
+    )

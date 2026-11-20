@@ -712,12 +712,13 @@ def changes(name: str, access: str | None) -> bool:
 
 def owned(skills: Sequence[Skill], access: Mapping[str, str]) -> dict[str, list[str]]:
     """The tools reachable only through a step, each with the slugs of the skills whose steps run it: every tool a
-    step of an attached skill runs that changes something (`changes`). `access` is each granted tool's access by
-    name."""
+    step of an attached skill runs that changes something (`changes`), and every read a builder locked to its step.
+    `access` is each granted tool's access by name."""
     out: dict[str, list[str]] = {}
     for s in skills:
+        locked = s.program.locked() if s.program is not None else set[str]()
         for name in sorted(s.program.targets()) if s.program is not None else ():
-            if changes(name, access.get(name)):
+            if name in locked or changes(name, access.get(name)):
                 out.setdefault(name, []).append(s.slug)
     return out
 

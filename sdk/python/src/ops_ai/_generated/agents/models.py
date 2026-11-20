@@ -3626,6 +3626,7 @@ class SkillStep(TypedDict, closed=True):
     check: NotRequired[StepCheck | None]
     do: str
     ifNot: NotRequired[IfNot | None]
+    locked: NotRequired[bool | None]
     use: NotRequired[RefInput | None]
 
 
@@ -3633,6 +3634,7 @@ class SkillStepOut(TypedDict, closed=True):
     check: NotRequired[StepCheckOut | None]
     do: str
     ifNot: NotRequired[IfNotOut | None]
+    locked: NotRequired[bool | None]
     use: NotRequired[RefOut | None]
 
 

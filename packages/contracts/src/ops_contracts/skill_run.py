@@ -138,6 +138,16 @@ class SkillStep(RunModel):
     use: Ref | None = None
     check: StepCheck | None = None
     if_not: IfNot | None = None
+    # The builder's lock on the step's tool: it is reachable only as this step even when it is a read. A tool that
+    # changes something is kept to its step with or without it. Stored only when on, and only on a step that runs a
+    # tool.
+    locked: bool | None = None
+
+    @model_validator(mode="after")
+    def _lock_needs_a_tool(self) -> SkillStep:
+        if not self.locked or self.use is None or self.use.tool_name is None:
+            self.locked = None
+        return self
 
 
 class ReturnField(RunModel):
@@ -181,6 +191,10 @@ class SkillProgram(RunModel):
     def targets(self) -> set[str]:
         """The tools this program's steps call, by the name each is granted under."""
         return {name for s in self.steps if s.use is not None and (name := s.use.tool_name) is not None}
+
+    def locked(self) -> set[str]:
+        """The tools a builder locked to their step (`SkillStep.locked`), by the name each is granted under."""
+        return {name for s in self.steps if s.locked and s.use is not None and (name := s.use.tool_name) is not None}
 
 
 class StepResult(RunModel):
