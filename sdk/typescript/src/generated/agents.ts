@@ -2376,6 +2376,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/skills/{skill_id}/text": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Read Skill Text
+         * @description How a text reads as this skill's steps, without saving it: the hints on its lines, the mentions of things
+         *     that no longer exist, what it uses, how each condition is decided and what each mentioned tool returns. The same
+         *     reader a save runs. skills: view in the skill's team (403 `forbidden`).
+         */
+        post: operations["agents_read_skill_text"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/task-types": {
         parameters: {
             query?: never;
@@ -4530,8 +4552,8 @@ export interface components {
         };
         /**
          * BlockerPosition
-         * @description Where a publish problem is: the field (`steps`, `notWhen`, `useWhen`, `brief.never`), and the step (from 1)
-         *     or list index when it has one.
+         * @description Where a publish problem is: the field (`steps`, `notWhen`, `useWhen`, `brief.never`, `source`), and the step
+         *     (from 1) or list index when it has one; for `source`, `index` is the line (from 1).
          */
         BlockerPosition: {
             /** Field */
@@ -4549,6 +4571,27 @@ export interface components {
             name: string;
             /** Version */
             version: number;
+        };
+        /**
+         * Branch
+         * @description A path, written `if <test>:` in a skill's text. Once the step is done its test decides: when it holds the
+         *     skill goes on (to the step's `next`, or the step after it); when it does not, to `otherwise`. A test that does
+         *     not hold is a path the author wrote, not a failed check: it counts no attempt and takes no hold, unless
+         *     `otherwise` ends the skill with an exit other than done, which is how a guard is written
+         *     (`if not ...: stop "..."`). A rule test runs in code on the step's result; a sentence is decided by the model,
+         *     which says which way it went (`step_done` with `holds`).
+         */
+        Branch: {
+            otherwise: components["schemas"]["Jump"];
+            test: components["schemas"]["StepCheck"];
+        };
+        /**
+         * BranchOut
+         * @description A path written `if <test>:`: when the test does not hold, the skill goes to `otherwise`.
+         */
+        BranchOut: {
+            otherwise: components["schemas"]["JumpOut"];
+            test: components["schemas"]["StepCheckOut"];
         };
         /**
          * Brief
@@ -6553,6 +6596,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[SkillTextReading] */
+        Envelope_SkillTextReading_: {
+            data: components["schemas"]["SkillTextReading"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[StepUpToken] */
         Envelope_StepUpToken_: {
             data: components["schemas"]["StepUpToken"];
@@ -7771,6 +7823,23 @@ export interface components {
             message: string;
         };
         JsonValue: unknown;
+        /**
+         * Jump
+         * @description Where a skill goes from a step: a step further on, or an exit that ends it. Exactly one of the two.
+         */
+        Jump: {
+            /** Exit */
+            exit?: string | null;
+            /** Step */
+            step?: number | null;
+        };
+        /** JumpOut */
+        JumpOut: {
+            /** Exit */
+            exit?: string | null;
+            /** Step */
+            step?: number | null;
+        };
         /** KindRow */
         KindRow: {
             /** Active */
@@ -9797,6 +9866,8 @@ export interface components {
             returns?: components["schemas"]["ReturnFieldOut"][];
             /** Slug */
             slug: string;
+            /** Source */
+            source?: string | null;
             /** Steps */
             steps?: components["schemas"]["SkillStepOut"][];
             /** Success */
@@ -9862,6 +9933,8 @@ export interface components {
             reviewNote: string;
             /** Slug */
             slug?: string | null;
+            /** Source */
+            source?: string | null;
             /** Steps */
             steps?: components["schemas"]["SkillStep"][];
             /** Success */
@@ -9928,6 +10001,8 @@ export interface components {
             status: "draft" | "in_review" | "published" | "deprecated";
             /** Tests */
             tests: components["schemas"]["JsonValue"][];
+            /** Text */
+            text: string;
             /** Tokens */
             tokens: number;
             /** Toolcount */
@@ -9980,6 +10055,8 @@ export interface components {
             refusal?: string | null;
             /** Returns */
             returns?: components["schemas"]["ReturnField"][] | null;
+            /** Source */
+            source?: string | null;
             /** Steps */
             steps?: components["schemas"]["SkillStep"][] | null;
             /** Success */
@@ -10234,12 +10311,14 @@ export interface components {
         };
         /** SkillStep */
         SkillStep: {
+            branch?: components["schemas"]["Branch"] | null;
             check?: components["schemas"]["StepCheck"] | null;
             /** Do */
             do: string;
             ifNot?: components["schemas"]["IfNot"] | null;
             /** Locked */
             locked?: boolean | null;
+            next?: components["schemas"]["Jump"] | null;
             use?: components["schemas"]["Ref-Input"] | null;
         };
         /**
@@ -10247,6 +10326,7 @@ export interface components {
          * @description One step: what to do, what it runs, what must hold after it and what happens when it does not.
          */
         SkillStepOut: {
+            branch?: components["schemas"]["BranchOut"] | null;
             check?: components["schemas"]["StepCheckOut"] | null;
             /** Do */
             do: string;
@@ -10256,7 +10336,95 @@ export interface components {
              * @description True when the builder locked the step's tool to this step: the agent reaches it only as the step, even when it is a read. Absent otherwise; a tool that changes something is kept to its step either way.
              */
             locked?: boolean | null;
+            next?: components["schemas"]["JumpOut"] | null;
             use?: components["schemas"]["RefOut"] | null;
+        };
+        /** SkillTextError */
+        SkillTextError: {
+            /** Id */
+            id: string;
+            /** Line */
+            line: number;
+            /** Message */
+            message: string;
+        };
+        /** SkillTextInput */
+        SkillTextInput: {
+            /**
+             * Hasparts
+             * @default false
+             */
+            hasParts: boolean;
+            /**
+             * Loading
+             * @default on_match
+             * @enum {string}
+             */
+            loading: "on_match" | "always";
+            /** Text */
+            text: string;
+        };
+        /**
+         * SkillTextLine
+         * @description One line of the text: its kind, the step (from 1) it is part of, how its condition is decided (an `if`
+         *     line: `checked` on the tool's result, or `agent`, decided from the conversation) and the tool its line runs.
+         */
+        SkillTextLine: {
+            /** How */
+            how?: ("checked" | "agent") | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "text" | "step" | "if" | "else" | "stop" | "blank";
+            /** Line */
+            line: number;
+            /** Step */
+            step?: number | null;
+            /** Tool */
+            tool?: string | null;
+        };
+        /** SkillTextNote */
+        SkillTextNote: {
+            /** Line */
+            line: number;
+            /** Message */
+            message: string;
+        };
+        /**
+         * SkillTextReading
+         * @description POST /v1/skills/{id}/text: how a skill's text reads, as a save will read it. Hints never block anything;
+         *     `errors` (a mention of something that no longer exists) block a publish, never a save.
+         */
+        SkillTextReading: {
+            /** Errors */
+            errors: components["schemas"]["SkillTextError"][];
+            /** Hints */
+            hints: components["schemas"]["SkillTextNote"][];
+            /** Lines */
+            lines: components["schemas"]["SkillTextLine"][];
+            /** Phrases */
+            phrases: {
+                [key: string]: string[];
+            };
+            /** Steplines */
+            stepLines: number[];
+            /** Steps */
+            steps: number;
+            uses: components["schemas"]["SkillTextUses"];
+        };
+        /** SkillTextUses */
+        SkillTextUses: {
+            /** Agents */
+            agents: number;
+            /** Knowledge */
+            knowledge: number;
+            /** Skills */
+            skills: number;
+            /** Tools */
+            tools: number;
+            /** Workflows */
+            workflows: number;
         };
         /** SkillToolRef */
         SkillToolRef: {
@@ -26178,6 +26346,113 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_SkillRendered_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    agents_read_skill_text: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                skill_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SkillTextInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SkillTextReading_"];
                 };
             };
             /** @description Invalid request */

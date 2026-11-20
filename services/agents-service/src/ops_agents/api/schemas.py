@@ -15,7 +15,7 @@ from typing import Literal
 from pydantic import ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
-from ops_agent_kernel.steps import IfNot, Ref, ReturnField, StepCheck
+from ops_agent_kernel.steps import IfNot, Jump, Ref, ReturnField, StepCheck
 from ops_agents.activities.agent_limits import AgentLimits
 
 # The envelope models live in ops_service_kit.http; the routers keep importing them from here.
@@ -1500,6 +1500,17 @@ class IfNotOut(Out, IfNot):
     pass
 
 
+class JumpOut(Out, Jump):
+    pass
+
+
+class BranchOut(Out):
+    """A path written `if <test>:`: when the test does not hold, the skill goes to `otherwise`."""
+
+    test: StepCheckOut
+    otherwise: JumpOut
+
+
 class SkillStepOut(Out):
     """One step: what to do, what it runs, what must hold after it and what happens when it does not."""
 
@@ -1507,6 +1518,9 @@ class SkillStepOut(Out):
     use: RefOut | None = None
     check: StepCheckOut | None = None
     if_not: IfNotOut | None = None
+    branch: BranchOut | None = None
+    # Where the skill goes once the step is done, when that is not the step after it.
+    next: JumpOut | None = None
     locked: bool | None = Field(
         default=None,
         description="True when the builder locked the step's tool to this step: the agent reaches it only as the "
@@ -1537,6 +1551,8 @@ class SkillContent(Out):
     # A skill that runs step by step; all absent on a skill without steps. Each step's check says who judges it
     # (`by`: a rule run on the step's result, or the model), set when the skill is saved.
     not_when: str = ""
+    # The skill as written in the text editor; absent on a skill saved as a list of steps.
+    source: str | None = None
     steps: list[SkillStepOut] = Field(default_factory=list[SkillStepOut])
     exit: dict[str, str] = Field(default_factory=dict[str, str])
     returns: list[ReturnFieldOut] = Field(default_factory=list[ReturnFieldOut])
@@ -1639,8 +1655,8 @@ class ReferenceSearch(Out):
 
 
 class BlockerPosition(Out):
-    """Where a publish problem is: the field (`steps`, `notWhen`, `useWhen`, `brief.never`), and the step (from 1)
-    or list index when it has one."""
+    """Where a publish problem is: the field (`steps`, `notWhen`, `useWhen`, `brief.never`, `source`), and the step
+    (from 1) or list index when it has one; for `source`, `index` is the line (from 1)."""
 
     field: str
     step: int | None = None
@@ -1750,6 +1766,8 @@ class SkillPendingReview(Out):
 
 class SkillDetail(Skill):
     content: SkillContent
+    # The text the editor shows: `content.source`, or a skill's stored steps written as text by the same reader.
+    text: str
     versions: list[SkillVersion]
     # Both are empty today: skill tests moved into assurance suites and nothing sends a shape here.
     tests: list[JsonValue]
@@ -1815,3 +1833,47 @@ class SkillOptions(Out):
     tools: list[SkillToolRef]
     knowledge_bases: list[str]
     limits: dict[str, int]
+
+
+class SkillTextNote(Out):
+    line: int
+    message: str
+
+
+class SkillTextError(SkillTextNote):
+    # The mention, as `<kind>:<id>`.
+    id: str
+
+
+class SkillTextUses(Out):
+    tools: int
+    knowledge: int
+    skills: int
+    agents: int
+    workflows: int
+
+
+class SkillTextLine(Out):
+    """One line of the text: its kind, the step (from 1) it is part of, how its condition is decided (an `if`
+    line: `checked` on the tool's result, or `agent`, decided from the conversation) and the tool its line runs."""
+
+    line: int
+    kind: Literal["text", "step", "if", "else", "stop", "blank"]
+    step: int | None = None
+    how: Literal["checked", "agent"] | None = None
+    tool: str | None = None
+
+
+class SkillTextReading(Out):
+    """POST /v1/skills/{id}/text: how a skill's text reads, as a save will read it. Hints never block anything;
+    `errors` (a mention of something that no longer exists) block a publish, never a save."""
+
+    hints: list[SkillTextNote]
+    errors: list[SkillTextError]
+    uses: SkillTextUses
+    lines: list[SkillTextLine]
+    # What the editor offers after `if ` for each mentioned tool (`@tool:<id>`), from what it returns.
+    phrases: dict[str, list[str]]
+    steps: int
+    # The line each step starts on, by step.
+    step_lines: list[int]

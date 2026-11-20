@@ -1001,6 +1001,16 @@ class JobInput(TypedDict, closed=True):
 JsonValue: TypeAlias = Any
 
 
+class Jump(TypedDict, closed=True):
+    exit: NotRequired[str | None]
+    step: NotRequired[int | None]
+
+
+class JumpOut(TypedDict, closed=True):
+    exit: NotRequired[str | None]
+    step: NotRequired[int | None]
+
+
 class KindRow(TypedDict, closed=True):
     active: int
     attention: int
@@ -1807,6 +1817,39 @@ class SkillResource(TypedDict, closed=True):
     kind: Literal["file", "template"]
     name: str
     size: NotRequired[int | None]
+
+
+class SkillTextError(TypedDict, closed=True):
+    id: str
+    line: int
+    message: str
+
+
+class SkillTextInput(TypedDict, closed=True):
+    hasParts: NotRequired[bool]
+    loading: NotRequired[Literal["on_match", "always"]]
+    text: str
+
+
+class SkillTextLine(TypedDict, closed=True):
+    how: NotRequired[Literal["checked", "agent"] | None]
+    kind: Literal["text", "step", "if", "else", "stop", "blank"]
+    line: int
+    step: NotRequired[int | None]
+    tool: NotRequired[str | None]
+
+
+class SkillTextNote(TypedDict, closed=True):
+    line: int
+    message: str
+
+
+class SkillTextUses(TypedDict, closed=True):
+    agents: int
+    knowledge: int
+    skills: int
+    tools: int
+    workflows: int
 
 
 class SkillToolRef(TypedDict, closed=True):
@@ -2712,6 +2755,16 @@ class BatchView(TypedDict, closed=True):
     stopped: NotRequired[Stopped | None]
     total: int
     workflowId: str
+
+
+class Branch(TypedDict, closed=True):
+    otherwise: Jump
+    test: StepCheck
+
+
+class BranchOut(TypedDict, closed=True):
+    otherwise: JumpOut
+    test: StepCheckOut
 
 
 class BulkResult(TypedDict, closed=True):
@@ -3623,19 +3676,33 @@ class SkillOptions(TypedDict, closed=True):
 
 
 class SkillStep(TypedDict, closed=True):
+    branch: NotRequired[Branch | None]
     check: NotRequired[StepCheck | None]
     do: str
     ifNot: NotRequired[IfNot | None]
     locked: NotRequired[bool | None]
+    next: NotRequired[Jump | None]
     use: NotRequired[RefInput | None]
 
 
 class SkillStepOut(TypedDict, closed=True):
+    branch: NotRequired[BranchOut | None]
     check: NotRequired[StepCheckOut | None]
     do: str
     ifNot: NotRequired[IfNotOut | None]
     locked: NotRequired[bool | None]
+    next: NotRequired[JumpOut | None]
     use: NotRequired[RefOut | None]
+
+
+class SkillTextReading(TypedDict, closed=True):
+    errors: list[SkillTextError]
+    hints: list[SkillTextNote]
+    lines: list[SkillTextLine]
+    phrases: dict[str, list[str]]
+    stepLines: list[int]
+    steps: int
+    uses: SkillTextUses
 
 
 class StoryCase(TypedDict, closed=True):
@@ -4123,6 +4190,11 @@ class EnvelopeSkillOptions(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeSkillTextReading(TypedDict, closed=True):
+    data: SkillTextReading
+    success: Literal[True]
+
+
 class EnvelopeSuiteList(TypedDict, closed=True):
     data: SuiteList
     success: Literal[True]
@@ -4238,6 +4310,7 @@ class SkillContent(TypedDict, closed=True):
     resources: list[SkillResource]
     returns: NotRequired[list[ReturnFieldOut]]
     slug: str
+    source: NotRequired[str | None]
     steps: NotRequired[list[SkillStepOut]]
     success: NotRequired[list[str]]
     tools: list[SkillToolRef]
@@ -4261,6 +4334,7 @@ class SkillCreateInput(TypedDict, closed=True):
     returns: NotRequired[list[ReturnField]]
     reviewNote: NotRequired[str]
     slug: NotRequired[str | None]
+    source: NotRequired[str | None]
     steps: NotRequired[list[SkillStep]]
     success: NotRequired[list[Succes]]
     toolIds: NotRequired[list[str]]
@@ -4281,6 +4355,7 @@ class SkillDraftPatch(TypedDict, closed=True):
     parts: NotRequired[list[SkillPartInput] | None]
     refusal: NotRequired[str | None]
     returns: NotRequired[list[ReturnField] | None]
+    source: NotRequired[str | None]
     steps: NotRequired[list[SkillStep] | None]
     success: NotRequired[list[Succes] | None]
     toolIds: NotRequired[list[str] | None]
@@ -4470,6 +4545,7 @@ class SkillDetail(TypedDict, closed=True):
     slug: str
     status: Literal["draft", "in_review", "published", "deprecated"]
     tests: list[JsonValue]
+    text: str
     tokens: int
     toolCount: int
     updatedAt: str

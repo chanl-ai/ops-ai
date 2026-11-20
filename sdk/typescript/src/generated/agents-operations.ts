@@ -438,6 +438,17 @@ export const agentsOperations = {
     ],
     "stream": false
   },
+  "agents_read_skill_text": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/skills/{skill_id}/text",
+    "pathParams": [
+      "skill_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "agents_recent_runs": {
     "body": null,
     "headers": [],

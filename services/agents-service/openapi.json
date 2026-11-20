@@ -2926,7 +2926,7 @@
       },
       "BlockerPosition": {
         "additionalProperties": false,
-        "description": "Where a publish problem is: the field (`steps`, `notWhen`, `useWhen`, `brief.never`), and the step (from 1)\nor list index when it has one.",
+        "description": "Where a publish problem is: the field (`steps`, `notWhen`, `useWhen`, `brief.never`, `source`), and the step\n(from 1) or list index when it has one; for `source`, `index` is the line (from 1).",
         "properties": {
           "field": {
             "title": "Field",
@@ -2983,6 +2983,42 @@
           "version"
         ],
         "title": "BoundWorkflow",
+        "type": "object"
+      },
+      "Branch": {
+        "additionalProperties": false,
+        "description": "A path, written `if <test>:` in a skill's text. Once the step is done its test decides: when it holds the\nskill goes on (to the step's `next`, or the step after it); when it does not, to `otherwise`. A test that does\nnot hold is a path the author wrote, not a failed check: it counts no attempt and takes no hold, unless\n`otherwise` ends the skill with an exit other than done, which is how a guard is written\n(`if not ...: stop \"...\"`). A rule test runs in code on the step's result; a sentence is decided by the model,\nwhich says which way it went (`step_done` with `holds`).",
+        "properties": {
+          "otherwise": {
+            "$ref": "#/components/schemas/Jump"
+          },
+          "test": {
+            "$ref": "#/components/schemas/StepCheck"
+          }
+        },
+        "required": [
+          "test",
+          "otherwise"
+        ],
+        "title": "Branch",
+        "type": "object"
+      },
+      "BranchOut": {
+        "additionalProperties": false,
+        "description": "A path written `if <test>:`: when the test does not hold, the skill goes to `otherwise`.",
+        "properties": {
+          "otherwise": {
+            "$ref": "#/components/schemas/JumpOut"
+          },
+          "test": {
+            "$ref": "#/components/schemas/StepCheckOut"
+          }
+        },
+        "required": [
+          "test",
+          "otherwise"
+        ],
+        "title": "BranchOut",
         "type": "object"
       },
       "Brief": {
@@ -8675,6 +8711,25 @@
         "title": "Envelope[SkillRendered]",
         "type": "object"
       },
+      "Envelope_SkillTextReading_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SkillTextReading"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[SkillTextReading]",
+        "type": "object"
+      },
       "Envelope_StepUpToken_": {
         "additionalProperties": false,
         "properties": {
@@ -11800,6 +11855,71 @@
         "type": "object"
       },
       "JsonValue": {},
+      "Jump": {
+        "additionalProperties": false,
+        "description": "Where a skill goes from a step: a step further on, or an exit that ends it. Exactly one of the two.",
+        "properties": {
+          "exit": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z][a-z0-9_]{0,31}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "maximum": 30.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step"
+          }
+        },
+        "title": "Jump",
+        "type": "object"
+      },
+      "JumpOut": {
+        "additionalProperties": false,
+        "properties": {
+          "exit": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z][a-z0-9_]{0,31}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "maximum": 30.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step"
+          }
+        },
+        "title": "JumpOut",
+        "type": "object"
+      },
       "KindRow": {
         "additionalProperties": false,
         "properties": {
@@ -18140,6 +18260,17 @@
             "title": "Slug",
             "type": "string"
           },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
           "steps": {
             "items": {
               "$ref": "#/components/schemas/SkillStepOut"
@@ -18294,6 +18425,17 @@
               }
             ],
             "title": "Slug"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
           },
           "steps": {
             "items": {
@@ -18508,6 +18650,10 @@
             "title": "Tests",
             "type": "array"
           },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
           "tokens": {
             "title": "Tokens",
             "type": "integer"
@@ -18572,6 +18718,7 @@
           "updatedBy",
           "origin",
           "content",
+          "text",
           "versions",
           "tests",
           "runs",
@@ -18743,6 +18890,17 @@
               }
             ],
             "title": "Returns"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
           },
           "steps": {
             "anyOf": [
@@ -19424,6 +19582,16 @@
       "SkillStep": {
         "additionalProperties": false,
         "properties": {
+          "branch": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Branch"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "check": {
             "anyOf": [
               {
@@ -19461,6 +19629,16 @@
             ],
             "title": "Locked"
           },
+          "next": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Jump"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "use": {
             "anyOf": [
               {
@@ -19482,6 +19660,16 @@
         "additionalProperties": false,
         "description": "One step: what to do, what it runs, what must hold after it and what happens when it does not.",
         "properties": {
+          "branch": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BranchOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "check": {
             "anyOf": [
               {
@@ -19518,6 +19706,16 @@
             "description": "True when the builder locked the step's tool to this step: the agent reaches it only as the step, even when it is a read. Absent otherwise; a tool that changes something is kept to its step either way.",
             "title": "Locked"
           },
+          "next": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JumpOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "use": {
             "anyOf": [
               {
@@ -19533,6 +19731,239 @@
           "do"
         ],
         "title": "SkillStepOut",
+        "type": "object"
+      },
+      "SkillTextError": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "line": {
+            "title": "Line",
+            "type": "integer"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "line",
+          "message",
+          "id"
+        ],
+        "title": "SkillTextError",
+        "type": "object"
+      },
+      "SkillTextInput": {
+        "additionalProperties": false,
+        "properties": {
+          "hasParts": {
+            "default": false,
+            "title": "Hasparts",
+            "type": "boolean"
+          },
+          "loading": {
+            "default": "on_match",
+            "enum": [
+              "on_match",
+              "always"
+            ],
+            "title": "Loading",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 24000,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "SkillTextInput",
+        "type": "object"
+      },
+      "SkillTextLine": {
+        "additionalProperties": false,
+        "description": "One line of the text: its kind, the step (from 1) it is part of, how its condition is decided (an `if`\nline: `checked` on the tool's result, or `agent`, decided from the conversation) and the tool its line runs.",
+        "properties": {
+          "how": {
+            "anyOf": [
+              {
+                "enum": [
+                  "checked",
+                  "agent"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "How"
+          },
+          "kind": {
+            "enum": [
+              "text",
+              "step",
+              "if",
+              "else",
+              "stop",
+              "blank"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "line": {
+            "title": "Line",
+            "type": "integer"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step"
+          },
+          "tool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool"
+          }
+        },
+        "required": [
+          "line",
+          "kind"
+        ],
+        "title": "SkillTextLine",
+        "type": "object"
+      },
+      "SkillTextNote": {
+        "additionalProperties": false,
+        "properties": {
+          "line": {
+            "title": "Line",
+            "type": "integer"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "line",
+          "message"
+        ],
+        "title": "SkillTextNote",
+        "type": "object"
+      },
+      "SkillTextReading": {
+        "additionalProperties": false,
+        "description": "POST /v1/skills/{id}/text: how a skill's text reads, as a save will read it. Hints never block anything;\n`errors` (a mention of something that no longer exists) block a publish, never a save.",
+        "properties": {
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/SkillTextError"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "hints": {
+            "items": {
+              "$ref": "#/components/schemas/SkillTextNote"
+            },
+            "title": "Hints",
+            "type": "array"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/SkillTextLine"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "phrases": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Phrases",
+            "type": "object"
+          },
+          "stepLines": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Steplines",
+            "type": "array"
+          },
+          "steps": {
+            "title": "Steps",
+            "type": "integer"
+          },
+          "uses": {
+            "$ref": "#/components/schemas/SkillTextUses"
+          }
+        },
+        "required": [
+          "hints",
+          "errors",
+          "uses",
+          "lines",
+          "phrases",
+          "steps",
+          "stepLines"
+        ],
+        "title": "SkillTextReading",
+        "type": "object"
+      },
+      "SkillTextUses": {
+        "additionalProperties": false,
+        "properties": {
+          "agents": {
+            "title": "Agents",
+            "type": "integer"
+          },
+          "knowledge": {
+            "title": "Knowledge",
+            "type": "integer"
+          },
+          "skills": {
+            "title": "Skills",
+            "type": "integer"
+          },
+          "tools": {
+            "title": "Tools",
+            "type": "integer"
+          },
+          "workflows": {
+            "title": "Workflows",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tools",
+          "knowledge",
+          "skills",
+          "agents",
+          "workflows"
+        ],
+        "title": "SkillTextUses",
         "type": "object"
       },
       "SkillToolRef": {
@@ -52759,6 +53190,204 @@
           }
         },
         "summary": "Render Skill",
+        "tags": [
+          "Agents"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/skills/{skill_id}/text": {
+      "post": {
+        "description": "How a text reads as this skill's steps, without saving it: the hints on its lines, the mentions of things\nthat no longer exist, what it uses, how each condition is decided and what each mentioned tool returns. The same\nreader a save runs. skills: view in the skill's team (403 `forbidden`).",
+        "operationId": "agents_read_skill_text",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "skill_id",
+            "required": true,
+            "schema": {
+              "title": "Skill Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SkillTextInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SkillTextReading_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Read Skill Text",
         "tags": [
           "Agents"
         ],

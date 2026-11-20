@@ -37,7 +37,7 @@ from ..auth import Principal, caller_in, caller_of, principal, reader_of, requir
 from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..publish_policy import decide
-from ..schemas import AgentSkills, SkillDetail, SkillList, SkillOptions, SkillRendered
+from ..schemas import AgentSkills, SkillDetail, SkillList, SkillOptions, SkillRendered, SkillTextReading
 from ..skills import (
     LIMITS,
     agent_skills,
@@ -49,6 +49,7 @@ from ..skills import (
     pin,
     pinned_by,
     publish,
+    read_text,
     render_published,
     require_unpinned,
     skills,
@@ -119,6 +120,8 @@ class SkillCreateInput(In):
     exit: dict[str, str] = Field(default_factory=dict[str, str], max_length=8)
     returns: list[ReturnField] = Field(default_factory=list[ReturnField], max_length=12)
     success: list[SuccessLine] = Field(default_factory=list[SuccessLine], max_length=8)
+    # The skill written as text (app/skill_text.py): its steps are read from it, and `instructions` is set to it.
+    source: str | None = None
 
 
 class SkillDraftPatch(In):
@@ -137,8 +140,16 @@ class SkillDraftPatch(In):
     exit: dict[str, str] | None = Field(default=None, max_length=8)
     returns: list[ReturnField] | None = Field(default=None, max_length=12)
     success: list[SuccessLine] | None = Field(default=None, max_length=8)
+    # The skill written as text: its steps are read from it at this save, and `instructions` is set to it.
+    source: str | None = None
     note: str = ""
     base_version: int
+
+
+class SkillTextInput(In):
+    text: str = Field(max_length=24000)
+    loading: Literal["on_match", "always"] = "on_match"
+    has_parts: bool = False
 
 
 class ReviewInput(In):
@@ -229,6 +240,20 @@ async def get_skill(
     row = await skills(rt).row(skill_id)
     can(caller_of(caller), "skills", "view", team=row.team_id, what=row.slug, code="forbidden")
     return ok(await detail(rt, skill_id))
+
+
+@router.post("/v1/skills/{skill_id}/text", response_model=Envelope[SkillTextReading])
+async def read_skill_text(
+    rt: Rt, skill_id: str, body: SkillTextInput, caller: Annotated[Principal, Depends(caller_in("skills"))]
+) -> JSONResponse:
+    """How a text reads as this skill's steps, without saving it: the hints on its lines, the mentions of things
+    that no longer exist, what it uses, how each condition is decided and what each mentioned tool returns. The same
+    reader a save runs. skills: view in the skill's team (403 `forbidden`)."""
+    async with isolation.request_transaction():
+        row = await skills(rt).row(skill_id)
+        can(caller_of(caller), "skills", "view", team=row.team_id, what=row.slug, code="forbidden")
+    reading = await read_text(rt, body.text, team_id=row.team_id, loading=body.loading, has_parts=body.has_parts)
+    return ok(reading.json())
 
 
 @router.post("/v1/skills/{skill_id}/render", response_model=Envelope[SkillRendered])

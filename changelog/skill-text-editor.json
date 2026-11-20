@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-20",
+  "title": "Write a skill as plain text",
+  "description": "A skill is now written like a prompt: type @ to mention a tool, knowledge, a skill or an agent, write \"if ...:\" with an indented block for a path and \"else:\" for the other one, and \"stop\" to end it. The agent follows the paths you write, and only a mention of something that no longer exists stops a publish.",
+  "tag": "new"
+}

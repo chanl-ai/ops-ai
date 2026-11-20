@@ -11,7 +11,7 @@ from typing import Annotated, Literal
 
 from pydantic import Field
 
-from ops_contracts.skill_run import IfNot, StepCheck
+from ops_contracts.skill_run import Branch, IfNot, StepCheck
 from ops_service_kit.http import In
 
 Rule = Annotated[str, Field(min_length=1, max_length=300)]
@@ -47,6 +47,8 @@ class Now:
     use: str | None = None
     check: StepCheck | None = None
     if_not: IfNot | None = None
+    # The path the step's text wrote (`if ...:`), decided once the step is done.
+    branch: Branch | None = None
     # The skill whose step started this one, when this is a sub-skill.
     inside: str | None = None
     rules: str = ""
@@ -85,6 +87,20 @@ def _step(now: Now) -> str:
     lines.append(now.do)
     if now.use:
         lines.append(f"Use: {now.use}")
+    if now.branch is not None:
+        if now.use:
+            lines.append(f"Done when: {now.use} has run.")
+        else:
+            lines.append("Done when: you have done it; then call step_done.")
+        if now.branch.test.by == "rule":
+            lines.append("Then: a rule on the result picks the next step; do not judge it yourself.")
+        else:
+            lines.append(
+                f"Then decide: {now.branch.test.text}. Call step_done with holds true if it holds, or false if it "
+                "does not; the skill takes the path that fits."
+            )
+        lines.append("Do only this step. If the person now asks for something else, call switch_skill or exit.")
+        return "\n".join(lines)
     if now.check is not None and now.check.by == "rule":
         lines.append("Done when: the check runs on the tool result; do not judge it yourself.")
     elif now.check is not None:

@@ -108,6 +108,8 @@ class SkillPin(TypedDict):
     exit: NotRequired[dict[str, str]]
     returns: NotRequired[list[Json]]
     success: NotRequired[list[str]]
+    # The skill was written as text, so its publish rule is the text's (app/skill_content.py, `unrunnable`).
+    fromText: NotRequired[bool]
     attachedBy: str
     attachedAt: str
 

@@ -23,6 +23,8 @@ from ops_agent_kernel.steps import Ref, SkillProgram
 from ops_service_kit.errors import ValidationFailed
 from ops_service_kit.http import Json
 
+from . import skill_text
+
 # The keys a skill version stores its program under, beside `instructions`; each is written only when set.
 KEYS = ("notWhen", "steps", "exit", "returns", "success")
 
@@ -253,10 +255,18 @@ def _mentions(program: SkillProgram) -> tuple[list[Problem], list[Problem]]:
     return problems, warnings
 
 
-def unrunnable(program: SkillProgram, access: Mapping[str, str]) -> tuple[list[Problem], list[Problem]]:
+def unrunnable(
+    program: SkillProgram, access: Mapping[str, str], *, text: bool = False
+) -> tuple[list[Problem], list[Problem]]:
     """(problems, warnings) for steps that must not run as they are stored: a step that changes something with no
     rule check, and a step that runs nothing and names exactly one tool. The one list a draft's publish check, an
-    attach and an agent's publish check all read, so a version published before a check existed is held to it too."""
+    attach and an agent's publish check all read, so a version published before a check existed is held to it too.
+
+    A skill written as text (`text`) is held to neither: free text always publishes, its step's tool is the one its
+    line mentions, and an unchecked write is a hint on its line (`skill_text.read`); only a mention of something that
+    no longer exists stops it (`publish_problems`)."""
+    if text:
+        return [], []
     found, warnings = _mentions(program)
     for p in unruled(program, access):
         spot: Position = {"field": "steps", "step": p.step, "index": None}
@@ -267,7 +277,7 @@ def unrunnable(program: SkillProgram, access: Mapping[str, str]) -> tuple[list[P
 def pin_problems(pins: Sequence[Json], access: Mapping[str, str] | None) -> list[Problem]:
     """What in the skills an agent version pins stops the agent's publish: `unrunnable` for each pinned copy, named
     by its skill. `access` is None when the tools directory could not answer, which blocks with one problem."""
-    stepped = [(pin, program) for pin in pins if (program := program_of(pin)) is not None]
+    stepped = [(pin, program) for pin in pins if (program := program_of(pin)) is not None and not pin.get("fromText")]
     if access is None and stepped:
         return [
             {
@@ -293,12 +303,67 @@ def pin_problems(pins: Sequence[Json], access: Mapping[str, str] | None) -> list
     return found
 
 
+async def missing(
+    refs: Sequence[Ref],
+    offered: Mapping[str, str] | None,
+    bases: Mapping[str, str] | None,
+    *,
+    team_id: str,
+    skills: TeamSkills,
+) -> dict[str, str]:
+    """The mentions (`@kind:id` to a name) of things that no longer exist: a tool, agent or workflow the directory
+    does not offer (`offered`, None when it could not answer), a knowledge base not among `bases` (id to name, None
+    when unknown), or a skill that is not a published skill of the team. The one answer to "is this mention still
+    good" for a skill's text, read by the publish check and by the editor's read call."""
+    gone: dict[str, str] = {}
+    for ref in refs:
+        if ref.kind == "knowledge":
+            if bases is not None and ref.id not in bases:
+                gone[ref.token] = ref.id
+        elif ref.kind == "skill":
+            target = await skills.skill(ref.id)
+            if target is None or target.team_id != team_id or not target.published or target.deprecated:
+                gone[ref.token] = target.name if target is not None else ref.id
+        elif (grant := ref.grant) is not None and offered is not None and grant not in offered:
+            gone[ref.token] = ref.id
+    return gone
+
+
 async def publish_problems(
-    content: Json, offered: Mapping[str, str] | None, *, team_id: str, skills: TeamSkills
+    content: Json,
+    offered: Mapping[str, str] | None,
+    *,
+    team_id: str,
+    skills: TeamSkills,
+    bases: Mapping[str, str] | None = None,
 ) -> tuple[list[Problem], list[Problem]]:
     """What in the skill's steps blocks a publish, and the warnings that do not. `offered` is the access of each tool
     the directory offers now, by id; None when it could not answer, which blocks the publish with one problem, since
-    nothing can be checked."""
+    nothing can be checked. A skill written as text is blocked only by a mention of something that no longer
+    exists, pointed at by its line (`position.index`, from 1, in the field `source`)."""
+    source = content.get("source")
+    if isinstance(source, str):
+        refs = Ref.found_in(source)
+        if offered is None and any(r.grant is not None for r in refs):
+            return [
+                {
+                    "kind": "unavailable_reference",
+                    "id": None,
+                    "position": None,
+                    "message": "Couldn't check the tools this skill mentions; try again.",
+                }
+            ], []
+        gone = await missing(refs, offered, bases, team_id=team_id, skills=skills)
+        found: list[Problem] = [
+            {
+                "kind": "missing_reference",
+                "id": e["id"],
+                "position": {"field": "source", "step": None, "index": e["line"]},
+                "message": e["message"],
+            }
+            for e in skill_text.read(source, missing=gone).errors
+        ]
+        return found, []
     program = program_of(content)
     if program is None:
         return [], []
