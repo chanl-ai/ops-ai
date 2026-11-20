@@ -625,11 +625,12 @@ async def test_an_ending_stays_final_however_many_skills_end_after_it_in_the_rep
     aside: list[Action] = [("switch_skill", {"slug": "small-talk"}), ("exit", {"name": "failed"})] * 6
     model = Script(START, over, *aside, START, over, "CH-1 is over the limit.")
     one, _ = await reply(ask, model, systems)
-    refunds = [e for e in ended(run_of(one)) if e[0] == "sk_refund"]
-    assert refunds == [("sk_refund", "blocked", 1)], f"the blocked skill ran once: {ended(run_of(one))}"
-    # A second lookup of the same charge would be answered from the reply's kept reads, so the refusal is read
-    # from what the second start was told.
-    assert "cannot start again in this reply" in json.dumps(model.returned[-2:]), model.returned[-2:]
+    # A forgotten ending lets the skill start a second time, and its second ending then reads the same on the
+    # record. What tells the two apart is how often the model was put on the skill's first step.
+    told = json.dumps(model.returned)
+    assert told.count("Now on Refund a charge, step 1") == 1, model.returned[-3:]
+    assert "cannot start again in this reply" in told, model.returned[-3:]
+    assert ("sk_refund", "blocked", 1) in ended(run_of(one)) and len(ended(run_of(one))) == 7, ended(run_of(one))
 
     # The next reply starts with the usual few, none marked as this reply's.
     later, _ = await reply(replace(carrying(ask, run_of(one)), turn_id="t2", user_turn="Thanks."), Script("Ok."))
