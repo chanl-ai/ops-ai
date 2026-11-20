@@ -10,10 +10,11 @@ import pytest
 
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.tenancy import tenant_scope
-from ops_engine.store import DefinitionStore, NotLiveError, RunStore
+from ops_engine.store import DefinitionStore, NotLiveError
 from tests.api.test_case_routes import started_run
 from tests.api.test_team_default_agent import Stack, stack  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from tests.engine.test_lifecycle_rights import BUILDER, TENANT, VIEWER
+from tests.run_rows import write_run
 
 
 def data(r: Any, status: int = 200) -> Any:
@@ -73,6 +74,6 @@ async def test_a_child_start_and_the_mailbox_listener_leave_an_archived_workflow
             "created_by": f"run:{run}",
         }
         with pytest.raises(NotLiveError) as refused:
-            await RunStore(tx).create(child)
+            await write_run(tx, child)
     assert refused.value.stage == "archived"
     assert "child_check" not in {d.workflow_id for d in await DefinitionStore(tx).live_everywhere()}

@@ -396,7 +396,7 @@ class DefinitionStore:
 
     async def delete_draft(self, workflow_id: str, *, team: str | None = None) -> str:
         """Removes every version of a workflow that has never run. The versions are locked first, and a run start
-        locks the version it pins (RunStore.create), so a start either commits before this reads the runs (and the
+        locks the version it pins (new_runs.write_run), so a start either commits before this reads the runs (and the
         workflow is kept) or finds its version gone. Returns "deleted", "missing" or "has_runs"."""
         t, r = engine_definitions, engine_runs
         tenant = self.tx.tenant()

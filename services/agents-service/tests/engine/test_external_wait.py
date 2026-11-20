@@ -29,6 +29,7 @@ from ops_service_kit.settings import Settings
 from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model
 from tests.engine.test_lifecycle_rights import introspect, jwks
 from tests.engine.test_worker import CountingTools, drain, worker
+from tests.run_rows import write_run
 
 
 def _flow(wid: str, seconds: float) -> Any:
@@ -130,9 +131,10 @@ async def _start(engine: AsyncEngine, tenant: str, team: str, seconds: float, ke
             team=team,
         )
         run_id = new_id("wfrun")
-        await RunStore(tx).create(
+        await write_run(
+            tx,
             {"id": run_id, "team_id": team, "workflow_id": flow.id, "version": version, "digest": flow.digest()}
-            | {"run_key": run_id, "mode": "live", "input": {"key": key}, "created_by": "a@x"}
+            | {"run_key": run_id, "mode": "live", "input": {"key": key}, "created_by": "a@x"},
         )
     return run_id
 

@@ -19,11 +19,12 @@ from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.events import EventLog
 from ops_agents.store.tenancy import tenant_scope
 from ops_engine.definition import parse
-from ops_engine.store import DefinitionStore, RunStore
+from ops_engine.store import DefinitionStore
 from ops_engine.store.tables import engine_work
 from ops_engine.worker import MAX_PASSES
 from ops_service_kit.ids import new_id
 from tests.engine.test_worker import CountingTools, M, drain, worker
+from tests.run_rows import write_run
 
 # A review that approves a reply, started with nothing to reply from: the reply's input reads nothing when it opens.
 ACK = parse(
@@ -85,8 +86,8 @@ async def test_a_failing_step_shows_people_a_plain_message_and_keeps_the_detail_
         )
         run_id = new_id("wfrun")
         run = {"id": run_id, "team_id": "team_a", "workflow_id": ACK.id, "version": version, "digest": ACK.digest()}
-        await RunStore(tx).create(
-            run | {"run_key": run_id, "mode": "live", "input": {"from": "a@b.test"}, "created_by": "a@x"}
+        await write_run(
+            tx, run | {"run_key": run_id, "mode": "live", "input": {"from": "a@b.test"}, "created_by": "a@x"}
         )
     # The last pass the worker allows, so the run fails on this one instead of waiting out the retry backoff.
     async with engine.begin() as c:

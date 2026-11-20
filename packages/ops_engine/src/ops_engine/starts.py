@@ -13,7 +13,8 @@ Form widgets come from the schema: `format: "file"` (see `file_shape`), `format:
 `start` is the one way a run is written. It holds the run's input to the schema its trigger declares (`input_schema`)
 with `typed_values`, the one rule for a start's values, so every source of a run (an API call, a hosted form, a batch
 row, an agent's tool call, a Start workflow step, a service event) is checked the same way and no caller chooses to
-skip it. `tests/test_run_entry.py` fails when anything else calls `RunStore.create`.
+skip it. The write itself (`store.new_runs.write_run`) is importable by this module alone: the import contract
+`runs-written-by-the-start-entry` in `.importlinter` fails when anything else imports it.
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ import math
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Literal, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import jsonschema
 import jsonschema.exceptions
@@ -30,6 +31,7 @@ import jsonschema.exceptions
 from ops_service_kit.http import Json, JsonValue
 
 from .store import DefinitionRow, RunRow, RunStore
+from .store.new_runs import NewRun, write_run
 
 if TYPE_CHECKING:
     from .node_types import TypeRegistry
@@ -311,25 +313,8 @@ def run_input(
     return dict(values) if schema is None else typed_values(schema, values)
 
 
-class NewRun(TypedDict):
-    """The run `start` writes: the columns `RunStore.create` takes, with the input still as its source sent it."""
-
-    id: str
-    team_id: str
-    workflow_id: str
-    version: int
-    digest: str
-    run_key: str
-    mode: Literal["live", "test"]
-    input: Json
-    created_by: str
-    started_via: str | None
-    started_by_approver: bool
-    after_seconds: float
-
-
 async def start(runs: RunStore, stored: DefinitionRow, run: NewRun, registry: TypeRegistry) -> tuple[RunRow, bool]:
     """Writes `run` on `stored` with its input held to the trigger's schema, or returns the run that already has its
-    key (`RunStore.create`). InputRefusedError when the input does not match, and then nothing is written."""
+    key (`store.new_runs.write_run`). InputRefusedError when the input does not match, and then nothing is written."""
     typed = run_input(stored.definition, run["input"], registry)
-    return await runs.create({**run, "input": typed})
+    return await write_run(runs.tx, {**run, "input": typed})

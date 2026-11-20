@@ -29,6 +29,7 @@ from ops_engine.store import NotLiveError, RunStore
 from ops_engine.worker import Worker, WorkerHost
 from ops_service_kit.settings import Settings
 from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model
+from tests.run_rows import write_run
 
 JAMES = {"X-Dev-User": "j.richardson@harborpine.example"}
 MAYA = {"X-Dev-User": "m.okafor@harborpine.example"}
@@ -429,4 +430,4 @@ async def test_a_start_after_a_pause_is_refused_by_the_store(
     run = {"id": f"wfrun_{uuid4().hex[:10]}", "team_id": "t", "workflow_id": wid, "version": 1}
     run |= {"digest": view["digest"], "mode": "live", "input": {}, "created_by": "a"}
     with tenant_scope(LOCAL_TENANT), pytest.raises(NotLiveError):
-        await RunStore(EngineTransactions(engine)).create(run | {"run_key": run["id"]})
+        await write_run(EngineTransactions(engine), run | {"run_key": run["id"]})

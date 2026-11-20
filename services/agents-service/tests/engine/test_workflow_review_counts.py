@@ -18,6 +18,7 @@ from ops_engine.journal import StepRow, StepStatus
 from ops_engine.store import DefinitionStore, DefinitionSummary, RunStore
 from ops_engine.store.steps import SqlJournal
 from ops_engine.store.tables import engine_runs
+from tests.run_rows import write_run
 
 CUTOFF = (datetime.now(UTC) - timedelta(days=1)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 OLD = "2020-01-01T00:00:00.000Z"
@@ -42,7 +43,7 @@ async def run_with(
 ) -> str:
     rid = f"wfrun_{uuid4().hex[:10]}"
     row: dict[str, Any] = {"id": rid, "team_id": team, "workflow_id": wf, "version": 1, "digest": "d" * 64}
-    await RunStore(tx).create(row | {"run_key": rid, "mode": "live", "input": {}, "created_by": "a"})
+    await write_run(tx, row | {"run_key": rid, "mode": "live", "input": {}, "created_by": "a"})
     await RunStore(tx).update(rid, status=status)
     if created:
         async with tx.tenant_tx() as c:

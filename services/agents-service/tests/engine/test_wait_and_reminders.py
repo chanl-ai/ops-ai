@@ -32,6 +32,7 @@ from tests.engine.test_worker import (  # noqa: F401
     engine,  # pyright: ignore[reportUnusedImport]
     worker,  # pyright: ignore[reportUnusedImport]
 )
+from tests.run_rows import write_run
 
 # Far longer than any test runs, so only `due_now` makes a reminder fall due.
 REMIND_EVERY_HOURS = 1
@@ -76,7 +77,8 @@ async def start(db: AsyncEngine, tenant: str, d: WorkflowDefinition) -> str:
             d.id, name=d.id, definition=d.wire(), digest=d.digest(), now="now", by="a@x", stage="live"
         )
         run_id = new_id("wfrun")
-        await RunStore(tx).create(
+        await write_run(
+            tx,
             {
                 "id": run_id,
                 "team_id": "team_a",
@@ -87,7 +89,7 @@ async def start(db: AsyncEngine, tenant: str, d: WorkflowDefinition) -> str:
                 "mode": "live",
                 "input": {},
                 "created_by": "a@x",
-            }
+            },
         )
         return run_id
 

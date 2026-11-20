@@ -87,7 +87,7 @@ async def start_run(
     """Writes the run on `stored` (a definition row) with its start work row, or returns the run that already has
     `run_key`. Returns (run, created). An input the trigger's schema refuses answers 422 `invalid_input` naming the
     field and the reason, and text that reads as a declared number is stored as the number. A version paused or
-    superseded since it was read is refused here, under the lock `RunStore.create` takes. `started_by_approver` is
+    superseded since it was read is refused here, under the lock the run's write takes. `started_by_approver` is
     `approves_own_writes` of the person starting it, read here because the worker that runs its steps has no
     principal."""
     run_id = new_id(RUN_PREFIX.rstrip("_"))
