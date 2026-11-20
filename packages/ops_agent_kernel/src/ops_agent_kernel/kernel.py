@@ -860,6 +860,7 @@ def _kept_run(kept: SkillRunState, stepped: list[Skill], has: list[Skill], *, ne
     if new_reply:
         for ended in run.history:
             ended.in_reply = False
+        steps.trim(run)
     running = run.running
     for frame in (running, running.sub if running is not None else None):
         if frame is None:

@@ -77,6 +77,7 @@ __all__ = [
     "start",
     "step_done",
     "target",
+    "trim",
 ]
 
 
@@ -258,6 +259,13 @@ def _tools(r: RunningSkill, skills: Sequence[Skill]) -> set[str]:
     return out
 
 
+def trim(run: SkillRunState) -> None:
+    """Keeps the newest `HISTORY_MAX` endings, and every ending made in this reply however many came after it: that
+    one is what keeps its skill from starting again (`final`), so it is forgotten only once the reply is over."""
+    cut = len(run.history) - HISTORY_MAX
+    run.history = [h for i, h in enumerate(run.history) if i >= cut or h.in_reply]
+
+
 def _end(
     run: SkillRunState,
     name: str,
@@ -292,7 +300,7 @@ def _end(
             meaning=r.program.exit.get(name),
         )
     )
-    del run.history[:-HISTORY_MAX]
+    trim(run)
     run.running = None
 
 

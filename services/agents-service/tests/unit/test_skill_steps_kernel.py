@@ -612,3 +612,26 @@ async def test_a_check_that_ends_a_skill_is_final_for_the_reply_and_the_record_s
     two, _ = await reply(replace(carrying(ask, run_of(one)), turn_id="t2", user_turn="CH-2 then."), second, systems)
     assert run_of(two).running.step == 2, run_of(two)
     assert [h.in_reply for h in run_of(two).history] == [False]
+
+
+async def test_an_ending_stays_final_however_many_skills_end_after_it_in_the_reply() -> None:
+    """The record keeps a few past endings. One made in this reply is what keeps its skill from starting again, so
+    it stays on the record until the reply is over, whatever ends after it."""
+    chat = stepped("sk_chat", 1, "Small talk", "small-talk", program({"do": "Say hello."}, {"do": "Say goodbye."}))
+    settings = agent([refund_after_a_check(), chat], max_tool_calls=None, max_steps=40)
+    systems = Systems(lookup_charge=_amount)
+    ask = TurnRequest("t1", "th1", settings, [LOOKUP, REFUND], user_turn="Refund CH-1.")
+    over: Call = ("lookup_charge", {"chargeId": "CH-1"})
+    aside: list[Action] = [("switch_skill", {"slug": "small-talk"}), ("exit", {"name": "failed"})] * 6
+    model = Script(START, over, *aside, START, over, "CH-1 is over the limit.")
+    one, _ = await reply(ask, model, systems)
+    refunds = [e for e in ended(run_of(one)) if e[0] == "sk_refund"]
+    assert refunds == [("sk_refund", "blocked", 1)], f"the blocked skill ran once: {ended(run_of(one))}"
+    # A second lookup of the same charge would be answered from the reply's kept reads, so the refusal is read
+    # from what the second start was told.
+    assert "cannot start again in this reply" in json.dumps(model.returned[-2:]), model.returned[-2:]
+
+    # The next reply starts with the usual few, none marked as this reply's.
+    later, _ = await reply(replace(carrying(ask, run_of(one)), turn_id="t2", user_turn="Thanks."), Script("Ok."))
+    kept = run_of(later).history
+    assert len(kept) == 5 and not any(h.in_reply for h in kept), kept
