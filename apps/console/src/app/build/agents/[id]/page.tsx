@@ -32,6 +32,7 @@ import { RequestAgentPublishDialog } from '@/components/agents/request-agent-pub
 import { useSendMessage } from '@/hooks/chat-queries';
 import { useAddReference } from '@/hooks/references-queries';
 import type { InstructionDocumentHandle } from '@/components/shared/instruction-document';
+import { keptEdits } from '@/lib/kept-edits';
 import { LeaveGuard } from '@/components/shared/leave-guard';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import type { AgentBrief, PromptMode } from '@/lib/types/domain';
@@ -76,6 +77,7 @@ import {
   useModelAliases,
   useRequestAgentPublish,
   useRestoreAgent,
+  useChangeAgentKnowledge,
   useChangeAgentTools,
   useGrantableTools,
   useUpdateAgent,
@@ -133,6 +135,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
   const runs = useAgentRuns(agent.id);
   const update = useUpdateAgent(agent.id);
   const changeTools = useChangeAgentTools(agent.id);
+  const changeKnowledge = useChangeAgentKnowledge(agent.id);
   const setPaused = useAgentPaused(agent.id);
   const restore = useRestoreAgent(agent.id);
   const requestPublish = useRequestAgentPublish(agent.id);
@@ -149,21 +152,16 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
 
   const saved = React.useMemo(() => draftOf(agent), [agent]);
   const [draft, setDraft] = React.useState<AgentDraft>(saved);
-  // A newer copy of the agent (a refetch after a cached first paint, a change made elsewhere) moves every field the
-  // draft has not edited. Left stale, those fields differ from `saved`, and autosave would write the old values back.
+  // A newer copy of the agent (a refetch after a cached first paint, a change made elsewhere, another person's save
+  // read again) moves every field the draft has not edited. Left stale, those fields differ from `saved`, and autosave
+  // would write the old values back over the newer copy.
   const savedBefore = React.useRef(saved);
   React.useEffect(() => {
     const before = savedBefore.current;
     savedBefore.current = saved;
-    if (before === saved) return;
-    setDraft((d) => {
-      const next = { ...d } as Record<string, unknown>;
-      for (const k of Object.keys(saved) as (keyof AgentDraft)[])
-        if (sameValue(d[k], before[k])) next[k] = saved[k];
-      return next as unknown as AgentDraft;
-    });
+    if (before !== saved) setDraft((d) => keptEdits(before, d, saved));
   }, [saved]);
-  const set =<K extends keyof AgentDraft>(k: K, v: AgentDraft[K]) => setDraft((d) => followLimits({ ...d, [k]: v }, agent.toolIds));
+  const set =<K extends keyof AgentDraft>(k: K, v: AgentDraft[K]) => setDraft((d) => followLimits({ ...d, [k]: v }, agent.toolIds, agent.collections));
   // The prompt is a brief unless the builder switched to plain text. A legacy agent (no brief) shows its job line as
   // Purpose and its instructions as How to answer, and stays as it is until a brief field is edited.
   const mode: PromptMode = agent.promptMode === 'full' ? 'full' : 'brief';
@@ -247,6 +245,9 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
   // A grant or a removal is its own save on the stored list, never part of the draft the page autosaves.
   const setTools = (change: { add?: string[]; remove?: string[] }) =>
     changeTools.mutate(change, { onError: (e) => toast.error('Couldn’t change the tools', { description: e.message }) });
+  // So is a knowledge base picked or removed, which an @ insert changes too.
+  const setKnowledge = (change: { add: string[]; remove: string[] }) =>
+    changeKnowledge.mutate(change, { onError: (e) => toast.error('Couldn’t change the knowledge bases', { description: e.message }) });
   const switchMode = (to: PromptMode) =>
     update.mutate(to === 'full' ? { promptMode: 'full', instructions: agent.instructions, base: agent } : { promptMode: 'brief', base: agent }, {
       onSuccess: () => (setModeAsked(null), toast.success(to === 'full' ? 'Editing as plain text' : 'Back to the brief', { description: to === 'full' ? 'Your brief stays saved; only Never is still used from it.' : 'The next version uses the prompt written from the brief.' })),
@@ -482,13 +483,13 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
                 <MemorySection draft={draft} set={set} />
                 <SkillMenuSection draft={draft} set={set} attached={skills.data?.pins.length ?? 0} />
                 <GuardrailsSection draft={draft} set={set} shown={agent.controls.guardrails} />
-                <LimitsSection draft={draft} set={set} models={modelAliases.data ?? []} tools={tools.data ?? []} toolIds={agent.toolIds} />
+                <LimitsSection draft={draft} set={set} models={modelAliases.data ?? []} tools={tools.data ?? []} toolIds={agent.toolIds} collections={agent.collections} />
                 </BuilderFieldset>
               </AgentModelLimitsSection>
               <AgentUsesSheet open={usesOpen} onOpenChange={setUsesOpen} uses={agent.uses}>
                 <BuilderFieldset canEdit={locked ? false : agent.canEdit}>
                   <ToolsSection draft={draft} set={set} toolIds={agent.toolIds} onChange={setTools} stale={agent.staleToolIds} />
-                  <KnowledgeSection draft={draft} set={set} />
+                  <KnowledgeSection collections={agent.collections} onChange={setKnowledge} />
                   <AgentSkillsSection
                     agentName={agent.name}
                     data={skills.data}

@@ -25,7 +25,7 @@ import type {
   WorkflowSettingsInput,
 } from '@/lib/types/domain';
 import type { AgentFilters, DeploymentFilters, ListParams, ListResult, PolicyFilters, ReviewListParams, RunFilters, ToolFilters, WorkflowFilters } from '@/lib/types/query';
-import { toolChange } from '@/lib/agent-tools';
+import { knowledgeChange, toolChange } from '@/lib/agent-tools';
 import { baseOf, staleSave } from '@/lib/save-base';
 import { teamKey, useTeamQuery } from './team-query';
 
@@ -136,26 +136,31 @@ export const useCreateAgent = () => useWrite((i: AgentInput) => api.agents.creat
 export const useUpdateAgent = (id: string) =>
   useWrite(({ base, ...fields }: AgentPatch & { base: Agent }) => api.agents.update(id, { ...fields, ...baseOf(base) }), ['agents', 'agent', 'tools', 'kbs']);
 /**
- * The one way the console changes an agent's tool list outside an @ insert: the stored list is read, changed and
- * saved naming the copy it was read from, so a change made from a list the page showed a moment ago never drops a
- * grant saved since. A save that lands in between is refused, and the change is made once more on the newer list.
+ * The one way the console changes an agent's tool list or knowledge list outside an @ insert: the stored agent is
+ * read, `change` is made on it and saved naming the copy it was read from, so a change made from a list the page
+ * showed a moment ago never drops an item saved since. A save that lands in between is refused, and the change is
+ * made once more on the newer copy.
  */
-async function changeAgentTools(agentId: string, change: { add?: string[]; remove?: string[] }): Promise<Agent> {
+async function changeStoredAgent(agentId: string, change: (stored: Agent) => AgentPatch | null): Promise<Agent> {
   const once = async () => {
     const agent = await api.agents.get(agentId);
-    const fields = toolChange(agent, change);
+    const fields = change(agent);
     return fields ? api.agents.update(agentId, { ...fields, ...baseOf(agent) }) : agent;
   };
   return once().catch((e: unknown) => (staleSave(e) ? once() : Promise.reject(e)));
 }
+type ListChange = { add?: string[]; remove?: string[] };
+const changeAgentTools = (agentId: string, change: ListChange) => changeStoredAgent(agentId, (a) => toolChange(a, change));
 /** Reads the open agent again, after a save was refused because a newer copy exists. */
 export function useReadAgentAgain() {
   const qc = useQueryClient();
   return () => qc.invalidateQueries({ queryKey: ['agent'] });
 }
 /** Grants and removes tools on the agent page; lands in the agent's draft. */
-export const useChangeAgentTools = (agentId: string) =>
-  useWrite((change: { add?: string[]; remove?: string[] }) => changeAgentTools(agentId, change), ['agents', 'agent', 'tools', 'kbs']);
+export const useChangeAgentTools = (agentId: string) => useWrite((change: ListChange) => changeAgentTools(agentId, change), ['agents', 'agent', 'tools', 'kbs']);
+/** Adds and removes knowledge bases on the agent page; lands in the agent's draft. */
+export const useChangeAgentKnowledge = (agentId: string) =>
+  useWrite((change: ListChange) => changeStoredAgent(agentId, (a) => knowledgeChange(a, change)), ['agents', 'agent', 'kbs']);
 /** Grants one tool to an agent from the tool's side. The app page's and Tools page's Used by refresh too. */
 export const useGrantToolToAgent = () =>
   useWrite(({ agentId, toolId }: { agentId: string; toolId: string }) => changeAgentTools(agentId, { add: [toolId] }), ['agents', 'agent', 'tools', 'apps']);

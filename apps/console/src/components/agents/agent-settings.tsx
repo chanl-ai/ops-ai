@@ -35,6 +35,7 @@ import type { Agent, AgentControls, AgentGuardrails, AgentLimits, AgentPatterns,
 import { modelHint, ModelSelect } from './model-select';
 import { teamLabel } from '@/components/shared/team-name';
 import { useTeam } from '@/hooks/use-team';
+import { listChange } from '@/lib/agent-tools';
 import { appPageHref } from '@/lib/app-links';
 
 /**
@@ -49,7 +50,6 @@ export interface AgentDraft {
   instructions: string;
   /** The account each app's calls use (app id to account name); an app it does not name uses its default. */
   accounts: Record<string, string>;
-  collections: string[];
   guardrails: AgentGuardrails;
   guardrailPins: { guardrailId: string; version: number; enabled: boolean }[];
   limits: AgentLimits;
@@ -69,7 +69,6 @@ export const draftOf = (a: Agent): AgentDraft => ({
   channels: a.channels,
   instructions: a.instructions,
   accounts: a.accounts ?? {},
-  collections: a.collections,
   guardrails: a.guardrails,
   guardrailPins: (a.guardrailPins ?? []).map((p) => ({ guardrailId: p.guardrailId, version: p.version, enabled: p.enabled ?? true })),
   limits: a.limits,
@@ -84,13 +83,13 @@ export const draftOf = (a: Agent): AgentDraft => ({
  * Keeps the limits in step with the version they are saved on, as agents-service requires: the agent's model is the
  * default and allowed, its knowledge bases are allowed, and only granted tools may be switched off.
  */
-export function followLimits(d: AgentDraft, toolIds: string[]): AgentDraft {
+export function followLimits(d: AgentDraft, toolIds: string[], collections: string[]): AgentDraft {
   const l = d.limits;
   const limits: AgentLimits = {
     ...l,
     defaultModel: d.model,
     allowedModels: l.allowedModels.includes(d.model) ? l.allowedModels : [d.model, ...l.allowedModels.filter((m) => m !== l.defaultModel)],
-    allowedKnowledgeBaseIds: [...new Set([...d.collections, ...l.allowedKnowledgeBaseIds])],
+    allowedKnowledgeBaseIds: [...new Set([...collections, ...l.allowedKnowledgeBaseIds])],
     switchableToolIds: l.switchableToolIds.filter((t) => toolIds.includes(t)),
     ...(l.switchableWidgetIds ? { switchableWidgetIds: l.switchableWidgetIds.filter((w) => d.widgetPins.some((p) => p.widgetId === w)) } : {}),
   };
@@ -104,7 +103,6 @@ const SECTION: Record<keyof AgentDraft, string> = {
   channels: 'Identity',
   instructions: 'Instructions',
   accounts: 'Tools',
-  collections: 'Knowledge',
   guardrails: 'Guardrails',
   guardrailPins: 'Guardrails',
   limits: 'Caller limits',
@@ -258,12 +256,15 @@ export function ToolsSection({ draft, set, toolIds, onChange, stale = [] }: { dr
   );
 }
 
-/** The knowledge bases the agent may search and cite, stored by id and picked through the options route. */
-export function KnowledgeSection({ draft, set }: { draft: AgentDraft; set: Set }) {
+/**
+ * The knowledge bases the agent may search and cite, picked through the options route. The list is the stored agent's:
+ * a pick is its own save (`onChange`), never part of the draft the page autosaves.
+ */
+export function KnowledgeSection({ collections, onChange }: { collections: string[]; onChange: (change: { add: string[]; remove: string[] }) => void }) {
   return (
-    <SettingsSection title={`Knowledge · ${draft.collections.length}`} description="Knowledge bases the agent may search and cite.">
-      {draft.collections.length === 0 && <p className="mb-2 text-sm text-muted-foreground">No knowledge bases. The agent cannot cite policy or product documents.</p>}
-      <EntityPicker source={knowledgeBaseOptions} value={draft.collections} onChange={(ids) => set('collections', ids)} addLabel="Choose knowledge bases" searchPlaceholder="Search knowledge bases…" emptyText="No knowledge base matches." icon={BookOpen} testId="agent-knowledge-picker" />
+    <SettingsSection title={`Knowledge · ${collections.length}`} description="Knowledge bases the agent may search and cite.">
+      {collections.length === 0 && <p className="mb-2 text-sm text-muted-foreground">No knowledge bases. The agent cannot cite policy or product documents.</p>}
+      <EntityPicker source={knowledgeBaseOptions} value={collections} onChange={(ids) => onChange(listChange(collections, ids))} addLabel="Choose knowledge bases" searchPlaceholder="Search knowledge bases…" emptyText="No knowledge base matches." icon={BookOpen} testId="agent-knowledge-picker" />
     </SettingsSection>
   );
 }
@@ -459,7 +460,7 @@ const num = (v: string) => (v.trim() === '' ? Number.NaN : Number(v));
  * What callers may change when they use this agent: a banker in chat, a service through the API, a widget on a public
  * key. Saved with the version and approved in its publish review; anything outside these is refused, never adjusted.
  */
-export function LimitsSection({ draft, set, models, tools, toolIds }: { draft: AgentDraft; set: Set; models: ModelAlias[]; tools: GrantableTool[]; toolIds: string[] }) {
+export function LimitsSection({ draft, set, models, tools, toolIds, collections }: { draft: AgentDraft; set: Set; models: ModelAlias[]; tools: GrantableTool[]; toolIds: string[]; collections: string[] }) {
   const l = draft.limits;
   const put = (patch: Partial<AgentLimits>) => set('limits', { ...l, ...patch });
   const toggle = <T,>(list: T[], x: T, on: boolean) => (on ? [...list, x] : list.filter((y) => y !== x));
@@ -517,7 +518,7 @@ export function LimitsSection({ draft, set, models, tools, toolIds }: { draft: A
         </div>
         <FormField id="lim-kb" label="Knowledge callers may choose from" hint="The agent's own knowledge is always allowed.">
           {/* The agent's own bases stay allowed: followLimits adds them back whatever is removed here. */}
-          <EntityPicker source={knowledgeBaseOptions} value={l.allowedKnowledgeBaseIds} onChange={(ids) => put({ allowedKnowledgeBaseIds: [...new Set([...draft.collections, ...ids])] })} addLabel="Allow knowledge bases" searchPlaceholder="Search knowledge bases…" emptyText="No knowledge base matches." icon={BookOpen} testId="agent-limits-knowledge-picker" />
+          <EntityPicker source={knowledgeBaseOptions} value={l.allowedKnowledgeBaseIds} onChange={(ids) => put({ allowedKnowledgeBaseIds: [...new Set([...collections, ...ids])] })} addLabel="Allow knowledge bases" searchPlaceholder="Search knowledge bases…" emptyText="No knowledge base matches." icon={BookOpen} testId="agent-limits-knowledge-picker" />
         </FormField>
         <FormField id="lim-tools" label="Tools callers may switch off" hint="Callers never add a tool.">
           {granted.length === 0 ? (
