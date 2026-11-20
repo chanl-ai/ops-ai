@@ -182,7 +182,11 @@ def _unquote(text: str) -> str:
 
 def _slug(reason: str) -> str:
     words = re.findall(r"[a-z0-9]+", reason.lower())
-    name = "_".join(words)[:32].strip("_")
+    name = "_".join(words)
+    if len(name) > 32:
+        # Cut at a word, so an exit reads as words: `hand_over_to_the_customer_care` rather than `..._care_t`.
+        name = name[:33].rsplit("_", 1)[0]
+    name = name.strip("_")
     if not name or not name[0].isalpha():
         name = f"stop_{name}"[:32].strip("_")
     return name if re.fullmatch(EXIT_NAME, name) else "stopped"
