@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- agents-service, stamped at 0119_unattributed_side_tables
+-- agents-service, stamped at 0120_model_call_reservations
 CREATE TABLE engine_definitions (
 	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
@@ -861,6 +861,7 @@ CREATE TABLE model_call_records (
 	request_hash VARCHAR(64) NULL, 
 	response NVARCHAR(max) NULL, 
 	created_at VARCHAR(40) NOT NULL, 
+	reserved_until VARCHAR(40) NULL, 
 	tenant_id VARCHAR(64) NOT NULL, 
 	CONSTRAINT model_call_records_pkey PRIMARY KEY (id)
 );
@@ -1633,5 +1634,5 @@ CREATE TABLE alembic_version (
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version (version_num) VALUES ('0119_unattributed_side_tables');
+INSERT INTO alembic_version (version_num) VALUES ('0120_model_call_reservations');
 GO

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-20",
+  "title": "A budget holds when agents are asked at once",
+  "description": "An agent that asked several agents together could spend past the conversation's model-call cap, because each ask was checked before any of them was counted. Each model call is now counted from the moment it starts, so asks made together stop at the cap and the first agent still gives its closing answer.",
+  "tag": "fix"
+}
