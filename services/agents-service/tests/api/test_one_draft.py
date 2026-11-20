@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -111,3 +112,40 @@ async def test_an_agent_save_made_from_an_old_copy_or_naming_no_copy_is_refused(
         again = {"baseVersion": kept["version"], "baseDigest": kept["digest"]}
         saved = _ok(await c.patch(f"/v1/agents/{aid}", json={"role": "typed meanwhile", **again}))
         assert (saved["toolIds"], saved["role"]) == (["lookup_customer"], "typed meanwhile"), saved
+
+
+async def test_a_save_landing_while_a_route_holds_its_read_is_never_written_over(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A PATCH, an attach and a detach each read the agent, change that copy and save it. Another save landing between
+    the read and the save must refuse the route's save (409), or the route writes its older copy over it. Attach and
+    detach take no base from the caller, so the copy the route read is the only thing that can tell."""
+    stored = AgentRegistry.save
+    between: list[str] = []
+
+    async def save(self: AgentRegistry, agent_id: str, spec: Any, **kw: Any) -> int:
+        if between:
+            # The other session's save, made after the route read the agent and before the route saves.
+            newest = (await self.version(agent_id, (await self.row(agent_id)).version)).spec
+            await stored(self, agent_id, {**newest, "role": between.pop()}, by="kim@x.example")
+        return await stored(self, agent_id, spec, **kw)
+
+    monkeypatch.setattr(AgentRegistry, "save", save)
+    async with _app(str(tmp_path / "db.sqlite")) as c:
+        s = await _published(c)
+        pin = f"/v1/agents/{BRANCH}/skills/{s['id']}"
+        opened = _ok(await c.get(f"/v1/agents/{BRANCH}"))
+        base = {"baseVersion": opened["version"], "baseDigest": opened["digest"]}
+        between.append("saved during the patch")
+        patched = await c.patch(f"/v1/agents/{BRANCH}", json={"name": "Renamed", **base})
+        between.append("saved during the attach")
+        attached = await c.put(pin, json={"version": 1})
+        _ok(await c.put(pin, json={"version": 1}))
+        between.append("saved during the detach")
+        detached = await c.delete(pin)
+        kept = _ok(await c.get(f"/v1/agents/{BRANCH}"))
+        still_pinned = await c.delete(pin)
+    answers = [(r.status_code, r.json().get("error", {}).get("code")) for r in (patched, attached, detached)]
+    assert answers == [(409, "stale_base")] * 3, [r.text[:200] for r in (patched, attached, detached)]
+    # Each refused route wrote nothing: the name is as it was, and the pin the refused detach named is still there.
+    assert (kept["name"], still_pinned.status_code) == (opened["name"], 200), (kept["name"], still_pinned.text[:200])
