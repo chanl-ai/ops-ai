@@ -142,3 +142,12 @@ def test_unmarked_data_of_a_registered_preview_is_claimed_by_its_branch(tmp_path
     assert (tmp_path / "data" / "offset-51000" / "branch").read_text() == "feat/a"
     r = run(tmp_path, "start", "--branch", "feat/b", "--dry-run")
     assert "offset 53000" in r.stdout and "offset 52000" not in r.stdout
+
+
+def test_make_up_in_its_own_worktree_claims_an_unmarked_folder_and_refuses_another_branchs(tmp_path: Path) -> None:
+    d = tmp_path / "data" / "offset-52000"
+    d.mkdir(parents=True)
+    assert run(tmp_path, "check-offset", "--offset", "52000", "--branch", "feat/x").returncode == 0
+    assert (d / "branch").read_text() == "feat/x"
+    r = run(tmp_path, "check-offset", "--offset", "52000", "--branch", "feat/y")
+    assert r.returncode == 1 and "belongs to feat/x" in r.stderr

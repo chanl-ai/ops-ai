@@ -356,6 +356,18 @@ def check_offset(p: Previews, a: argparse.Namespace) -> int:
     for e in p.entries():
         if int(e["offset"]) == off and e["running"] and Path(e["dir"]).resolve() != root:
             held.append(f"offset {off} runs the preview of {e['branch']} ({e['dir']})")
+    branch = (
+        a.branch
+        or subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True, text=True, check=False
+        ).stdout.strip()
+    )
+    if branch and branch != "HEAD" and (p.data_root / f"offset-{off}").is_dir():
+        marker = p.data_root / f"offset-{off}" / "branch"
+        if not marker.exists():
+            p.mark_data(off, branch)  # a hand-started stack's folder, claimed by the worktree restarting it
+        elif marker.read_text().strip() != branch:
+            held.append(f"data in .data/offset-{off} belongs to {marker.read_text().strip()}, not {branch}")
     ports = ports_for(off, dict(os.environ))
     own_ports = docker_ports(f"ops-runtime-{off}") if any(v > 0 for v in ports) else set()
     held += blockers(ports, listening(), p.own_pids(off), own_ports)
