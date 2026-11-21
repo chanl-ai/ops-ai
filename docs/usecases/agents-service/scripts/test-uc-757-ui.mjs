@@ -171,7 +171,7 @@ await withUiStack(
       await lineOf('Offer to explain the review').waitFor({ timeout: 60_000 });
       const legend = page.getByTestId('sop-condition-how');
       await legend.first().waitFor({ timeout: 30_000 }).catch(() => undefined);
-      check('10 an if line shows whether it is checked or the agent decides', (await legend.count()) >= 1 && /^(checked|agent decides)$/.test(await legend.first().innerText()), await legend.allInnerTexts());
+      check('10 an if line shows that the agent decides', (await legend.count()) >= 1 && /^agent decides$/.test(await legend.first().innerText()), await legend.allInnerTexts());
       await shootBothWidths(page, AREA, 'uc-757-skill-text-admin', async () => {});
 
       await page.setViewportSize({ width: 1440, height: 1000 });

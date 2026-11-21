@@ -7,8 +7,9 @@ The text is a prompt with three things the kernel also enforces:
 - a line that mentions a tool, an agent, a workflow or a skill (`@tool:find_customer`) is a step that may use it;
   plain lines before it are part of that step's instruction;
 - `if <condition>:` with an indented block is a path, and `else:` at the same indent is the other one;
-- `stop "reason"` (or `stop <exit> "reason"`) ends the skill with that reason; a bare `stop <exit>` names an exit the
-  skill declares (or `done`, `failed`), and any other bare `stop …` line is an instruction;
+- `stop "reason"` (or `stop <exit> "reason"`) under an `if` or `else` ends the skill with that reason; at the top
+  level it is text. A bare `stop <exit>` on a path names an exit the skill declares (or `done`, `failed`), and any
+  other bare `stop …` line is an instruction;
 - under `if not <check>:`, a block of only `try again` (`try again 2 times`) or `go back to step 3` makes the check
   the step's own, retried or sent back when it fails; a step line ending in `(locked)` keeps even a read tool to it.
 
@@ -326,7 +327,7 @@ class _Parser:
                     }
                 )
                 items.extend(self._inner(line, ind, depth))
-            elif (stop := _stop_of(word, self.declared)) is not None and (depth > 0 or stop != (None, "")):
+            elif (stop := _stop_of(word, self.declared)) is not None and depth > 0:
                 name, rest = stop
                 ruled = name in BUILT_IN_EXITS or name in self.declared
                 rest = rest or (name.replace("_", " ") if name and not ruled else "")
@@ -335,14 +336,13 @@ class _Parser:
             else:
                 if _STOP.match(word):
                     self.marks[line]["kind"] = "text"
-                    if depth == 0 and _stop_of(word, self.declared) == (None, ""):
+                    if depth == 0 and _stop_of(word, self.declared) is not None:
                         self.hints.append(
                             {
                                 "line": line,
                                 "message": (
-                                    "A plain “Stop” ends the skill only on a path, under an “if …:” line, so here it "
-                                    "is read as an ordinary line. Indent it under its “if”, or give it a reason: "
-                                    "stop “Why it ends”."
+                                    "A “Stop” ends the skill only on a path, under an indented “if …:” line, so here "
+                                    "it is read as an ordinary line. Indent it under its “if”."
                                 ),
                             }
                         )

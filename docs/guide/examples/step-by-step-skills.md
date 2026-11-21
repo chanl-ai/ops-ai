@@ -131,7 +131,7 @@ prompt. Every line is an instruction to the agent. These things in it are also e
 | A line that mentions a tool, an agent, a workflow or a skill (`@tool:find_customer`) | A step that may use it. Plain lines above it are part of that step's instruction |
 | The same line ending in `(locked)` | The step's tool is offered only on this line, even when it only reads |
 | `if <condition>:` with an indented block, then `else:` at the same indent | A path: the nearest tool line above it in its block decides it, so plain lines between the two stay part of that step, and the other block is skipped |
-| `stop "reason"` (or `stop <exit> "reason"`) | An exit that ends the skill with that reason. A bare `stop <exit>` needs an ending the skill declares (or `done`, `failed`); any other bare `stop …` line is an instruction |
+| `stop "reason"` (or `stop <exit> "reason"`), under an `if` or `else` | An exit that ends the skill with that reason. A bare `stop <exit>` needs an ending the skill declares (or `done`, `failed`); any other bare `stop …` line is an instruction |
 | `if not <condition>:` with only `try again` (`try again 2 times`) or `go back to step 3` under it | The condition becomes the step's own check: a failure asks again up to that many times, or goes back to that step |
 
 ```text title="customer-lookup.txt"
@@ -159,8 +159,8 @@ line endings count as ordinary ones. Two rules keep a flat list a list:
 | `If …:` or `Otherwise:`, with or without a list marker, with indented lines under it | A path |
 | The same line with nothing indented under it, as in a flat numbered list (`2. If active:` / `3. Open the claim` / `4. Otherwise:`) | A plain line of its step, with a hint to indent the path |
 | `Stop` or `- Stop` with no reason, under an `if` or `else` | An exit |
-| `Stop` or `- Stop` with no reason at the top level, outside any path | A plain line, with a hint to indent it or give it a reason |
-| `stop "Reason"` anywhere | An exit |
+| `stop`, `Stop "Reason"` or `- Stop` at the top level, outside any path, with or without a reason | A plain line, with a hint to indent it under an `if` |
+| `stop "Reason"` under an `if` or `else` | An exit |
 
 So `2. If active:` followed by an indented `Open the claim` is a path, and the same lines written flat stay five
 steps the agent reads in order. In the console editor, click a mention to replace or remove it, tap a line with a wavy underline to

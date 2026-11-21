@@ -97,7 +97,7 @@ async def test_a_text_past_the_step_cap_saves_but_cannot_publish_and_a_plain_tex
         assert d["content"]["instructions"] == "Be warm and brief."
         # A reworded stop replaces its ending; the one the text no longer says goes with it.
         for reason in ("Card blocked", "Card held"):
-            sent = {"source": f'Look the customer up with @tool:lookup_customer\nstop "{reason}"'}
+            sent = {"source": f'Look the customer up with @tool:lookup_customer\nif found:\n    stop "{reason}"'}
             d = _ok(await save_skill_draft(c, s["id"], {**sent, "exit": d["content"].get("exit", {})}))
         assert d["content"]["exit"] == {"card_held": "Card held"}
 

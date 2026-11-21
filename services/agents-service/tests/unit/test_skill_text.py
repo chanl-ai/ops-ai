@@ -354,6 +354,27 @@ _POLICY: dict[str, Any] = {"active": {"type": "boolean"}}
             ],
             id="a flat numbered list builds no path and a top-level Stop is text, each with a hint",
         ),
+        pytest.param(
+            "1. Find the policy with @tool:find_policy\n2. Check the policy is active\n3. Open the claim with "
+            '@tool:open_claim\n4. Tell the customer\n5. Stop "Policy lapsed"\n6. Say goodbye',
+            ["step", "text", "step", "text", "text", "text"],
+            [5],
+            {},
+            [
+                "Find the policy with @tool:find_policy",
+                "Check the policy is active\nOpen the claim with @tool:open_claim",
+                'Tell the customer\nStop "Policy lapsed"\nSay goodbye',
+            ],
+            id="a top-level Stop with a reason in a flat list is text and every step runs",
+        ),
+        pytest.param(
+            "Find it with @tool:find_policy\n- if active:\n    Open it with @tool:open_claim\nOtherwise:\nSay goodbye",
+            ["step", "if", "step", "text", "text"],
+            [4],
+            {},
+            ["Find it with @tool:find_policy", "Open it with @tool:open_claim", "Otherwise:\nSay goodbye"],
+            id="a flat else after a real if is text with a hint",
+        ),
     ],
 )
 def test_the_reader_reads_each_keyword_with_or_without_a_list_marker(
