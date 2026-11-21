@@ -9988,6 +9988,46 @@
         "title": "EvalCheckResult",
         "type": "object"
       },
+      "EvalGate": {
+        "additionalProperties": false,
+        "description": "Whether the version a run scored may publish on its evals, and each step, as a publish check reads it.",
+        "properties": {
+          "blocked": {
+            "title": "Blocked",
+            "type": "boolean"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/GateStep"
+            },
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "blocked",
+          "steps"
+        ],
+        "title": "EvalGate",
+        "type": "object"
+      },
+      "EvalGateDetails": {
+        "additionalProperties": false,
+        "properties": {
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/GateStep"
+            },
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "steps"
+        ],
+        "title": "EvalGateDetails",
+        "type": "object"
+      },
       "EvalRunInput": {
         "additionalProperties": false,
         "properties": {
@@ -10020,6 +10060,16 @@
           "costUsd": {
             "title": "Costusd",
             "type": "number"
+          },
+          "gate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EvalGate"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "id": {
             "title": "Id",
@@ -14945,6 +14995,16 @@
         "additionalProperties": false,
         "description": "One thing that blocks a publish. `id` names the reference for a reference problem, as `<kind>:<id>`.",
         "properties": {
+          "details": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EvalGateDetails"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "id": {
             "anyOf": [
               {
@@ -14971,7 +15031,11 @@
               "deprecated",
               "too_long",
               "mention",
-              "hint"
+              "hint",
+              "eval_failed",
+              "eval_not_run",
+              "eval_no_cases",
+              "eval_setting_unread"
             ],
             "title": "Kind",
             "type": "string"

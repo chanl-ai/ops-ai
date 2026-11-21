@@ -15,6 +15,7 @@ from ops_service_kit.ids import now_iso
 
 from ..store.agent_registry import AgentRow
 from ..store.evals import EvalStore
+from . import eval_gate
 from .agent_test import judge_call, one_test_turn
 from .auth import Principal, started_by
 from .deps import Runtime
@@ -87,4 +88,5 @@ async def run_saved(rt: Runtime, me: Principal, row: AgentRow, *, trigger: str) 
         "ran_at": now_iso(),
     }
     await store.add_run(stored)
-    return stored_run(stored)
+    found, steps = await eval_gate.gate(rt, row, version)
+    return {**stored_run(stored), "gate": {"blocked": bool(found), "steps": cast(JsonList, steps)}}

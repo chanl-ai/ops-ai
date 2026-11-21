@@ -38,6 +38,7 @@ from ops_store import isolation
 from ...store.agent_registry import AgentRow, digest_of, refuse_stale
 from ...store.graphs import StoredThread
 from ...store.template_copies import TemplateCopies
+from .. import eval_gate
 from ..account_names import require_team_accounts
 from ..agent_registry import (
     GUARDRAILS,
@@ -738,11 +739,12 @@ async def publish_preview(rt: Rt, me: Me, agent_id: str, version: Annotated[int,
     return ok(decision.record())
 
 
-async def _publish_problems(rt: Runtime, spec: Json) -> list[Json]:
-    """What stops a version's publish: what its brief names and the agent lacks, and what in the skills it pins must
-    not run as stored. The check and the publish both read this list."""
+async def _publish_problems(rt: Runtime, row: AgentRow, version: int, spec: Json) -> list[Json]:
+    """What stops a version's publish: what its brief names and the agent lacks, what in the skills it pins must not
+    run as stored, and its evals (`eval_gate`). The check and the publish both read this list."""
     brief = cast(list[Json], agent_brief.publish_problems(spec))
-    return [*brief, *cast(list[Json], await skill_pin_problems(rt, spec))]
+    pins = cast(list[Json], await skill_pin_problems(rt, spec))
+    return [*brief, *pins, *await eval_gate.problems(rt, row, version)]
 
 
 @router.get("/{agent_id}/publish-check", response_model=Envelope[AgentPublishCheck])
@@ -752,7 +754,7 @@ async def publish_check(rt: Rt, me: Me, _: Tx, agent_id: str, version: Annotated
     (422 `cannot_publish`). 422 `not_newest_draft` for any other version."""
     row = await changeable(rt, me, agent_id, "publish")
     require_newest_draft(row, version)
-    problems = await _publish_problems(rt, (await registry(rt).version(agent_id, version)).spec)
+    problems = await _publish_problems(rt, row, version, (await registry(rt).version(agent_id, version)).spec)
     return ok({"canRequest": not problems, "problems": problems})
 
 
@@ -765,7 +767,7 @@ async def request_publish(rt: Rt, me: Me, agent_id: str, body: PublishRequestInp
     require_newest_draft(row, body.version)
     v = await reg.version(agent_id, body.version)
     spec = v.spec
-    if problems := await _publish_problems(rt, spec):
+    if problems := await _publish_problems(rt, row, body.version, spec):
         raise Unprocessable(
             "This version cannot be published yet: " + " ".join(str(p["message"]) for p in problems),
             code="cannot_publish",

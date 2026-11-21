@@ -7190,6 +7190,21 @@ export interface components {
              */
             status: "pass" | "fail";
         };
+        /**
+         * EvalGate
+         * @description Whether the version a run scored may publish on its evals, and each step, as a publish check reads it.
+         */
+        EvalGate: {
+            /** Blocked */
+            blocked: boolean;
+            /** Steps */
+            steps: components["schemas"]["GateStep"][];
+        };
+        /** EvalGateDetails */
+        EvalGateDetails: {
+            /** Steps */
+            steps: components["schemas"]["GateStep"][];
+        };
         /** EvalRunInput */
         EvalRunInput: {
             /** Cases */
@@ -7206,6 +7221,7 @@ export interface components {
             agentId: string;
             /** Costusd */
             costUsd: number;
+            gate?: components["schemas"]["EvalGate"] | null;
             /** Id */
             id: string;
             /** Liveversion */
@@ -8888,13 +8904,14 @@ export interface components {
          * @description One thing that blocks a publish. `id` names the reference for a reference problem, as `<kind>:<id>`.
          */
         PublishBlocker: {
+            details?: components["schemas"]["EvalGateDetails"] | null;
             /** Id */
             id?: string | null;
             /**
              * Kind
              * @enum {string}
              */
-            kind: "missing_field" | "missing_reference" | "unavailable_reference" | "bad_step" | "bad_check" | "bad_exit" | "sub_skill_not_held" | "prompt_rule_in_text" | "review_open" | "already_published" | "deprecated" | "too_long" | "mention" | "hint";
+            kind: "missing_field" | "missing_reference" | "unavailable_reference" | "bad_step" | "bad_check" | "bad_exit" | "sub_skill_not_held" | "prompt_rule_in_text" | "review_open" | "already_published" | "deprecated" | "too_long" | "mention" | "hint" | "eval_failed" | "eval_not_run" | "eval_no_cases" | "eval_setting_unread";
             /** Message */
             message: string;
             position?: components["schemas"]["BlockerPosition"] | null;

@@ -34,6 +34,8 @@ from ops_service_kit.http import (
     error_responses,
 )
 
+from .assurance_schemas import GateStep
+
 ERROR_RESPONSES = error_responses({503: "Degraded: no model, or the graph runtime did not start"})
 
 
@@ -362,6 +364,17 @@ class EvalSummary(Out):
     regressions: int
 
 
+class EvalGateDetails(Out):
+    steps: list[GateStep]
+
+
+class EvalGate(Out):
+    """Whether the version a run scored may publish on its evals, and each step, as a publish check reads it."""
+
+    blocked: bool
+    steps: list[GateStep]
+
+
 class AgentEvalRun(Out):
     """Cases sent in the body, scored and not kept."""
 
@@ -393,6 +406,8 @@ class EvalRunRecord(Out):
     unpriced: bool
     started_by: str
     ran_at: str
+    # Only on the reply of the run that was just made (`run_saved`); the CLI exits on it.
+    gate: EvalGate | None = None
 
 
 class LoadedSkill(Out):
@@ -1768,10 +1783,18 @@ class PublishBlocker(Out):
         # Only ever a warning: a tool a step's sentence names and the step does not run.
         "mention",
         "hint",
+        # The agent's evals (api/eval_gate.py): a blocking step failed, the team requires a run and there is none or
+        # no saved cases, or the team's evalsRequired setting could not be read.
+        "eval_failed",
+        "eval_not_run",
+        "eval_no_cases",
+        "eval_setting_unread",
     ]
     id: str | None = None
     position: BlockerPosition | None = None
     message: str
+    # An eval problem's steps, as the Evals page shows them.
+    details: EvalGateDetails | None = None
 
 
 class AgentPublishCheck(Out):

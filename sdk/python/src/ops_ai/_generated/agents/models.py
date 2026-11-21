@@ -1333,28 +1333,6 @@ class PromptVariable(TypedDict, closed=True):
     source: str
 
 
-class PublishBlocker(TypedDict, closed=True):
-    id: NotRequired[str | None]
-    kind: Literal[
-        "missing_field",
-        "missing_reference",
-        "unavailable_reference",
-        "bad_step",
-        "bad_check",
-        "bad_exit",
-        "sub_skill_not_held",
-        "prompt_rule_in_text",
-        "review_open",
-        "already_published",
-        "deprecated",
-        "too_long",
-        "mention",
-        "hint",
-    ]
-    message: str
-    position: NotRequired[BlockerPosition | None]
-
-
 class PublishDecisionFields(TypedDict, closed=True):
     majorChange: NotRequired[bool | None]
     policy: NotRequired[Literal["always", "major", "never"] | None]
@@ -1790,15 +1768,6 @@ class SkillProvenance(TypedDict, closed=True):
 class SkillPublishAgent(TypedDict, closed=True):
     name: str
     pinnedVersion: int | None
-
-
-class SkillPublishCheck(TypedDict, closed=True):
-    approversNeeded: int
-    blockers: list[str]
-    canRequest: bool
-    editClass: Literal["free", "re_test", "re_approval"]
-    problems: NotRequired[list[PublishBlocker]]
-    warnings: NotRequired[list[PublishBlocker]]
 
 
 class SkillRenderInput(TypedDict, closed=True):
@@ -2649,11 +2618,6 @@ class AgentPatch(TypedDict, closed=True):
     widgets: NotRequired[WidgetSettings | None]
 
 
-class AgentPublishCheck(TypedDict, closed=True):
-    canRequest: bool
-    problems: NotRequired[list[PublishBlocker]]
-
-
 class AgentPublishRequest(TypedDict, closed=True):
     agentId: str
     agentName: str
@@ -2988,11 +2952,6 @@ class EngineRunStep(TypedDict, closed=True):
     status: str
 
 
-class EnvelopeAgentPublishCheck(TypedDict, closed=True):
-    data: AgentPublishCheck
-    success: Literal[True]
-
-
 class EnvelopeAgentSkills(TypedDict, closed=True):
     data: AgentSkills
     success: Literal[True]
@@ -3314,6 +3273,15 @@ class EvalCasesInput(TypedDict, closed=True):
     cases: NotRequired[list[EvalCaseInput]]
 
 
+class EvalGate(TypedDict, closed=True):
+    blocked: bool
+    steps: list[GateStep]
+
+
+class EvalGateDetails(TypedDict, closed=True):
+    steps: list[GateStep]
+
+
 class EvalRunInput(TypedDict, closed=True):
     cases: NotRequired[list[EvalCaseInput] | None]
 
@@ -3321,6 +3289,7 @@ class EvalRunInput(TypedDict, closed=True):
 class EvalRunRecord(TypedDict, closed=True):
     agentId: str
     costUsd: float
+    gate: NotRequired[EvalGate | None]
     id: str
     liveVersion: int | None
     ranAt: str
@@ -3537,6 +3506,33 @@ class PublicForm(TypedDict, closed=True):
     title: str
 
 
+class PublishBlocker(TypedDict, closed=True):
+    details: NotRequired[EvalGateDetails | None]
+    id: NotRequired[str | None]
+    kind: Literal[
+        "missing_field",
+        "missing_reference",
+        "unavailable_reference",
+        "bad_step",
+        "bad_check",
+        "bad_exit",
+        "sub_skill_not_held",
+        "prompt_rule_in_text",
+        "review_open",
+        "already_published",
+        "deprecated",
+        "too_long",
+        "mention",
+        "hint",
+        "eval_failed",
+        "eval_not_run",
+        "eval_no_cases",
+        "eval_setting_unread",
+    ]
+    message: str
+    position: NotRequired[BlockerPosition | None]
+
+
 class PublishRequestInfo(TypedDict, closed=True):
     changes: list[str]
     digest: str
@@ -3688,6 +3684,15 @@ class SkillOptions(TypedDict, closed=True):
     limits: dict[str, int]
     teams: list[str]
     tools: list[SkillToolRef]
+
+
+class SkillPublishCheck(TypedDict, closed=True):
+    approversNeeded: int
+    blockers: list[str]
+    canRequest: bool
+    editClass: Literal["free", "re_test", "re_approval"]
+    problems: NotRequired[list[PublishBlocker]]
+    warnings: NotRequired[list[PublishBlocker]]
 
 
 class SkillPublishInfo(TypedDict, closed=True):
@@ -4000,6 +4005,11 @@ class AgentEvalRun(TypedDict, closed=True):
     unpriced: bool
 
 
+class AgentPublishCheck(TypedDict, closed=True):
+    canRequest: bool
+    problems: NotRequired[list[PublishBlocker]]
+
+
 class CaseDetail(TypedDict, closed=True):
     assignee: str | None
     createdAt: str
@@ -4093,6 +4103,11 @@ class DocumentRead(TypedDict, closed=True):
     records: list[ReadRecord]
     schema: list[ReadField]
     sources: NotRequired[list[str]]
+
+
+class EnvelopeAgentPublishCheck(TypedDict, closed=True):
+    data: AgentPublishCheck
+    success: Literal[True]
 
 
 class EnvelopeAgent(TypedDict, closed=True):

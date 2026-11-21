@@ -12,8 +12,6 @@ from ops_agents.domain.evals import (
     ASSET_AGENT,
     ASSET_SKILL,
     ASSET_WORKFLOW,
-    DEFAULT_TIER,
-    MODE_BLOCKING,
     STEP_FAIL,
     STEP_PASS,
     STEP_PENDING,
@@ -22,14 +20,15 @@ from ops_agents.domain.evals import (
 )
 from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.listing import ListParams
+from ops_store import isolation
 
 from ..store.assurance_list import Checks, Listed, Stats, read_list
 from .deps import Runtime
+from .eval_gate import STEP_LABELS, GateStep, checks_of, eval_steps, evals_required
 from .team_names import team_name
 
 HREF = {ASSET_AGENT: "/build/agents", ASSET_SKILL: "/build/skills", ASSET_WORKFLOW: "/build/workflows"}
 PASS, FAIL = "pass", "fail"
-STEP_LABELS = {"structural": "Structure checks", "pass_rate": "Pass rate", "regressions": "Regressions"}
 OPEN_STATUS = "pending"
 REVIEW_STATUSES = ("pending", "approved", "rejected", "returned")
 
@@ -92,6 +91,9 @@ class GateRow(AssetRow):
     total: Figure
     regressions: Figure
     checks_failing: Figure | None
+    cases: Figure
+    pass_rate_result: str
+    regressions_result: str
     blocked: JsonValue
 
 
@@ -160,14 +162,6 @@ class RunView(TypedDict):
     reviewId: None
 
 
-class GateStep(TypedDict):
-    step: str
-    label: str
-    mode: str
-    result: str
-    detail: str
-
-
 class GateView(TypedDict):
     """A publish request's checks as the Evals page reads them, in reply order."""
 
@@ -205,9 +199,11 @@ def _figures(s: Stats) -> Json:
     }
 
 
-def _checks(rt: Runtime) -> Checks:
-    blocking = frozenset(step for step in STEP_LABELS if step_mode(DEFAULT_TIER, step) == MODE_BLOCKING)
-    return Checks(tier=DEFAULT_TIER, blocking=blocking, min_pass_rate=rt.settings.eval_min_pass_rate)
+async def _checks(rt: Runtime) -> Checks:
+    """The acting team's checks, with its evalsRequired read as a publish reads it: a setting that cannot be read
+    counts as on, as the publish refuses then."""
+    required = await evals_required(rt, isolation.team())
+    return checks_of(rt, required=required is not False)
 
 
 async def _answer[R: AssetRow, V](
@@ -215,7 +211,7 @@ async def _answer[R: AssetRow, V](
 ) -> dict[str, JsonValue | list[V]]:
     """Reads the page, its extras and the figures in one transaction, then names the page's teams with none open.
     `shape` is given the page's team names, which a suite shows as its owner."""
-    checks = _checks(rt)
+    checks = await _checks(rt)
     listed = await read_list(rt.db, tab, params, checks)
     # The tab's columns as its page query selects them (store/assurance_list.py).
     rows = cast(list[R], listed.page["data"])
@@ -337,26 +333,19 @@ def _gate(row: GateRow, _listed: Listed, minimum: float, _teams: dict[str, str])
                 STEP_FAIL if failing else STEP_PASS,
                 f"{failing} structure checks fail." if failing else "Every structure check passes.",
             )
-    passed, total, regressions = int(row["passed"]), int(row["total"]), int(row["regressions"])
-    if not summarised or total == 0:
-        pending = f"No saved cases have run on version {version}."
-        add("pass_rate", STEP_PENDING, pending)
-        add("regressions", STEP_PENDING, pending)
-    else:
-        ok_rate = passed / total >= float(minimum)
-        add(
-            "pass_rate",
-            STEP_PASS if ok_rate else STEP_FAIL,
-            f"{passed} of {total} cases pass"
-            + ("." if ok_rate else f"; at least {round(float(minimum) * 100)}% must."),
+    # The step results are the store's rule (`assurance_list._eval_steps`); this only words them.
+    steps.extend(
+        eval_steps(
+            tier,
+            float(minimum),
+            version,
+            passed=int(row["passed"]),
+            total=int(row["total"]),
+            regressions=int(row["regressions"]),
+            pass_rate_result=row["pass_rate_result"],
+            regressions_result=row["regressions_result"],
         )
-        add(
-            "regressions",
-            STEP_FAIL if regressions else STEP_PASS,
-            f"{regressions} cases pass on the live version and fail on this one."
-            if regressions
-            else "No case that passes live fails here.",
-        )
+    )
     published = row["published_version"]
     status = str(row["status"])
     return {

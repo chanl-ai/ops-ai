@@ -33,15 +33,19 @@ CASE_ACTIVE, CASE_DRAFT = "active", "draft"
 TRIGGER_MANUAL = "manual"
 DECIDED = ("approved", "rejected", "returned")
 OPEN = "pending"
+# A publish check step's result, as domain/evals.py names them.
+STEP_PASS, STEP_FAIL, STEP_PENDING = "pass", "fail", "pending"
 
 
 @dataclass(frozen=True)
 class Checks:
-    """How the caller judges a publish: the tier every list shows, the steps that block at it, the lowest pass rate."""
+    """How the caller judges a publish: the tier every list shows, the steps that block at it, the lowest pass rate,
+    and whether the team requires a finished run (evalsRequired), which adds a block for no cases and for no run."""
 
     tier: str
     blocking: frozenset[str]
     min_pass_rate: float
+    required: bool = False
 
 
 def _text(value: str) -> sa.ColumnElement[str]:
@@ -118,6 +122,53 @@ def _latest_validation(name: str) -> sa.Subquery:
     n = sa.func.row_number().over(partition_by=v.c.workflow_id, order_by=(v.c.ran_at.desc(), v.c.id.desc()))
     ranked = sa.select(v, n.label("n")).where(mine(v)).subquery(f"{name}_ranked")
     return sa.select(ranked).where(ranked.c.n == 1).subquery(name)
+
+
+def _active_cases(name: str) -> sa.Subquery:
+    """The number of active saved cases per (kind, asset) of the acting team."""
+    c = eval_cases
+    return (
+        sa.select(c.c.kind, c.c.asset_id, sa.func.count().label("active"))
+        .where(mine(c), team_visible(c), c.c.status == CASE_ACTIVE)
+        .group_by(c.c.kind, c.c.asset_id)
+        .subquery(name)
+    )
+
+
+@dataclass(frozen=True)
+class _Steps:
+    pass_rate: sa.ColumnElement[str]
+    regressions: sa.ColumnElement[str]
+    blocked: sa.ColumnElement[bool]
+
+
+def _eval_steps(
+    run_id: sa.ColumnElement[Any],
+    passed: sa.ColumnElement[int],
+    total: sa.ColumnElement[int],
+    regressions: sa.ColumnElement[int],
+    checks: Checks,
+    *,
+    gated: sa.ColumnElement[bool] | None = None,
+) -> _Steps:
+    """The one statement of the eval rule, which the Evals page (`gates`) and a publish (`version_gate`) both read:
+    each step's result (pass, fail, or pending while no run of the version counts) and whether the version is blocked.
+    The tier's blocking steps decide which failed step blocks once a run exists; `checks.required` only adds a block
+    while there is no counted run. Neither lifts a block the other sets. `gated` limits the required block to the rows
+    it holds for (agents and skills, never workflows)."""
+    counted = sa.and_(run_id.is_not(None), total > 0)
+    rate = sa.cast(passed, sa.Float()) / sa.case((total > 0, total), else_=1)
+    rate_fails = rate < sa.literal(checks.min_pass_rate, sa.Float())
+    pass_rate = sa.case((~counted, _text(STEP_PENDING)), (rate_fails, _text(STEP_FAIL)), else_=_text(STEP_PASS))
+    regressed = sa.case((~counted, _text(STEP_PENDING)), (regressions > 0, _text(STEP_FAIL)), else_=_text(STEP_PASS))
+    failing: list[sa.ColumnElement[bool]] = []
+    if "pass_rate" in checks.blocking:
+        failing.append(sa.and_(counted, rate_fails))
+    if "regressions" in checks.blocking:
+        failing.append(sa.and_(counted, regressions > 0))
+    if checks.required:
+        failing.append(~counted if gated is None else sa.and_(gated, ~counted))
+    return _Steps(pass_rate=pass_rate, regressions=regressed, blocked=sa.or_(*failing) if failing else sa.false())
 
 
 def _result(run_id: sa.ColumnElement[Any], passed: sa.ColumnElement[int], total: sa.ColumnElement[int]) -> Any:
@@ -246,9 +297,11 @@ def gates(checks: Checks) -> sa.Subquery:
     p, u, tier = publish_requests, assets(), checks.tier
     run = _latest((eval_runs.c.kind, eval_runs.c.asset_id, eval_runs.c.version), "version_run")
     val = _latest_validation("gate_validation")
+    active = _active_cases("gate_cases")
     is_workflow = p.c.kind == ASSET_WORKFLOW
     joined = (
         p.join(u, sa.and_(u.c.kind == p.c.kind, u.c.asset_id == p.c.subject_id))
+        .outerjoin(active, sa.and_(active.c.kind == p.c.kind, active.c.asset_id == p.c.subject_id))
         .outerjoin(
             run,
             sa.and_(
@@ -261,16 +314,12 @@ def gates(checks: Checks) -> sa.Subquery:
     passed = sa.func.coalesce(val.c.passed, run.c.passed, 0)
     total = sa.func.coalesce(val.c.total, run.c.total, 0)
     regressions = sa.func.coalesce(val.c.regressions, run.c.regressions, 0)
-    counted = sa.and_(summary_id.is_not(None), total > 0)
-    failing: list[sa.ColumnElement[bool]] = []
+    cases = sa.func.coalesce(active.c.active, 0)
+    steps = _eval_steps(summary_id, passed, total, regressions, checks, gated=~is_workflow)
+    failing: list[sa.ColumnElement[bool]] = [steps.blocked]
     if "structural" in checks.blocking:
         failing.append(sa.and_(is_workflow, val.c.id.is_not(None), val.c.checks_failing > 0))
-    if "pass_rate" in checks.blocking:
-        rate = sa.cast(passed, sa.Float()) / sa.case((total > 0, total), else_=1)
-        failing.append(sa.and_(counted, rate < sa.literal(checks.min_pass_rate, sa.Float())))
-    if "regressions" in checks.blocking:
-        failing.append(sa.and_(counted, regressions > 0))
-    blocked = sa.and_(p.c.status == OPEN, sa.or_(*failing)) if failing else sa.false()
+    blocked = sa.and_(p.c.status == OPEN, sa.or_(*failing))
     q = sa.select(
         p.c.id.label("id"),
         p.c.kind.label("kind"),
@@ -287,6 +336,9 @@ def gates(checks: Checks) -> sa.Subquery:
         total.label("total"),
         regressions.label("regressions"),
         val.c.checks_failing.label("checks_failing"),
+        cases.label("cases"),
+        steps.pass_rate.label("pass_rate_result"),
+        steps.regressions.label("regressions_result"),
         sa.case((blocked, 1), else_=0).label("blocked"),
         sa.case((blocked, _text("blocked")), (p.c.status.in_(DECIDED), _text("decided")), else_=_text("ready")).label(
             "result"
@@ -338,6 +390,54 @@ async def gates_page(conn: AsyncConnection, params: ListParams, *, checks: Check
         facets={"tier": u.c.tier, "result": u.c.result},
         key=(u.c.id,),
     )
+
+
+class VersionGate(BaseModel):
+    """The eval rule's answer for one version: each step's result, the counts it read, and whether it blocks."""
+
+    run_id: str | None
+    passed: int
+    total: int
+    regressions: int
+    cases: int
+    pass_rate_result: str
+    regressions_result: str
+    blocked: bool
+
+
+async def version_gate(conn: AsyncConnection, kind: str, asset_id: str, version: int, checks: Checks) -> VersionGate:
+    """The rule `gates` shows on the Evals page, for one version with no publish request: the newest run of exactly
+    that version in the acting team; a pass on an older version never counts. Runs are written only once `run_eval`
+    has finished (`api/eval_runs.run_saved`), so every row read here is a complete run. The tier's blocking steps
+    decide which steps block once a run exists; `checks.required` only adds the no-cases and not-run blocks."""
+    r = eval_runs
+    newest = (
+        sa.select(r.c.id, r.c.passed, r.c.total, r.c.regressions)
+        .where(mine(r), team_visible(r), r.c.kind == kind, r.c.asset_id == asset_id, r.c.version == version)
+        .order_by(r.c.ran_at.desc(), r.c.id.desc())
+        .limit(1)
+        .subquery("gate_run")
+    )
+    active = _active_cases("version_cases")
+    one = sa.select(sa.literal(1).label("one")).subquery("gate_one")
+    joined = one.outerjoin(newest, sa.true()).outerjoin(
+        active, sa.and_(active.c.kind == kind, active.c.asset_id == asset_id)
+    )
+    passed, total = sa.func.coalesce(newest.c.passed, 0), sa.func.coalesce(newest.c.total, 0)
+    regressions = sa.func.coalesce(newest.c.regressions, 0)
+    steps = _eval_steps(newest.c.id, passed, total, regressions, checks)
+    q = sa.select(
+        newest.c.id.label("run_id"),
+        passed.label("passed"),
+        total.label("total"),
+        regressions.label("regressions"),
+        sa.func.coalesce(active.c.active, 0).label("cases"),
+        steps.pass_rate.label("pass_rate_result"),
+        steps.regressions.label("regressions_result"),
+        sa.case((steps.blocked, 1), else_=0).label("blocked"),
+    ).select_from(joined)
+    row = (await conn.execute(q)).mappings().one()
+    return VersionGate.model_validate({**row, "blocked": bool(row["blocked"])})
 
 
 class Stats(BaseModel):
@@ -479,6 +579,7 @@ __all__ = [
     "Listed",
     "Stats",
     "SuiteExtra",
+    "VersionGate",
     "assets",
     "gates",
     "gates_page",
@@ -489,4 +590,5 @@ __all__ = [
     "suite_details",
     "suites",
     "suites_page",
+    "version_gate",
 ]

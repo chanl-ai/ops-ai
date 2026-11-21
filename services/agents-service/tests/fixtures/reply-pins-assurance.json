@@ -505,6 +505,25 @@
       "data": {
         "agentId": "<ag>",
         "costUsd": 0.0,
+        "gate": {
+          "blocked": true,
+          "steps": [
+            {
+              "detail": "1 of 2 cases pass; at least 80% must.",
+              "label": "Pass rate",
+              "mode": "blocking",
+              "result": "fail",
+              "step": "pass_rate"
+            },
+            {
+              "detail": "No case that passes live fails here.",
+              "label": "Regressions",
+              "mode": "advisory",
+              "result": "pass",
+              "step": "regressions"
+            }
+          ]
+        },
         "id": "<evr>",
         "liveVersion": null,
         "ranAt": "<timeZ>",
