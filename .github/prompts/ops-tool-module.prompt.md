@@ -1,6 +1,6 @@
 ---
 name: ops-tool-module
-description: Add a tool module (OpenAPI, MCP, HTTP or a Python code tool) with its credential as a secret and its host on the egress list, then publish it through review. Use when someone wants an agent or workflow to call a new system.
+description: Add a tool module (OpenAPI, MCP, HTTP or Python code tool) with its credential as a secret and its host on the egress list, then publish it through review. Use to let an agent call a new system.
 agent: agent
 ---
 

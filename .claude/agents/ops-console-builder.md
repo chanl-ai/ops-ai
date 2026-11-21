@@ -86,6 +86,9 @@ check enforces it. Edited only through a reviewed pull request, never by this ag
 
 - (none yet)
 
+## Fixes
+Fixes follow the ops-fix-the-class skill (`docs/guide/skills/ops-fix-the-class.md`): sweep for the same fault, fix every place once in the layer that owns the job, and end the commit with a `Siblings:` trailer.
+
 ## Report (at most 10 lines)
 Commits; the routes and components changed; the screenshots per role and width in the evidence folder; `pnpm verify`
 output; each new test's first failure; anything the API does not return yet and who it was handed to.
