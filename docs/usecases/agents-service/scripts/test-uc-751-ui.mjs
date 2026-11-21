@@ -2,7 +2,7 @@
 // Headless Chromium, signed in through platform-service. A builder's saved cases and two runs show on Govern > Evals as
 // an admin and as a viewer: three tabs (no Evidence or Judges), counts equal rows, no sample data. S6: on the agent's
 // Evals tab a builder adds a judge case, runs it and reads the result and its cost; a viewer sees the tab without Add case or Run evals.
-// S7: with a failing case run on the newest version, Request publish names the failing step and Publish is disabled; once the case
+// S10: with a failing case run on the newest version, Request publish names the failing step and Publish is disabled; once the case
 // is fixed and run again, it is enabled.
 import { AGENTS_PORT, asRole, check, chromium, consoleSignIn, finish, shootBothWidths, withUiStack } from '@ops-ai/usecase-runner/harness';
 
@@ -71,7 +71,7 @@ await withUiStack(
       await shootBothWidths(james, 'agents-service', 'uc-751-agent-evals-tab', async () => {
         await james.waitForTimeout(300);
       });
-      // S7: a failed blocking eval step stops the publish dialog; fixing the case and running again opens it.
+      // S10: a failed blocking eval step stops the publish dialog; fixing the case and running again opens it.
       // A new agent is a draft with nothing published, so its header offers Request publish.
       const made = (await (await fetch(`${agents}/v1/agents`, { method: 'POST', headers: builder, body: JSON.stringify({ name: 'Wire hold desk', role: 'Checks wires before they leave' }) })).json()).data;
       const FAILING = { cases: [{ name: 'Never says it', input: 'Hello', checks: [{ type: 'reply_contains', text: 'zzq-never-said-zzq' }] }] };

@@ -1,5 +1,5 @@
 """uc-751, sdk layer: docs/usecases/agents-service/evals-keep-saved-cases-and-runs.md. The same flow through the Python SDK:
-a builder saves cases and runs them, a viewer reads suites and runs, a member of another team reads nothing. S7: the SDK runs the saved cases, reads the run's gate and cost, and the publish
+a builder saves cases and runs them, a viewer reads suites and runs, a member of another team reads nothing. S8: the SDK runs the saved cases, reads the run's gate and cost, and the publish
 request is refused naming the step."""
 
 from __future__ import annotations
@@ -66,7 +66,7 @@ with platform(), agents(env={**AUTH, **PRICED}):
     cant = refused(lambda: outsider.raw.agents.agents_create_eval_run(AGENT, {}))
     check("15 another team sees no suites and cannot run the agent (404)", theirs["data"] == [] and cant is not None and cant.status == 404, cant and cant.status)
 
-    # S7
+    # S8
     priya = OpsAI.sign_in("p.shah@harborpine.example", PASSWORD, team="team_ops", **CONN)
     desk = james.agents.create({"name": "Fee desk", "role": "Answers questions about fees"})
     judged = [

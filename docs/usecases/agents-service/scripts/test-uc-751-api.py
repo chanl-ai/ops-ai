@@ -127,7 +127,9 @@ with platform() as (identity, _internal), agents(env={**AUTH, **PRICED}) as api:
     )
 
     on = identity.put("/v1/policies/evalsRequired", json={"value": True}, headers=admin)
-    bare = data(api.post("/v1/agents", json={"name": "Bare desk", "role": "Answers questions about hours"}, headers=builder))
+    made_bare = api.post("/v1/agents", json={"name": "Bare desk", "role": "Answers questions about hours"}, headers=builder)
+    assert made_bare.status_code == 201, f"creating the bare agent: {made_bare.status_code} {made_bare.text[:300]}"
+    bare = data(made_bare)
     again = api.post(f"/v1/agents/{bare['id']}/publish-requests", json={"version": bare["version"], "note": "go"}, headers=builder)
     kinds = [p["kind"] for p in (again.json().get("error", {}).get("details") or {}).get("problems", [])]
     check(

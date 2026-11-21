@@ -1,4 +1,4 @@
-"""uc-751, cli layer: docs/usecases/agents-service/evals-keep-saved-cases-and-runs.md, story S7. A builder runs
+"""uc-751, cli layer: docs/usecases/agents-service/evals-keep-saved-cases-and-runs.md, story S9. A builder runs
 `opsai agents eval` as CI does: a saved judged case that fails stops it (exit 1, the blocked step named, a cost above 0),
 a passing case lets it through (exit 0), and an agent that does not exist is exit 2. Platform sign-in and agents-service
 on the scripted model."""

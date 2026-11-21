@@ -33,7 +33,10 @@ and agents and the scripted model, so no real model is called.
 | S4 | The same flow works through the Python SDK, and another team still sees nothing | sdk | 11, 12, 13, 14, 15 | 15 |
 | S5 | An admin and a viewer open Govern > Evals: three tabs, counts equal rows, no sample data | ui | 1, 2, 3, 4, 5, 6 | 3 |
 | S6 | James opens the agent's Evals tab, adds a judge case, runs it and sees the result and its cost; Ravi sees the tab without Add case or Run evals | ui | 16, 17, 18, 19, 20, 21 | 20 |
-| S7 | A failing judged case run the way CI runs it stops the publish: the run names the failed step and costs above 0, the request is refused naming it, `opsai agents eval` exits 1, and a team that requires evals refuses an agent with no saved cases | api, sdk, cli, ui | 22 to 26 (ui), 27, 28, 29 (api), 30, 31, 32 (sdk), 33 to 37 (cli) | 28 |
+| S7 | A failing judged case run the way CI runs it stops the publish: the run names the failed step and costs above 0, the request is refused naming it, and a team that requires evals refuses an agent with no saved cases | api | 27, 28, 29 | 28 |
+| S8 | The same gate through the Python SDK: the run carries its gate and cost, and the publish is refused | sdk | 30, 31, 32 | 31 |
+| S9 | `opsai agents eval` exits 1 on a blocked gate, 0 when open, 2 when it cannot run, and `--cases` keeps no run | cli | 33, 34, 35, 36, 37 | 33 |
+| S10 | Request publish names the failing step and Publish is disabled; after the case is fixed and run again, Publish is enabled | ui | 22, 23, 24, 25, 26 | 23 |
 
 ## Preconditions
 
