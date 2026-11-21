@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, StringConstraints,
 from ops_access.catalogue import INVITE_ROLES
 from ops_service_kit.flags import FlagName
 from ops_service_kit.http import In, ListResult, Out
+from ops_service_kit.names import Name
 
 
 class SignIn(In):
@@ -379,7 +380,7 @@ class InvitePreview(Out):
 
 
 class AcceptIn(In):
-    name: str = Field(min_length=1, max_length=200)
+    name: Name
     # Set for a new person in a workspace that signs in by password; stored as a hash.
     password: str | None = Field(default=None, max_length=200)
 
@@ -421,7 +422,7 @@ class KeyTargetIn(In):
 
 
 class ApiKeyIn(In):
-    name: str = Field(min_length=1, max_length=200)
+    name: Name
     scopes: list[Literal["read", "write"]] = Field(min_length=1, max_length=2)
     expires_in_days: int | None = Field(default=None, ge=1, le=730)
     # The one agent or workflow the key may start; left out, any live workflow of the team.
@@ -725,7 +726,7 @@ class GroupSettings(In):
 
 class ProviderIn(In):
     kind: Literal["password", "oidc", "saml"]
-    label: str = Field(min_length=1, max_length=200)
+    label: Name
     enabled: bool = True
     domains: list[Annotated[str, StringConstraints(to_lower=True, max_length=253, pattern=DOMAIN)]] = Field(
         default_factory=list[str], max_length=50

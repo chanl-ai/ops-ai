@@ -8,6 +8,7 @@ from typing import Annotated, Literal
 from pydantic import Field
 
 from ops_service_kit.http import In, Json, JsonValue, ListResult, Out
+from ops_service_kit.names import Name
 
 # `Json` types a body's section, patch or stage settings: keys checked as a whole by the service (settings sections,
 # source stages), so any JSON object.
@@ -727,7 +728,7 @@ class WrittenItemIn(In):
     """One item written into a typed text or push source. `name` is its key: sent again with the same content it is
     unchanged, with new content it is the item's next version."""
 
-    name: str = Field(min_length=1, max_length=200)
+    name: Name
     title: str | None = Field(default=None, max_length=200)
     # Markdown by default; `mime` text/plain or text/html for other text.
     text: str | None = Field(default=None, max_length=1_000_000)

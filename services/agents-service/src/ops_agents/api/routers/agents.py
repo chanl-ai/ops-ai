@@ -32,6 +32,7 @@ from ops_service_kit.errors import Conflict, NotFound, Unprocessable, Validation
 from ops_service_kit.http import Envelope, In, Json, JsonList, ListResult, Out
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.listing import ListQuery
+from ops_service_kit.names import Name
 from ops_store import isolation
 
 from ...store.agent_registry import AgentRow
@@ -110,7 +111,7 @@ class Guardrails(In):
 
 
 class AgentInput(In):
-    name: str = Field(min_length=1, max_length=200)
+    name: Name
     role: str = Field(min_length=1, max_length=400)
     # A models-service alias; empty runs the agent on the runtime's alias.
     model: str = ""
@@ -135,7 +136,7 @@ class WidgetPinInput(In):
 
 
 class AgentPatch(In):
-    name: str | None = Field(default=None, min_length=1, max_length=200)
+    name: Name | None = None
     role: str | None = Field(default=None, min_length=1, max_length=400)
     model: str | None = None
     channels: list[Channel] | None = None

@@ -21,6 +21,7 @@ from ops_identity.fastapi import Tx
 from ops_service_kit.errors import NotFound, Unprocessable
 from ops_service_kit.http import Envelope, In, ListResult, Out, ok
 from ops_service_kit.listing import ListQuery
+from ops_service_kit.names import Name, Name120
 
 from .callers import caller_in
 from .mcp_server import WORKFLOW_PREFIX
@@ -39,7 +40,7 @@ ACCESS = Access()
 class PickedTool(In):
     # A tool as the tools picker names it: an operation's name, or `workflow:<id>` for a published workflow.
     id: str = Field(min_length=1, max_length=200)
-    label: str = Field(min_length=1, max_length=200)
+    label: Name
     # For a workflow, what the link picker's option said it takes and does (agents-service's catalog), listed to
     # assistants in tools/list. It only describes: agents-service checks the input again when the run starts.
     input_schema: dict[str, JsonValue] | None = None
@@ -47,7 +48,7 @@ class PickedTool(In):
 
 
 class McpLinkIn(In):
-    name: str = Field(min_length=1, max_length=120)
+    name: Name120
     environment: Literal["test"] = "test"
     tools: list[PickedTool] = Field(min_length=1, max_length=MAX_TOOLS)
 

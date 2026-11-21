@@ -20,6 +20,7 @@ from ops_identity.fastapi import Tx
 from ops_service_kit.errors import Unprocessable
 from ops_service_kit.http import Envelope, In, Json, ListResult
 from ops_service_kit.listing import ListQuery
+from ops_service_kit.names import Name
 
 from ... import task_types as tt
 from ..auth import Principal, caller_in, caller_of, reader_of
@@ -37,7 +38,7 @@ router = APIRouter(prefix="/v1/task-types")
 
 
 class Definition(In):
-    name: str = Field(min_length=1, max_length=200)
+    name: Name
     description: str = Field(default="", max_length=2000)
     params: dict[str, Any]
     regions: list[dict[str, Any]]
@@ -54,7 +55,7 @@ class TypeIn(In):
     id: str = Field(min_length=3, max_length=64)
     # Start from this type's published version (the newest when no version); the fields below replace its own.
     copy_of: TypeRef | None = None
-    name: str | None = Field(default=None, min_length=1, max_length=200)
+    name: Name | None = None
     description: str | None = Field(default=None, max_length=2000)
     params: dict[str, Any] | None = None
     regions: list[dict[str, Any]] | None = None

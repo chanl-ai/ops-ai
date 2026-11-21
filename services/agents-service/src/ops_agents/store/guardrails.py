@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from ops_service_kit.errors import Conflict
 from ops_service_kit.http import Json, Out
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.names import cap_slug
 from ops_store import Guarantee
 from ops_store.rows import rows
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, team_owned_via
@@ -129,7 +130,7 @@ class GuardrailVersion(Out):
 
 
 def _slug(name: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "guardrail"
+    return cap_slug(re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-"), 120) or "guardrail"
 
 
 class GuardrailRegistry(VersionedRegistry[GuardrailRow, GuardrailVersion]):

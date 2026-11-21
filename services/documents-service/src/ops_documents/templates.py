@@ -37,6 +37,7 @@ from ops_identity import ServiceCallError, ServiceUnreachable
 from ops_identity.fastapi import Tx
 from ops_service_kit.errors import ApiError, Conflict, NotFound, ServiceUnavailable, ValidationFailed
 from ops_service_kit.http import Envelope, In, Json, JsonValue, Out, ok
+from ops_service_kit.names import Name
 from ops_service_kit.narrow import a_list, an_object, entries, required
 from ops_service_kit.template_merge import Choice, FieldOutcome, apply, merge
 
@@ -94,7 +95,7 @@ class InstallInput(In):
     # The version listed now when left out; another one is 404 template_version_not_found.
     version: int | None = Field(default=None, ge=1)
     # The copy's name; the template's when left out. Unique in the team, as on create (409 name_taken).
-    name: str | None = Field(default=None, min_length=1, max_length=200)
+    name: Name | None = None
 
 
 class Installation(Out):

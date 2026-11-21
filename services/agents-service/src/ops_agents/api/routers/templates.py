@@ -45,6 +45,7 @@ from ops_service_kit.errors import (
 )
 from ops_service_kit.http import Envelope, In, Json, JsonList, JsonValue, Out
 from ops_service_kit.ids import new_id
+from ops_service_kit.names import Name
 from ops_service_kit.template_merge import Choice, FieldOutcome, Strictness, apply, merge
 
 from ...store.agent_registry import SPEC_FIELDS
@@ -190,7 +191,7 @@ class InstallInput(In):
     # The version listed now when left out; another one is 404 template_version_not_found.
     version: int | None = Field(default=None, ge=1)
     # The copy's name; the template's when left out. A name the team already uses for the kind is 409 name_taken.
-    name: str | None = Field(default=None, min_length=1, max_length=200)
+    name: Name | None = None
     # The team's own knowledge bases and model alias for the template's bindings; a binding left out is named in
     # `needs` and the copy is made without it.
     knowledge_bases: list[str] = Field(default_factory=list[str], max_length=20)

@@ -8,6 +8,7 @@ from typing import Annotated, Literal
 from pydantic import Field, model_validator
 
 from ops_service_kit.http import In, JsonValue, Out
+from ops_service_kit.names import Name
 
 # Whose account a call signs in with: the team's one sign-in, the person the call acts for, or the person's
 # with the team's as the backup for calls with nobody behind them.
@@ -22,7 +23,7 @@ class NewAppIn(In):
     """A custom app a builder adds, as its first account: by name with a sign-in kind, or an MCP server by its address,
     whose sign-in is found from the server."""
 
-    name: str | None = Field(default=None, min_length=1, max_length=200)
+    name: Name | None = None
     auth_kind: str | None = Field(default=None, min_length=1, max_length=40)
     sign_in: SignIn = "team"
     # What the console's card shows for a system connected by name; the docs link must be https.
@@ -48,7 +49,7 @@ class AccountIn(In):
     app it takes the first account's contract (the kind, whose account calls use, the OAuth app and the credentials);
     on a custom app it signs in with the app's kind, with the kind's fields given in `credentials`."""
 
-    name: str = Field(min_length=1, max_length=200)
+    name: Name
     sandbox: bool = False
     # A plugin's settings this account keeps its own, such as a sandbox's sign-in address.
     settings: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
@@ -71,7 +72,7 @@ class AnotherOwnIn(In):
     account of the app in the team holds, and where it signs in (the app's per-account settings, such as a company
     server's address), kept as given rather than copied from the account it starts from."""
 
-    name: str = Field(min_length=1, max_length=200)
+    name: Name
     settings: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
 
 
