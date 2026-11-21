@@ -72,7 +72,7 @@ _FLIP = {">": "<=", "<": ">=", ">=": "<", "<=": ">"}
 # A path is a line that starts with "if" (any case) and ends in a colon; `else:` or `otherwise:` is the other one. A
 # stop line holds nothing but an exit name and a quoted reason, so prose that starts with "If", "Else" or "Stop" and
 # runs on stays an instruction.
-_IF = re.compile(r"^if\s+(.+?)\s*:\s*$", re.IGNORECASE)
+_IF = re.compile(r"^if\s+(\S(?:.*\S)?)\s*:\s*$", re.IGNORECASE)
 _ELSE = re.compile(r"^(?:else|otherwise)\s*:\s*$", re.IGNORECASE)
 # A pasted list item: `•`, `-`, `*`, `1.` or `1)`. Its indent opens nothing, and its marker is not read: `2. If
 # found:` is a path like `If found:`.
