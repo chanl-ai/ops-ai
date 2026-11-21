@@ -1,6 +1,7 @@
 """What people read when a step fails, on PostgreSQL with the real worker, read back through the run page's
 route, by failure mode: the run's error is a Python exception (`ValueError: reply's input mailbox, subject is empty when
-ack opens`, staging wfrun_ae6001c606ce), or the failed step is never marked failed and its detail is lost."""
+ack opens`, staging wfrun_ae6001c606ce), or the failed step is never marked failed and its detail is lost; a fault of
+the worker's own reads as the app failing, so people are told to try again; the error's details never reach the API."""
 
 from __future__ import annotations
 
@@ -18,7 +19,7 @@ from ops_agents.api.routers.engine import get_engine_run
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.events import EventLog
 from ops_agents.store.tenancy import tenant_scope
-from ops_engine.definition import parse
+from ops_engine.definition import WorkflowDefinition, parse
 from ops_engine.store import DefinitionStore, RunStore
 from ops_engine.store.tables import engine_work
 from ops_engine.worker import MAX_PASSES
@@ -117,3 +118,91 @@ async def test_a_failing_step_shows_people_a_plain_message_and_keeps_the_detail_
     ), failure
     assert failure["message"] == error and failure["nodeName"] == "Send the acknowledgement", failure
     assert "ack" not in failure["userMessage"] and "_" not in failure["userMessage"], failure
+
+
+async def failed_run_as_shown(
+    engine: AsyncEngine, definition: WorkflowDefinition, payload: dict[str, Any]
+) -> dict[str, Any]:
+    """A run of `definition` worked on the last pass the worker allows, as the run page's route returns it."""
+    tenant, tx = f"t-{uuid4().hex[:8]}", EngineTransactions(engine)
+    with tenant_scope(tenant):
+        version, _ = await DefinitionStore(tx).publish(
+            definition.id,
+            name=definition.id,
+            definition=definition.wire(),
+            digest=definition.digest(),
+            now="n",
+            by="a@x",
+            stage="live",
+        )
+        run_id = new_id("wfrun")
+        run = {"id": run_id, "team_id": "team_a", "workflow_id": definition.id, "version": version}
+        await RunStore(tx).create(
+            run
+            | {"digest": definition.digest(), "run_key": run_id, "mode": "live", "input": payload, "created_by": "a"}
+        )
+    async with engine.begin() as c:
+        await c.execute(engine_work.update().where(engine_work.c.run_id == run_id).values(attempts=MAX_PASSES - 1))
+    await drain(worker(engine, CountingTools(), InMemorySaver()))
+    rt: Any = SimpleNamespace(db=engine, policies=NoPolicies(), settings=SimpleNamespace(review_sla_hours=24.0))
+    with tenant_scope(tenant):
+        shown = json.loads(bytes((await get_engine_run(rt, M, run_id)).body))["data"]
+    assert shown["status"] == "failed", shown
+    return shown
+
+
+# A Combine step whose source has no name, which the engine reads without checking: the step raises a KeyError from
+# the engine's own code, and no app or tool was called.
+MERGE = parse(
+    {
+        "schemaVersion": 2,
+        "id": "merge_sources",
+        "nodes": [
+            {"id": "start", "type": "ops.trigger.request", "typeVersion": 1, "parameters": {}},
+            {
+                "id": "merge",
+                "type": "ops.data.combine",
+                "typeVersion": 1,
+                "name": "Combine the sources",
+                "parameters": {"sources": [{"values": {"amount": 250}}]},
+            },
+            {"id": "done", "type": "ops.flow.end", "typeVersion": 1, "parameters": {"outcome": "merged"}},
+        ],
+        "connections": [
+            {"from": {"node": "start", "port": "payload"}, "to": {"node": "merge", "port": "in"}},
+            {"from": {"node": "merge", "port": "out"}, "to": {"node": "done", "port": "in"}},
+        ],
+    }
+)
+
+
+async def test_a_fault_of_our_own_in_a_step_reads_internal_and_not_retryable(engine: AsyncEngine) -> None:
+    failure = (await failed_run_as_shown(engine, MERGE, {}))["failure"]
+    assert failure["nodeId"] == "merge", f"the step did not fail the run itself: {failure}"
+    assert (failure["kind"], failure["code"], failure["retryable"]) == ("internal", "internal_error", False), failure
+
+
+# A trigger wired straight to an End its builder marked as a failure.
+DECLINE = parse(
+    {
+        "schemaVersion": 2,
+        "id": "decline_request",
+        "nodes": [
+            {"id": "start", "type": "ops.trigger.request", "typeVersion": 1, "parameters": {}},
+            {
+                "id": "declined",
+                "type": "ops.flow.end",
+                "typeVersion": 1,
+                "name": "Declined",
+                "parameters": {"outcome": "declined", "result": "failed"},
+            },
+        ],
+        "connections": [{"from": {"node": "start", "port": "payload"}, "to": {"node": "declined", "port": "in"}}],
+    }
+)
+
+
+async def test_a_run_errors_details_reach_the_run_page(engine: AsyncEngine) -> None:
+    failure = (await failed_run_as_shown(engine, DECLINE, {}))["failure"]
+    assert failure["code"] == "ended_as_failure", failure
+    assert failure.get("details") == {"end": "Declined"}, failure
