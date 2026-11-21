@@ -30,6 +30,7 @@ from usecase_harness import (
     demo,
     finish,
     pg_url,
+    save_agent,
     turn_text,
 )
 
@@ -76,7 +77,7 @@ def grant(api: httpx.Client, *, on: bool) -> int:
     tools: list[str] = list(data(api.get(f"/v1/agents/{AGENT}", headers=OPS))["toolIds"])
     wanted = f"workflow:{WORKFLOW}"
     tools = [t for t in tools if t != wanted] + ([wanted] if on else [])
-    patched = api.patch(f"/v1/agents/{AGENT}", json={"toolIds": tools}, headers=OPS)
+    patched = save_agent(api, AGENT, {"toolIds": tools}, headers=OPS)
     if patched.status_code != 200:
         return patched.status_code
     # A save is a new version; the live agent changes once it is published (dev approves its own request).

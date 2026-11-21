@@ -133,6 +133,18 @@ def data(r: httpx.Response, status: int | None = None) -> Any:
     return body["data"]
 
 
+async def save_agent(
+    agents: httpx.AsyncClient, agent_id: str, fields: dict[str, Any], headers: dict[str, str]
+) -> httpx.Response:
+    """PATCH an agent, naming the copy it just read (baseVersion, baseDigest) as the API requires; returns the PATCH."""
+    path = f"/v1/agents/{agent_id}"
+    seen = await agents.get(path, headers=headers)
+    copy: dict[str, Any] = (seen.json().get("data") or {}) if seen.status_code == 200 else {}
+    return await agents.patch(
+        path, json={**fields, "baseVersion": copy.get("version"), "baseDigest": copy.get("digest")}, headers=headers
+    )
+
+
 @dataclass
 class Seeded:
     retail_kb: str
@@ -258,7 +270,7 @@ async def wire_agents(agents: httpx.AsyncClient, seeded: Seeded) -> None:
     advisor = [*reads, "workflow:customer_summary"]
     for agent_id, kb_ids, tools in (("ag_advisor", [seeded.retail_kb], advisor), ("ag_policy", [seeded.branch_kb], [])):
         body: dict[str, Any] = {"collections": kb_ids, "toolIds": tools}
-        r = await agents.patch(f"/v1/agents/{agent_id}", json=body, headers=team)
+        r = await save_agent(agents, agent_id, body, team)
         patched = data(r)
         r = await agents.post(
             f"/v1/agents/{agent_id}/publish-requests",

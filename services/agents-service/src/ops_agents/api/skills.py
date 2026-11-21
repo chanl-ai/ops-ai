@@ -704,6 +704,8 @@ class SkillDetailView(SkillListRow):
     content: SkillContent
     # The text the editor shows: `content.source`, or the stored steps written as text.
     text: str
+    # The newest version's stored digest: with `version`, the copy a draft save names as its base.
+    digest: str
     versions: list[SkillVersionView]
     tests: list[JsonValue]
     runs: list[JsonValue]
@@ -947,6 +949,7 @@ async def detail(rt: Runtime, skill_id: str, *, fresh: bool = False) -> SkillDet
             **base,
             "content": _wire(content_of(newest.content)),
             "text": text_of(newest.content),
+            "digest": newest.digest,
             "versions": [
                 {
                     "version": v.version,

@@ -51,9 +51,10 @@ test('a review decision goes to the review the version waits on', async () => {
 
 test('granting tools keeps the ones the agent already holds', async () => {
   const seen = [];
-  const ops = client(() => [200, { id: 'agt_1', toolIds: ['op:a', 'op:b'] }], seen);
+  const ops = client(() => [200, { id: 'agt_1', version: 3, digest: 'd3', toolIds: ['op:a', 'op:b'] }], seen);
   await ops.agents.grantTools('agt_1', ['op:b', 'op:c']);
-  assert.deepEqual(seen.at(-1).body, { toolIds: ['op:a', 'op:b', 'op:c'] });
+  // The save names the copy the grant was added to, so the service refuses it when that copy has moved on.
+  assert.deepEqual(seen.at(-1).body, { toolIds: ['op:a', 'op:b', 'op:c'], baseVersion: 3, baseDigest: 'd3' });
 });
 
 test('a held write asks for the step-up and is retried once with its token', async () => {

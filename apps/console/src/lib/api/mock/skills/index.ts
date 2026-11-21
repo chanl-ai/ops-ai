@@ -46,6 +46,7 @@ import { ApiError, type OpsApi } from '../../contract';
 import type { SkillsApi } from '../../skills-contract';
 import type { FileLinks } from '../files';
 import { auditSink } from '../governance';
+import { digestOf } from '../knowledge/ingest';
 import { pageOptions } from '../../options';
 import { field, id, list, mode, notFound, respond } from '../runtime';
 import { isOffered } from '../references';
@@ -429,6 +430,8 @@ export function createSkillsMock(deps: SkillsDeps) {
       ...row(sk),
       content: content(sk, newest(sk).content),
       text: newest(sk).content.source ?? newest(sk).content.instructions,
+      // Changes with every save of the draft, as the service's stored digest does.
+      digest: digestOf(JSON.stringify(newest(sk).content)),
       versions: sk.versions.map((v) => version(sk, v)),
       tests: sk.tests,
       runs: sk.runs,
@@ -854,7 +857,7 @@ export function createSkillsMock(deps: SkillsDeps) {
         const sk = find(sid);
         if (sk.deprecated) throw new ApiError('The skill is deprecated. Duplicate it to change it.', 409);
         const n = newest(sk);
-        if (patch.baseVersion !== n.version) throw new ApiError(`v${n.version} was saved by ${n.savedBy} ${n.version > patch.baseVersion ? 'after you opened the page' : ''}. Reload to see it.`.replace(' .', '.'), 409, undefined, 'stale_base');
+        if (patch.baseVersion !== n.version || patch.baseDigest !== digestOf(JSON.stringify(n.content))) throw new ApiError('The draft was saved after it was read; reload and try again.', 409, undefined, 'stale_base', { version: n.version, savedBy: n.savedBy, savedAt: n.savedAt });
         if (n.state === 'in_review') throw new ApiError(`v${n.version} is waiting in Reviews. Withdraw it there, or wait for the decision.`, 409);
         validateContent({ ...patch, loading: patch.loading ?? n.content.loading });
         const before = n.content;

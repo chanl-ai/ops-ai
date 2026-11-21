@@ -31,6 +31,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { PageSaveActions } from '@/components/shared/page-save-actions';
 import { plural } from '@/lib/format';
 import { type Carried, keptEdits } from '@/lib/kept-edits';
+import { baseOf, staleNote, staleSave } from '@/lib/save-base';
 import type { PublishBlocker } from '@/lib/types/references';
 import type { SkillDetail, SkillEditClass, SkillInputField, SkillLoading, SkillPartContent } from '@/lib/types/skills';
 
@@ -145,11 +146,12 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried }: { sk
     try {
       // A skill saved as a list of steps keeps them until its text is changed; one written as text sends its text.
       const text = form.text !== saved.text || sk.content.source !== undefined ? { source: form.text } : {};
-      const d = await save.mutateAsync({ name: form.name, useWhen: form.when.useWhen, loading: form.loading, ...(stepped ? {} : { instructions: form.instructions }), toolIds: form.toolIds, knowledgeBases: form.knowledgeBases, guardrails: form.guardrails, refusal: form.refusal.trim(), parts: form.parts, ...(stepped ? { inputs: form.inputs, ...text, notWhen: form.when.notWhen.trim(), exit: form.ending.exit, returns: form.ending.returns, success: form.ending.success } : {}), note: note.trim() || undefined, baseVersion: newest.version });
+      const d = await save.mutateAsync({ name: form.name, useWhen: form.when.useWhen, loading: form.loading, ...(stepped ? {} : { instructions: form.instructions }), toolIds: form.toolIds, knowledgeBases: form.knowledgeBases, guardrails: form.guardrails, refusal: form.refusal.trim(), parts: form.parts, ...(stepped ? { inputs: form.inputs, ...text, notWhen: form.when.notWhen.trim(), exit: form.ending.exit, returns: form.ending.returns, success: form.ending.success } : {}), note: note.trim() || undefined, ...baseOf(sk) });
       toast.success(`Saved draft v${d.versions[0].version}`, { description: `${EDIT_CLASS[d.versions[0].editClass].hint} Run the tests before requesting review.` });
     } catch (e) {
       // In review and deprecated are 409 as well; only a newer version offers a reload.
-      if ((e as { code?: string }).code === 'stale_base') return setStale((e as Error).message);
+      const newer = staleSave(e);
+      if (newer) return setStale(staleNote(newer));
       const onStep = refusedSave(e);
       if (onStep?.position?.step) {
         setRefused(onStep);

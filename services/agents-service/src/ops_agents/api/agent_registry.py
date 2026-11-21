@@ -599,6 +599,8 @@ class AgentView(TypedDict):
     controls: Json
     usedIn: list[WorkflowUse]
     staleToolIds: NotRequired[list[str]]
+    # On the detail reply only: with `version`, the copy a save names as its base.
+    digest: NotRequired[str]
     templateId: NotRequired[JsonValue]
     protection: NotRequired[JsonValue]
 

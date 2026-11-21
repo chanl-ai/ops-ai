@@ -59,6 +59,8 @@ with a read and a write on a mock bank, published for the team, and platform sig
 | 12 | On the agent page James types `@` in the brief | The menu lists a tool the agent lacks and says what picking it adds |
 | 13 | James picks the tool | The tool is added to the agent and the brief saves |
 | 17 | James opens the test chat, then a chat whose reply ended a skill on a reviewer's rejection | The panel shows the skill and the step it is on; the chat view shows, once under that reply, that the skill stopped at step 3 because a reviewer rejected the action |
+| 20 | Two sessions read the same agent draft and both save (api); Priya saves a new Goal in the brief and switches parallel reads off while James has the agent page open, and he changes the brief's Purpose and Thinking (ui) | The second save is refused, 409 `stale_base`, naming who saved and when, and a save that names no copy is refused, 400; the page says who saved and keeps his change, and Reload saves his Purpose and Thinking with her Goal and her parallel reads |
+| 21 | Two sessions save the same skill draft (api); James saves the agent from elsewhere, then changes a field on the page (ui) | The second skill save is refused under the same version number; the page reads the agent again and saves with no message |
 
 ## Acceptance layers
 

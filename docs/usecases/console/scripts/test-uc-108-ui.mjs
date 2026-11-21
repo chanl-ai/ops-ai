@@ -3,6 +3,7 @@
 // make one model call: James's second message pauses on a budget card with the server's numbers, he continues and the
 // turn answers; Priya, a team admin, raises the budget on her own chat; the wrong person is refused on each action.
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
+import { saveAgent } from '../../lib/agent_save.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const NAME = `Budget Desk ${Math.random().toString(36).slice(2, 6)}`;
@@ -39,7 +40,7 @@ await withUiStack(
     const made = await (await fetch(`${agents}/v1/agents`, { method: 'POST', headers: J, body: JSON.stringify({ name: NAME, role: 'Answers account questions' }) })).json();
     if (!made.data) throw new Error(`setup: create agent: ${JSON.stringify(made).slice(0, 300)}`);
     const guardrails = { ...made.data.guardrails, maxModelCallsPerConversation: 1 };
-    const saved = await (await fetch(`${agents}/v1/agents/${made.data.id}`, { method: 'PATCH', headers: J, body: JSON.stringify({ guardrails, note: 'one call per conversation' }) })).json();
+    const saved = await (await saveAgent(agents, J, made.data.id, { guardrails, note: 'one call per conversation' })).json();
     if (!saved.data) throw new Error(`setup: caps: ${JSON.stringify(saved).slice(0, 300)}`);
     const pub = await fetch(`${agents}/v1/agents/${made.data.id}/publish-requests`, { method: 'POST', headers: J, body: JSON.stringify({ version: saved.data.version, note: 'first' }) });
     if (!pub.ok) throw new Error(`setup: publish answered ${pub.status}: ${await pub.text()}`);

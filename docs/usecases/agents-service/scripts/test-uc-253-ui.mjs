@@ -5,6 +5,7 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { saveAgent } from '../../lib/agent_save.mjs';
 
 const QUESTION = 'UC229 FUND QUESTION: what should my client know about the Harbor & Pine fund?';
 const CORRECTED = "I can't give investment advice. A licensed adviser can talk your client through the fund.";
@@ -77,7 +78,7 @@ await withUiStack(
       const J = { Authorization: `Bearer ${(await signIn.json()).data.token}`, 'Content-Type': 'application/json' };
       const agentsUrl = `http://127.0.0.1:${AGENTS_PORT}/v1/agents/ag_advisor`;
       const advisor = (await (await fetch(agentsUrl, { headers: J })).json()).data;
-      const drafted = await fetch(agentsUrl, { method: 'PATCH', headers: J, body: JSON.stringify({ instructions: `${advisor.instructions} UC253 DRAFT` }) });
+      const drafted = await saveAgent(`http://127.0.0.1:${AGENTS_PORT}`, J, 'ag_advisor', { instructions: `${advisor.instructions} UC253 DRAFT` });
       await page.setViewportSize({ width: 1280, height: 900 });
       await page.goto(`${consoleUrl}/agents/ag_advisor`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await panel.waitFor({ timeout: 120_000 });

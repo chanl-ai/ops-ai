@@ -9,6 +9,7 @@ from typing import Any, cast
 from httpx import AsyncClient
 
 from ..conftest import sse_events
+from ..saves import save_agent
 from .test_agent_registry import _app, _ok  # pyright: ignore[reportPrivateUsage]
 from .test_chat_budget import who
 from .test_write_approval_policy import dev_platform  # noqa: F401  # pyright: ignore[reportUnusedImport] - fixture
@@ -85,7 +86,7 @@ async def test_a_picked_skill_stops_loading_once_the_menu_is_off_or_the_right_is
 
     off = _ok(await dev_platform.post("/chat/threads", json={"agentId": "ag_fraud", "kbIds": []}, headers=admin), 201)
     assert skill in await _used(dev_platform, off["id"], "Brief me", admin, **pick)
-    draft = _ok(await dev_platform.patch("/v1/agents/ag_fraud", json={"skillMenu": "off"}, headers=admin))
+    draft = _ok(await save_agent(dev_platform, "ag_fraud", {"skillMenu": "off"}, headers=admin))
     _ok(
         await dev_platform.post(
             "/v1/agents/ag_fraud/publish-requests", json={"version": draft["version"]}, headers=admin

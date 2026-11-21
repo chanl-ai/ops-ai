@@ -26,6 +26,7 @@ import { sampleBackground } from './background';
 import { createCasesMock } from './cases';
 import { createChatMock } from './chat';
 import { createKnowledgeMock } from './knowledge';
+import { digestOf } from './knowledge/ingest';
 import { createKnowledgeChangesMock } from './knowledge-changes';
 import { createNotificationsMock } from './notifications';
 import { createSearchMock } from './search';
@@ -309,7 +310,8 @@ export function createMockApi(): OpsApi {
     const limits = a.limits ?? { allowedModels: [a.model], defaultModel: a.model, allowedKnowledgeBaseIds: a.collections, switchableToolIds: a.toolIds, callersMayAddInstructions: false, publicKeyMay: ['tools', 'knowledge', 'budget', 'outputSchema', 'variables'] as const satisfies readonly AgentPublicKeyOverride[] };
     const controls = { channels: ['voice', 'chat', 'email', 'api'] as Channel[], guardrails: ['redactPii', 'maxToolCallsPerTurn', 'whenUnsure', 'blockedTopics'] as (keyof AgentGuardrails)[], evals: true };
     const uses = { tools: a.toolIds.length, knowledgeBases: a.collections.length, skills: a.brief ? 1 : 0, agents: 0, workflows: 0 };
-    return { ...a, brief: a.brief ?? null, promptMode: a.promptMode ?? null, patterns: a.patterns ?? { thinking: 'default' as const, parallelReads: true }, uses, limits: { ...limits, publicKeyMay: [...limits.publicKeyMay] }, controls, staleToolIds, publishedVersion, availability: a.paused ? ('paused' as const) : publishedVersion !== null ? ('published' as const) : ('not_published' as const), usedIn, workflowIds: usedIn.map((u) => u.workflowId), wrapperWorkflowId: wrappers?.wrapperOf(a.id) };
+    // Changes with every save, as the service's digest of the stored agent does.
+    return { ...a, digest: digestOf(JSON.stringify(a)), brief: a.brief ?? null, promptMode: a.promptMode ?? null, patterns: a.patterns ?? { thinking: 'default' as const, parallelReads: true }, uses, limits: { ...limits, publicKeyMay: [...limits.publicKeyMay] }, controls, staleToolIds, publishedVersion, availability: a.paused ? ('paused' as const) : publishedVersion !== null ? ('published' as const) : ('not_published' as const), usedIn, workflowIds: usedIn.map((u) => u.workflowId), wrapperWorkflowId: wrappers?.wrapperOf(a.id) };
   };
 
   const policyRow = (p: GatePolicy): GatePolicy => ({ ...p, workflowName: wfName(p.workflowId) });
@@ -783,7 +785,9 @@ export function createMockApi(): OpsApi {
       update: (aid, patch) =>
         respond(() => {
           const a = agentOr404(aid);
-          const { note, ...fields } = patch;
+          const { note, baseVersion, baseDigest, ...fields } = patch;
+          // As the service answers a save made from an older copy.
+          if (baseVersion !== a.version || baseDigest !== digestOf(JSON.stringify(a))) throw new ApiError('The draft was saved after it was read; reload and try again.', 409, undefined, 'stale_base', { version: a.version, savedBy: me, savedAt: a.updatedAt });
           // As the service answers: a brief agent's prompt is written from its brief, so text sent without one is refused.
           if (a.promptMode === 'brief' && !fields.brief && fields.promptMode !== 'full' && (fields.instructions !== undefined || fields.role !== undefined)) throw new ApiError('This agent’s prompt is written from its brief. Edit the brief, or switch to plain text.', 422, undefined, 'brief_owns_prompt');
           if (fields.brief) Object.assign(fields, { role: fields.brief.purpose, instructions: composeBrief(fields.brief), promptMode: fields.promptMode ?? 'brief' });

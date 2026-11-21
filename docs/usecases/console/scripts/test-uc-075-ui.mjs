@@ -8,6 +8,7 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { AGENTS_PORT, FILES_PORT, KB_PORT, PLATFORM_PORT, ROOT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { saveAgent } from '../../lib/agent_save.mjs';
 
 // A failing check leaves a screenshot to look at.
 const EVIDENCE = evidenceDir('uc-075');
@@ -104,7 +105,7 @@ await withUiStack(
       // citation is kb-service's passage from the PDF.
       const J = { Authorization: `Bearer ${await tokenFor(JAMES)}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
       const agent = (await (await fetch(`${agents}/v1/agents`, { method: 'POST', headers: J, body: JSON.stringify({ name: `Branch desk ${TAG}`, role: 'Answers from the branch manual' }) })).json()).data;
-      const grantRes = await (await fetch(`${agents}/v1/agents/${agent.id}`, { method: 'PATCH', headers: J, body: JSON.stringify({ collections: [kbId] }) })).json();
+      const grantRes = await (await saveAgent(agents, J, agent.id, { collections: [kbId] })).json();
       const granted = grantRes.data;
       if (!granted) throw new Error(`setup: grant the base: ${JSON.stringify(grantRes).slice(0, 400)}`);
       await fetch(`${agents}/v1/agents/${agent.id}/publish-requests`, { method: 'POST', headers: J, body: JSON.stringify({ version: granted.version, note: 'uc-075' }) });

@@ -43,7 +43,7 @@ export function useInstructionsAssist({
   const [genOpen, setGenOpen] = React.useState(false);
   const [templateOpen, setTemplateOpen] = React.useState(false);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
-  const granted = tools.filter((t) => draft.toolIds.includes(t.id)).map((t) => t.name);
+  const granted = tools.filter((t) => agent.toolIds.includes(t.id)).map((t) => t.name);
   const next = agent.version + 1;
 
   const toolbar = (
@@ -74,8 +74,8 @@ export function useInstructionsAssist({
         open={genOpen}
         onOpenChange={setGenOpen}
         backend={generator}
-        context={{ model: draft.model, grantedTools: granted, collections: draft.collections }}
-        initial={initialSpec({ role: draft.role, channels: draft.channels, tools: granted, collections: draft.collections, guardrails: draft.guardrails })}
+        context={{ model: draft.model, grantedTools: granted, collections: agent.collections }}
+        initial={initialSpec({ role: draft.role, channels: draft.channels, tools: granted, collections: agent.collections, guardrails: draft.guardrails })}
         currentInstructions={draft.instructions}
         onApply={(text) => {
           setInstructions(text);

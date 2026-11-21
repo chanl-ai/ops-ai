@@ -20,7 +20,7 @@ from fake_sharepoint_confluence import FAILING_QUERY, connect, stack
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate
-from usecase_harness import KB_PORT, agents, check, data, every_page, finish, sse
+from usecase_harness import KB_PORT, agents, check, data, every_page, finish, save_agent, sse
 
 RUN = int(time.time())
 OWNER = "maya@harborpine.example"
@@ -72,7 +72,7 @@ def agent(api: Any, collections: list[str]) -> str:
     made = data(
         api.post("/v1/agents", json={"name": f"Policy desk {RUN}", "role": "Answers policy questions"}, headers=OPS)
     )
-    saved = data(api.patch(f"/v1/agents/{made['id']}", json={"collections": collections}, headers=OPS))
+    saved = data(save_agent(api, made["id"], {"collections": collections}, headers=OPS))
     api.post(
         f"/v1/agents/{made['id']}/publish-requests", json={"version": saved["version"], "note": "uc-678"}, headers=OPS
     )

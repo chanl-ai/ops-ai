@@ -24,6 +24,7 @@
             "maxCostPerConversation"
           ]
         },
+        "digest": "<hex>",
         "guardrailPins": [],
         "guardrails": {
           "blockedTopics": [],
@@ -652,6 +653,7 @@
             "maxCostPerConversation"
           ]
         },
+        "digest": "<hex>",
         "guardrailPins": [],
         "guardrails": {
           "blockedTopics": [],
@@ -783,6 +785,7 @@
             "maxCostPerConversation"
           ]
         },
+        "digest": "<hex>",
         "guardrailPins": [],
         "guardrails": {
           "blockedTopics": [],
@@ -894,6 +897,7 @@
             "maxCostPerConversation"
           ]
         },
+        "digest": "<hex>",
         "guardrailPins": [],
         "guardrails": {
           "blockedTopics": [],
@@ -1329,6 +1333,7 @@
           ],
           "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship."
         },
+        "digest": "<hex>",
         "draftVersion": 1,
         "id": "<sk>",
         "inputs": [],
@@ -1663,6 +1668,7 @@
           ],
           "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship."
         },
+        "digest": "<hex>",
         "draftVersion": null,
         "id": "<sk>",
         "inputs": [],
@@ -1789,6 +1795,7 @@
           ],
           "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship."
         },
+        "digest": "<hex>",
         "draftVersion": 1,
         "id": "<sk>",
         "inputs": [],

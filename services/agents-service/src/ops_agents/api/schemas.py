@@ -214,6 +214,8 @@ class Agent(Out):
     can_edit: bool | None = None
     can_delete: bool | None = None
     can_publish: bool | None = None
+    # With `version`, the copy a save names as its base (`baseVersion`, `baseDigest`); on the detail response only.
+    digest: str | None = None
     name: str
     # From the provisioning service: the template it was made from, and `system` or `managed`; null otherwise.
     template_id: str | None = None
@@ -1813,6 +1815,8 @@ class SkillDetail(Skill):
     content: SkillContent
     # The text the editor shows: `content.source`, or a skill's stored steps written as text by the same reader.
     text: str
+    # With `version`, the copy a draft save names as its base (`baseVersion`, `baseDigest`).
+    digest: str
     versions: list[SkillVersion]
     # Both are empty today: skill tests moved into assurance suites and nothing sends a shape here.
     tests: list[JsonValue]

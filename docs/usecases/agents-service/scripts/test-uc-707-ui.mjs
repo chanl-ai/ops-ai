@@ -8,6 +8,7 @@ import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 
 import { AGENTS_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { agentBase } from '../../lib/agent_save.mjs';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
 const agentsUrl = `http://127.0.0.1:${AGENTS_PORT}`;
@@ -75,7 +76,7 @@ try {
       const on = await call(tools, 'PUT', `/v1/apps/${encodeURIComponent(APP)}/team`, priya, { enabled: true, signIn: 'team', accountName: 'Retail org', settings: { login_url: sf.login_url } });
       const eu = await call(tools, 'POST', `/v1/apps/${encodeURIComponent(APP)}/accounts`, priya, { name: 'EU org', settings: { login_url: sf.eu_login_url } });
       const agent = await call(agentsUrl, 'POST', '/v1/agents', priya, { name: 'Claims desk', role: 'Answers about claims' });
-      const named = await call(agentsUrl, 'PATCH', `/v1/agents/${agent.data?.id}`, priya, { accounts: { [APP]: 'EU org' } });
+      const named = await call(agentsUrl, 'PATCH', `/v1/agents/${agent.data?.id}`, priya, { accounts: { [APP]: 'EU org' }, ...(await agentBase(agentsUrl, priya, agent.data?.id)) });
       check('0 Salesforce has Retail org and EU org, and an agent names EU org', on.status === 200 && eu.status === 201 && named.status === 200, { on: on.text, eu: eu.text, named: named.text });
       const browser = await chromium.launch();
       try {

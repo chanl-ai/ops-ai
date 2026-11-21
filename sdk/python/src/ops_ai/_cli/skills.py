@@ -41,7 +41,7 @@ def apply(ops: OpsAI, data: dict[str, Any], *, note: str = "") -> Any:
     fields = {k: data[k] for k in SKILL_KEYS if k in data}
     current = _stored(ops, data)
     if current is not None:
-        return ops.skills.save_draft(str(current["id"]), fields, note=note, base_version=int(current["version"]))
+        return ops.skills.save_draft(str(current["id"]), fields, note=note, base=current)
     return ops.skills.create({**fields, **{k: data[k] for k in CREATE_ONLY if k in data}})
 
 

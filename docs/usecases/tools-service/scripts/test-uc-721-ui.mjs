@@ -5,6 +5,7 @@
 import { mkdirSync } from 'node:fs';
 import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, check, chromium, consoleSignIn, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 import { JAMES, MAYA, PASSWORD, PRIYA, as, openHeldChatWrite, until } from '../../lib/workflow_ui.mjs';
+import { agentBase } from '../../lib/agent_save.mjs';
 
 const SHOTS = evidenceDir('721', 'screens');
 mkdirSync(SHOTS, { recursive: true });
@@ -48,7 +49,7 @@ await withUiStack(
     await (await import('@ops-ai/usecase-runner/harness')).approveToolReview(moduleId, await as(NADIA, 'team_security'), J);
     await until(async () => ((await call('GET', `${agents}/v1/tools/options?search=${WRITE}`, J)).data?.data ?? []).some((o) => o.id === WRITE), 60);
     const agent = (await call('POST', `${agents}/v1/agents`, J, { name: `Closer ${RUN}`, role: 'Closes tickets' })).data;
-    const granted = (await call('PATCH', `${agents}/v1/agents/${agent.id}`, J, { toolIds: [WRITE] })).data;
+    const granted = (await call('PATCH', `${agents}/v1/agents/${agent.id}`, J, { toolIds: [WRITE], ...(await agentBase(agents, J, agent.id)) })).data;
     await call('POST', `${agents}/v1/agents/${agent.id}/publish-requests`, J, { version: granted.version, note: 'uc-721' });
     const rowsOf = async () => ((await call('GET', `${tools}/v1/executions?tool=${WRITE}`, J)).data?.data ?? []).filter((r) => r.target === WRITE);
     const ran = async () => (await rowsOf()).filter((r) => r.status === 'ok' || r.effect === true);
