@@ -54,6 +54,8 @@ const refused = (what: string) => () => {
 
 const chat: ChatApi = {
   agents: async () => [],
+  // The widget talks to one agent, so its composer offers no @ hand-over.
+  agentOptions: async () => ({ data: [], nextCursor: null }),
   settings: new Proxy({} as ChatApi['settings'], { get: () => refused('change thread settings') }),
   // The widget talks to one agent and keeps no memories of its own; both are console features.
   defaultAgent: new Proxy({} as ChatApi['defaultAgent'], { get: () => refused('change the default agent') }),

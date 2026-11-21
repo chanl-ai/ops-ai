@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { NodeViewContent, NodeViewWrapper, useEditorState, type ReactNodeViewProps } from '@tiptap/react';
-import { Ban, BookOpen, Bot, Braces, Lock, LockOpen, Play, Plus, Search, Sparkles, TriangleAlert, Workflow, Wrench, X, type LucideIcon } from 'lucide-react';
+import { Ban, Braces, Lock, LockOpen, Play, Plus, Search, TriangleAlert, X, type LucideIcon } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -10,9 +10,11 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { PublishBlocker, Ref, RefKind, ReferenceItem } from '@/lib/types/references';
 
+import { KIND_ICON } from '@/components/shared/reference-kinds';
+
 import { type IfNot, chipFor, refToken, refsInNode, runsIndex } from './document-model';
 
-export const KIND_ICON: Record<RefKind, LucideIcon> = { tool: Wrench, knowledge: BookOpen, skill: Sparkles, agent: Bot, workflow: Workflow };
+export { KIND_ICON };
 
 export interface InvalidField {
   /** A block's key (`brief.purpose`), or `steps`. */

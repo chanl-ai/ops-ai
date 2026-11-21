@@ -15,7 +15,7 @@ from typing import Literal
 from pydantic import ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
-from ops_agent_kernel.steps import IfNot, Ref, ReturnField, StepCheck
+from ops_agent_kernel.steps import IfNot, Jump, Ref, ReturnField, StepCheck
 from ops_agents.activities.agent_limits import AgentLimits
 
 # The envelope models live in ops_service_kit.http; the routers keep importing them from here.
@@ -581,6 +581,45 @@ class PublishRequestInfo(PublishDecisionFields):
     digest: str
 
 
+class SkillPublishAgent(Out):
+    name: str
+    pinned_version: int | None
+
+
+class TextHint(Out):
+    """A hint the reader put on one line of a skill's text (from 1)."""
+
+    line: int
+    message: str
+
+
+class SkillPublishInfo(Out):
+    """A skill publish request as its reviewer reads it, kept as it was when the request opened: the published
+    version it replaces, both texts, the hints on the new text and what it adds."""
+
+    skill_id: str
+    skill_name: str
+    owner_team: str
+    from_version: int | None
+    to_version: int
+    edit_class: str
+    requested_by: str
+    note: str
+    changes: list[str]
+    # Skill tests are not run yet: always null and empty.
+    test_run: None = None
+    failing: list[str]
+    tools_added: list[str]
+    kbs_added: list[str]
+    guardrails: list[str]
+    agents: list[SkillPublishAgent]
+    approvals_needed: int
+    # Absent on a request opened before the texts were kept with it.
+    text_before: str | None = None
+    text_after: str | None = None
+    hints: list[TextHint]
+
+
 class OperationSummary(Out):
     name: str
     method: str | None = None
@@ -642,7 +681,7 @@ class PublishReview(Out):
     agent_slug: str
     agent_name: str | None
     # egress_host: an app's first address on a host the tenant has not listed, for a Security admin.
-    kind: Literal["agent_publish", "publish_request", "egress_host"]
+    kind: Literal["agent_publish", "publish_request", "skill_publish", "egress_host"]
     risk: Literal["critical", "high", "medium", "low"]
     confidence: float
     proposal: str
@@ -661,6 +700,7 @@ class PublishReview(Out):
     evidence: list[Evidence]
     agent_publish: AgentPublishRequest | None = None
     publish: PublishRequestInfo | None = None
+    skill_publish: SkillPublishInfo | None = None
     tool_module: ToolModuleReviewRef | None = None
     egress_host: EgressHostRef | None = None
     # Who the review is assigned to now; None while nobody has it.
@@ -1502,6 +1542,17 @@ class IfNotOut(Out, IfNot):
     pass
 
 
+class JumpOut(Out, Jump):
+    pass
+
+
+class BranchOut(Out):
+    """A path written `if <test>:`: when the test does not hold, the skill goes to `otherwise`."""
+
+    test: StepCheckOut
+    otherwise: JumpOut
+
+
 class SkillStepOut(Out):
     """One step: what to do, what it runs, what must hold after it and what happens when it does not."""
 
@@ -1509,6 +1560,9 @@ class SkillStepOut(Out):
     use: RefOut | None = None
     check: StepCheckOut | None = None
     if_not: IfNotOut | None = None
+    branch: BranchOut | None = None
+    # Where the skill goes once the step is done, when that is not the step after it.
+    next: JumpOut | None = None
     locked: bool | None = Field(
         default=None,
         description="True when the builder locked the step's tool to this step: the agent reaches it only as the "
@@ -1539,6 +1593,8 @@ class SkillContent(Out):
     # A skill that runs step by step; all absent on a skill without steps. Each step's check says who judges it
     # (`by`: a rule run on the step's result, or the model), set when the skill is saved.
     not_when: str = ""
+    # The skill as written in the text editor; absent on a skill saved as a list of steps.
+    source: str | None = None
     steps: list[SkillStepOut] = Field(default_factory=list[SkillStepOut])
     exit: dict[str, str] = Field(default_factory=dict[str, str])
     returns: list[ReturnFieldOut] = Field(default_factory=list[ReturnFieldOut])
@@ -1588,7 +1644,11 @@ class SkillVersion(Out):
     tokens: int
     review_id: str | None = None
     published_at: str | None = None
+    # Who made it live. Who asked for the publish, and who approved it: approved_by is null when the team's publish
+    # policy let it go live without a review; both are null for a version no request published.
     published_by: str | None = None
+    requested_by: str | None = None
+    approved_by: str | None = None
     # Always null today: nothing records a test run on a version.
     test_run: None
 
@@ -1641,8 +1701,8 @@ class ReferenceSearch(Out):
 
 
 class BlockerPosition(Out):
-    """Where a publish problem is: the field (`steps`, `notWhen`, `useWhen`, `brief.never`), and the step (from 1)
-    or list index when it has one."""
+    """Where a publish problem is: the field (`steps`, `notWhen`, `useWhen`, `brief.never`, `source`), and the step
+    (from 1) or list index when it has one; for `source`, `index` is the line (from 1)."""
 
     field: str
     step: int | None = None
@@ -1667,6 +1727,7 @@ class PublishBlocker(Out):
         "too_long",
         # Only ever a warning: a tool a step's sentence names and the step does not run.
         "mention",
+        "hint",
     ]
     id: str | None = None
     position: BlockerPosition | None = None
@@ -1752,6 +1813,8 @@ class SkillPendingReview(Out):
 
 class SkillDetail(Skill):
     content: SkillContent
+    # The text the editor shows: `content.source`, or a skill's stored steps written as text by the same reader.
+    text: str
     # With `version`, the copy a draft save names as its base (`baseVersion`, `baseDigest`).
     digest: str
     versions: list[SkillVersion]
@@ -1819,3 +1882,60 @@ class SkillOptions(Out):
     tools: list[SkillToolRef]
     knowledge_bases: list[str]
     limits: dict[str, int]
+
+
+class SkillTextNote(Out):
+    line: int
+    message: str
+
+
+class SkillTextError(SkillTextNote):
+    # The mention, as `<kind>:<id>`.
+    id: str
+
+
+class SkillTextUses(Out):
+    tools: int
+    knowledge: int
+    skills: int
+    agents: int
+    workflows: int
+
+
+class SkillTextKeyword(Out):
+    """The keyword a line is written with (`if`, `else` for else or otherwise, `stop`) and where it sits in the line
+    after its indent, past any list marker. Set whether or not the line reads as one: the editor highlights it only on
+    a line whose kind is that keyword, and indents after an `if` or `else` it is typing."""
+
+    word: Literal["if", "else", "stop"]
+    start: int
+    end: int
+
+
+class SkillTextLine(Out):
+    """One line of the text: its kind, the step (from 1) it is part of, how its condition is decided (an `if`
+    line: `checked` on the tool's result, or `agent`, decided from the conversation) and the tool its line runs."""
+
+    line: int
+    kind: Literal["text", "step", "if", "else", "stop", "blank"]
+    step: int | None = None
+    how: Literal["checked", "agent"] | None = None
+    tool: str | None = None
+    # How many path levels in the line is, as the reader counts its indent (the editor draws its guides from it).
+    depth: int = 0
+    keyword: SkillTextKeyword | None = None
+
+
+class SkillTextReading(Out):
+    """POST /v1/skills/{id}/text: how a skill's text reads, as a save will read it. Hints never block anything;
+    `errors` (a mention of something that no longer exists) block a publish, never a save."""
+
+    hints: list[SkillTextNote]
+    errors: list[SkillTextError]
+    uses: SkillTextUses
+    lines: list[SkillTextLine]
+    # What the editor offers after `if ` for each mentioned tool (`@tool:<id>`), from what it returns.
+    phrases: dict[str, list[str]]
+    steps: int
+    # The line each step starts on, by step.
+    step_lines: list[int]

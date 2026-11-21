@@ -69,6 +69,16 @@ export const joinSections = (s: Record<SkillSectionKey, string>) => SECTIONS.map
 
 /** The headings a blank skill was created with. Notes that hold only these read as a second, empty step list, so the step document shows them as empty. */
 export const UNWRITTEN_SECTIONS = joinSections({ steps: '1. ', rules: '- ', examples: '', output_format: '' });
+/** What a new skill opens with: one line to mention a tool on and one path, to show the two things the text enforces.
+ * Every line is the author's to rewrite. Lines with no tool join the step below them, so the first step is one line and
+ * the starter runs as the steps it shows (services/agents-service/tests/unit/test_skill_text.py reads this array). */
+export const WORKED_EXAMPLE = [
+  'Greet them, ask for their order number and look the order up: type @ at the end of this line to pick the tool.',
+  'if they want a refund:',
+  '    Explain the refund policy and ask them to confirm.',
+  'else:',
+  '    Answer their question from what you found.',
+].join('\n');
 
 export function ToolChips({ tools, max = 4, outOfScope = [] }: { tools: Pick<SkillToolRef, 'toolId' | 'name' | 'access'>[]; max?: number; outOfScope?: string[] }) {
   if (!tools.length) return <span className="text-xs text-muted-foreground">None</span>;

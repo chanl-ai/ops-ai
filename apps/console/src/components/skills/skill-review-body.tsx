@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { Bot, CheckCircle2, ShieldCheck, XCircle } from 'lucide-react';
 
+import { PromptDiff } from '@/components/prompts/prompt-diff';
 import { FieldSectionLabel } from '@/components/shared/field-row';
 import { Badge } from '@/components/ui/badge';
 import { plural, relativeTime } from '@/lib/format';
@@ -33,6 +34,25 @@ export function SkillPublishBody({ review }: { review: Review }) {
             {p.skillName} · {p.fromVersion ? `v${p.fromVersion} → ` : 'first version, '}v{p.toVersion} · {p.ownerTeam} · requested by {p.requestedBy}
           </p>
         </div>
+      </Section>
+      {p.textAfter != null && (
+        <Section title="Text">
+          <PromptDiff before={p.textBefore ?? ''} after={p.textAfter} against={p.fromVersion ? `the published v${p.fromVersion}` : 'an empty skill'} />
+        </Section>
+      )}
+      <Section title={`Hints · ${p.hints.length}`}>
+        {p.hints.length ? (
+          <ul className="flex flex-col gap-1.5 rounded-lg border p-3 text-sm" data-testid="skill-publish-hints">
+            {p.hints.map((h) => (
+              <li key={`${h.line}-${h.message}`}>
+                <span className="mr-2 font-mono text-xs text-muted-foreground tabular-nums">Line {h.line}</span>
+                {h.message}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-muted-foreground">No hints on the new text.</p>
+        )}
       </Section>
       <Section title="Edit class">
         <div className="flex flex-wrap items-center gap-2 text-sm">

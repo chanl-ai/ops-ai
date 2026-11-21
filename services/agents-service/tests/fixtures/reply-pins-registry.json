@@ -1363,6 +1363,7 @@
         "slug": "hardship-request-triage",
         "status": "draft",
         "tests": [],
+        "text": "Steps: confirm the customer, record the reason, offer the hardship form.",
         "tokens": 36,
         "toolCount": 1,
         "updatedAt": "<timeZ>",
@@ -1706,6 +1707,7 @@
         "slug": "hardship-request-triage",
         "status": "published",
         "tests": [],
+        "text": "Steps: confirm the customer, record the reason, offer the hardship form.",
         "tokens": 36,
         "toolCount": 1,
         "updatedAt": "<timeZ>",
@@ -1716,6 +1718,7 @@
         "version": 1,
         "versions": [
           {
+            "approvedBy": null,
             "changes": [
               "Created"
             ],
@@ -1746,6 +1749,7 @@
             "note": "",
             "publishedAt": "<timeZ>",
             "publishedBy": "auto-approve (dev)",
+            "requestedBy": "j.richardson@harborpine.example",
             "reviewId": "<SKP>",
             "savedAt": "<timeZ>",
             "savedBy": "j.richardson@harborpine.example",
@@ -1823,6 +1827,7 @@
         "slug": "hardship-request-triage",
         "status": "draft",
         "tests": [],
+        "text": "Steps: confirm the customer, record the reason, offer the hardship form.",
         "tokens": 36,
         "toolCount": 1,
         "updatedAt": "<timeZ>",

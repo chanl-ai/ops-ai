@@ -121,6 +121,76 @@ opsai skills publish "$SKILL" --note "First version"
 saves a new draft of the skill the file names by id, slug or name. The stored steps say who judges each check: `rule`
 or `model`.
 
+## Write the skill as text
+
+The console's skill page and the `source` field of a draft save take the same skill as plain text, written like a
+prompt. Every line is an instruction to the agent. These things in it are also enforced:
+
+| You write | It becomes |
+|---|---|
+| A line that mentions a tool, an agent, a workflow or a skill (`@tool:find_customer`) | A step that may use it. Plain lines above it are part of that step's instruction |
+| A numbered or bulleted line (`1.`, `-`, `•`) at the top level, with or without a mention | A step of its own. Plain lines above it are part of that step's instruction; a list indented under a plain line stays part of that line |
+| Plain paragraphs with no list marker and no mention | Instructions the agent reads as it sees fit; no steps are made |
+| The same line ending in `(locked)` | The step's tool is offered only on this line, even when it only reads |
+| `if <condition>:` with an indented block, then `else:` at the same indent | A path: the nearest tool line above it in its block decides it, so plain lines between the two stay part of that step, and the other block is skipped |
+| `stop "reason"` (or `stop <exit> "reason"`), under an `if` or `else` | An exit that ends the skill with that reason. A bare `stop <exit>` needs an ending the skill declares (or `done`, `failed`); any other bare `stop …` line is an instruction |
+| `if not <condition>:` with only `try again` (`try again 2 times`) or `go back to step 3` under it | The condition becomes the step's own check: a failure asks again up to that many times, or goes back to that step |
+
+```text title="customer-lookup.txt"
+Greet them and ask for the email or order number they used.
+Look them up with @tool:find_customer
+if found:
+    Confirm their name and read the last order from @tool:order_history
+    if they want a refund:
+        Follow @knowledge:refund_policy, then use @tool:issue_refund
+    else:
+        Answer from @knowledge:help_center
+else:
+    Ask for the email they used at checkout.
+    if not verified:
+        stop "Could not verify the caller"
+Thank them.
+```
+
+A procedure pasted from a document reads as it looks: `If …:`, `Otherwise:` and `Stop "…"` work like `if …:`,
+`else:` and `stop "…"`, a list marker (`•`, `-`, `1.`) is not read, and non-breaking or full-width spaces and Windows
+line endings count as ordinary ones. These rules keep a flat list a list:
+
+| Line | Reads as |
+|---|---|
+| `If …:` or `Otherwise:`, with or without a list marker, with indented lines under it | A path |
+| The same line with nothing indented under it, as in a flat numbered list (`2. If active:` / `3. Open the claim` / `4. Otherwise:`) | A plain line (a step of its own when it has a list marker), with a hint to indent the path |
+| `Stop` or `- Stop` with no reason, under an `if` or `else` | An exit |
+| `stop`, `Stop "Reason"` or `- Stop` at the top level, outside any path, with or without a reason | A plain line, with a hint to indent it under an `if` |
+| `stop "Reason"` under an `if` or `else` | An exit |
+
+So `2. If active:` followed by an indented `Open the claim` is a path, and the same lines written flat stay five
+steps the agent reads in order. In the console editor, click a mention to replace or remove it, tap a line with a wavy underline to
+read its hint (every hint is also listed under the text), and press Esc then Tab to leave the editor with the
+keyboard. A new skill opens with a short example of one mention line and one path.
+
+| Condition | How it is decided |
+|---|---|
+| Made of words the tool above returns (`found`, `not found`, `status is VIP`, `amount is more than 500`), or written as a rule (`result.balance > 0`) | Checked: a rule runs in code on the tool's result, labelled "checked" in the editor |
+| Anything else (`they want a refund`) | The agent decides from the conversation and says which way it went: `step_done` with `holds` true or false. The kernel refuses `step_done` on that step without it. Labelled "agent decides" |
+
+A path that is not taken is not a failure: it takes no hold and counts no attempt. A `stop` that a checked condition
+leads to is a guard, on either side of its `if` (`if not verified: stop …` and `if flagged: stop …` alike): it takes
+the hold, and a value that is missing takes the guarded path, as a failed check does. A `stop` an "agent decides"
+condition leads to ends the skill without a hold. A path that reaches the end before the last line still asks for the
+skill's results before it ends as done.
+
+Nothing in the text stops a save. A line the reader cannot use is a hint on that line, and so is a tool that changes
+something on a path the agent decides (on either side of the `if`, at any depth under it); hints never stop a save or
+a publish, and the publish check lists them as warnings of kind `hint`. A team that turns on **Strict skill
+publishing** (the `skillPublishStrict` setting on Governance › Policies) refuses that one hint at publish instead, as a
+`bad_check` problem on its line. A mention of something that no longer exists blocks a publish, with the line it is on
+(`position.field` `source`, `position.index` the line), and so does a text that makes more than 30 steps: none of its
+tools or paths could be enforced, so it is a `bad_step` problem on the 31st step's line. Each step's prompt carries
+only that step's lines, not the whole text. `POST /v1/skills/{id}/text` reads a text without saving it,
+by the same reader a save runs (`services/agents-service/src/ops_agents/app/skill_text.py`). A skill saved as a list
+of steps is shown as text by that reader and keeps its stored steps until its text is saved.
+
 ## Give the skill to an agent and follow the steps
 
 **The problem.** The agent needs the skill, the tools its steps use and the skill its second step runs. Granting
@@ -303,6 +373,13 @@ confirming a caller. A rule on the step can read how the sub-skill ended:
 | `goto` a step that does not exist, or an exit the skill does not list | On save |
 | A step that runs its own skill, or a skill whose steps run a skill | On save |
 | A step that names a tool your team no longer offers | On publish. The error names each problem and the step it is on |
+| A skill written as text mentions something that no longer exists, or makes more than 30 steps | On publish only; the draft saves. The error names the line |
+| A skill written as text runs a tool that changes something on a path the agent decides, in a team with Strict skill publishing on | On publish only; the draft saves. The error names the line |
+
+A skill's publish request shows its reviewer the text against the published version it replaces, kept as it was when
+the request opened, with the hints on the new text's lines. Each published version keeps who asked for the publish
+(`requestedBy`), who approved it (`approvedBy`, empty when the team's publish policy let it go live without a review)
+and who made it live (`publishedBy`); `opsai skills versions <id>` lists all three.
 
 ## Next steps
 

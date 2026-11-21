@@ -7,8 +7,21 @@ ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))..)
 
 # .env is optional. Plain KEY=value lines. A key set in .env replaces the same key in the caller's environment (make lets a
 # file assignment override an environment variable unless run with -e); keys the secrets command supplies (below) never do.
+# OPS_EVIDENCE_DIR is the exception: it is where one run writes, so the caller's value wins.
+OPS_EVIDENCE_DIR_CALLER := $(if $(filter environment,$(origin OPS_EVIDENCE_DIR)),$(OPS_EVIDENCE_DIR))
 -include $(ROOT)/.env
 export $(shell sed -n 's/^\([A-Z_][A-Z0-9_]*\)=.*/\1/p' $(ROOT)/.env 2>/dev/null)
+# A .env copied from the host into a devcontainer or a worktree can name an evidence folder this machine cannot create
+# (/Users/... inside a container). Such a value is dropped, so the use-case runner writes under .logs/usecases in the tree.
+ifneq ($(OPS_EVIDENCE_DIR_CALLER),)
+  OPS_EVIDENCE_DIR := $(OPS_EVIDENCE_DIR_CALLER)
+else ifeq ($(origin OPS_EVIDENCE_DIR),file)
+  ifeq ($(shell d='$(OPS_EVIDENCE_DIR)'; while [ ! -e "$$d" ]; do d=$$(dirname "$$d"); done; [ -d "$$d" ] && [ -w "$$d" ] && echo ok),)
+    $(info OPS_EVIDENCE_DIR in .env ($(OPS_EVIDENCE_DIR)) cannot be written here; use cases write under .logs/usecases)
+    undefine OPS_EVIDENCE_DIR
+    unexport OPS_EVIDENCE_DIR
+  endif
+endif
 # Per-developer keys outside the image (devcontainer). Same KEY=value shape as .env.
 -include $(ROOT)/.devcontainer/.env.local
 export $(shell sed -n 's/^\([A-Z_][A-Z0-9_]*\)=.*/\1/p' $(ROOT)/.devcontainer/.env.local 2>/dev/null)

@@ -349,6 +349,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": ["version"],
         "stream": False,
     },
+    "agents_read_skill_text": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/skills/{skill_id}/text",
+        "pathParams": ["skill_id"],
+        "query": [],
+        "stream": False,
+    },
     "agents_recent_runs": {
         "body": None,
         "headers": [],
@@ -2915,6 +2924,10 @@ class Operations:
         "Render Skill"
         return self._t.call(SERVICE, OPERATIONS["agents_render_skill"], {"skill_id": skill_id}, {}, {}, body)  # type: ignore[no-any-return]
 
+    def agents_read_skill_text(self, skill_id: str, body: SkillTextInput) -> SkillTextReading:
+        "Read Skill Text"
+        return self._t.call(SERVICE, OPERATIONS["agents_read_skill_text"], {"skill_id": skill_id}, {}, {}, body)  # type: ignore[no-any-return]
+
     def reviews_list_task_types(
         self,
         *,
@@ -4531,6 +4544,10 @@ class AsyncOperations:
     async def agents_render_skill(self, skill_id: str, body: SkillRenderInput) -> SkillRendered:
         "Render Skill"
         return await self._t.call(SERVICE, OPERATIONS["agents_render_skill"], {"skill_id": skill_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def agents_read_skill_text(self, skill_id: str, body: SkillTextInput) -> SkillTextReading:
+        "Read Skill Text"
+        return await self._t.call(SERVICE, OPERATIONS["agents_read_skill_text"], {"skill_id": skill_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def reviews_list_task_types(
         self,
