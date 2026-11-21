@@ -3,8 +3,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Memory was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -42,8 +44,10 @@
             "msg": "String should have at least 1 character"
           }
         ],
+        "kind": "input",
         "message": "value: String should have at least 1 character",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -54,8 +58,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Memory was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -66,8 +72,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Memory was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -87,8 +95,10 @@
             "msg": "Extra inputs are not permitted"
           }
         ],
+        "kind": "input",
         "message": "k: Extra inputs are not permitted",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -103,8 +113,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Memory was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -115,8 +127,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Memory was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -209,8 +223,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Memory was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -230,8 +246,10 @@
     "body": {
       "error": {
         "code": "agent_required",
+        "kind": "input",
         "message": "Name the agent whose memories to forget (agentId).",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -293,8 +311,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Memory was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false

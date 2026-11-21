@@ -3,8 +3,10 @@
     "body": {
       "error": {
         "code": "invalid_id",
+        "kind": "refused",
         "message": "id: lowercase letters, digits and underscores, starting with a letter.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 422
       },
       "success": false
@@ -80,8 +82,10 @@
             "msg": "Extra inputs are not permitted"
           }
         ],
+        "kind": "input",
         "message": "colour: Extra inputs are not permitted",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -159,8 +163,10 @@
     "body": {
       "error": {
         "code": "case_type_not_found",
+        "kind": "input",
         "message": "Case type no_such_type was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -239,8 +245,10 @@
             "msg": "Extra inputs are not permitted"
           }
         ],
+        "kind": "input",
         "message": "note: Extra inputs are not permitted",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -375,8 +383,10 @@
           ],
           "teamId": "team_ops"
         },
+        "kind": "refused",
         "message": "Your role cannot create a case type; a Builder or Admin can.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -399,8 +409,10 @@
           ],
           "teamId": "team_ops"
         },
+        "kind": "refused",
         "message": "Your role cannot edit this case type; a Builder or Admin can.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -411,8 +423,10 @@
     "body": {
       "error": {
         "code": "invalid_id",
+        "kind": "refused",
         "message": "id: lowercase letters, digits and underscores, starting with a letter.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 422
       },
       "success": false
@@ -553,8 +567,10 @@
             "msg": "Extra inputs are not permitted"
           }
         ],
+        "kind": "input",
         "message": "colour: Extra inputs are not permitted",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -668,8 +684,10 @@
     "body": {
       "error": {
         "code": "task_type_not_found",
+        "kind": "input",
         "message": "Task type no_such_type was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -810,8 +828,10 @@
             "msg": "Extra inputs are not permitted"
           }
         ],
+        "kind": "input",
         "message": "note: Extra inputs are not permitted",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -1073,8 +1093,10 @@
           ],
           "teamId": "team_ops"
         },
+        "kind": "refused",
         "message": "Your role cannot create a task type; a Builder or Admin can.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -1097,8 +1119,10 @@
           ],
           "teamId": "team_ops"
         },
+        "kind": "refused",
         "message": "Your role cannot edit this task type; a Builder or Admin can.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false

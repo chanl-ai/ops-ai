@@ -24,8 +24,10 @@
     "body": {
       "error": {
         "code": "bad_source",
+        "kind": "refused",
         "message": "A source is type:id with type one of workflow, agent, channel, case.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 422
       },
       "success": false
@@ -36,8 +38,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Team team_nobody was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -57,8 +61,10 @@
             "msg": "Input should be less than or equal to 100"
           }
         ],
+        "kind": "input",
         "message": "query.pageSize: Input should be less than or equal to 100",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -170,8 +176,10 @@
         "details": {
           "scope": "agents:view"
         },
+        "kind": "refused",
         "message": "This service token does not hold the agents:view scope.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -317,8 +325,10 @@
     "body": {
       "error": {
         "code": "validation_failed",
+        "kind": "input",
         "message": "Unknown group bogus; use case.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -329,8 +339,10 @@
     "body": {
       "error": {
         "code": "validation_failed",
+        "kind": "input",
         "message": "Unknown view bogus.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -396,8 +408,10 @@
         "details": {
           "scope": "workflows:view"
         },
+        "kind": "refused",
         "message": "This service token does not hold the workflows:view scope.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
