@@ -9853,6 +9853,11 @@
           "draft": {
             "$ref": "#/components/schemas/EvalCaseOutcome"
           },
+          "judgeUnpriced": {
+            "default": false,
+            "title": "Judgeunpriced",
+            "type": "boolean"
+          },
           "live": {
             "anyOf": [
               {
@@ -21207,7 +21212,7 @@
       },
       "StepCheck": {
         "additionalProperties": false,
-        "description": "What must hold before a step is done. `by` is set when the skill is saved: a rule is run on the step's result\nin code, a sentence is confirmed by the model.",
+        "description": "What must hold before a step is done. `by` is set when the skill is saved: a rule is run on the step's result\nin code, a sentence is decided by the judge model (`ops_agent_kernel.judge`).",
         "properties": {
           "by": {
             "anyOf": [

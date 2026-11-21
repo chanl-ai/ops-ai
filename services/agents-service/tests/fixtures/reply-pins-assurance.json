@@ -175,7 +175,11 @@
             "version": 1
           }
         ],
-        "facets": {},
+        "facets": {
+          "trigger": {
+            "manual": 1
+          }
+        },
         "pagination": {
           "hasNext": false,
           "hasPrev": false,
@@ -427,6 +431,7 @@
               "reply": "I could not find that.",
               "status": "pass"
             },
+            "judgeUnpriced": false,
             "live": null,
             "regression": false,
             "unpriced": true
@@ -444,6 +449,7 @@
               "reply": "I could not find that.",
               "status": "fail"
             },
+            "judgeUnpriced": false,
             "live": null,
             "regression": false,
             "unpriced": true
@@ -505,6 +511,7 @@
               "reply": "I could not find that.",
               "status": "pass"
             },
+            "judgeUnpriced": false,
             "live": null,
             "regression": false,
             "unpriced": true
@@ -522,6 +529,7 @@
               "reply": "I could not find that.",
               "status": "fail"
             },
+            "judgeUnpriced": false,
             "live": null,
             "regression": false,
             "unpriced": true

@@ -356,6 +356,8 @@ class EvalCaseResult(Out):
     regression: bool = False
     # An alias this case's turns or judge spent tokens on has no price (absent on runs kept before it was recorded).
     unpriced: bool = False
+    # The judge's alias spent tokens and has no price; false on a case with no judge check (absent on runs kept before).
+    judge_unpriced: bool = False
 
 
 class EvalSummary(Out):

@@ -7148,6 +7148,11 @@ export interface components {
             /** Casename */
             caseName: string;
             draft: components["schemas"]["EvalCaseOutcome"];
+            /**
+             * Judgeunpriced
+             * @default false
+             */
+            judgeUnpriced: boolean;
             live?: components["schemas"]["EvalCaseOutcome"] | null;
             /**
              * Regression
@@ -10905,7 +10910,7 @@ export interface components {
         /**
          * StepCheck
          * @description What must hold before a step is done. `by` is set when the skill is saved: a rule is run on the step's result
-         *     in code, a sentence is confirmed by the model.
+         *     in code, a sentence is decided by the judge model (`ops_agent_kernel.judge`).
          */
         StepCheck: {
             /** By */

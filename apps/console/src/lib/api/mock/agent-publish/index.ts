@@ -243,7 +243,7 @@ export function createAgentPublishMock(deps: AgentPublishDeps) {
     const sum = deps.evals.summaryFor(aid, version);
     const failed = sum ? sum.total - sum.passed : 0;
     if (!sum || failed <= 0) return [];
-    const detail = `${sum.passed} of ${sum.total} cases pass; at least 90% must.`;
+    const detail = `${sum.passed} of ${sum.total} ${sum.total === 1 ? 'case passes' : 'cases pass'}; at least 90% must.`;
     return [
       {
         kind: 'eval_failed',

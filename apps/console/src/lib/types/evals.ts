@@ -61,8 +61,10 @@ export interface EvalCaseResult {
   live: EvalCaseOutcome | null;
   /** Passed on the live version and fails on the newest one. */
   regression: boolean;
-  /** The judge's model has no price, so this case's cost is missing from the run's. */
+  /** A model this case's turns or judge used has no price, so its cost is a lower bound. */
   unpriced: boolean;
+  /** The judge's model has no price; false on a case with no judge check. */
+  judgeUnpriced: boolean;
 }
 
 export interface EvalSummary {
@@ -77,7 +79,7 @@ export interface EvalRun {
   agentId: string;
   version: number;
   liveVersion: number | null;
-  /** `manual`, or `publish_request` when a publish check started it. */
+  /** `manual` (the Run button), `cli` (the command line), or `publish_request` when a publish check started it. */
   trigger: string;
   /** The service runs synchronously: a kept run is always complete. */
   status: 'complete';

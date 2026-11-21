@@ -94,6 +94,7 @@ class GateRow(AssetRow):
     cases: Figure
     pass_rate_result: str
     regressions_result: str
+    stale: JsonValue
     blocked: JsonValue
 
 
@@ -331,7 +332,9 @@ def _gate(row: GateRow, _listed: Listed, minimum: float, _teams: dict[str, str])
             add(
                 "structural",
                 STEP_FAIL if failing else STEP_PASS,
-                f"{failing} structure checks fail." if failing else "Every structure check passes.",
+                ("1 structure check fails." if failing == 1 else f"{failing} structure checks fail.")
+                if failing
+                else "Every structure check passes.",
             )
     # The step results are the store's rule (`assurance_list._eval_steps`); this only words them.
     steps.extend(
@@ -344,6 +347,7 @@ def _gate(row: GateRow, _listed: Listed, minimum: float, _teams: dict[str, str])
             regressions=int(row["regressions"]),
             pass_rate_result=row["pass_rate_result"],
             regressions_result=row["regressions_result"],
+            stale=bool(row["stale"]),
         )
     )
     published = row["published_version"]

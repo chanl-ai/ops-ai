@@ -50,8 +50,8 @@ export function TaskDecision({
   layout: 'sheet' | 'panel';
   children: (parts: TaskDecisionParts) => React.ReactNode;
 }) {
-  const { onDecide, onOption, pendingDecision, pendingOption, evalBlocked } = decider;
-  const blockedHere = evalBlocked?.reviewId === review.id ? evalBlocked.problems : null;
+  const { onDecide, onOption, pendingDecision, pendingOption, publishBlocked } = decider;
+  const blockedHere = publishBlocked?.reviewId === review.id ? publishBlocked.problems : null;
   const panel = layout === 'panel';
   if (!isOpen(review))
     return (
@@ -111,7 +111,7 @@ export function TaskDecision({
           <>
             {blockedHere && (
               <div className="mb-2 flex flex-col gap-2 rounded-md border border-destructive/40 bg-card p-3 text-sm" role="alert" data-testid="eval-blocked">
-                <p className="font-medium">A failed eval stops this approval. The request stays open.</p>
+                <p className="font-medium">This version cannot be published yet. The request stays open.</p>
                 {blockedHere.map((p, i) => (
                   <div key={i} className="flex flex-col gap-1">
                     <p>{p.message}</p>

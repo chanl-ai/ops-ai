@@ -389,10 +389,13 @@ opsai agents publish-check "$AGENT"
 opsai agents publish "$AGENT" --note "First version"
 ```
 
-The publish check also carries the agent's evals. A blocking step that failed on the newest run of that exact version
-is `eval_failed`, and the publish is refused; an approval of a request whose version failed after it opened is 409
-`eval_blocked`. With the team's "Require passing evals to publish" setting (`evalsRequired`) on, no saved cases is
-`eval_no_cases` and no run on the version is `eval_not_run`; a setting that cannot be read is `eval_setting_unread`.
+The publish check also carries the agent's evals. Only a run of that exact version on its content as it reads now
+counts: a draft keeps its version number while it is edited, so any save after a run needs a new run, and until then
+the check answers `eval_not_run` (the agent changed since its last run) whatever the team's setting. A blocking step
+that failed on the newest counted run is `eval_failed`, and the publish is refused; an approval of a request whose
+version failed after it opened is refused the same way, 422 `cannot_publish` with the problems in `details.problems`.
+With the team's "Require passing evals to publish" setting (`evalsRequired`) on, no saved cases is `eval_no_cases` and
+no run on the version is `eval_not_run`; a setting that cannot be read is `eval_setting_unread`.
 
 `opsai agents eval` runs the saved cases on the newest version, keeps the run and prints one line per case (with the
 judge's reason when a judge check failed), the pass rate, regressions, the cost and each publish gate step. Its exit

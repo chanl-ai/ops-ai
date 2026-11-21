@@ -81,7 +81,8 @@ queries = 17
 queries = 2
 
 ["GET /v1/agents/{agent_id}/eval-runs"]
-queries = 3
+# The agent, the count, the page and the trigger facet.
+queries = 4
 
 ["GET /v1/agents/{agent_id}/live"]
 queries = 9

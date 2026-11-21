@@ -120,3 +120,18 @@ async def test_a_kept_run_stores_the_priced_usage_of_its_turns_and_judge(
     # A list row leaves the case results to the single read.
     assert "results" not in listed
     assert listed["id"] == stored["id"] and listed["unpriced"] is False
+
+
+async def test_only_a_case_with_a_judge_check_reads_its_judge_as_unpriced(
+    graph_models: FakeGraphModels, database_url: str
+) -> None:
+    judged = _case("judged", "Hello", {"type": "judge", "rubric": "The reply says it could not find the account."})
+    plain = _case("plain", "Hello", {"type": CHECK_REPLY_CONTAINS, "text": "could not find"})
+    settings = Settings(database_url=database_url, seed_dir=SEED)
+    async with empty_engine(database_url) as engine, started(engine, settings, graph_models) as (_, c):
+        assert (await c.put(f"/v1/agents/{AGENT}/eval-cases", json={"cases": [judged, plain]})).status_code == 200
+        ran = (await c.post(f"/v1/agents/{AGENT}/eval-runs")).json()["data"]
+        stored = (await c.get(f"/v1/eval-runs/{ran['id']}")).json()["data"]
+    by_name = {r["caseName"]: r for r in stored["results"]}
+    assert [by_name[n]["unpriced"] for n in ("judged", "plain")] == [True, True], "no alias is priced here"
+    assert [by_name[n]["judgeUnpriced"] for n in ("judged", "plain")] == [True, False], by_name

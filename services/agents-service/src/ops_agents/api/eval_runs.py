@@ -16,6 +16,7 @@ from ops_service_kit.ids import now_iso
 from ..store.agent_registry import AgentRow
 from ..store.evals import EvalStore
 from . import eval_gate
+from .agent_registry import registry
 from .agent_test import judge_call, one_test_turn
 from .auth import Principal, started_by
 from .deps import Runtime
@@ -47,12 +48,15 @@ def prices_of(rt: Runtime) -> PriceTable:
 
 async def run_saved(rt: Runtime, me: Principal, row: AgentRow, *, trigger: str) -> Json:
     """Runs the agent's active saved cases on its newest version, and on the live one when that is another, and keeps
-    the run, so repeating it keeps a second run. Answers the run as stored (`stored_run`). No saved cases, or an
+    the run with the version's content digest as it started, which is what the publish gate matches it on, so
+    repeating it keeps a second run. Answers the run as stored (`stored_run`). No saved cases, or an
     unknown check type, is 422. The caller checks who may run (`evals.run`)."""
     store = EvalStore(rt.db)
     cases = parse_cases([x["body"] for x in await store.cases(ASSET_AGENT, row.id) if x["status"] == CASE_ACTIVE])
     version, published = int(row.version), row.published_version
     live = int(published) if published is not None and int(published) != version else None
+    # Read before the cases run: a save landing while they run rewrites the draft, and the run must not vouch for it.
+    digest = (await registry(rt).version(row.id, version)).digest
     started = time.perf_counter()
     run = await run_eval(
         row.id,
@@ -86,6 +90,7 @@ async def run_saved(rt: Runtime, me: Principal, row: AgentRow, *, trigger: str) 
         "results": results,
         "started_by": started_by(me),
         "ran_at": now_iso(),
+        "digest": digest,
     }
     await store.add_run(stored)
     found, steps = await eval_gate.gate(rt, row, version)

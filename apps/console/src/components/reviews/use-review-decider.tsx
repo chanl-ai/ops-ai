@@ -17,9 +17,12 @@ import type { Review, ReviewDecision, ReviewOption } from '@/lib/types/domain';
  * says. `onDone` runs once the decision is recorded and the review is closed (not when it waits on a second approver).
  */
 /** A decision someone else recorded first: the server answers 409 `already_decided` (hitl_facade.decide). */
-const decidedElsewhere = (e: unknown) => (e as { status?: number; code?: string } | null)?.status === 409 && (e as { code?: string }).code !== 'eval_blocked';
-/** An approval a failed eval stops: 409 `eval_blocked` with the problems; the review stays open. */
-const evalBlockedOf = (e: unknown): PublishBlocker[] | null => ((e as { code?: string } | null)?.code === 'eval_blocked' ? ((e as { details?: { problems?: PublishBlocker[] } }).details?.problems ?? []) : null);
+const decidedElsewhere = (e: unknown) => (e as { status?: number; code?: string } | null)?.status === 409;
+/** An approval the publish gate stops (a failed eval): 422 `cannot_publish` with the problems, the refusal a publish request gives; the review stays open. */
+const publishBlockedOf = (e: unknown): PublishBlocker[] | null => {
+  const err = e as { status?: number; code?: string; details?: { problems?: PublishBlocker[] } } | null;
+  return err?.status === 422 && err.code === 'cannot_publish' ? (err.details?.problems ?? []) : null;
+};
 
 export function useReviewDecider({
   active,
@@ -38,14 +41,14 @@ export function useReviewDecider({
   const decide = useDecideReview();
   const [pendingDecision, setPendingDecision] = React.useState<ReviewDecision | null>(null);
   const [pendingOption, setPendingOption] = React.useState<string | null>(null);
-  const [evalBlocked, setEvalBlocked] = React.useState<{ reviewId: string; problems: PublishBlocker[] } | null>(null);
+  const [publishBlocked, setPublishBlocked] = React.useState<{ reviewId: string; problems: PublishBlocker[] } | null>(null);
 
   // Approving a call that needs two approvers needs a step-up the API checks; the gate asks once per 5 minutes and retries with the token.
   const stepUp = useStepUpGate();
   const onDecide = (decision: ReviewDecision, reason: string, conditions?: ConditionInput[], actingAsId?: string, addTestCase?: boolean) => {
     if (!active) return;
     setPendingDecision(decision);
-    setEvalBlocked(null);
+    setPublishBlocked(null);
     const target = active;
     // Approve sends a corrected read as the whole records list; the case opens on what was approved.
     const read = target.read;
@@ -96,8 +99,8 @@ export function useReviewDecider({
     stepUp
       .withStepUp(`Approving ${target.id}`, (stepUpToken) => decide.mutateAsync({ id: target.id, decision, reason, conditions, actingAsId, addTestCase, inputs, stepUpToken }), { upfront: decision === 'approved' && !!target.stepUp })
       .then(decided, (e) => {
-        const blocked = evalBlockedOf(e);
-        if (blocked) setEvalBlocked({ reviewId: target.id, problems: blocked });
+        const blocked = publishBlockedOf(e);
+        if (blocked) setPublishBlocked({ reviewId: target.id, problems: blocked });
         else if (decidedElsewhere(e)) {
           toast('Someone decided this task first', { description: 'Their decision stands; the next task is open.' });
           onDone();
@@ -142,5 +145,5 @@ export function useReviewDecider({
   };
 
   // The gate's dialog renders once on the page that holds it; bulk decisions there reuse the same gate.
-  return { onDecide, onOption, pendingDecision, pendingOption, stepUp, evalBlocked };
+  return { onDecide, onOption, pendingDecision, pendingOption, stepUp, publishBlocked };
 }

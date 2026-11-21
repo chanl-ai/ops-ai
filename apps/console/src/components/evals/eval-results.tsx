@@ -4,7 +4,7 @@ import * as React from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ms, pct } from '@/lib/format';
+import { ms, pct, plural } from '@/lib/format';
 import type { EvalCaseOutcome, EvalCaseResult, EvalRun, EvalRunRow } from '@/lib/types/evals';
 import { cn } from '@/lib/utils';
 
@@ -14,7 +14,7 @@ import { OutcomeText, RegressionBadge } from './eval-meta';
 export const usd = (n: number) => (n > 0 && n < 0.01 ? `$${n.toFixed(4)}` : `$${n.toFixed(2)}`);
 
 /** How a run was started, for history rows and sheet headers. */
-const TRIGGER_LABEL: Record<string, string> = { manual: 'Run evals', publish_request: 'Publish check' };
+const TRIGGER_LABEL: Record<string, string> = { manual: 'Run evals', cli: 'Command line', publish_request: 'Publish check' };
 
 export const triggerLabel = (trigger: string) => TRIGGER_LABEL[trigger] ?? trigger;
 
@@ -34,7 +34,7 @@ function failure(o: EvalCaseOutcome) {
 export function EvalRunSummary({ run }: { run: EvalRunRow }) {
   const s = run.summary;
   const tiles = [
-    { label: 'Pass rate', value: s.total ? pct(s.passed / s.total) : '—', sub: `${s.passed} of ${s.total} cases`, tone: s.passed < s.total ? 'warn' : undefined },
+    { label: 'Pass rate', value: s.total ? pct(s.passed / s.total) : '—', sub: `${s.passed} of ${plural(s.total, 'case')}`, tone: s.passed < s.total ? 'warn' : undefined },
     { label: 'Regressions', value: String(s.regressions), sub: run.liveVersion !== null ? `vs v${run.liveVersion}, live` : 'Nothing to compare', tone: s.regressions ? 'bad' : undefined },
     { label: 'Cost', value: costLabel(run), sub: run.unpriced ? 'A model in this run has no price' : 'Cases and judging' },
   ];
@@ -62,7 +62,7 @@ export function EvalResultsTable({ results, liveVersion }: { results: EvalCaseRe
   return (
     <div className="flex flex-col gap-2" data-testid="eval-results">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm text-muted-foreground">{failing.length ? `${failing.length === 1 ? '1 case needs' : `${failing.length} cases need`} attention` : `All ${results.length} cases passed`}</span>
+        <span className="text-sm text-muted-foreground">{failing.length ? `${failing.length === 1 ? '1 case needs' : `${failing.length} cases need`} attention` : results.length === 1 ? 'The case passed' : `All ${results.length} cases passed`}</span>
         <Button variant="ghost" size="sm" onClick={() => setShowAll((x) => !x)}>
           {showAll ? 'Show failing only' : `Show all ${results.length}`}
         </Button>
@@ -86,7 +86,7 @@ export function EvalResultsTable({ results, liveVersion }: { results: EvalCaseRe
                       <span className="font-medium">{r.caseName}</span>
                       {r.regression && <RegressionBadge />}
                     </div>
-                    {r.unpriced && <div className="text-xs text-muted-foreground">Judge model has no price</div>}
+                    {r.judgeUnpriced && <div className="text-xs text-muted-foreground">Judge model has no price</div>}
                   </TableCell>
                   <TableCell className="max-w-80 whitespace-normal">
                     <OutcomeText status={r.draft.status} detail={failure(r.draft)} />

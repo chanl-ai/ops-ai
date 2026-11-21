@@ -283,7 +283,7 @@ export function EvalsTab({ agent }: { agent: Agent }) {
               getRowId={(r) => r.id}
               searchColumn="id"
               searchPlaceholder="Search runs…"
-              filters={[{ column: 'trigger', title: 'Started by', options: (['manual', 'publish_request'] as const).map((v) => ({ value: v, label: triggerLabel(v), count: runFacets.trigger?.[v] ?? 0 })) }]}
+              filters={[{ column: 'trigger', title: 'Started by', options: (['manual', 'cli', 'publish_request'] as const).map((v) => ({ value: v, label: triggerLabel(v), count: runFacets.trigger?.[v] ?? 0 })) }]}
               onColumnFiltersChange={runList.onColumnFiltersChange}
               serverPagination={serverPagination(runList, runs)}
               emptyState={<ListEmpty icon={FlaskConical} noun="eval runs" filtered={runList.isFiltered} description="Runs appear here each time someone runs evals." />}

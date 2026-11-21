@@ -301,7 +301,7 @@ export function createEvalsMock(deps: EvalsDeps) {
       trigger: r.trigger,
       status: 'complete',
       summary: { passed: own.filter((x) => x.draft.status === 'pass').length, total: own.length, regressions: own.filter((x) => x.regression).length },
-      results: own.map((x) => ({ caseName: x.caseName, draft: outcomeOf(x.draft), live: x.live && live !== null ? outcomeOf(x.live) : null, regression: x.regression, unpriced: false })),
+      results: own.map((x) => ({ caseName: x.caseName, draft: outcomeOf(x.draft), live: x.live && live !== null ? outcomeOf(x.live) : null, regression: x.regression, unpriced: false, judgeUnpriced: false })),
       costUsd: Math.round((own.length * (live === null ? 1 : 2) * 0.012 + judged * 0.003) * 10_000) / 10_000,
       unpriced: false,
       startedBy: r.requestedBy,

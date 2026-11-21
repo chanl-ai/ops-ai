@@ -13,7 +13,7 @@ from ops_service_kit.http import Json
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.listing import ListParams
 from ops_store import Guarantee
-from ops_store.listing import ListPage, list_page
+from ops_store.listing import LISTED, ListPage, list_page
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.team_scope import team_visible
 
@@ -53,7 +53,7 @@ eval_runs = sa.Table(
     sa.Column("asset_id", sa.String(64), nullable=False),
     sa.Column("version", sa.Integer, nullable=False),
     sa.Column("live_version", sa.Integer),
-    sa.Column("trigger", sa.String(24), nullable=False),
+    sa.Column("trigger", sa.String(24), nullable=False, info=LISTED),
     sa.Column("passed", sa.Integer, nullable=False),
     sa.Column("total", sa.Integer, nullable=False),
     sa.Column("live_passed", sa.Integer),
@@ -63,7 +63,13 @@ eval_runs = sa.Table(
     sa.Column("results", sa.JSON, nullable=False),
     sa.Column("started_by", sa.String(320), nullable=False),
     sa.Column("ran_at", sa.String(32), nullable=False),
+    # The digest of the version's content when the run started (agents 0121). A draft is rewritten under one version
+    # number, so the publish gate counts a run only while this still equals the version's own digest; null on runs
+    # kept before, which count for nothing.
+    sa.Column("digest", sa.String(64)),
     sa.Index("ix_eval_runs_asset", "tenant_id", "team_id", "kind", "asset_id", "ran_at"),
+    # The runs list filters and counts by what started a run (agents 0121).
+    sa.Index("ix_eval_runs_trigger", "tenant_id", "team_id", "trigger"),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
@@ -144,11 +150,18 @@ class EvalStore(RuntimeStore):
             await c.execute(eval_runs.insert().values(**row))
 
     async def runs_page(self, kind: str, asset_id: str, params: ListParams) -> ListPage:
-        """One page of the asset's runs in the acting team, newest first, then by id."""
+        """One page of the asset's runs in the acting team, newest first, then by id; `trigger` filters and counts."""
         t = eval_runs
         q = sa.select(t).where(t.c.kind == kind, t.c.asset_id == asset_id, team_visible(t))
         async with self.tx() as c:
-            return await list_page(c, q, params, default_sort=t.c.ran_at.desc())
+            return await list_page(
+                c,
+                q,
+                params,
+                default_sort=t.c.ran_at.desc(),
+                filters={"trigger": t.c.trigger},
+                facets={"trigger": t.c.trigger},
+            )
 
     async def run(self, run_id: str) -> Json | None:
         """One run of the acting team, or None: another team's run is not there."""

@@ -3264,6 +3264,7 @@ class EvalCaseOutcome(TypedDict, closed=True):
 class EvalCaseResult(TypedDict, closed=True):
     caseName: str
     draft: EvalCaseOutcome
+    judgeUnpriced: NotRequired[bool]
     live: NotRequired[EvalCaseOutcome | None]
     regression: NotRequired[bool]
     unpriced: NotRequired[bool]

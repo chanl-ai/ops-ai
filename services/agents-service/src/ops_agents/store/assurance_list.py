@@ -108,12 +108,50 @@ def assets() -> sa.Subquery:
     return sa.union_all(agents, skills, workflows).subquery("assets")
 
 
-def _latest(rank_by: Sequence[sa.ColumnElement[Any]], name: str) -> sa.Subquery:
-    """The newest of the team's saved-case runs per `rank_by`."""
+def _latest(rank_by: Sequence[sa.ColumnElement[Any]], name: str, *where: sa.ColumnElement[bool]) -> sa.Subquery:
+    """The newest of the team's saved-case runs per `rank_by`, of those `where` holds for."""
     r = eval_runs
     n = sa.func.row_number().over(partition_by=list(rank_by), order_by=(r.c.ran_at.desc(), r.c.id.desc()))
-    ranked = sa.select(r, n.label("n")).where(mine(r), team_visible(r)).subquery(f"{name}_ranked")
+    ranked = sa.select(r, n.label("n")).where(mine(r), team_visible(r), *where).subquery(f"{name}_ranked")
     return sa.select(ranked).where(ranked.c.n == 1).subquery(name)
+
+
+def _on_current_content(r: sa.Table) -> sa.ColumnElement[bool]:
+    """Whether a kept run ran on its version as that version reads now: a draft is rewritten under one version number,
+    and the digest is what tells two copies of it apart, so a run counts for a version only while its digest is the
+    version's own. A run kept with no digest (before agents 0121) counts for nothing."""
+    av, sv = registry_agent_versions, registry_skill_versions
+    agent = (
+        sa.select(av.c.version)
+        .where(
+            av.c.tenant_id == r.c.tenant_id,
+            av.c.agent_id == r.c.asset_id,
+            av.c.version == r.c.version,
+            av.c.digest == r.c.digest,
+        )
+        .exists()
+    )
+    skill = (
+        sa.select(sv.c.version)
+        .where(
+            sv.c.tenant_id == r.c.tenant_id,
+            sv.c.skill_id == r.c.asset_id,
+            sv.c.version == r.c.version,
+            sv.c.digest == r.c.digest,
+        )
+        .exists()
+    )
+    return sa.or_(sa.and_(r.c.kind == ASSET_AGENT, agent), sa.and_(r.c.kind == ASSET_SKILL, skill))
+
+
+def _ran_before(kind: Any, asset_id: Any, version: Any) -> sa.ColumnElement[bool]:
+    """Whether the version has a kept run in the team at all, on any copy of its content."""
+    r = eval_runs
+    return (
+        sa.select(r.c.id)
+        .where(mine(r), team_visible(r), r.c.kind == kind, r.c.asset_id == asset_id, r.c.version == version)
+        .exists()
+    )
 
 
 def _latest_validation(name: str) -> sa.Subquery:
@@ -139,6 +177,7 @@ def _active_cases(name: str) -> sa.Subquery:
 class _Steps:
     pass_rate: sa.ColumnElement[str]
     regressions: sa.ColumnElement[str]
+    stale: sa.ColumnElement[bool]
     blocked: sa.ColumnElement[bool]
 
 
@@ -149,14 +188,21 @@ def _eval_steps(
     regressions: sa.ColumnElement[int],
     checks: Checks,
     *,
+    ran_before: sa.ColumnElement[bool],
+    cases: sa.ColumnElement[int],
     gated: sa.ColumnElement[bool] | None = None,
 ) -> _Steps:
     """The one statement of the eval rule, which the Evals page (`gates`) and a publish (`version_gate`) both read:
     each step's result (pass, fail, or pending while no run of the version counts) and whether the version is blocked.
-    The tier's blocking steps decide which failed step blocks once a run exists; `checks.required` only adds a block
-    while there is no counted run. Neither lifts a block the other sets. `gated` limits the required block to the rows
-    it holds for (agents and skills, never workflows)."""
+    `run_id` is the newest run on the version's current content (`_on_current_content`). The tier's blocking steps
+    decide which failed step blocks once a run exists; `checks.required` only adds a block while there is no counted
+    run. A version that has active cases and was run, but not since its content changed, is `stale` and blocks whatever
+    the team's setting, or one edit after a failed run would clear the failure. None of these lifts a block another
+    sets. `gated` limits the required and stale blocks to the rows it holds for (agents and skills, never workflows)."""
     counted = sa.and_(run_id.is_not(None), total > 0)
+    stale = sa.and_(run_id.is_(None), cases > 0, ran_before)
+    if gated is not None:
+        stale = sa.and_(gated, stale)
     rate = sa.cast(passed, sa.Float()) / sa.case((total > 0, total), else_=1)
     rate_fails = rate < sa.literal(checks.min_pass_rate, sa.Float())
     pass_rate = sa.case((~counted, _text(STEP_PENDING)), (rate_fails, _text(STEP_FAIL)), else_=_text(STEP_PASS))
@@ -168,7 +214,8 @@ def _eval_steps(
         failing.append(sa.and_(counted, regressions > 0))
     if checks.required:
         failing.append(~counted if gated is None else sa.and_(gated, ~counted))
-    return _Steps(pass_rate=pass_rate, regressions=regressed, blocked=sa.or_(*failing) if failing else sa.false())
+    failing.append(stale)
+    return _Steps(pass_rate=pass_rate, regressions=regressed, stale=stale, blocked=sa.or_(*failing))
 
 
 def _result(run_id: sa.ColumnElement[Any], passed: sa.ColumnElement[int], total: sa.ColumnElement[int]) -> Any:
@@ -295,7 +342,8 @@ def gates(checks: Checks) -> sa.Subquery:
     skill's newest run of the requested version, a workflow's newest test run. `blocked` is 1 when the request is
     open and a step that blocks at its tier fails (`checks.blocking`); `result` is blocked, ready or decided."""
     p, u, tier = publish_requests, assets(), checks.tier
-    run = _latest((eval_runs.c.kind, eval_runs.c.asset_id, eval_runs.c.version), "version_run")
+    e = eval_runs
+    run = _latest((e.c.kind, e.c.asset_id, e.c.version), "version_run", _on_current_content(e))
     val = _latest_validation("gate_validation")
     active = _active_cases("gate_cases")
     is_workflow = p.c.kind == ASSET_WORKFLOW
@@ -315,7 +363,10 @@ def gates(checks: Checks) -> sa.Subquery:
     total = sa.func.coalesce(val.c.total, run.c.total, 0)
     regressions = sa.func.coalesce(val.c.regressions, run.c.regressions, 0)
     cases = sa.func.coalesce(active.c.active, 0)
-    steps = _eval_steps(summary_id, passed, total, regressions, checks, gated=~is_workflow)
+    ran_before = _ran_before(p.c.kind, p.c.subject_id, p.c.version)
+    steps = _eval_steps(
+        summary_id, passed, total, regressions, checks, ran_before=ran_before, cases=cases, gated=~is_workflow
+    )
     failing: list[sa.ColumnElement[bool]] = [steps.blocked]
     if "structural" in checks.blocking:
         failing.append(sa.and_(is_workflow, val.c.id.is_not(None), val.c.checks_failing > 0))
@@ -339,6 +390,7 @@ def gates(checks: Checks) -> sa.Subquery:
         cases.label("cases"),
         steps.pass_rate.label("pass_rate_result"),
         steps.regressions.label("regressions_result"),
+        sa.case((steps.stale, 1), else_=0).label("stale"),
         sa.case((blocked, 1), else_=0).label("blocked"),
         sa.case((blocked, _text("blocked")), (p.c.status.in_(DECIDED), _text("decided")), else_=_text("ready")).label(
             "result"
@@ -402,18 +454,28 @@ class VersionGate(BaseModel):
     cases: int
     pass_rate_result: str
     regressions_result: str
+    # Run before, but not on the version's content as it reads now.
+    stale: bool
     blocked: bool
 
 
 async def version_gate(conn: AsyncConnection, kind: str, asset_id: str, version: int, checks: Checks) -> VersionGate:
     """The rule `gates` shows on the Evals page, for one version with no publish request: the newest run of exactly
-    that version in the acting team; a pass on an older version never counts. Runs are written only once `run_eval`
+    that version, on its content as it reads now, in the acting team; a pass on an older version, or on an earlier copy
+    of this draft, never counts. Runs are written only once `run_eval`
     has finished (`api/eval_runs.run_saved`), so every row read here is a complete run. The tier's blocking steps
     decide which steps block once a run exists; `checks.required` only adds the no-cases and not-run blocks."""
     r = eval_runs
     newest = (
         sa.select(r.c.id, r.c.passed, r.c.total, r.c.regressions)
-        .where(mine(r), team_visible(r), r.c.kind == kind, r.c.asset_id == asset_id, r.c.version == version)
+        .where(
+            mine(r),
+            team_visible(r),
+            r.c.kind == kind,
+            r.c.asset_id == asset_id,
+            r.c.version == version,
+            _on_current_content(r),
+        )
         .order_by(r.c.ran_at.desc(), r.c.id.desc())
         .limit(1)
         .subquery("gate_run")
@@ -425,19 +487,22 @@ async def version_gate(conn: AsyncConnection, kind: str, asset_id: str, version:
     )
     passed, total = sa.func.coalesce(newest.c.passed, 0), sa.func.coalesce(newest.c.total, 0)
     regressions = sa.func.coalesce(newest.c.regressions, 0)
-    steps = _eval_steps(newest.c.id, passed, total, regressions, checks)
+    cases = sa.func.coalesce(active.c.active, 0)
+    ran_before = _ran_before(kind, asset_id, version)
+    steps = _eval_steps(newest.c.id, passed, total, regressions, checks, ran_before=ran_before, cases=cases)
     q = sa.select(
         newest.c.id.label("run_id"),
         passed.label("passed"),
         total.label("total"),
         regressions.label("regressions"),
-        sa.func.coalesce(active.c.active, 0).label("cases"),
+        cases.label("cases"),
         steps.pass_rate.label("pass_rate_result"),
         steps.regressions.label("regressions_result"),
+        sa.case((steps.stale, 1), else_=0).label("stale"),
         sa.case((steps.blocked, 1), else_=0).label("blocked"),
     ).select_from(joined)
     row = (await conn.execute(q)).mappings().one()
-    return VersionGate.model_validate({**row, "blocked": bool(row["blocked"])})
+    return VersionGate.model_validate({**row, "stale": bool(row["stale"]), "blocked": bool(row["blocked"])})
 
 
 class Stats(BaseModel):

@@ -98,8 +98,9 @@ class _Spend:
         return float(total), unpriced
 
 
-async def _scored(case: EvalCase, data: Json, judge: JudgeFn | None, spend: _Spend) -> CaseOutcome:
-    """One turn scored: its usage counted, and each judge check judged on the turn's reply."""
+async def _scored(case: EvalCase, data: Json, judge: JudgeFn | None, spend: _Spend, judging: _Spend) -> CaseOutcome:
+    """One turn scored: its usage counted in `spend`, and each judge check judged on the turn's reply, the judge's
+    usage counted in `spend` and in `judging` too."""
     usage = json_object(data.get("usage"))
     alias = str(usage.get("model") or data.get("model") or "")
     spend.add(alias, field(usage, "inputTokens", int, 0), field(usage, "outputTokens", int, 0), 1)
@@ -112,7 +113,9 @@ async def _scored(case: EvalCase, data: Json, judge: JudgeFn | None, spend: _Spe
             judged[i] = Judged(None, "No judge is configured.")
             continue
         verdict, spent_on = await judge(check.rubric or "", judge_evidence(view), alias)
-        spend.add(spent_on, verdict.usage.input_tokens, verdict.usage.output_tokens, verdict.usage.requests)
+        used = (verdict.usage.input_tokens, verdict.usage.output_tokens, verdict.usage.requests)
+        spend.add(spent_on, *used)
+        judging.add(spent_on, *used)
         judged[i] = Judged(verdict.passed, verdict.reason, verdict.confidence)
     return score_case(case, view, judged)
 
@@ -134,11 +137,11 @@ async def run_eval(
     table = prices or PriceTable()
     spend = _Spend()
     for case in cases:
-        mine = _Spend()
-        outcome = await _scored(case, await turn(case.input, case.collections), judge, mine)
+        mine, judging = _Spend(), _Spend()
+        outcome = await _scored(case, await turn(case.input, case.collections), judge, mine, judging)
         live = None
         if live_turn is not None:
-            live = await _scored(case, await live_turn(case.input, case.collections), judge, mine)
+            live = await _scored(case, await live_turn(case.input, case.collections), judge, mine, judging)
         spend.merge(mine)
         regression = live is not None and live.status == CHECK_STATUS_PASS and outcome.status != CHECK_STATUS_PASS
         passed += outcome.status == CHECK_STATUS_PASS
@@ -151,6 +154,8 @@ async def run_eval(
                 "regression": regression,
                 # Kept on each case, as a run stores its results whole: the run's own flag is read from them.
                 "unpriced": mine.priced(table)[1],
+                # The part of that the judge spent: only a case with a judge check can hold it.
+                "judgeUnpriced": judging.priced(table)[1],
             }
         )
     cost_usd, unpriced = spend.priced(table)

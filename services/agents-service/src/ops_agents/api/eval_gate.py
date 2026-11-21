@@ -20,6 +20,12 @@ from .platform_policies import PolicyUnread
 REQUIRED_KEY = "evalsRequired"
 STEP_LABELS = {"structural": "Structure checks", "pass_rate": "Pass rate", "regressions": "Regressions"}
 UNREAD = "The team's eval setting could not be read just now"
+CHANGED = "The agent changed since its last eval run"
+
+
+def cases_pass(n: int) -> str:
+    """`n` with "case passes" or "cases pass", as each count of cases in the gate's words reads."""
+    return f"{n} case passes" if n == 1 else f"{n} cases pass"
 
 
 class GateStep(TypedDict):
@@ -59,6 +65,7 @@ def eval_steps(
     regressions: int,
     pass_rate_result: str,
     regressions_result: str,
+    stale: bool = False,
 ) -> list[GateStep]:
     """The pass-rate and regression steps worded from the results the store's rule returned; nothing is decided here."""
 
@@ -72,19 +79,21 @@ def eval_steps(
         }
 
     if pass_rate_result == STEP_PENDING:
-        pending = f"No saved cases have run on version {version}."
+        pending = f"{CHANGED} on version {version}." if stale else f"No saved cases have run on version {version}."
         return [step("pass_rate", STEP_PENDING, pending), step("regressions", STEP_PENDING, pending)]
     rate_failed = pass_rate_result == STEP_FAIL
     return [
         step(
             "pass_rate",
             pass_rate_result,
-            f"{passed} of {total} cases pass" + (f"; at least {round(minimum * 100)}% must." if rate_failed else "."),
+            f"{passed} of {cases_pass(total)}" + (f"; at least {round(minimum * 100)}% must." if rate_failed else "."),
         ),
         step(
             "regressions",
             regressions_result,
-            f"{regressions} cases pass on the live version and fail on this one."
+            f"{cases_pass(regressions)} on the live version and "
+            + ("fails" if regressions == 1 else "fail")
+            + " on this one."
             if regressions_result == STEP_FAIL
             else "No case that passes live fails here.",
         ),
@@ -101,6 +110,7 @@ def _steps(checks: Checks, version: int, g: VersionGate) -> list[GateStep]:
         regressions=g.regressions,
         pass_rate_result=g.pass_rate_result,
         regressions_result=g.regressions_result,
+        stale=g.stale,
     )
 
 
@@ -125,9 +135,11 @@ async def gate(rt: Runtime, row: AgentRow, version: int) -> tuple[list[Json], li
 
 
 def _why(found: VersionGate, version: int, steps: list[GateStep]) -> tuple[str, str]:
-    """The problem's kind and message for a blocked version: no cases or no run (only with evalsRequired), else the
-    blocking steps that failed."""
+    """The problem's kind and message for a blocked version: run, but not since its content changed (whatever the
+    team's setting); no cases or no run (only with evalsRequired); else the blocking steps that failed."""
     required = "The team requires evals to publish, and"
+    if found.stale:
+        return "eval_not_run", f"{CHANGED} on version {version}; run its evals again."
     if found.pass_rate_result == STEP_PENDING:
         if found.cases == 0:
             return "eval_no_cases", f"{required} this agent has no saved cases."

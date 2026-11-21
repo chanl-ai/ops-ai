@@ -214,10 +214,26 @@ async def test_a_failed_blocking_step_stops_the_request_and_the_approval(dev_pla
         _ok(await _save(c, other, [PASSING, FAILING], OPS))
         _ok(await c.post(f"/v1/agents/{other}/eval-runs", headers=OPS))
         approved = await c.post(f"/v1/publish-requests/{rid}/decision", json={"decision": "approved"}, headers=REVIEWER)
-        assert approved.status_code == 409 and approved.json()["error"]["code"] == "eval_blocked", approved.text
+        assert approved.status_code == 422 and approved.json()["error"]["code"] == "cannot_publish", approved.text
         assert _kinds(approved) == ["eval_failed"]
         gate = next(g for g in (await _tab(c, "gates", OPS))["data"] if g["reviewId"] == rid)
         assert (gate["reviewStatus"], gate["blocked"]) == ("pending", True)
+
+
+async def test_a_pass_stops_counting_once_the_draft_changes_under_the_same_version(dev_platform: AsyncClient) -> None:
+    async with _same(dev_platform) as c:
+        _runtime(c).policies = _EveryChangeWaits()
+        aid = await _agent(c, OPS)
+        _ok(await _save(c, aid, [PASSING], OPS))
+        _ok(await c.post(f"/v1/agents/{aid}/eval-runs", headers=OPS))
+        assert _ok(await save_agent(c, aid, {"role": "Checks payees, no tools"}, headers=OPS))["version"] == 1
+        check = _ok(await c.get(f"/v1/agents/{aid}/publish-check", params={"version": 1}, headers=OPS))
+        assert not check["canRequest"], "a pass on an earlier copy of version 1 opened the check"
+        assert [p["kind"] for p in check["problems"]] == ["eval_not_run"], check
+        asked = await c.post(f"/v1/agents/{aid}/publish-requests", json={"version": 1, "note": "go"}, headers=OPS)
+        assert asked.status_code == 422 and _kinds(asked) == ["eval_not_run"], asked.text
+        _ok(await c.post(f"/v1/agents/{aid}/eval-runs", headers=OPS))
+        assert _ok(await c.get(f"/v1/agents/{aid}/publish-check", params={"version": 1}, headers=OPS))["canRequest"]
 
 
 class _Required:

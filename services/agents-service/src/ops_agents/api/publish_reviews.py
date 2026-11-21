@@ -12,7 +12,7 @@ from ops_agents.store.agent_registry import PublishRequestRow, registry_agents
 from ops_agents.store.review_sources import ReviewSources
 from ops_engine.store import DefinitionRow
 from ops_service_kit import narrow
-from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
+from ops_service_kit.errors import Conflict, NotFound, Unprocessable, ValidationFailed
 from ops_service_kit.http import JsonList
 from ops_store import isolation
 
@@ -301,14 +301,15 @@ async def decide(
 
 
 async def _require_evals_pass(rt: Runtime, req: PublishRequestRow) -> None:
-    """A run that failed after the request opened stops the approval: 409 `eval_blocked`, and the request stays
-    pending. Read as the agent's team, as the publish itself is."""
+    """A run that failed after the request opened stops the approval with the refusal the publish request gives:
+    422 `cannot_publish`, the same `PublishBlocker` list in `details.problems`, and the request stays pending. Read as
+    the agent's team, as the publish itself is."""
     with isolation.scope(isolation.tenant(), await subject_team(rt, req) or isolation.team()):
         row = await registry(rt).row(req.subject_id)
         if found := await eval_gate.problems(rt, row, int(req.version)):
-            raise Conflict(
+            raise Unprocessable(
                 "This version cannot be approved yet: " + " ".join(str(p["message"]) for p in found),
-                code="eval_blocked",
+                code="cannot_publish",
                 details={"problems": cast(JsonList, found)},
             )
 
