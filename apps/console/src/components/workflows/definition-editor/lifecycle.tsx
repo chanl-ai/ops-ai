@@ -56,11 +56,23 @@ function VersionDetails({ version, digest }: { version: number; digest?: string 
   );
 }
 
+/** The live version when it is not the one shown; the canvas header leaves its live chip out for this line. */
+function LiveElsewhere({ lifecycle }: { lifecycle: Pick<Lifecycle, 'version' | 'liveVersion' | 'paused'> }) {
+  const { version, liveVersion, paused } = lifecycle;
+  if (liveVersion === null || liveVersion === version) return null;
+  return (
+    <span className="text-muted-foreground" data-testid="definition-live-version">
+      Version {liveVersion} {paused ? 'is paused' : 'is live'}
+    </span>
+  );
+}
+
 /** You can view the workflow; the stage shows, and who changes it. */
-export function ViewOnlyLine({ stage }: { stage: DefinitionStage }) {
+export function ViewOnlyLine({ lifecycle }: { lifecycle: Lifecycle }) {
   return (
     <div className="mr-auto flex flex-wrap items-center gap-2 text-sm" data-testid="definition-view-only">
-      <StageBadge stage={stage} testId="definition-stage" />
+      <StageBadge stage={lifecycle.stage} testId="definition-stage" />
+      <LiveElsewhere lifecycle={lifecycle} />
       <span className="text-muted-foreground">You can view this workflow; builders change it.</span>
     </div>
   );
@@ -101,11 +113,7 @@ export function LifecycleActions({
       <div className="mr-auto flex flex-wrap items-center gap-2 text-sm" data-testid="definition-lifecycle">
         <VersionDetails version={version} digest={lifecycle.digest} />
         <StageBadge stage={stage} testId="definition-stage" />
-        {liveVersion !== null && liveVersion !== version && (
-          <span className="text-muted-foreground" data-testid="definition-live-version">
-            Version {liveVersion} {paused ? 'is paused' : 'is live'}
-          </span>
-        )}
+        <LiveElsewhere lifecycle={lifecycle} />
       </div>
       {liveVersion !== null && (
         <Button type="button" variant="outline" onClick={() => setConfirm(paused ? 'resume' : 'pause')} data-testid={paused ? 'definition-resume' : 'definition-pause'}>

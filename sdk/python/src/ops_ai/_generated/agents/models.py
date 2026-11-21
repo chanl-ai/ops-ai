@@ -508,6 +508,8 @@ class DefinitionCheck(TypedDict, closed=True):
 
 
 class DefinitionPublishInput(TypedDict, closed=True):
+    baseDigest: NotRequired[str | None]
+    baseVersion: NotRequired[int | None]
     note: NotRequired[str]
     version: NotRequired[int | None]
 
@@ -1209,6 +1211,18 @@ class OptionalPortView(TypedDict, closed=True):
 class OptionsPage(TypedDict, closed=True):
     data: list[Option]
     nextCursor: NotRequired[str | None]
+
+
+class OutdatedCopyView(TypedDict, closed=True):
+    baseVersion: int
+    checks: list[DefinitionCheck]
+    definition: dict[str, JsonValue]
+    digest: str
+    newerAt: str | None
+    newerBy: str | None
+    newerVersion: int
+    updatedAt: str
+    updatedBy: str
 
 
 class OverviewCaseRow(TypedDict, closed=True):
@@ -2916,6 +2930,7 @@ class DefinitionView(TypedDict, closed=True):
     digest: str
     liveVersion: int | None
     name: str
+    outdatedCopy: NotRequired[OutdatedCopyView | None]
     paused: bool
     review: OpenPublishRequest | None
     saveBase: SaveBase

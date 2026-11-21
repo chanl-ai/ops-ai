@@ -140,6 +140,8 @@ export interface DefinitionView {
   startForm?: StartForm | null;
   /** What the editor saves to; null until the first change after the newest version. */
   workingCopy: WorkingCopy | null;
+  /** A copy made on an older version than the newest (one saved outside the editor since): kept, shown read-only. */
+  outdatedCopy?: OutdatedCopy | null;
   /** The copy the next save names: the working copy, else the newest version (`baseOf` reads it). */
   saveBase: { version: number; digest: string };
 }
@@ -153,6 +155,13 @@ export interface WorkingCopy {
   checks: DefinitionCheck[];
   updatedAt: string;
   updatedBy: string;
+}
+
+export interface OutdatedCopy extends WorkingCopy {
+  /** The version saved since outside the editor, who saved it and when. */
+  newerVersion: number;
+  newerBy: string | null;
+  newerAt: string | null;
 }
 
 export interface WorkingCopySaved {

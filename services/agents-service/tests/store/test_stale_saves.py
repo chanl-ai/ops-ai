@@ -14,6 +14,7 @@ from uuid import uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ops_agents.store.agent_registry import AgentRegistry, digest_of
@@ -106,3 +107,33 @@ async def test_six_tabs_saving_one_workflow_copy_at_once_write_one(engine: Async
         tabs = [save(f"Tab {i}", (1, opened.digest)) for i in range(SAVERS)]
         done = await asyncio.gather(*tabs, return_exceptions=True)
     assert sorted(type(r).__name__ for r in done) == ["StaleWorkingCopy"] * (SAVERS - 1) + ["WorkingCopy"], done
+
+
+async def test_an_autosave_locks_only_the_newest_version_row(engine: AsyncEngine) -> None:
+    """Every autosave runs this lock, so locking every version with its whole definition costs more the longer a
+    workflow lives and holds rows a publish of any version waits on."""
+    store = DefinitionStore(EngineTransactions(engine))
+    wid = f"loan_intake_{uuid4().hex[:8]}"
+    with isolation.scope(f"t_{uuid4().hex[:10]}", TEAM):
+        for i in range(4):
+            d: dict[str, Any] = {"schemaVersion": 2, "id": wid, "name": f"Loan intake {i}", "nodes": []}
+            await store.publish(wid, name=d["name"], definition=d, digest=digest_of(d), now="n", by="maya")
+        newest = await store.row(wid)
+        assert newest is not None and newest.version == 4
+        seen: list[str] = []
+
+        def record(_c: Any, _cur: Any, statement: str, *_: Any) -> None:
+            if "FROM engine_definitions" in statement and ("FOR UPDATE" in statement or "UPDLOCK" in statement):
+                seen.append(statement)
+
+        event.listen(engine.sync_engine, "before_cursor_execute", record)
+        try:
+            d = {"schemaVersion": 2, "id": wid, "name": "Edited", "nodes": []}
+            await store.put_working_copy(
+                wid, definition=d, digest=digest_of(d), checks=[], base=(4, newest.digest), now="n", by="maya"
+            )
+        finally:
+            event.remove(engine.sync_engine, "before_cursor_execute", record)
+    assert len(seen) == 1, seen
+    assert "engine_definitions.definition" not in seen[0], seen[0]
+    assert "LIMIT" in seen[0] or "TOP" in seen[0], seen[0]

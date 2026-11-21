@@ -3257,7 +3257,10 @@ export interface paths {
          * @description Opens a publish request for a draft in Reviews; the version goes live when a second person approves it (at once
          *     under the dev auto-approve setting). 409 when the version is not a draft or a request is already open, 422 when it
          *     no longer passes its checks, 403 unless the caller is a builder or admin of the owning team (an admin for a
-         *     workflow no team owns). The request lists what each step acts on: its operation, agent and approver.
+         *     workflow no team owns). With `baseVersion` and `baseDigest` it publishes the working copy: every blocker the
+         *     publish preview lists refuses it (422, or 403 for a mailbox the caller may not watch) before any version is made,
+         *     then the next version is made and its request opened. The request lists what each step acts on: its operation,
+         *     agent and approver.
          *     No request transaction: the team's accounts (tools-service) and the review deadline (platform-service) are asked
          *     with none open.
          */
@@ -5557,6 +5560,10 @@ export interface components {
         };
         /** DefinitionPublishInput */
         DefinitionPublishInput: {
+            /** Basedigest */
+            baseDigest?: string | null;
+            /** Baseversion */
+            baseVersion?: number | null;
             /**
              * Note
              * @default
@@ -5658,6 +5665,7 @@ export interface components {
             liveVersion: number | null;
             /** Name */
             name: string;
+            outdatedCopy?: components["schemas"]["OutdatedCopyView"] | null;
             /** Paused */
             paused: boolean;
             review: components["schemas"]["OpenPublishRequest"] | null;
@@ -8563,6 +8571,32 @@ export interface components {
             data: components["schemas"]["Option"][];
             /** Nextcursor */
             nextCursor?: string | null;
+        };
+        /**
+         * OutdatedCopyView
+         * @description A working copy made on an older version than the newest, kept so its change is not lost.
+         */
+        OutdatedCopyView: {
+            /** Baseversion */
+            baseVersion: number;
+            /** Checks */
+            checks: components["schemas"]["DefinitionCheck"][];
+            /** Definition */
+            definition: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Digest */
+            digest: string;
+            /** Newerat */
+            newerAt: string | null;
+            /** Newerby */
+            newerBy: string | null;
+            /** Newerversion */
+            newerVersion: number;
+            /** Updatedat */
+            updatedAt: string;
+            /** Updatedby */
+            updatedBy: string;
         };
         /** OverviewCaseRow */
         OverviewCaseRow: {

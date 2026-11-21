@@ -16,7 +16,11 @@ import type { SaveState } from './use-working-copy';
  * header, so the standards check finds PageLayout from every routed page. Runs, Tests and Settings join when their
  * routes exist.
  */
-export function workflowHeader(id: string, view: DefinitionView | undefined) {
+/**
+ * `liveChip` false on the canvas, whose lifecycle line already names the live version beside the shown one, so the
+ * live state shows once.
+ */
+export function workflowHeader(id: string, view: DefinitionView | undefined, { liveChip = true }: { liveChip?: boolean } = {}) {
   const base = `/build/workflows/definitions/${encodeURIComponent(id)}`;
   return {
     icon: Workflow,
@@ -25,7 +29,7 @@ export function workflowHeader(id: string, view: DefinitionView | undefined) {
     backHref: '/build/workflows',
     badge: view && (
       <span className="flex flex-wrap items-center gap-1.5">
-        {view.liveVersion !== null && (
+        {liveChip && view.liveVersion !== null && (
           <Badge variant="outline" className="border-success/40 bg-success/10 font-normal text-success-text" data-testid="definition-live-chip">
             {view.paused ? `Paused v${view.liveVersion}` : `Live v${view.liveVersion}`}
           </Badge>

@@ -24,14 +24,18 @@ An agent follows the same path: publish compiles a one-node plan (`ag_x@7`), and
 
 The workflow editor (`/build/workflows/definitions/<id>`) edits a working copy, not a version. Each change saves the
 copy a second later with the server's checks, failing ones included (`PUT /v1/workflows/definitions/{id}/working-copy`,
-`engine_working_copies`, agents migration 0121), and makes no version. Publishing makes the next version from the copy
-(`POST …/versions`), refused while an error check remains, then opens its publish request; the team's publish policy
-lets a change of step positions alone go live with no review (`publish_policy.is_major`).
+`engine_working_copies`, agents migration 0121), and makes no version. Publishing is one call
+(`POST …/publish-requests` with `baseVersion` and `baseDigest`): it refuses on every blocker before anything is made,
+then makes the next version from the copy and opens its publish request; the team's publish policy lets a change of
+step positions alone go live with no review (`publish_policy.is_major`). `POST …/versions` still makes a draft version
+from the copy without publishing it.
 
 | Rule | Where |
 |---|---|
 | A save names the copy it was made on (`saveBase` of the view: the copy, or the newest version without one) and is refused with 409 `stale_base` otherwise, naming who saved first | `DefinitionStore.put_working_copy` compares under a row lock in the write's transaction; the answer is `refuse_stale` (`store/agent_registry.py`), as for agents and skills |
-| A copy made on an older version than the newest (a version saved since through `POST …/definitions`, the SDK or CLI `workflows save`) is outdated: its saves and its publish are refused with 409 `stale_base` naming that version, and the view leaves it out, so the editor reloads onto the newest version | `DefinitionStore.put_working_copy`, `engine.py` `_open_copy`, `version_from_working_copy` |
+| A copy made on an older version than the newest (a version saved since through `POST …/definitions`, the SDK or CLI `workflows save`) is outdated: its saves and its publish are refused with 409 `stale_base` naming that version. The view returns it as `outdatedCopy` with who saved the newer version and when, never hiding it; the editor says so, holds autosave and lets the person open their copy read-only until they choose to start from the newer version | `DefinitionStore.put_working_copy`, `engine.py` `definition_view`, `_version_from_copy`; the definition page |
+| What stops a publish is one list, `engine_lifecycle.blockers`: error checks, AI steps while the team has them off, an email trigger on a mailbox the publisher may not watch, accounts the team does not have. The preview lists all of them and the publish refuses on the first, so the dialog never shows fewer problems than the publish refuses on; Publish and Send for review stay disabled while one is listed. Document-type pinning is checked only when the version is made | `engine_lifecycle.blockers`, `publish_preview`, `request_publish`; `publish-state.ts` |
+| An autosave locks the newest version row only, a few columns, and the copy; a publish locks every row of the workflow, so the two still wait on each other | `DefinitionStore.put_working_copy` |
 | A refused workflow save is never sent again, even after the person's own save from another tab: the canvas is one field, so a resend would replace that tab's whole canvas. The page says who saved and offers Reload. Agents resend their own (field-merged) saves | `use-working-copy.ts`; `lib/save-base.ts` for agents |
 | Publish waits while a change on screen is unsaved, so the version and its preview are made from what is on screen | `lifecycle.tsx`, the definition page's `saving` |
 | A copy equal to an older, superseded version (a restore) publishes as a new draft version; the copy is removed only after the version is stored, and a save made meanwhile is kept on the new version. One definition may sit at several versions (agents migration 0122) | `DefinitionStore.publish(reopen=True)`, `rebase_working_copy` |

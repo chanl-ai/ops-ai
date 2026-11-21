@@ -127,4 +127,10 @@ async def test_a_save_on_a_copy_older_than_a_version_saved_outside_the_editor_is
     # Read again, the editor opens on version 2 and its next save is kept.
     reread = (await client.get(WF)).json()["data"]
     assert reread["saveBase"]["version"] == 2 and reread["workingCopy"] is None
+    # The editor's unpublished change is kept and shown beside who saved the newer version and when, never hidden.
+    kept = reread["outdatedCopy"]
+    assert kept["definition"]["name"] == "Editor change" and kept["baseVersion"] == 1, kept
+    newer = pushed.json()["data"]
+    assert (kept["newerVersion"], kept["newerBy"]) == (2, reread["versions"][-1]["createdBy"]), kept
+    assert kept["newerAt"] == reread["versions"][-1]["createdAt"] and newer["version"] == 2
     assert (await _save(client, basic() | {"name": "Editor change on v2"}, reread["saveBase"])).status_code == 200

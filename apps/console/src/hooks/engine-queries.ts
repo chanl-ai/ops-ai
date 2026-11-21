@@ -79,17 +79,15 @@ export const useWorkflowPublishPreview = (workflowId: string, enabled: boolean) 
   useTeamQuery({ queryKey: ['engine', 'publish-preview', workflowId], queryFn: () => api.engine.publishPreview(workflowId), enabled, retry: false, staleTime: 0 });
 
 /**
- * Publishes the working copy: makes the next version from it (refused while a problem remains), then opens its
- * publish request, which goes live at once where the team's policy needs no review. Without a working copy it asks to
- * publish the newest draft.
+ * Publishes the working copy in one call: the server refuses on any problem the preview lists before making a
+ * version, then makes it and opens its publish request, which goes live at once where the team's policy needs no
+ * review. Without a working copy it asks to publish the newest draft.
  */
 export function usePublishWorkingCopy(workflowId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ view, note }: { view: DefinitionView; note: string }) => {
-      const version = view.workingCopy ? (await api.engine.makeVersion(workflowId, { baseVersion: view.saveBase.version, baseDigest: view.saveBase.digest })).version : undefined;
-      return api.engine.requestPublish(workflowId, { version, note });
-    },
+    mutationFn: ({ view, note }: { view: DefinitionView; note: string }) =>
+      api.engine.requestPublish(workflowId, view.workingCopy ? { note, baseVersion: view.saveBase.version, baseDigest: view.saveBase.digest } : { note }),
     onSettled: () =>
       Promise.all([
         qc.invalidateQueries({ queryKey: ['engine', 'definition', workflowId] }),

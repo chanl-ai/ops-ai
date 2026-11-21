@@ -377,7 +377,7 @@ function EditorBody({ definition: initial, types, validation, validateError = nu
       {saveState}
       <ProblemsChip validation={validation} checking={checking} failed={validateError} nodeName={nodeName} onSelectNode={(id) => { selectNode(id); setSheetId(id); }} />
       {!readOnly && <LifecycleActions lifecycle={lifecycle} changed={changed} saving={saving} onPublish={() => setPublishOpen(true)} onSetPaused={setPaused} pausing={pausing} canPublish={canPublish !== false} />}
-      {readOnly && <ViewOnlyLine stage={lifecycle.stage} />}
+      {readOnly && <ViewOnlyLine lifecycle={lifecycle} />}
       {/* Someone who may only read a draft still sees that it waits on a publish, and why they cannot start it. */}
       {readOnly && canPublish === false && lifecycle.stage === 'draft' && !lifecycle.review && <LockedReason area="workflows" action="publish" label="Publish…" />}
       {/* Starting any run is a builder's or admin's step (runs/start); the server refuses the rest, so the

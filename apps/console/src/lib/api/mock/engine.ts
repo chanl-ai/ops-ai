@@ -14,7 +14,6 @@ export function createEngineMock(): EngineApi {
     deleteDefinition: unavailable,
     requestPublish: unavailable,
     saveWorkingCopy: unavailable,
-    makeVersion: unavailable,
     diff: unavailable,
     publishPreview: unavailable,
     setPaused: unavailable,

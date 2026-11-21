@@ -16,6 +16,7 @@ import { useWorkflowPublishPreview } from '@/hooks/engine-queries';
 import type { WorkflowPublishPreview } from '@/lib/types/engine';
 
 import { ChangesList } from './changes-list';
+import { canSubmitPublish } from './publish-state';
 
 /** What happens once Publish is pressed, from the team's publish policy as the server read it. */
 function nextStep(p: WorkflowPublishPreview): string {
@@ -26,8 +27,8 @@ function nextStep(p: WorkflowPublishPreview): string {
 
 /**
  * Publishes the working copy: makes the next version from it and opens its review, or puts it live at once where the
- * team's policy needs none. It lists what changed against the live version and every problem that stops the publish;
- * pressing Publish while one remains moves to the list and sends nothing.
+ * team's policy needs none. It lists what changed against the live version and every problem the server would refuse
+ * the publish on (the same list the publish checks); Publish and Send for review stay disabled while one remains.
  */
 export function PublishDefinitionDialog({
   open,
@@ -50,7 +51,6 @@ export function PublishDefinitionDialog({
   const [error, setError] = React.useState<string>();
   const [pending, setPending] = React.useState(false);
   const [noteMissing, setNoteMissing] = React.useState(false);
-  const problemsRef = React.useRef<HTMLDivElement>(null);
   React.useEffect(() => {
     if (open) {
       setNote('');
@@ -63,12 +63,7 @@ export function PublishDefinitionDialog({
   const blockers = p?.blockers ?? [];
 
   const submit = async () => {
-    if (!p) return;
-    if (blockers.length) {
-      problemsRef.current?.scrollIntoView({ block: 'nearest' });
-      problemsRef.current?.focus();
-      return;
-    }
+    if (!p || !canSubmitPublish(p, pending)) return;
     if (p.reviewRequired && !note.trim()) return setNoteMissing(true);
     setPending(true);
     try {
@@ -99,7 +94,7 @@ export function PublishDefinitionDialog({
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
             Cancel
           </Button>
-          <LoadingButton type="button" onClick={submit} isLoading={pending} loadingText="Publishing…" disabled={!p} data-testid="definition-publish-submit">
+          <LoadingButton type="button" onClick={submit} isLoading={pending} loadingText="Publishing…" disabled={!canSubmitPublish(p, pending)} title={blockers.length ? 'Fix the problems listed first' : undefined} data-testid="definition-publish-submit">
             {p?.reviewRequired ? 'Send for review' : 'Publish'}
           </LoadingButton>
         </>
@@ -116,7 +111,7 @@ export function PublishDefinitionDialog({
         p && (
           <div className="flex flex-col gap-4">
             {blockers.length > 0 && (
-              <div ref={problemsRef} tabIndex={-1} className="outline-none" data-testid="definition-publish-blockers">
+              <div data-testid="definition-publish-blockers">
                 <Alert variant="destructive">
                   <AlertTriangle />
                   <AlertTitle>{blockers.length === 1 ? 'Fix 1 problem to publish' : `Fix ${blockers.length} problems to publish`}</AlertTitle>

@@ -4,7 +4,7 @@ superseded), which only the transitions below change."""
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Annotated, Any, ClassVar, TypedDict
+from typing import Annotated, Any, ClassVar, TypedDict, cast
 
 import sqlalchemy as sa
 from pydantic import BeforeValidator, JsonValue
@@ -250,7 +250,7 @@ class DefinitionStore:
     ) -> WorkingCopy:
         """Stores `definition` as the working copy, whatever its checks say, when `base` (the version and digest the
         save was made on) names the newest copy: the working copy when there is one made on the newest version, the
-        newest version otherwise. The workflow's versions and its copy are locked first, so two saves made on one copy
+        newest version otherwise. The newest version and the copy are locked first, so two saves made on one copy
         cannot both pass the compare. Raises StaleWorkingCopy when `base` is older, and LookupError when the workflow
         has no version."""
         t, w = engine_definitions, engine_working_copies
@@ -259,10 +259,16 @@ class DefinitionStore:
         async with self.tx.tenant_tx() as c:
             newest = (
                 await c.execute(
+                    # The newest row alone, without its definition: a publish locks every row of the workflow, so
+                    # holding the newest one still orders this save against it.
                     locked(
-                        t.select()
+                        cast(
+                            sa.Select[Any],
+                            sa.select(t.c.version, t.c.digest, t.c.created_by, t.c.created_at, t.c.team_id),
+                        )
                         .where(t.c.tenant_id == tenant, t.c.workflow_id == workflow_id)
-                        .order_by(t.c.version.desc()),
+                        .order_by(t.c.version.desc())
+                        .limit(1),
                         t,
                     )
                 )

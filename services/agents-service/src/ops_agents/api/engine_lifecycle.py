@@ -10,29 +10,31 @@ only in `request_publish`.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import cast
 
 from pydantic import JsonValue
 
 from ops_engine import default_registry
-from ops_engine.definition import WorkflowDefinition, validate
+from ops_engine.definition import InvalidDefinitionError, parse, validate
 from ops_engine.diff import diff
 from ops_engine.node_types import list_columns
 from ops_engine.store import DefinitionRow, DefinitionStore, DefinitionVersion
 from ops_engine.store.definitions import ListColumns
 from ops_service_kit import narrow
-from ops_service_kit.errors import Conflict, NotFound, Unprocessable
+from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, Unprocessable
 from ops_service_kit.http import Json
 
 from ..store.agent_registry import PublishRequestRow
 from ..store.engine import EngineTransactions
 from ..store.mailboxes import MailboxStore
 from ..store.tenancy import current_team
+from . import ai_steps_gate
 from .account_names import require_team_accounts, step_names
 from .agent_registry import ReviewView, registry, review_view
 from .auth import Principal, require_builder
 from .deps import Runtime
-from .email_trigger import require_binding
+from .email_trigger import EMAIL_TRIGGER, require_binding
 from .publish_policy import decide
 from .review_sla import sla_hours
 
@@ -114,7 +116,73 @@ def require_rights(me: Principal, row: DefinitionRow, action: str) -> None:
     )
 
 
-async def request_publish(rt: Runtime, me: Principal, workflow_id: str, version: int | None, note: str) -> ReviewView:
+@dataclass(frozen=True)
+class Blocker:
+    """One reason a publish is refused: `check` as the publish dialog lists it (DefinitionCheck's fields), and
+    `error`, the refusal the publish answers with when it is the first one."""
+
+    check: Json
+    error: ApiError
+
+
+def _on_trigger(definition: Json) -> str | None:
+    """The id of the definition's email trigger step, where a mailbox refusal is fixed."""
+    for n in narrow.json_list(definition.get("nodes")):
+        if isinstance(n, dict) and n.get("type") == EMAIL_TRIGGER:
+            return str(n.get("id") or "") or None
+    return None
+
+
+async def blockers(rt: Runtime, me: Principal, row: DefinitionRow, definition: Json) -> list[Blocker]:
+    """Every reason publishing `definition` as a version of `row`'s workflow is refused: its error checks, AI steps
+    while the team has them off, an email trigger on a mailbox the publisher may not bind, and accounts the team does
+    not have. The publish dialog lists them all and the publish refuses on the first, so the two cannot differ.
+    Asks platform-service and tools-service, so it runs with no transaction open."""
+    out: list[Blocker] = []
+    try:
+        d = parse(definition)
+    except InvalidDefinitionError as e:
+        check: Json = {"node": None, "level": "error", "code": "invalid_definition", "message": str(e)}
+        return [Blocker(check, Unprocessable(str(e), code="definition_checks", details={"checks": [check]}))]
+    if checks := validate(d, REGISTRY):
+        failing = Unprocessable(
+            f"The workflow has {len(checks)} failing checks.",
+            code="definition_checks",
+            details={"checks": cast(JsonValue, checks)},
+        )
+        out += [Blocker(c, failing) for c in checks]
+    team = current_team() or (row.team_id or "")
+    if (uses := ai_steps_gate.ai_nodes(d, REGISTRY)) and not await ai_steps_gate.allowed(
+        rt, row.team_id or team or None
+    ):
+        err = Unprocessable(ai_steps_gate.OFF, code="ai_steps_off", details={"nodes": cast(JsonValue, uses)})
+        out += [
+            Blocker({"node": n, "level": "error", "code": "ai_steps_off", "message": ai_steps_gate.OFF}, err)
+            for n in uses
+        ]
+    try:
+        await require_binding(MailboxStore(rt.db), me, row.model_copy(update={"definition": definition}))
+    except (Unprocessable, Forbidden) as e:
+        node = _on_trigger(definition)
+        out.append(
+            Blocker({"node": node, "level": "error", "code": e.code, "message": e.message, "field": "mailbox"}, e)
+        )
+    try:
+        await require_team_accounts(rt, team, step_names(definition))
+    except Unprocessable as e:
+        out.append(Blocker({"node": None, "level": "error", "code": e.code, "message": e.message}, e))
+    return out
+
+
+def refuse(found: list[Blocker]) -> None:
+    """Raises the first blocker's refusal; a no-op when there is none."""
+    if found:
+        raise found[0].error
+
+
+async def request_publish(
+    rt: Runtime, me: Principal, workflow_id: str, version: int | None, note: str, *, checked: bool = False
+) -> ReviewView:
     """Opens the publish request for a draft (the newest version when `version` is None) and returns it as a Review.
     Approved at once only where the publish policy says no review is needed, which makes the version live."""
     store = definitions(rt)
@@ -125,15 +193,11 @@ async def request_publish(rt: Runtime, me: Principal, workflow_id: str, version:
     require_rights(me, row, "publish")
     if row.stage != "draft":
         raise Conflict(f"v{row.version} is {row.stage}, not a draft.", code="not_a_draft")
-    checks = validate(WorkflowDefinition.model_validate(row.definition), REGISTRY)
-    if checks:
-        raise Unprocessable(
-            f"v{row.version} has {len(checks)} failing checks.", code="definition_checks", details={"checks": checks}
-        )
-    await require_binding(MailboxStore(rt.db), me, row)
+    # `checked`: the caller asked `blockers` for this definition a moment ago, before making the version.
+    if not checked:
+        refuse(await blockers(rt, me, row, row.definition))
     current = await store.serving(workflow_id, team=current_team())
     team = current_team() or (row.team_id or "")
-    await require_team_accounts(rt, team, step_names(row.definition))
     req = await open_publish(rt, workflow_id, row, current, by=me.email, team=team, note=note)
     return review_view(req, name=row.name, slug="", sla_hours=await sla_hours(rt))
 

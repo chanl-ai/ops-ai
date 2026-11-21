@@ -13,14 +13,13 @@ export interface EngineApi {
   publish(definition: EngineDefinition): Promise<DefinitionPublished>;
   /** Saves the editor's working copy, failing checks and all; makes no version. 409 `stale_base` when `base` is not the newest copy. */
   saveWorkingCopy(workflowId: string, definition: EngineDefinition, base: { baseVersion: number; baseDigest: string }): Promise<WorkingCopySaved>;
-  /** Makes the next version (a draft) from the working copy; 422 `definition_checks` while it fails a check. */
-  makeVersion(workflowId: string, base: { baseVersion: number; baseDigest: string }): Promise<DefinitionPublished>;
   /** What changed between two versions, the live one or the working copy. */
   diff(workflowId: string, from: DiffSide, to: DiffSide): Promise<DefinitionDiff>;
   /** What a publish of the working copy would change, what stops it, and whether it waits for a review. */
   publishPreview(workflowId: string): Promise<WorkflowPublishPreview>;
   /** Opens a publish request for a draft in Reviews; 409 when one is open or the version is not a draft. */
-  requestPublish(workflowId: string, input: { version?: number; note: string }): Promise<DefinitionPublishRequest>;
+  /** Opens a draft's publish request; with `baseVersion`/`baseDigest` it publishes the working copy in one call, refused before any version is made while a blocker remains. */
+  requestPublish(workflowId: string, input: { version?: number; note: string; baseVersion?: number; baseDigest?: string }): Promise<DefinitionPublishRequest>;
   /** Stops (true) or restarts live runs of the live version; 409 before a version is live. */
   setPaused(workflowId: string, paused: boolean): Promise<DefinitionView>;
   /** Choices for a node form field with an option source. */

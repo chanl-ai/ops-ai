@@ -15,7 +15,6 @@ export function createEngineHttp(get: Get, send: Send): EngineApi {
     publish: (definition) => send('POST', '/workflows/definitions', { definition }),
     deleteDefinition: (id) => send('DELETE', `/workflows/definitions/${encodeURIComponent(id)}`),
     saveWorkingCopy: (id, definition, base) => send('PUT', `/workflows/definitions/${encodeURIComponent(id)}/working-copy`, { definition, ...base }),
-    makeVersion: (id, base) => send('POST', `/workflows/definitions/${encodeURIComponent(id)}/versions`, base),
     diff: (id, from, to) => get(`/workflows/definitions/${encodeURIComponent(id)}/diff?from=${from}&to=${to}`),
     publishPreview: (id) => get(`/workflows/definitions/${encodeURIComponent(id)}/publish-preview`),
     requestPublish: (id, input) => send('POST', `/workflows/definitions/${encodeURIComponent(id)}/publish-requests`, input),

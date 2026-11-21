@@ -329,6 +329,15 @@ class WorkingCopyView(Out):
     updated_by: str
 
 
+class OutdatedCopyView(WorkingCopyView):
+    """A working copy made on an older version than the newest, kept so its change is not lost."""
+
+    # The version saved since outside the editor, who saved it and when.
+    newer_version: int
+    newer_by: str | None
+    newer_at: str | None
+
+
 class DefinitionView(Out):
     workflow_id: str
     name: str
@@ -348,6 +357,8 @@ class DefinitionView(Out):
     start_form: StartFormView | None = None
     # What the editor saves to; None until the first change after the newest version.
     working_copy: WorkingCopyView | None = None
+    # A copy older than the newest version: shown to its editor read-only, never saved over without their choice.
+    outdated_copy: OutdatedCopyView | None = None
     # The copy the next working copy save must name: the working copy, else the newest version.
     save_base: SaveBase
 
@@ -767,7 +778,11 @@ async def definition_view(rt: Runtime, me: Principal, workflow_id: str, version:
     }
     newest = versions[-1] if versions else {"version": row.version, "digest": row.digest}
     viewer = ACCESS.may(caller_of(me), "workflows", "view", team=row.team_id or current_team())
-    copy = await _open_copy(store, workflow_id, int(newest["version"])) if viewer else None
+    held = await store.working_copy(workflow_id, team=current_team()) if viewer else None
+    copy = held if held is not None and held.base_version >= int(newest["version"]) else None
+    # A copy made on an older version than the newest (one saved through the API or CLI since) is kept and shown, so
+    # its unpublished change is never lost; saves are made on the newest version.
+    outdated = held if held is not None and copy is None else None
     return {
         "workflowId": workflow_id,
         "name": row.name,
@@ -783,6 +798,9 @@ async def definition_view(rt: Runtime, me: Principal, workflow_id: str, version:
         "startForm": start_form(row.definition, REGISTRY),
         "workingCopy": copy and _copy_view(copy),
         "saveBase": _save_base(copy) if copy else {"version": newest["version"], "digest": newest["digest"]},
+        "outdatedCopy": outdated
+        and _copy_view(outdated)
+        | {"newerVersion": newest["version"], "newerBy": newest.get("createdBy"), "newerAt": newest.get("createdAt")},
     }
 
 
@@ -871,12 +889,20 @@ async def version_from_working_copy(rt: Rt, me: Me, workflow_id: str, body: Vers
     request is approved. 422 `definition_checks` while the copy fails a check, and nothing is made; 409
     `nothing_to_publish` without a working copy; 409 `stale_base` when the copy was saved again after the caller read
     it. No request transaction, as for a new definition."""
+    data = await _version_from_copy(rt, me, workflow_id, (body.base_version, body.base_digest))
+    return ok(data, status=201 if data["created"] else 200)
+
+
+async def _version_from_copy(
+    rt: Runtime, me: Principal, workflow_id: str, base: tuple[int, str], *, publishing: bool = False
+) -> Json:
+    """Makes the next version from the working copy saved on `base` and removes the copy; returns DefinitionPublished.
+    `publishing` refuses first on every publish blocker, so a copy that cannot go live is not turned into a draft."""
     held = await _editable(rt, me, workflow_id)
     store = definitions(rt)
     copy = await store.working_copy(workflow_id, team=current_team())
     if copy is None:
         raise Conflict("There are no unpublished changes to make a version from.", code="nothing_to_publish")
-    base = (body.base_version, body.base_digest)
     if copy.base_version < held.version:
         refuse_stale(base, held.version, held.digest, saved_by=held.created_by, saved_at=held.created_at)
     refuse_stale(base, copy.base_version, copy.digest, saved_by=copy.updated_by, saved_at=copy.updated_at)
@@ -887,11 +913,13 @@ async def version_from_working_copy(rt: Rt, me: Me, workflow_id: str, body: Vers
         raise Unprocessable(
             "The working copy is not a whole workflow yet.", code="definition_checks", details={"checks": [check]}
         ) from e
+    if publishing:
+        engine_lifecycle.refuse(await engine_lifecycle.blockers(rt, me, held, d.wire()))
     data = await _store_version(rt, me, d, held, reopen=True)
     # Removed only once the version is stored; a save made since stays, as a change on the new version.
     if not await store.drop_working_copy(workflow_id, digest=copy.digest):
         await store.rebase_working_copy(workflow_id, cast(int, data["version"]))
-    return ok(data, status=201 if data["created"] else 200)
+    return data
 
 
 # A side of a comparison: a version number, `live` or `working-copy`.
@@ -991,7 +1019,7 @@ async def publish_preview(rt: Rt, me: Me, workflow_id: str) -> JSONResponse:
     # its defaults filled in would otherwise differ from the live version in more than step positions.
     with contextlib.suppress(InvalidDefinitionError):
         new = parse(new).wire()
-    checks = copy.checks if copy else (await _checked(rt, row.definition))[1]
+    found = await engine_lifecycle.blockers(rt, me, row, copy.definition if copy else row.definition)
     old = live.definition if live else None
     decision = await decide(
         rt,
@@ -1006,7 +1034,7 @@ async def publish_preview(rt: Rt, me: Me, workflow_id: str) -> JSONResponse:
         | {
             "liveVersion": live.version if live else None,
             "changes": definition_diff(old, new),
-            "blockers": [c for c in checks if isinstance(c, dict) and c.get("level") == "error"],
+            "blockers": [enrich_check(b.check) for b in found],
         }
     )
 
@@ -1015,6 +1043,18 @@ class DefinitionPublishInput(In):
     # The draft to publish; the newest version when left out.
     version: int | None = None
     note: str = Field(default="", max_length=2000)
+    # The working copy to publish, as `saveBase` named it when it was read: its next version is made and its request
+    # opened in one call, refused before anything is made while a blocker remains. Both or neither, with no `version`.
+    base_version: int | None = None
+    base_digest: str | None = None
+
+    @model_validator(mode="after")
+    def _one_source(self) -> DefinitionPublishInput:
+        if (self.base_version is None) != (self.base_digest is None):
+            raise ValueError("baseVersion and baseDigest go together")
+        if self.base_version is not None and self.version is not None:
+            raise ValueError("Name a draft's version or the working copy's base, not both")
+        return self
 
 
 @router.post("/definitions/{workflow_id}/publish-requests", response_model=Envelope[PublishReview], status_code=201)
@@ -1022,9 +1062,17 @@ async def request_definition_publish(rt: Rt, me: Me, workflow_id: str, body: Def
     """Opens a publish request for a draft in Reviews; the version goes live when a second person approves it (at once
     under the dev auto-approve setting). 409 when the version is not a draft or a request is already open, 422 when it
     no longer passes its checks, 403 unless the caller is a builder or admin of the owning team (an admin for a
-    workflow no team owns). The request lists what each step acts on: its operation, agent and approver.
+    workflow no team owns). With `baseVersion` and `baseDigest` it publishes the working copy: every blocker the
+    publish preview lists refuses it (422, or 403 for a mailbox the caller may not watch) before any version is made,
+    then the next version is made and its request opened. The request lists what each step acts on: its operation,
+    agent and approver.
     No request transaction: the team's accounts (tools-service) and the review deadline (platform-service) are asked
     with none open."""
+    if body.base_version is not None and body.base_digest is not None:
+        made = await _version_from_copy(rt, me, workflow_id, (body.base_version, body.base_digest), publishing=True)
+        version = cast(int, made["version"])
+        review = await engine_lifecycle.request_publish(rt, me, workflow_id, version, body.note, checked=True)
+        return ok(review, status=201)
     return ok(await engine_lifecycle.request_publish(rt, me, workflow_id, body.version, body.note), status=201)
 
 

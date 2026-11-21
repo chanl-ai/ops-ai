@@ -15,7 +15,7 @@ import { SaveStateLine, workflowHeader } from '@/components/workflows/definition
 import { useWorkingCopy } from '@/components/workflows/definition-editor/use-working-copy';
 import { useCan, useCanBuild } from '@/hooks/me-queries';
 import { useDefinition, useDefinitionChecks, useNodeTypes, usePublishWorkingCopy, useSetDefinitionPaused, useStartEngineRun, useStartWorkflow } from '@/hooks/engine-queries';
-import type { DefinitionValidation, DefinitionView, EngineNodeType } from '@/lib/types/engine';
+import type { DefinitionValidation, DefinitionView, EngineNodeType, OutdatedCopy } from '@/lib/types/engine';
 
 const layout = {
   // The canvas fills what is left of the window under the header, so the page itself does not scroll.
@@ -55,7 +55,13 @@ function CanvasTab({ view, types }: { view: DefinitionView; types: EngineNodeTyp
   const router = useRouter();
   const canBuild = useCanBuild('workflows');
   const canPublish = useCan('workflows', 'publish');
-  const copy = useWorkingCopy(view, canBuild);
+  // A copy made on a version older than one saved outside the editor since is kept: nothing saves over it until the
+  // person chooses to start from the newer version, and they may open their copy read-only to copy their changes out.
+  const [startedFresh, setStartedFresh] = React.useState(false);
+  const [showingMine, setShowingMine] = React.useState(false);
+  const outdated = canBuild && !startedFresh ? (view.outdatedCopy ?? null) : null;
+  const mine = outdated && showingMine ? outdated : null;
+  const copy = useWorkingCopy(view, canBuild && !outdated);
   // Before the first change there is no working copy, so the stored version's checks are read once.
   const stored = useDefinitionChecks(view.workingCopy ? undefined : view.definition, view.digest);
   const checks = copy.checks ?? view.workingCopy?.checks ?? null;
@@ -64,11 +70,11 @@ function CanvasTab({ view, types }: { view: DefinitionView; types: EngineNodeTyp
   const { mutateAsync: startByFormAsync } = useStartWorkflow();
   const { mutateAsync: publishAsync } = usePublishWorkingCopy(id);
   const { mutateAsync: pauseAsync, isPending: pausing } = useSetDefinitionPaused(id);
-  const header = { ...workflowHeader(id, view), ...layout };
+  const header = { ...workflowHeader(id, view, { liveChip: false }), ...layout };
   // The canvas opens on the copy read when the page opened (or reloaded). A save puts the saved copy in the cache;
   // handing it back to the editor would lay the steps out again and remount it, closing the open step mid-edit.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const opened = React.useMemo(() => view.workingCopy?.definition ?? view.definition, [copy.revision]);
+  const opened = React.useMemo(() => mine?.definition ?? view.workingCopy?.definition ?? view.definition, [copy.revision, !!mine]);
 
   const startRun = React.useCallback(
     async (input: Record<string, unknown>, mode: 'live' | 'test') => {
@@ -93,7 +99,7 @@ function CanvasTab({ view, types }: { view: DefinitionView; types: EngineNodeTyp
     <>
       <LeaveGuard unsaved={canBuild && copy.unsaved} failed={copy.state === 'failed'} />
       <DefinitionEditor
-        key={`${id}-${copy.revision}`}
+        key={`${id}-${copy.revision}-${mine ? 'mine' : 'newest'}`}
         definition={opened}
         types={types}
         validation={validation}
@@ -108,10 +114,28 @@ function CanvasTab({ view, types }: { view: DefinitionView; types: EngineNodeTyp
         requestPublish={requestPublish}
         setPaused={pauseAsync}
         pausing={pausing}
-        readOnly={!canBuild}
+        readOnly={!canBuild || !!outdated}
         canPublish={canPublish}
         frame={({ actions, canvas }) => (
           <PageLayout {...header} actions={actions}>
+            {outdated && (
+              <Alert data-testid="definition-outdated-copy">
+                <AlertTitle>A newer version was saved outside the editor</AlertTitle>
+                <AlertDescription>
+                  <p>
+                    {outdatedNote(outdated)} Reload to start from it, or copy your changes first. {mine ? 'You are looking at your copy; it cannot be edited.' : `You are looking at version ${outdated.newerVersion}.`}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setShowingMine((v) => !v)} data-testid="definition-outdated-open">
+                      {mine ? `Show version ${outdated.newerVersion}` : 'Open my copy'}
+                    </Button>
+                    <Button size="sm" onClick={() => (setShowingMine(false), setStartedFresh(true))} data-testid="definition-outdated-reload">
+                      Start from version {outdated.newerVersion}
+                    </Button>
+                  </div>
+                </AlertDescription>
+              </Alert>
+            )}
             {copy.stale && (
               <Alert data-testid="definition-stale">
                 <AlertTitle>Your change was not saved</AlertTitle>
@@ -129,4 +153,11 @@ function CanvasTab({ view, types }: { view: DefinitionView; types: EngineNodeTyp
       />
     </>
   );
+}
+
+/** Who saved the newer version and when, for the outdated copy's notice. */
+function outdatedNote(c: OutdatedCopy): string {
+  const at = c.newerAt ? new Date(c.newerAt) : null;
+  const when = at && !Number.isNaN(at.getTime()) ? ` at ${at.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}` : '';
+  return `${c.newerBy || 'Someone'} saved version ${c.newerVersion}${when}; your unpublished changes, made on version ${c.baseVersion}, are kept.`;
 }
