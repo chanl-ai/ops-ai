@@ -293,6 +293,8 @@ export function SopEditor({ value, onChange, readOnly = false, reading, readingF
   const armed = React.useRef<number | null>(null);
   // Esc, then Tab within two seconds, leaves the editor; Tab otherwise indents.
   const escaped = React.useRef(0);
+  // The condition list's highlight counts only once an arrow key moved it: the list's own first-row highlight does not.
+  const chose = React.useRef(false);
   // A clicked badge's menu: change what it mentions, or take it out.
   const [badge, setBadge] = React.useState<{ from: number; to: number } | null>(null);
 
@@ -318,6 +320,7 @@ export function SopEditor({ value, onChange, readOnly = false, reading, readingF
       const { menu: m, rows, active: a } = menuRef.current;
       if (!m || !rows.length) return false;
       const i = rows.findIndex((r) => r.key === a);
+      chose.current = true;
       setActive(rows[i < 0 ? (by > 0 ? 0 : rows.length - 1) : (i + by + rows.length) % rows.length].key);
       return true;
     };
@@ -325,7 +328,8 @@ export function SopEditor({ value, onChange, readOnly = false, reading, readingF
     const pickActive = () => {
       const { menu: m, rows, active: a, pick } = menuRef.current;
       const row = m && rows.find((r) => r.key === a);
-      if (!row) return false;
+      // Enter or Tab at the end of a sentence starting “if” is a new line or an indent, unless a row was arrowed to.
+      if (!row || (m.kind === 'if' && !chose.current)) return false;
       pick(row);
       return true;
     };
@@ -372,7 +376,11 @@ export function SopEditor({ value, onChange, readOnly = false, reading, readingF
             else if (armed.current !== null && armed.current !== here.number) armed.current = null;
             if (u.docChanged || u.selectionSet) {
               const next = u.view.hasFocus || u.docChanged ? menuAt(u.state, armed.current) : null;
-              setMenu((m) => (next && m && next.kind === m.kind && next.from === m.from && next.query === m.query ? m : next));
+              setMenu((m) => {
+                if (next && m && next.kind === m.kind && next.from === m.from && next.query === m.query) return m;
+                if (!next || !m || next.kind !== m.kind || next.from !== m.from) chose.current = false;
+                return next;
+              });
             }
           }),
         ],
@@ -443,6 +451,7 @@ export function SopEditor({ value, onChange, readOnly = false, reading, readingF
     v.dispatch({ changes: { from: m.from, to: m.to, insert }, selection: { anchor: m.from + insert.length }, userEvent: 'input.complete' });
     setMenu(null);
     armed.current = null;
+    chose.current = false;
     v.focus();
   }, []);
 
