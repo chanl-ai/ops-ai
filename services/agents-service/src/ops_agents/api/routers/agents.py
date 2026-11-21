@@ -41,6 +41,7 @@ from ...store.agent_registry import AgentRow, digest_of, refuse_stale
 from ...store.evals import EvalStore
 from ...store.graphs import StoredThread
 from ...store.template_copies import TemplateCopies
+from .. import publish_reviews
 from ..account_names import require_team_accounts
 from ..agent_registry import (
     GUARDRAILS,
@@ -187,6 +188,8 @@ class AgentPatch(In):
 class PublishRequestInput(In):
     version: int
     note: str = ""
+    # A withdrawn request of this agent that this one sends again.
+    follows: str | None = None
 
 
 class PausedInput(In):
@@ -779,6 +782,7 @@ async def request_publish(rt: Rt, me: Me, agent_id: str, body: PublishRequestInp
     review_body = {
         **agent_review_body(agent_id, spec, row, v, note=body.note, by=me.email),
         **decision.record(),
+        **await publish_reviews.follows(rt, "agent", agent_id, body.follows),
     }
     # Asking for the newest draft replaces a request still waiting on an older version (a seed change, a colleague's),
     # so the version that goes live is the one holding the newest grants.

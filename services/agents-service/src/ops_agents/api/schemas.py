@@ -691,8 +691,10 @@ class PublishReview(Out):
     # Minutes left before it is overdue, negative once overdue; null once decided.
     sla_minutes: int | None = None
     approvals: list[str]
-    status: Literal["pending", "in_review", "approved", "rejected", "returned"]
+    status: Literal["pending", "in_review", "approved", "rejected", "returned", "withdrawn"]
     created_at: str
+    # The withdrawn request this one sends again; its comments carry over.
+    follows: str | None = None
     decided_by: str | None = None
     decided_at: str | None = None
     decision_reason: str | None = None
@@ -1239,7 +1241,7 @@ class ThreadReview(Out):
     # When the deadline falls; null as for sla_minutes.
     due_at: str | None = None
     approvals: list[str]
-    status: Literal["pending", "in_review", "approved", "rejected", "returned"]
+    status: Literal["pending", "in_review", "approved", "rejected", "returned", "withdrawn"]
     created_at: str
     reasoning: list[str]
     evidence: list[Evidence]

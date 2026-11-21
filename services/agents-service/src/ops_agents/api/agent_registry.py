@@ -673,7 +673,7 @@ def agent_view(row: Mapping[str, JsonValue], spec: Json, tasks: int) -> AgentVie
 
 
 # Kept on a workflow request for its decision to publish, and left out of the Review the console reads.
-STORED_ONLY = frozenset({"definition", "graph"})
+STORED_ONLY = frozenset({"definition", "graph", "follows"})
 
 
 def _sla_minutes(req: PublishRequestRow, now: datetime, hours: float) -> int | None:
@@ -716,6 +716,8 @@ class ReviewView(TypedDict):
     slaMinutes: int | None
     approvals: list[str]
     decidedBy: NotRequired[str]
+    # The withdrawn request this one sends again, whose comments the reviewer reads with it.
+    follows: NotRequired[str]
     status: str
     createdAt: str
     decidedAt: NotRequired[str]
@@ -770,9 +772,14 @@ def review_view(
         "status": req.status,
         "createdAt": req.created_at,
         **({"decidedAt": req.decided_at} if req.decided_at else {}),
+        **({"follows": body["follows"]} if body.get("follows") else {}),
         "reasoning": body.get("changes", []),
         "evidence": [],
-        **({"agentPublish": body} if agent else {"publish": {k: v for k, v in body.items() if k not in STORED_ONLY}}),
+        **(
+            {"agentPublish": {k: v for k, v in body.items() if k != "follows"}}
+            if agent
+            else {"publish": {k: v for k, v in body.items() if k not in STORED_ONLY}}
+        ),
         **({"decisionReason": req.decision_reason} if req.decision_reason else {}),
     }
     return cast(ReviewView, view)

@@ -106,7 +106,7 @@ publish_requests = sa.Table(
     sa.Column("kind", sa.String(16), nullable=False),  # agent | workflow
     sa.Column("subject_id", sa.String(64), nullable=False),
     sa.Column("version", sa.Integer, nullable=False),
-    sa.Column("status", sa.String(16), nullable=False),  # pending | approved | rejected | returned
+    sa.Column("status", sa.String(16), nullable=False),  # pending | approved | rejected | returned | withdrawn
     sa.Column("note", sa.Text, nullable=False),
     sa.Column("requested_by", sa.String(200), nullable=False),
     sa.Column("created_at", sa.String(32), nullable=False),
@@ -833,6 +833,17 @@ class AgentRegistry(VersionedRegistry[AgentRow, AgentVersionRow]):
             await c.execute(
                 publish_requests.update().where(_mine(), publish_requests.c.id == request_id).values(body=body)
             )
+
+    async def withdraw_request(self, request_id: str, by: str) -> bool:
+        """Marks a pending request withdrawn by its requester, with no decider, so the review lists no approval; False
+        when a decision got there first."""
+        q = (
+            publish_requests.update()
+            .where(_mine(), publish_requests.c.id == request_id, publish_requests.c.status == "pending")
+            .values(status="withdrawn", decided_at=now_iso(), decision_reason=f"Withdrawn by {by}")
+        )
+        async with self.tx() as c:
+            return (await c.execute(q)).rowcount == 1
 
     async def decide_request(self, request_id: str, status: str, by: str, reason: str | None) -> bool:
         """Records the decision on a pending request; False when another decision got there first."""

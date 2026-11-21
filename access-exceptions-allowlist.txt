@@ -146,6 +146,7 @@ packages/ops_access/src/ops_access/policies.py policy-default appChangesByApp={}
 * conflict not_published 0 state
 * conflict not_routable 0 state
 * conflict not_waiting 0 state
+* conflict not_withdrawable 0 state
 * conflict nothing_to_approve 0 state
 * conflict nothing_to_publish 0 state
 * conflict owner_changed 0 state

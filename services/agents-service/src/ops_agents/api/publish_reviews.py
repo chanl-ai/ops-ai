@@ -15,9 +15,16 @@ from ops_service_kit import narrow
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
 from ops_store import isolation
 
-from . import deployment_reviews, egress_host_reviews, engine_lifecycle, tool_access_reviews, tool_module_reviews
+from . import (
+    deployment_reviews,
+    egress_host_reviews,
+    engine_lifecycle,
+    service_events,
+    tool_access_reviews,
+    tool_module_reviews,
+)
 from .agent_registry import ReviewView, go_live, registry, review_view
-from .auth import Principal, require_not_own, require_reviews_decide, review_teams
+from .auth import Principal, require_asker, require_not_own, require_reviews_decide, review_teams
 from .deps import Runtime
 from .guardrails import guardrails
 from .guardrails import publish as publish_guardrail
@@ -33,6 +40,10 @@ from .workflow_registry import registry as workflow_registry
 ID_PREFIXES = ("AGP-", "WFP-", "GRP-", "SKP-", "WDP-", "DPR-", "TMP-", "TAR-", "EGH-")
 # Kinds whose request names who saved the change; that person never decides it.
 SAVED_KINDS = ("agent", "guardrail", "skill", "widget", deployment_reviews.KIND, tool_module_reviews.KIND)
+# Kinds whose requester may take a waiting request back. A tool module or new host is applied by tools-service on every
+# decision, so a withdraw here would leave tools-service holding a review nobody can decide.
+WITHDRAWABLE = ("agent", "guardrail", "skill", "widget", engine_lifecycle.KIND, "workflow")
+WITHDRAWN_EVENT = "publish_request.withdrawn"
 
 
 def is_request_id(review_id: str) -> bool:
@@ -323,3 +334,47 @@ async def _publish(rt: Runtime, req: PublishRequestRow, by: str) -> None:
         by=by,
         review_id=req.id,
     )
+
+
+async def withdraw(rt: Runtime, me: Principal, request_id: str) -> ReviewView:
+    """The requester takes back a waiting request: it is marked withdrawn and leaves the reviewer's queue, the version
+    it named reads as a draft again (its state is read from the requests), and a `publish_request.withdrawn` event
+    records it in the activity log. Only the person who asked may withdraw; 409 once decided, whoever got there
+    first."""
+    reg = registry(rt)
+    async with isolation.request_transaction():
+        req = await reg.request(request_id)
+        if not await in_acting_team(rt, req, asked_from=True):
+            raise NotFound(f"Publish request {request_id}")
+    if req.kind not in WITHDRAWABLE:
+        raise Conflict(f"A {req.kind} review is decided in Reviews; it cannot be withdrawn.", code="not_withdrawable")
+    # The asker rule (E50): taking back one's own request is the requester's act, so no role grants it to another.
+    require_asker(me, req.requested_by, what=f"the withdraw of {request_id}")
+    if req.status != "pending":
+        raise Conflict(f"{request_id} was already {req.status}.", code="already_decided")
+    if not await reg.withdraw_request(request_id, me.email):
+        raise Conflict(f"{request_id} was decided before it could be withdrawn.", code="already_decided")
+    team = await subject_team(rt, req) or isolation.team() or ""
+    await service_events.emit(
+        rt,
+        name=WITHDRAWN_EVENT,
+        key=f"withdraw:{request_id}",
+        team_id=team,
+        source="agents",
+        actor=me.email,
+        payload={"reviewId": request_id, "kind": req.kind, "subjectId": req.subject_id, "version": req.version},
+    )
+    return await get(rt, request_id)
+
+
+async def follows(rt: Runtime, kind: str, subject_id: str, request_id: str | None) -> dict[str, str]:
+    """The `follows` a new request records when it sends again what an earlier, withdrawn request asked: the earlier
+    one must be the same subject's and withdrawn, so its comments are the ones the reviewer sees again."""
+    if request_id is None:
+        return {}
+    earlier = await registry(rt).request(request_id)
+    if earlier.kind != kind or str(earlier.subject_id) != subject_id or earlier.status != "withdrawn":
+        raise ValidationFailed(
+            f"{request_id} is not a withdrawn request for this {kind}.", code="follows_not_withdrawn"
+        )
+    return {"follows": request_id}
