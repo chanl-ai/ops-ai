@@ -19,7 +19,7 @@ import type { Ref, ReferenceContext, ReferenceItem, RefKind } from '@/lib/types/
 import type { SkillTextReading } from '@/lib/types/skills';
 
 const UNIT = '    ';
-/** Offered after `if ` once what the tool above returns is listed: conditions the agent decides from the conversation. */
+/** Offered after `if ` once what the tool above returns is listed: conditions a judge model decides. */
 const OWN_WORDS = ['they want a refund', 'they sound upset', 'they ask for a person', 'they have already tried this'];
 
 export interface SopEditorHandle {
@@ -113,7 +113,7 @@ class HowWidget extends WidgetType {
   toDOM() {
     const el = document.createElement('span');
     el.className = 'ml-2 select-none text-xs text-muted-foreground';
-    el.textContent = this.how === 'checked' ? 'checked' : 'agent decides';
+    el.textContent = this.how === 'checked' ? 'checked' : 'judged';
     el.dataset.testid = 'sop-condition-how';
     el.title = HOW_SAYS[this.how];
     el.setAttribute('aria-label', `${el.textContent}: ${HOW_SAYS[this.how]}`);

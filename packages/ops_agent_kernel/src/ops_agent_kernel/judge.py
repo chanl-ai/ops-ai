@@ -1,9 +1,10 @@
 """A model judge: one structured call that says whether evidence meets a check written in words, with a one-line
-reason. Eval checks of type `judge` use it, and skill step checks will. Through models-service the call runs on its own
-alias, `judge`, so an operator can give judging a different model from the answering one; while that alias is not
-bound it runs on the turn's model. The judge is given the check and the evidence only, never the agent's instructions,
-so what the agent was told cannot argue for its own reply. A call that fails, or an answer outside the schema, is a
-verdict of None: the judge did not answer, and a caller scores that as a fail.
+reason. Eval checks of type `judge` use it, and so do skill step checks written as a sentence (`steps.to_judge`).
+Through models-service the call runs on its own alias, `judge`, so an operator can give judging a different model from
+the answering one; while that alias is not bound it runs on the turn's model. The judge is given the check and the
+evidence only, never the agent's instructions, so what the agent was told cannot argue for its own reply. A call that
+fails, or an answer outside the schema, is a verdict of None: the judge did not answer, and a caller scores that as a
+fail.
 """
 
 from __future__ import annotations

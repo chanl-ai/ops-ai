@@ -20,7 +20,8 @@ rules: [../../CLAUDE.md](../../CLAUDE.md#folder-guides).
 | `models`, `aliases` | `build_model(settings)` (direct provider key; an alias starting `claude-` selects Anthropic) or `ModelsServiceModels` by alias; a job's own alias (`guardrail-check`, memory extraction) falls back to the turn's model only on "no such alias" |
 | `guard` | Blocked-topic guardrails: one structured classification before and after the answer; a failed check raises `GuardrailUnavailable` and the turn fails closed |
 | `skills` | The skill index, always-on bodies and the `load_skill` built-in, with per-turn caps; loading a skill replaces the one carried from an earlier reply |
-| `steps` | Skills that run step by step: the program a skill version stores (models in `ops_contracts.skill_run`), the problems that stop one from running, and the running-skill record's moves (start, pass, fail, exit, sub-skill) |
+| `steps` | Skills that run step by step: the program a skill version stores (models in `ops_contracts.skill_run`), the problems that stop one from running, and the running-skill record's moves (start, pass, fail, exit, sub-skill, a verdict) |
+| `judge` | One structured model call that says whether evidence meets a check written in words, on the `judge` alias; fails closed. Eval checks and skill step checks use it |
 | `expr` | A step's rule check: a whitelist walk over `ast.parse`, reading `result` and `inputs`; nothing is compiled or executed. A rule holds only when it is known true: a comparison with a missing value has no answer, and neither has its `not` |
 | `step_tools` | The built-ins `switch_skill`, `step_done` and `exit`, counted apart from the cap on kernel tools |
 | `prompt_writer` | `Brief`, `Patterns`, `head(name, brief)` (the agent's stable instructions) and `tail`, written before every model request: the current step, the skill's rules, the never rules last |
@@ -81,6 +82,14 @@ rules: [../../CLAUDE.md](../../CLAUDE.md#folder-guides).
     fails the step takes none. A tool error, a
     skill a step could not start, and an exit the model calls take none. An escalate, refuse or failed exit still
     keeps the skill's tools from the rest of that reply.
+- A check written as a sentence (a step's check, or a branch test) is decided by the judge (`judge.verdict`, run by
+  `_TurnState.judge` in `kernel.py`), never by the answering model. The kernel asks it when the step's tool result
+  arrives, given only the sentence, the raw result and the skill's inputs; for a step with no tool `step_done` is a
+  claim and the judge reads the reply's person message and tool results; for a step that runs a skill, the skill's
+  handed-back result. `steps.to_judge` says what waits, `steps.decided` takes the verdict, and both rules and the
+  judge go through `steps._verdict`: no, or no verdict, is a failed check (if-not, hold, ending). `step_done` with
+  `holds` on a judged step is refused, an exit as done needs the last step's check passed, the result keeps
+  `judged_by` and `reason`, and the judge's tokens join the turn's `usage`. A rule is never sent to the judge.
 - A step that runs a skill hands it the inputs it declares, from the running skill's inputs and then the result of
   the step before; a required one missing fails the step.
 

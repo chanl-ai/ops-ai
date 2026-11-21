@@ -96,15 +96,17 @@ def _step(now: Now) -> str:
             lines.append("Then: a rule on the result picks the next step; do not judge it yourself.")
         else:
             lines.append(
-                f"Then decide: {now.branch.test.text}. Call step_done with holds true if it holds, or false if it "
-                "does not; the skill takes the path that fits."
+                f"Then: a judge decides whether {now.branch.test.text} and picks the next step; do not judge it "
+                "yourself."
             )
         lines.append("Do only this step. If the person now asks for something else, call switch_skill or exit.")
         return "\n".join(lines)
     if now.check is not None and now.check.by == "rule":
         lines.append("Done when: the check runs on the tool result; do not judge it yourself.")
+    elif now.check is not None and now.use:
+        lines.append(f"Done when: a judge finds this holds on the tool result: {now.check.text}")
     elif now.check is not None:
-        lines.append(f"Done when: {now.check.text} Call step_done once it holds.")
+        lines.append(f"Done when: {now.check.text} Call step_done once it is done; a judge decides it from this reply.")
     elif now.use:
         lines.append(f"Done when: {now.use} has run.")
     else:

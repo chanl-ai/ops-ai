@@ -9,7 +9,7 @@ import json
 import time
 from typing import Any
 
-from brief_steps import brief, confirm_skill, freeze_skill, hold_skill
+from brief_steps import CONFIRMS, brief, confirm_skill, freeze_skill, hold_skill
 from main_chains import ACCOUNT, bank_stack, holds, publish_bank_module
 from usecase_harness import agents, check, data, finish, save_agent, sse
 
@@ -243,7 +243,7 @@ with bank_stack() as s:
     started = say(f"call switch_skill {slug}")
     read_done = say(f"call {read} {account}")
     idle = say("What does a freeze do?")
-    confirmed = say("call step_done {}")
+    confirmed = say(CONFIRMS)
     paused = say(f"call {write} {account}")
     trail = [
         (started.get("step"), bool(started.get("sub"))),
@@ -282,7 +282,7 @@ with bank_stack() as s:
     )
 
     # In that chat the write is rejected: the skill ends as failed and nothing more reaches the bank.
-    say("call step_done {}")
+    say(CONFIRMS)
     waits = say(f"call {write} {account}")
     refused = decide({"type": "reject", "reason": "Not this account."})
     ends = [(h.get("ended"), h.get("why"), h.get("inReply")) for h in refused.get("history") or []]
