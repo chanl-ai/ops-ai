@@ -8,9 +8,9 @@ reader ever sees a role in `members` that the assignments disagree with. Every s
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import ClassVar, Literal
+from typing import Any, ClassVar, Literal
 
 import sqlalchemy as sa
 from pydantic import JsonValue
@@ -164,7 +164,7 @@ class RoleStore(TenantDb):
         async with self.tenant_tx(tenant_id) as c:
             # The cells come from grids_in, as the live check reads them, never counted off the table: a built-in
             # role with no rows holds its seed.
-            grids = await grids_in(c, [str(r) for r in (await c.execute(sa.select(roles.c.id))).scalars()])
+            _, grids = await named_grids(c)
             deciding = sorted(r for r, g in grids.items() if any((a, x) == ("reviews", "decide") for a, x, _ in g))
             decides = roles.c.id.in_(deciding) if deciding else sa.false()
             # The filters compare query text, so each is the "true" or "false" its condition reads as.
@@ -607,8 +607,8 @@ class RoleStore(TenantDb):
 
 async def grids_in(c: AsyncConnection, role_ids: list[str]) -> dict[str, list[Grant]]:
     """What each role grants, as `effective_grids` answers it from the stored rows: a built-in role with no rows
-    answers its seed. Every reader here (the live check, the token's grids, the group guard, the roles page) reads
-    through it."""
+    answers its seed. Every reader here (the live check, the token's grids, the group guard, the roles page, who holds
+    a cell) reads through it or `named_grids`."""
     q = (
         sa.select(
             role_permissions.c.role_id, role_permissions.c.area, role_permissions.c.action, role_permissions.c.scope
@@ -616,8 +616,33 @@ async def grids_in(c: AsyncConnection, role_ids: list[str]) -> dict[str, list[Gr
         .where(role_permissions.c.role_id.in_(role_ids))
         .order_by(role_permissions.c.role_id, role_permissions.c.area, role_permissions.c.action)
     )
+    return _effective((await c.execute(q)).all(), role_ids)
+
+
+async def named_grids(c: AsyncConnection) -> tuple[list[tuple[str, str]], dict[str, list[Grant]]]:
+    """Every role of the tenant as (id, name), built-in first then by name, and what each grants as `grids_in` answers
+    it, in one statement."""
+    q = (
+        sa.select(
+            roles.c.id,
+            roles.c.name,
+            role_permissions.c.area,
+            role_permissions.c.action,
+            role_permissions.c.scope,
+        )
+        .select_from(roles.outerjoin(role_permissions, role_permissions.c.role_id == roles.c.id))
+        .order_by(roles.c.builtin.desc(), roles.c.name, roles.c.id, role_permissions.c.area, role_permissions.c.action)
+    )
+    found = (await c.execute(q)).all()
+    named = list(dict.fromkeys((str(r.id), str(r.name)) for r in found))
+    cells = [(r.id, r.area, r.action, r.scope) for r in found if r.area is not None]
+    return named, _effective(cells, [i for i, _ in named])
+
+
+def _effective(cells: Sequence[Any], role_ids: list[str]) -> dict[str, list[Grant]]:
+    """(role id, area, action, scope) rows read through `effective_grids`."""
     out: dict[str, list[Grant]] = {}
-    for role_id, area, action, scope in (await c.execute(q)).all():
+    for role_id, area, action, scope in cells:
         out.setdefault(str(role_id), []).append((str(area), str(action), "own" if scope == "own" else "all"))
     return {r: list(g) for r, g in effective_grids(out, [r for r in role_ids if r in out or r in BUILTIN_IDS]).items()}
 
