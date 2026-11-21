@@ -10437,6 +10437,23 @@ export interface components {
             text: string;
         };
         /**
+         * SkillTextKeyword
+         * @description The keyword a line is written with (`if`, `else` for else or otherwise, `stop`) and where it sits in the line
+         *     after its indent, past any list marker. Set whether or not the line reads as one: the editor highlights it only on
+         *     a line whose kind is that keyword, and indents after an `if` or `else` it is typing.
+         */
+        SkillTextKeyword: {
+            /** End */
+            end: number;
+            /** Start */
+            start: number;
+            /**
+             * Word
+             * @enum {string}
+             */
+            word: "if" | "else" | "stop";
+        };
+        /**
          * SkillTextLine
          * @description One line of the text: its kind, the step (from 1) it is part of, how its condition is decided (an `if`
          *     line: `checked` on the tool's result, or `agent`, decided from the conversation) and the tool its line runs.
@@ -10449,6 +10466,7 @@ export interface components {
             depth: number;
             /** How */
             how?: ("checked" | "agent") | null;
+            keyword?: components["schemas"]["SkillTextKeyword"] | null;
             /**
              * Kind
              * @enum {string}

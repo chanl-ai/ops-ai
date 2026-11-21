@@ -599,6 +599,9 @@ export interface SkillTextLine {
   tool: string | null;
   /** How many path levels in the line is, as the service's reader counts its indent. */
   depth?: number;
+  /** The keyword the line is written with and where it sits after the indent, past any list marker; set even when
+   * the line reads as text (an `if …:` with nothing indented under it yet). */
+  keyword?: { word: 'if' | 'else' | 'stop'; start: number; end: number } | null;
 }
 
 /** POST /v1/skills/{id}/text: how a text reads, as a save will read it. Hints never block; errors block a publish. */

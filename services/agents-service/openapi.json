@@ -20008,6 +20008,36 @@
         "title": "SkillTextInput",
         "type": "object"
       },
+      "SkillTextKeyword": {
+        "additionalProperties": false,
+        "description": "The keyword a line is written with (`if`, `else` for else or otherwise, `stop`) and where it sits in the line\nafter its indent, past any list marker. Set whether or not the line reads as one: the editor highlights it only on\na line whose kind is that keyword, and indents after an `if` or `else` it is typing.",
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "integer"
+          },
+          "start": {
+            "title": "Start",
+            "type": "integer"
+          },
+          "word": {
+            "enum": [
+              "if",
+              "else",
+              "stop"
+            ],
+            "title": "Word",
+            "type": "string"
+          }
+        },
+        "required": [
+          "word",
+          "start",
+          "end"
+        ],
+        "title": "SkillTextKeyword",
+        "type": "object"
+      },
       "SkillTextLine": {
         "additionalProperties": false,
         "description": "One line of the text: its kind, the step (from 1) it is part of, how its condition is decided (an `if`\nline: `checked` on the tool's result, or `agent`, decided from the conversation) and the tool its line runs.",
@@ -20031,6 +20061,16 @@
               }
             ],
             "title": "How"
+          },
+          "keyword": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SkillTextKeyword"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "kind": {
             "enum": [

@@ -124,8 +124,8 @@ class HowWidget extends WidgetType {
 const GUIDE = Decoration.mark({ class: 'sop-guide' });
 const indentOf = (text: string) => text.length - text.trimStart().length;
 const levels = (text: string) => Math.floor(text.slice(0, indentOf(text)).replace(/\t/g, UNIT).length / UNIT.length);
-const KEYWORD = { if: /^if\b/i, else: /^(?:else|otherwise)\b/i, stop: /^stop\b/ } as const;
-/** The reader's own syntax for a line that opens a path, used until its reading of the text arrives. */
+/** A line that opens a path, read on the keystroke before the service's reading of the new text can arrive; once it
+ * has, the line's keyword from that reading decides. */
 const OPENS = /^\s*(?:if\s.+|else|otherwise)\s*:\s*$/i;
 const MENTION_AT = /^@(?:tool|knowledge|skill|agent|workflow):[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,126}[A-Za-z0-9_])?/;
 
@@ -146,7 +146,8 @@ function decorate(state: EditorState): { all: DecorationSet; atomic: DecorationS
     if (depth > 0) all.add(line.from, line.from, Decoration.line({ attributes: { style: `padding-left:calc(${depth} * 1.5rem + 0.25rem);text-indent:calc(${depth} * -1.5rem)` } }));
     const lead = indentOf(line.text);
     const body = line.text.slice(lead);
-    const kw = mark && (mark.kind === 'if' || mark.kind === 'else' || mark.kind === 'stop') ? body.match(KEYWORD[mark.kind as keyof typeof KEYWORD]) : null;
+    // The reader owns the keywords: a line is drawn as one only when it reads as one, at the span the reader found.
+    const kw = mark?.keyword && mark.kind === mark.keyword.word ? mark.keyword : null;
     const pieces: { from: number; to: number; deco: Decoration; atomic?: boolean }[] = [];
     // One guide per indent step, drawn on the leading whitespace itself, so it lines up in any font.
     const each = depth ? Math.max(1, Math.floor(lead / depth)) : 0;
@@ -155,7 +156,7 @@ function decorate(state: EditorState): { all: DecorationSet; atomic: DecorationS
       pieces.push({ from: line.from + at, to: line.from + at + size, deco: GUIDE });
       at += size;
     }
-    if (kw) pieces.push({ from: line.from + lead, to: line.from + lead + kw[0].length, deco: Decoration.mark({ class: 'sop-keyword' }) });
+    if (kw) pieces.push({ from: line.from + lead + kw.start, to: line.from + lead + kw.end, deco: Decoration.mark({ class: 'sop-keyword' }) });
     if (hinted.has(n) && body.trim()) pieces.push({ from: line.from + lead, to: line.to, deco: Decoration.mark({ class: 'sop-hint' }) });
     let at = line.from;
     for (const seg of parseText(line.text)) {
@@ -255,8 +256,9 @@ function enter(view: EditorView): boolean {
   const line = state.doc.lineAt(range.head);
   const before = line.text.slice(0, range.head - line.from);
   const drawn = state.field(drawnField);
-  const kind = drawn.current ? drawn.reading?.lines.find((l) => l.line === line.number)?.kind : undefined;
-  const opens = kind ? kind === 'if' || kind === 'else' : OPENS.test(before);
+  const mark = drawn.current ? drawn.reading?.lines.find((l) => l.line === line.number) : undefined;
+  // The keyword, not the kind: an `if …:` reads as text until a line is indented under it, which this Enter makes.
+  const opens = mark ? mark.keyword?.word === 'if' || mark.keyword?.word === 'else' : OPENS.test(before);
   if (!opens || !before.trimEnd().endsWith(':')) return insertNewlineAndIndent(view);
   const insert = `\n${before.slice(0, indentOf(before))}${UNIT}`;
   view.dispatch({ changes: { from: range.head, insert }, selection: { anchor: range.head + insert.length }, scrollIntoView: true, userEvent: 'input' });

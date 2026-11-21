@@ -1838,9 +1838,16 @@ class SkillTextInput(TypedDict, closed=True):
     text: str
 
 
+class SkillTextKeyword(TypedDict, closed=True):
+    end: int
+    start: int
+    word: Literal["if", "else", "stop"]
+
+
 class SkillTextLine(TypedDict, closed=True):
     depth: NotRequired[int]
     how: NotRequired[Literal["checked", "agent"] | None]
+    keyword: NotRequired[SkillTextKeyword | None]
     kind: Literal["text", "step", "if", "else", "stop", "blank"]
     line: int
     step: NotRequired[int | None]

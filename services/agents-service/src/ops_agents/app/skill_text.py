@@ -109,6 +109,16 @@ class Missing(Note):
     id: str
 
 
+class Keyword(TypedDict):
+    """The keyword a line is written with, where it sits in the line after its indent (a list marker before it is
+    skipped). It is set whether or not the line reads as one: a `2. If found:` with nothing indented under it reads as
+    text, and the editor still indents the line after it."""
+
+    word: Literal["if", "else", "stop"]
+    start: int
+    end: int
+
+
 class Mark(TypedDict):
     """What one line of the text is, for the editor: its kind, the step it belongs to, how its condition is decided
     and the tool of its step."""
@@ -120,6 +130,7 @@ class Mark(TypedDict):
     tool: str | None
     # How many path levels in the line is, as the reader counts its indent.
     depth: int
+    keyword: Keyword | None
 
 
 class Uses(TypedDict):
@@ -280,11 +291,26 @@ class _Parser:
                 )
             self.i += 1
             word = _bare(txt)
-            if m := _IF.match(word):
+            # An `if …:` or `else:` starts a path only with lines indented under it: a flat numbered list
+            # (`2. If active:` / `3. Open the claim` / `4. Otherwise:`) stays its steps.
+            if (_IF.match(word) or _ELSE.match(word)) and not self._opens(ind):
+                self.marks[line]["kind"] = "text"
+                self.hints.append(
+                    {
+                        "line": line,
+                        "message": (
+                            "Nothing is indented under this line, so it is read as an ordinary line, not a path. "
+                            "Indent the lines that belong to it."
+                        ),
+                    }
+                )
+                items.append(_Text(line, word))
+            elif m := _IF.match(word):
                 body = self._inner(line, ind, depth)
                 orelse: list[_Item] = []
-                if self.i < len(self.rows) and self.rows[self.i][1] == ind and _ELSE.match(_bare(self.rows[self.i][2])):
-                    else_line = self.rows[self.i][0]
+                nxt = self.i < len(self.rows) and self.rows[self.i]
+                if nxt and nxt[1] == ind and _ELSE.match(_bare(nxt[2])) and self._opens(ind, self.i + 1):
+                    else_line = nxt[0]
                     self.i += 1
                     self.marks[else_line]["depth"] = depth
                     orelse = self._inner(else_line, ind, depth)
@@ -300,7 +326,7 @@ class _Parser:
                     }
                 )
                 items.extend(self._inner(line, ind, depth))
-            elif (stop := _stop_of(word, self.declared)) is not None:
+            elif (stop := _stop_of(word, self.declared)) is not None and (depth > 0 or stop != (None, "")):
                 name, rest = stop
                 ruled = name in BUILT_IN_EXITS or name in self.declared
                 rest = rest or (name.replace("_", " ") if name and not ruled else "")
@@ -309,9 +335,25 @@ class _Parser:
             else:
                 if _STOP.match(word):
                     self.marks[line]["kind"] = "text"
+                    if depth == 0 and _stop_of(word, self.declared) == (None, ""):
+                        self.hints.append(
+                            {
+                                "line": line,
+                                "message": (
+                                    "A plain “Stop” ends the skill only on a path, under an “if …:” line, so here it "
+                                    "is read as an ordinary line. Indent it under its “if”, or give it a reason: "
+                                    "stop “Why it ends”."
+                                ),
+                            }
+                        )
                 # The step the agent reads drops a pasted list marker, as the keywords above do.
                 items.append(_Text(line, word))
         return items
+
+    def _opens(self, ind: int, at: int | None = None) -> bool:
+        """Whether the row at `at` (the next one) is indented past `ind`, so the line before it starts a path."""
+        at = self.i if at is None else at
+        return at < len(self.rows) and self.rows[at][1] > ind
 
     def _inner(self, line: int, ind: int, depth: int) -> list[_Item]:
         if self.i < len(self.rows) and self.rows[self.i][1] > ind:
@@ -757,18 +799,23 @@ def read(
     marks: dict[int, Mark] = {}
     for n, raw in enumerate(text.split("\n"), start=1):
         t = _bare(raw.strip())
-        kind: LineKind = (
-            "blank"
-            if not t
-            else "if"
-            if _IF.match(t)
-            else "else"
-            if _ELSE.match(t)
-            else "stop"
-            if _STOP.match(t)
-            else "text"
+        at = len(raw.strip()) - len(t)
+        word: Literal["if", "else", "stop"] | None = (
+            "if" if _IF.match(t) else "else" if _ELSE.match(t) else "stop" if _STOP.match(t) else None
         )
-        marks[n] = {"line": n, "kind": kind, "step": None, "how": None, "tool": None, "depth": _indent(raw) // 4}
+        kind: LineKind = "blank" if not t else word or "text"
+        keyword: Keyword | None = None
+        if word is not None:
+            keyword = {"word": word, "start": at, "end": at + len(t.split(None, 1)[0].rstrip(":"))}
+        marks[n] = {
+            "line": n,
+            "kind": kind,
+            "step": None,
+            "how": None,
+            "tool": None,
+            "depth": _indent(raw) // 4,
+            "keyword": keyword,
+        }
     tree = _Parser(text, hints, frozenset(declared), marks).block(0) if text.strip() else []
     refs = Ref.found_in(text)
     errors: list[Missing] = []
@@ -903,7 +950,7 @@ def stop_exits(text: str) -> dict[str, str]:
     form declares itself are kept."""
     out: dict[str, str] = {}
     marks: dict[int, Mark] = {
-        n: {"line": n, "kind": "text", "step": None, "how": None, "tool": None, "depth": 0}
+        n: {"line": n, "kind": "text", "step": None, "how": None, "tool": None, "depth": 0, "keyword": None}
         for n in range(1, text.count("\n") + 2)
     }
     stack: list[_Item] = list(_Parser(normalised(text), [], frozenset(), marks).block(0))

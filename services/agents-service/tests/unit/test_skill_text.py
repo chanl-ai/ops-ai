@@ -13,6 +13,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from ops_agent_kernel import step_tools, steps
 from ops_agent_kernel.types import Skill
 from ops_agents.app.skill_text import read, render
@@ -306,3 +308,65 @@ def test_a_write_on_a_path_the_agent_decides_is_a_hint_and_one_behind_a_checked_
     assert [n["line"] for n in r.unguarded] == [8], "the else side of a path the agent decides is unguarded too"
     assert {"line": 8, "message": r.unguarded[0]["message"]} in r.hints
     assert not read(text, fields=FIELDS).unguarded, "with the directory unread no tool is taken as a write"
+
+
+_POLICY: dict[str, Any] = {"active": {"type": "boolean"}}
+
+
+@pytest.mark.parametrize(
+    ("text", "kinds", "hints", "exit", "dos"),
+    [
+        pytest.param(
+            "Find it with @tool:find_policy\n- if active:\n    Open it with @tool:open_claim\n"
+            '- else:\n    - Stop "Lapsed"',
+            ["step", "if", "step", "else", "stop"],
+            [],
+            {"lapsed": "Lapsed"},
+            ["Find it with @tool:find_policy", "Open it with @tool:open_claim"],
+            id="a list-marked else is its if's other path and a list-marked stop on it ends the skill",
+        ),
+        pytest.param(
+            "Say hello\n- else:\n    Say goodbye",
+            ["text", "else", "text"],
+            [2],
+            None,
+            None,
+            id="a list-marked else with no if above is hinted",
+        ),
+        pytest.param(
+            "Find it with @tool:find_policy\nStop now",
+            ["step", "text"],
+            [],
+            {},
+            ["Find it with @tool:find_policy", "Stop now"],
+            id="a stop that runs on is an instruction",
+        ),
+        pytest.param(
+            "1. Find the policy with @tool:find_policy\n2. If active:\n3. Open the claim with @tool:open_claim\n"
+            "4. Otherwise:\n5. Stop",
+            ["step", "text", "step", "text", "text"],
+            [2, 4, 5],
+            {},
+            [
+                "Find the policy with @tool:find_policy",
+                "If active:\nOpen the claim with @tool:open_claim",
+                "Otherwise:\nStop",
+            ],
+            id="a flat numbered list builds no path and a top-level Stop is text, each with a hint",
+        ),
+    ],
+)
+def test_the_reader_reads_each_keyword_with_or_without_a_list_marker(
+    text: str, kinds: list[str], hints: list[int], exit: dict[str, str] | None, dos: list[str] | None
+) -> None:
+    r = read(text, fields={"@tool:find_policy": _POLICY, "@tool:open_claim": _POLICY})
+    assert [m["kind"] for m in r.marks] == kinds
+    assert [h["line"] for h in r.hints] == hints, r.hints
+    assert (r.program and r.program.exit) == exit
+    assert (r.program and [s.do for s in r.program.steps]) == dos, "a list marker is not part of the step"
+    # The editor highlights and indents from these spans, past the list marker, never from its own matching.
+    lines = text.split("\n")
+    spans = [
+        (k["word"], lines[m["line"] - 1].strip()[k["start"] : k["end"]].lower()) for m in r.marks if (k := m["keyword"])
+    ]
+    assert all(said in ({"else", "otherwise"} if word == "else" else {word}) for word, said in spans), spans

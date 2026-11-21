@@ -1902,6 +1902,16 @@ class SkillTextUses(Out):
     workflows: int
 
 
+class SkillTextKeyword(Out):
+    """The keyword a line is written with (`if`, `else` for else or otherwise, `stop`) and where it sits in the line
+    after its indent, past any list marker. Set whether or not the line reads as one: the editor highlights it only on
+    a line whose kind is that keyword, and indents after an `if` or `else` it is typing."""
+
+    word: Literal["if", "else", "stop"]
+    start: int
+    end: int
+
+
 class SkillTextLine(Out):
     """One line of the text: its kind, the step (from 1) it is part of, how its condition is decided (an `if`
     line: `checked` on the tool's result, or `agent`, decided from the conversation) and the tool its line runs."""
@@ -1913,6 +1923,7 @@ class SkillTextLine(Out):
     tool: str | None = None
     # How many path levels in the line is, as the reader counts its indent (the editor draws its guides from it).
     depth: int = 0
+    keyword: SkillTextKeyword | None = None
 
 
 class SkillTextReading(Out):
