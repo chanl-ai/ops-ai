@@ -357,6 +357,19 @@ query = { app = "salesforce", name = "Main" }
 ["GET /v1/workflows/definitions/{workflow_id}"]
 queries = 4
 
+["GET /v1/workflows/definitions/{workflow_id}/diff"]
+# Each side is its own store read in its own transaction (the definition row, then the two sides); a fixed count.
+queries = 5
+transactions = 5
+connections = 5
+query = { from = "live", to = "working-copy" }
+
+["GET /v1/workflows/definitions/{workflow_id}/publish-preview"]
+# No request transaction by design: the publish policy is read from platform-service between the store reads.
+queries = 3
+transactions = 3
+connections = 3
+
 ["GET /v1/workflows/definitions/{workflow_id}/versions/{version}/shapes"]
 queries = 1
 

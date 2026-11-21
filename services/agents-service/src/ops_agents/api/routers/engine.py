@@ -38,7 +38,7 @@ from ops_engine.store import (
 )
 from ops_engine.store import DefinitionRow as StoredDefinition
 from ops_engine.store import RunRow as StoredRun
-from ops_engine.store.definitions import HUMAN_REVIEW
+from ops_engine.store.definitions import CURRENT, HUMAN_REVIEW
 from ops_files_client import FilesClient, FilesRefused
 from ops_identity.fastapi import ActingPerson, Tx
 from ops_service_kit.errors import (
@@ -759,7 +759,10 @@ async def definition_view(rt: Runtime, me: Principal, workflow_id: str, version:
     if row is None:
         raise NotFound(f"Workflow definition {workflow_id}")
     request = await engine_lifecycle.pending(rt, workflow_id)
-    current = await store.serving(workflow_id, team=current_team())
+    stored = await store.versions(workflow_id)
+    # The serving version is read from the versions listed here, not by a statement of its own: all versions of an id
+    # belong to one team, which `row` has already checked, so `serving` would pick the same one.
+    current = next((v for v in reversed(stored) if v.stage in CURRENT), None)
     versions = [
         {
             "version": v.version,
@@ -768,7 +771,7 @@ async def definition_view(rt: Runtime, me: Principal, workflow_id: str, version:
             "createdBy": v.created_by,
             "stage": engine_lifecycle.stage_of(v, request),
         }
-        for v in await store.versions(workflow_id)
+        for v in stored
     ]
     review = request and {
         "id": request.id,
