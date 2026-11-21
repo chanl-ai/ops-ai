@@ -10,9 +10,13 @@ refused: its call was paid for.
 The spec's agent activity keeps a step ledger in its heartbeat; on the LangGraph adapter a resume node that
 crashes after its turn runs again from its start, and without a ledger it calls the model again. `LedgerModel`
 wraps the kernel's model: inside a graph run (a LangGraph config with a thread) each response is recorded under the
-thread and a hash of the request, and the same request on the same thread is answered from the record. Outside a
-graph run (chat turns) it passes through. The request hash leaves out timestamps and run ids, which differ between
-the first run and the re-run while the conversation is the same.
+thread, a replay key and a hash of the request, and the same request under the same key is answered from the record.
+A workflow step's key is its own step id (run:node:iteration, `step_calls`), which every attempt and every re-run of
+the step after a crash or a Retry repeats, so none of them pays for the call again. A chat turn's key is the
+LangGraph task it ran in, which a crashed node's re-run keeps and a regenerate does not. Outside a graph run (the AI
+step route's test call) it passes through. The request hash leaves out timestamps and run ids, which differ between
+the first run and the re-run while the conversation is the same, and a changed request has a new hash, so it is
+never answered from an older record.
 """
 
 from __future__ import annotations
@@ -21,8 +25,9 @@ import contextlib
 import hashlib
 import json
 import time
-from collections.abc import AsyncGenerator, AsyncIterator
-from contextlib import asynccontextmanager
+from collections.abc import AsyncGenerator, AsyncIterator, Generator
+from contextlib import asynccontextmanager, contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any, Protocol, cast
 
@@ -40,7 +45,9 @@ from ops_metering import Usage
 from ops_service_kit.http import Json
 from ops_store import isolation
 
-_VOLATILE = frozenset({"timestamp", "run_id", "provider_response_id", "provider_details"})
+# Fields that differ between a request and its re-run though the conversation is the same: pydantic-ai gives every
+# agent run its own conversation_id, so a hash that kept it would never match a re-run.
+_VOLATILE = frozenset({"timestamp", "run_id", "conversation_id", "provider_response_id", "provider_details"})
 
 
 def _stable(value: Any) -> Any:
@@ -63,12 +70,29 @@ class _Site:
     task: str | None
 
 
+# A workflow step's replay key while its kernel turn runs (engine_agents.py), in place of the LangGraph task.
+_STEP_KEY: ContextVar[str | None] = ContextVar("ops_agents_ledger_step_key", default=None)
+
+
+@contextmanager
+def step_calls(key: str) -> Generator[None]:
+    """Records and replays the model calls made inside under `key`, a workflow step's id (run:node:iteration): the
+    LangGraph task a re-run gets is new whenever the run continues from another checkpoint, while the step id is not."""
+    token = _STEP_KEY.set(key)
+    try:
+        yield
+    finally:
+        _STEP_KEY.reset(token)
+
+
 def _site() -> _Site | None:
-    """Where the request runs: the graph call site and the LangGraph task, which a crashed node's re-run keeps and a
-    new step does not. None outside a graph run."""
+    """Where the request runs: the graph call site and its replay key, a workflow step's id or else the LangGraph
+    task, which a crashed node's re-run keeps and a new step does not. None outside a graph run."""
     call = call_site()
     if call is None:
         return None
+    if (key := _STEP_KEY.get()) is not None:
+        return _Site(call, key)
     cfg = get_config()
     task = (cfg.get("configurable") or {}).get("checkpoint_ns") or (cfg.get("metadata") or {}).get(
         "langgraph_checkpoint_ns"

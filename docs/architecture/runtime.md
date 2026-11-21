@@ -23,7 +23,7 @@ Detail on the kernel is in agent-kernel, on nodes in
 | Activities | `ops_agents/activities/` | Seed catalogue, local tools, keyword knowledge store, `GatewayToolExecutor` for tools-service |
 | Channels | `api/channels/inbox.py`, `store/channels.py` | Input delivered to a busy thread; the deployments store |
 | Metering | `graphs/metering.py`, `api/metering.py`, `api/usage.py`, `packages/ops_metering` | A usage row per model call; the budget check before each call, which pauses the thread when spent |
-| Model-call ledger | `api/model_ledger.py` | Records each completed model response by thread and request hash, under the alias it ran on; a node re-run after a crash replays it instead of calling the model again |
+| Model-call ledger | `api/model_ledger.py` | Records each completed model response by thread, replay key and request hash, under the alias it ran on: a chat turn's key is its LangGraph task, a workflow step's its step id (`step_calls`); a re-run after a crash replays it instead of calling the model again |
 | Model source | `ops_agent_kernel/models.py`, `ports.py` (`ModelSource`), `api/model_ledger.py` (`LedgerSource`) | The model a turn runs on, by its agent's alias: through models-service when it is configured, else the one direct model ([Which model a turn runs on](#which-model-a-turn-runs-on)) |
 | Route to people | `api/routing.py`, `routers/routing.py` | Stops a definition workflow at the next step end with no write in flight, journals the skipped steps, and raises the built-in `manual_handling` step |
 

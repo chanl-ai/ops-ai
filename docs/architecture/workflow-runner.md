@@ -80,7 +80,7 @@ A dangling write is reconciled by its key, never attempted twice.
 |---|---|---|
 | none | 3 | Runs again; deterministic |
 | read | 3, waits up to 5 s and 30 s | New attempt row |
-| model | 2 | New attempt; the model ledger replays recorded responses |
+| model | 2 | New attempt; the model ledger replays recorded responses by step id and request hash |
 | write | 3, only when the gateway proves the write never ran, each under a new key; otherwise a reconciliation read | Found by key means done; absent means the error port |
 | human | not retried | The upsert finds the same review |
 

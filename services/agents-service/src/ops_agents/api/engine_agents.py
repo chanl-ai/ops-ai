@@ -38,7 +38,7 @@ from ..store.engine import AsyncEngine
 from ..store.usage import UsageLedger
 from .agent_registry import definition_of
 from .error_words import WordedTools
-from .model_ledger import LedgerModel, LedgerSource
+from .model_ledger import LedgerModel, LedgerSource, step_calls
 
 
 class AgentUnavailableError(RuntimeError):
@@ -84,7 +84,7 @@ class KernelPrompts:
         rules = await self.rules.rules(request.run_id) if self.rules is not None else StepRules(True, True)
         if not rules.allowed:
             return AgentResult(False, error=AI_STEPS_OFF, code="ai_steps_off")
-        with outside_call():
+        with outside_call(), step_calls(request.turn_id):
             result = await kernel_call(
                 self.ports,
                 key=request.turn_id,
@@ -186,7 +186,11 @@ class KernelAgents:
         )
         result: TurnResult | None = None
         # The agent's own account per app, under the choice of the chat or agent that started the run.
-        with using_accounts(chosen_accounts(agent=agent.accounts, chat=current_run_context().accounts)), outside_call():
+        with (
+            using_accounts(chosen_accounts(agent=agent.accounts, chat=current_run_context().accounts)),
+            outside_call(),
+            step_calls(request.turn_id),
+        ):
             async for event in run_turn(req, self.ports):
                 if isinstance(event, TurnFinished):
                     result = event.result

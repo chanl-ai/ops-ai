@@ -36,8 +36,9 @@ deduplication lives where the call lands (tools-service), never in the process t
 
 | Call in a re-run node | What happens |
 |---|---|
-| Agent-kernel model call already completed, inside a graph run on PostgreSQL | Replayed from `model_call_records` (`api/model_ledger.py`), keyed by thread and a hash of the request without timestamps and run ids; a re-run resume node makes no second call |
-| Workflow model calls (classify, extract, draft, grade) | Repeat: 3 extra calls per crash in the dispute workflow's fan-out. The repeat may differ, though nothing downstream saw the first answer |
+| Agent-kernel model call already completed in a chat turn, on PostgreSQL or SQL Server | Replayed from `model_call_records` (`api/model_ledger.py`), keyed by thread, the LangGraph task and a hash of the request without timestamps, run ids and conversation ids; a re-run resume node makes no second call |
+| Workflow AI and agent step model calls (classify, summarise, extract from text, draft, agent) already completed | Replayed from the same records, keyed by run, the step's own id (run:node:iteration) and the request hash, so a re-run after a crash, a lost checkpoint or a step whose done mark never committed pays nothing twice; a changed input is a new request and calls the model. Test: `services/agents-service/tests/engine/test_model_replay.py` |
+| Chat-graph models outside the kernel (classify, extract, grade nodes, `MeteredModels`) | Repeat; they are metered, not recorded |
 | Model call in flight at the crash | Repeats; a response is recorded only after its stream is read to the end |
 | Tool write through tools-service | Runs once (dedupe below) |
 | Usage rows | Written as each call returns, outside the checkpoint and unfenced, so a crashed attempt's spend is still counted |
