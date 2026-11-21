@@ -3181,6 +3181,20 @@ class EvalRunInput(TypedDict, closed=True):
     cases: NotRequired[list[EvalCaseInput] | None]
 
 
+class EvalRunRecord(TypedDict, closed=True):
+    agentId: str
+    costUsd: float
+    id: str
+    liveVersion: int | None
+    ranAt: str
+    results: list[EvalCaseResult]
+    startedBy: str
+    status: Literal["complete"]
+    summary: EvalSummary
+    trigger: str
+    version: int
+
+
 class FieldRead(TypedDict, closed=True):
     boxes: NotRequired[list[ReadBox]]
     bySource: NotRequired[dict[str, JsonValue] | None]
@@ -3273,6 +3287,12 @@ class ListResultCaseTypeView(TypedDict, closed=True):
 
 class ListResultDefinitionRow(TypedDict, closed=True):
     data: list[DefinitionRow]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
+class ListResultEvalRunRecord(TypedDict, closed=True):
+    data: list[EvalRunRecord]
     facets: dict[str, dict[str, int]]
     pagination: Pagination
 
@@ -3919,11 +3939,6 @@ class DocumentRead(TypedDict, closed=True):
     sources: NotRequired[list[str]]
 
 
-class EnvelopeAgentEvalRun(TypedDict, closed=True):
-    data: AgentEvalRun
-    success: Literal[True]
-
-
 class EnvelopeAgent(TypedDict, closed=True):
     data: Agent
     success: Literal[True]
@@ -3946,6 +3961,11 @@ class EnvelopeCaseTypeDetail(TypedDict, closed=True):
 
 class EnvelopeChannelPage(TypedDict, closed=True):
     data: ChannelPage
+    success: Literal[True]
+
+
+class EnvelopeEvalRunRecord(TypedDict, closed=True):
+    data: EvalRunRecord
     success: Literal[True]
 
 
@@ -3976,6 +3996,11 @@ class EnvelopeListResultCaseTypeView(TypedDict, closed=True):
 
 class EnvelopeListResultDefinitionRow(TypedDict, closed=True):
     data: ListResultDefinitionRow
+    success: Literal[True]
+
+
+class EnvelopeListResultEvalRunRecord(TypedDict, closed=True):
+    data: ListResultEvalRunRecord
     success: Literal[True]
 
 
@@ -4076,6 +4101,11 @@ class EnvelopeThreadState(TypedDict, closed=True):
 
 class EnvelopeToolOptionsPage(TypedDict, closed=True):
     data: ToolOptionsPage
+    success: Literal[True]
+
+
+class EnvelopeUnionEvalRunRecordAgentEvalRun(TypedDict, closed=True):
+    data: EvalRunRecord | AgentEvalRun
     success: Literal[True]
 
 

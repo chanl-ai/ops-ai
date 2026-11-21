@@ -322,11 +322,31 @@ class EvalSummary(Out):
 
 
 class AgentEvalRun(Out):
+    """Cases sent in the body, scored and not kept."""
+
     id: str
     agent_id: str
     status: Literal["complete"]
     summary: EvalSummary
     results: list[EvalCaseResult]
+
+
+class EvalRunRecord(Out):
+    """A kept run of an agent's saved cases (`app.evals.stored_run`): `version` is the newest version it ran on and
+    `live_version` the live one it was compared with, when that was another. `trigger` is manual or
+    publish_request; `started_by` is a person's email or `key:<id>`."""
+
+    id: str
+    agent_id: str
+    version: int
+    live_version: int | None
+    trigger: str
+    status: Literal["complete"]
+    summary: EvalSummary
+    results: list[EvalCaseResult]
+    cost_usd: float
+    started_by: str
+    ran_at: str
 
 
 class LoadedSkill(Out):

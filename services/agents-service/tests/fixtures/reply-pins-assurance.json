@@ -1,4 +1,95 @@
 {
+  "agent.add": {
+    "body": {
+      "data": {
+        "cases": [
+          {
+            "checks": [
+              {
+                "text": "could not find",
+                "tool": null,
+                "type": "reply_contains"
+              }
+            ],
+            "context": null,
+            "createdAt": "<timeZ>",
+            "createdBy": "usr_ops@harborpine.example",
+            "id": "<evc>",
+            "input": "Hello",
+            "name": "greets",
+            "reason": "",
+            "source": "manual",
+            "status": "active"
+          },
+          {
+            "checks": [
+              {
+                "text": null,
+                "tool": "lookup_account",
+                "type": "calls_tool"
+              }
+            ],
+            "context": null,
+            "createdAt": "<timeZ>",
+            "createdBy": "usr_ops@harborpine.example",
+            "id": "<evc>",
+            "input": "Hello",
+            "name": "calls lookup",
+            "reason": "",
+            "source": "manual",
+            "status": "active"
+          },
+          {
+            "checks": [
+              {
+                "text": "could not find",
+                "tool": null,
+                "type": "reply_contains"
+              }
+            ],
+            "context": null,
+            "createdAt": "<timeZ>",
+            "createdBy": "usr_ops@harborpine.example",
+            "id": "<evc>",
+            "input": "Hello",
+            "name": "greets",
+            "reason": "",
+            "source": "manual",
+            "status": "active"
+          }
+        ]
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "agent.addNone": {
+    "body": {
+      "error": {
+        "code": "empty_cases",
+        "message": "cases must not be empty.",
+        "requestId": "<req>",
+        "status": 422
+      },
+      "success": false
+    },
+    "status": 422
+  },
+  "agent.addUnknownCheck": {
+    "body": {
+      "error": {
+        "code": "unknown_check_type",
+        "details": {
+          "type": "rubric"
+        },
+        "message": "Unknown check type: rubric. Allowed: calls_tool, refuses, reply_contains.",
+        "requestId": "<req>",
+        "status": 422
+      },
+      "success": false
+    },
+    "status": 422
+  },
   "agent.missing": {
     "body": {
       "error": {
@@ -52,6 +143,75 @@
             "status": "active"
           }
         ]
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "agent.runs": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "agentId": "<ag>",
+            "costUsd": 0.0,
+            "id": "<evr>",
+            "liveVersion": null,
+            "ranAt": "<timeZ>",
+            "results": [
+              {
+                "caseName": "greets",
+                "draft": {
+                  "checks": [
+                    {
+                      "label": "Reply contains \u201ccould not find\u201d",
+                      "status": "pass"
+                    }
+                  ],
+                  "latencyMs": "<latencyMs>",
+                  "reply": "I could not find that.",
+                  "status": "pass"
+                },
+                "live": null,
+                "regression": false
+              },
+              {
+                "caseName": "calls lookup",
+                "draft": {
+                  "checks": [
+                    {
+                      "label": "Calls lookup_account",
+                      "status": "fail"
+                    }
+                  ],
+                  "latencyMs": "<latencyMs>",
+                  "reply": "I could not find that.",
+                  "status": "fail"
+                },
+                "live": null,
+                "regression": false
+              }
+            ],
+            "startedBy": "usr_ops@harborpine.example",
+            "status": "complete",
+            "summary": {
+              "passed": 1,
+              "regressions": 0,
+              "total": 2
+            },
+            "trigger": "manual",
+            "version": 1
+          }
+        ],
+        "facets": {},
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 5,
+          "total": 1,
+          "totalPages": 1
+        }
       },
       "success": true
     },
@@ -139,7 +299,71 @@
     },
     "status": 422
   },
+  "agent.viewerAdds": {
+    "body": {
+      "error": {
+        "code": "role_required",
+        "details": {
+          "action": "run",
+          "area": "evals",
+          "grantedBy": [
+            "builder",
+            "admin"
+          ],
+          "roles": [
+            "viewer"
+          ],
+          "teamId": "team_ops"
+        },
+        "message": "Your role cannot run the eval cases of agent <ag>; a Builder or Admin can.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  },
   "agent.viewerSaves": {
+    "body": {
+      "error": {
+        "code": "role_required",
+        "details": {
+          "action": "run",
+          "area": "evals",
+          "grantedBy": [
+            "builder",
+            "admin"
+          ],
+          "roles": [
+            "viewer"
+          ],
+          "teamId": "team_ops"
+        },
+        "message": "Your role cannot run the eval cases of agent <ag>; a Builder or Admin can.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  },
+  "case.delete": {
+    "body": null,
+    "status": 204
+  },
+  "case.deleteAgain": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Eval case was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "case.viewerDeletes": {
     "body": {
       "error": {
         "code": "role_required",
@@ -190,6 +414,130 @@
           "runs": 1,
           "suites": 2
         }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "run.missing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Eval run was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "run.read": {
+    "body": {
+      "data": {
+        "agentId": "<ag>",
+        "costUsd": 0.0,
+        "id": "<evr>",
+        "liveVersion": null,
+        "ranAt": "<timeZ>",
+        "results": [
+          {
+            "caseName": "greets",
+            "draft": {
+              "checks": [
+                {
+                  "label": "Reply contains \u201ccould not find\u201d",
+                  "status": "pass"
+                }
+              ],
+              "latencyMs": "<latencyMs>",
+              "reply": "I could not find that.",
+              "status": "pass"
+            },
+            "live": null,
+            "regression": false
+          },
+          {
+            "caseName": "calls lookup",
+            "draft": {
+              "checks": [
+                {
+                  "label": "Calls lookup_account",
+                  "status": "fail"
+                }
+              ],
+              "latencyMs": "<latencyMs>",
+              "reply": "I could not find that.",
+              "status": "fail"
+            },
+            "live": null,
+            "regression": false
+          }
+        ],
+        "startedBy": "usr_ops@harborpine.example",
+        "status": "complete",
+        "summary": {
+          "passed": 1,
+          "regressions": 0,
+          "total": 2
+        },
+        "trigger": "manual",
+        "version": 1
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "run.start": {
+    "body": {
+      "data": {
+        "agentId": "<ag>",
+        "costUsd": 0.0,
+        "id": "<evr>",
+        "liveVersion": null,
+        "ranAt": "<timeZ>",
+        "results": [
+          {
+            "caseName": "greets",
+            "draft": {
+              "checks": [
+                {
+                  "label": "Reply contains \u201ccould not find\u201d",
+                  "status": "pass"
+                }
+              ],
+              "latencyMs": "<latencyMs>",
+              "reply": "I could not find that.",
+              "status": "pass"
+            },
+            "live": null,
+            "regression": false
+          },
+          {
+            "caseName": "calls lookup",
+            "draft": {
+              "checks": [
+                {
+                  "label": "Calls lookup_account",
+                  "status": "fail"
+                }
+              ],
+              "latencyMs": "<latencyMs>",
+              "reply": "I could not find that.",
+              "status": "fail"
+            },
+            "live": null,
+            "regression": false
+          }
+        ],
+        "startedBy": "usr_ops@harborpine.example",
+        "status": "complete",
+        "summary": {
+          "passed": 1,
+          "regressions": 0,
+          "total": 2
+        },
+        "trigger": "manual",
+        "version": 1
       },
       "success": true
     },

@@ -1,8 +1,8 @@
 # The statement budget of each agents-service GET at 5 and 50 rows (ops_service_kit.testing.budget_check, data-access
 # standard DA1 and DA6), measured on PostgreSQL by tests/api/test_statement_budget.py. Each row is today's count at 50
 # rows. The seed adds rows to agents (each holding a tool and an account), skills, guardrails, widgets, cases, workflows
-# of each engine, runs of the registry workflow (each waiting at its review), queued engine runs and a batch of `n`
-# rows only; a chat thread, a live form workflow with a link and a members form, and a publish request are made once;
+# of each engine, runs of the registry workflow (each waiting at its review), queued engine runs, kept eval runs of
+# the first agent and a batch of `n` rows only; a chat thread, a live form workflow with a link and a members form, and a publish request are made once;
 # a row for any other list proves its count, not that it stays flat as rows grow. Rows listing more than one
 # transaction or connection open one per store read and are budgeted as they run until their route is converted. A
 # `not_budgeted` row that grows names its counts.
@@ -76,6 +76,9 @@ queries = 17
 
 ["GET /v1/agents/{agent_id}/eval-cases"]
 queries = 2
+
+["GET /v1/agents/{agent_id}/eval-runs"]
+queries = 3
 
 ["GET /v1/agents/{agent_id}/live"]
 queries = 9
@@ -167,6 +170,9 @@ queries = 2
 ["GET /v1/document-type-uses"]
 queries = 1
 query = { types = "dt_budget" }
+
+["GET /v1/eval-runs/{run_id}"]
+queries = 1
 
 # A stream holds no transaction while it is open: each read it makes opens and closes its own, so the count is
 # the reads of one pass with `follow=false`.

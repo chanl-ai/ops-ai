@@ -1,4 +1,5 @@
-"""Run a dataset of cases through one existing agent test turn each. No local runner."""
+"""Run a dataset of cases through one existing agent test turn each. No local runner. A kept run starts in
+`api/eval_runs.py` (`run_saved`) and is answered as `stored_run` shapes it."""
 
 from __future__ import annotations
 
@@ -77,6 +78,24 @@ async def run_eval(agent_id: str, cases: list[EvalCase], turn: TurnFn, live_turn
         "status": EVAL_STATUS_COMPLETE,
         "summary": {"passed": passed, "total": len(cases), "regressions": regressions},
         "results": results,
+    }
+
+
+def stored_run(row: Json) -> Json:
+    """A kept run as the API answers it (`EvalRunRecord`): the start of a run, each row of an agent's runs and the
+    read of one."""
+    return {
+        "id": row["id"],
+        "agentId": row["asset_id"],
+        "version": row["version"],
+        "liveVersion": row["live_version"],
+        "trigger": row["trigger"],
+        "status": EVAL_STATUS_COMPLETE,
+        "summary": {"passed": row["passed"], "total": row["total"], "regressions": row["regressions"]},
+        "results": row["results"],
+        "costUsd": row["cost_usd"],
+        "startedBy": row["started_by"],
+        "ranAt": row["ran_at"],
     }
 
 

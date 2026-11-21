@@ -1,6 +1,7 @@
-"""Govern > Evals on stored data, by failure mode: another team's suites, a repeated run overwriting the first, the
-runs list leaving out workflows, counts that differ from the rows, tabs with nothing behind them, a failing publish
-check that does not block, and who may save cases."""
+"""Govern > Evals and an agent's Evals tab on stored data, by failure mode: another team's suites, runs or cases read
+or deleted, a repeated run overwriting the first, two people adding a case at once and one case lost, the runs list
+leaving out workflows, counts that differ from the rows, tabs with nothing behind them, a failing publish check that
+does not block, and who may save cases."""
 
 # ruff: noqa: F811 - the dev_platform fixture is imported, then named as a parameter
 from __future__ import annotations
@@ -69,16 +70,21 @@ async def _tab(c: AsyncClient, tab: str, headers: dict[str, str], **params: Any)
     return _ok(await c.get(f"/v1/assurance/{tab}", params=params, headers=headers))
 
 
-async def test_another_teams_suites_runs_and_counts_are_never_shown(dev_platform: AsyncClient) -> None:
+async def test_another_teams_suites_runs_cases_and_counts_are_never_shown_or_deleted(dev_platform: AsyncClient) -> None:
     async with _same(dev_platform) as c:
         theirs = await _agent(c, LENDING)
-        _ok(await _save(c, theirs, [PASSING], LENDING))
-        _ok(await c.post(f"/v1/agents/{theirs}/eval-runs", headers=LENDING))
+        (case,) = _ok(await _save(c, theirs, [PASSING], LENDING))["cases"]
+        run = _ok(await c.post(f"/v1/agents/{theirs}/eval-runs", headers=LENDING))
         mine = await _tab(c, "suites", OPS)
         assert mine["data"] == [] and mine["tabCounts"]["suites"] == 0 and mine["tabCounts"]["runs"] == 0
         assert mine["stats"]["notRun"] == 0 and mine["stats"]["failingSuites"] == 0
         assert (await _save(c, theirs, [PASSING], OPS)).status_code == 404
         assert (await c.post(f"/v1/agents/{theirs}/eval-runs", headers=OPS)).status_code == 404
+        assert (await c.get(f"/v1/eval-runs/{run['id']}", headers=OPS)).status_code == 404
+        assert (await c.delete(f"/v1/eval-cases/{case['id']}", headers=OPS)).status_code == 404
+        kept = _ok(await c.get(f"/v1/agents/{theirs}/eval-cases", headers=LENDING))
+        assert [x["id"] for x in kept["cases"]] == [case["id"]], "the other team's delete removed nothing"
+        assert _ok(await c.get(f"/v1/eval-runs/{run['id']}", headers=LENDING))["id"] == run["id"]
 
 
 async def test_running_saved_cases_twice_stores_two_runs_newest_first(dev_platform: AsyncClient) -> None:
@@ -88,13 +94,33 @@ async def test_running_saved_cases_twice_stores_two_runs_newest_first(dev_platfo
         first = _ok(await c.post(f"/v1/agents/{aid}/eval-runs", headers=OPS))
         second = _ok(await c.post(f"/v1/agents/{aid}/eval-runs", headers=OPS))
         assert first["id"] != second["id"] and second["summary"] == {"passed": 1, "total": 2, "regressions": 0}
-        runs = (await _tab(c, "runs", OPS))["data"]
-        assert [r["id"] for r in runs] == [second["id"], first["id"]]
-        assert runs[0]["asset"] == {"kind": "agent", "id": aid, "name": "Payee Checker", "href": f"/build/agents/{aid}"}
-        assert (runs[0]["passed"], runs[0]["total"], runs[0]["trigger"]) == (1, 2, "manual")
+        assert (second["version"], second["trigger"], second["startedBy"]) == (
+            1,
+            "manual",
+            "usr_ops@harborpine.example",
+        )
+        runs = f"/v1/agents/{aid}/eval-runs"
+        newest = _ok(await c.get(runs, params={"pageSize": 1}, headers=OPS))
+        older = _ok(await c.get(runs, params={"pageSize": 1, "page": 2}, headers=OPS))
+        assert newest["data"] == [second] and older["data"] == [first], "each row is the run as it was stored"
+        assert newest["pagination"]["total"] == 2 and newest["pagination"]["hasNext"] is True
+        assert _ok(await c.get(f"/v1/eval-runs/{first['id']}", headers=OPS)) == first
         suite = (await _tab(c, "suites", OPS))["data"][0]
         assert suite["passRate"] == 0.5 and suite["failing"] is True and suite["cases"] == 2
         assert [r["name"] for r in suite["results"]] == ["greets", "calls lookup"]
+
+
+async def test_two_people_adding_a_case_each_keep_theirs(dev_platform: AsyncClient) -> None:
+    async with _same(dev_platform) as c:
+        aid, builder = await _agent(c, OPS), who("usr_b", "builder")
+        cases = f"/v1/agents/{aid}/eval-cases"
+        added = [await c.post(cases, json={"cases": [x]}, headers=h) for x, h in ((PASSING, OPS), (FAILING, builder))]
+        assert [r.status_code for r in added] == [201, 201], [r.text for r in added]
+        kept = _ok(await c.get(cases, headers=OPS))["cases"]
+        assert [(x["name"], x["createdBy"]) for x in kept] == [
+            ("greets", "usr_ops@harborpine.example"),
+            ("calls lookup", "usr_b@harborpine.example"),
+        ]
 
 
 async def test_a_workflow_test_run_is_listed_with_agent_runs(dev_platform: AsyncClient) -> None:

@@ -502,12 +502,48 @@ OPERATIONS: dict[str, Operation] = {
         "query": ["search", "cursor", "limit", "ids", "granted"],
         "stream": False,
     },
+    "assurance_add_agent_cases": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/agents/{agent_id}/eval-cases",
+        "pathParams": ["agent_id"],
+        "query": [],
+        "stream": False,
+    },
     "assurance_agent_cases": {
         "body": None,
         "headers": [],
         "method": "GET",
         "path": "/v1/agents/{agent_id}/eval-cases",
         "pathParams": ["agent_id"],
+        "query": [],
+        "stream": False,
+    },
+    "assurance_agent_eval_runs": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/agents/{agent_id}/eval-runs",
+        "pathParams": ["agent_id"],
+        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
+        "stream": False,
+    },
+    "assurance_delete_eval_case": {
+        "body": None,
+        "headers": [],
+        "method": "DELETE",
+        "path": "/v1/eval-cases/{case_id}",
+        "pathParams": ["case_id"],
+        "query": [],
+        "stream": False,
+    },
+    "assurance_eval_run": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/eval-runs/{run_id}",
+        "pathParams": ["run_id"],
         "query": [],
         "stream": False,
     },
@@ -2060,11 +2096,43 @@ class Operations:
         "Agent Cases"
         return self._t.call(SERVICE, OPERATIONS["assurance_agent_cases"], {"agent_id": agent_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def assurance_add_agent_cases(self, agent_id: str, body: EvalCasesInput) -> SavedCases:
+        "Add Agent Cases"
+        return self._t.call(SERVICE, OPERATIONS["assurance_add_agent_cases"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
+
     def assurance_save_agent_cases(self, agent_id: str, body: EvalCasesInput) -> SavedCases:
         "Save Agent Cases"
         return self._t.call(SERVICE, OPERATIONS["assurance_save_agent_cases"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
 
-    def agents_create_eval_run(self, agent_id: str, body: EvalRunInput) -> AgentEvalRun:
+    def assurance_agent_eval_runs(
+        self,
+        agent_id: str,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultEvalRunRecord:
+        "Agent Eval Runs"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["assurance_agent_eval_runs"],
+            {"agent_id": agent_id},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
+    def agents_create_eval_run(self, agent_id: str, body: EvalRunInput) -> Any:
         "Create Eval Run"
         return self._t.call(SERVICE, OPERATIONS["agents_create_eval_run"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
 
@@ -2414,6 +2482,14 @@ class Operations:
     def workflows_list_document_type_uses(self, *, types: str | None = None) -> Any:
         "List Document Type Uses"
         return self._t.call(SERVICE, OPERATIONS["workflows_list_document_type_uses"], {}, {"types": types}, {}, None)  # type: ignore[no-any-return]
+
+    def assurance_delete_eval_case(self, case_id: str) -> Any:
+        "Delete Eval Case"
+        return self._t.call(SERVICE, OPERATIONS["assurance_delete_eval_case"], {"case_id": case_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def assurance_eval_run(self, run_id: str) -> EvalRunRecord:
+        "Eval Run"
+        return self._t.call(SERVICE, OPERATIONS["assurance_eval_run"], {"run_id": run_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     def threads_team_stream(self, *, after: int | None = None, follow: bool | None = None) -> Any:
         "Team Stream"
@@ -3616,13 +3692,47 @@ class AsyncOperations:
         "Agent Cases"
         return await self._t.call(SERVICE, OPERATIONS["assurance_agent_cases"], {"agent_id": agent_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    async def assurance_add_agent_cases(self, agent_id: str, body: EvalCasesInput) -> SavedCases:
+        "Add Agent Cases"
+        return await self._t.call(
+            SERVICE, OPERATIONS["assurance_add_agent_cases"], {"agent_id": agent_id}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
     async def assurance_save_agent_cases(self, agent_id: str, body: EvalCasesInput) -> SavedCases:
         "Save Agent Cases"
         return await self._t.call(
             SERVICE, OPERATIONS["assurance_save_agent_cases"], {"agent_id": agent_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    async def agents_create_eval_run(self, agent_id: str, body: EvalRunInput) -> AgentEvalRun:
+    async def assurance_agent_eval_runs(
+        self,
+        agent_id: str,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultEvalRunRecord:
+        "Agent Eval Runs"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["assurance_agent_eval_runs"],
+            {"agent_id": agent_id},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
+    async def agents_create_eval_run(self, agent_id: str, body: EvalRunInput) -> Any:
         "Create Eval Run"
         return await self._t.call(SERVICE, OPERATIONS["agents_create_eval_run"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
 
@@ -3984,6 +4094,14 @@ class AsyncOperations:
         return await self._t.call(
             SERVICE, OPERATIONS["workflows_list_document_type_uses"], {}, {"types": types}, {}, None
         )  # type: ignore[no-any-return]
+
+    async def assurance_delete_eval_case(self, case_id: str) -> Any:
+        "Delete Eval Case"
+        return await self._t.call(SERVICE, OPERATIONS["assurance_delete_eval_case"], {"case_id": case_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def assurance_eval_run(self, run_id: str) -> EvalRunRecord:
+        "Eval Run"
+        return await self._t.call(SERVICE, OPERATIONS["assurance_eval_run"], {"run_id": run_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def threads_team_stream(self, *, after: int | None = None, follow: bool | None = None) -> Any:
         "Team Stream"

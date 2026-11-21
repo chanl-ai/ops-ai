@@ -12,8 +12,7 @@ ask models-service for the aliases, and the test, eval and job routes run the mo
 
 from __future__ import annotations
 
-import time
-from typing import Annotated, Any, Literal, TypeAlias, cast
+from typing import Annotated, Literal, TypeAlias, cast
 
 from fastapi import APIRouter, Body, Depends, Query
 from fastapi.responses import JSONResponse, Response
@@ -29,13 +28,12 @@ from ops_agents.domain.evals import TRIGGER_MANUAL
 from ops_identity.fastapi import Tx
 from ops_service_kit import narrow
 from ops_service_kit.errors import Conflict, NotFound, Unprocessable, ValidationFailed
-from ops_service_kit.http import Envelope, In, Json, JsonList, ListResult, Out
+from ops_service_kit.http import Envelope, In, Json, ListResult, Out
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.listing import ListQuery
 from ops_store import isolation
 
 from ...store.agent_registry import AgentRow
-from ...store.evals import EvalStore
 from ...store.graphs import StoredThread
 from ...store.template_copies import TemplateCopies
 from ..account_names import require_team_accounts
@@ -57,10 +55,11 @@ from ..agent_registry import (
     version_state,
 )
 from ..agent_test import one_test_turn
-from ..auth import Principal, caller, caller_in, caller_of, principal, reader_of, require_builder, started_by
+from ..auth import Principal, caller, caller_in, caller_of, principal, reader_of, require_builder
 from ..child_runs import engine_workflows, refusal, team_workflows
 from ..deps import Runtime, runtime
 from ..envelope import ok
+from ..eval_runs import run_saved, version_turn
 from ..guardrails import resolve_pins
 from ..model_aliases import chat_aliases
 from ..publish_policy import Decision, decide, team_document
@@ -73,6 +72,7 @@ from ..schemas import (
     AgentRun,
     AgentTestTurn,
     AgentVersion,
+    EvalRunRecord,
     MemorySettings,
     PublishDecisionFields,
     PublishReview,
@@ -768,66 +768,20 @@ async def test_agent(rt: Rt, me: Me, agent_id: str, body: TestInput) -> JSONResp
     return ok(await one_test_turn(rt, agent_id, body.message, row=row))
 
 
-@router.post("/{agent_id}/eval-runs", response_model=Envelope[AgentEvalRun])
+@router.post("/{agent_id}/eval-runs", response_model=Envelope[EvalRunRecord | AgentEvalRun])
 async def create_eval_run(
     rt: Rt, me: Me, agent_id: str, body: Annotated[EvalRunInput, Body(default_factory=EvalRunInput)]
 ) -> JSONResponse:
     """Scores cases on the newest version through the same one-turn test path. With no cases in the body it runs the
-    agent's saved cases, also on the live version when that is another one, and keeps the run, so repeating it makes a
-    second run. With cases in the body it scores them and keeps nothing. Empty cases and an unknown check type are
-    422."""
+    agent's saved cases, also on the live version when that is another one, and keeps the run (`EvalRunRecord`), so
+    repeating it makes a second run. With cases in the body it scores them and keeps nothing (`AgentEvalRun`). Empty
+    cases and an unknown check type are 422."""
     row = await registry(rt).row(agent_id)
     can(caller_of(me), "evals", "run", team=row.team_id, what=f"agent {row.slug}")
-    saved = body.cases is None
-    raw = (
-        [x["body"] for x in await EvalStore(rt.db).cases("agent", agent_id) if x["status"] == "active"]
-        if saved
-        else [item.model_dump(by_alias=True) for item in cast(list[EvalCaseInput], body.cases)]
-    )
-    cases = parse_cases(raw)
-
-    def turn_on(version: int) -> Any:
-        async def turn(message: str, collections: tuple[str, ...]) -> Json:
-            return await one_test_turn(
-                rt, agent_id, message, row=row.model_copy(update={"version": version}), collections=collections or None
-            )
-
-        return turn
-
-    published = row.published_version
-    live = int(published) if published is not None else None
-    compare = saved and live is not None and live != int(row.version)
-    started = time.perf_counter()
-    run = await run_eval(
-        agent_id, cases, turn_on(int(row.version)), turn_on(live) if compare and live is not None else None
-    )
-    if saved:
-        # The run's own JSON (app.evals.run_eval), read as it was written there.
-        results = cast(JsonList, run["results"])
-        summary = cast(Json, run["summary"])
-        await EvalStore(rt.db).add_run(
-            {
-                "id": run["id"],
-                "team_id": row.team_id,
-                "kind": "agent",
-                "asset_id": agent_id,
-                "version": int(row.version),
-                "live_version": live if compare else None,
-                "trigger": TRIGGER_MANUAL,
-                "passed": summary["passed"],
-                "total": summary["total"],
-                "live_passed": sum(1 for r in results if cast(Json, cast(Json, r)["live"])["status"] == "pass")
-                if compare
-                else None,
-                "regressions": summary["regressions"],
-                "duration_ms": round((time.perf_counter() - started) * 1000),
-                "cost_usd": 0.0,
-                "results": results,
-                "started_by": started_by(me),
-                "ran_at": now_iso(),
-            }
-        )
-    return ok(run)
+    if body.cases is None:
+        return ok(await run_saved(rt, me, row, trigger=TRIGGER_MANUAL))
+    cases = parse_cases([item.model_dump(by_alias=True) for item in body.cases])
+    return ok(await run_eval(agent_id, cases, version_turn(rt, row, int(row.version))))
 
 
 @router.post("/{agent_id}/jobs", response_model=Envelope[JobArmed], response_model_exclude_none=True)
