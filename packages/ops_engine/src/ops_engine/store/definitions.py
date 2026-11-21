@@ -14,7 +14,6 @@ from ops_service_kit.narrow import json_object
 from ops_store import Guarantee
 from ops_store.dialect import locked
 from ops_store.rows import one, rows
-from ops_store.team_scope import team_visible
 
 from .tables import engine_definitions, engine_runs, engine_steps, engine_working_copies
 from .tx import LIVE_WORKFLOWS, Transactions
@@ -244,7 +243,7 @@ class DefinitionStore:
         """The workflow's working copy; None when it has none or `team` may not see it."""
         w = engine_working_copies
         seen = sa.true() if team is None else sa.or_(w.c.team_id == team, w.c.team_id.is_(None))
-        q = w.select().where(w.c.tenant_id == self.tx.tenant(), w.c.workflow_id == workflow_id, seen, team_visible(w))
+        q = w.select().where(w.c.tenant_id == self.tx.tenant(), w.c.workflow_id == workflow_id, seen)
         async with self.tx.tenant_tx() as c:
             return await one(c, q, WorkingCopy)
 
@@ -268,7 +267,7 @@ class DefinitionStore:
         when it is theirs), and LookupError when the workflow has no version."""
         w = engine_working_copies
         tenant = self.tx.tenant()
-        mine = sa.and_(w.c.tenant_id == tenant, w.c.workflow_id == workflow_id, team_visible(w))
+        mine = sa.and_(w.c.tenant_id == tenant, w.c.workflow_id == workflow_id)
         async with self.tx.tenant_tx() as c:
             # The newest row alone, without its definition; a publish takes the same lock, so each waits on the other.
             newest = (await c.execute(_newest_locked(tenant, workflow_id))).first()
@@ -321,7 +320,7 @@ class DefinitionStore:
         """Removes the working copy; with `digest`, only while it is still that copy, so a save made after a version
         was taken from it is kept. Returns whether a row went."""
         w = engine_working_copies
-        where = sa.and_(w.c.tenant_id == self.tx.tenant(), w.c.workflow_id == workflow_id, team_visible(w))
+        where = sa.and_(w.c.tenant_id == self.tx.tenant(), w.c.workflow_id == workflow_id)
         if digest is not None:
             where = sa.and_(where, w.c.digest == digest)
         async with self.tx.tenant_tx() as c:
@@ -331,12 +330,7 @@ class DefinitionStore:
         """Moves the working copy onto `version`: a save made while a version was taken from an earlier copy stays a
         change waiting on that version."""
         w = engine_working_copies
-        where = sa.and_(
-            w.c.tenant_id == self.tx.tenant(),
-            w.c.workflow_id == workflow_id,
-            w.c.base_version < version,
-            team_visible(w),
-        )
+        where = sa.and_(w.c.tenant_id == self.tx.tenant(), w.c.workflow_id == workflow_id, w.c.base_version < version)
         async with self.tx.tenant_tx() as c:
             await c.execute(w.update().where(where).values(base_version=version))
 
