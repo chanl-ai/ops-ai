@@ -63,6 +63,32 @@ async def test_a_custom_role_never_holds_secrets_egress_or_security_team_cells(p
     assert (r.status_code, r.json()["error"]["code"]) == (400, "not_for_custom_roles"), r.text
 
 
+async def test_only_owner_holds_workspace_manage_on_a_custom_or_edited_built_in_role(platform: Platform) -> None:
+    """E42: `workspace.manage` transfers and closes the workspace, held by Owner alone; a custom role made with it, or
+    a built-in role edited to hold it, is refused."""
+    _, ah = await _admin(platform)
+    owns = {"area": "workspace", "action": "manage", "scope": "all"}
+    made = await platform.public.post("/v1/roles", headers=ah, json={"name": "Closer", "permissions": [owns]})
+    assert (made.status_code, made.json()["error"]["code"]) == (400, "not_for_custom_roles"), made.text
+    builder = next(r for r in BUILTIN_ROLES if r.id == "builder")
+    cells = [{"area": a, "action": x, "scope": s} for a, x, s in builder.grants] + [owns]
+    edited = await platform.public.put("/v1/roles/builder/permissions", headers=ah, json={"permissions": cells})
+    assert (edited.status_code, edited.json()["error"]["code"]) == (400, "owner_only"), edited.text
+
+
+async def test_a_workspace_admin_cannot_edit_owner_or_security_admin_with_one_cell_or_none(platform: Platform) -> None:
+    """Owner and Security admin come by rule; an edit that narrowed Owner locked the workspace out of a transfer, and
+    an empty list left it read as the seed by one check and as nothing by another."""
+    _, ah = await _admin(platform)
+    one = [{"area": "knowledge", "action": "view", "scope": "all"}]
+    for role in ("owner", "security_admin"):
+        for cells in (one, []):
+            r = await platform.public.put(f"/v1/roles/{role}/permissions", headers=ah, json={"permissions": cells})
+            assert (r.status_code, r.json()["error"]["code"]) == (409, "role_set_by_rule"), (role, cells, r.text)
+        read = await platform.public.get(f"/v1/roles/{role}", headers=ah)
+        assert read.json()["data"]["canEdit"] is False, read.text
+
+
 async def test_names_are_unique_and_built_in_roles_keep_theirs(platform: Platform) -> None:
     _, ah = await _admin(platform)
     first = (await platform.public.post("/v1/roles", headers=ah, json={"name": "Fraud desk"})).json()["data"]

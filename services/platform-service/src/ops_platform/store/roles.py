@@ -27,6 +27,8 @@ from ops_access import (
     Grids,
     active,
     builtin_roles_for,
+    effective_grids,
+    privileged_cells,
 )
 from ops_access.catalogue import ADMIN
 from ops_access.check import FetchGrids
@@ -40,7 +42,7 @@ from ops_store.listing import ListPage, list_page
 from ops_store.rows import one, rows
 
 from .audit import record
-from .tables import members, role_assignments, role_permissions, roles, teams, tenants, users
+from .tables import group_members, members, role_assignments, role_permissions, roles, teams, tenants, users
 from .tenancy import TenantDb
 
 MEMBERSHIP = "membership"
@@ -52,6 +54,14 @@ class RoleNameTakenError(Exception):
 
 class AlreadyGrantedError(Exception):
     """The person holds that role in that team already."""
+
+
+class PrivilegedForGroupError(Exception):
+    """The role holds cells a group's assignment never carries (`ops_access.PRIVILEGED`); `cells` names them."""
+
+    def __init__(self, cells: list[str]) -> None:
+        super().__init__("privileged role for a group")
+        self.cells = cells
 
 
 class RoleSummary(Out):
@@ -83,7 +93,7 @@ class RoleRow(Out):
 
 
 class RoleHolderRow(Out):
-    kind: Literal["person", "team"]
+    kind: Literal["person", "team", "group"]
     id: str
     team_id: str
     # The person's name, or the id when the holder is a team or a person with no name.
@@ -110,7 +120,7 @@ class GrantRef(Out):
 
 
 class _Held(Out):
-    subject_kind: Literal["person", "team"]
+    subject_kind: Literal["person", "team", "group"]
     subject_id: str
     team_id: str
     name: str | None
@@ -476,12 +486,34 @@ class RoleStore(TenantDb):
 
     async def grant(self, tenant_id: str, user_id: str, role_id: str, team_id: str, *, by: str, request_id: str) -> str:
         """Gives the person a role in a team, audited as `role.grant`; AlreadyGrantedError when they hold it there."""
+        return await self.assign(
+            tenant_id, subject_kind="person", subject_id=user_id, role_id=role_id, team_id=team_id, by=by,
+            request_id=request_id,
+        )  # fmt: skip
+
+    async def assign(
+        self,
+        tenant_id: str,
+        *,
+        subject_kind: Literal["person", "group"],
+        subject_id: str,
+        role_id: str,
+        team_id: str,
+        by: str,
+        request_id: str,
+        expires_at: str | None = None,
+    ) -> str:
+        """Gives a person or a group a role in one team or in every team (`*`), audited as `role.grant`. A group is
+        never given a role holding a privileged cell there (PrivilegedForGroupError naming the cells);
+        AlreadyGrantedError when the subject holds the role there already."""
         grant_id = new_id("ras")
         async with self.tenant_tx(tenant_id) as c:
+            if subject_kind == "group":
+                await _refuse_privileged_for_group(c, tenant_id, role_id, team_id)
             held = await c.execute(
                 sa.select(role_assignments.c.id).where(
-                    role_assignments.c.subject_kind == "person",
-                    role_assignments.c.subject_id == user_id,
+                    role_assignments.c.subject_kind == subject_kind,
+                    role_assignments.c.subject_id == subject_id,
                     role_assignments.c.role_id == role_id,
                     role_assignments.c.team_id == team_id,
                 )
@@ -492,10 +524,11 @@ class RoleStore(TenantDb):
                 role_assignments.insert().values(
                     id=grant_id,
                     tenant_id=tenant_id,
-                    subject_kind="person",
-                    subject_id=user_id,
+                    subject_kind=subject_kind,
+                    subject_id=subject_id,
                     role_id=role_id,
                     team_id=team_id,
+                    expires_at=expires_at,
                     granted_by=by,
                     reason="Given on Access",
                     source="grant",
@@ -506,11 +539,11 @@ class RoleStore(TenantDb):
             await record(
                 c,
                 tenant_id=tenant_id,
-                team_id=team_id,
+                team_id=None if team_id == ANY_TEAM else team_id,
                 actor=by,
                 action="role.grant",
-                target_kind="person",
-                target_id=user_id,
+                target_kind=subject_kind,
+                target_id=subject_id,
                 request_id=request_id,
                 detail={"roleId": role_id, "teamId": team_id},
             )
@@ -524,13 +557,20 @@ class RoleStore(TenantDb):
             return await one(c, q, GrantRef)
 
     async def ungrant(self, tenant_id: str, grant_id: str, *, by: str, request_id: str) -> bool:
-        """Takes a given role away, audited as `role.ungrant`; False when no such grant."""
+        """Takes a given role away from a person or a group, audited as `role.ungrant`; False when no such grant.
+        Taking a group's away ends only what that assignment gave: each person keeps what they hold on their own or
+        through another group."""
         async with self.tenant_tx(tenant_id) as c:
             row = (
                 await c.execute(
                     role_assignments.delete()
                     .where(role_assignments.c.id == grant_id, role_assignments.c.source == "grant")
-                    .returning(role_assignments.c.subject_id, role_assignments.c.role_id, role_assignments.c.team_id)
+                    .returning(
+                        role_assignments.c.subject_id,
+                        role_assignments.c.role_id,
+                        role_assignments.c.team_id,
+                        role_assignments.c.subject_kind,
+                    )
                 )
             ).first()
             if row is None:
@@ -539,10 +579,10 @@ class RoleStore(TenantDb):
             await record(
                 c,
                 tenant_id=tenant_id,
-                team_id=str(row[2]),
+                team_id=None if row[2] == ANY_TEAM else str(row[2]),
                 actor=by,
                 action="role.ungrant",
-                target_kind="person",
+                target_kind=str(row[3]),
                 target_id=str(row[0]),
                 request_id=request_id,
                 detail={"roleId": row[1], "teamId": row[2]},
@@ -575,6 +615,9 @@ class RoleStore(TenantDb):
 
 
 async def grids_in(c: AsyncConnection, role_ids: list[str]) -> dict[str, list[Grant]]:
+    """What each role grants, as `effective_grids` answers it from the stored rows: a built-in role with no rows
+    answers its seed. Every reader here (the live check, the token's grids, the group guard, the roles page) reads
+    through it."""
     q = (
         sa.select(
             role_permissions.c.role_id, role_permissions.c.area, role_permissions.c.action, role_permissions.c.scope
@@ -585,7 +628,7 @@ async def grids_in(c: AsyncConnection, role_ids: list[str]) -> dict[str, list[Gr
     out: dict[str, list[Grant]] = {}
     for role_id, area, action, scope in (await c.execute(q)).all():
         out.setdefault(str(role_id), []).append((str(area), str(action), "own" if scope == "own" else "all"))
-    return out
+    return {r: list(g) for r, g in effective_grids(out, [r for r in role_ids if r in out or r in BUILTIN_IDS]).items()}
 
 
 async def _name_free(c: AsyncConnection, tenant_id: str, name: str, role_id: str | None) -> None:
@@ -670,13 +713,17 @@ async def holdings_in(c: AsyncConnection, user_id: str) -> Holdings:
 
 
 async def holdings_with(c: AsyncConnection, user_id: str, names: dict[str, str]) -> Holdings:
-    """The one holdings read, in one statement, given the person's active member teams (id to name): the assignments
-    made to them or to one of those teams, and the names of teams only an assignment names. An assignment counts only
+    """The one holdings read, given the person's active member teams (id to name): the assignments made to them, to one
+    of those teams or to a group they are in, and the names of teams only an assignment names. An assignment counts only
     in every team (`*`) or in an active team: an archived team's, or one whose row is gone, grants nothing, since
-    acting there answers 403. `/v1/me` and `/v1/me/permissions` both read it."""
+    acting there answers 403. A group's assignment of a role that holds a privileged cell where it is given counts for
+    nothing, whenever the role gained the cell. `/v1/me`, `/v1/me/permissions` and the token's `access` claim all
+    read it."""
+    groups = sa.select(group_members.c.group_id).where(group_members.c.user_id == user_id)
     subject = sa.or_(
         sa.and_(role_assignments.c.subject_kind == "person", role_assignments.c.subject_id == user_id),
         sa.and_(role_assignments.c.subject_kind == "team", role_assignments.c.subject_id.in_(list(names))),
+        sa.and_(role_assignments.c.subject_kind == "group", role_assignments.c.subject_id.in_(groups)),
     )
     q = (
         sa.select(
@@ -686,6 +733,7 @@ async def holdings_with(c: AsyncConnection, user_id: str, names: dict[str, str])
             role_assignments.c.subject_kind,
             role_assignments.c.expires_at,
             teams.c.name,
+            role_assignments.c.tenant_id,
         )
         .join(roles, roles.c.id == role_assignments.c.role_id)
         .outerjoin(teams, teams.c.id == role_assignments.c.team_id)
@@ -693,10 +741,28 @@ async def holdings_with(c: AsyncConnection, user_id: str, names: dict[str, str])
         .order_by(role_assignments.c.created_at, role_assignments.c.id)
     )
     rows = (await c.execute(q)).all()
+    by_group = [r for r in rows if r[3] == "group"]
+    if by_group:
+        grids = await grids_in(c, sorted({str(r[0]) for r in by_group}))
+        security = (
+            await c.execute(sa.select(tenants.c.security_team_id).where(tenants.c.id == by_group[0][6]))
+        ).scalar()
+        rows = [
+            r
+            for r in rows
+            if r[3] != "group" or not privileged_cells(grids.get(str(r[0]), []), team=str(r[2]), security_team=security)
+        ]
     # A team named by an assignment but not a membership still needs its name.
     names = {**names, **{str(r[2]): str(r[5]) for r in rows if r[5] is not None and str(r[2]) not in names}}
     assignments = [Assignment(str(r[0]), str(r[1]), str(r[2]), r[3], r[4]) for r in rows]
     return Holdings(teams=names, assignments=assignments)
+
+
+async def _refuse_privileged_for_group(c: AsyncConnection, tenant_id: str, role_id: str, team_id: str) -> None:
+    grants = (await grids_in(c, [role_id])).get(role_id, [])
+    security = (await c.execute(sa.select(tenants.c.security_team_id).where(tenants.c.id == tenant_id))).scalar()
+    if cells := privileged_cells(grants, team=team_id, security_team=security):
+        raise PrivilegedForGroupError(cells)
 
 
 async def version_in(c: AsyncConnection, tenant_id: str) -> int:
@@ -711,7 +777,7 @@ async def bump_version(c: AsyncConnection, tenant_id: str) -> None:
 
 
 async def ensure_builtin_roles(c: AsyncConnection, tenant_id: str, *, at: str) -> None:
-    """The five built-in roles and their grid for a tenant made after migration 0006 (the dev seed, tests). Rows that
+    """The seven built-in roles and their grid for a tenant made after migration 0006 (the dev seed, tests). Rows that
     exist are left as they are; a missing one is added."""
     q = sa.select(roles.c.id).where(roles.c.tenant_id == tenant_id, roles.c.id.in_(sorted(BUILTIN_IDS)))
     have = {str(r) for r in (await c.execute(q)).scalars()}

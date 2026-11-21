@@ -104,6 +104,7 @@ BOTH_DATABASES = frozenset(
         "test_signin_secrets.py",
         "test_api_keys.py",
         "test_step_up.py",
+        "test_role_assignments.py",
     }
 )
 

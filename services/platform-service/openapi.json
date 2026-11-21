@@ -2414,7 +2414,8 @@
           "via": {
             "enum": [
               "person",
-              "team"
+              "team",
+              "group"
             ],
             "title": "Via",
             "type": "string"
@@ -4060,7 +4061,9 @@
               "names",
               "choice",
               "app_changes",
-              "app_changes_by_app"
+              "app_changes_by_app",
+              "by_area",
+              "floor_rules"
             ],
             "title": "Kind",
             "type": "string"
@@ -4747,7 +4750,8 @@
           "kind": {
             "enum": [
               "person",
-              "team"
+              "team",
+              "group"
             ],
             "title": "Kind",
             "type": "string"

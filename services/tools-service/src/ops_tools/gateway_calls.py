@@ -282,7 +282,7 @@ class GatewayCalls:
         clock: Callable[[], float] = time.time,
         approvals: WriteApprovals | None = None,
         approver: Callable[[Principal], bool] | None = None,
-        requester_may_decide: Callable[[str], Awaitable[bool]] | None = None,
+        requester_may_decide: Callable[[str, str | None], Awaitable[bool]] | None = None,
     ) -> None:
         self.registry = registry
         # The tenant's requesterMayDecide, read live at each call; without it the policy's default (off) holds.
@@ -347,7 +347,7 @@ class GatewayCalls:
         """`caller` carrying the tenant's requesterMayDecide as read at this call, in place of the token's copy."""
         if self.requester_may_decide is None:
             return caller
-        may_decide = await self.requester_may_decide(caller.tenant_id)
+        may_decide = await self.requester_may_decide(caller.tenant_id, caller.team_id)
         return caller.model_copy(update={"policies": {**caller.policies, "requesterMayDecide": may_decide}})
 
     async def _asker_refusal(self, tenant_id: str, req: CallRequest) -> Forbidden | None:
@@ -357,7 +357,7 @@ class GatewayCalls:
         if req.acting_for is None:
             return None
         may_decide = (
-            await self.requester_may_decide(tenant_id)
+            await self.requester_may_decide(tenant_id, req.acting_for.team_id)
             if self.requester_may_decide is not None
             else BY_KEY["requesterMayDecide"].default is True
         )

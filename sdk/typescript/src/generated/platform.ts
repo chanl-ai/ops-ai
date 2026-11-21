@@ -2535,7 +2535,7 @@ export interface components {
              * Via
              * @enum {string}
              */
-            via: "person" | "team";
+            via: "person" | "team" | "group";
         };
         /** GridRow */
         GridRow: {
@@ -3077,7 +3077,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "bool" | "floor" | "days" | "hours" | "publish_modes" | "names" | "choice" | "app_changes" | "app_changes_by_app";
+            kind: "bool" | "floor" | "days" | "hours" | "publish_modes" | "names" | "choice" | "app_changes" | "app_changes_by_app" | "by_area" | "floor_rules";
             /** Note */
             note?: string | null;
             /** Title */
@@ -3284,7 +3284,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "person" | "team";
+            kind: "person" | "team" | "group";
             /** Name */
             name: string;
             /** Teamid */

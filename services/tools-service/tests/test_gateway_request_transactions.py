@@ -84,5 +84,5 @@ async def test_gateway_reads_and_local_writes_each_hold_one_transaction_and_none
         line = next(json.loads(x) for x in stream.getvalue().splitlines() if '"http.request"' in x)
         counts[name] = int(line["db.tx_count"])
     assert counts == {name: 1 for name, *_ in steps}, counts
-    # platform-service is asked twice per list (the team's levels, then each app's).
-    assert gateway.held == [0, 0] * 2, gateway.held
+    # platform-service is asked three times per list (the team's levels, each app's, then the Security team's floor).
+    assert gateway.held == [0, 0, 0] * 2, gateway.held

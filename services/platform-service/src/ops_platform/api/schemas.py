@@ -519,7 +519,7 @@ class RoleGrantOut(Out):
 
 
 class RoleHolderOut(Out):
-    kind: Literal["person", "team"]
+    kind: Literal["person", "team", "group"]
     id: str
     team_id: str
     name: str
@@ -529,7 +529,7 @@ class RoleHolderOut(Out):
 class GrantingRole(Out):
     id: str
     name: str
-    via: Literal["person", "team"]
+    via: Literal["person", "team", "group"]
 
 
 class EffectivePermission(Out):
@@ -888,8 +888,9 @@ class PolicyOut(Out):
     changed_by: str
     effect: str
     kind: Literal[
-        "bool", "floor", "days", "hours", "publish_modes", "names", "choice", "app_changes", "app_changes_by_app"
-    ]
+        "bool", "floor", "days", "hours", "publish_modes", "names", "choice", "app_changes", "app_changes_by_app",
+        "by_area", "floor_rules",
+    ]  # fmt: skip
     title: str
     # A "choice" policy's options, in order.
     choices: list[PolicyChoice] | None = None

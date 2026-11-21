@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from ops_access import ACTIONS, ANY_TEAM, AREAS, SECURITY_TEAM_ACTIONS
-from ops_access.catalogue import ADMIN, Grant
+from ops_access.catalogue import ADMIN, FIXED_ROLES, Grant
 from ops_identity import Principal as Caller
 from ops_identity import ServiceAuth, ServiceClient, service_verifiers
 from ops_identity.fastapi import Tx
@@ -691,7 +691,8 @@ def create_public_app(
         acting_actor: Annotated[Actor, Depends(reading)],
     ) -> Any:
         """One role and its grid: every area and action in the catalogue, with the scope it grants or null, and
-        whether the caller may change it (`canEdit`: a workspace admin, for any role but Admin)."""
+        whether the caller may change it (`canEdit`: a workspace admin, for any role but Admin, Owner and Security
+        admin)."""
         await people.require_admin(acting_actor, "access", "view")
         role = await roles.get(str(claims["tenant_id"]), role_id)
         actor = Actor(str(claims["tenant_id"]), "*", str(claims["sub"]), new_id("req"))
@@ -702,6 +703,8 @@ def create_public_app(
             locked = "A workspace admin changes roles."
         if role_id == ADMIN.id:
             locked = "Admin holds every permission in its team, so it is not edited."
+        elif role_id in FIXED_ROLES:
+            locked = "This role comes with the workspace's owner or the Security team's admins, so it is not edited."
         return ok(role | {"canEdit": locked is None, "lockedReason": locked})
 
     holder_store = HolderStore(store.db)
