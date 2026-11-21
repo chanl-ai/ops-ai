@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, StringConstraints,
 from ops_access.catalogue import INVITE_ROLES
 from ops_service_kit.flags import FlagName
 from ops_service_kit.http import In, ListResult, Out
-from ops_service_kit.names import Name
+from ops_service_kit.names import Name, Name80
 
 
 class SignIn(In):
@@ -236,7 +236,7 @@ class TransferIn(In):
 class WorkspaceCloseIn(In):
     """The workspace's name, typed by its owner to confirm the delete."""
 
-    name: str = Field(min_length=1, max_length=80)
+    name: Name80
 
 
 class TeamDeleteCheckOut(Out):
@@ -330,7 +330,7 @@ class RoleCellsIn(In):
 
 
 class RoleCreateIn(In):
-    name: str = Field(min_length=1, max_length=80)
+    name: Name80
     description: str = Field(default="", max_length=500)
     # Start from another role's cells (less those a custom role may not hold), or from `permissions`, or from none.
     copy_of: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,64}$")
@@ -338,7 +338,7 @@ class RoleCreateIn(In):
 
 
 class RolePatchIn(In):
-    name: str = Field(min_length=1, max_length=80)
+    name: Name80
     description: str | None = Field(default=None, max_length=500)
 
 

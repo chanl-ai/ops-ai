@@ -240,7 +240,9 @@ class GuardrailRegistry(VersionedRegistry[GuardrailRow, GuardrailVersion]):
                 )
             ).first()
             if taken is not None:
-                raise Conflict(f"A guardrail named {name} exists; give this one another name.", code="name_taken")
+                # Names are compared by their slug, which stops at 120 letters.
+                cut = " Names are compared by their first 120 letters." if len(name) > 118 else ""
+                raise Conflict(f"A guardrail named {name} exists; give this one another name.{cut}", code="name_taken")
             await c.execute(
                 registry_guardrails.insert().values(
                     id=gid,

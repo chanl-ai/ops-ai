@@ -9,6 +9,7 @@ import unicodedata
 from typing import Annotated
 
 from pydantic import BeforeValidator, Field
+from pydantic_core import PydanticCustomError
 
 # Room for "-" and up to four digits, which `_unique_slug` appends when a slug is taken.
 SLUG_SUFFIX = 5
@@ -25,17 +26,21 @@ def clean_name(value: object) -> object:
         return value
     name = value.strip()
     if not name:
-        raise ValueError("The name cannot be blank.")
+        raise PydanticCustomError("name_blank", "The name cannot be blank.")
     if has_control(name):
-        raise ValueError("The name cannot hold a control character or a line break.")
+        raise PydanticCustomError("name_control", "The name cannot hold a control character or a line break.")
     return name
 
 
 # A name stored in a 200-wide column (agent, guardrail, skill, form title) and one in a 120-wide column (an MCP link).
 Name = Annotated[str, BeforeValidator(clean_name), Field(min_length=1, max_length=200)]
 Name120 = Annotated[str, BeforeValidator(clean_name), Field(min_length=1, max_length=120)]
+Name80 = Annotated[str, BeforeValidator(clean_name), Field(min_length=1, max_length=80)]
+# A file name is capped but not checked for control characters: files-service sanitises it before it keeps the bytes.
+FileName = Annotated[str, Field(min_length=1, max_length=255)]
 
 
-def cap_slug(slug: str, width: int, *, reserve: int = 0) -> str:
-    """`slug` cut to `width` less `reserve`, with no hyphen left dangling at the cut."""
-    return slug[: width - reserve].rstrip("-")
+def cap_slug(slug: str, width: int, *, reserve: int = 0, sep: str = "-") -> str:
+    """The one cutter of a slug made from a name: `slug` cut to `width` less `reserve`, with no `sep` left dangling at
+    the cut."""
+    return slug[: width - reserve].rstrip(sep)

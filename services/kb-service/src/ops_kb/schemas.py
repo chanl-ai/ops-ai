@@ -251,7 +251,7 @@ class SourceStages(Out):
 class KnowledgeBaseIn(In):
     # A caller-chosen id, for knowledge bases that agents were granted before they moved here; kb-service makes one.
     id: str | None = Field(default=None, pattern=r"^kb_[a-z0-9_]{1,60}$")
-    name: str
+    name: Name
     # Set by the provisioning service only.
     template_id: str | None = Field(default=None, min_length=1, max_length=120)
     protection: Literal["system", "managed"] | None = None
@@ -274,7 +274,7 @@ class KnowledgeBasePatch(In):
     # Set by the provisioning service only.
     template_id: str | None = Field(default=None, min_length=1, max_length=120)
     protection: Literal["system", "managed"] | None = None
-    name: str | None = None
+    name: Name | None = None
     owner: str | None = None
     description: str | None = None
     color: str | None = None
@@ -296,7 +296,7 @@ class AttachIn(In):
 
 class SourceIn(In):
     type: str
-    name: str
+    name: Name
     collection: str = ""
     owner: str | None = None
     sensitivity: str = "internal"
@@ -720,7 +720,7 @@ class QueryIn(In):
 
 
 class PageIn(In):
-    title: str = Field(max_length=200)
+    title: Name
     text: str = Field(max_length=100_000)
 
 
@@ -729,7 +729,7 @@ class WrittenItemIn(In):
     unchanged, with new content it is the item's next version."""
 
     name: Name
-    title: str | None = Field(default=None, max_length=200)
+    title: Name | None = None
     # Markdown by default; `mime` text/plain or text/html for other text.
     text: str | None = Field(default=None, max_length=1_000_000)
     # A file's bytes in base64 (a PDF, a Word document), with its `mime`.
@@ -1065,7 +1065,7 @@ class SourcePreview(Out):
 
 
 class SourcePatch(In):
-    name: str | None = None
+    name: Name | None = None
     # A source read through an app: its own settings (a site's start, include and exclude, depth, pace), merged over
     # the saved ones and checked against what the plugin declares.
     values: Json | None = None

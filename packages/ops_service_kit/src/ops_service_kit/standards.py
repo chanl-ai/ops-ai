@@ -115,8 +115,9 @@ def check_env(path: Path, tree: ast.AST, allowed: Path) -> list[str]:
 
 
 def check_names(path: Path, tree: ast.AST, baseline: set[str]) -> list[str]:
-    """A request model's name, title or label field is a `Name`: trimmed, never blank, no control character, capped at
-    its column. A bare `str` is refused unless it carries a `pattern` or is in the baseline."""
+    """MD5 (docs/architecture/standards/api-and-models.md): a request model's name, title or label field is a `Name`:
+    trimmed, never blank, no control character, capped at its column. A bare `str` is refused unless it carries a
+    `pattern` or is in the baseline."""
     at = _at(path)
     out: list[str] = []
     for cls in (n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)):
@@ -131,7 +132,7 @@ def check_names(path: Path, tree: ast.AST, baseline: set[str]) -> list[str]:
                 continue
             key = f"{at}:{cls.name}.{node.target.id}"
             if key not in baseline:
-                out.append(f"{at}:{node.lineno} names: {cls.name}.{node.target.id} is a bare str; use names.Name")
+                out.append(f"{at}:{node.lineno} MD5 names: {cls.name}.{node.target.id} is a bare str; use names.Name")
     return out
 
 

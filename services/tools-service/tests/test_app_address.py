@@ -151,3 +151,12 @@ async def test_a_module_made_with_a_tool_needs_no_type(gateway: Gateway) -> None
     body = {k: v for k, v in made_by_path(gateway, conn).items() if k != "type"}
     r = await gateway.client.post("/v1/tool-modules", json=body, headers=TEAM)
     assert r.status_code == 201 and r.json()["data"]["type"] == "http", r.text
+
+
+async def test_an_app_name_wider_than_its_column_is_refused_with_400(
+    gateway: Gateway,  # noqa: F811
+) -> None:
+    body = {"displayName": "Ledger", "name": "x" * 121, "type": "http"}
+    made = await gateway.client.post("/v1/tool-modules/blank", json=body, headers=TEAM)
+    assert made.status_code == 400, made.text
+    assert "Value error" not in made.text, made.text

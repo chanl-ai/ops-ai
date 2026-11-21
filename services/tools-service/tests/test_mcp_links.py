@@ -173,7 +173,7 @@ async def test_a_link_takes_only_tools_the_team_can_run(stack: Stack) -> None:
 
 
 async def test_a_blank_control_character_or_over_long_link_name_is_refused_with_400(stack: Stack) -> None:
-    tools = [{"id": "run_payroll", "label": "Run payroll"}]
+    tools = [{"id": "lookup_case", "label": "Look up a case"}]
     async with _rest(stack, "linker") as rest:
         for name in ("   ", "Claims\x00lookups", "Claims\r\nlookups", "x" * 121):
             r = await rest.post("/v1/mcp-links", json={"name": name, "tools": tools})

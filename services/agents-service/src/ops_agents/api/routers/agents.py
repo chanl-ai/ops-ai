@@ -197,7 +197,7 @@ class EvalCaseContextInput(In):
 
 
 class EvalCaseInput(In):
-    name: str
+    name: Name
     input: str
     context: EvalCaseContextInput | None = None
     checks: list[EvalCheckInput] = Field(default_factory=list[EvalCheckInput])

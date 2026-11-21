@@ -50,3 +50,9 @@ async def test_a_blank_or_control_character_name_is_refused_with_400_by_every_ro
     for path, body in routes.items():
         r = await client.post(path, json=body, headers=OPS)
         assert r.status_code == 400 and r.json()["success"] is False, (path, r.text)
+
+
+async def test_two_guardrail_names_equal_in_their_first_120_letters_say_so(client: AsyncClient) -> None:
+    ok(await client.post("/v1/guardrails", json={"name": LONG + "one", **GUARDRAIL}, headers=OPS), 201)
+    again = await client.post("/v1/guardrails", json={"name": LONG + "two", **GUARDRAIL}, headers=OPS)
+    assert again.status_code == 409 and "first 120 letters" in again.json()["error"]["message"], again.text

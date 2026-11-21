@@ -78,7 +78,7 @@ class AnotherOwnIn(In):
 
 class AccountPatchIn(In):
     revision: int = Field(ge=1)
-    name: str | None = Field(default=None, max_length=200)
+    name: Name | None = None
     sign_in: SignIn | None = None
     team_backup: bool | None = None
     # The account a test run of the app uses; a live run never signs in with it.
