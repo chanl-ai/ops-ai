@@ -12184,7 +12184,8 @@
       "secrets_egress.decide",
       "secrets_egress.manage",
       "settings.view",
-      "settings.manage"
+      "settings.manage",
+      "workspace.manage"
     ],
     "permissionCount": 1,
     "permissions": [
