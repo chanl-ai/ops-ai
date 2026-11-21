@@ -35,7 +35,7 @@ import type { SkillDetail } from '@/lib/types/skills';
 
 import { ActivityTab } from './_parts/activity-tab';
 import { ResourcesTab } from './_parts/resources-tab';
-import { type Form as SkillForm, SkillEditor } from './_parts/skill-editor';
+import { type KeptText, type Form as SkillForm, SkillEditor } from './_parts/skill-editor';
 import { TestsTab } from './_parts/tests-tab';
 import { VersionsTab } from './_parts/versions-tab';
 
@@ -72,6 +72,8 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
   // The editor is drawn again for each saved version; after a save someone else made first, it hands its unsaved text
   // here so the form drawn on their version starts with it.
   const carried = React.useRef<Carried<SkillForm> | null>(null);
+  // The person's own text after that reload, kept read-only beside theirs.
+  const keptText = React.useRef<KeptText | null>(null);
   const waits = unsaved && (panel === 'resources' || panel === 'versions');
   const request = useRequestSkillReview(s.id);
   const deprecate = useDeprecateSkill(s.id);
@@ -286,7 +288,7 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
                 </>
               }
             >
-              <SkillEditor key={`${newest.version}-${newest.savedAt}`} skill={s} canEdit={canBuild} onDirtyChange={setUnsaved} carried={carried} />
+              <SkillEditor key={`${newest.version}-${newest.savedAt}`} skill={s} canEdit={canBuild} onDirtyChange={setUnsaved} carried={carried} keptText={keptText} />
             </RecordLayout>
             </BuilderFieldset>
           </div>

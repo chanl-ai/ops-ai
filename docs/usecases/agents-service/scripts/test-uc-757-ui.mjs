@@ -114,7 +114,8 @@ await withUiStack(
         drawn === 1 && ['tool', 'agent', 'workflow'].includes(kept.use?.kind) && kept.do?.includes(`@${kept.use.kind}:${kept.use.id}`),
         { drawn, kept, keptSteps },
       );
-      // Someone else saves first: James's save is refused, and Reload keeps what he typed on top of their version.
+      // Someone else saves first: James's save is refused. Reload shows their text and keeps his as a read-only copy,
+      // and nothing saves over their text unless he chooses to.
       // The button is off while the save is in flight, so the saved toast is waited for first.
       await page.getByText(/Saved draft v1/).first().waitFor({ timeout: 60_000 });
       await page.waitForFunction(() => document.querySelector('[data-testid="save-skill-draft"]')?.disabled === true, null, { timeout: 60_000 });
@@ -131,27 +132,82 @@ await withUiStack(
       check('10 unsaved text survives a resize to 390 and back, still unsaved', /Then thank them\./.test(await doc.innerText()) && (await page.getByTestId('save-skill-draft').isEnabled()), await doc.innerText());
       await made(`/v1/skills/${skill.id}/publish-requests`, { note: 'use case' });
       const open = (await (await fetch(`${agents}/v1/skills/${skill.id}`, { headers: J })).json()).data;
-      await made(`/v1/skills/${skill.id}/draft`, { name: `Card dispute renamed ${RUN}`, baseVersion: open.version, baseDigest: open.digest }, 'PUT');
+      const THEIRS = 'Ask whether there is anything else.';
+      await made(`/v1/skills/${skill.id}/draft`, { name: `Card dispute renamed ${RUN}`, source: `${open.text}\n${THEIRS}`, baseVersion: open.version, baseDigest: open.digest }, 'PUT');
       await page.getByTestId('save-skill-draft').click();
       await page.getByTestId('save-skill-draft-confirm').click();
       const staleAlert = page.getByTestId('skill-stale-base');
       const refusedStale = await staleAlert.waitFor({ timeout: 60_000 }).then(() => true, () => false);
       await page.getByTestId('skill-stale-reload').click();
       await staleAlert.waitFor({ state: 'detached', timeout: 60_000 }).catch(() => undefined);
-      await lineOf('Then thank them.').waitFor({ timeout: 60_000 }).catch(() => undefined);
+      await lineOf(THEIRS).waitFor({ timeout: 60_000 }).catch(() => undefined);
       const afterReload = await doc.innerText();
       const fields = await page.locator('input').evaluateAll((els) => els.map((el) => el.value));
       check(
-        '10 after someone else saves first, Reload shows their version and keeps the unsaved text',
-        refusedStale && /Then thank them\./.test(afterReload) && fields.includes(`Card dispute renamed ${RUN}`),
+        '10 after someone else saves first, Reload shows their text and name, not his',
+        refusedStale && afterReload.includes(THEIRS) && !/Then thank them\./.test(afterReload) && fields.includes(`Card dispute renamed ${RUN}`),
         { refusedStale, afterReload, fields },
       );
+      const notice = page.getByTestId('skill-kept-copy');
+      await page.getByTestId('skill-kept-copy-open').click();
+      const copy = page.getByTestId('skill-kept-copy-text');
+      await copy.waitFor({ timeout: 10_000 }).catch(() => undefined);
+      const copyText = (await copy.innerText().catch(() => '')) ?? '';
+      const copyLocked = await copy.locator('[contenteditable="true"]').count();
+      check('10 his text is kept as a read-only copy he can open', (await notice.count()) === 1 && /Then thank them\./.test(copyText) && copyLocked === 0, { copyText, copyLocked });
+      await shootBothWidths(page, AREA, 'uc-757-skill-kept-copy', async () => {
+        await page.waitForTimeout(600);
+        await notice.scrollIntoViewIfNeeded().catch(() => undefined);
+      });
+      // He copies his sentence across by hand; the save keeps their text with it, and their name.
+      await lineOf(THEIRS).click();
+      await page.keyboard.press('End');
+      await page.keyboard.insertText(' Then thank them.');
       const onTop = armed(page.waitForResponse((r) => r.request().method() === 'PUT' && r.url() === `${agents}/v1/skills/${skill.id}/draft`, { timeout: 60_000 }));
       await page.getByTestId('save-skill-draft').click();
       await page.getByTestId('save-skill-draft-confirm').click();
       const top = (await (await onTop).json()).data ?? {};
       const topSteps = top.content?.steps ?? [];
-      check('10 the kept text then saves on top of their version', top.name === `Card dispute renamed ${RUN}` && topSteps.some((s) => /Then thank them\./.test(s.do ?? '')) && topSteps.some((s) => s.use?.id === kept.use?.id), { name: top.name, topSteps });
+      const said = topSteps.map((s) => s.do ?? '').join('\n');
+      check('10 the save after Reload keeps their text and what he copied in', top.name === `Card dispute renamed ${RUN}` && said.includes(THEIRS) && /Then thank them\./.test(said) && topSteps.some((s) => s.use?.id === kept.use?.id), { name: top.name, topSteps });
+      await page.getByTestId('skill-kept-copy-drop').click();
+      check('10 dropping the copy closes the notice', (await notice.count()) === 0, await notice.count());
+      // The race: Reload refetches the skill, and the editor must open on that copy, not on the one read before it.
+      // Five rounds in a row on a page whose timers run late, so the cache tells the page a moment after the read lands.
+      const raced = await made('/v1/skills', { name: `Reload race ${RUN}`, ownerTeam: 'team_ops', useWhen: 'The cardholder asks what happens next.', instructions: '', source: 'Say hello to the cardholder.\nTell them what happens next.' });
+      const slow = await page.context().newPage();
+      watch(slow, 'james-slow');
+      await slow.addInitScript(() => {
+        const real = window.setTimeout.bind(window);
+        window.setTimeout = (fn, ms, ...rest) => real(fn, ms === undefined || ms === 0 ? 60 : ms, ...rest);
+      });
+      const slowLine = (text) => slow.getByTestId('sop-editor').locator('.cm-line', { hasText: text });
+      const rounds = [];
+      for (let n = 1; n <= 5; n += 1) {
+        await slow.goto(`${consoleUrl}/build/skills/${raced.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await slowLine('Tell them what happens next').waitFor({ timeout: 120_000 });
+        await slowLine('Tell them what happens next').click();
+        await slow.keyboard.press('End');
+        await slow.keyboard.insertText(` mine${n}.`);
+        const read = (await (await fetch(`${agents}/v1/skills/${raced.id}`, { headers: J })).json()).data;
+        const put = await fetch(`${agents}/v1/skills/${raced.id}/draft`, { method: 'PUT', headers: J, body: JSON.stringify({ source: `${read.text}\nSay theirs${n}.`, baseVersion: read.version, baseDigest: read.digest }) });
+        await slow.getByTestId('save-skill-draft').click();
+        await slow.getByTestId('save-skill-draft-confirm').click();
+        await slow.getByTestId('skill-stale-base').waitFor({ timeout: 30_000 });
+        await slow.getByTestId('skill-stale-reload').click();
+        await slow.getByTestId('skill-stale-base').waitFor({ state: 'detached', timeout: 30_000 }).catch(() => undefined);
+        await slowLine(`theirs${n}`).waitFor({ timeout: 30_000 }).catch(() => undefined);
+        const shown = await slow.getByTestId('sop-editor-content').innerText();
+        await slow.getByTestId('skill-kept-copy-open').click().catch(() => undefined);
+        const copied = await slow.getByTestId('skill-kept-copy-text').innerText().catch(() => '');
+        // Long enough for a save to land, were one going to.
+        await slow.waitForTimeout(1500);
+        const stored = (await (await fetch(`${agents}/v1/skills/${raced.id}`, { headers: J })).json()).data?.text ?? '';
+        rounds.push({ n, put: put.status, shown: shown.includes(`theirs${n}`) && !shown.includes(`mine${n}`), copy: copied.includes(`mine${n}`), kept: stored.includes(`theirs${n}`) && !stored.includes(`mine${n}`) });
+        await slow.getByTestId('skill-kept-copy-drop').click().catch(() => undefined);
+      }
+      check('10 Reload shows the newest saved text and keeps his as a copy, five times in a row', rounds.every((r) => r.put === 200 && r.shown && r.copy && r.kept), rounds);
+      await slow.close();
       await shootBothWidths(page, AREA, 'uc-757-skill-admin', async () => {
         await page.waitForTimeout(600);
         await page.getByTestId('skill-results-section').scrollIntoViewIfNeeded().catch(() => undefined);

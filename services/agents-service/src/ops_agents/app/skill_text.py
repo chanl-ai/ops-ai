@@ -76,7 +76,6 @@ _IF = re.compile(r"^if\s+(.+?)\s*:\s*$", re.IGNORECASE)
 _ELSE = re.compile(r"^(?:else|otherwise)\s*:\s*$", re.IGNORECASE)
 # A pasted list item: `•`, `-`, `*`, `1.` or `1)`. Its indent opens nothing, and its marker is not read: `2. If
 # found:` is a path like `If found:`.
-_NUMBERED = re.compile(r"^\d{1,3}[.)]\s+")
 _LIST = re.compile(r"^(?:[\u2022\u2023\u25e6\u2043\u2219*-]|\d{1,3}[.)])\s+")
 # The keyword reads in any case, as `if` and `else` do; an exit name stays lower case.
 _STOP = re.compile(r"^(?i:stop)(?:\s+([a-z][a-z0-9_]{0,31}))?(?:\s+([\"\u201c'].*[\"\u201d']))?\s*$")
@@ -183,6 +182,9 @@ class Reading:
 class _Text:
     line: int
     text: str
+    # A line with a list marker (`1.`, `-`, `•`) at the top level, not indented under another line: the author's own
+    # step, whatever it mentions.
+    listed: bool = False
 
 
 @dataclass
@@ -274,6 +276,10 @@ class _Parser:
         self.marks = marks
         self.i = 0
 
+    def top(self) -> list[_Item]:
+        """The text's top level, at its least indented line: a list pasted with every line indented is still a list."""
+        return self.block(min((ind for _, ind, _ in self.rows), default=0))
+
     def block(self, level: int, depth: int = 0) -> list[_Item]:
         items: list[_Item] = []
         while self.i < len(self.rows):
@@ -306,7 +312,7 @@ class _Parser:
                         ),
                     }
                 )
-                items.append(_Text(line, word))
+                items.append(_Text(line, word, listed=depth == 0 and ind == level and word != txt))
             elif m := _IF.match(word):
                 body = self._inner(line, ind, depth)
                 orelse: list[_Item] = []
@@ -348,7 +354,7 @@ class _Parser:
                             }
                         )
                 # The step the agent reads drops a pasted list marker, as the keywords above do.
-                items.append(_Text(line, word))
+                items.append(_Text(line, word, listed=depth == 0 and ind == level and word != txt))
         return items
 
     def _opens(self, ind: int, at: int | None = None) -> bool:
@@ -500,9 +506,6 @@ class _Compiler:
     out: list[_Step] = field(default_factory=list[_Step])
     # The endings declared beside the text (the form's results section), then those its stop lines add.
     exits: dict[str, str] = field(default_factory=dict[str, str])
-    # Each plain line is its own step: a numbered list names its steps itself, where other text groups lines up to
-    # the next line that runs a tool.
-    per_line: bool = False
 
     def exit_for(self, stop: _Stop) -> str:
         if stop.name in BUILT_IN_EXITS:
@@ -529,6 +532,9 @@ class _Compiler:
         start = _Label()
         waiting: list[_Label] = [start]
         buffer: list[tuple[int, str]] = []
+        # The lines of `buffer` that carry a list marker: the next list line starts a step after them, and the lines
+        # under a list line (a sub-list, a note) stay part of its step.
+        listed: set[int] = set()
         last: int | None = None
         dead = False
 
@@ -566,12 +572,16 @@ class _Compiler:
                 continue
             if isinstance(item, _Text):
                 runs = [r for r in Ref.found_in(item.text) if r.kind in _STEP_KINDS]
+                # A list names its steps itself: each list line starts a step, with the plain lines above it that
+                # no list line holds. A plain line waits for the next line that runs something.
+                if item.listed and any(n in listed for n, _ in buffer):
+                    last = flush()
                 if not runs:
                     if sum(len(t) for _, t in buffer) + len(item.text) > DO_MAX - 50 and buffer:
                         last = flush()
                     buffer.append((item.line, item.text))
-                    if self.per_line:
-                        last = flush()
+                    if item.listed:
+                        listed.add(item.line)
                     continue
                 if len(runs) > 1:
                     name = self.labels.get(runs[0].token, runs[0].id)
@@ -822,7 +832,7 @@ def read(
             "depth": _indent(raw) // 4,
             "keyword": keyword,
         }
-    tree = _Parser(text, hints, frozenset(declared), marks).block(0) if text.strip() else []
+    tree = _Parser(text, hints, frozenset(declared), marks).top() if text.strip() else []
     refs = Ref.found_in(text)
     errors: list[Missing] = []
     for n, raw in enumerate(text.split("\n"), start=1):
@@ -848,16 +858,16 @@ def read(
         "workflows": counts["workflow"],
     }
     phrases = {tok: p for tok, f in fields.items() if (p := phrases_of(f))}
-    # A flat numbered list is the author's own steps even with nothing mentioned: one step per numbered line.
-    rows = [raw.strip() for raw in text.split("\n") if raw.strip()]
-    numbered = len(rows) > 1 and all(_NUMBERED.match(r) for r in rows) and not any(r.kind in _STEP_KINDS for r in refs)
-    structured = numbered or any(not isinstance(i, _Text) for i in tree) or any(r.kind in _STEP_KINDS for r in refs)
+    # Every top-level list line is a step, with or without a mention; plain paragraphs with nothing to run stay
+    # instructions the agent reads as it sees fit.
+    listed = any(isinstance(i, _Text) and i.listed for i in tree)
+    structured = listed or any(not isinstance(i, _Text) for i in tree) or any(r.kind in _STEP_KINDS for r in refs)
     if not structured:
         return Reading(None, hints, errors, uses, list(marks.values()), phrases, [], refs)
     if plain is not None:
         hints.insert(0, {"line": 1, "message": plain})
         return Reading(None, hints, errors, uses, list(marks.values()), phrases, [], refs)
-    c = _Compiler(fields, labels, hints, marks, exits=declared, per_line=numbered)
+    c = _Compiler(fields, labels, hints, marks, exits=declared)
     c.block(tree, _Label("done"))
     if len(c.out) > MAX_STEPS:
         unrun: Note = {
@@ -962,7 +972,7 @@ def stop_exits(text: str) -> dict[str, str]:
         n: {"line": n, "kind": "text", "step": None, "how": None, "tool": None, "depth": 0, "keyword": None}
         for n in range(1, text.count("\n") + 2)
     }
-    stack: list[_Item] = list(_Parser(normalised(text), [], frozenset(), marks).block(0))
+    stack: list[_Item] = list(_Parser(normalised(text), [], frozenset(), marks).top())
     while stack:
         item = stack.pop()
         if isinstance(item, _If):

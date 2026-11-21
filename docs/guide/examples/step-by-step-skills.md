@@ -129,6 +129,8 @@ prompt. Every line is an instruction to the agent. These things in it are also e
 | You write | It becomes |
 |---|---|
 | A line that mentions a tool, an agent, a workflow or a skill (`@tool:find_customer`) | A step that may use it. Plain lines above it are part of that step's instruction |
+| A numbered or bulleted line (`1.`, `-`, `•`) at the top level, with or without a mention | A step of its own. Plain lines above it are part of that step's instruction; a list indented under a plain line stays part of that line |
+| Plain paragraphs with no list marker and no mention | Instructions the agent reads as it sees fit; no steps are made |
 | The same line ending in `(locked)` | The step's tool is offered only on this line, even when it only reads |
 | `if <condition>:` with an indented block, then `else:` at the same indent | A path: the nearest tool line above it in its block decides it, so plain lines between the two stay part of that step, and the other block is skipped |
 | `stop "reason"` (or `stop <exit> "reason"`), under an `if` or `else` | An exit that ends the skill with that reason. A bare `stop <exit>` needs an ending the skill declares (or `done`, `failed`); any other bare `stop …` line is an instruction |
@@ -152,12 +154,12 @@ Thank them.
 
 A procedure pasted from a document reads as it looks: `If …:`, `Otherwise:` and `Stop "…"` work like `if …:`,
 `else:` and `stop "…"`, a list marker (`•`, `-`, `1.`) is not read, and non-breaking or full-width spaces and Windows
-line endings count as ordinary ones. Two rules keep a flat list a list:
+line endings count as ordinary ones. These rules keep a flat list a list:
 
 | Line | Reads as |
 |---|---|
 | `If …:` or `Otherwise:`, with or without a list marker, with indented lines under it | A path |
-| The same line with nothing indented under it, as in a flat numbered list (`2. If active:` / `3. Open the claim` / `4. Otherwise:`) | A plain line of its step, with a hint to indent the path |
+| The same line with nothing indented under it, as in a flat numbered list (`2. If active:` / `3. Open the claim` / `4. Otherwise:`) | A plain line (a step of its own when it has a list marker), with a hint to indent the path |
 | `Stop` or `- Stop` with no reason, under an `if` or `else` | An exit |
 | `stop`, `Stop "Reason"` or `- Stop` at the top level, outside any path, with or without a reason | A plain line, with a hint to indent it under an `if` |
 | `stop "Reason"` under an `if` or `else` | An exit |
