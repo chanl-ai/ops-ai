@@ -27,6 +27,7 @@ from ops_access import (
     Grids,
     active,
     builtin_roles_for,
+    effective_grids,
     privileged_cells,
 )
 from ops_access.catalogue import ADMIN
@@ -614,6 +615,9 @@ class RoleStore(TenantDb):
 
 
 async def grids_in(c: AsyncConnection, role_ids: list[str]) -> dict[str, list[Grant]]:
+    """What each role grants, as `effective_grids` answers it from the stored rows: a built-in role with no rows
+    answers its seed. Every reader here (the live check, the token's grids, the group guard, the roles page) reads
+    through it."""
     q = (
         sa.select(
             role_permissions.c.role_id, role_permissions.c.area, role_permissions.c.action, role_permissions.c.scope
@@ -624,7 +628,7 @@ async def grids_in(c: AsyncConnection, role_ids: list[str]) -> dict[str, list[Gr
     out: dict[str, list[Grant]] = {}
     for role_id, area, action, scope in (await c.execute(q)).all():
         out.setdefault(str(role_id), []).append((str(area), str(action), "own" if scope == "own" else "all"))
-    return out
+    return {r: list(g) for r, g in effective_grids(out, [r for r in role_ids if r in out or r in BUILTIN_IDS]).items()}
 
 
 async def _name_free(c: AsyncConnection, tenant_id: str, name: str, role_id: str | None) -> None:

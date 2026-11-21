@@ -18,9 +18,11 @@ from .service_clients import fake_service
 DANA = ActingForPerson(sub="usr_dana", email="dana@bank.example", name="Dana", team_id="team_ops")
 
 
-def platform(values: dict[str, Any]) -> Any:
+def platform(values: dict[str, Any], *, unserved: str | None = None) -> Any:
     def handler(request: httpx.Request) -> httpx.Response:
         key = request.url.path.rsplit("/", 1)[-1]
+        if key == unserved:
+            return httpx.Response(503, json={"success": False, "error": {"code": "unavailable", "message": "down"}})
         return httpx.Response(200, json={"success": True, "data": {"key": key, "value": values.get(key, {})}})
 
     return fake_service(handler, "platform", ["settings:view"])
@@ -37,3 +39,17 @@ async def test_a_looser_app_changes_value_saved_before_the_floor_waits_for_the_f
     saved = platform({"appChanges": {"team_ops": {"ask": False}}, "approvalsFloor": {"appChanges": "reviewer"}})
     got = await WriteApprovals(saved).answer("t", "team_ops", None, access="write", setting=None)
     assert (got["waits"], got["answer"]) == (True, "reviewer"), got
+
+
+async def test_a_floor_that_is_not_served_makes_every_write_wait_for_a_reviewer_and_no_asker_decide() -> None:
+    values = {"requesterMayDecide": True, "appChanges": {"team_ops": {"ask": False}}}
+    down = platform(values, unserved="approvalsFloor")
+    got = await WriteApprovals(down).answer("t", "team_ops", None, access="write", setting=None)
+    assert (got["waits"], got["answer"]) == (True, "reviewer"), got
+    assert await RequesterMayDecide(down).allowed("t", "team_ops") is False
+
+
+async def test_a_per_team_value_reads_for_the_asking_team_only() -> None:
+    per_team = platform({"requesterMayDecide": {"*": True, "team_ops": {"reviews": False}}, "approvalsFloor": {}})
+    assert await RequesterMayDecide(per_team).allowed("t", "team_ops") is False
+    assert await RequesterMayDecide(per_team).allowed("t", "team_risk") is True

@@ -157,6 +157,7 @@ packages/ops_access/src/ops_access/policies.py policy-default approvalsFloor={} 
 * conflict review_open 0 state
 * conflict review_required 0 state
 * conflict role_in_use 0 state
+* conflict role_set_by_rule 0 state
 * conflict run_active 0 state
 * conflict run_finished 0 state
 * conflict run_not_running 0 state

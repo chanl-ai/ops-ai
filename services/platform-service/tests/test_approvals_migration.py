@@ -1,9 +1,10 @@
-"""Migration 0046 changes no one's access, by failure mode: a person of any seeded role, or a Security admin, losing or
-gaining a cell when the grid gains the `approvals` area; a team's admin left without `approvals.manage`, so they could
-no longer set the team's approval rule they set before; a Builder handed it; and a built-in role an admin had edited
-to change settings losing the approval rules it could change. Runs the real chain on the test database: down to
-0045, a workspace as it stood there (its roles' cells less the new area), up to head, every person's cells compared
-per team. Synchronous: Alembic's environment runs its own event loop."""
+"""Migration 0046 changes no one's access but `workspace.manage`, which it leaves on Owner alone, by failure mode: a
+person of any seeded role, or a Security admin, losing or gaining a cell when the grid gains the `approvals` area; a
+team's admin left without `approvals.manage`, so they could no longer set the team's approval rule they set before; a
+Builder handed it; a built-in role an admin had edited to change settings losing the approval rules it could change;
+and a role saved with `workspace.manage` before only Owner could hold it keeping it. Runs the real chain on the test
+database: down to 0045, a workspace as it stood there (its roles' cells less the new area), up to head, every
+person's cells compared per team. Synchronous: Alembic's environment runs its own event loop."""
 
 from __future__ import annotations
 
@@ -178,3 +179,51 @@ def test_a_rollback_leaves_self_approval_on_only_where_the_workspace_had_it_on(d
             assert (json.loads(value) if isinstance(value, str) else value) is after, tenant
     finally:
         command.upgrade(alembic_config(), "head")
+
+
+def test_only_owner_keeps_workspace_manage_after_the_upgrade(database_url: str) -> None:
+    """Before this revision a custom role, or an edited built-in role, could be saved with `workspace.manage`."""
+    tenant, now = new_id("ten"), now_iso()
+    command.downgrade(alembic_config(), "0045_api_key_revision")
+    try:
+        writes: list[tuple[str, dict[str, Any]]] = [
+            (
+                "INSERT INTO tenants (id, name, status, allowed_domains, created_at) "
+                "VALUES (:t, :t, 'active', '[]', :now)",
+                {"t": tenant, "now": now},
+            )
+        ]
+        for role, builtin in (("owner", True), ("builder", True), ("closer", False)):
+            writes.append(
+                (
+                    "INSERT INTO roles (tenant_id, id, name, builtin, description, created_at) "
+                    "VALUES (:t, :id, :id, :b, '', :now)",
+                    {"t": tenant, "id": role, "b": builtin, "now": now},
+                )
+            )
+            for area, action in (("workspace", "manage"), ("knowledge", "view")):
+                writes.append(
+                    (
+                        "INSERT INTO role_permissions (tenant_id, role_id, area, action, scope) "
+                        "VALUES (:t, :r, :a, :x, 'all')",
+                        {"t": tenant, "r": role, "a": area, "x": action},
+                    )
+                )
+        asyncio.run(_run(database_url, writes))
+    finally:
+        command.upgrade(alembic_config(), "head")
+    [held] = asyncio.run(
+        _run(
+            database_url,
+            [
+                (
+                    "SELECT role_id, area FROM role_permissions "
+                    "WHERE tenant_id = :t AND area IN ('workspace', 'knowledge')",
+                    {"t": tenant},
+                )
+            ],
+        )
+    )
+    assert sorted((str(r), str(a)) for r, a in held) == [
+        ("builder", "knowledge"), ("closer", "knowledge"), ("owner", "knowledge"), ("owner", "workspace"),
+    ]  # fmt: skip

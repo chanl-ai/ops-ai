@@ -380,7 +380,11 @@ def check_value(key: str, value: Any) -> Any:
             return {str(a): bool(on) for a, on in areas.items()}
     if policy.kind == "floor_rules" and isinstance(value, dict):
         rules = cast(dict[Any, Any], value)
-        if all(k in FLOOR_RULES and v in FLOOR_RULES[k] for k, v in rules.items()):
+        # By type as well as value: 0 == False, so `in` alone took {requesterMayDecide: 0}, which every reader's
+        # `is False` then read as unlocked.
+        if all(
+            k in FLOOR_RULES and any(type(v) is type(t) and v == t for t in FLOOR_RULES[k]) for k, v in rules.items()
+        ):
             return {str(k): v for k, v in rules.items()}
     if policy.kind == "publish_modes" and isinstance(value, dict):
         modes = cast(dict[Any, Any], value)

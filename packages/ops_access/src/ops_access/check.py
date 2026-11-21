@@ -48,6 +48,16 @@ from .policies import policy, requester_may_decide
 
 BUILTIN_GRIDS: dict[str, tuple[Grant, ...]] = {r.id: r.grants for r in BUILTIN_ROLES}
 BUILTIN_NAMES = {r.id: r.name for r in BUILTIN_ROLES}
+
+
+def effective_grids(stored: Mapping[str, Iterable[Grant]], role_ids: Iterable[str]) -> dict[str, tuple[Grant, ...]]:
+    """The one answer for what each role grants, read by `can()`, platform-service's live check, the group guard and
+    the roles page alike: its stored rows; a built-in role with none answers its seed, and any other role nothing. Two
+    readers that answered an emptied built-in role differently let a group be given a role the live check still read
+    as privileged."""
+    return {r: tuple(stored[r]) if r in stored else BUILTIN_GRIDS.get(r, ()) for r in role_ids}
+
+
 # The role whose `*` (workspace) assignment may decide a review that names any role.
 ADMIN_ROLE = "admin"
 _CELLS = frozenset((a, x) for a in AREAS for x in ACTIONS)
@@ -79,7 +89,7 @@ class Grids:
         included; a built-in role not fetched answers its seed grid."""
         cached = self._cache.get(tenant_id)
         extra = cached[1] if cached and cached[0] == version else {}
-        return {r: extra[r] if r in extra else BUILTIN_GRIDS.get(r, ()) for r in role_ids}
+        return effective_grids(extra, role_ids)
 
     async def load(self, tenant_id: str, version: int | None, role_ids: Iterable[str]) -> None:
         """Fetches the roles the cache lacks for this version, built-in ones too, since an admin may have edited them;

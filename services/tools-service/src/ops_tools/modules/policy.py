@@ -9,13 +9,17 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
-from ops_access import BY_KEY, Access, EffectiveAnswer, effective_answer, publish_mode, team_on
+from ops_access import BY_KEY, Access, EffectiveAnswer, effective_answer, publish_mode, requester_may_decide, team_on
 from ops_identity import ActingForPerson, Principal, ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_service_kit.errors import Forbidden
 from ops_service_kit.http import Json
 from ops_service_kit.narrow import json_object
 
 from ..store.modules import Module, ModuleColumns, Operation
+
+# The area a per-team requesterMayDecide names for a tool access request or write approval: every decision here is a
+# review, as `can()` asks it (`BY_AREA_TAKES`).
+REVIEWS = "reviews"
 
 Mode = Literal["always", "major", "never"]
 MODES: tuple[Mode, ...] = ("always", "major", "never")
@@ -266,16 +270,17 @@ class RequesterMayDecide:
         self.platform = platform
         self.dev = dev or {}
 
-    async def allowed(self, tenant_id: str) -> bool:
-        """Whether whoever asked may also decide. Off while the Security team's floor (`approvalsFloor`) locks it off,
-        whatever the workspace stored. A policy or floor that cannot be read counts as off: a person never decides
-        their own request because a read failed."""
+    async def allowed(self, tenant_id: str, team_id: str | None = None) -> bool:
+        """Whether whoever asked in `team_id` may also decide, read by `requester_may_decide`, the one reader of the
+        value's shape: the team's own part over the workspace's `*`, off while the Security team's floor
+        (`approvalsFloor`) locks it. A policy or floor that cannot be read counts as off: a person never decides their
+        own request because a read failed."""
         if self.platform is None:
-            locked = json_object(self.dev.get("approvalsFloor")).get("requesterMayDecide") is False
-            return not locked and self.dev.get("requesterMayDecide", BY_KEY["requesterMayDecide"].default) is True
+            value = self.dev.get("requesterMayDecide", BY_KEY["requesterMayDecide"].default)
+            return requester_may_decide(value, team_id, REVIEWS, self.dev.get("approvalsFloor"))
         try:
             data = await self.platform.get("/v1/policies/requesterMayDecide", tenant=tenant_id)
             floor = await self.platform.get("/v1/policies/approvalsFloor", tenant=tenant_id)
-            return json_object(floor.get("value")).get("requesterMayDecide") is not False and data.get("value") is True
+            return requester_may_decide(data.get("value"), team_id, REVIEWS, floor.get("value"))
         except (ServiceCallError, ServiceUnreachable, KeyError, TypeError, ValueError, AttributeError):
             return False

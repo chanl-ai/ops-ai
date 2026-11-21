@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import NotRequired, TypedDict
 
 from ops_access import ACTIONS, ANY_TEAM, AREAS, BUILTIN_GRIDS, SECURITY_TEAM_ACTIONS, Grant, Granted, effective
-from ops_access.catalogue import ADMIN, OWNER
+from ops_access.catalogue import ADMIN, FIXED_ROLES
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
 from ops_service_kit.http import Json
 from ops_service_kit.ids import now_iso
@@ -129,16 +129,24 @@ class Roles:
         }
 
     async def edit(self, tenant_id: str, role_id: str, cells: list[Grant], *, by: str, request_id: str) -> RoleView:
-        """Sets a role's cells, built-in or custom. Admin keeps every cell: 409 `admin_holds_every_cell`. A cell outside
-        the catalogue is 400 `unknown_cell`; `workspace.manage` on a built-in role other than Owner is 400 `owner_only`.
+        """Sets a role's cells, built-in or custom. Admin keeps every cell: 409 `admin_holds_every_cell`; Owner and
+        Security admin are not edited either (`FIXED_ROLES`), 409 `role_set_by_rule`, refused before the cells are
+        read so an empty list is refused too. A cell outside the catalogue is 400 `unknown_cell`; `workspace.manage`
+        on another built-in role is 400 `owner_only`.
         The caller's right to change roles is checked by the route."""
         if role_id == ADMIN.id:
             raise Conflict("Admin holds every permission in its team; it is not edited.", code="admin_holds_every_cell")
+        if role_id in FIXED_ROLES:
+            raise Conflict(
+                "Owner and Security admin come with the workspace's owner and the Security team's admins; their "
+                "permissions are not edited.",
+                code="role_set_by_rule",
+            )
         _checked(cells)
         role = await self.store.role_by_id(tenant_id, role_id)
         if role is not None and not role.builtin:
             self._custom_cells(cells)
-        elif role_id != OWNER.id and any((a, x) == OWNER_CELL for a, x, _ in cells):
+        elif any((a, x) == OWNER_CELL for a, x, _ in cells):
             raise ValidationFailed(
                 "Only Owner holds workspace.manage; it moves from person to person by a transfer.",
                 code="owner_only",

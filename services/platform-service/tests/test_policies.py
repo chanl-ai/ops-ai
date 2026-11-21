@@ -259,6 +259,11 @@ async def test_a_team_admin_sets_their_teams_approval_rules_and_the_security_tea
     floor = {"value": {"requesterMayDecide": False}}
     assert (await signin.public.put("/v1/policies/approvalsFloor", json=floor, headers=ana)).status_code == 403
     sec = await signin.security_admin_only(f"sec.floor@{signin.zone}")
+    # 0 equals False but every reader tests `is False`, so a 0 floor would save and lock nothing.
+    zero = await signin.public.put(
+        "/v1/policies/approvalsFloor", json={"value": {"requesterMayDecide": 0}}, headers=sec
+    )
+    assert (zero.status_code, zero.json()["error"]["code"]) == (400, "policy_value"), zero.text
     put = await signin.public.put("/v1/policies/approvalsFloor", json=floor, headers=sec)
     assert put.status_code == 200, put.text
     looser = await signin.public.put("/v1/policies/requesterMayDecide", json=on, headers=ana)

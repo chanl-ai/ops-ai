@@ -314,12 +314,17 @@ memories (`GET /v1/me/memories` returns the caller's own), so the Admin and Buil
 
 Every role's cells, built-in or custom, are the `role_permissions` rows platform-service stores. The grid above is
 the seed: platform-service writes it for a new workspace and **Reset to default** puts a built-in role back to it.
-A workspace admin edits any role but Admin on Access › Roles (`PUT /v1/roles/{id}/permissions`,
-`POST /v1/roles/{id}/reset`, both audited as `role.edit` and `role.reset` and raising `perm_version`); Admin keeps
-every cell (409 `admin_holds_every_cell`), and only Owner holds `workspace.manage` (row E42): a custom role refuses it
-(400 `not_for_custom_roles`) and an edited built-in role refuses it (400 `owner_only`). `can()` decides from the token's `grids` claim, and platform-service from
-the rows it reads at the moment of the check. A token minted without the claim (a test token, the dev header
-caller) is answered from the seed.
+A workspace admin edits any role but Admin, Owner and Security admin on Access › Roles (`PUT /v1/roles/{id}/permissions`,
+`POST /v1/roles/{id}/reset`, both audited as `role.edit` and `role.reset` and raising `perm_version`). Admin keeps
+every cell (409 `admin_holds_every_cell`). Owner and Security admin come by rule, with the workspace's owner and the
+Security team's admins, and hold privileged cells, so an edit to either is refused whatever it sends, an empty list
+included (409 `role_set_by_rule`, `FIXED_ROLES` in `catalogue.py`); reset still puts them back to the seed. Only
+Owner holds `workspace.manage` (row E42): a custom role refuses it (400 `not_for_custom_roles`) and an edited
+built-in role refuses it (400 `owner_only`). `can()` decides from the token's `grids` claim, and platform-service from
+the rows it reads at the moment of the check. Every reader of a role's cells (the token's claim, the live check, the
+group guard and the roles page) goes through `effective_grids` (`check.py`): the stored rows, or for a built-in role
+with none, its seed. A token minted without the claim (a test token, the dev header caller) is answered from the
+seed.
 
 ## Policies
 

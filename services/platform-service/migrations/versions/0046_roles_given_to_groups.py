@@ -12,22 +12,26 @@ before. Every role keeps what it could do: Admin takes every approvals cell (it 
 and Viewer read the rules (`approvals.view`), as every member read the policies; and any other role that holds
 `settings.manage` or `settings.view` takes the matching approvals cell at the same scope, so an edited built-in role
 keeps the approval rules it could change. Security admin is left out: it is only ever held beside Admin, in the
-Security team. Nothing is taken away, so no person loses access; each tenant's permission
+Security team. Nothing else is taken away (see Owner only), so no person loses access; each tenant's permission
 version rises. Running it again adds nothing. Stored policy values are left as they are: a `requesterMayDecide`
 stored as true still means on in every team and area.
+
+Owner only. `workspace.manage` (transfer, close and restore the workspace) is taken from every role but Owner: the
+code before this revision let a custom role, or an edited built-in role, be saved with it, and from this revision
+only Owner holds it (E42). No seeded role but Owner holds it, so only such a saved role loses it. The step writes no
+audit entry: the audit log is written through the outbox by platform-service, which a migration does not run.
 
 The downgrade removes the approvals cells and every group's assignment, then the two tables. It also collapses a
 per-team `requesterMayDecide` ({team or `*`: ...}) to one boolean, true only when the workspace's own part `*` is true:
 the code before this revision reads any stored object as on, so a rollback would otherwise let whoever asked decide
-their own request in every team.
+their own request in every team. It is one UPDATE per database, so it renders under `--sql` for a release's
+downgrade.sql. It does not give `workspace.manage` back to the roles the upgrade took it from.
 
 Revision ID: 0046_roles_given_to_groups
 Revises: 0045_api_key_revision
 """
 
 from __future__ import annotations
-
-from typing import Any, cast
 
 import sqlalchemy as sa
 from alembic import op
@@ -104,6 +108,7 @@ def upgrade() -> None:
             f"WHERE p.area = 'settings' AND p.action = '{action}' AND p.role_id NOT IN ('admin', 'security_admin')"
         )
         op.execute(_add(held, action, "r.scope"))
+    op.execute("DELETE FROM role_permissions WHERE area = 'workspace' AND action = 'manage' AND role_id <> 'owner'")
     op.execute("UPDATE tenants SET permission_version = permission_version + 1")
     if dialect == "postgresql":
         for name in TABLES:
@@ -121,19 +126,18 @@ def downgrade() -> None:
         for name in TABLES:
             for statement in isolation_drop_ddl(_marked(name), dialect):
                 op.execute(statement)
-    bind = op.get_bind()
-    stored = sa.table(
-        "policies", sa.column("tenant_id", sa.String), sa.column("key", sa.String), sa.column("value", sa.JSON)
-    )
-    rows = bind.execute(sa.select(stored.c.tenant_id, stored.c.value).where(stored.c.key == "requesterMayDecide")).all()
-    for tenant_id, value in rows:
-        if isinstance(value, dict):
-            whole = cast(dict[str, Any], value)
-            bind.execute(
-                stored.update()
-                .where(stored.c.tenant_id == tenant_id, stored.c.key == "requesterMayDecide")
-                .values(value=whole.get("*") is True)
-            )
+    # Plain SQL, so the step renders offline; the per-team value is the only JSON object the key ever stored.
+    if dialect == "postgresql":
+        op.execute(
+            "UPDATE policies SET value = to_json(COALESCE(json_extract_path_text(value, '*') = 'true', false)) "
+            "WHERE key = 'requesterMayDecide' AND json_typeof(value) = 'object'"
+        )
+    elif dialect == "mssql":
+        # `key` is a reserved word on SQL Server. JSON_VALUE answers 'true' for a boolean true and NULL for an object.
+        op.execute(
+            "UPDATE policies SET value = CASE WHEN JSON_VALUE(value, '$.\"*\"') = 'true' THEN 'true' ELSE 'false' END "
+            "WHERE [key] = 'requesterMayDecide' AND ISJSON(value) = 1 AND LTRIM(value) LIKE '{%'"
+        )
     op.execute("DELETE FROM role_permissions WHERE area = 'approvals'")
     op.execute("DELETE FROM role_assignments WHERE subject_kind = 'group'")
     op.execute("UPDATE tenants SET permission_version = permission_version + 1")

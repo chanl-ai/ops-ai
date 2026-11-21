@@ -73,9 +73,10 @@ export default function ApprovalsPage() {
   // A key starting `tool:` is one tool's answer, set on that tool's own page; it is kept as it is when apps are saved.
   const savedByApp = React.useMemo(() => Object.fromEntries(Object.entries(savedAll).filter(([k]) => !k.startsWith(TOOL_KEY))), [savedAll]);
   const savedTools = React.useMemo(() => Object.fromEntries(Object.entries(savedAll).filter(([k]) => k.startsWith(TOOL_KEY))), [savedAll]);
-  // Both policies are changed under settings.manage; the cell is held in the Security team or the acting team.
+  // The team's approval rules (appChanges, appChangesByApp, requesterMayDecide) are changed under approvals.manage in
+  // the acting team, so a custom role holding it unlocks the page without settings.manage.
   const mayRead = useCan('access', 'view');
-  const locked = useCan('settings', 'manage') !== true || sample;
+  const locked = useCan('approvals', 'manage') !== true || sample;
 
   const form = useForm<TeamForm>({
     resolver: zodResolver(teamSchema),

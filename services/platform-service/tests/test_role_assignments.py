@@ -96,6 +96,18 @@ async def test_a_group_never_carries_a_privileged_cell(platform: Platform) -> No
     assert not await _may(platform, ana, team, "knowledge", "edit")
 
 
+async def test_an_emptied_owner_or_security_admin_is_still_refused_to_a_group(platform: Platform) -> None:
+    """A built-in role with no stored cells answers its seed to the live check, so the group guard must too: emptied
+    rows never let Owner or Security admin reach a group."""
+    ana = await platform.person(roles=("chat_user",))
+    group = await _group(platform, ana, ana)
+    store = RoleStore(platform.store)
+    for role in ("owner", "security_admin"):
+        await store.set_grid(ana.tenant_id, role, [], by=BY, request_id="r", action="role.edit")
+        with pytest.raises(PrivilegedForGroupError):
+            await _give(platform, ana, group, role, ANY_TEAM)
+
+
 async def test_taking_a_groups_role_away_takes_back_only_what_it_gave(platform: Platform) -> None:
     ana = await platform.person(roles=("chat_user",))
     ben = await platform.person(roles=("chat_user",), tenant_id=ana.tenant_id)

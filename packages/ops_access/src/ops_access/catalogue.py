@@ -219,6 +219,10 @@ BUILTIN_IDS = frozenset(r.id for r in BUILTIN_ROLES)
 # Owner are seeded too but attached by rule, never picked: Security admin comes with Admin of the Security team, Owner
 # with the workspace's one owner.
 SEEDED_ROLES = (ADMIN, BUILDER, REVIEWER, VIEWER, CHAT_USER)
+# The built-in roles whose cells are never edited: Admin holds every cell, and Security admin and Owner, attached by
+# rule, carry privileged cells (`PRIVILEGED`), so an edit could never widen them safely and emptying one would only
+# hide what the seed still grants. Reset still puts any of them back to its seed.
+FIXED_ROLES = frozenset({ADMIN.id, SECURITY_ADMIN.id, OWNER.id})
 
 # Cells a group's assignment never carries, so editing a group at the identity provider never makes anyone an admin:
 # changing who may do what (every `access` action but reading it, which every member holds), the workspace itself, and
