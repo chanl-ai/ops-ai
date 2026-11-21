@@ -249,7 +249,7 @@ def with_descendants(pids: set[int]) -> set[int]:
     """The pids plus every process below them: a stack's pid file holds the launcher (pnpm, uv), and the process
     that listens is its child."""
     kids: dict[int, list[int]] = {}
-    for line in tool_output(["ps", "-axo", "pid=,ppid="]).splitlines():
+    for line in tool_output(["ps", "-A", "-o", "pid=,ppid="]).splitlines():
         parts = line.split()
         if len(parts) == 2 and all(x.isdigit() for x in parts):
             kids.setdefault(int(parts[1]), []).append(int(parts[0]))
