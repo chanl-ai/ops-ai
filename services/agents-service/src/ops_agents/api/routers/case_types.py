@@ -21,6 +21,7 @@ from ops_identity.fastapi import Tx
 from ops_service_kit.errors import Unprocessable
 from ops_service_kit.http import Envelope, In, Json, ListResult
 from ops_service_kit.listing import ListQuery
+from ops_service_kit.names import Name
 
 from ...case_fields import specs_of
 from ..auth import Principal, caller_in, caller_of, reader_of
@@ -40,7 +41,7 @@ ID = re.compile(r"^[a-z][a-z0-9_]{2,63}$")
 
 class CaseField(In):
     key: str = Field(min_length=1, max_length=64)
-    label: str = Field(min_length=1, max_length=200)
+    label: Name
     # text, number, money, date, enum (the extraction field types), file or link.
     type: str = "text"
     required: bool = False
@@ -48,7 +49,7 @@ class CaseField(In):
 
 
 class Definition(In):
-    name: str = Field(min_length=1, max_length=200)
+    name: Name
     description: str = Field(default="", max_length=2000)
     fields: list[CaseField] = Field(max_length=50)
     # The key of one of the type's date fields whose value is the case's deadline, its main timer: a court
@@ -65,7 +66,7 @@ class TypeIn(In):
     id: str = Field(min_length=3, max_length=64)
     # Start from this type's published version (the newest when no version); the fields below replace its own.
     copy_of: TypeRef | None = None
-    name: str | None = Field(default=None, min_length=1, max_length=200)
+    name: Name | None = None
     description: str | None = Field(default=None, max_length=2000)
     fields: list[CaseField] | None = Field(default=None, max_length=50)
     deadline: str | None = Field(default=None, max_length=64)

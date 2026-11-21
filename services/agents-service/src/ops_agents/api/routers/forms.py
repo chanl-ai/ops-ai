@@ -47,6 +47,7 @@ from ops_service_kit.errors import (
 )
 from ops_service_kit.http import Envelope, In, Json, JsonValue, ListResult, Out
 from ops_service_kit.listing import ListQuery
+from ops_service_kit.names import Name, cap_slug
 from ops_store import isolation
 
 from ...store.engine import EngineTransactions
@@ -81,7 +82,7 @@ class FormIn(In):
     mode: Literal["link", "members"] = "link"
     expires_in_days: int = Field(default=DEFAULT_DAYS, ge=1, le=90)
     daily_cap: int = Field(default=DEFAULT_CAP, ge=1, le=10_000)
-    title: str | None = Field(default=None, max_length=200)
+    title: Name | None = None
     description: str = Field(default="", max_length=1000)
     after_text: str = Field(default="", max_length=1000)
 
@@ -194,7 +195,7 @@ def _token(tenant: str, team: str, form_id: str) -> tuple[str, str]:
 
 
 def _slug(title: str) -> str:
-    words = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:60] or "form"
+    words = cap_slug(re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-"), 60) or "form"
     return f"{words}-{secrets.token_hex(3)}"
 
 
