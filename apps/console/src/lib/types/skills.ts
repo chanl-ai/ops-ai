@@ -135,7 +135,12 @@ export interface SkillVersion {
   tokens: number;
   reviewId?: string;
   publishedAt?: string;
+  /** Who made it live. */
   publishedBy?: string;
+  /** Who asked for the publish; null for a version no request published. */
+  requestedBy?: string | null;
+  /** Who approved it; null when the team's publish policy let it go live without a review. */
+  approvedBy?: string | null;
   testRun: SkillTestRunSummary | null;
 }
 
@@ -497,6 +502,12 @@ export interface SkillPublishRequest {
   guardrails: string[];
   agents: { name: string; pinnedVersion: number | null }[];
   approvalsNeeded: number;
+  /** The published text this request replaces ('' for a first version) and the text it publishes, kept as they were
+   * when the request opened. Absent on a request opened before they were kept. */
+  textBefore?: string;
+  textAfter?: string;
+  /** The hints on the new text's lines; none of them blocks the publish. */
+  hints: { line: number; message: string }[];
 }
 
 export interface AgentSkillPin {

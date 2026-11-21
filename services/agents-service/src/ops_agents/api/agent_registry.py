@@ -724,6 +724,7 @@ class ReviewView(TypedDict):
     decisionReason: NotRequired[str]
     egressHost: NotRequired[Json]
     toolModule: NotRequired[Json]
+    skillPublish: NotRequired[Json]
     # Added by the review list and the routes: who it is assigned to and whether the caller may decide it.
     assignee: NotRequired[JsonValue]
     caseTitle: NotRequired[str | None]

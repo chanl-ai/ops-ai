@@ -53,6 +53,7 @@ from ..skills import (
     read_text,
     render_published,
     require_unpinned,
+    review_record,
     skills,
 )
 from .agents import changeable as agent_changeable
@@ -304,6 +305,9 @@ async def _request_review(rt: Runtime, skill_id: str, note: str, by: str) -> Non
             "savedBy": v.saved_by,
             **decision.record(),
             "changes": v.changes,
+            # What the reviewer approves, kept as it was when the request opened: a returned draft is saved over in
+            # place, and once approved the published version is this one.
+            **review_record(live, v, d["publishCheck"]["warnings"]),
         },
         approved=approved,
     )

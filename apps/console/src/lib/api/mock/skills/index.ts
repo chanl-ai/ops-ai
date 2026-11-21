@@ -111,6 +111,8 @@ interface StoredVersion {
   reviewId?: string;
   publishedAt?: string;
   publishedBy?: string;
+  requestedBy?: string | null;
+  approvedBy?: string | null;
 }
 
 interface Stored {
@@ -189,6 +191,8 @@ export function createSkillsMock(deps: SkillsDeps) {
           savedAt: ago(v.daysAgo),
           publishedAt: ['published', 'superseded', 'deprecated'].includes(v.state) ? ago(v.daysAgo - 0.5) : undefined,
           publishedBy: ['published', 'superseded', 'deprecated'].includes(v.state) ? (v.by === 'Priya Shah' ? 'Maya Okafor' : 'Priya Shah') : undefined,
+          requestedBy: ['published', 'superseded', 'deprecated'].includes(v.state) ? v.by : undefined,
+          approvedBy: ['published', 'superseded', 'deprecated'].includes(v.state) ? (v.by === 'Priya Shah' ? 'Maya Okafor' : 'Priya Shah') : undefined,
           content: {
             ...structuredClone(base),
             instructions: v.instructions ?? base.instructions,
@@ -416,7 +420,7 @@ export function createSkillsMock(deps: SkillsDeps) {
 
   const version = (sk: Stored, v: StoredVersion): SkillVersion => {
     const run = runFor(sk, v.version);
-    return { version: v.version, state: v.state, editClass: v.editClass, note: v.note, changes: v.changes, savedBy: v.savedBy, savedAt: v.savedAt, content: content(sk, v.content), tokens: tokensOf(v.content), reviewId: v.reviewId, publishedAt: v.publishedAt, publishedBy: v.publishedBy, testRun: run ? { runId: run.id, version: run.version, ranAt: run.ranAt, passed: run.passed, total: run.total } : null };
+    return { version: v.version, state: v.state, editClass: v.editClass, note: v.note, changes: v.changes, savedBy: v.savedBy, savedAt: v.savedAt, content: content(sk, v.content), tokens: tokensOf(v.content), reviewId: v.reviewId, publishedAt: v.publishedAt, publishedBy: v.publishedBy, requestedBy: v.requestedBy, approvedBy: v.approvedBy, testRun: run ? { runId: run.id, version: run.version, ranAt: run.ranAt, passed: run.passed, total: run.total } : null };
   };
 
   const detail = (sk: Stored): SkillDetail => {
@@ -531,6 +535,10 @@ export function createSkillsMock(deps: SkillsDeps) {
       guardrails: n.content.guardrails,
       agents: [...new Set([...livePins(sk).map((p) => p.agentId), ...sk.targetAgentIds])].map((aid) => ({ name: agentOf(aid)?.name ?? aid, pinnedVersion: pins.find((p) => p.skillId === sk.id && p.agentId === aid)?.version ?? null })),
       approvalsNeeded: needed,
+      textBefore: pub ? (pub.content.source ?? pub.content.instructions) : '',
+      textAfter: n.content.source ?? n.content.instructions,
+      // The sample API reads nothing, so it has no hints.
+      hints: [],
     };
     const review: Review = {
       id: `SKP-${++seq}`,
@@ -591,7 +599,7 @@ export function createSkillsMock(deps: SkillsDeps) {
         return r;
       }
       for (const x of sk.versions) if (x.state === 'published') x.state = 'superseded';
-      Object.assign(v, { state: 'published', publishedAt: now, publishedBy: me });
+      Object.assign(v, { state: 'published', publishedAt: now, publishedBy: me, requestedBy: sp.requestedBy, approvedBy: me });
       Object.assign(r, { status: 'approved', decidedAt: now, decisionReason: input.reason, assignee: me });
       audit(sk, 'published', `Published v${v.version}`, { diff: [{ field: 'Published version', before: sp.fromVersion ? `v${sp.fromVersion}` : 'None', after: `v${v.version}` }], reason: input.reason });
       return r;

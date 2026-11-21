@@ -1,7 +1,9 @@
 """A skill written as text through /v1/skills, by failure mode: a mention of a tool that no longer exists refusing
 the save, or not blocking the publish, or not pointing at its line; a write tool with no rule check refusing a text
-save; a hint blocking a publish; a team with strict publishing publishing a write the agent decides; the editor's
-read call reading a text differently from the save; a skill saved as steps showing no text."""
+save; a hint blocking a publish; a team with strict publishing publishing a write the agent decides; a reviewer shown
+a text other than the published one against the draft, or not shown its hints; a version losing who asked for it or
+who approved it; the editor's read call reading a text differently from the save; a skill saved as steps showing no
+text."""
 
 from __future__ import annotations
 
@@ -10,6 +12,7 @@ from typing import Any
 
 from .test_agent_registry import _app, _ok  # pyright: ignore[reportPrivateUsage]
 from .test_ai_step_route import policies
+from .test_skills import KIM, LEE
 
 TEXT = """Look the customer up with @tool:lookup_customer
 if they sound upset:
@@ -58,12 +61,12 @@ async def test_a_strict_team_cannot_publish_a_write_the_agent_decides_but_can_on
         fixed = TEXT.replace("@tool:retired_lookup", "@tool:lookup_customer")
         _ok(await c.put(f"/v1/skills/{s['id']}/draft", json={"source": fixed, "baseVersion": 1}))
         r = await c.post(f"/v1/skills/{s['id']}/publish-requests", json={"note": ""})
-        assert (r.status_code, r.json()["error"]["code"]) == (422, "cannot_request"), r.text
+        assert (r.status_code, r.json()["error"]["code"]) == (400, "cannot_request"), r.text
         refused = [(p["kind"], p["position"]["index"]) for p in r.json()["error"]["details"]["problems"]]
         assert refused == [("bad_check", 3)]
         plain = "Look the customer up with @tool:lookup_customer\nPlace a hold with @tool:place_wire_hold\n"
         r = await c.post("/v1/skills", json={**SKILL, "name": "Hold", "source": fixed, "requestReview": True})
-        assert (r.status_code, r.json()["error"]["code"]) == (422, "cannot_request"), "a create asks the same check"
+        assert (r.status_code, r.json()["error"]["code"]) == (400, "cannot_request"), "a create asks the same check"
         _ok(await c.put(f"/v1/skills/{s['id']}/draft", json={"source": plain, "baseVersion": 1}))
         _ok(await c.post(f"/v1/skills/{s['id']}/publish-requests", json={"note": ""}), 201)
 
@@ -93,3 +96,30 @@ async def test_a_text_past_the_step_cap_saves_but_cannot_publish_and_a_plain_tex
             sent = {"source": f'Look the customer up with @tool:lookup_customer\nstop "{reason}"', "baseVersion": 1}
             d = _ok(await c.put(f"/v1/skills/{s['id']}/draft", json={**sent, "exit": d["content"].get("exit", {})}))
         assert d["content"]["exit"] == {"card_held": "Card held"}
+
+
+async def test_a_reviewer_reads_the_draft_against_the_published_text_and_the_version_keeps_who_approved(
+    tmp_path: Path,
+) -> None:
+    async with _app(
+        str(tmp_path / "db.sqlite"), registry_auto_approve=False, dev_policies={"requesterMayDecide": False}
+    ) as c:
+        sid = _ok(await c.post("/v1/skills", json=SKILL, headers=LEE), 201)["id"]
+        first = "Look the customer up with @tool:lookup_customer\n"
+        _ok(await c.put(f"/v1/skills/{sid}/draft", json={"source": first, "baseVersion": 1}, headers=LEE))
+        rid = _ok(await c.post(f"/v1/skills/{sid}/publish-requests", json={"note": ""}, headers=LEE), 201)
+        decided = {"decision": "approved"}
+        _ok(await c.post(f"/v1/publish-requests/{rid['pendingReviewId']}/decision", json=decided, headers=KIM))
+        fixed = TEXT.replace("@tool:retired_lookup", "@tool:lookup_customer")
+        _ok(await c.put(f"/v1/skills/{sid}/draft", json={"source": first.upper(), "baseVersion": 1}, headers=LEE))
+        _ok(await c.put(f"/v1/skills/{sid}/draft", json={"source": fixed, "baseVersion": 2}, headers=LEE))
+        asked = _ok(await c.post(f"/v1/skills/{sid}/publish-requests", json={"note": "hold"}, headers=LEE), 201)
+        review = _ok(await c.get(f"/v1/publish-requests/{asked['pendingReviewId']}"))
+        sp = review["skillPublish"]
+        assert (review["kind"], sp["fromVersion"], sp["toVersion"]) == ("skill_publish", 1, 2)
+        assert (sp["textBefore"], sp["textAfter"]) == (first, fixed), "the draft is read against v1, not the last save"
+        assert [h["line"] for h in sp["hints"] if "changes something" in h["message"]] == [3]
+        _ok(await c.post(f"/v1/publish-requests/{asked['pendingReviewId']}/decision", json=decided, headers=KIM))
+        versions = {v["version"]: v for v in _ok(await c.get(f"/v1/skills/{sid}"))["versions"]}
+        kept = [(versions[n]["requestedBy"], versions[n]["approvedBy"], versions[n]["publishedBy"]) for n in (1, 2)]
+        assert kept == [(LEE["X-Dev-User"], KIM["X-Dev-User"], KIM["X-Dev-User"])] * 2

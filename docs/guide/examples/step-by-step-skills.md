@@ -363,6 +363,11 @@ confirming a caller. A rule on the step can read how the sub-skill ended:
 | A skill written as text mentions something that no longer exists, or makes more than 30 steps | On publish only; the draft saves. The error names the line |
 | A skill written as text runs a tool that changes something on a path the agent decides, in a team with Strict skill publishing on | On publish only; the draft saves. The error names the line |
 
+A skill's publish request shows its reviewer the text against the published version it replaces, kept as it was when
+the request opened, with the hints on the new text's lines. Each published version keeps who asked for the publish
+(`requestedBy`), who approved it (`approvedBy`, empty when the team's publish policy let it go live without a review)
+and who made it live (`publishedBy`); `opsai skills versions <id>` lists all three.
+
 ## Next steps
 
 - [Skill examples](skills.md): what skills do today.

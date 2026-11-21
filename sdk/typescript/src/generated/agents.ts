@@ -8869,7 +8869,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "agent_publish" | "publish_request" | "egress_host";
+            kind: "agent_publish" | "publish_request" | "skill_publish" | "egress_host";
             policy: components["schemas"]["ReviewPolicy"];
             /** Proposal */
             proposal: string;
@@ -8881,6 +8881,7 @@ export interface components {
              * @enum {string}
              */
             risk: "critical" | "high" | "medium" | "low";
+            skillPublish?: components["schemas"]["SkillPublishInfo"] | null;
             /** Slaminutes */
             slaMinutes?: number | null;
             /**
@@ -10235,6 +10236,13 @@ export interface components {
             /** Origin */
             origin: string;
         };
+        /** SkillPublishAgent */
+        SkillPublishAgent: {
+            /** Name */
+            name: string;
+            /** Pinnedversion */
+            pinnedVersion: number | null;
+        };
         /** SkillPublishCheck */
         SkillPublishCheck: {
             /** Approversneeded */
@@ -10252,6 +10260,51 @@ export interface components {
             problems?: components["schemas"]["PublishBlocker"][];
             /** Warnings */
             warnings?: components["schemas"]["PublishBlocker"][];
+        };
+        /**
+         * SkillPublishInfo
+         * @description A skill publish request as its reviewer reads it, kept as it was when the request opened: the published
+         *     version it replaces, both texts, the hints on the new text and what it adds.
+         */
+        SkillPublishInfo: {
+            /** Agents */
+            agents: components["schemas"]["SkillPublishAgent"][];
+            /** Approvalsneeded */
+            approvalsNeeded: number;
+            /** Changes */
+            changes: string[];
+            /** Editclass */
+            editClass: string;
+            /** Failing */
+            failing: string[];
+            /** Fromversion */
+            fromVersion: number | null;
+            /** Guardrails */
+            guardrails: string[];
+            /** Hints */
+            hints: components["schemas"]["TextHint"][];
+            /** Kbsadded */
+            kbsAdded: string[];
+            /** Note */
+            note: string;
+            /** Ownerteam */
+            ownerTeam: string;
+            /** Requestedby */
+            requestedBy: string;
+            /** Skillid */
+            skillId: string;
+            /** Skillname */
+            skillName: string;
+            /** Testrun */
+            testRun?: null;
+            /** Textafter */
+            textAfter?: string | null;
+            /** Textbefore */
+            textBefore?: string | null;
+            /** Toversion */
+            toVersion: number;
+            /** Toolsadded */
+            toolsAdded: string[];
         };
         /** SkillRenderInput */
         SkillRenderInput: {
@@ -10506,6 +10559,8 @@ export interface components {
         };
         /** SkillVersion */
         SkillVersion: {
+            /** Approvedby */
+            approvedBy?: string | null;
             /** Changes */
             changes: string[];
             content: components["schemas"]["SkillContent"];
@@ -10520,6 +10575,8 @@ export interface components {
             publishedAt?: string | null;
             /** Publishedby */
             publishedBy?: string | null;
+            /** Requestedby */
+            requestedBy?: string | null;
             /** Reviewid */
             reviewId?: string | null;
             /** Savedat */
@@ -11181,6 +11238,16 @@ export interface components {
             ok: boolean;
             /** Steps */
             steps: components["schemas"]["TestStepView"][];
+        };
+        /**
+         * TextHint
+         * @description A hint the reader put on one line of a skill's text (from 1).
+         */
+        TextHint: {
+            /** Line */
+            line: number;
+            /** Message */
+            message: string;
         };
         /** ThreadCreated */
         ThreadCreated: {

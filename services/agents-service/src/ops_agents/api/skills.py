@@ -10,7 +10,7 @@ views return those as empty and the docs page says so.
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any, NotRequired, TypedDict, cast
@@ -671,7 +671,11 @@ class SkillVersionView(TypedDict):
     tokens: int
     reviewId: NotRequired[str]
     publishedAt: NotRequired[str]
+    # Who made it live; who asked for the publish; who approved it (None when the team's policy let it publish without
+    # a review).
     publishedBy: NotRequired[str | None]
+    requestedBy: NotRequired[str | None]
+    approvedBy: NotRequired[str | None]
     testRun: None
 
 
@@ -854,6 +858,7 @@ async def detail(rt: Runtime, skill_id: str, *, fresh: bool = False) -> SkillDet
     users = await pinning_agents(rt.db, skill_id)
     versions = await reg.versions(skill_id)
     requests = await _requests(rt, skill_id)
+    by_review = {r.id: r for r in requests}
     pending = next((r for r in requests if r.status == "pending"), None)
     newest = versions[0]
     base = list_row(
@@ -954,7 +959,16 @@ async def detail(rt: Runtime, skill_id: str, *, fresh: bool = False) -> SkillDet
                     "content": _wire(content_of(v.content)),
                     "tokens": v.tokens,
                     **({"reviewId": v.review_id} if v.review_id else {}),
-                    **({"publishedAt": v.published_at, "publishedBy": v.published_by} if v.published_at else {}),
+                    **(
+                        {
+                            "publishedAt": v.published_at,
+                            "publishedBy": v.published_by,
+                            "requestedBy": requester(by_review.get(v.review_id or "")),
+                            "approvedBy": approver(by_review.get(v.review_id or "")),
+                        }
+                        if v.published_at
+                        else {}
+                    ),
                     "testRun": None,
                 }
                 for v in versions
@@ -990,7 +1004,73 @@ async def detail(rt: Runtime, skill_id: str, *, fresh: bool = False) -> SkillDet
 
 
 async def publish(rt: Runtime, req: PublishRequestRow, by: str) -> None:
+    """Publishes the request's version as `by`, who made it live. Who asked for it and who approved it are read back
+    from the request by `review_id` (`requester`, `approver`)."""
     await skills(rt).publish(req.subject_id, int(req.version), by=by, review_id=req.id)
+
+
+def requester(req: PublishRequestRow | None) -> str | None:
+    """Who asked for a published version's publish; None when no request published it (a seed)."""
+    return str(req.requested_by) if req is not None and req.requested_by else None
+
+
+def approver(req: PublishRequestRow | None) -> str | None:
+    """Who approved a published version: the request's decider when its policy asked for a review; None when the
+    policy let it publish without one (`reviewRequired` false) or no request published it (a seed)."""
+    if req is None or req.status != "approved" or not req.body.get("reviewRequired", True):
+        return None
+    return str(req.decided_by) if req.decided_by else None
+
+
+def review_record(live: SkillVersionRow | None, v: SkillVersionRow, warnings: Sequence[Problem]) -> Json:
+    """What a skill publish request keeps for its reviewer: the published version it replaces, both texts as the
+    editor shows them (`text_of`, so a skill saved as steps compares as text), the hints on the new text's lines, and
+    the tools and knowledge bases it adds."""
+    before = content_of(live.content) if live else None
+    after = content_of(v.content)
+    had_tools = set(tool_ids(before)) if before else set[str]()
+    had_bases = set(before["knowledgeBases"]) if before else set[str]()
+    return {
+        "fromVersion": live.version if live else None,
+        "textBefore": text_of(live.content) if live else "",
+        "textAfter": text_of(v.content),
+        "hints": [
+            {"line": w["position"]["index"], "message": w["message"]}
+            for w in warnings
+            if w["kind"] == "hint" and w["position"] is not None
+        ],
+        "toolsAdded": [t for t in tool_ids(after) if t not in had_tools],
+        "kbsAdded": [k for k in after["knowledgeBases"] if k not in had_bases],
+    }
+
+
+async def review_body(rt: Runtime, req: PublishRequestRow) -> Json:
+    """A skill publish request as the console's `skillPublish`: the record kept when it opened, with the skill's
+    owning team and the agents that pin the skill now."""
+    body, row = req.body, await skills(rt).row(req.subject_id)
+    v = await skills(rt).version(req.subject_id, int(req.version))
+    users = await pinning_agents(rt.db, req.subject_id)
+    return {
+        "skillId": req.subject_id,
+        "skillName": body["skillName"],
+        "ownerTeam": row.owner_team,
+        "fromVersion": body.get("fromVersion"),
+        "toVersion": int(req.version),
+        "editClass": "re_test",
+        "requestedBy": str(req.requested_by),
+        "note": req.note,
+        "changes": body.get("changes", []),
+        "testRun": None,
+        "failing": [],
+        "toolsAdded": body.get("toolsAdded", []),
+        "kbsAdded": body.get("kbsAdded", []),
+        "guardrails": list(content_of(v.content).get("guardrails") or []) if v else [],
+        "agents": [{"name": a.spec["name"], "pinnedVersion": a.pinned_version} for a in users],
+        "approvalsNeeded": 1,
+        # Absent on a request opened before the text was kept with it.
+        **({"textBefore": body["textBefore"], "textAfter": body["textAfter"]} if "textAfter" in body else {}),
+        "hints": body.get("hints", []),
+    }
 
 
 def snapshot(skill_id: str, version: int, content: SkillContent, tokens: int, *, by: str, at: str) -> SkillPin:

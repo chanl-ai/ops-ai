@@ -579,6 +579,45 @@ class PublishRequestInfo(PublishDecisionFields):
     digest: str
 
 
+class SkillPublishAgent(Out):
+    name: str
+    pinned_version: int | None
+
+
+class TextHint(Out):
+    """A hint the reader put on one line of a skill's text (from 1)."""
+
+    line: int
+    message: str
+
+
+class SkillPublishInfo(Out):
+    """A skill publish request as its reviewer reads it, kept as it was when the request opened: the published
+    version it replaces, both texts, the hints on the new text and what it adds."""
+
+    skill_id: str
+    skill_name: str
+    owner_team: str
+    from_version: int | None
+    to_version: int
+    edit_class: str
+    requested_by: str
+    note: str
+    changes: list[str]
+    # Skill tests are not run yet: always null and empty.
+    test_run: None = None
+    failing: list[str]
+    tools_added: list[str]
+    kbs_added: list[str]
+    guardrails: list[str]
+    agents: list[SkillPublishAgent]
+    approvals_needed: int
+    # Absent on a request opened before the texts were kept with it.
+    text_before: str | None = None
+    text_after: str | None = None
+    hints: list[TextHint]
+
+
 class OperationSummary(Out):
     name: str
     method: str | None = None
@@ -640,7 +679,7 @@ class PublishReview(Out):
     agent_slug: str
     agent_name: str | None
     # egress_host: an app's first address on a host the tenant has not listed, for a Security admin.
-    kind: Literal["agent_publish", "publish_request", "egress_host"]
+    kind: Literal["agent_publish", "publish_request", "skill_publish", "egress_host"]
     risk: Literal["critical", "high", "medium", "low"]
     confidence: float
     proposal: str
@@ -659,6 +698,7 @@ class PublishReview(Out):
     evidence: list[Evidence]
     agent_publish: AgentPublishRequest | None = None
     publish: PublishRequestInfo | None = None
+    skill_publish: SkillPublishInfo | None = None
     tool_module: ToolModuleReviewRef | None = None
     egress_host: EgressHostRef | None = None
     # Who the review is assigned to now; None while nobody has it.
@@ -1602,7 +1642,11 @@ class SkillVersion(Out):
     tokens: int
     review_id: str | None = None
     published_at: str | None = None
+    # Who made it live. Who asked for the publish, and who approved it: approved_by is null when the team's publish
+    # policy let it go live without a review; both are null for a version no request published.
     published_by: str | None = None
+    requested_by: str | None = None
+    approved_by: str | None = None
     # Always null today: nothing records a test run on a version.
     test_run: None
 

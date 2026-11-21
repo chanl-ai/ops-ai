@@ -425,6 +425,7 @@
         "version": 1,
         "versions": [
           {
+            "approvedBy": null,
             "changes": [
               "Changed instructions"
             ],
@@ -451,6 +452,7 @@
             "note": "",
             "publishedAt": "<timeZ>",
             "publishedBy": "auto-approve (dev)",
+            "requestedBy": "usr_b@harborpine.example",
             "reviewId": "<SKP>",
             "savedAt": "<timeZ>",
             "savedBy": "usr_b@harborpine.example",
@@ -1773,6 +1775,7 @@
         "version": 1,
         "versions": [
           {
+            "approvedBy": null,
             "changes": [
               "Changed instructions"
             ],
@@ -1799,6 +1802,7 @@
             "note": "",
             "publishedAt": "<timeZ>",
             "publishedBy": "auto-approve (dev)",
+            "requestedBy": "usr_b@harborpine.example",
             "reviewId": "<SKP>",
             "savedAt": "<timeZ>",
             "savedBy": "usr_b@harborpine.example",

@@ -15153,6 +15153,7 @@
             "enum": [
               "agent_publish",
               "publish_request",
+              "skill_publish",
               "egress_host"
             ],
             "title": "Kind",
@@ -15191,6 +15192,16 @@
             ],
             "title": "Risk",
             "type": "string"
+          },
+          "skillPublish": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SkillPublishInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "slaMinutes": {
             "anyOf": [
@@ -19352,6 +19363,32 @@
         "title": "SkillProvenance",
         "type": "object"
       },
+      "SkillPublishAgent": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "pinnedVersion": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinnedversion"
+          }
+        },
+        "required": [
+          "name",
+          "pinnedVersion"
+        ],
+        "title": "SkillPublishAgent",
+        "type": "object"
+      },
       "SkillPublishCheck": {
         "additionalProperties": false,
         "properties": {
@@ -19401,6 +19438,150 @@
           "approversNeeded"
         ],
         "title": "SkillPublishCheck",
+        "type": "object"
+      },
+      "SkillPublishInfo": {
+        "additionalProperties": false,
+        "description": "A skill publish request as its reviewer reads it, kept as it was when the request opened: the published\nversion it replaces, both texts, the hints on the new text and what it adds.",
+        "properties": {
+          "agents": {
+            "items": {
+              "$ref": "#/components/schemas/SkillPublishAgent"
+            },
+            "title": "Agents",
+            "type": "array"
+          },
+          "approvalsNeeded": {
+            "title": "Approvalsneeded",
+            "type": "integer"
+          },
+          "changes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "editClass": {
+            "title": "Editclass",
+            "type": "string"
+          },
+          "failing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Failing",
+            "type": "array"
+          },
+          "fromVersion": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fromversion"
+          },
+          "guardrails": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Guardrails",
+            "type": "array"
+          },
+          "hints": {
+            "items": {
+              "$ref": "#/components/schemas/TextHint"
+            },
+            "title": "Hints",
+            "type": "array"
+          },
+          "kbsAdded": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Kbsadded",
+            "type": "array"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "ownerTeam": {
+            "title": "Ownerteam",
+            "type": "string"
+          },
+          "requestedBy": {
+            "title": "Requestedby",
+            "type": "string"
+          },
+          "skillId": {
+            "title": "Skillid",
+            "type": "string"
+          },
+          "skillName": {
+            "title": "Skillname",
+            "type": "string"
+          },
+          "testRun": {
+            "title": "Testrun",
+            "type": "null"
+          },
+          "textAfter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Textafter"
+          },
+          "textBefore": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Textbefore"
+          },
+          "toVersion": {
+            "title": "Toversion",
+            "type": "integer"
+          },
+          "toolsAdded": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Toolsadded",
+            "type": "array"
+          }
+        },
+        "required": [
+          "skillId",
+          "skillName",
+          "ownerTeam",
+          "fromVersion",
+          "toVersion",
+          "editClass",
+          "requestedBy",
+          "note",
+          "changes",
+          "failing",
+          "toolsAdded",
+          "kbsAdded",
+          "guardrails",
+          "agents",
+          "approvalsNeeded",
+          "hints"
+        ],
+        "title": "SkillPublishInfo",
         "type": "object"
       },
       "SkillRenderInput": {
@@ -20179,6 +20360,17 @@
       "SkillVersion": {
         "additionalProperties": false,
         "properties": {
+          "approvedBy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approvedby"
+          },
           "changes": {
             "items": {
               "type": "string"
@@ -20223,6 +20415,17 @@
               }
             ],
             "title": "Publishedby"
+          },
+          "requestedBy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requestedby"
           },
           "reviewId": {
             "anyOf": [
@@ -22244,6 +22447,26 @@
           "steps"
         ],
         "title": "TestView",
+        "type": "object"
+      },
+      "TextHint": {
+        "additionalProperties": false,
+        "description": "A hint the reader put on one line of a skill's text (from 1).",
+        "properties": {
+          "line": {
+            "title": "Line",
+            "type": "integer"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "line",
+          "message"
+        ],
+        "title": "TextHint",
         "type": "object"
       },
       "ThreadCreated": {
