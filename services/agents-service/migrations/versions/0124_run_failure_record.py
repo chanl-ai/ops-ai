@@ -1,6 +1,6 @@
 """engine_runs.failure: the run's error in the one error model
 
-Revision ID: 0123_run_failure_record
+Revision ID: 0124_run_failure_record
 Revises: 0119_unattributed_side_tables
 
 A failed or Stuck run kept only a sentence in `error`, so the run view could not say which kind of failure it was or
@@ -13,7 +13,7 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0123_run_failure_record"
+revision = "0124_run_failure_record"
 down_revision = "0119_unattributed_side_tables"
 branch_labels = None
 depends_on = None

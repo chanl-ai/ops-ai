@@ -1,7 +1,7 @@
 """engine_work: the team, priority, concurrency key and rate-limit key a fair claim reads
 
-Revision ID: 0124_engine_work_fair_claim
-Revises: 0123_run_failure_record
+Revision ID: 0125_engine_work_fair_claim
+Revises: 0124_run_failure_record
 
 The claim took the oldest due row of any tenant, so one team's long runs could hold every worker. A claim now skips a
 concurrency key (the team when none is set) whose claimed rows are at its cap and takes keys in turn
@@ -21,8 +21,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0124_engine_work_fair_claim"
-down_revision = "0123_run_failure_record"
+revision = "0125_engine_work_fair_claim"
+down_revision = "0124_run_failure_record"
 branch_labels = None
 depends_on = None
 

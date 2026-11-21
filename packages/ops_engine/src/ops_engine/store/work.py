@@ -341,7 +341,7 @@ def _work(row: Any) -> Work:
 
 
 def _key(t: sa.FromClause) -> sa.ColumnElement[str]:
-    """The key a row's cap counts: its concurrency key, else its team (agents migration 0124 filled it in on the rows
+    """The key a row's cap counts: its concurrency key, else its team (agents migration 0125 filled it in on the rows
     queued before it); a row with neither counts under ''. The empty string is literal SQL so the GROUP BY repeats the
     select's expression exactly; a bound value would be a second parameter PostgreSQL does not match."""
     return sa.func.coalesce(t.c.concurrency_key, t.c.team_id, sa.literal_column("''"))

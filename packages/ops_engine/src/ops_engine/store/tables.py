@@ -89,7 +89,7 @@ engine_runs = sa.Table(
     sa.Column("output", sa.JSON),
     sa.Column("error", sa.Text),
     # The error as ops_contracts.errors.RunError records it ({kind, code, message, userMessage, retryable, ...}), set
-    # with `error`; None on a run that has not failed and on runs that failed before agents migration 0123.
+    # with `error`; None on a run that has not failed and on runs that failed before agents migration 0124.
     sa.Column("failure", sa.JSON),
     # While waiting: {node, iteration, interruptId, payload}; the Reviews facade reads it.
     sa.Column("waiting", sa.JSON),
@@ -164,7 +164,7 @@ engine_work = sa.Table(
     sa.Column("lapses", sa.Integer, nullable=False, server_default="0"),
     sa.Column("error", sa.Text),
     sa.Column("created_at", sa.String(32), nullable=False),
-    # The fair claim (work.py, agents migration 0124). Nullable, so adding them rewrote no row: the migration filled
+    # The fair claim (work.py, agents migration 0125). Nullable, so adding them rewrote no row: the migration filled
     # in the team and priority 0 on every open row, and every row queued since carries both. Higher priority first.
     sa.Column("team_id", sa.String(64)),
     sa.Column("priority", sa.Integer),
