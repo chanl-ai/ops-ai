@@ -7,7 +7,7 @@ import { SaveState } from '@/components/shared/save-state';
 import * as React from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Bot, CircleAlert, FlaskConical, Info, Lock, MoreHorizontal, Pause, Play, RefreshCw, Rocket, Send, Star, Trash2, Users } from 'lucide-react';
+import { ArrowLeft, Bot, CircleAlert, FlaskConical, Info, MoreHorizontal, Pause, Play, RefreshCw, Rocket, Send, Star, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 
 import {

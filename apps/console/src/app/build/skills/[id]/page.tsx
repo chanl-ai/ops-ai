@@ -1,6 +1,7 @@
 'use client';
 
 import { RecordActions } from '@/components/shared/record-actions';
+import { SaveState } from '@/components/shared/save-state';
 import { ReviewNotice } from '@/components/shared/review-notice';
 import * as React from 'react';
 import Link from 'next/link';
@@ -37,7 +38,7 @@ import type { SkillDetail } from '@/lib/types/skills';
 
 import { ActivityTab } from './_parts/activity-tab';
 import { ResourcesTab } from './_parts/resources-tab';
-import { type KeptText, type Form as SkillForm, SkillEditor } from './_parts/skill-editor';
+import { type KeptText, type Form as SkillForm, SkillEditor, type SkillSaveState } from './_parts/skill-editor';
 import { TestsTab } from './_parts/tests-tab';
 import { VersionsTab } from './_parts/versions-tab';
 
@@ -71,6 +72,13 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
   const close = (open: boolean) => !open && setPanel('instructions');
   // Adding a file or restoring a version saves a draft, and the form is drawn again from it: unsaved text would go.
   const [unsaved, setUnsaved] = React.useState(false);
+  // The editor owns the autosave; the header shows its state and a Save that sends the waiting change now.
+  const saveCtl = React.useRef<SkillSaveState | null>(null);
+  const [saveView, setSaveView] = React.useState<Pick<SkillSaveState, 'status' | 'detail' | 'canSave'> | null>(null);
+  const onSaveState = React.useCallback((st: SkillSaveState) => {
+    saveCtl.current = st;
+    setSaveView((v) => (v && v.status === st.status && v.detail === st.detail && v.canSave === st.canSave ? v : { status: st.status, detail: st.detail, canSave: st.canSave }));
+  }, []);
   // The editor is drawn again for each saved version; after a save someone else made first, it hands its unsaved text
   // here so the form drawn on their version starts with it.
   const carried = React.useRef<Carried<SkillForm> | null>(null);
@@ -120,6 +128,8 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
         }
         actions={
           <RecordActions
+            status={canBuild && saveView ? <SaveState status={saveView.status} detail={saveView.detail} onRetry={() => saveCtl.current?.retry()} /> : undefined}
+            save={canBuild && saveView ? { onSave: () => void saveCtl.current?.saveNow(), disabled: !saveView.canSave, saving: saveView.status === 'saving', testId: 'save-skill-draft' } : undefined}
             test={
               <Button variant="outline" onClick={() => setPanel('tests')} title={`${plural(s.tests.length, 'test')}`} data-testid="skill-open-tests">
                 <FlaskConical className="size-4" /> Test
@@ -289,7 +299,7 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
                 </>
               }
             >
-              <SkillEditor key={`${newest.version}-${newest.savedAt}`} skill={s} canEdit={canBuild} onDirtyChange={setUnsaved} carried={carried} keptText={keptText} />
+              <SkillEditor key={`${newest.version}-${newest.savedAt}`} skill={s} canEdit={canBuild} onDirtyChange={setUnsaved} onSaveState={onSaveState} carried={carried} keptText={keptText} />
             </RecordLayout>
             </BuilderFieldset>
           </div>

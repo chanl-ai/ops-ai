@@ -2,7 +2,6 @@
 
 import * as React from 'react';
 import { AtSign, CircleAlert, Eye, GitBranch, Lock, Pencil, RefreshCw, Square, TriangleAlert, Users, X } from 'lucide-react';
-import { toast } from 'sonner';
 
 import { AddMenu } from '@/components/shared/add-menu';
 import { FormField } from '@/components/shared/form-field';
@@ -13,7 +12,7 @@ import { TagInput } from '@/components/shared/tag-input';
 import { parseText, refToken } from '@/components/shared/instruction-document/document-model';
 import { HOW_SAYS, SopEditor, type SopEditorHandle } from '@/components/shared/sop-editor';
 import { SkillInputsSection } from '@/components/skills/skill-inputs-section';
-import { EDIT_CLASS, EditClassBadge, MarkdownPreview, UNWRITTEN_SECTIONS, WORKED_EXAMPLE } from '@/components/skills/skill-meta';
+import { MarkdownPreview, UNWRITTEN_SECTIONS, WORKED_EXAMPLE } from '@/components/skills/skill-meta';
 import { inText, refusedSave } from '@/components/skills/skill-problems';
 import { SkillResultsSection, type SkillEndingValue } from '@/components/skills/skill-results-section';
 import { SkillWhenSection, type SkillWhen, type SkillWhenHandle } from '@/components/skills/skill-when-section';
@@ -29,15 +28,25 @@ import { useReferenceLabels } from '@/hooks/references-queries';
 import { useReloadToRead } from '@/hooks/use-reload-to-read';
 import { useSaveSkillDraft, useSkill, useSkillOptions, useSkillTextReading } from '@/hooks/skill-queries';
 import { SKILL_LOADING_OPTIONS } from '@/components/skills/skill-loading';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { PageSaveActions } from '@/components/shared/page-save-actions';
+import { useAutosave } from '@/hooks/use-autosave';
+import { carriedAfterSave } from '@/lib/autosave';
+import type { SaveStatus } from '@/lib/save-state-gate';
 import { plural } from '@/lib/format';
 import { type Carried, keptEdits } from '@/lib/kept-edits';
 import { baseOf, staleNote, staleSave } from '@/lib/save-base';
 import type { PublishBlocker } from '@/lib/types/references';
-import type { SkillDetail, SkillEditClass, SkillInputField, SkillLoading, SkillPartContent } from '@/lib/types/skills';
+import type { SkillDetail, SkillInputField, SkillLoading, SkillPartContent } from '@/lib/types/skills';
 
 import { PartsSection, partsError } from './parts-section';
+
+/** What the page's header shows and does for the editor's autosave. */
+export interface SkillSaveState {
+  status: SaveStatus;
+  detail: string | null;
+  saveNow: () => void;
+  retry: () => void;
+  canSave: boolean;
+}
 
 export interface Form {
   name: string;
@@ -84,22 +93,18 @@ const same = (a: string[], b: string[]) => a.length === b.length && a.every((x) 
  * publisher approves it. The unsaved bar says which edit class the change is. A person who may not change the team's
  * skills (`canEdit` false) reads the same form with every field off and no save.
  */
-export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried, keptText }: { skill: SkillDetail; canEdit: boolean; onDirtyChange?: (dirty: boolean) => void; carried?: React.RefObject<Carried<Form> | null>; keptText?: React.RefObject<KeptText | null> }) {
+export function SkillEditor({ skill: sk, canEdit, onDirtyChange, onSaveState, carried, keptText }: { skill: SkillDetail; canEdit: boolean; onDirtyChange?: (dirty: boolean) => void; onSaveState?: (s: SkillSaveState) => void; carried?: React.RefObject<Carried<Form> | null>; keptText?: React.RefObject<KeptText | null> }) {
   const save = useSaveSkillDraft(sk.id);
   const current = useSkill(sk.id);
-  const [noting, setNoting] = React.useState(false);
   const options = useSkillOptions();
   const saved = React.useMemo(() => formOf(sk), [sk]);
   // The page owns the unsaved edits (`carried`): the form is drawn again on a resize (the page's columns stack below
   // 1024px) and on a newer version after Reload, and each time starts from the saved version with those edits on top.
   const [form, setForm] = React.useState<Form>(() => (carried?.current ? keptEdits(carried.current.readBefore, carried.current.edited, saved) : saved));
   const [mode, setMode] = React.useState<'edit' | 'preview'>('edit');
-  const [note, setNote] = React.useState('');
   const [endingValid, setEndingValid] = React.useState(true);
   const [whenValid, setWhenValid] = React.useState(true);
   const [inputsValid, setInputsValid] = React.useState(true);
-  // The when and endings forms keep their own field state, so a discard remounts them on the saved values.
-  const [discards, setDiscards] = React.useState(0);
   const setEnding = React.useCallback((ending: SkillEndingValue) => setForm((f) => ({ ...f, ending })), []);
   const setWhen = React.useCallback((when: SkillWhen) => setForm((f) => ({ ...f, when })), []);
   const setInputs = React.useCallback((inputs: SkillInputField[]) => setForm((f) => ({ ...f, inputs })), []);
@@ -111,16 +116,12 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried, keptTe
   const labels = useReferenceLabels({ forSkill: sk.id }, mentioned);
   // A step's first line, from the reader's last answer; line 1 until it has answered.
   const lineOfStep = (step: number) => reading.reading?.stepLines[step - 1] ?? 1;
-  // A save refused because a newer version exists: what the service said. Cleared by Reload.
-  const [stale, setStale] = React.useState<string | null>(null);
   // The person's text from before a Reload, held by the page so a redraw keeps it until they use it or drop it.
   const [mine, setMine] = React.useState<KeptText | null>(() => keptText?.current ?? null);
   const [mineOpen, setMineOpen] = React.useState(false);
   React.useEffect(() => {
     if (keptText) keptText.current = mine;
   }, [keptText, mine]);
-  // A save that did not go through for any other reason: what the service said, kept with a Retry until a save works.
-  const [failed, setFailed] = React.useState<string | null>(null);
   // A save refused for one step, shown on that step until the steps change.
   const [refused, setRefused] = React.useState<PublishBlocker | null>(null);
   // A skill has steps or parts, never both: one with parts keeps its Markdown body.
@@ -145,50 +146,29 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried, keptTe
   React.useEffect(() => {
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
-  const editClass: SkillEditClass = changed.scope ? 're_approval' : 're_test';
   const limit = options.data?.limits.useWhenMaxChars ?? 1024;
   const errors = { name: form.name.trim() ? undefined : 'Name the skill.', parts: partsError(form.parts) };
   const found = React.useMemo(() => (newest.state === 'draft' ? inText(sk.publishCheck.problems ?? NONE) : NONE), [newest.state, sk.publishCheck.problems]);
   const problems = React.useMemo(() => (refused ? [...found, refused] : found), [found, refused]);
   // A missing list from an older service is none.
   const warnings = newest.state === 'draft' ? sk.publishCheck.warnings : undefined;
-  const discard = () => (setForm(saved), setEndingValid(true), setWhenValid(true), setInputsValid(true), setRefused(null), setFailed(null), setDiscards((n) => n + 1));
   const tools = options.data?.tools ?? [];
   // A skill written as text runs the tools its text mentions; one kept on the form from before stays listed, removable.
   const textTools = mentioned.filter((t) => t.startsWith('tool:')).map((t) => t.slice('tool:'.length));
   const listedTools = stepped ? [...new Set([...textTools, ...form.toolIds])] : form.toolIds;
   const labelOf = (id: string) => labels.data?.find((l) => l.kind === 'tool' && l.id === id)?.label;
   const toolOf = (id: string) => tools.find((t) => t.toolId === id) ?? sk.content.tools.find((t) => t.toolId === id);
-  const target = newest.state === 'draft' ? `draft v${newest.version}` : `draft v${newest.version + 1}`;
 
-  // The tab remounts once the saved version arrives, so the toast follows the awaited result rather than mutate callbacks.
-  const submit = async () => {
-    setFailed(null);
+  // Everything the form needs to be saved: a valid name, parts, when, endings and inputs.
+  const valid = !errors.name && !errors.parts && endingValid && whenValid && inputsValid;
+  const sentForm = React.useRef<Form>(form);
+  const send = () => {
+    sentForm.current = form;
     saving.current = true;
     if (carried) carried.current = null;
-    try {
-      // A skill saved as a list of steps keeps them until its text is changed; one written as text sends its text.
-      const text = form.text !== saved.text || sk.content.source !== undefined ? { source: form.text } : {};
-      const d = await save.mutateAsync({ name: form.name, useWhen: form.when.useWhen, loading: form.loading, ...(stepped ? {} : { instructions: form.instructions }), toolIds: form.toolIds, knowledgeBases: form.knowledgeBases, guardrails: form.guardrails, refusal: form.refusal.trim(), parts: form.parts, ...(stepped ? { inputs: form.inputs, ...text, notWhen: form.when.notWhen.trim(), exit: form.ending.exit, returns: form.ending.returns, success: form.ending.success } : {}), note: note.trim() || undefined, ...baseOf(sk) });
-      toast.success(`Saved draft v${d.versions[0].version}`, { description: `${EDIT_CLASS[d.versions[0].editClass].hint} Run the tests before requesting review.` });
-    } catch (e) {
-      // Still this form: what it holds now, typed during the save included, is carried again.
-      if (carried) carried.current = { readBefore: saved, edited: formNow.current };
-      // In review and deprecated are 409 as well; only a newer version offers a reload.
-      const newer = staleSave(e);
-      if (newer) return setStale(staleNote(newer));
-      const onStep = refusedSave(e);
-      if (onStep?.position?.step) {
-        setRefused(onStep);
-        textDoc.current?.focusLine(lineOfStep(onStep.position.step));
-        return void toast.error('Couldn’t save the draft', { description: `Step ${onStep.position.step} needs a fix.` });
-      }
-      // The toast goes away; the page keeps saying so, with a way to try again, while the text is still unsaved.
-      setFailed((e as Error).message);
-      toast.error('Couldn’t save the draft', { description: (e as Error).message });
-    } finally {
-      saving.current = false;
-    }
+    // A skill saved as a list of steps keeps them until its text is changed; one written as text sends its text.
+    const text = form.text !== saved.text || sk.content.source !== undefined ? { source: form.text } : {};
+    return save.mutateAsync({ name: form.name, useWhen: form.when.useWhen, loading: form.loading, ...(stepped ? {} : { instructions: form.instructions }), toolIds: form.toolIds, knowledgeBases: form.knowledgeBases, guardrails: form.guardrails, refusal: form.refusal.trim(), parts: form.parts, ...(stepped ? { inputs: form.inputs, ...text, notWhen: form.when.notWhen.trim(), exit: form.ending.exit, returns: form.ending.returns, success: form.ending.success } : {}), ...baseOf(sk) });
   };
   // The page remounts this form when a newer version arrives, and the new form takes the person's unsaved edits from
   // `carried`. With nothing newer the form stays as it is. Either way nothing the person typed is dropped.
@@ -199,20 +179,45 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried, keptTe
   const readAgain = React.useCallback(async () => (await current.refetch({ throwOnError: true })).data?.digest, [current]);
   const { reload: readNewest, reading: reloading } = useReloadToRead(sk.digest, readAgain, () => {
     // Nothing newer was read, so this form is still the newest one and keeps the person's text as it is.
-    setStale(null);
+    auto.clearStale();
     if (keptText) keptText.current = null;
   });
   const reload = async () => {
-    if (keptText) keptText.current = form.text !== saved.text ? { text: form.text, note: stale ?? '' } : null;
+    if (keptText) keptText.current = form.text !== saved.text ? { text: form.text, note: auto.stale ?? '' } : null;
     if (carried) carried.current = { readBefore: saved, edited: { ...form, text: saved.text } };
     await readNewest();
   };
   const takeMine = () => mine && (setForm((f) => ({ ...f, text: mine.text })), setMine(null), setMineOpen(false));
   const dropMine = () => (setMine(null), setMineOpen(false));
-  const askNote = async () => {
-    if (whenValid) return setNoting(true);
-    await whenForm.current?.check();
-  };
+  // The saved version redraws the form, so what was typed while the save was in flight is carried onto it.
+  const auto = useAutosave({
+    waiting: dirty && valid ? JSON.stringify(form) : null,
+    enabled: !readOnly,
+    paused: reloading,
+    settledOn: sk.digest,
+    send,
+    onSaved: () => {
+      const kept = carriedAfterSave(sentForm.current, formNow.current, sentForm.current);
+      if (carried) carried.current = kept && { readBefore: sentForm.current, edited: kept };
+      saving.current = false;
+    },
+    refusal: (e) => {
+      saving.current = false;
+      // In review and deprecated are 409 as well; only a newer version offers a reload.
+      const newer = staleSave(e);
+      if (carried) carried.current = { readBefore: saved, edited: formNow.current };
+      return newer ? { stale: staleNote(newer) } : null;
+    },
+    onError: (e) => {
+      const onStep = refusedSave(e);
+      if (onStep?.position?.step) setRefused(onStep);
+    },
+  });
+  const { stale, error: failed } = auto;
+  const status: SaveStatus = reloading ? 'saving' : auto.status;
+  React.useEffect(() => {
+    onSaveState?.({ status, detail: stale ?? failed ?? (dirty && !valid ? 'Fix the highlighted fields to save' : null), saveNow: auto.saveNow, retry: auto.retry, canSave: !readOnly && dirty && valid && !stale });
+  });
 
   return (
     <div className="flex flex-col gap-4" data-testid="skill-editor">
@@ -258,7 +263,7 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried, keptTe
           <AlertDescription>
             <p>It is kept on this page. Check your connection, then retry.</p>
             <p className="text-xs">{failed}</p>
-            <Button variant="outline" size="sm" onClick={() => void submit()} disabled={save.isPending} data-testid="skill-save-retry">
+            <Button variant="outline" size="sm" onClick={auto.retry} disabled={auto.saving} data-testid="skill-save-retry">
               <RefreshCw className="size-3.5" /> Retry
             </Button>
           </AlertDescription>
@@ -290,7 +295,7 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried, keptTe
           </AlertDescription>
         </Alert>
       )}
-      <SkillWhenSection key={`when-${discards}`} value={saved.when} onChange={setWhen} onValidity={setWhenValid} useWhenMax={limit} needsUseWhen={form.loading === 'on_match'} showNotWhen={stepped} notWhenProblem={problems.find((p) => p.position?.field === 'notWhen')?.message} disabled={readOnly} controls={whenForm} />
+      <SkillWhenSection value={saved.when} onChange={setWhen} onValidity={setWhenValid} useWhenMax={limit} needsUseWhen={form.loading === 'on_match'} showNotWhen={stepped} notWhenProblem={problems.find((p) => p.position?.field === 'notWhen')?.message} disabled={readOnly} controls={whenForm} />
       {stepped ? (
         <SettingsSection title="Instructions" description="Write the skill the way you would explain it to a new teammate. A line that mentions a tool may use it; an indented “if …:” block is a path, “else:” the other one, and “stop” ends the skill.">
           <div className="flex flex-col gap-2">
@@ -472,37 +477,9 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried, keptTe
       </SettingsSection>
 
       {/* A skill with parts takes its inputs on each part. */}
-      {stepped && <SkillInputsSection key={`inputs-${discards}`} value={saved.inputs} onChange={setInputs} onValidity={setInputsValid} disabled={readOnly} />}
-      {stepped && <SkillResultsSection key={discards} value={saved.ending} onChange={setEnding} onValidity={setEndingValid} disabled={readOnly} />}
+      {stepped && <SkillInputsSection value={saved.inputs} onChange={setInputs} onValidity={setInputsValid} disabled={readOnly} />}
+      {stepped && <SkillResultsSection value={saved.ending} onChange={setEnding} onValidity={setEndingValid} disabled={readOnly} />}
 
-      {!readOnly && (
-        <PageSaveActions
-          dirty={dirty}
-          saving={save.isPending}
-          status={save.isPending ? 'saving' : dirty ? 'unsaved' : 'saved'}
-          onDiscard={discard}
-          save={
-            // Saving asks for a version note and says what this kind of edit needs before it goes live.
-            <Popover open={noting} onOpenChange={(open) => (open ? void askNote() : setNoting(false))}>
-              <PopoverTrigger asChild>
-                <Button size="sm" disabled={!dirty || !!errors.name || !!errors.parts || !endingValid || !inputsValid || save.isPending || reloading} title={`Saves ${target}`} data-testid="save-skill-draft">
-                  Save
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent align="end" className="flex w-80 flex-col gap-3">
-                <div className="flex items-start gap-2">
-                  <EditClassBadge editClass={editClass} />
-                  <p className="text-sm text-muted-foreground">{errors.parts ?? EDIT_CLASS[editClass].hint}</p>
-                </div>
-                <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Add the joint account rule" aria-label="Version note" />
-                <Button size="sm" className="self-end" onClick={() => (setNoting(false), submit())} disabled={save.isPending || reloading} title={`Saves ${target}`} data-testid="save-skill-draft-confirm">
-                  Save
-                </Button>
-              </PopoverContent>
-            </Popover>
-          }
-        />
-      )}
     </div>
   );
 }
