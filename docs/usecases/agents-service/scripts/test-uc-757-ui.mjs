@@ -300,6 +300,64 @@ await withUiStack(
       await maya.getByTestId('sop-editor-content').waitFor({ timeout: 120_000 });
       await shootBothWidths(maya, AREA, 'uc-757-skill-member', async () => {});
 
+      // 23. Pages reached by the sidebar's links, not by loading their URL: a client navigation keeps the shell mounted,
+      // and the walks saw update loops only that way, at both widths.
+      const viaSidebar = async (p, href) => {
+        const link = p.locator(`[data-sidebar="sidebar"] a[href="${href}"]`).first();
+        if (!(await link.isVisible())) await p.getByRole('button', { name: /toggle sidebar/i }).first().click();
+        await link.click();
+        // Unsaved text asks first; the walk leaves it.
+        const leave = p.getByTestId('leave-guard-discard');
+        await leave.waitFor({ timeout: 2_000 }).then(() => leave.click(), () => undefined);
+        await p.waitForURL((u) => u.pathname === href, { timeout: 60_000 });
+        await p.waitForTimeout(1500);
+      };
+      const seen = errors.length;
+      for (const [who, p] of [['james', page], ['maya', maya]]) {
+        for (const width of [1440, 390]) {
+          await p.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
+          await viaSidebar(p, '/build/workflows');
+          const flow = p.locator('main a[href^="/build/workflows/definitions/"]').first();
+          if (await flow.count()) {
+            await flow.dispatchEvent('click');
+            await p.waitForURL((u) => /^\/build\/workflows\/[^/]+/.test(u.pathname), { timeout: 60_000 });
+            await p.waitForTimeout(2000);
+          }
+          await viaSidebar(p, '/build/skills');
+          // The row's link lies under its label; a click event on the link is the row click a person makes.
+          await p.locator(`main a[href="/build/skills/${skill.id}"]`).first().dispatchEvent('click');
+          await p.getByTestId('sop-editor-content').waitFor({ timeout: 60_000 });
+          if (who === 'james') {
+            await p.getByTestId('sop-editor-content').click();
+            await p.keyboard.press('ControlOrMeta+End');
+            await p.keyboard.type(' Then say goodbye with @', { delay: 20 });
+            await p.getByTestId('caret-menu').getByRole('option').first().waitFor({ timeout: 60_000 });
+            await p.keyboard.press('Enter');
+            // The walks typed, then resized to the other width with the text unsaved.
+            await p.setViewportSize(width === 1440 ? { width: 390, height: 844 } : { width: 1440, height: 1000 });
+            await p.waitForTimeout(1000);
+            await p.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
+            await p.waitForTimeout(1000);
+          }
+          await viaSidebar(p, '/work/tasks');
+        }
+        await p.setViewportSize({ width: 1440, height: 1000 });
+      }
+      // A skill publish waiting on Maya, the way the walk made one: the team's skill publishes always need a review.
+      const policy = await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/policies/publishReview`, { method: 'PUT', headers: as(await tokenFor(PRIYA)), body: JSON.stringify({ value: { skills: 'always' } }) });
+      // A policy change ends the tokens issued before it.
+      const fresh = as(await tokenFor(JAMES));
+      const post = async (path, body) => (await (await fetch(`${agents}${path}`, { method: 'POST', headers: fresh, body: JSON.stringify(body) })).json()).data ?? {};
+      const asked = await post('/v1/skills', { name: `Reviewed walk ${RUN}`, ownerTeam: 'team_ops', useWhen: 'The cardholder asks for a statement.', instructions: 'Send the latest statement.', steps: [{ do: 'Say where the statement is.' }] });
+      const request = await post(`/v1/skills/${asked.id}/publish-requests`, { note: 'uc-757 walk' });
+      await viaSidebar(maya, '/build/skills');
+      await viaSidebar(maya, '/work/tasks');
+      // The publish is the one task waiting on Maya here; its row names the review, not the skill.
+      await maya.locator('[data-testid^="queue-item-"]').first().click();
+      const pane = maya.getByTestId('review-sheet');
+      const shown = await pane.getByTestId('review-approve').waitFor({ timeout: 60_000 }).then(() => true, () => false);
+      check('23 a skill publish opened from Human Tasks shows in the review sheet with its approve button', policy.status === 200 && request.status === 'in_review' && shown, { policy: policy.status, request: request.status, shown });
+      check('23 the workflows list and canvas, the skill editor while typing and Human Tasks, reached by sidebar links, log no errors', errors.length === seen, errors.slice(seen));
       check('19 no page errors and no failed requests', errors.length === 0 && failed.length === 0, { errors, failed });
       console.log(`walk: ${errors.length} console errors, ${failed.length} failed requests`, errors, failed);
     } finally {
