@@ -237,20 +237,27 @@ def test_a_procedure_pasted_from_a_document_reads_as_its_paths() -> None:
         "  • their policy number\r\n"
         "  1. the date of the claim\r\n"
         "Find the policy with @tool:find_policy\r\n"
-        "If active:\r\n"
+        "2. If active:\r\n"
         f"{nbsp}Open the claim with @tool:open_claim\r\n"
+        f"{nbsp}- if closed:\r\n"
+        f"{nbsp}{nbsp}Read it back with @tool:read_claim\r\n"
         "Otherwise:\r\n"
-        f'{wide}stop "Policy lapsed"'
+        f'{wide}Stop "Policy lapsed"'
     )
-    r = read(pasted, fields={"@tool:find_policy": {"active": {"type": "boolean"}}})
+    fields: dict[str, Any] = {"active": {"type": "boolean"}, "closed": {"type": "boolean"}}
+    r = read(pasted, fields={"@tool:find_policy": fields, "@tool:open_claim": fields})
     assert r.program is not None and [s.use.id if s.use else None for s in r.program.steps] == [
         "find_policy",
         "open_claim",
+        "read_claim",
     ]
-    branch = r.program.steps[0].branch
-    assert branch and branch.test.by == "rule" and branch.otherwise.exit == "policy_lapsed"
+    first, second = r.program.steps[0].branch, r.program.steps[1].branch
+    assert first and first.test.by == "rule" and first.otherwise.exit == "policy_lapsed", "a numbered If is a path"
+    assert second and second.test.by == "rule", "a bulleted if is a path"
+    assert r.program.exit == {"policy_lapsed": "Policy lapsed"}, "a capital Stop ends the skill"
     assert r.hints == [], "list items and pasted spaces earn no indent hint"
-    assert [m["depth"] for m in r.marks] == [0, 1, 1, 0, 0, 1, 0, 1]
+    assert [m["kind"] for m in r.marks][4:] == ["if", "step", "if", "step", "else", "stop"]
+    assert [m["depth"] for m in r.marks] == [0, 1, 1, 0, 0, 1, 1, 2, 0, 1]
 
 
 def test_a_write_on_a_path_the_agent_decides_is_a_hint_and_one_behind_a_checked_path_is_not() -> None:

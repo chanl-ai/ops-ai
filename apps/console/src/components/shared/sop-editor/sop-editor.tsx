@@ -92,6 +92,10 @@ class MentionWidget extends WidgetType {
     // A wrapped line's hanging indent is inherited by inline blocks; a badge draws from its own left edge.
     el.style.textIndent = '0';
     el.title = `${missing ? `${this.ref.id} no longer exists` : this.label}. Click it, or press Alt+Enter beside it, to replace or remove it.`;
+    // The title shows only on hover; a screen reader and a touch reader get the same words from the label.
+    el.setAttribute('aria-label', el.title);
+    el.setAttribute('role', 'button');
+    el.style.cursor = 'pointer';
     return el;
   }
   ignoreEvent() {
@@ -112,6 +116,7 @@ class HowWidget extends WidgetType {
     el.textContent = this.how === 'checked' ? 'checked' : 'agent decides';
     el.dataset.testid = 'sop-condition-how';
     el.title = HOW_SAYS[this.how];
+    el.setAttribute('aria-label', `${el.textContent}: ${HOW_SAYS[this.how]}`);
     return el;
   }
 }

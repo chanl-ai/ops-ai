@@ -241,7 +241,7 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
                   <AttributeCard title="Tools and knowledge" icon={Wrench} testId="skill-scope-card">
                     <div className="flex flex-col gap-3 text-sm">
                       <div>
-                        <div className="mb-1 text-xs text-muted-foreground">Tools</div>
+                        <div className="mb-1 text-xs text-muted-foreground">{s.content.parts?.length ? 'Tools' : 'Tools · read from the text when saved'}</div>
                         <ToolChips tools={s.content.tools} max={8} />
                       </div>
                       <div>

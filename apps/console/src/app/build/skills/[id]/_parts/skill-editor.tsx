@@ -12,7 +12,7 @@ import { TagInput } from '@/components/shared/tag-input';
 import { parseText, refToken } from '@/components/shared/instruction-document/document-model';
 import { HOW_SAYS, SopEditor, type SopEditorHandle } from '@/components/shared/sop-editor';
 import { SkillInputsSection } from '@/components/skills/skill-inputs-section';
-import { EDIT_CLASS, EditClassBadge, MarkdownPreview, WORKED_EXAMPLE } from '@/components/skills/skill-meta';
+import { EDIT_CLASS, EditClassBadge, MarkdownPreview, UNWRITTEN_SECTIONS, WORKED_EXAMPLE } from '@/components/skills/skill-meta';
 import { inText, refusedSave } from '@/components/skills/skill-problems';
 import { SkillResultsSection, type SkillEndingValue } from '@/components/skills/skill-results-section';
 import { SkillWhenSection, type SkillWhen, type SkillWhenHandle } from '@/components/skills/skill-when-section';
@@ -52,7 +52,10 @@ export interface Form {
   inputs: SkillInputField[];
 }
 
-const formOf = (sk: SkillDetail): Form => ({ name: sk.content.name, when: { useWhen: sk.content.useWhen, notWhen: sk.content.notWhen ?? '' }, loading: sk.content.loading, instructions: sk.content.instructions, toolIds: sk.content.tools.map((t) => t.toolId), knowledgeBases: sk.content.knowledgeBases, guardrails: sk.content.guardrails, refusal: sk.content.refusal ?? '', parts: sk.content.parts ?? [], text: sk.text, ending: { exit: sk.content.exit ?? {}, returns: sk.content.returns ?? [], success: sk.content.success ?? [] }, inputs: sk.content.inputs ?? [] });
+// A skill made blank holds only section headings; its text opens empty so the worked example shows instead.
+const squash = (t: string) => t.replace(/\s+/g, '');
+const textOf = (text: string) => (squash(text) === squash(UNWRITTEN_SECTIONS) ? '' : text);
+const formOf = (sk: SkillDetail): Form => ({ name: sk.content.name, when: { useWhen: sk.content.useWhen, notWhen: sk.content.notWhen ?? '' }, loading: sk.content.loading, instructions: sk.content.instructions, toolIds: sk.content.tools.map((t) => t.toolId), knowledgeBases: sk.content.knowledgeBases, guardrails: sk.content.guardrails, refusal: sk.content.refusal ?? '', parts: sk.content.parts ?? [], text: textOf(sk.text), ending: { exit: sk.content.exit ?? {}, returns: sk.content.returns ?? [], success: sk.content.success ?? [] }, inputs: sk.content.inputs ?? [] });
 const NONE: PublishBlocker[] = [];
 const EXAMPLE = WORKED_EXAMPLE;
 const KINDS = [['tools', 'tool', 'tools'], ['knowledge', 'knowledge source', 'knowledge sources'], ['skills', 'skill', 'skills'], ['agents', 'agent', 'agents'], ['workflows', 'workflow', 'workflows']] as const;
@@ -129,6 +132,10 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried }: { sk
   const warnings = newest.state === 'draft' ? sk.publishCheck.warnings : undefined;
   const discard = () => (setForm(saved), setEndingValid(true), setWhenValid(true), setInputsValid(true), setRefused(null), setFailed(null), setDiscards((n) => n + 1));
   const tools = options.data?.tools ?? [];
+  // A skill written as text runs the tools its text mentions; one kept on the form from before stays listed, removable.
+  const textTools = mentioned.filter((t) => t.startsWith('tool:')).map((t) => t.slice('tool:'.length));
+  const listedTools = stepped ? [...new Set([...textTools, ...form.toolIds])] : form.toolIds;
+  const labelOf = (id: string) => labels.data?.find((l) => l.kind === 'tool' && l.id === id)?.label;
   const toolOf = (id: string) => tools.find((t) => t.toolId === id) ?? sk.content.tools.find((t) => t.toolId === id);
   const target = newest.state === 'draft' ? `draft v${newest.version}` : `draft v${newest.version + 1}`;
 
@@ -229,9 +236,14 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried }: { sk
           <div className="flex flex-col gap-2">
             <div className={readOnly ? 'rounded-lg border bg-muted/40' : 'rounded-lg border bg-card'} data-testid="skill-text-editor">
               {readOnly ? (
-                <p className="flex items-center gap-2 border-b px-3 py-2 text-xs text-muted-foreground" data-testid="sop-read-only">
-                  <Lock className="size-3.5" /> Read only. {locked ?? 'You can read this skill; a builder in its team can change it.'}
-                </p>
+                <div className="flex flex-col gap-1 border-b px-3 py-2 text-xs text-muted-foreground">
+                  <p className="flex items-center gap-2" data-testid="sop-read-only">
+                    <Lock className="size-3.5" /> Read only. {locked ?? 'You can read this skill; a builder in its team can change it.'}
+                  </p>
+                  <span data-testid="sop-how-legend">
+                    {HOW_SAYS.checked} {HOW_SAYS.agent}
+                  </span>
+                </div>
               ) : (
                 // Above the text, so it stays in view on a long skill.
                 <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2" data-testid="sop-cue-bar">
@@ -325,17 +337,18 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried }: { sk
           <div className="flex flex-col gap-2">
             <span className="text-sm font-medium">Tools</span>
             <div className="flex flex-col divide-y rounded-md border bg-card">
-              {form.toolIds.length ? (
-                form.toolIds.map((id) => {
+              {listedTools.length ? (
+                listedTools.map((id) => {
                   const t = toolOf(id);
+                  const inText = stepped && textTools.includes(id);
                   return (
-                    <div key={id} className="flex items-center gap-2 px-3 py-1.5">
-                      <code className="flex-1 truncate font-mono text-xs">{t?.name ?? id}</code>
-                      <span className="text-xs text-muted-foreground">{t?.module}</span>
+                    <div key={id} className="flex items-center gap-2 px-3 py-1.5" data-testid="skill-tool-row">
+                      <code className="flex-1 truncate font-mono text-xs">{t?.name ?? labelOf(id) ?? id}</code>
+                      <span className="text-xs text-muted-foreground">{inText ? 'in the text' : t?.module}</span>
                       {t && <AccessBadge access={t.access} />}
-                      <Button variant="ghost" size="icon" className="size-7" disabled={readOnly} aria-label={`Remove ${t?.name ?? id}`} onClick={() => setForm({ ...form, toolIds: form.toolIds.filter((x) => x !== id) })}>
+                      {!inText && <Button variant="ghost" size="icon" className="size-7" disabled={readOnly} aria-label={`Remove ${t?.name ?? id}`} onClick={() => setForm({ ...form, toolIds: form.toolIds.filter((x) => x !== id) })}>
                         <X className="size-3.5" />
-                      </Button>
+                      </Button>}
                     </div>
                   );
                 })
@@ -343,6 +356,11 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried }: { sk
                 <p className="px-3 py-2 text-sm text-muted-foreground">No tools. The skill answers from its instructions and knowledge only.</p>
               )}
             </div>
+            {stepped ? (
+              <p className="text-xs text-muted-foreground" data-testid="skill-tools-from-text">
+                Read from the text. Mention a tool with @ to add it.
+              </p>
+            ) : (
             <AddMenu
               label="Add a tool operation"
               items={tools
@@ -359,6 +377,7 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried }: { sk
               disabled={readOnly}
               className="w-72"
             />
+            )}
           </div>
           <div className="flex flex-col gap-2">
             <span className="text-sm font-medium">Knowledge bases</span>

@@ -150,8 +150,9 @@ else:
 Thank them.
 ```
 
-A procedure pasted from a document reads as it looks: `If …:` and `Otherwise:` work like `if …:` and `else:`, list
-items (`•`, `-`, `1.`) are plain lines, and non-breaking or full-width spaces and Windows line endings count as
+A procedure pasted from a document reads as it looks: `If …:`, `Otherwise:` and `Stop "…"` work like `if …:`,
+`else:` and `stop "…"`, a list marker (`•`, `-`, `1.`) is not read, so `2. If active:` is a path and any other list
+item is a plain line, and non-breaking or full-width spaces and Windows line endings count as
 ordinary ones. In the console editor, click a mention to replace or remove it, tap a line with a wavy underline to
 read its hint (every hint is also listed under the text), and press Esc then Tab to leave the editor with the
 keyboard. A new skill opens with a short example of one mention line and one path.

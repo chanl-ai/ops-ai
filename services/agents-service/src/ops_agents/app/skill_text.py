@@ -73,9 +73,11 @@ _FLIP = {">": "<=", "<": ">=", ">=": "<", "<=": ">"}
 # runs on stays an instruction.
 _IF = re.compile(r"^if\s+(.+?)\s*:\s*$", re.IGNORECASE)
 _ELSE = re.compile(r"^(?:else|otherwise)\s*:\s*$", re.IGNORECASE)
-# A pasted list item: `•`, `-`, `*`, `1.` or `1)`. It reads as a plain line, and its indent opens nothing.
+# A pasted list item: `•`, `-`, `*`, `1.` or `1)`. Its indent opens nothing, and its marker is not read: `2. If
+# found:` is a path like `If found:`.
 _LIST = re.compile(r"^(?:[\u2022\u2023\u25e6\u2043\u2219*-]|\d{1,3}[.)])\s+")
-_STOP = re.compile(r"^stop(?:\s+([a-z][a-z0-9_]{0,31}))?(?:\s+([\"\u201c'].*[\"\u201d']))?\s*$")
+# The keyword reads in any case, as `if` and `else` do; an exit name stays lower case.
+_STOP = re.compile(r"^(?i:stop)(?:\s+([a-z][a-z0-9_]{0,31}))?(?:\s+([\"\u201c'].*[\"\u201d']))?\s*$")
 _QUOTES = "\"'\u201c\u201d\u2018\u2019"
 _IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _RETRY = re.compile(r"^try again(?:\s+(once|[1-3])(?:\s+times?)?)?\.?$")
@@ -235,6 +237,11 @@ def _slug(reason: str) -> str:
     return name if re.fullmatch(EXIT_NAME, name) else "stopped"
 
 
+def _bare(txt: str) -> str:
+    """The line without a pasted list marker, for reading its keyword."""
+    return _LIST.sub("", txt, count=1)
+
+
 def _stop_of(txt: str, declared: frozenset[str]) -> tuple[str | None, str] | None:
     """(exit name, reason) of a stop line; None for a line that reads as an instruction (`stop now`)."""
     m = _STOP.match(txt)
@@ -272,16 +279,17 @@ class _Parser:
                     }
                 )
             self.i += 1
-            if m := _IF.match(txt):
+            word = _bare(txt)
+            if m := _IF.match(word):
                 body = self._inner(line, ind, depth)
                 orelse: list[_Item] = []
-                if self.i < len(self.rows) and self.rows[self.i][1] == ind and _ELSE.match(self.rows[self.i][2]):
+                if self.i < len(self.rows) and self.rows[self.i][1] == ind and _ELSE.match(_bare(self.rows[self.i][2])):
                     else_line = self.rows[self.i][0]
                     self.i += 1
                     self.marks[else_line]["depth"] = depth
                     orelse = self._inner(else_line, ind, depth)
                 items.append(_If(line, m.group(1).strip(), body, orelse))
-            elif _ELSE.match(txt):
+            elif _ELSE.match(word):
                 self.hints.append(
                     {
                         "line": line,
@@ -292,14 +300,14 @@ class _Parser:
                     }
                 )
                 items.extend(self._inner(line, ind, depth))
-            elif (stop := _stop_of(txt, self.declared)) is not None:
+            elif (stop := _stop_of(word, self.declared)) is not None:
                 name, rest = stop
                 ruled = name in BUILT_IN_EXITS or name in self.declared
                 rest = rest or (name.replace("_", " ") if name and not ruled else "")
                 exit_name = name or (_slug(rest) if rest else "failed")
                 items.append(_Stop(line, exit_name, rest[:300], named=name is not None))
             else:
-                if _STOP.match(txt):
+                if _STOP.match(word):
                     self.marks[line]["kind"] = "text"
                 items.append(_Text(line, txt))
         return items
@@ -747,7 +755,7 @@ def read(
     hints: list[Note] = []
     marks: dict[int, Mark] = {}
     for n, raw in enumerate(text.split("\n"), start=1):
-        t = raw.strip()
+        t = _bare(raw.strip())
         kind: LineKind = (
             "blank"
             if not t

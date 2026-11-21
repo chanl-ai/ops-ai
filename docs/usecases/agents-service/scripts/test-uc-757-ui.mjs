@@ -62,69 +62,56 @@ await withUiStack(
     try {
       const page = await signIn(JAMES);
 
-      // 10. The skill page: the steps are one document, and the endings hint reads.
+      // 10. The skill page: the notes and steps are one text, and the endings hint reads.
+      const doc = page.getByTestId('sop-editor-content');
+      const lineOf = (text) => page.getByTestId('sop-editor').locator('.cm-line', { hasText: text });
       await page.goto(`${consoleUrl}/build/skills/${skill.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await page.getByTestId('skill-document').waitFor({ timeout: 120_000 });
-      await page.getByTestId('skill-document').getByRole('group', { name: 'Step 3' }).waitFor({ timeout: 60_000 });
-      check('10 the skill page draws its steps as one document', (await page.getByTestId('skill-document').getByRole('group', { name: /^Step \d/ }).count()) === 3, await page.getByTestId('skill-document').innerText());
-      const notes = await page.getByTestId('skill-document').innerText();
-      // A skill made by the New skill dialog holds only section headings; the notes block shows those as empty.
+      await doc.waitFor({ timeout: 120_000 });
+      await lineOf('Tell the cardholder what happens next').waitFor({ timeout: 60_000 });
+      const notes = await doc.innerText();
+      check('10 the skill page draws its notes and three steps as one text', ['Say what each step found', 'Ask which charge is disputed', 'Look the charge up', 'Tell the cardholder what happens next'].every((t) => notes.includes(t)), notes);
+      // A skill made by the New skill dialog holds only section headings; the text shows those as empty.
       const blank = await made('/v1/skills', { name: `Blank walk ${RUN}`, ownerTeam: 'team_ops', useWhen: 'Never, it is blank.', instructions: '## Steps\n1.\n\n## Rules\n-\n\n## Examples\n\n\n## Output format\n' });
       await page.goto(`${consoleUrl}/build/skills/${blank.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await page.getByTestId('skill-document').waitFor({ timeout: 120_000 });
-      const empty = await page.getByTestId('skill-document').innerText();
-      check('10 written notes show as saved and a blank skill\'s notes start empty', /Say what each step found/.test(notes) && !/## Steps|## Rules/.test(empty), { notes, empty });
-      // A check the model judges that states a comparison says to write it as a rule; a sentence that compares nothing does not.
-      const judged = await made('/v1/skills', { name: `Judged walk ${RUN}`, ownerTeam: 'team_ops', useWhen: 'A balance is checked.', instructions: '', steps: [{ do: 'Read the balance aloud.', check: { text: 'The balance is above zero.' } }, { do: 'Say goodbye.', check: { text: 'The caller said goodbye.' } }] });
-      await page.goto(`${consoleUrl}/build/skills/${judged.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await page.getByTestId('skill-document').getByRole('group', { name: 'Step 2' }).waitFor({ timeout: 60_000 });
-      const hinted = page.getByTestId('check-rule-hint');
-      await hinted.first().waitFor({ timeout: 30_000 }).catch(() => undefined);
-      check('10 a judged check that compares a value says to write a rule, and only that one', (await hinted.count()) === 1 && /result\.balance > 0/.test(await hinted.first().innerText()), await page.getByTestId('skill-document').innerText());
+      await doc.waitFor({ timeout: 120_000 });
+      const empty = await doc.innerText();
+      check('10 a blank skill\'s text starts empty', !/## Steps|## Rules/.test(empty), { empty });
       await page.goto(`${consoleUrl}/build/skills/${skill.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await page.getByTestId('skill-document').getByRole('group', { name: 'Step 3' }).waitFor({ timeout: 60_000 });
+      await lineOf('Look the charge up').waitFor({ timeout: 60_000 });
       const endings = page.getByTestId('skill-results-section');
       await endings.scrollIntoViewIfNeeded();
       check('10 the endings section says when another skill\'s step passes', /passes only if this skill ends as done/.test(await endings.innerText()), await endings.innerText());
-      // A tool picked in the middle of a step's sentence becomes the tool the step runs, drawn once with a "runs" mark.
-      const two = page.getByTestId('skill-document').getByRole('group', { name: 'Step 2' });
-      await two.click();
+      // A tool picked in the middle of a step's sentence becomes the tool the step runs, drawn once as a mention.
+      await lineOf('Look the charge up').click();
       await page.keyboard.press('End');
       await page.keyboard.type(' with @');
       const picker = page.getByTestId('caret-menu');
       await picker.getByRole('option').first().waitFor({ timeout: 60_000 });
       await page.keyboard.press('Enter');
-      await two.getByTestId('runs-mark').waitFor({ timeout: 30_000 }).catch(() => undefined);
-      // The builder keeps the tool to this step, whatever kind of tool it is.
-      await two.getByTestId('lock-step-tool').click();
-      const lockOn = await two.getByTestId('lock-step-tool').getAttribute('aria-pressed');
-      const drawn = { chips: await two.getByTestId('reference-chip').count(), marks: await two.getByTestId('runs-mark').count() };
+      await lineOf('Look the charge up').getByTestId('sop-mention').waitFor({ timeout: 30_000 }).catch(() => undefined);
+      const drawn = await page.getByTestId('sop-editor').getByTestId('sop-mention').count();
+      // The Tools field lists what the text mentions, read-only, once the text holds the mention.
+      const picked = (await lineOf('Look the charge up').getByTestId('sop-mention').innerText()).trim();
+      const toolRow = page.getByTestId('skill-tool-row').filter({ hasText: 'in the text' });
+      await toolRow.first().waitFor({ timeout: 30_000 }).catch(() => undefined);
+      const toolRows = await page.getByTestId('skill-tool-row').allInnerTexts();
+      check('10 the Tools field lists the tool the text mentions, read-only', (await toolRow.count()) === 1 && (await toolRow.getByRole('button').count()) === 0 && (await page.getByTestId('skill-tools-from-text').count()) === 1, { picked, toolRows });
       const stored = armed(page.waitForResponse((r) => r.request().method() === 'PUT' && r.url() === `${agents}/v1/skills/${skill.id}/draft`, { timeout: 60_000 }));
       await page.getByTestId('save-skill-draft').click();
       await page.getByTestId('save-skill-draft-confirm').click();
-      const kept = (await (await stored).json()).data?.content?.steps?.[1] ?? {};
+      const keptSteps = (await (await stored).json()).data?.content?.steps ?? [];
+      const kept = keptSteps.find((s) => (s.do ?? '').includes('Look the charge up')) ?? {};
       check(
         '10 a tool picked mid-sentence is saved as the step\'s tool and drawn once',
-        drawn.chips === 1 && drawn.marks === 1 && ['tool', 'agent', 'workflow'].includes(kept.use?.kind) && kept.do?.includes(`@${kept.use.kind}:${kept.use.id}`) && /^Look the charge up/.test(kept.do),
-        { drawn, kept },
+        drawn === 1 && ['tool', 'agent', 'workflow'].includes(kept.use?.kind) && kept.do?.includes(`@${kept.use.kind}:${kept.use.id}`),
+        { drawn, kept, keptSteps },
       );
-      check('10 a tool the builder locks to its step is saved locked', lockOn === 'true' && kept.locked === true, { lockOn, locked: kept.locked });
       // Someone else saves first: James's save is refused, and Reload keeps what he typed on top of their version.
-      // The form is drawn again from the version just saved; typing starts once it has.
-      // The button is also off while the save is in flight, so the saved toast is waited for first.
+      // The button is off while the save is in flight, so the saved toast is waited for first.
       await page.getByText(/Saved draft v1/).first().waitFor({ timeout: 60_000 });
       await page.waitForFunction(() => document.querySelector('[data-testid="save-skill-draft"]')?.disabled === true, null, { timeout: 60_000 });
       await page.waitForTimeout(800);
-      // Enter just before the tool: the tool, and its lock, go with it to the new step, and the first half runs none.
-      // The caret is put by a click in the space just left of the chip, as a person would.
-      const chip = await page.getByTestId('skill-document').getByRole('group', { name: 'Step 2' }).getByTestId('reference-chip').boundingBox();
-      await page.mouse.click(chip.x - 2, chip.y + chip.height / 2);
-      await page.keyboard.press('Enter');
-      const stepGroups = page.getByTestId('skill-document').getByRole('group', { name: /^Step \d/ });
-      await stepGroups.nth(3).waitFor({ timeout: 60_000 });
-      const spoken = await stepGroups.evaluateAll((els) => els.map((el) => el.getAttribute('aria-label')));
-      check('10 after a step is added above, each step is announced by its new number', spoken.join() === 'Step 1,Step 2,Step 3,Step 4', spoken);
-      await stepGroups.nth(3).click();
+      await lineOf('Tell the cardholder what happens next').click();
       await page.keyboard.press('End');
       // One insert, as a paste is: the check is about what Reload keeps, not about key-by-key typing.
       await page.keyboard.insertText(' Then thank them.');
@@ -136,8 +123,8 @@ await withUiStack(
       const refusedStale = await staleAlert.waitFor({ timeout: 60_000 }).then(() => true, () => false);
       await page.getByTestId('skill-stale-reload').click();
       await staleAlert.waitFor({ state: 'detached', timeout: 60_000 }).catch(() => undefined);
-      await page.getByTestId('skill-document').getByRole('group', { name: 'Step 3' }).waitFor({ timeout: 60_000 });
-      const afterReload = await page.getByTestId('skill-document').innerText();
+      await lineOf('Then thank them.').waitFor({ timeout: 60_000 }).catch(() => undefined);
+      const afterReload = await doc.innerText();
       const fields = await page.locator('input').evaluateAll((els) => els.map((el) => el.value));
       check(
         '10 after someone else saves first, Reload shows their version and keeps the unsaved text',
@@ -148,13 +135,8 @@ await withUiStack(
       await page.getByTestId('save-skill-draft').click();
       await page.getByTestId('save-skill-draft-confirm').click();
       const top = (await (await onTop).json()).data ?? {};
-      check('10 the kept text then saves on top of their version', top.name === `Card dispute renamed ${RUN}` && /Then thank them\./.test(top.content?.steps?.[3]?.do ?? ''), { name: top.name, step: top.content?.steps?.[3] });
-      const [, first, second] = top.content?.steps ?? [];
-      check(
-        '10 Enter before a step\'s tool leaves the tool, and its lock, on the step that holds it',
-        first?.use == null && !/@/.test(first?.do ?? '@') && second?.use?.id === kept.use?.id && second?.locked === true && (second?.do ?? '').includes(`@${kept.use?.kind}:${kept.use?.id}`),
-        { first, second },
-      );
+      const topSteps = top.content?.steps ?? [];
+      check('10 the kept text then saves on top of their version', top.name === `Card dispute renamed ${RUN}` && topSteps.some((s) => /Then thank them\./.test(s.do ?? '')) && topSteps.some((s) => s.use?.id === kept.use?.id), { name: top.name, topSteps });
       await shootBothWidths(page, AREA, 'uc-757-skill-admin', async () => {
         await page.waitForTimeout(600);
         await page.getByTestId('skill-results-section').scrollIntoViewIfNeeded().catch(() => undefined);
@@ -167,6 +149,8 @@ await withUiStack(
       const brief = page.getByTestId('agent-brief');
       await brief.waitFor({ timeout: 120_000 });
       await page.getByTestId('agent-uses-link').waitFor({ timeout: 60_000 });
+      // The document editor draws after the page's own fields, so its headings are waited for before they are counted.
+      await brief.getByRole('group').nth(4).waitFor({ timeout: 60_000 }).catch(() => undefined);
       check('11 the brief has its headings and the uses line is a link', (await brief.getByRole('group').count()) >= 5 && /^Uses /.test(await page.getByTestId('agent-uses-link').innerText()), await page.getByTestId('agent-uses-link').innerText());
       // An empty block's hint takes its own height at phone width, so a wrapped hint never runs under the next line.
       const bare = await made('/v1/agents', { name: `Bare desk ${RUN}`, role: 'Has an empty brief' });
@@ -264,7 +248,7 @@ await withUiStack(
       check('18 a reviewer can open what the agent uses and its model and limits, with the fields off', sheet && limits && (await maya.locator('#ag-thinking').isDisabled()), { sheet, limits });
       await shootBothWidths(maya, AREA, 'uc-757-agent-member', async () => {});
       await maya.goto(`${consoleUrl}/build/skills/${skill.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await maya.getByTestId('skill-document').waitFor({ timeout: 120_000 });
+      await maya.getByTestId('sop-editor-content').waitFor({ timeout: 120_000 });
       await shootBothWidths(maya, AREA, 'uc-757-skill-member', async () => {});
 
       check('19 no page errors and no failed requests', errors.length === 0 && failed.length === 0, { errors, failed });
