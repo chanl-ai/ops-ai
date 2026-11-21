@@ -68,12 +68,12 @@ function LiveElsewhere({ lifecycle }: { lifecycle: Pick<Lifecycle, 'version' | '
 }
 
 /** You can view the workflow; the stage shows, and who changes it. */
-export function ViewOnlyLine({ lifecycle }: { lifecycle: Lifecycle }) {
+export function ViewOnlyLine({ lifecycle, note = 'You can view this workflow; builders change it.' }: { lifecycle: Lifecycle; note?: string }) {
   return (
     <div className="mr-auto flex flex-wrap items-center gap-2 text-sm" data-testid="definition-view-only">
       <StageBadge stage={lifecycle.stage} testId="definition-stage" />
       <LiveElsewhere lifecycle={lifecycle} />
-      <span className="text-muted-foreground">You can view this workflow; builders change it.</span>
+      <span className="text-muted-foreground">{note}</span>
     </div>
   );
 }

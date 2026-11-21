@@ -152,9 +152,8 @@ async def blockers(rt: Runtime, me: Principal, row: DefinitionRow, definition: J
         )
         out += [Blocker(c, failing) for c in checks]
     team = current_team() or (row.team_id or "")
-    if (uses := ai_steps_gate.ai_nodes(d, REGISTRY)) and not await ai_steps_gate.allowed(
-        rt, row.team_id or team or None
-    ):
+    # The owning team's policy, as a version is stored under (`_store_version`): a workflow no team owns runs none.
+    if (uses := ai_steps_gate.ai_nodes(d, REGISTRY)) and not await ai_steps_gate.allowed(rt, row.team_id):
         err = Unprocessable(ai_steps_gate.OFF, code="ai_steps_off", details={"nodes": cast(JsonValue, uses)})
         out += [
             Blocker({"node": n, "level": "error", "code": "ai_steps_off", "message": ai_steps_gate.OFF}, err)

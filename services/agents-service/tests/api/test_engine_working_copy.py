@@ -103,10 +103,9 @@ async def test_a_restored_older_version_publishes_as_a_new_live_version(client: 
     on_two = (await client.get(WF)).json()["data"]
     assert on_two["liveVersion"] == 2
     restored = (await _save(client, first, on_two["saveBase"])).json()["data"]["saveBase"]
-    again = await client.post(f"{WF}/versions", json={"baseVersion": 2, "baseDigest": restored["digest"]})
-    assert again.status_code == 201, again.text
-    assert again.json()["data"]["version"] == 3
-    live = await client.post(f"{WF}/publish-requests", json={"version": 3, "note": "roll back"})
+    # The editor publishes the copy in one call: the version is made and its request opened together.
+    body = {"baseVersion": 2, "baseDigest": restored["digest"], "note": "roll back"}
+    live = await client.post(f"{WF}/publish-requests", json=body)
     assert live.status_code == 201, live.text
     after = (await client.get(WF)).json()["data"]
     assert after["liveVersion"] == 3 and after["definition"]["name"] == first["name"]

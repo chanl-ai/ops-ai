@@ -72,6 +72,8 @@ export interface DefinitionEditorProps {
   pausing: boolean;
   /** For a person who may not change the workflow: the graph shows, with no palette, editing, save, publish or pause. */
   readOnly?: boolean;
+  /** Why the canvas is read-only, when it is not the person's role (an outdated copy held for their choice). */
+  readOnlyNote?: string;
   /** Whether the person may publish workflows; false shows Publish locked with the reason, read-only or not. */
   canPublish?: boolean;
   /**
@@ -143,7 +145,7 @@ function EditorInner(props: DefinitionEditorProps) {
   return <EditorBody {...props} definition={placed} />;
 }
 
-function EditorBody({ definition: initial, types, validation, validateError = null, onChange, saveState, changed = false, saving = false, startRun, startByHand, lifecycle, requestPublish, setPaused, pausing, readOnly = false, canPublish, frame }: DefinitionEditorProps) {
+function EditorBody({ definition: initial, types, validation, validateError = null, onChange, saveState, changed = false, saving = false, startRun, startByHand, lifecycle, requestPublish, setPaused, pausing, readOnly = false, readOnlyNote, canPublish, frame }: DefinitionEditorProps) {
   const [def, setDef] = React.useState<EngineDefinition>(initial);
   const [dirty, setDirty] = React.useState(false);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
@@ -377,7 +379,7 @@ function EditorBody({ definition: initial, types, validation, validateError = nu
       {saveState}
       <ProblemsChip validation={validation} checking={checking} failed={validateError} nodeName={nodeName} onSelectNode={(id) => { selectNode(id); setSheetId(id); }} />
       {!readOnly && <LifecycleActions lifecycle={lifecycle} changed={changed} saving={saving} onPublish={() => setPublishOpen(true)} onSetPaused={setPaused} pausing={pausing} canPublish={canPublish !== false} />}
-      {readOnly && <ViewOnlyLine lifecycle={lifecycle} />}
+      {readOnly && <ViewOnlyLine lifecycle={lifecycle} note={readOnlyNote} />}
       {/* Someone who may only read a draft still sees that it waits on a publish, and why they cannot start it. */}
       {readOnly && canPublish === false && lifecycle.stage === 'draft' && !lifecycle.review && <LockedReason area="workflows" action="publish" label="Publish…" />}
       {/* Starting any run is a builder's or admin's step (runs/start); the server refuses the rest, so the

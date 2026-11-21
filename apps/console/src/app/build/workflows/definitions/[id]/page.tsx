@@ -115,6 +115,7 @@ function CanvasTab({ view, types }: { view: DefinitionView; types: EngineNodeTyp
         setPaused={pauseAsync}
         pausing={pausing}
         readOnly={!canBuild || !!outdated}
+        readOnlyNote={outdated ? 'Nothing is saved until you choose below.' : undefined}
         canPublish={canPublish}
         frame={({ actions, canvas }) => (
           <PageLayout {...header} actions={actions}>
@@ -130,7 +131,7 @@ function CanvasTab({ view, types }: { view: DefinitionView; types: EngineNodeTyp
                       {mine ? `Show version ${outdated.newerVersion}` : 'Open my copy'}
                     </Button>
                     <Button size="sm" onClick={() => (setShowingMine(false), setStartedFresh(true))} data-testid="definition-outdated-reload">
-                      Start from version {outdated.newerVersion}
+                      Reload to start from version {outdated.newerVersion}
                     </Button>
                   </div>
                 </AlertDescription>

@@ -899,6 +899,8 @@ async def _version_from_copy(
     """Makes the next version from the working copy saved on `base` and removes the copy; returns DefinitionPublished.
     `publishing` refuses first on every publish blocker, so a copy that cannot go live is not turned into a draft."""
     held = await _editable(rt, me, workflow_id)
+    if publishing:
+        engine_lifecycle.require_rights(me, held, "publish")
     store = definitions(rt)
     copy = await store.working_copy(workflow_id, team=current_team())
     if copy is None:
