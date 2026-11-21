@@ -14,6 +14,8 @@ docs-verify: ## Docs live in mapped docs/ folders; folder READMEs are briefs
 	uv run --quiet python scripts/check_examples.py --check
 
 docs-guides-check: ## Every CLAUDE.md and AGENTS.md: links, anchors, repo paths and make targets resolve; every agent and folder guide links its standards and cites rule ids that exist
+	node scripts/check-doc-routes.mjs --self-test
+	node scripts/check-doc-routes.mjs
 	node scripts/check-guides.mjs --self-test
 	node scripts/check-guides.mjs
 	node scripts/check-standards-refs.mjs --self-test

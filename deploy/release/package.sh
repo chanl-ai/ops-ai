@@ -32,7 +32,7 @@ trap cleanup EXIT
 echo "package: $NAME from $SHA"
 mkdir "$WORK/src"
 git -C "$ROOT" archive "$SHA" | tar -x -C "$WORK/src"
-test -f "$WORK/src/docs/deploy/install-guide.md" || { echo "package: $REF has no docs/deploy/install-guide.md"; exit 1; }
+test -f "$WORK/src/docs/deploy/package-install.md" || { echo "package: $REF has no docs/deploy/package-install.md"; exit 1; }
 
 if [ "${BUILD:-1}" = 1 ]; then
   TARGETS="$TARGETS" IMAGE_PREFIX="$PREFIX" sh "$ROOT/deploy/release/images.sh" "$SHA" "$VERSION" --platforms $PLATFORM
@@ -48,7 +48,8 @@ mkdir -p "$PKG/compose" "$PKG/db"
 cp "$WORK/src/deploy/compose/app.yaml" "$WORK/src/deploy/compose/dba.yaml" "$WORK/src/deploy/compose/try.yaml" "$PKG/compose/"
 sed -e "s|^OPS_IMAGE_PREFIX=.*|OPS_IMAGE_PREFIX=$PREFIX|" -e "s|^OPS_IMAGE_TAG=.*|OPS_IMAGE_TAG=$VERSION|" \
   "$WORK/src/deploy/compose/app.env.example" >"$PKG/ops-ai.env.example"
-cp "$WORK/src/docs/deploy/install-guide.md" "$PKG/INSTALL.md"
+# Not install-guide.md: that one starts from a clone and install.sh, which a package does not hold.
+cp "$WORK/src/docs/deploy/package-install.md" "$PKG/INSTALL.md"
 
 if [ -z "${SERVER:-}" ]; then
   # The schema tool makes scratch databases and the chains' roles on this server; roles are server-wide, so it is a
@@ -102,7 +103,7 @@ These scripts are here so your DBA can review the schema, roles and row-level se
 | manifest.json, SHA256SUMS | Each chain's revision and every file's checksum |
 
 Still to come before Ops AI runs on Azure SQL: applying these scripts to a server and comparing the result with the
-models; kb's full-text search column; the checkpointer's three tables; platform's pre-tenant lookups; the workflow
+models; knowledge search (kb's full-text column and vector table); platform's pre-tenant lookups; the workflow
 worker's queue claim under the tenant write predicate; and every service's tests on SQL Server.
 EOF
 

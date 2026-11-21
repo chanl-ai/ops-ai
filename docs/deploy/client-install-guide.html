@@ -873,7 +873,7 @@ do inside a team; they never open another team&#39;s data.</p>
 <tr><td>Files</td><td>A volume on the host until a Security admin points each upload purpose at a target: local, S3 or an S3-compatible store, or Azure Blob Storage. Each target is tested with a write, a read and a delete before it is saved</td><td>Type judged from the bytes; size and type limits per tenant; one stored copy per content per team; storage credentials encrypted with AES-256-GCM; a reference from a case or a run blocks deletion</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>Malware scanning</td><td>A hook your scanner calls back on, with files held as pending until it answers; a test engine that recognises the EICAR test file. Scanning cannot be turned off outside development</td><td>No scanner ships in the package</td><td><span class="b b-part">Partial</span></td></tr>
 <tr><td>Knowledge</td><td>Source files on the knowledge volume; their text split into chunks in the database. PDF (each file is read once, with OCR for scanned pages, half-scanned pages and images, and filled form fields), Word, Excel, CSV, HTML, text and Markdown, up to 50 MB each</td><td>Search with PostgreSQL full-text ranking and by meaning (below); every answer cites page and section; a knowledge base belongs to one team</td><td><span class="b b-ok">Built</span></td></tr>
-<tr><td>Vector search</td><td>Each knowledge piece embedded through the environment&#39;s embedding alias on the AI gateway, stored in PostgreSQL with pgvector</td><td>Searched by meaning and keywords together, each result saying which ran</td><td><span class="b b-ok">Built</span> on PostgreSQL</td></tr>
+<tr><td>Vector search</td><td>Each knowledge piece embedded through the environment&#39;s embedding alias on the AI gateway, stored in PostgreSQL with pgvector</td><td>Searched by meaning and keywords together, each result saying which ran</td><td><span class="b b-ok">Built</span> on PostgreSQL; not built on SQL Server</td></tr>
 <tr><td>Documents</td><td>Page layouts, extracted fields with the place each came from, corrections. The documents service never holds the bytes and reads them from files</td><td>A model may see page images only where the document type, the team&#39;s policy and the alias all allow it</td><td><span class="b b-ok">Built</span></td></tr>
 </tbody></table></div>
 <h3 id="data-and-database-retention">Retention</h3>
@@ -1521,8 +1521,7 @@ sqlcmd -b -U ops_migrator -d ops -i grants.sql</code></pre></div>
 <tbody>
 <tr><td>A full install on Azure SQL or SQL Server, from the scripts to a signed-in console</td><td>The scripts and each service&#39;s stores are tested on SQL Server 2025; the whole install has not run on one</td><td><span class="b b-plan">Planned</span></td></tr>
 <tr><td>Running the services on Azure SQL and SQL Server</td><td>Each service&#39;s store and isolation tests pass on SQL Server 2025; database code specific to PostgreSQL remains in some services and is moving into the shared layer</td><td><span class="b b-part">Partial</span></td></tr>
-<tr><td>Saved run state for workflows and chats</td><td>Its three tables are written with PostgreSQL-specific code and are not in the SQL Server scripts</td><td><span class="b b-plan">Planned</span></td></tr>
-<tr><td>Knowledge search</td><td>PostgreSQL full-text search has no SQL Server equivalent in the scripts yet</td><td><span class="b b-plan">Planned</span></td></tr>
+<tr><td>Knowledge search</td><td>PostgreSQL full-text search and pgvector have no SQL Server equivalent in the scripts yet; a search there returns no passages</td><td><span class="b b-plan">Planned</span></td></tr>
 <tr><td>Sign-in data</td><td>The platform service still sets the tenant with PostgreSQL statements and uses four lookup functions that run before the tenant is known</td><td><span class="b b-plan">Planned</span></td></tr>
 <tr><td>The worker&#39;s queue claim and the timer poller</td><td>The claim happens before the tenant is known, which SQL Server&#39;s block predicate refuses; the timer poller starts only on PostgreSQL</td><td><span class="b b-plan">Planned</span></td></tr>
 <tr><td>Tenant policies for the tools, models, knowledge, files and documents tables</td><td>The same gap as on PostgreSQL (<a href="#data-and-database-tenants-and-teams">Tenants and teams</a>)</td><td><span class="b b-plan">Planned</span></td></tr>
@@ -1539,7 +1538,7 @@ sqlcmd -b -U ops_migrator -d ops -i grants.sql</code></pre></div>
 <tbody>
 <tr><td>Chat with an agent: streamed answers, citations, tables and charts in the conversation</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>Tool calls from chat, with a person approving each write and a fresh sign-in for payments</td><td><span class="b b-ok">Built</span></td></tr>
-<tr><td>Knowledge bases with answers cited by page and section</td><td><span class="b b-ok">Built</span> search by meaning and keywords together, each result saying which ran, on PostgreSQL with pgvector</td></tr>
+<tr><td>Knowledge bases with answers cited by page and section</td><td><span class="b b-ok">Built</span> search by meaning and keywords together, each result saying which ran, on PostgreSQL with pgvector only; not built on SQL Server</td></tr>
 <tr><td>Skills: versioned instructions an agent loads when they match, published through review</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>Guardrails: blocked topics with a written scope, checked before and after each answer, failing closed</td><td><span class="b b-part">Partial</span> blocked topics; other kinds, such as required citations or an output shape, planned</td></tr>
 <tr><td>Personal data masked in what people see</td><td><span class="b b-ok">Built</span> emails, national ID, card, phone and account numbers; names planned</td></tr>
@@ -1664,7 +1663,7 @@ sqlcmd -b -U ops_migrator -d ops -i grants.sql</code></pre></div>
   </main>
 </div>
 
-<footer>Ops AI by Chanl AI, <a href="https://chanl.ai">chanl.ai</a>. This page is generated from the Markdown in <a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/README.md"><code>docs/guide/</code></a> of the Ops AI repository; the install and operate sections also ship in the release package as <code>INSTALL.md</code>.</footer>
+<footer>Ops AI by Chanl AI, <a href="https://chanl.ai">chanl.ai</a>. This page is generated from the Markdown in <a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/README.md"><code>docs/guide/</code></a> of the Ops AI repository; the install and operate sections are also <code>docs/deploy/install-guide.md</code>. The release package ships its own <code>INSTALL.md</code>.</footer>
 
 <script>
 // A copy button on each command block; when the clipboard is refused, the command is selected for a manual copy.
