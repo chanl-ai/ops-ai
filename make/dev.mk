@@ -1,6 +1,6 @@
 # The local stack: compose (PostgreSQL, OPA), migrations, then the agents service, tools service and console in the
 # background. scripts/stack.sh is the process manager: logs in .logs/<svc>.log, pids in .run/<svc>.pid.
-.PHONY: up down restart reset-db health logs ports demo-model sample-team sample-library sample-teams demo-walk demo demo-salesforce demo-salesforce-templates demo-salesforce-walk
+.PHONY: offset-guard port-list up down restart reset-db health logs ports demo-model sample-team sample-library sample-teams demo-walk demo demo-salesforce demo-salesforce-templates demo-salesforce-walk
 
 ##@ Stack (one per machine)
 
@@ -14,7 +14,7 @@ DEMO_MODEL ?= $(if $(OPENAI_API_KEY),gpt-5-mini,fake)
 DEMO_FAST_MODEL ?= $(if $(filter fake,$(DEMO_MODEL)),fake,gpt-4.1-mini)
 DEMO_CHAT_MODEL ?= $(if $(filter fake,$(DEMO_MODEL)),fake,gpt-5-nano)
 
-up: db-up ## Compose, migrate every chain in place, then the services, the worker, models-service and the demo fakes; AUTH=platform signs in through platform-service; RESET=1 wipes the database first (as make reset-db); a new database gets the sample team (SAMPLE=0 skips); OPS_INFRA=external uses side containers and skips db-up/db-down
+up: offset-guard db-up ## Compose, migrate every chain in place, then the services, the worker, models-service and the demo fakes; AUTH=platform signs in through platform-service; RESET=1 wipes the database first (as make reset-db); a new database gets the sample team (SAMPLE=0 skips); OPS_INFRA=external uses side containers and skips db-up/db-down
 	@# Services started before their code last changed run old code: stopped here, started again after the schema step.
 	@$(STACK) stop-stale
 	@# Always migrate, never drop data on its own. A chain the database holds ahead of this checkout
@@ -124,6 +124,12 @@ ports: ## Print the ports this stack uses
 	@printf '  offset %s, compose project %s, state in %s\n' "$(OPS_PORT_OFFSET)" "$(OPS_COMPOSE_PROJECT)" "$(OPS_RUN_DIR)"
 	@printf '  console %s (runtime %s), agents %s, tools %s, opa %s, postgres %s\n' $(OPS_CONSOLE_PORT) \
 		$(OPS_CONSOLE_RUNTIME_PORT) $(OPS_AGENTS_PORT) $(OPS_TOOLS_PORT) $(OPS_OPA_PORT) $(OPS_PG_PORT)
+
+port-list: ## Print NAME=port for every port this stack binds at OPS_PORT_OFFSET (what the preview picker and the offset guard read)
+	@$(foreach v,$(sort $(filter OPS_%_PORT,$(.VARIABLES))),printf '%s=%s\n' $(v) '$($(v))';)
+
+offset-guard:
+	@[ "$(OPS_PORT_OFFSET)" = 0 ] || python3 $(ROOT)/scripts/preview.py check-offset --offset $(OPS_PORT_OFFSET) --root $(ROOT) --run-root $(STACK_HOME)/.run --data-root $(STACK_HOME)/.data
 
 ##@ Call an API as a dev user
 

@@ -27,11 +27,26 @@ def seed(run_root: Path, branch: str, offset: int, live: bool) -> None:
     (d / "console.pid").write_text(str(os.getpid() if live else 2**22 + 12345))
 
 
-def run(tmp: Path, *args: str) -> subprocess.CompletedProcess[str]:
+def fake_lsof(tmp: Path, listeners: list[tuple[int, str, int]]) -> dict[str, str]:
+    """The machine's listeners, faked at the edge: `lsof -Fpcn` prints what the test says is listening."""
+    bin_dir = tmp / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    (tmp / "listeners").write_text("".join(f"{pid} {cmd} {port}\n" for pid, cmd, port in listeners))
+    loop = 'printf "p%s\\nc%s\\nn*:%s\\n" "$pid" "$cmd" "$port"'
+    (bin_dir / "lsof").write_text(f"#!/bin/sh\nwhile read pid cmd port; do {loop}; done < {tmp}/listeners\n")
+    (bin_dir / "lsof").chmod(0o755)
+    (bin_dir / "docker").write_text("#!/bin/sh\nexit 0\n")
+    (bin_dir / "docker").chmod(0o755)
+    return {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"}
+
+
+def run(tmp: Path, *args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [
             *PREVIEW,
             *args,
+            "--data-root",
+            str(tmp / "data"),
             "--run-root",
             str(tmp),
             "--page",
@@ -44,6 +59,7 @@ def run(tmp: Path, *args: str) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         text=True,
         check=False,
+        env=env or fake_lsof(tmp, []),
     )
 
 
@@ -79,3 +95,39 @@ def test_stop_unknown_branch_changes_nothing_and_list_matches_page(tmp_path: Pat
 def test_empty_list_writes_an_empty_page(tmp_path: Path) -> None:
     assert "no previews" in run(tmp_path, "list").stdout
     assert "No previews running." in (tmp_path / "p.html").read_text()
+
+
+def test_offset_whose_non_console_port_is_held_is_skipped_naming_the_holder(tmp_path: Path) -> None:
+    # 59750 is offset 51000's files port; the console port 54016 is free, which is all the old check looked at.
+    env = fake_lsof(tmp_path, [(777, "codeloop-hub", 59750)])
+    r = run(tmp_path, "start", "--branch", "feat/a", "--dry-run", env=env)
+    assert r.returncode == 0 and "offset 52000" in r.stdout
+
+
+def test_offset_over_the_port_range_is_refused(tmp_path: Path) -> None:
+    r = run(tmp_path, "check-offset", "--offset", "57000")
+    assert r.returncode == 1 and "65535" in r.stderr
+
+
+def test_another_branchs_data_blocks_the_offset_and_the_same_branchs_does_not(tmp_path: Path) -> None:
+    (tmp_path / "data" / "offset-51000").mkdir(parents=True)
+    (tmp_path / "data" / "offset-51000" / "branch").write_text("feat/other")
+    assert "offset 52000" in run(tmp_path, "start", "--branch", "feat/a", "--dry-run").stdout
+    (tmp_path / "data" / "offset-51000" / "branch").write_text("feat/a")
+    assert "offset 51000" in run(tmp_path, "start", "--branch", "feat/a", "--dry-run").stdout
+
+
+def test_hand_start_refused_on_a_foreign_listener_but_not_on_its_own_stack(tmp_path: Path) -> None:
+    env = fake_lsof(tmp_path, [(4242, "node", 59750)])
+    r = run(tmp_path, "check-offset", "--offset", "51000", env=env)
+    assert r.returncode == 1 and "59750" in r.stderr
+    (tmp_path / "offset-51000").mkdir()
+    (tmp_path / "offset-51000" / "files.pid").write_text("4242")
+    assert run(tmp_path, "check-offset", "--offset", "51000", env=env).returncode == 0
+
+
+def test_no_usable_offset_refuses_in_one_line_naming_pid_and_command(tmp_path: Path) -> None:
+    env = fake_lsof(tmp_path, [(900 + i, f"holder{i}", 3016 + 51000 + i * 1000) for i in range(10)])
+    r = run(tmp_path, "start", "--branch", "feat/a", "--dry-run", env=env)
+    assert r.returncode == 1 and len(r.stderr.strip().splitlines()) == 1
+    assert "pid 900 holder0" in r.stderr and "pid 903 holder3" in r.stderr
