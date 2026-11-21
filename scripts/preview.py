@@ -21,10 +21,12 @@ import time
 from pathlib import Path
 
 LIMIT = 3
-# Clear of the default stack and of the offsets tests and lanes use. Not 50000: the mail ports move by offset/10 and
-# GreenMail's SMTP (3025 + 5000) would land on the default stack's Mailpit (8025).
-FIRST_OFFSET = 51000
+# Clear of the default stack and of the offsets tests (1000, 30000) and lanes use. Every port of the last slot stays
+# below EPHEMERAL_FIRST: macOS hands ports from 49152 up to any server bound to port 0, and one holding a preview's
+# port stops make up (scripts/tests/test_preview.py checks this against the stack's real ports).
+FIRST_OFFSET = 36000
 STEP = 1000
+EPHEMERAL_FIRST = 49152
 CONSOLE_BASE = 3016
 
 

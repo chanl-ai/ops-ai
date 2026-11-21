@@ -5,6 +5,7 @@ the real start and stop are proven by hand on a branch."""
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import subprocess
@@ -49,33 +50,56 @@ def run(tmp: Path, *args: str) -> subprocess.CompletedProcess[str]:
 
 def test_fourth_stack_refused_naming_the_three_and_dead_one_does_not_count(tmp_path: Path) -> None:
     for i, b in enumerate(["feat/a", "feat/b", "feat/c"]):
-        seed(tmp_path, b, 51000 + i * 1000, live=True)
+        seed(tmp_path, b, 36000 + i * 1000, live=True)
     r = run(tmp_path, "start", "--branch", "feat/d", "--dry-run")
     assert r.returncode == 1
-    assert all(b in r.stderr for b in ("feat/a", "feat/b", "feat/c")) and "54016" not in r.stdout
+    assert all(b in r.stderr for b in ("feat/a", "feat/b", "feat/c")) and "39016" not in r.stdout
     assert not (tmp_path / "wt").exists()
 
-    seed(tmp_path, "feat/b", 52000, live=False)  # crashed: frees its slot and its offset
+    seed(tmp_path, "feat/b", 37000, live=False)  # crashed: frees its slot and its offset
     r = run(tmp_path, "start", "--branch", "feat/d", "--dry-run")
-    assert r.returncode == 0 and "offset 52000" in r.stdout
+    assert r.returncode == 0 and "offset 37000" in r.stdout
 
 
 def test_same_branch_twice_names_its_url(tmp_path: Path) -> None:
-    seed(tmp_path, "feat/a", 51000, live=True)
+    seed(tmp_path, "feat/a", 36000, live=True)
     r = run(tmp_path, "start", "--branch", "feat/a", "--dry-run")
-    assert r.returncode == 1 and "http://localhost:54016" in r.stderr
+    assert r.returncode == 1 and "http://localhost:39016" in r.stderr
 
 
 def test_stop_unknown_branch_changes_nothing_and_list_matches_page(tmp_path: Path) -> None:
-    seed(tmp_path, "feat/a", 51000, live=True)
+    seed(tmp_path, "feat/a", 36000, live=True)
     r = run(tmp_path, "stop", "--branch", "feat/nope")
     assert r.returncode == 1 and "no preview for feat/nope" in r.stderr
     assert (tmp_path / "previews" / "feat_a.json").exists()
     out = run(tmp_path, "list").stdout
-    assert "feat/a\thttp://localhost:54016\t2h" in out
-    assert 'href="http://localhost:54016"' in (tmp_path / "p.html").read_text()
+    assert "feat/a\thttp://localhost:39016\t2h" in out
+    assert 'href="http://localhost:39016"' in (tmp_path / "p.html").read_text()
 
 
 def test_empty_list_writes_an_empty_page(tmp_path: Path) -> None:
     assert "no previews" in run(tmp_path, "list").stdout
     assert "No previews running." in (tmp_path / "p.html").read_text()
+
+
+def test_every_port_of_every_preview_slot_stays_below_the_ephemeral_range() -> None:
+    """A server bound to port 0 (macOS gives it a port from 49152 up) can hold a preview's port and stop make up."""
+    spec = importlib.util.spec_from_file_location("preview", ROOT / "scripts" / "preview.py")
+    assert spec and spec.loader
+    preview = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(preview)
+
+    show = "show:\n\t@$(foreach v,$(filter OPS_%_PORT,$(.VARIABLES)),echo $($(v));)\n"
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("OPS_", "MAKE", "STACK_"))}
+    last = preview.FIRST_OFFSET + (preview.LIMIT - 1) * preview.STEP
+    out = subprocess.run(
+        ["make", "-s", "--no-print-directory", "-f", "Makefile", "-f", "/dev/stdin", "show", f"OPS_PORT_OFFSET={last}"],
+        cwd=ROOT,
+        input=show,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    ports = [int(p) for p in out.split() if p.isdigit()]
+    assert len(ports) > 10 and max(ports) < preview.EPHEMERAL_FIRST, (last, max(ports))
