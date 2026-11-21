@@ -4,9 +4,11 @@ import * as React from 'react';
 import { keepPreviousData } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
+import { pageOptions } from '@/lib/api/options';
 import { fetchAgents, fetchWorkflows } from './queries';
 import { sdk } from '@/lib/api/ops-sdk';
-import type { AgentFilters, ConnectionOptionsPage, OptionsPage, OptionsParams, ToolOptionsPage, WorkflowFilters } from '@/lib/types/query';
+import type { AgentFilters, ConnectionOptionsPage, Option, OptionsPage, OptionsParams, ToolOptionsPage, WorkflowFilters } from '@/lib/types/query';
+import type { RefKind, ReferenceContext } from '@/lib/types/references';
 import type { SkillLoading } from '@/lib/types/skills';
 import { useTeamInfiniteQuery, useTeamQuery } from './team-query';
 
@@ -37,6 +39,8 @@ const agentsWhere = (key: string, filters: AgentFilters = {}): OptionSource => (
   },
 });
 export const agentOptions = agentsWhere('agent-options');
+/** The agents the person may hand a chat to, as GET /chat/agents lists them: the composer's `@` list. */
+export const chatAgentOptions: OptionSource = { key: 'chat-agent-options', fetch: (p) => api.chat.agentOptions(p) };
 /** The agents an embed can serve: published ones. */
 export const publishedAgentOptions = agentsWhere('published-agent-options', { availability: ['published'] });
 /** The team's workflows (both engines) under `filters`, searched and paged by the workflows list route; a page number is the cursor. */
@@ -113,13 +117,66 @@ export const widgetOptionsFor = (granted: string[]): OptionSource => ({ key: `wi
 /** Skills the agent may attach; `loading` keeps always-on or on-match ones. */
 export const skillOptionsFor = (agentId: string, loading?: SkillLoading): OptionSource => ({ key: `skill-options:${agentId}:${loading ?? 'all'}`, fetch: (p) => api.skills.agents.options(agentId, p, loading) });
 
-/** Pages of a source's options for a search, one page at a time as the list scrolls; the search runs on the server. */
-export function useOptionSearch<P extends OptionsPage>(source: OptionSource<P>, search: string, enabled: boolean, limit = 25) {
+/**
+ * A short fixed list (a setting's choices) as a source, so its picker is the shared one and searches it the way every
+ * `/options` route does. Anything a service holds comes from its route instead.
+ */
+export const fixedOptions = (key: string, all: Option[]): OptionSource => ({ key: `fixed:${key}`, fetch: async (p) => pageOptions(all, p) });
+
+/**
+ * What an agent's brief or a skill's text can mention, one kind at a time: GET /v1/references with `kind`, searched and
+ * paged on the server (`cursor`). An option's id is the mention's `kind:id`.
+ */
+export const referenceOptionsFor = (context: ReferenceContext, kind: RefKind): OptionSource => ({
+  key: `reference-options:${'forAgent' in context ? `agent:${context.forAgent}` : `skill:${context.forSkill}`}:${kind}`,
+  fetch: async ({ search, cursor, limit = 25 }) => {
+    const found = await api.references.search(context, { search: search ?? '', kind, cursor, limit });
+    const group = found.groups.find((g) => g.kind === kind);
+    return { data: (group?.items ?? []).map((i) => ({ id: `${i.kind}:${i.id}`, label: i.label, hint: i.hint, disabled: i.disabled })), nextCursor: group?.nextCursor ?? null };
+  },
+});
+
+/** The first page of several sources at once, one group each, for a list that shows every kind under its heading. */
+export interface GroupedOptionSource {
+  key: string;
+  fetch: (search: string, limit: number) => Promise<{ group: string; label: string; page: OptionsPage }[]>;
+}
+
+/** Every kind a brief or a skill can mention, the first `limit` of each, in one GET /v1/references. */
+export const referenceGroupsFor = (context: ReferenceContext): GroupedOptionSource => ({
+  key: `reference-groups:${'forAgent' in context ? `agent:${context.forAgent}` : `skill:${context.forSkill}`}`,
+  fetch: async (search, limit) => {
+    const found = await api.references.search(context, { search, limit });
+    return found.groups.map((g) => ({ group: g.kind, label: g.label, page: { data: g.items.map((i) => ({ id: `${i.kind}:${i.id}`, label: i.label, hint: i.hint, disabled: i.disabled })), nextCursor: g.nextCursor } }));
+  },
+});
+
+/** The first page of each group for a search, run on the server once typing pauses; a group with more continues
+ * through its own `OptionSource` and `useOptionSearch`. */
+export function useGroupedOptionSearch(source: GroupedOptionSource, search: string, enabled: boolean, limit = 5) {
+  const debounced = useDebounced(search);
+  return useTeamQuery({
+    queryKey: [source.key, 'search', debounced, limit],
+    queryFn: () => source.fetch(debounced, limit),
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+    retry: false,
+    enabled,
+  });
+}
+
+function useDebounced(search: string): string {
   const [debounced, setDebounced] = React.useState(search);
   React.useEffect(() => {
     const t = setTimeout(() => setDebounced(search), 200);
     return () => clearTimeout(t);
   }, [search]);
+  return debounced;
+}
+
+/** Pages of a source's options for a search, one page at a time as the list scrolls; the search runs on the server. */
+export function useOptionSearch<P extends OptionsPage>(source: OptionSource<P>, search: string, enabled: boolean, limit = 25) {
+  const debounced = useDebounced(search);
   return useTeamInfiniteQuery({
     queryKey: [source.key, 'search', debounced, limit],
     queryFn: ({ pageParam }) => source.fetch({ search: debounced, cursor: pageParam, limit }),

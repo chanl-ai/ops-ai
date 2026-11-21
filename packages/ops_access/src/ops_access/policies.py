@@ -94,6 +94,17 @@ POLICIES: tuple[Policy, ...] = (
         title="Publish reviews",
     ),
     Policy(
+        "skillPublishStrict",
+        # Off: a skill written as text publishes with a write behind a condition the agent decides, shown as a hint.
+        {},
+        "A skill publishes a tool that changes something only behind a condition checked on a tool's result, never "
+        "one the agent decides from the conversation. Off: such a line is a hint and the skill still publishes.",
+        changed_by=("reviews", "manage"),
+        per_team=True,
+        live=True,
+        title="Strict skill publishing",
+    ),
+    Policy(
         "companySignInRequired",
         # Off: a password follows the sign-in providers, as before company sign-in could be required.
         False,
@@ -372,8 +383,8 @@ def policy(p: Principal, key: str) -> Any:
 
 def team_on(values: object, team: str | None) -> bool:
     """Whether `team` turned a per-team switch on (toolWritesNeedApproval, aiSteps, taskAssist, checkBeforeSend,
-    pageImages), from the value GET /v1/policies/{key} returns (read live on each call); off for a team that set
-    nothing."""
+    pageImages, skillPublishStrict), from the value GET /v1/policies/{key} returns (read live on each call); off for a
+    team that set nothing."""
     return team is not None and json_object(values).get(team) is True
 
 

@@ -108,6 +108,8 @@ class SkillPin(TypedDict):
     exit: NotRequired[dict[str, str]]
     returns: NotRequired[list[Json]]
     success: NotRequired[list[str]]
+    # The skill was written as text, so its publish rule is the text's (app/skill_content.py, `unrunnable`).
+    fromText: NotRequired[bool]
     attachedBy: str
     attachedAt: str
 
@@ -597,6 +599,8 @@ class AgentView(TypedDict):
     controls: Json
     usedIn: list[WorkflowUse]
     staleToolIds: NotRequired[list[str]]
+    # On the detail reply only: with `version`, the copy a save names as its base.
+    digest: NotRequired[str]
     templateId: NotRequired[JsonValue]
     protection: NotRequired[JsonValue]
 
@@ -722,6 +726,7 @@ class ReviewView(TypedDict):
     decisionReason: NotRequired[str]
     egressHost: NotRequired[Json]
     toolModule: NotRequired[Json]
+    skillPublish: NotRequired[Json]
     # Added by the review list and the routes: who it is assigned to and whether the caller may decide it.
     assignee: NotRequired[JsonValue]
     caseTitle: NotRequired[str | None]

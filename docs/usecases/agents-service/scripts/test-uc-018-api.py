@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import secrets
 
-from usecase_harness import TEAM, agents, check, data, finish, models, new_thread, run, sse, state
+from usecase_harness import TEAM, agents, check, data, finish, models, new_thread, run, save_agent, sse, state
 
 # The agent names a models-service alias; models-service is the one that says which aliases exist.
 with models() as models_url, agents(models_url=models_url) as api:
@@ -27,9 +27,10 @@ with models() as models_url, agents(models_url=models_url) as api:
     early = api.post("/chat/threads", json={"agentId": aid, "kbIds": []}, headers=TEAM)
     check("chat with the unpublished agent is refused", early.status_code >= 400, early.status_code)
 
-    res = api.patch(
-        f"/v1/agents/{aid}",
-        json={"instructions": "You check payees. Use lookup_account before you answer.", "toolIds": ["lookup_account"]},
+    res = save_agent(
+        api,
+        aid,
+        {"instructions": "You check payees. Use lookup_account before you answer.", "toolIds": ["lookup_account"]},
         headers=TEAM,
     )
     edited = data(res)

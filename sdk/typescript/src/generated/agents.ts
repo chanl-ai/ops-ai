@@ -330,7 +330,10 @@ export interface paths {
         head?: never;
         /**
          * Update Agent
-         * @description Saves the patched spec as a new draft version; what is live does not change until it is published.
+         * @description Saves the patched spec as the agent's draft; what is live does not change until it is published.
+         *
+         *     409 `stale_base` when `baseVersion` and `baseDigest` are not the newest copy (its details name who saved it and
+         *     when): read the agent again and repeat the change.
          */
         patch: operations["agents_update_agent"];
         trace?: never;
@@ -2300,10 +2303,10 @@ export interface paths {
         get?: never;
         /**
          * Save Skill Draft
-         * @description Edits the newest draft, or opens the next version on top of the published one. 409 when `baseVersion` is
-         *     not the newest version, or the skill is deprecated or in review. The checks run again in the transaction that
-         *     writes, after the tools are checked against tools-service with nothing open, so a save landing in between answers
-         *     `stale_base`.
+         * @description Edits the newest draft, or opens the next version on top of the published one. 409 `stale_base` when
+         *     `baseVersion` and `baseDigest` are not the newest copy (its details name who saved it and when); 409 too when the
+         *     skill is deprecated or in review. The checks run again in the transaction that writes, after the tools are checked
+         *     against tools-service with nothing open, so a save landing in between answers `stale_base`.
          */
         put: operations["agents_save_skill_draft"];
         post?: never;
@@ -2370,6 +2373,28 @@ export interface paths {
          *     `unknown_input` or `missing_input`.
          */
         post: operations["agents_render_skill"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/skills/{skill_id}/text": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Read Skill Text
+         * @description How a text reads as this skill's steps, without saving it: the hints on its lines, the mentions of things
+         *     that no longer exist, what it uses, how each condition is decided and what each mentioned tool returns. The same
+         *     reader a save runs. skills: view in the skill's team (403 `forbidden`).
+         */
+        post: operations["agents_read_skill_text"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3768,6 +3793,8 @@ export interface components {
             /** Collections */
             collections: string[];
             controls: components["schemas"]["AgentControls"];
+            /** Digest */
+            digest?: string | null;
             /** Guardrailpins */
             guardrailPins: components["schemas"]["GuardrailPin"][];
             guardrails: components["schemas"]["Guardrails-Output"];
@@ -3904,6 +3931,10 @@ export interface components {
             } | null;
             /** Allteamknowledgebases */
             allTeamKnowledgeBases?: boolean | null;
+            /** Basedigest */
+            baseDigest: string;
+            /** Baseversion */
+            baseVersion: number;
             brief?: components["schemas"]["Brief"] | null;
             /** Channels */
             channels?: ("voice" | "chat" | "email" | "api")[] | null;
@@ -4530,8 +4561,8 @@ export interface components {
         };
         /**
          * BlockerPosition
-         * @description Where a publish problem is: the field (`steps`, `notWhen`, `useWhen`, `brief.never`), and the step (from 1)
-         *     or list index when it has one.
+         * @description Where a publish problem is: the field (`steps`, `notWhen`, `useWhen`, `brief.never`, `source`), and the step
+         *     (from 1) or list index when it has one; for `source`, `index` is the line (from 1).
          */
         BlockerPosition: {
             /** Field */
@@ -4549,6 +4580,29 @@ export interface components {
             name: string;
             /** Version */
             version: number;
+        };
+        /**
+         * Branch
+         * @description A path, written `if <test>:` in a skill's text. Once the step is done its test decides: when it holds the
+         *     skill goes on (to the step's `next`, or the step after it); when it does not, to `otherwise`. A test that does
+         *     not hold is a path the author wrote, not a failed check: it counts no attempt and takes no hold, unless
+         *     `otherwise` ends the skill with an exit other than done, which is how a guard is written
+         *     (`if not ...: stop "..."`). A stop that a rule test's path reaches takes the hold on either side
+         *     (`if found: stop "..."` as much as `else: stop "..."`); one a sentence test's path reaches takes none, since the
+         *     model decided it. A rule test runs in code on the step's result; a sentence is decided by the model,
+         *     which says which way it went (`step_done` with `holds`).
+         */
+        Branch: {
+            otherwise: components["schemas"]["Jump"];
+            test: components["schemas"]["StepCheck"];
+        };
+        /**
+         * BranchOut
+         * @description A path written `if <test>:`: when the test does not hold, the skill goes to `otherwise`.
+         */
+        BranchOut: {
+            otherwise: components["schemas"]["JumpOut"];
+            test: components["schemas"]["StepCheckOut"];
         };
         /**
          * Brief
@@ -6553,6 +6607,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[SkillTextReading] */
+        Envelope_SkillTextReading_: {
+            data: components["schemas"]["SkillTextReading"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[StepUpToken] */
         Envelope_StepUpToken_: {
             data: components["schemas"]["StepUpToken"];
@@ -7771,6 +7834,23 @@ export interface components {
             message: string;
         };
         JsonValue: unknown;
+        /**
+         * Jump
+         * @description Where a skill goes from a step: a step further on, or an exit that ends it. Exactly one of the two.
+         */
+        Jump: {
+            /** Exit */
+            exit?: string | null;
+            /** Step */
+            step?: number | null;
+        };
+        /** JumpOut */
+        JumpOut: {
+            /** Exit */
+            exit?: string | null;
+            /** Step */
+            step?: number | null;
+        };
         /** KindRow */
         KindRow: {
             /** Active */
@@ -8680,7 +8760,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "missing_field" | "missing_reference" | "unavailable_reference" | "bad_step" | "bad_check" | "bad_exit" | "sub_skill_not_held" | "prompt_rule_in_text" | "review_open" | "already_published" | "deprecated" | "too_long" | "mention";
+            kind: "missing_field" | "missing_reference" | "unavailable_reference" | "bad_step" | "bad_check" | "bad_exit" | "sub_skill_not_held" | "prompt_rule_in_text" | "review_open" | "already_published" | "deprecated" | "too_long" | "mention" | "hint";
             /** Message */
             message: string;
             position?: components["schemas"]["BlockerPosition"] | null;
@@ -8798,7 +8878,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "agent_publish" | "publish_request" | "egress_host";
+            kind: "agent_publish" | "publish_request" | "skill_publish" | "egress_host";
             policy: components["schemas"]["ReviewPolicy"];
             /** Proposal */
             proposal: string;
@@ -8810,6 +8890,7 @@ export interface components {
              * @enum {string}
              */
             risk: "critical" | "high" | "medium" | "low";
+            skillPublish?: components["schemas"]["SkillPublishInfo"] | null;
             /** Slaminutes */
             slaMinutes?: number | null;
             /**
@@ -9797,6 +9878,8 @@ export interface components {
             returns?: components["schemas"]["ReturnFieldOut"][];
             /** Slug */
             slug: string;
+            /** Source */
+            source?: string | null;
             /** Steps */
             steps?: components["schemas"]["SkillStepOut"][];
             /** Success */
@@ -9862,6 +9945,8 @@ export interface components {
             reviewNote: string;
             /** Slug */
             slug?: string | null;
+            /** Source */
+            source?: string | null;
             /** Steps */
             steps?: components["schemas"]["SkillStep"][];
             /** Success */
@@ -9878,6 +9963,8 @@ export interface components {
         SkillDetail: {
             activity: components["schemas"]["SkillActivity"];
             content: components["schemas"]["SkillContent"];
+            /** Digest */
+            digest: string;
             /** Draftversion */
             draftVersion: number | null;
             /** Id */
@@ -9928,6 +10015,8 @@ export interface components {
             status: "draft" | "in_review" | "published" | "deprecated";
             /** Tests */
             tests: components["schemas"]["JsonValue"][];
+            /** Text */
+            text: string;
             /** Tokens */
             tokens: number;
             /** Toolcount */
@@ -9949,6 +10038,8 @@ export interface components {
         };
         /** SkillDraftPatch */
         SkillDraftPatch: {
+            /** Basedigest */
+            baseDigest: string;
             /** Baseversion */
             baseVersion: number;
             /** Exit */
@@ -9980,6 +10071,8 @@ export interface components {
             refusal?: string | null;
             /** Returns */
             returns?: components["schemas"]["ReturnField"][] | null;
+            /** Source */
+            source?: string | null;
             /** Steps */
             steps?: components["schemas"]["SkillStep"][] | null;
             /** Success */
@@ -10156,6 +10249,13 @@ export interface components {
             /** Origin */
             origin: string;
         };
+        /** SkillPublishAgent */
+        SkillPublishAgent: {
+            /** Name */
+            name: string;
+            /** Pinnedversion */
+            pinnedVersion: number | null;
+        };
         /** SkillPublishCheck */
         SkillPublishCheck: {
             /** Approversneeded */
@@ -10173,6 +10273,51 @@ export interface components {
             problems?: components["schemas"]["PublishBlocker"][];
             /** Warnings */
             warnings?: components["schemas"]["PublishBlocker"][];
+        };
+        /**
+         * SkillPublishInfo
+         * @description A skill publish request as its reviewer reads it, kept as it was when the request opened: the published
+         *     version it replaces, both texts, the hints on the new text and what it adds.
+         */
+        SkillPublishInfo: {
+            /** Agents */
+            agents: components["schemas"]["SkillPublishAgent"][];
+            /** Approvalsneeded */
+            approvalsNeeded: number;
+            /** Changes */
+            changes: string[];
+            /** Editclass */
+            editClass: string;
+            /** Failing */
+            failing: string[];
+            /** Fromversion */
+            fromVersion: number | null;
+            /** Guardrails */
+            guardrails: string[];
+            /** Hints */
+            hints: components["schemas"]["TextHint"][];
+            /** Kbsadded */
+            kbsAdded: string[];
+            /** Note */
+            note: string;
+            /** Ownerteam */
+            ownerTeam: string;
+            /** Requestedby */
+            requestedBy: string;
+            /** Skillid */
+            skillId: string;
+            /** Skillname */
+            skillName: string;
+            /** Testrun */
+            testRun?: null;
+            /** Textafter */
+            textAfter?: string | null;
+            /** Textbefore */
+            textBefore?: string | null;
+            /** Toversion */
+            toVersion: number;
+            /** Toolsadded */
+            toolsAdded: string[];
         };
         /** SkillRenderInput */
         SkillRenderInput: {
@@ -10234,12 +10379,14 @@ export interface components {
         };
         /** SkillStep */
         SkillStep: {
+            branch?: components["schemas"]["Branch"] | null;
             check?: components["schemas"]["StepCheck"] | null;
             /** Do */
             do: string;
             ifNot?: components["schemas"]["IfNot"] | null;
             /** Locked */
             locked?: boolean | null;
+            next?: components["schemas"]["Jump"] | null;
             use?: components["schemas"]["Ref-Input"] | null;
         };
         /**
@@ -10247,6 +10394,7 @@ export interface components {
          * @description One step: what to do, what it runs, what must hold after it and what happens when it does not.
          */
         SkillStepOut: {
+            branch?: components["schemas"]["BranchOut"] | null;
             check?: components["schemas"]["StepCheckOut"] | null;
             /** Do */
             do: string;
@@ -10256,7 +10404,122 @@ export interface components {
              * @description True when the builder locked the step's tool to this step: the agent reaches it only as the step, even when it is a read. Absent otherwise; a tool that changes something is kept to its step either way.
              */
             locked?: boolean | null;
+            next?: components["schemas"]["JumpOut"] | null;
             use?: components["schemas"]["RefOut"] | null;
+        };
+        /** SkillTextError */
+        SkillTextError: {
+            /** Id */
+            id: string;
+            /** Line */
+            line: number;
+            /** Message */
+            message: string;
+        };
+        /** SkillTextInput */
+        SkillTextInput: {
+            /** Exit */
+            exit?: {
+                [key: string]: string;
+            };
+            /**
+             * Hasparts
+             * @default false
+             */
+            hasParts: boolean;
+            /**
+             * Loading
+             * @default on_match
+             * @enum {string}
+             */
+            loading: "on_match" | "always";
+            /** Text */
+            text: string;
+        };
+        /**
+         * SkillTextKeyword
+         * @description The keyword a line is written with (`if`, `else` for else or otherwise, `stop`) and where it sits in the line
+         *     after its indent, past any list marker. Set whether or not the line reads as one: the editor highlights it only on
+         *     a line whose kind is that keyword, and indents after an `if` or `else` it is typing.
+         */
+        SkillTextKeyword: {
+            /** End */
+            end: number;
+            /** Start */
+            start: number;
+            /**
+             * Word
+             * @enum {string}
+             */
+            word: "if" | "else" | "stop";
+        };
+        /**
+         * SkillTextLine
+         * @description One line of the text: its kind, the step (from 1) it is part of, how its condition is decided (an `if`
+         *     line: `checked` on the tool's result, or `agent`, decided from the conversation) and the tool its line runs.
+         */
+        SkillTextLine: {
+            /**
+             * Depth
+             * @default 0
+             */
+            depth: number;
+            /** How */
+            how?: ("checked" | "agent") | null;
+            keyword?: components["schemas"]["SkillTextKeyword"] | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "text" | "step" | "if" | "else" | "stop" | "blank";
+            /** Line */
+            line: number;
+            /** Step */
+            step?: number | null;
+            /** Tool */
+            tool?: string | null;
+        };
+        /** SkillTextNote */
+        SkillTextNote: {
+            /** Line */
+            line: number;
+            /** Message */
+            message: string;
+        };
+        /**
+         * SkillTextReading
+         * @description POST /v1/skills/{id}/text: how a skill's text reads, as a save will read it. Hints never block anything;
+         *     `errors` (a mention of something that no longer exists) block a publish, never a save.
+         */
+        SkillTextReading: {
+            /** Errors */
+            errors: components["schemas"]["SkillTextError"][];
+            /** Hints */
+            hints: components["schemas"]["SkillTextNote"][];
+            /** Lines */
+            lines: components["schemas"]["SkillTextLine"][];
+            /** Phrases */
+            phrases: {
+                [key: string]: string[];
+            };
+            /** Steplines */
+            stepLines: number[];
+            /** Steps */
+            steps: number;
+            uses: components["schemas"]["SkillTextUses"];
+        };
+        /** SkillTextUses */
+        SkillTextUses: {
+            /** Agents */
+            agents: number;
+            /** Knowledge */
+            knowledge: number;
+            /** Skills */
+            skills: number;
+            /** Tools */
+            tools: number;
+            /** Workflows */
+            workflows: number;
         };
         /** SkillToolRef */
         SkillToolRef: {
@@ -10327,6 +10590,8 @@ export interface components {
         };
         /** SkillVersion */
         SkillVersion: {
+            /** Approvedby */
+            approvedBy?: string | null;
             /** Changes */
             changes: string[];
             content: components["schemas"]["SkillContent"];
@@ -10341,6 +10606,8 @@ export interface components {
             publishedAt?: string | null;
             /** Publishedby */
             publishedBy?: string | null;
+            /** Requestedby */
+            requestedBy?: string | null;
             /** Reviewid */
             reviewId?: string | null;
             /** Savedat */
@@ -11002,6 +11269,16 @@ export interface components {
             ok: boolean;
             /** Steps */
             steps: components["schemas"]["TestStepView"][];
+        };
+        /**
+         * TextHint
+         * @description A hint the reader put on one line of a skill's text (from 1).
+         */
+        TextHint: {
+            /** Line */
+            line: number;
+            /** Message */
+            message: string;
         };
         /** ThreadCreated */
         ThreadCreated: {
@@ -26178,6 +26455,113 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_SkillRendered_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    agents_read_skill_text: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                skill_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SkillTextInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SkillTextReading_"];
                 };
             };
             /** @description Invalid request */

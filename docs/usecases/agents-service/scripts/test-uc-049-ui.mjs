@@ -4,6 +4,7 @@
 // count twice; Priya approves and the write runs once. Platform sign-in, the fake bank on https, the scripted model.
 import { AGENTS_PORT, TOOLS_PORT, approveToolReview, check, chromium, consoleSignIn, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 import { JAMES, MAYA, PASSWORD, PRIYA, as, until } from '../../lib/workflow_ui.mjs';
+import { agentBase } from '../../lib/agent_save.mjs';
 
 const SAM = 's.adeyemi@harborpine.example';
 const NADIA = 'n.petrov@harborpine.example';
@@ -51,7 +52,7 @@ await withUiStack(
     // agents-service reads the tool directory through a 30-second cache; the grant names the write once it is offered.
     await until(async () => ((await call('GET', `${agents}/v1/tools/options?search=${WRITE}`, J)).data?.data ?? []).some((o) => o.id === WRITE), 60);
     const agent = (await call('POST', `${agents}/v1/agents`, J, { name: `Freezer ${RUN}`, role: 'Freezes accounts' })).data;
-    const granted = (await call('PATCH', `${agents}/v1/agents/${agent.id}`, J, { toolIds: [WRITE] })).data;
+    const granted = (await call('PATCH', `${agents}/v1/agents/${agent.id}`, J, { toolIds: [WRITE], ...(await agentBase(agents, J, agent.id)) })).data;
     await call('POST', `${agents}/v1/agents/${agent.id}/publish-requests`, J, { version: granted.version, note: 'uc-049' });
     const ran = async () => ((await call('GET', `${tools}/v1/executions?tool=${WRITE}`, J)).data?.data ?? []).filter((r) => r.status === 'ok');
 

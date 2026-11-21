@@ -71,7 +71,7 @@ export function VersionsTab({ skill: s, onExport }: { skill: SkillDetail; onExpo
               </div>
               <p className="mt-0.5 text-xs text-muted-foreground">
                 Saved by {v.savedBy} · {relativeTime(v.savedAt)}
-                {v.publishedAt && ` · published ${relativeTime(v.publishedAt)} by ${v.publishedBy}`} · {v.tokens.toLocaleString('en-CA')} tokens
+                {v.publishedAt && ` · published ${relativeTime(v.publishedAt)} by ${v.publishedBy}${v.requestedBy ? `, requested by ${v.requestedBy}` : ''}${v.approvedBy ? `, approved by ${v.approvedBy}` : ''}`} · {v.tokens.toLocaleString('en-CA')} tokens
               </p>
               <p className="mt-0.5 text-xs">
                 {v.testRun ? (

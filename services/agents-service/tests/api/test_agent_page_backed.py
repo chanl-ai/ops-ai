@@ -23,6 +23,8 @@ from ops_service_kit.settings import Settings
 from tests.api.test_chat import new_thread, send
 from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model
 
+from ..saves import save_agent
+
 WIRE = "Place a 24-hour hold on wire W-88213"
 
 
@@ -117,14 +119,14 @@ async def test_caps_are_optional_numbers_with_no_ceiling(stack: tuple[AsyncClien
     fraud = (await client.get("/v1/agents/ag_fraud")).json()["data"]
     assert fraud["guardrails"]["maxToolCallsPerTurn"] == 6 and fraud["guardrails"]["maxModelCallsPerTurn"] == 8
     caps = {**fraud["guardrails"], "maxToolCallsPerTurn": 250, "maxModelCallsPerTurn": None}
-    saved = await client.patch("/v1/agents/ag_fraud", json={"guardrails": caps})
+    saved = await save_agent(client, "ag_fraud", {"guardrails": caps})
     assert saved.status_code == 200, saved.text
     spec = (await client.get("/v1/agents/ag_fraud")).json()["data"]
     defn = definition_of("ag_fraud", spec["version"], {"name": "x", "role": "y", "guardrails": spec["guardrails"]})
     assert (defn.max_tool_calls, defn.max_model_calls) == (250, 50), "an empty model-call cap is the platform's 50"
     settings = rt.catalog.settings_for(defn, "m")
     assert (settings.max_tool_calls, settings.max_steps) == (250, 50)
-    zero = await client.patch("/v1/agents/ag_fraud", json={"guardrails": {**caps, "maxModelCallsPerTurn": 0}})
+    zero = await save_agent(client, "ag_fraud", {"guardrails": {**caps, "maxModelCallsPerTurn": 0}})
     assert zero.status_code == 400, zero.text
 
 

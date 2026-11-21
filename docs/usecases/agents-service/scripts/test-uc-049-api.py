@@ -17,6 +17,7 @@ from usecase_harness import (
     check,
     data,
     finish,
+    save_agent,
     service_headers,
     sse,
     tools,
@@ -86,7 +87,7 @@ with (
 
     time.sleep(31)  # agents-service keeps each tenant's tool list for 30 seconds
     agent = data(api.post("/v1/agents", json={"name": f"Freezer {RUN}", "role": "Freezes accounts"}, headers=TEAM))
-    granted = data(api.patch(f"/v1/agents/{agent['id']}", json={"toolIds": [WRITE]}, headers=TEAM))
+    granted = data(save_agent(api, agent["id"], {"toolIds": [WRITE]}, headers=TEAM))
     api.post(
         f"/v1/agents/{agent['id']}/publish-requests",
         json={"version": granted["version"], "note": "uc-049"},

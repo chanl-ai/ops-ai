@@ -133,11 +133,41 @@ class IfNot(RunModel):
         return self
 
 
+class Jump(RunModel):
+    """Where a skill goes from a step: a step further on, or an exit that ends it. Exactly one of the two."""
+
+    step: int | None = Field(default=None, ge=1, le=MAX_STEPS)
+    exit: str | None = Field(default=None, pattern=EXIT_NAME)
+
+    @model_validator(mode="after")
+    def _one_target(self) -> Self:
+        if (self.step is None) == (self.exit is None):
+            raise ValueError("a jump names a step or an exit, not both")
+        return self
+
+
+class Branch(RunModel):
+    """A path, written `if <test>:` in a skill's text. Once the step is done its test decides: when it holds the
+    skill goes on (to the step's `next`, or the step after it); when it does not, to `otherwise`. A test that does
+    not hold is a path the author wrote, not a failed check: it counts no attempt and takes no hold, unless
+    `otherwise` ends the skill with an exit other than done, which is how a guard is written
+    (`if not ...: stop "..."`). A stop that a rule test's path reaches takes the hold on either side
+    (`if found: stop "..."` as much as `else: stop "..."`); one a sentence test's path reaches takes none, since the
+    model decided it. A rule test runs in code on the step's result; a sentence is decided by the model,
+    which says which way it went (`step_done` with `holds`)."""
+
+    test: StepCheck
+    otherwise: Jump
+
+
 class SkillStep(RunModel):
     do: str = Field(min_length=1, max_length=600)
     use: Ref | None = None
     check: StepCheck | None = None
     if_not: IfNot | None = None
+    branch: Branch | None = None
+    # Where the skill goes once this step is done (and its branch held), when that is not the step after it.
+    next: Jump | None = None
     # The builder's lock on the step's tool: it is reachable only as this step even when it is a read. A tool that
     # changes something is kept to its step with or without it. Stored only when on, and only on a step that runs a
     # tool.
@@ -224,6 +254,9 @@ class SubRun(RunModel):
     return_to: int
     program: SkillProgram
     rules: str = ""
+    # A path reached done before the last step and the skill still owes its results: it waits for exit. Written only
+    # when on, so a record of a skill that never owes reads the same to a build without the field.
+    owing: bool | None = Field(default=None, exclude_if=lambda v: v is None)
 
 
 class RunningSkill(RunModel):
@@ -246,12 +279,16 @@ class RunningSkill(RunModel):
     # The steps and shared notes of the version that started, which the skill finishes on.
     program: SkillProgram
     rules: str = ""
+    # A path reached done before the last step and the skill still owes its results: it waits for exit. Written only
+    # when on, so a record of a skill that never owes reads the same to a build without the field.
+    owing: bool | None = Field(default=None, exclude_if=lambda v: v is None)
 
 
 # Why a skill ended when it did not finish: a check did not pass, a person rejected its action, a step could not be
 # done (its tool failed, or the skill it runs could not start), another skill holds its step's tool, or the model
 # called the exit itself.
-EndedWhy = Literal["check", "denied", "error", "held", "exit"]
+# `stop` is a `stop "..."` line of the skill's text that the skill reached.
+EndedWhy = Literal["check", "denied", "error", "held", "exit", "stop"]
 
 
 class EndedSkill(RunModel):

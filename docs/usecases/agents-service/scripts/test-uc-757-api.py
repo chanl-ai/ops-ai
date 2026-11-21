@@ -11,7 +11,7 @@ from typing import Any
 
 from brief_steps import brief, confirm_skill, freeze_skill, hold_skill
 from main_chains import ACCOUNT, bank_stack, holds, publish_bank_module
-from usecase_harness import agents, check, data, finish, sse
+from usecase_harness import agents, check, data, finish, save_agent, sse
 
 RUN = int(time.time())
 STREAM = {"Accept": "text/event-stream"}
@@ -38,7 +38,7 @@ with bank_stack() as s:
 
     # 1. An agent saved before the brief keeps its prompt when something else is saved.
     old = data(s.api.post("/v1/agents", json={"name": f"Old desk {RUN}", "role": "Answers the team"}, headers=me))
-    saved = data(s.api.patch(f"/v1/agents/{old['id']}", json={"toolIds": [read]}, headers=me))
+    saved = data(save_agent(s.api, old["id"], {"toolIds": [read]}, headers=me))
     check(
         "1 an agent saved before the brief keeps its instructions and gets no brief",
         (saved.get("brief"), saved.get("promptMode"), saved["instructions"]) == (None, None, old["instructions"]),
@@ -49,9 +49,9 @@ with bank_stack() as s:
     agent = data(s.api.post("/v1/agents", json={"name": f"Freeze desk {RUN}", "role": "Freezes accounts"}, headers=me))
     aid = agent["id"]
     patterns = {"thinking": "low", "parallelReads": False}
-    written = data(s.api.patch(f"/v1/agents/{aid}", json={"brief": brief(read), "patterns": patterns}, headers=me))
-    renamed = data(s.api.patch(f"/v1/agents/{aid}", json={"name": f"Account freeze desk {RUN}"}, headers=me))
-    by_hand = s.api.patch(f"/v1/agents/{aid}", json={"instructions": "Do anything."}, headers=me)
+    written = data(save_agent(s.api, aid, {"brief": brief(read), "patterns": patterns}, headers=me))
+    renamed = data(save_agent(s.api, aid, {"name": f"Account freeze desk {RUN}"}, headers=me))
+    by_hand = save_agent(s.api, aid, {"instructions": "Do anything."}, headers=me)
     check(
         "2 a brief writes the prompt, a rename rewrites it, and editing the instructions beside it is refused",
         written["promptMode"] == "brief"
@@ -79,6 +79,62 @@ with bank_stack() as s:
         and again["added"] == []
         and again["agentVersion"] == added["agentVersion"],
         (blocked, code_of(refused), added, again),
+    )
+
+    # 20. Two sessions hold the same agent draft: the second save is refused and loses nothing the first saved.
+    opened = data(s.api.get(f"/v1/agents/{aid}", headers=me))
+    copy = {"baseVersion": opened["version"], "baseDigest": opened["digest"]}
+    first = data(s.api.patch(f"/v1/agents/{aid}", json={"skillMenu": "attached", **copy}, headers=me))
+    late = s.api.patch(f"/v1/agents/{aid}", json={"skillMenu": "off", **copy}, headers=me)
+    unnamed = s.api.patch(f"/v1/agents/{aid}", json={"skillMenu": "off"}, headers=me)
+    kept = data(s.api.get(f"/v1/agents/{aid}", headers=me))
+    reread = data(save_agent(s.api, aid, {"skillMenu": "team"}, headers=me))
+    told = (late.json().get("error") or {}).get("details") or {}
+    check(
+        "20 an agent save made from a copy another session has since saved is refused, and one naming no copy too",
+        first["version"] == opened["version"]
+        and first["digest"] != opened["digest"]
+        and code_of(late) == (409, "stale_base")
+        and bool(told.get("savedBy") and told.get("savedAt"))
+        and unnamed.status_code == 400
+        and kept["skillMenu"] == "attached"
+        and kept["toolIds"] == [read]
+        and reread["skillMenu"] == "team",
+        (code_of(late), told, unnamed.status_code, kept.get("skillMenu"), kept.get("toolIds")),
+    )
+
+    # 21. Two sessions hold the same skill draft, which keeps its number when saved: the second save is refused.
+    shared = made(s.api.post("/v1/skills", json=confirm_skill(RUN, "api-shared"), headers=me))
+    sid = shared["id"]
+    copy = {"baseVersion": shared["version"], "baseDigest": shared["digest"]}
+    one = made(s.api.put(f"/v1/skills/{sid}/draft", json={"useWhen": "The first session's wording.", **copy}, headers=me))
+    two = s.api.put(f"/v1/skills/{sid}/draft", json={"useWhen": "The second session's wording.", **copy}, headers=me)
+    told = (two.json().get("error") or {}).get("details") or {}
+    stored = data(s.api.get(f"/v1/skills/{sid}", headers=me))
+    check(
+        "21 a skill draft save made from a copy another session has since saved is refused under the same number",
+        one["version"] == shared["version"]
+        and code_of(two) == (409, "stale_base")
+        and bool(told.get("savedBy"))
+        and stored["content"]["useWhen"] == "The first session's wording.",
+        (one.get("version"), code_of(two), told, stored["content"].get("useWhen")),
+    )
+
+    # 22. The same race through the text editor's save: two texts sent from one copy, the second refused, the first kept.
+    base = {"baseVersion": stored["version"], "baseDigest": stored["digest"]}
+    first_text = stored["text"].rstrip() + "\n\nSay the first session's closing line."
+    wrote = made(s.api.put(f"/v1/skills/{sid}/draft", json={"source": first_text, **base}, headers=me))
+    late = s.api.put(f"/v1/skills/{sid}/draft", json={"source": stored["text"] + "\n\nSay another line.", **base}, headers=me)
+    error = late.json().get("error") or {}
+    after = data(s.api.get(f"/v1/skills/{sid}", headers=me))
+    check(
+        "22 a text save made from a copy another text save has replaced is refused, and the first text is kept",
+        wrote["version"] == stored["version"]
+        and code_of(late) == (409, "stale_base")
+        and bool(error.get("message") and (error.get("details") or {}).get("savedBy"))
+        and "first session's closing line" in after["text"]
+        and "another line" not in after["text"],
+        (code_of(late), error, after["text"][-120:]),
     )
 
     # 4. A skill with steps is saved, published and added to the agent with the skill and the tool it needs.
@@ -291,6 +347,41 @@ with bank_stack() as s:
         "6 the write a test chat waits on is in Human Tasks for the reviewer and the asker, and opens",
         listed.status_code == 200 and thread in listed.text and opened.status_code == 200 and thread in mine.text,
         (listed.status_code, thread in listed.text, opened.status_code, mine.status_code, thread in mine.text),
+    )
+
+    # 4, written as text. The guard is a sentence in the skill's text, read into a rule on the read's result: on an
+    # account that owes money the run stops at it and holds the write after it. Without the `if not` lines the same
+    # run goes on to step 2 and holds nothing.
+    guarded = (
+        f"Look up the account with @tool:{read}\n"
+        "if not result.balance > 0:\n"
+        '    stop "The account has nothing to hold."\n'
+        f"Place a hold on the account with @tool:{write}"
+    )
+    texted = made(
+        s.api.post(
+            "/v1/skills",
+            json={
+                "name": f"Hold as text api {RUN}",
+                "ownerTeam": "team_ops",
+                "useWhen": "The caller asks for a hold on an account.",
+                "instructions": "",
+                "source": guarded,
+            },
+            headers=me,
+        )
+    )
+    made(s.api.post(f"/v1/skills/{texted['id']}/publish-requests", json={"note": "use case"}, headers=me))
+    made(s.api.post(f"/v1/agents/{aid}/references", json={"kind": "skill", "id": texted["id"]}, headers=me))
+    thread = test_chat()
+    say("call switch_skill " + json.dumps({"slug": texted["slug"]}))
+    say(f"call {read} {owing}")
+    stopped = last_reply().get("skillRun") or {}
+    held = [(h.get("skillId"), h.get("tools")) for h in stopped.get("holds") or []]
+    check(
+        "4 a guard written in a skill's text stops the run on the read's result and holds the write after it",
+        stopped.get("running") is None and held == [(texted["id"], [write])],
+        (stopped.get("running"), held, [h.get("ended") for h in stopped.get("history") or []]),
     )
 
 # 6, continued. A step that asks another agent, on the dev stack, where the team's default agent may ask a specialist.

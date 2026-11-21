@@ -25,6 +25,7 @@ from ops_agents.api.agent_registry import definition_of
 from ops_agents.app import skill_content
 from tests.conftest import SEED
 
+from ..saves import save_skill_draft
 from .test_agent_registry import _app, _ok  # pyright: ignore[reportPrivateUsage]
 from .test_stale_grants import Directory
 
@@ -79,8 +80,7 @@ async def _published(c: AsyncClient, body: dict[str, Any]) -> str:
 async def test_a_save_keeps_the_steps_and_refuses_a_mistyped_rule_or_a_skill_that_cannot_run(tmp_path: Path) -> None:
     async with _app(str(tmp_path / "db.sqlite")) as c:
         sid = _ok(await c.post("/v1/skills", json=REFUND), 201)["id"]
-        url = f"/v1/skills/{sid}/draft"
-        _ok(await c.put(url, json={**PROGRAM, "baseVersion": 1}))
+        _ok(await save_skill_draft(c, sid, PROGRAM))
         content = _ok(await c.get(f"/v1/skills/{sid}"))["content"]
         first, second = content["steps"]
         assert (first["do"], first["use"]) == (STEPS[0]["do"], LOOKUP)
@@ -95,7 +95,7 @@ async def test_a_save_keeps_the_steps_and_refuses_a_mistyped_rule_or_a_skill_tha
         # A text that reads as a rule and is not a valid one is refused, with its step: stored as a sentence it would
         # be a check the model judges. A rule reads the step's own result and the inputs, never an earlier step.
         for text in ("reslt.amount <= 500", "result.amount =< 500", "steps[1].amount <= 500"):
-            error = _error(await c.put(url, json={"steps": _step(1, check={"text": text}), "baseVersion": 1}))
+            error = _error(await save_skill_draft(c, sid, {"steps": _step(1, check={"text": text})}))
             assert (error["code"], error["details"]["step"]) == ("bad_check", 1), (text, error)
 
         plain = await _published(c, {**REFUND, "name": "Plain look-up"})
@@ -117,21 +117,21 @@ async def test_a_save_keeps_the_steps_and_refuses_a_mistyped_rule_or_a_skill_tha
             "check_needs_tool": {"steps": _step(1, use=None, do="Look up the customer and the charge.")},
         }
         two = "Look up the customer with @tool:lookup_customer."
-        error = _error(await c.put(url, json={"steps": _step(1, use=None, do=two), "baseVersion": 1}))
+        error = _error(await save_skill_draft(c, sid, {"steps": _step(1, use=None, do=two)}))
         assert (error["code"], error["details"]["step"]) == ("check_needs_tool", 1), error
         for code, change in cannot_run.items():
-            error = _error(await c.put(url, json={**change, "baseVersion": 1}))
+            error = _error(await save_skill_draft(c, sid, change))
             assert error["code"] == code, (code, error)
         to_itself = _step(1, ifNot={"action": "goto", "step": 1})
-        own_step = _error(await c.put(url, json={"steps": to_itself, "baseVersion": 1}))
+        own_step = _error(await save_skill_draft(c, sid, {"steps": to_itself}))
         assert own_step["code"] == "bad_goto", own_step
         # A step runs a tool, a skill, an agent or a workflow; a knowledge base is only ever mentioned in its text.
         searches = _step(2, use={"kind": "knowledge", "id": "kb_support"})
-        _error(await c.put(url, json={"steps": searches, "baseVersion": 1}))
+        _error(await save_skill_draft(c, sid, {"steps": searches}))
 
         # A published skill whose new draft has a step that runs the skill itself.
         _ok(await c.post(f"/v1/skills/{sid}/publish-requests", json={"note": ""}), 201)
-        itself = _error(await c.put(url, json={"steps": _step(2, use={"kind": "skill", "id": sid}), "baseVersion": 1}))
+        itself = _error(await save_skill_draft(c, sid, {"steps": _step(2, use={"kind": "skill", "id": sid})}))
         assert itself["code"] == "sub_skill_cycle", itself
 
         kept = _ok(await c.get(f"/v1/skills/{sid}"))

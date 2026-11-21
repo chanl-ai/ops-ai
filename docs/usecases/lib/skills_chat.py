@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import httpx
-from usecase_harness import AGENTS_PORT, agents, as_role, bearer, data, platform, signed_in, sse, tools
+from usecase_harness import AGENTS_PORT, agents, as_role, bearer, data, platform, save_agent, signed_in, sse, tools
 
 PREPARE = {
     "slug": "prepare-meeting",
@@ -76,7 +76,7 @@ class Stack:
         patch: dict[str, Any] = {"toolIds": tool_ids or []}
         if skill_menu:
             patch["skillMenu"] = skill_menu
-        saved = self.api.patch(f"/v1/agents/{agent['id']}", json=patch, headers=self.admin)
+        saved = save_agent(self.api, agent["id"], patch, headers=self.admin)
         if saved.status_code != 200:
             raise SystemExit(f"FAIL set agent {name} {patch}: {saved.status_code} {saved.text[:300]}")
         draft = data(saved)

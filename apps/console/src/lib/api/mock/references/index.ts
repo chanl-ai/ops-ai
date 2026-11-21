@@ -43,11 +43,11 @@ const ITEMS: ReferenceItem[] = [
 /** Whether the team offers what a `kind:id` token names; the skills mock's publish check asks. */
 export const isOffered = (token: string) => ITEMS.some((i) => `${i.kind}:${i.id}` === token);
 
-const grouped = (items: ReferenceItem[], limit: number): ReferenceGroup[] =>
+const grouped = (items: ReferenceItem[], limit: number, offset = 0): ReferenceGroup[] =>
   (Object.keys(GROUP_LABEL) as RefKind[])
     .map((kind) => {
       const all = items.filter((i) => i.kind === kind);
-      return { kind, label: GROUP_LABEL[kind], items: all.slice(0, limit), nextCursor: all.length > limit ? String(limit) : null };
+      return { kind, label: GROUP_LABEL[kind], items: all.slice(offset, offset + limit), nextCursor: all.length > offset + limit ? String(offset + limit) : null };
     })
     .filter((g) => g.items.length);
 
@@ -57,7 +57,8 @@ export function createReferencesMock(): ReferencesApi {
       respond((m): ReferenceSearch => {
         if (m === 'empty') return { groups: [] };
         const q = p.search.trim().toLowerCase();
-        return { groups: grouped(ITEMS.filter((i) => (!p.kind || i.kind === p.kind) && i.label.toLowerCase().includes(q)), p.limit ?? 8) };
+        const offset = p.kind ? Number(p.cursor ?? 0) || 0 : 0;
+        return { groups: grouped(ITEMS.filter((i) => (!p.kind || i.kind === p.kind) && i.label.toLowerCase().includes(q)), p.limit ?? 8, offset) };
       }),
     add: (_agentId, ref) =>
       respond(() => {

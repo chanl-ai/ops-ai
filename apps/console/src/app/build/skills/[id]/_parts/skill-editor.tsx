@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { CircleAlert, Eye, Pencil, RefreshCw, TriangleAlert, Users, X } from 'lucide-react';
+import { AtSign, CircleAlert, Eye, GitBranch, Lock, Pencil, RefreshCw, Square, TriangleAlert, Users, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { AddMenu } from '@/components/shared/add-menu';
@@ -9,9 +9,10 @@ import { FormField } from '@/components/shared/form-field';
 import { LeaveGuard } from '@/components/shared/leave-guard';
 import { SettingsSection } from '@/components/shared/settings-section';
 import { TagInput } from '@/components/shared/tag-input';
-import { SkillDocumentEditor } from '@/components/skills/skill-document-editor';
+import { parseText, refToken } from '@/components/shared/instruction-document/document-model';
+import { HOW_SAYS, SopEditor, type SopEditorHandle } from '@/components/shared/sop-editor';
 import { SkillInputsSection } from '@/components/skills/skill-inputs-section';
-import { EDIT_CLASS, EditClassBadge, MarkdownPreview } from '@/components/skills/skill-meta';
+import { EDIT_CLASS, EditClassBadge, MarkdownPreview, UNWRITTEN_SECTIONS, WORKED_EXAMPLE } from '@/components/skills/skill-meta';
 import { inText, refusedSave } from '@/components/skills/skill-problems';
 import { SkillResultsSection, type SkillEndingValue } from '@/components/skills/skill-results-section';
 import { SkillWhenSection, type SkillWhen, type SkillWhenHandle } from '@/components/skills/skill-when-section';
@@ -23,13 +24,14 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { useSaveSkillDraft, useSkill, useSkillOptions } from '@/hooks/skill-queries';
+import { useReferenceLabels } from '@/hooks/references-queries';
+import { useSaveSkillDraft, useSkill, useSkillOptions, useSkillTextReading } from '@/hooks/skill-queries';
 import { SKILL_LOADING_OPTIONS } from '@/components/skills/skill-loading';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { PageSaveActions } from '@/components/shared/page-save-actions';
-import type { InstructionDocumentHandle, StepValue } from '@/components/shared/instruction-document';
 import { plural } from '@/lib/format';
 import { type Carried, keptEdits } from '@/lib/kept-edits';
+import { baseOf, staleNote, staleSave } from '@/lib/save-base';
 import type { PublishBlocker } from '@/lib/types/references';
 import type { SkillDetail, SkillEditClass, SkillInputField, SkillLoading, SkillPartContent } from '@/lib/types/skills';
 
@@ -45,13 +47,24 @@ export interface Form {
   guardrails: string[];
   refusal: string;
   parts: SkillPartContent[];
-  steps: StepValue[];
+  /** The skill as text: what it says and, for a skill without parts, its steps. */
+  text: string;
   ending: SkillEndingValue;
   inputs: SkillInputField[];
 }
 
-const formOf = (sk: SkillDetail): Form => ({ name: sk.content.name, when: { useWhen: sk.content.useWhen, notWhen: sk.content.notWhen ?? '' }, loading: sk.content.loading, instructions: sk.content.instructions, toolIds: sk.content.tools.map((t) => t.toolId), knowledgeBases: sk.content.knowledgeBases, guardrails: sk.content.guardrails, refusal: sk.content.refusal ?? '', parts: sk.content.parts ?? [], steps: sk.content.steps ?? [], ending: { exit: sk.content.exit ?? {}, returns: sk.content.returns ?? [], success: sk.content.success ?? [] }, inputs: sk.content.inputs ?? [] });
+// A skill made blank holds only section headings; its text opens empty so the worked example shows instead.
+const squash = (t: string) => t.replace(/\s+/g, '');
+const textOf = (text: string) => (squash(text) === squash(UNWRITTEN_SECTIONS) ? '' : text);
+const formOf = (sk: SkillDetail): Form => ({ name: sk.content.name, when: { useWhen: sk.content.useWhen, notWhen: sk.content.notWhen ?? '' }, loading: sk.content.loading, instructions: sk.content.instructions, toolIds: sk.content.tools.map((t) => t.toolId), knowledgeBases: sk.content.knowledgeBases, guardrails: sk.content.guardrails, refusal: sk.content.refusal ?? '', parts: sk.content.parts ?? [], text: textOf(sk.text), ending: { exit: sk.content.exit ?? {}, returns: sk.content.returns ?? [], success: sk.content.success ?? [] }, inputs: sk.content.inputs ?? [] });
 const NONE: PublishBlocker[] = [];
+const EXAMPLE = WORKED_EXAMPLE;
+const KINDS = [['tools', 'tool', 'tools'], ['knowledge', 'knowledge source', 'knowledge sources'], ['skills', 'skill', 'skills'], ['agents', 'agent', 'agents'], ['workflows', 'workflow', 'workflows']] as const;
+/** “3 tools · 2 knowledge sources”, from the counts the service read from the text. */
+const usesLine = (uses: Record<(typeof KINDS)[number][0], number> | undefined) => {
+  const parts = KINDS.filter(([k]) => uses?.[k]).map(([k, one, many]) => `${uses![k]} ${uses![k] === 1 ? one : many}`);
+  return parts.length ? parts.join(' · ') : 'nothing yet';
+};
 const same = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x));
 
 /**
@@ -66,12 +79,9 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried }: { sk
   const [noting, setNoting] = React.useState(false);
   const options = useSkillOptions();
   const saved = React.useMemo(() => formOf(sk), [sk]);
-  // Drawn again on a newer version after Reload, the form starts from that version with the person's unsaved edits
-  // on top (`carried`, which the page holds across the remount).
+  // The page owns the unsaved edits (`carried`): the form is drawn again on a resize (the page's columns stack below
+  // 1024px) and on a newer version after Reload, and each time starts from the saved version with those edits on top.
   const [form, setForm] = React.useState<Form>(() => (carried?.current ? keptEdits(carried.current.readBefore, carried.current.edited, saved) : saved));
-  React.useEffect(() => {
-    if (carried) carried.current = null;
-  }, [carried]);
   const [mode, setMode] = React.useState<'edit' | 'preview'>('edit');
   const [note, setNote] = React.useState('');
   const [endingValid, setEndingValid] = React.useState(true);
@@ -83,7 +93,13 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried }: { sk
   const setWhen = React.useCallback((when: SkillWhen) => setForm((f) => ({ ...f, when })), []);
   const setInputs = React.useCallback((inputs: SkillInputField[]) => setForm((f) => ({ ...f, inputs })), []);
   const whenForm = React.useRef<SkillWhenHandle>(null);
-  const stepsDoc = React.useRef<InstructionDocumentHandle>(null);
+  const textDoc = React.useRef<SopEditorHandle>(null);
+  const context = React.useMemo(() => ({ forSkill: sk.id }), [sk.id]);
+  const reading = useSkillTextReading(sk.id, form.text, { loading: form.loading, hasParts: form.parts.length > 0, exit: form.ending.exit });
+  const mentioned = React.useMemo(() => [...new Set(parseText(form.text).flatMap((x) => (x.t === 'ref' ? [refToken(x).slice(1)] : [])))], [form.text]);
+  const labels = useReferenceLabels({ forSkill: sk.id }, mentioned);
+  // A step's first line, from the reader's last answer; line 1 until it has answered.
+  const lineOfStep = (step: number) => reading.reading?.stepLines[step - 1] ?? 1;
   // A save refused because a newer version exists: what the service said. Cleared by Reload.
   const [stale, setStale] = React.useState<string | null>(null);
   // A save that did not go through for any other reason: what the service said, kept with a Retry until a save works.
@@ -97,10 +113,17 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried }: { sk
   // The document editor and the save bar sit outside what a disabled fieldset reaches, so they read this.
   const readOnly = !!locked || !canEdit;
   const changed = {
-    wording: form.name !== saved.name || form.when.useWhen !== saved.when.useWhen || form.when.notWhen.trim() !== saved.when.notWhen.trim() || form.loading !== saved.loading || form.instructions !== saved.instructions || JSON.stringify([form.parts, form.steps, form.ending, form.inputs]) !== JSON.stringify([saved.parts, saved.steps, saved.ending, saved.inputs]),
+    wording: form.name !== saved.name || form.when.useWhen !== saved.when.useWhen || form.when.notWhen.trim() !== saved.when.notWhen.trim() || form.loading !== saved.loading || form.instructions !== saved.instructions || form.text !== saved.text || JSON.stringify([form.parts, form.ending, form.inputs]) !== JSON.stringify([saved.parts, saved.ending, saved.inputs]),
     scope: !same(form.toolIds, saved.toolIds) || !same(form.knowledgeBases, saved.knowledgeBases) || !same(form.guardrails, saved.guardrails) || form.refusal.trim() !== saved.refusal.trim(),
   };
   const dirty = changed.wording || changed.scope;
+  // Set while a save is in flight: the saved version redraws the form, and the edits it saved are not carried onto it.
+  const saving = React.useRef(false);
+  const formNow = React.useRef(form);
+  formNow.current = form;
+  React.useEffect(() => {
+    if (carried && !saving.current) carried.current = dirty ? { readBefore: saved, edited: form } : null;
+  }, [carried, dirty, saved, form]);
   // The page holds back what would redraw this form (a file added, a version restored) while there is unsaved text.
   React.useEffect(() => {
     onDirtyChange?.(dirty);
@@ -114,36 +137,47 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried }: { sk
   const warnings = newest.state === 'draft' ? sk.publishCheck.warnings : undefined;
   const discard = () => (setForm(saved), setEndingValid(true), setWhenValid(true), setInputsValid(true), setRefused(null), setFailed(null), setDiscards((n) => n + 1));
   const tools = options.data?.tools ?? [];
+  // A skill written as text runs the tools its text mentions; one kept on the form from before stays listed, removable.
+  const textTools = mentioned.filter((t) => t.startsWith('tool:')).map((t) => t.slice('tool:'.length));
+  const listedTools = stepped ? [...new Set([...textTools, ...form.toolIds])] : form.toolIds;
+  const labelOf = (id: string) => labels.data?.find((l) => l.kind === 'tool' && l.id === id)?.label;
   const toolOf = (id: string) => tools.find((t) => t.toolId === id) ?? sk.content.tools.find((t) => t.toolId === id);
   const target = newest.state === 'draft' ? `draft v${newest.version}` : `draft v${newest.version + 1}`;
 
   // The tab remounts once the saved version arrives, so the toast follows the awaited result rather than mutate callbacks.
   const submit = async () => {
     setFailed(null);
+    saving.current = true;
+    if (carried) carried.current = null;
     try {
-      const d = await save.mutateAsync({ name: form.name, useWhen: form.when.useWhen, loading: form.loading, instructions: form.instructions, toolIds: form.toolIds, knowledgeBases: form.knowledgeBases, guardrails: form.guardrails, refusal: form.refusal.trim(), parts: form.parts, ...(stepped ? { inputs: form.inputs, steps: form.steps, notWhen: form.when.notWhen.trim(), exit: form.ending.exit, returns: form.ending.returns, success: form.ending.success } : {}), note: note.trim() || undefined, baseVersion: newest.version });
+      // A skill saved as a list of steps keeps them until its text is changed; one written as text sends its text.
+      const text = form.text !== saved.text || sk.content.source !== undefined ? { source: form.text } : {};
+      const d = await save.mutateAsync({ name: form.name, useWhen: form.when.useWhen, loading: form.loading, ...(stepped ? {} : { instructions: form.instructions }), toolIds: form.toolIds, knowledgeBases: form.knowledgeBases, guardrails: form.guardrails, refusal: form.refusal.trim(), parts: form.parts, ...(stepped ? { inputs: form.inputs, ...text, notWhen: form.when.notWhen.trim(), exit: form.ending.exit, returns: form.ending.returns, success: form.ending.success } : {}), note: note.trim() || undefined, ...baseOf(sk) });
       toast.success(`Saved draft v${d.versions[0].version}`, { description: `${EDIT_CLASS[d.versions[0].editClass].hint} Run the tests before requesting review.` });
     } catch (e) {
+      // Still this form: what it holds now, typed during the save included, is carried again.
+      if (carried) carried.current = { readBefore: saved, edited: formNow.current };
       // In review and deprecated are 409 as well; only a newer version offers a reload.
-      if ((e as { code?: string }).code === 'stale_base') return setStale((e as Error).message);
+      const newer = staleSave(e);
+      if (newer) return setStale(staleNote(newer));
       const onStep = refusedSave(e);
       if (onStep?.position?.step) {
         setRefused(onStep);
-        stepsDoc.current?.focus({ field: 'steps', step: onStep.position.step });
+        textDoc.current?.focusLine(lineOfStep(onStep.position.step));
         return void toast.error('Couldn’t save the draft', { description: `Step ${onStep.position.step} needs a fix.` });
       }
       // The toast goes away; the page keeps saying so, with a way to try again, while the text is still unsaved.
       setFailed((e as Error).message);
       toast.error('Couldn’t save the draft', { description: (e as Error).message });
+    } finally {
+      saving.current = false;
     }
   };
   // The page remounts this form when a newer version arrives, and the new form takes the person's unsaved edits from
   // `carried`. With nothing newer the form stays as it is. Either way nothing the person typed is dropped.
   const reload = async () => {
     if (carried) carried.current = { readBefore: saved, edited: form };
-    const read = await current.refetch();
-    const newer = read.data?.versions[0];
-    if (carried && newer && newer.version === newest.version && newer.savedAt === newest.savedAt) carried.current = null;
+    await current.refetch();
     setStale(null);
   };
   const askNote = async () => {
@@ -192,8 +226,13 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried }: { sk
               <p key={i} className="flex flex-wrap items-center gap-x-2" data-testid="skill-problem">
                 <span>{p.message}</span>
                 {p.position?.field === 'steps' && p.position.step && (
-                  <Button variant="link" size="sm" className="h-auto p-0" onClick={() => stepsDoc.current?.focus({ field: 'steps', step: p.position!.step! })}>
+                  <Button variant="link" size="sm" className="h-auto p-0" onClick={() => textDoc.current?.focusLine(lineOfStep(p.position!.step!))}>
                     Go to step {p.position.step}
+                  </Button>
+                )}
+                {p.position?.field === 'source' && p.position.index && (
+                  <Button variant="link" size="sm" className="h-auto p-0" onClick={() => textDoc.current?.focusLine(p.position!.index!)} data-testid="skill-problem-line">
+                    Go to line {p.position.index}
                   </Button>
                 )}
               </p>
@@ -203,8 +242,55 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried }: { sk
       )}
       <SkillWhenSection key={`when-${discards}`} value={saved.when} onChange={setWhen} onValidity={setWhenValid} useWhenMax={limit} needsUseWhen={form.loading === 'on_match'} showNotWhen={stepped} notWhenProblem={problems.find((p) => p.position?.field === 'notWhen')?.message} disabled={readOnly} controls={whenForm} />
       {stepped ? (
-        <SettingsSection title="Notes and steps" description="Notes hold for the whole skill. Steps run in order: each can name a tool, a check on what came back, and what happens when the check fails.">
-          <SkillDocumentEditor skillId={sk.id} name={form.name} value={{ instructions: form.instructions, steps: form.steps }} onChange={(doc) => (setRefused(null), setForm((f) => ({ ...f, ...doc })))} readOnly={readOnly} problems={problems} warnings={warnings} controls={stepsDoc} />
+        <SettingsSection title="Instructions" description="Write the skill the way you would explain it to a new teammate. A line that mentions a tool may use it; an indented “if …:” block is a path, “else:” the other one, and “stop” ends the skill.">
+          <div className="flex flex-col gap-2">
+            <div className={readOnly ? 'rounded-lg border bg-muted/40' : 'rounded-lg border bg-card'} data-testid="skill-text-editor">
+              {readOnly ? (
+                <div className="flex flex-col gap-1 border-b px-3 py-2 text-xs text-muted-foreground">
+                  <p className="flex items-center gap-2" data-testid="sop-read-only">
+                    <Lock className="size-3.5" /> Read only. {locked ?? 'You can read this skill; a builder in its team can change it.'}
+                  </p>
+                  <span data-testid="sop-how-legend">
+                    {HOW_SAYS.checked} {HOW_SAYS.agent}
+                  </span>
+                </div>
+              ) : (
+                // Above the text, so it stays in view on a long skill.
+                <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2" data-testid="sop-cue-bar">
+                  <Button variant="ghost" size="sm" onClick={() => textDoc.current?.insert('@')} data-testid="sop-insert-mention">
+                    <AtSign className="size-4" /> Mention
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => textDoc.current?.insert('\nif ')} data-testid="sop-add-path">
+                    <GitBranch className="size-4" /> Add a path
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => textDoc.current?.insert('\nstop "')} data-testid="sop-end-here">
+                    <Square className="size-4" /> End here
+                  </Button>
+                  <span className="w-full text-xs text-muted-foreground sm:ml-auto sm:w-auto">Type @ to mention · click a mention to change it · Tab indents, Esc then Tab leaves</span>
+                  <span className="w-full text-xs text-muted-foreground" data-testid="sop-how-legend">
+                    {HOW_SAYS.checked} {HOW_SAYS.agent}
+                  </span>
+                </div>
+              )}
+              <SopEditor value={form.text} onChange={(text) => (setRefused(null), setForm((f) => ({ ...f, text })))} readOnly={readOnly} reading={reading.reading} readingFor={reading.forText} labels={labels.data} context={context} controls={textDoc} placeholder={EXAMPLE} />
+            </div>
+            {!!reading.reading?.hints.length && reading.forText === form.text && (
+              <div className="flex flex-col gap-1 rounded-md border px-3 py-2" data-testid="sop-hints">
+                <span className="text-xs font-medium">{plural(reading.reading.hints.length, 'hint')} · nothing here stops a save</span>
+                {reading.reading.hints.map((h, k) => (
+                  <p key={k} className="flex flex-wrap items-baseline gap-x-2 text-xs text-muted-foreground" data-testid="sop-hint">
+                    <span>{h.message}</span>
+                    <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => textDoc.current?.focusLine(h.line)}>
+                      Go to line {h.line}
+                    </Button>
+                  </p>
+                ))}
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground tabular-nums" data-testid="skill-text-uses">
+              {reading.isError ? 'Couldn’t read the text just now; it still saves.' : `Uses ${usesLine(reading.reading?.uses)} · read from the text, nothing to set up separately`}
+            </p>
+          </div>
         </SettingsSection>
       ) : (
         <SettingsSection title="Instructions" description="Markdown with four sections: Steps, Rules, Examples and Output format.">
@@ -261,17 +347,18 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried }: { sk
           <div className="flex flex-col gap-2">
             <span className="text-sm font-medium">Tools</span>
             <div className="flex flex-col divide-y rounded-md border bg-card">
-              {form.toolIds.length ? (
-                form.toolIds.map((id) => {
+              {listedTools.length ? (
+                listedTools.map((id) => {
                   const t = toolOf(id);
+                  const inText = stepped && textTools.includes(id);
                   return (
-                    <div key={id} className="flex items-center gap-2 px-3 py-1.5">
-                      <code className="flex-1 truncate font-mono text-xs">{t?.name ?? id}</code>
-                      <span className="text-xs text-muted-foreground">{t?.module}</span>
+                    <div key={id} className="flex items-center gap-2 px-3 py-1.5" data-testid="skill-tool-row">
+                      <code className="flex-1 truncate font-mono text-xs">{t?.name ?? labelOf(id) ?? id}</code>
+                      <span className="text-xs text-muted-foreground">{inText ? 'in the text' : t?.module}</span>
                       {t && <AccessBadge access={t.access} />}
-                      <Button variant="ghost" size="icon" className="size-7" disabled={readOnly} aria-label={`Remove ${t?.name ?? id}`} onClick={() => setForm({ ...form, toolIds: form.toolIds.filter((x) => x !== id) })}>
+                      {!inText && <Button variant="ghost" size="icon" className="size-7" disabled={readOnly} aria-label={`Remove ${t?.name ?? id}`} onClick={() => setForm({ ...form, toolIds: form.toolIds.filter((x) => x !== id) })}>
                         <X className="size-3.5" />
-                      </Button>
+                      </Button>}
                     </div>
                   );
                 })
@@ -279,6 +366,11 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried }: { sk
                 <p className="px-3 py-2 text-sm text-muted-foreground">No tools. The skill answers from its instructions and knowledge only.</p>
               )}
             </div>
+            {stepped ? (
+              <p className="text-xs text-muted-foreground" data-testid="skill-tools-from-text">
+                Read from the text. Mention a tool with @ to add it.
+              </p>
+            ) : (
             <AddMenu
               label="Add a tool operation"
               items={tools
@@ -295,6 +387,7 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried }: { sk
               disabled={readOnly}
               className="w-72"
             />
+            )}
           </div>
           <div className="flex flex-col gap-2">
             <span className="text-sm font-medium">Knowledge bases</span>

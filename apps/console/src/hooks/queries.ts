@@ -8,6 +8,7 @@ import { sdk } from '@/lib/api/ops-sdk';
 import type { OpsAI } from '@chanl-ai/ops-ai';
 import type { ToolRowFilters } from '@/lib/types/tool-directory';
 import type {
+  Agent,
   AgentInput,
   AgentPatch,
   GatePolicyInput,
@@ -24,6 +25,8 @@ import type {
   WorkflowSettingsInput,
 } from '@/lib/types/domain';
 import type { AgentFilters, DeploymentFilters, ListParams, ListResult, PolicyFilters, ReviewListParams, RunFilters, ToolFilters, WorkflowFilters } from '@/lib/types/query';
+import { knowledgeChange, toolChange } from '@/lib/agent-tools';
+import { baseOf, staleSave } from '@/lib/save-base';
 import { teamKey, useTeamQuery } from './team-query';
 
 export const qk = {
@@ -129,17 +132,38 @@ function useWrite<A, R>(fn: (a: A) => Promise<R>, roots: string[]) {
 }
 
 export const useCreateAgent = () => useWrite((i: AgentInput) => api.agents.create(i), ['agents', 'overview']);
+/** Saves fields on the agent's draft, made on `base`: the agent as the page last read it. */
 export const useUpdateAgent = (id: string) =>
-  useWrite((p: AgentPatch) => api.agents.update(id, p), ['agents', 'agent', 'tools', 'kbs']);
+  useWrite(({ base, ...fields }: AgentPatch & { base: Agent }) => api.agents.update(id, { ...fields, ...baseOf(base) }), ['agents', 'agent', 'tools', 'kbs']);
 /**
- * Grants one tool to an agent from the tool's side: the same save as the agent page's Grant tools, with the tool added
- * to the agent's grants, so it lands as a new draft version. The app page's and Tools page's Used by refresh too.
+ * The one way the console changes an agent's tool list or knowledge list outside an @ insert: the stored agent is
+ * read, `change` is made on it and saved naming the copy it was read from, so a change made from a list the page
+ * showed a moment ago never drops an item saved since. A save that lands in between is refused, and the change is
+ * made once more on the newer copy.
  */
-export const useGrantToolToAgent = () =>
-  useWrite(async ({ agentId, toolId }: { agentId: string; toolId: string }) => {
+async function changeStoredAgent(agentId: string, change: (stored: Agent) => AgentPatch | null): Promise<Agent> {
+  const once = async () => {
     const agent = await api.agents.get(agentId);
-    return agent.toolIds.includes(toolId) ? agent : api.agents.update(agentId, { toolIds: [...agent.toolIds, toolId] });
-  }, ['agents', 'agent', 'tools', 'apps']);
+    const fields = change(agent);
+    return fields ? api.agents.update(agentId, { ...fields, ...baseOf(agent) }) : agent;
+  };
+  return once().catch((e: unknown) => (staleSave(e) ? once() : Promise.reject(e)));
+}
+type ListChange = { add?: string[]; remove?: string[] };
+const changeAgentTools = (agentId: string, change: ListChange) => changeStoredAgent(agentId, (a) => toolChange(a, change));
+/** Reads the open agent again, after a save was refused because a newer copy exists. */
+export function useReadAgentAgain() {
+  const qc = useQueryClient();
+  return () => qc.invalidateQueries({ queryKey: ['agent'] });
+}
+/** Grants and removes tools on the agent page; lands in the agent's draft. */
+export const useChangeAgentTools = (agentId: string) => useWrite((change: ListChange) => changeAgentTools(agentId, change), ['agents', 'agent', 'tools', 'kbs']);
+/** Adds and removes knowledge bases on the agent page; lands in the agent's draft. */
+export const useChangeAgentKnowledge = (agentId: string) =>
+  useWrite((change: ListChange) => changeStoredAgent(agentId, (a) => knowledgeChange(a, change)), ['agents', 'agent', 'kbs']);
+/** Grants one tool to an agent from the tool's side. The app page's and Tools page's Used by refresh too. */
+export const useGrantToolToAgent = () =>
+  useWrite(({ agentId, toolId }: { agentId: string; toolId: string }) => changeAgentTools(agentId, { add: [toolId] }), ['agents', 'agent', 'tools', 'apps']);
 export const useDeleteAgent = () => useWrite((id: string) => api.agents.remove(id), ['agents', 'overview']);
 export const useAgentVersions = (id: string) => useTeamQuery({ queryKey: qk.agentVersions(id), queryFn: () => api.agents.versions(id) });
 export const useAgentRuns = (id: string) => useTeamQuery({ queryKey: qk.agentRuns(id), queryFn: () => api.agents.runs(id) });

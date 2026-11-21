@@ -9,7 +9,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from usecase_harness import agents, check, data, finish, sse
+from usecase_harness import agents, check, data, finish, save_agent, sse
 
 ROOT = Path(__file__).resolve().parents[4]
 TEAM = {"X-Team-Id": "team_ops", "X-Dev-User": "m.okafor@harborpine.example"}
@@ -75,7 +75,7 @@ with agents() as api:
 
     ask = 'call agent__ag_dispute {"question": "Can I dispute a card charge?"}'
     held = data(api.get("/v1/agents/ag_branch", headers=TEAM))["toolIds"]
-    saved = data(api.patch("/v1/agents/ag_branch", json={"toolIds": [*held, "agent:ag_dispute"]}, headers=TEAM))
+    saved = data(save_agent(api, "ag_branch", {"toolIds": [*held, "agent:ag_dispute"]}, headers=TEAM))
     published = api.post(
         "/v1/agents/ag_branch/publish-requests", json={"version": saved["version"], "note": "go"}, headers=TEAM
     )

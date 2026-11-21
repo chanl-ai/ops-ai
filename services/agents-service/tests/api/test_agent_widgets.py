@@ -11,6 +11,7 @@ from typing import Any, cast
 from ops_agents.api.deps import Runtime
 from tests.conftest import sse_events
 
+from ..saves import save_agent
 from .test_agent_limits import _app, _data  # pyright: ignore[reportPrivateUsage]
 
 FRAUD = "ag_fraud"
@@ -45,7 +46,7 @@ async def test_the_library_lists_each_published_widget_with_its_schema_and_sampl
 
 async def test_a_pin_to_a_widget_that_does_not_exist_is_refused_naming_it(tmp_path: Path) -> None:
     async with _app(tmp_path) as (c, _):
-        r = await c.patch(f"/v1/agents/{FRAUD}", json={"widgetPins": [{"widgetId": "fake-approval"}]})
+        r = await save_agent(c, FRAUD, {"widgetPins": [{"widgetId": "fake-approval"}]})
         assert r.status_code == 422 and "fake-approval" in r.text, r.text
 
 
@@ -53,9 +54,8 @@ async def test_pinned_widgets_go_live_through_a_publish_and_draw_in_chat(tmp_pat
     async with _app(tmp_path) as (c, app):
         rt: Runtime = app.state.runtime
         saved = _data(
-            await c.patch(
-                f"/v1/agents/{FRAUD}",
-                json={"widgetPins": [{"widgetId": "hold-review"}], "widgets": {"compose": True, "perTurn": 2}},
+            await save_agent(
+                c, FRAUD, {"widgetPins": [{"widgetId": "hold-review"}], "widgets": {"compose": True, "perTurn": 2}}
             )
         )
         assert saved["widgetPins"] == [
@@ -88,18 +88,18 @@ async def test_a_widget_whose_button_needs_a_tool_the_agent_lacks_cannot_be_pinn
     """Case summary's button asks for request_document, which Wire Fraud Sentinel does not hold: the pin is refused
     naming the tool. Taking away a tool a pinned widget's button needs is refused the same way."""
     async with _app(tmp_path) as (c, _):
-        r = await c.patch(f"/v1/agents/{FRAUD}", json={"widgetPins": [{"widgetId": "case-summary"}]})
+        r = await save_agent(c, FRAUD, {"widgetPins": [{"widgetId": "case-summary"}]})
         assert r.status_code == 422 and r.json()["error"]["code"] == "widget_needs_tool", r.text
         assert "request_document" in r.json()["error"]["message"]
-        _data(await c.patch(f"/v1/agents/{FRAUD}", json={"widgetPins": [{"widgetId": "hold-review"}]}))
-        dropped = await c.patch(f"/v1/agents/{FRAUD}", json={"toolIds": ["place_wire_hold"]})
+        _data(await save_agent(c, FRAUD, {"widgetPins": [{"widgetId": "hold-review"}]}))
+        dropped = await save_agent(c, FRAUD, {"toolIds": ["place_wire_hold"]})
         assert dropped.status_code == 422 and "lookup_account" in dropped.text, dropped.text
 
 
 async def test_a_click_on_a_granted_action_calls_that_tool_once(tmp_path: Path) -> None:
     """The button's reply names its action; the agent's turn calls that granted tool once, through its normal path."""
     async with _app(tmp_path) as (c, _):
-        saved = _data(await c.patch(f"/v1/agents/{FRAUD}", json={"widgetPins": [{"widgetId": "hold-review"}]}))
+        saved = _data(await save_agent(c, FRAUD, {"widgetPins": [{"widgetId": "hold-review"}]}))
         _data(await c.post(f"/v1/agents/{FRAUD}/publish-requests", json={"version": saved["version"]}), 201)
         tid = _data(await c.post("/chat/threads", json={"agentId": FRAUD, "kbIds": []}), 201)["id"]
         res = await c.post(

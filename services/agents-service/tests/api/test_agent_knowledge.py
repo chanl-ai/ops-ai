@@ -12,6 +12,7 @@ from ops_agents.activities.knowledge import NoKnowledgeService
 from ops_agents.api.agent_registry import registry
 from ops_agents.store.tenancy import LOCAL_TENANT, tenant_scope
 
+from ..saves import save_agent
 from .test_agent_limits import _app, _data  # pyright: ignore[reportPrivateUsage]
 
 AGENT = "ag_branch"
@@ -19,10 +20,10 @@ AGENT = "ag_branch"
 
 async def test_a_name_is_refused_and_an_id_saves(tmp_path: Path) -> None:
     async with _app(tmp_path) as (c, _):
-        named = await c.patch(f"/v1/agents/{AGENT}", json={"collections": ["Retail banking"]})
+        named = await save_agent(c, AGENT, {"collections": ["Retail banking"]})
         assert named.status_code == 422, named.text
         assert named.json()["error"]["code"] == "unknown_knowledge_base" and "Retail banking" in named.text
-        saved = _data(await c.patch(f"/v1/agents/{AGENT}", json={"collections": ["kb_people"]}))
+        saved = _data(await save_agent(c, AGENT, {"collections": ["kb_people"]}))
         assert saved["collections"] == ["kb_people"]
 
 
@@ -34,7 +35,7 @@ async def test_a_value_already_held_is_kept(tmp_path: Path) -> None:
             row = await reg.row(AGENT)
             spec = dict((await reg.version(AGENT, row.version)).spec)
             await reg.save(AGENT, {**spec, "collections": ["kb_gone"]}, by="seed")
-        kept = await c.patch(f"/v1/agents/{AGENT}", json={"collections": ["kb_gone", "kb_people"]})
+        kept = await save_agent(c, AGENT, {"collections": ["kb_gone", "kb_people"]})
         assert kept.status_code == 200, kept.text
 
 
@@ -43,5 +44,5 @@ async def test_adding_knowledge_while_kb_service_is_down_is_refused(
 ) -> None:
     async with _app(tmp_path) as (c, app):
         monkeypatch.setattr(app.state.runtime, "kbs", NoKnowledgeService)
-        down = await c.patch(f"/v1/agents/{AGENT}", json={"collections": ["kb_people"]})
+        down = await save_agent(c, AGENT, {"collections": ["kb_people"]})
         assert down.status_code == 503, down.text

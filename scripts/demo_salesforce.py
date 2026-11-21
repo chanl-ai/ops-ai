@@ -407,7 +407,7 @@ def add_templates() -> int:
     agent = ops.raw.agents.agents_get_agent(made["agent"]) if "agent" in made else None
     if agent and (agent.get("memory") or {}).get("enabled", True):
         # The stack's memory alias is a real model; the demo's chat stays on the fake one.
-        agent = ops.raw.agents.agents_update_agent(made["agent"], {"memory": {"enabled": False}})
+        agent = ops.agents.update(made["agent"], {"memory": {"enabled": False}})
         say("MADE", "Case helper's memory off, so the demo's chat makes no real model call")
     if agent and agent.get("publishedVersion") != agent.get("version"):
         review = ops.raw.agents.agents_request_publish(

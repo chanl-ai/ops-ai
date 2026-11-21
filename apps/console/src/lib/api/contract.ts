@@ -1,4 +1,5 @@
 import type { PublishPreview } from '@/lib/types/publish-preview';
+import type { SaveBase } from '@/lib/save-base';
 import type { CasesApi } from './cases-contract';
 import type { ChannelsApi } from './channels-contract';
 import type { EngineApi } from './engine-contract';
@@ -108,7 +109,8 @@ export interface OpsApi {
     get(id: string): Promise<Agent>;
     create(input: AgentInput): Promise<Agent>;
     /** Saves a new draft version. Workflows keep pinning the published one until it is published and they republish. */
-    update(id: string, patch: AgentPatch): Promise<Agent>;
+    /** 409 `stale_base` when the base is not the newest copy; the details name who saved it and when. */
+    update(id: string, patch: AgentPatch & SaveBase): Promise<Agent>;
     remove(id: string): Promise<void>;
     versions(id: string): Promise<AgentVersion[]>;
     /** The agent's newest threads in the selected team, newest first. */

@@ -12,7 +12,7 @@ from typing import Any
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import create_async_engine
-from usecase_harness import chat, check, data, demo, finish, pg_url, turn_text
+from usecase_harness import chat, check, data, demo, finish, pg_url, save_agent, turn_text
 
 ADVISOR = "ag_advisor"
 GUARDRAIL = "gr_no_investment_advice"
@@ -73,7 +73,7 @@ with demo() as d:
     message = g["config"]["message"]
     if UNPINNED:
         data(api.delete(f"/v1/agents/{ADVISOR}/skills/{SKILL}"))
-        v = data(api.patch(f"/v1/agents/{ADVISOR}", json={"guardrailPins": []}))["version"]
+        v = data(save_agent(api, ADVISOR, {"guardrailPins": []}))["version"]
         data(api.post(f"/v1/agents/{ADVISOR}/publish-requests", json={"version": v}))
 
     tid, events = chat(api, ADVISOR, BLOCKED)

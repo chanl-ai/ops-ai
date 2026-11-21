@@ -14,6 +14,7 @@ from ops_agents.api.deps import Runtime
 from ops_agents.store.events import thread_events
 
 from ..conftest import SEED
+from ..saves import save_agent
 from .test_agent_registry import _app  # pyright: ignore[reportPrivateUsage]
 
 DEV_AGENTS = SEED.parents[2] / "seed" / "chat_agents.json"
@@ -40,7 +41,7 @@ async def test_switching_a_guardrail_off_saves_a_version_and_stops_its_checks(tm
         [pin] = before["guardrailPins"]
         assert pin["enabled"] is True
         off = {"guardrailId": pin["guardrailId"], "version": pin["version"], "enabled": False}
-        saved = (await c.patch(f"/v1/agents/{ADVISOR}", json={"guardrailPins": [off], "note": "test"})).json()["data"]
+        saved = (await save_agent(c, ADVISOR, {"guardrailPins": [off], "note": "test"})).json()["data"]
         assert saved["version"] == before["version"] + 1 and saved["guardrailPins"][0]["enabled"] is False, saved
         versions = (await c.get(f"/v1/agents/{ADVISOR}/versions")).json()["data"]
         assert "Changed guardrail pins" in versions[0]["changes"]
@@ -67,7 +68,7 @@ async def test_switching_a_guardrail_off_saves_a_version_and_stops_its_checks(tm
         }, turns
 
         on = {**off, "enabled": True}
-        back = (await c.patch(f"/v1/agents/{ADVISOR}", json={"guardrailPins": [on]})).json()["data"]
+        back = (await save_agent(c, ADVISOR, {"guardrailPins": [on]})).json()["data"]
         assert back["guardrailPins"][0]["enabled"] is True
 
 

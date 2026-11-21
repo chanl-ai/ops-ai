@@ -10,12 +10,15 @@ views return those as empty and the docs page says so.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any, NotRequired, TypedDict, cast
 
+from ops_access import team_on
 from ops_agent_kernel.types import Skill as KernelSkill
 from ops_contracts.chat import SkillPick
+from ops_contracts.skill_run import Ref, SkillProgram, SkillStep
 from ops_service_kit import narrow
 from ops_service_kit.errors import Conflict, NotFound, Unprocessable, ValidationFailed
 from ops_service_kit.http import Json, JsonList, JsonValue
@@ -23,16 +26,19 @@ from ops_service_kit.logging import get_logger
 
 from ..activities.catalog import AgentDefinition, kernel_skills
 from ..activities.tool_directory import ToolsUnavailable
-from ..app import skill_content
+from ..app import skill_content, skill_text
 from ..app.skill_content import KnownSkill, Problem
 from ..store.agent_registry import PublishRequestRow
 from ..store.skill_list import pinning_agents, published_pinning
 from ..store.skills import SkillRegistry, SkillRow, SkillVersionRow, slug_of
+from ..store.tenancy import NoTenantError
 from .agent_registry import SEED_BY, SEED_TEAM, AgentSpec, SkillPin, seed_agent_version
 from .agent_registry import registry as agent_registry
 from .child_runs import published_workflows
 from .deps import Runtime
+from .platform_policies import PolicyUnread
 from .routers.tool_catalog import known_tools
+from .step_shapes import ServiceLookups
 
 log = get_logger("ops_agents.skills")
 MAX_PER_TURN = 2
@@ -52,6 +58,9 @@ LIMITS: dict[str, int] = {
     "tokenBudget": TOKEN_BUDGET,
     "useWhenMaxChars": USE_WHEN_MAX,
 }
+
+# The team setting that refuses a write behind a condition the agent decides (ops_access.policies).
+STRICT_KEY = "skillPublishStrict"
 
 
 def skills(rt: Runtime) -> SkillRegistry:
@@ -109,28 +118,55 @@ async def check_content(rt: Runtime, fields: Json, *, skill_id: str | None = Non
         )
     if len(use_when) > USE_WHEN_MAX:
         raise ValidationFailed(f"The use-when line is at most {USE_WHEN_MAX} characters.", code="use_when_too_long")
-    program = await skill_content.checked(
-        fields,
-        skill_id=skill_id,
-        team_id=team_id,
-        has_parts=bool(narrow.entries(fields.get("parts"))),
-        always_on=loading == "always",
-        skills=_TeamSkills(rt),
-    )
-    # With steps the instructions are notes shared by every step, and may be empty.
-    if program is None and not str(fields.get("instructions") or "").strip():
-        raise ValidationFailed("Write the skill's instructions.", code="no_instructions")
-    # What the steps name joins the skill's own tools and knowledge bases: the scope an agent must hold to attach it.
-    step_tools, step_bases = skill_content.scope(program)
+    source = fields.get("source")
+    has_parts = bool(narrow.entries(fields.get("parts")))
+    if isinstance(source, str):
+        # Written as text: the reader makes the steps, and nothing it reads refuses the save.
+        if len(source) > INSTRUCTIONS_MAX:
+            raise ValidationFailed(
+                f"The text is at most {INSTRUCTIONS_MAX:,} characters.", code="instructions_too_long"
+            )
+        if not source.strip():
+            raise ValidationFailed("Write the skill's instructions.", code="no_instructions")
+        source = skill_text.normalised(source)
+        program = await _program_of_text(
+            rt, source, fields, team_id=team_id, skill_id=skill_id, loading=loading, has_parts=has_parts
+        )
+        # A text read as steps reaches the model one step at a time (`do`), so the instructions keep nothing: a copy
+        # would put every path into every step's prompt. A text with no steps is the instructions.
+        fields = {**fields, "instructions": "" if program is not None and program.steps else source}
+        refs = Ref.found_in(source)
+        step_tools = list(dict.fromkeys(g for r in refs if (g := r.grant) is not None))
+        step_bases = list(dict.fromkeys(r.id for r in refs if r.kind == "knowledge"))
+    else:
+        program = await skill_content.checked(
+            fields,
+            skill_id=skill_id,
+            team_id=team_id,
+            has_parts=has_parts,
+            always_on=loading == "always",
+            skills=_TeamSkills(rt),
+        )
+        # With steps the instructions are notes shared by every step, and may be empty.
+        if program is None and not str(fields.get("instructions") or "").strip():
+            raise ValidationFailed("Write the skill's instructions.", code="no_instructions")
+        # What the steps name joins the skill's own tools and knowledge bases: the scope an agent must hold to attach
+        # it.
+        step_tools, step_bases = skill_content.scope(program)
     tool_ids = list(dict.fromkeys([*(str(t) for t in cast(list[Any], fields.get("toolIds") or [])), *step_tools]))
     # The directory is read per tenant, so a skill naming no tool does not need it (the start-up seed has no tenant).
     offered = {t["id"]: t for t in await known_tools(rt)} if tool_ids else {}
     if any(t not in offered for t in tool_ids):
         # A tool offered moments ago is not in the list kept for 30 s: ask once more before refusing it.
         offered = {t["id"]: t for t in await known_tools(rt, fresh=True)}
-    if unknown := [t for t in tool_ids if t not in offered]:
+    if isinstance(source, str):
+        # A mention of a tool that is gone stays in the text and its step, where the publish check finds it; it
+        # joins no scope, since no agent could hold it.
+        tool_ids = [t for t in tool_ids if t in offered]
+    elif unknown := [t for t in tool_ids if t not in offered]:
         raise ValidationFailed(f"Unknown tools: {', '.join(unknown)}.", code="unknown_tool")
-    skill_content.refuse_unruled(program, {t: str(offered[t]["access"]) for t in tool_ids})
+    if not isinstance(source, str):
+        skill_content.refuse_unruled(program, {t: str(offered[t]["access"]) for t in tool_ids})
     slug = str(fields.get("slug") or slug_of(name))
     parts = _parts(fields.get("parts"), tool_ids, loading)
     if parts:
@@ -164,8 +200,20 @@ async def check_content(rt: Runtime, fields: Json, *, skill_id: str | None = Non
         content["inputs"] = inputs
     if parts:
         content["parts"] = parts
+    if isinstance(source, str):
+        content["source"] = source
     # Stored as written: the registry takes the document as JSON. The program's keys join only when set.
     return {**cast(Json, content), **skill_content.stored(program)}
+
+
+def _kept_keys(fields: Json) -> Json:
+    """The not-when line, endings, results and success lines the form keeps beside a text, checked as a program's
+    keys: they are the form's, so a text that holds no step keeps them."""
+    extra = {k: fields[k] for k in ("notWhen", "exit", "returns", "success") if fields.get(k)}
+    try:
+        return SkillProgram.model_validate(extra).model_dump(mode="json", by_alias=True, exclude_none=True)
+    except Exception as e:
+        raise ValidationFailed(str(e), code="validation_failed") from e
 
 
 class SkillInputSpec(TypedDict):
@@ -215,6 +263,9 @@ class SkillContent(TypedDict):
     refusal: NotRequired[str]
     inputs: NotRequired[list[SkillInputSpec]]
     parts: NotRequired[list[SkillPartSpec]]
+    # The skill as written in the text editor; its steps are read from it (app/skill_text.py) at each save. Absent on
+    # a skill saved as a list of steps.
+    source: NotRequired[str]
     # A skill with steps (ops_contracts.skill_run.SkillProgram, as stored): absent on a skill without them.
     notWhen: NotRequired[str]
     steps: NotRequired[list[JsonValue]]
@@ -344,7 +395,8 @@ def render(content: SkillContent, part: str | None, given: dict[str, str]) -> Re
             code="missing_input",
             details={"missing": missing},
         )
-    text = str(content["instructions"])
+    # A skill written as text renders as written: its stored instructions are empty once the text runs as steps.
+    text = text_of(cast(Json, content)) if content.get("source") is not None else str(content["instructions"])
     if chosen is not None:
         text += "\n\n" + str(chosen["instructions"])
     for n, v in values.items():
@@ -619,7 +671,11 @@ class SkillVersionView(TypedDict):
     tokens: int
     reviewId: NotRequired[str]
     publishedAt: NotRequired[str]
+    # Who made it live; who asked for the publish; who approved it (None when the team's policy let it publish without
+    # a review).
     publishedBy: NotRequired[str | None]
+    requestedBy: NotRequired[str | None]
+    approvedBy: NotRequired[str | None]
     testRun: None
 
 
@@ -646,6 +702,10 @@ class SkillDetailView(SkillListRow):
     """The skill page's reply: the list row, then these, in reply order."""
 
     content: SkillContent
+    # The text the editor shows: `content.source`, or the stored steps written as text.
+    text: str
+    # The newest version's stored digest: with `version`, the copy a draft save names as its base.
+    digest: str
     versions: list[SkillVersionView]
     tests: list[JsonValue]
     runs: list[JsonValue]
@@ -656,12 +716,139 @@ class SkillDetailView(SkillListRow):
     publishCheck: PublishCheck
 
 
-async def _offered_tools(rt: Runtime, *, fresh: bool) -> dict[str, str] | None:
-    """The access of each tool the tools directory offers, by id; None when it cannot answer."""
+async def _directory(rt: Runtime, *, fresh: bool = False) -> tuple[dict[str, str] | None, dict[str, str]]:
+    """The access of each tool the tools directory offers, by id (None when it cannot answer), and each tool's name by
+    its `@tool:` token, for the reader's hints."""
     try:
-        return {str(t["id"]): str(t["access"]) for t in await known_tools(rt, fresh=fresh)}
+        rows = await known_tools(rt, fresh=fresh)
     except ToolsUnavailable:
+        return None, {}
+    offered = {str(t["id"]): str(t["access"]) for t in rows}
+    return offered, {f"@tool:{t['id']}": str(t.get("title") or t["name"]) for t in rows if ":" not in str(t["id"])}
+
+
+async def strict_publishing(rt: Runtime, team: str | None) -> bool | None:
+    """Whether `team` turned skillPublishStrict on, read live from platform-service as publishReview is; None when it
+    could not be read. Off with no platform URL or no tenant (the start-up seed)."""
+    if team is None or rt.policies is None:
+        return False
+    try:
+        return team_on(await rt.policies.value(STRICT_KEY), team)
+    except NoTenantError:
+        return False
+    except PolicyUnread:
         return None
+
+
+async def _bases(rt: Runtime) -> dict[str, str] | None:
+    """The knowledge bases kb-service offers, id to name; None when it cannot answer."""
+    try:
+        return {b.id: b.name for b in await rt.kbs().bases()}
+    except Exception:
+        return None
+
+
+async def _fields(rt: Runtime, refs: list[Ref]) -> dict[str, skill_text.Fields]:
+    """What each mentioned tool returns, by its token, from its output schema in tools-service; a tool with none,
+    or one tools-service cannot answer for, is left out, so its conditions are decided by the agent."""
+    out: dict[str, skill_text.Fields] = {}
+    lookups = ServiceLookups(rt, "", None)
+    for ref in refs:
+        if ref.kind != "tool" or ref.token in out:
+            continue
+        shape = await lookups.operation_output(ref.id)
+        props = narrow.json_object(shape.get("properties")) if shape is not None else {}
+        fields: dict[str, skill_text.Field] = {}
+        for name, raw in props.items():
+            spec = narrow.json_object(raw)
+            f: skill_text.Field = {"type": str(spec.get("type") or "")}
+            if enum := narrow.json_list(spec.get("enum")):
+                f["enum"] = [str(e) for e in enum]
+            fields[name] = f
+        out[ref.token] = fields
+    return out
+
+
+def _plain(loading: str, has_parts: bool) -> str | None:
+    """Why a text is read as plain instructions whatever it holds; None when it may run step by step."""
+    if loading == "always":
+        return "An always-on skill is read as plain instructions: its tools and paths are not enforced."
+    if has_parts:
+        return "A skill written in parts is read as plain instructions: its tools and paths are not enforced."
+    return None
+
+
+async def read_text(
+    rt: Runtime,
+    source: str,
+    *,
+    team_id: str,
+    loading: str = "on_match",
+    has_parts: bool = False,
+    exits: Mapping[str, str] | None = None,
+) -> skill_text.Reading:
+    """The editor's read of a text it has not saved: the same reader a save runs, with what each tool returns and
+    which mentions no longer exist."""
+    refs = Ref.found_in(source)
+    offered, labels = await _directory(rt)
+    bases = await _bases(rt) if any(r.kind == "knowledge" for r in refs) else None
+    labels |= {f"@knowledge:{i}": n for i, n in (bases or {}).items()}
+    gone = await skill_content.missing(refs, offered, bases, team_id=team_id, skills=_TeamSkills(rt))
+    return skill_text.read(
+        source,
+        fields=await _fields(rt, refs),
+        labels=labels,
+        missing=gone,
+        plain=_plain(loading, has_parts),
+        exits=exits,
+        access=offered,
+    )
+
+
+async def _program_of_text(
+    rt: Runtime, source: str, fields: Json, *, team_id: str, skill_id: str | None, loading: str, has_parts: bool
+) -> SkillProgram | None:
+    """The program a saved text reads as, with the not-when line, results and success lines the form keeps beside
+    it. A step that would run a skill that runs this one, or one whose own steps run a skill, keeps the mention as
+    words: the kernel starts sub-skills one level deep."""
+    refs = Ref.found_in(source)
+    kept_keys = _kept_keys(fields)
+    declared = cast(dict[str, str], kept_keys.get("exit") or {})
+    reading = skill_text.read(source, fields=await _fields(rt, refs), plain=_plain(loading, has_parts), exits=declared)
+    program = reading.program
+    if program is None:
+        return SkillProgram.model_validate(kept_keys) if any(kept_keys.get(k) for k in skill_content.KEYS) else None
+    team = _TeamSkills(rt)
+    kept: list[SkillStep] = []
+    for step in program.steps:
+        if step.use is not None and step.use.kind == "skill":
+            target = await team.skill(step.use.id)
+            loops = step.use.id == skill_id or (
+                target is not None and (bool(target.runs) or (skill_id or "") in target.runs)
+            )
+            kept.append(step.model_copy(update={"use": None}) if loops else step)
+            continue
+        kept.append(step)
+    extra = {k: kept_keys[k] for k in ("notWhen", "returns", "success") if kept_keys.get(k)}
+    try:
+        return SkillProgram.model_validate(
+            {
+                **program.model_dump(mode="json", by_alias=True, exclude_none=True),
+                "steps": [s.model_dump(mode="json", by_alias=True, exclude_none=True) for s in kept],
+                **extra,
+            }
+        )
+    except Exception as e:
+        raise ValidationFailed(str(e), code="validation_failed") from e
+
+
+def text_of(content: Json) -> str:
+    """The skill's text for the editor: as written, or for a skill saved as a list of steps, its steps written as
+    text by the same reader (`skill_text.render`)."""
+    source = content.get("source")
+    if isinstance(source, str):
+        return skill_text.normalised(source)
+    return skill_text.render(str(content.get("instructions") or ""), skill_content.program_of(content))
 
 
 async def detail(rt: Runtime, skill_id: str, *, fresh: bool = False) -> SkillDetailView:
@@ -673,6 +860,7 @@ async def detail(rt: Runtime, skill_id: str, *, fresh: bool = False) -> SkillDet
     users = await pinning_agents(rt.db, skill_id)
     versions = await reg.versions(skill_id)
     requests = await _requests(rt, skill_id)
+    by_review = {r.id: r for r in requests}
     pending = next((r for r in requests if r.status == "pending"), None)
     newest = versions[0]
     base = list_row(
@@ -700,10 +888,20 @@ async def detail(rt: Runtime, skill_id: str, *, fresh: bool = False) -> SkillDet
     if too_long := over_budget(newest):
         block("too_long", too_long)
     warnings: list[Problem] = []
-    if newest.content.get("steps") and newest.published_at is None:
-        offered = await _offered_tools(rt, fresh=fresh)
+    if (newest.content.get("steps") or newest.content.get("source") is not None) and newest.published_at is None:
+        offered, labels = await _directory(rt, fresh=fresh)
+        source = newest.content.get("source")
+        bases = await _bases(rt) if source is not None else None
+        fields = await _fields(rt, Ref.found_in(source)) if isinstance(source, str) else None
         blocking, warnings = await skill_content.publish_problems(
-            newest.content, offered, team_id=row.team_id, skills=_TeamSkills(rt)
+            newest.content,
+            offered,
+            team_id=row.team_id,
+            skills=_TeamSkills(rt),
+            bases=bases,
+            fields=fields,
+            labels=labels,
+            strict=lambda: strict_publishing(rt, row.team_id or None),
         )
         problems += blocking
     blockers = [p["message"] for p in problems]
@@ -750,6 +948,8 @@ async def detail(rt: Runtime, skill_id: str, *, fresh: bool = False) -> SkillDet
         {
             **base,
             "content": _wire(content_of(newest.content)),
+            "text": text_of(newest.content),
+            "digest": newest.digest,
             "versions": [
                 {
                     "version": v.version,
@@ -762,7 +962,16 @@ async def detail(rt: Runtime, skill_id: str, *, fresh: bool = False) -> SkillDet
                     "content": _wire(content_of(v.content)),
                     "tokens": v.tokens,
                     **({"reviewId": v.review_id} if v.review_id else {}),
-                    **({"publishedAt": v.published_at, "publishedBy": v.published_by} if v.published_at else {}),
+                    **(
+                        {
+                            "publishedAt": v.published_at,
+                            "publishedBy": v.published_by,
+                            "requestedBy": requester(by_review.get(v.review_id or "")),
+                            "approvedBy": approver(by_review.get(v.review_id or "")),
+                        }
+                        if v.published_at
+                        else {}
+                    ),
                     "testRun": None,
                 }
                 for v in versions
@@ -798,7 +1007,73 @@ async def detail(rt: Runtime, skill_id: str, *, fresh: bool = False) -> SkillDet
 
 
 async def publish(rt: Runtime, req: PublishRequestRow, by: str) -> None:
+    """Publishes the request's version as `by`, who made it live. Who asked for it and who approved it are read back
+    from the request by `review_id` (`requester`, `approver`)."""
     await skills(rt).publish(req.subject_id, int(req.version), by=by, review_id=req.id)
+
+
+def requester(req: PublishRequestRow | None) -> str | None:
+    """Who asked for a published version's publish; None when no request published it (a seed)."""
+    return str(req.requested_by) if req is not None and req.requested_by else None
+
+
+def approver(req: PublishRequestRow | None) -> str | None:
+    """Who approved a published version: the request's decider when its policy asked for a review; None when the
+    policy let it publish without one (`reviewRequired` false) or no request published it (a seed)."""
+    if req is None or req.status != "approved" or not req.body.get("reviewRequired", True):
+        return None
+    return str(req.decided_by) if req.decided_by else None
+
+
+def review_record(live: SkillVersionRow | None, v: SkillVersionRow, warnings: Sequence[Problem]) -> Json:
+    """What a skill publish request keeps for its reviewer: the published version it replaces, both texts as the
+    editor shows them (`text_of`, so a skill saved as steps compares as text), the hints on the new text's lines, and
+    the tools and knowledge bases it adds."""
+    before = content_of(live.content) if live else None
+    after = content_of(v.content)
+    had_tools = set(tool_ids(before)) if before else set[str]()
+    had_bases = set(before["knowledgeBases"]) if before else set[str]()
+    return {
+        "fromVersion": live.version if live else None,
+        "textBefore": text_of(live.content) if live else "",
+        "textAfter": text_of(v.content),
+        "hints": [
+            {"line": w["position"]["index"], "message": w["message"]}
+            for w in warnings
+            if w["kind"] == "hint" and w["position"] is not None
+        ],
+        "toolsAdded": [t for t in tool_ids(after) if t not in had_tools],
+        "kbsAdded": [k for k in after["knowledgeBases"] if k not in had_bases],
+    }
+
+
+async def review_body(rt: Runtime, req: PublishRequestRow) -> Json:
+    """A skill publish request as the console's `skillPublish`: the record kept when it opened, with the skill's
+    owning team and the agents that pin the skill now."""
+    body, row = req.body, await skills(rt).row(req.subject_id)
+    v = await skills(rt).version(req.subject_id, int(req.version))
+    users = await pinning_agents(rt.db, req.subject_id)
+    return {
+        "skillId": req.subject_id,
+        "skillName": body["skillName"],
+        "ownerTeam": row.owner_team,
+        "fromVersion": body.get("fromVersion"),
+        "toVersion": int(req.version),
+        "editClass": "re_test",
+        "requestedBy": str(req.requested_by),
+        "note": req.note,
+        "changes": body.get("changes", []),
+        "testRun": None,
+        "failing": [],
+        "toolsAdded": body.get("toolsAdded", []),
+        "kbsAdded": body.get("kbsAdded", []),
+        "guardrails": list(content_of(v.content).get("guardrails") or []) if v else [],
+        "agents": [{"name": a.spec["name"], "pinnedVersion": a.pinned_version} for a in users],
+        "approvalsNeeded": 1,
+        # Absent on a request opened before the text was kept with it.
+        **({"textBefore": body["textBefore"], "textAfter": body["textAfter"]} if "textAfter" in body else {}),
+        "hints": body.get("hints", []),
+    }
 
 
 def snapshot(skill_id: str, version: int, content: SkillContent, tokens: int, *, by: str, at: str) -> SkillPin:
@@ -823,6 +1098,8 @@ def snapshot(skill_id: str, version: int, content: SkillContent, tokens: int, *,
             **({"inputs": content.get("inputs")} if content.get("inputs") else {}),
             # A skill with steps is pinned with them, so the runtime serves the program with no lookup.
             **{k: v for k in skill_content.KEYS if (v := cast(Json, content).get(k))},
+            # Written as text: held to the text's publish rule, not the step list's (skill_content.unrunnable).
+            **({"fromText": True} if content.get("source") is not None else {}),
             "attachedBy": by,
             "attachedAt": at,
         },
@@ -852,7 +1129,8 @@ async def pin(
     runs = program is not None and bool(program.targets())
     # An unreachable tools directory fails the attach as it fails a save, rather than reading every tool as a write.
     access = {str(t["id"]): str(t["access"]) for t in await known_tools(rt, fresh=fresh)} if runs else {}
-    if program is not None and (broken := skill_content.unrunnable(program, access)[0]):
+    text = v.content.get("source") is not None
+    if program is not None and (broken := skill_content.unrunnable(program, access, text=text)[0]):
         raise Unprocessable(
             f"{v.content['name']} v{version} cannot be attached as it is: {broken[0]['message']} Fix the skill and "
             "publish it again.",
@@ -894,7 +1172,7 @@ async def pin_problems(rt: Runtime, agent_spec: Json) -> list[Problem]:
     pins = cast(list[Json], agent_spec.get("skillPins") or [])
     if not any(p.get("steps") for p in pins):
         return []
-    return skill_content.pin_problems(pins, await _offered_tools(rt, fresh=True))
+    return skill_content.pin_problems(pins, (await _directory(rt, fresh=True))[0])
 
 
 def check_pins_hold(agent_spec: AgentSpec) -> None:

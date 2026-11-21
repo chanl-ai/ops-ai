@@ -24,6 +24,7 @@
             "maxCostPerConversation"
           ]
         },
+        "digest": "<hex>",
         "guardrailPins": [],
         "guardrails": {
           "blockedTopics": [],
@@ -652,6 +653,7 @@
             "maxCostPerConversation"
           ]
         },
+        "digest": "<hex>",
         "guardrailPins": [],
         "guardrails": {
           "blockedTopics": [],
@@ -783,6 +785,7 @@
             "maxCostPerConversation"
           ]
         },
+        "digest": "<hex>",
         "guardrailPins": [],
         "guardrails": {
           "blockedTopics": [],
@@ -894,6 +897,7 @@
             "maxCostPerConversation"
           ]
         },
+        "digest": "<hex>",
         "guardrailPins": [],
         "guardrails": {
           "blockedTopics": [],
@@ -1329,6 +1333,7 @@
           ],
           "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship."
         },
+        "digest": "<hex>",
         "draftVersion": 1,
         "id": "<sk>",
         "inputs": [],
@@ -1358,6 +1363,7 @@
         "slug": "hardship-request-triage",
         "status": "draft",
         "tests": [],
+        "text": "Steps: confirm the customer, record the reason, offer the hardship form.",
         "tokens": 36,
         "toolCount": 1,
         "updatedAt": "<timeZ>",
@@ -1662,6 +1668,7 @@
           ],
           "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship."
         },
+        "digest": "<hex>",
         "draftVersion": null,
         "id": "<sk>",
         "inputs": [],
@@ -1700,6 +1707,7 @@
         "slug": "hardship-request-triage",
         "status": "published",
         "tests": [],
+        "text": "Steps: confirm the customer, record the reason, offer the hardship form.",
         "tokens": 36,
         "toolCount": 1,
         "updatedAt": "<timeZ>",
@@ -1710,6 +1718,7 @@
         "version": 1,
         "versions": [
           {
+            "approvedBy": null,
             "changes": [
               "Created"
             ],
@@ -1740,6 +1749,7 @@
             "note": "",
             "publishedAt": "<timeZ>",
             "publishedBy": "auto-approve (dev)",
+            "requestedBy": "j.richardson@harborpine.example",
             "reviewId": "<SKP>",
             "savedAt": "<timeZ>",
             "savedBy": "j.richardson@harborpine.example",
@@ -1787,6 +1797,7 @@
           ],
           "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship."
         },
+        "digest": "<hex>",
         "draftVersion": 1,
         "id": "<sk>",
         "inputs": [],
@@ -1816,6 +1827,7 @@
         "slug": "hardship-request-triage",
         "status": "draft",
         "tests": [],
+        "text": "Steps: confirm the customer, record the reason, offer the hardship form.",
         "tokens": 36,
         "toolCount": 1,
         "updatedAt": "<timeZ>",

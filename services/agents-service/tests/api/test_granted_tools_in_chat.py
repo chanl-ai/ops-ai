@@ -13,6 +13,7 @@ from ops_agents.activities.tool_directory import ToolsOperations, grants_for
 from ops_agents.store.tenancy import current_tenant, tenant_scope
 from ops_identity import ServiceClient, dev_service_signer
 
+from ..saves import save_agent
 from ..unit.test_tool_directory import Clock, Tools, op
 from .test_agent_limits import _app, _data  # pyright: ignore[reportPrivateUsage]
 from .test_chat import send
@@ -42,19 +43,17 @@ async def test_a_grant_saved_while_an_older_publish_waits_is_what_goes_live(tmp_
         service = ServiceClient(client, dev_service_signer(), "agents", "tools", tenant=current_tenant)
         app.state.runtime.tool_directory = ToolsOperations(service, ttl_s=30, clock=Clock())
         agent = _data(await c.post("/v1/agents", json={"name": "Desk helper", "role": "Helps"}, headers=LEE), 201)
-        saved = _data(await c.patch(f"/v1/agents/{agent['id']}", json={"toolIds": ["lookup_account"]}, headers=LEE))
+        saved = _data(await save_agent(c, agent["id"], {"toolIds": ["lookup_account"]}, headers=LEE))
         await publish(c, agent["id"], saved["version"])
         cases = ["lookup_account", "list_cases"]
-        renamed = _data(await c.patch(f"/v1/agents/{agent['id']}", json={"toolIds": cases}, headers=LEE))
+        renamed = _data(await save_agent(c, agent["id"], {"toolIds": cases}, headers=LEE))
         waiting = _data(
             await c.post(
                 f"/v1/agents/{agent['id']}/publish-requests", json={"version": renamed["version"]}, headers=LEE
             ),
             201,
         )
-        granted = _data(
-            await c.patch(f"/v1/agents/{agent['id']}", json={"toolIds": [*cases, "read_file"]}, headers=LEE)
-        )
+        granted = _data(await save_agent(c, agent["id"], {"toolIds": [*cases, "read_file"]}, headers=LEE))
         assert waiting["status"] == "pending", waiting
         asked = await c.post(
             f"/v1/agents/{agent['id']}/publish-requests", json={"version": granted["version"]}, headers=LEE
