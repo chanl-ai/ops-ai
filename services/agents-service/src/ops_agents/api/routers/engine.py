@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import Field, model_validator
 from sse_starlette import EventSourceResponse
 
-from ops_access import can
+from ops_access import can, require_view
 from ops_access.check import DEFAULT as ACCESS
 from ops_agent_kernel.pii import masked
 from ops_documents_client import DocumentNotFound, DocumentsClient
@@ -69,6 +69,7 @@ from ...store.trigger_events import TriggerEvents
 from .. import ai_steps_gate, engine_lifecycle, run_starts, run_story, step_shapes, task_view
 from ..account_names import account_uses_in
 from ..actors import ActorView, NamedActors, actor_reads, named_actors, started_by_of
+from ..agent_registry import ReviewView
 from ..agent_registry import registry as agent_registry
 from ..auth import (
     Principal,
@@ -447,9 +448,7 @@ async def _store_version(
     owner = held.team_id if held is not None else current_team() or me.team_id or None
     if (uses := ai_steps_gate.ai_nodes(d, REGISTRY)) and not await ai_steps_gate.allowed(rt, owner):
         raise Unprocessable(ai_steps_gate.OFF, code="ai_steps_off", details={"nodes": uses})
-    if wanted := unpinned(d.wire()):
-        acting = current_team() or (held.team_id if held is not None else None) or me.team_id
-        d = parse(pinned(d.wire(), await _newest_versions(rt, wanted, team=acting)))
+    d = await _pinned_types(rt, me, d, held)
     digest = d.digest()
     # An existing workflow keeps its owner, a shared one (no team) included, so a team's builder edits a shared
     # workflow through review instead of being told it is another team's.
@@ -477,6 +476,16 @@ async def _store_version(
         "created": created,
         "warnings": cast(JsonList, warnings),
     }
+
+
+async def _pinned_types(
+    rt: Runtime, me: Principal, d: WorkflowDefinition, held: StoredDefinition | None
+) -> WorkflowDefinition:
+    """`d` with each document type it names unpinned set to that type's newest version, as its version is stored."""
+    if not (wanted := unpinned(d.wire())):
+        return d
+    acting = current_team() or (held.team_id if held is not None else None) or me.team_id
+    return parse(pinned(d.wire(), await _newest_versions(rt, wanted, team=acting)))
 
 
 async def _newest_versions(rt: Runtime, type_ids: set[str], *, team: str | None) -> dict[str, int]:
@@ -834,6 +843,9 @@ class WorkingCopyInput(In):
     definition: dict[str, JsonValue]
     base_version: int
     base_digest: str
+    # The digest of another person's outdated copy (the view's `outdatedCopy`) this save replaces; a save on the
+    # newest version without it is refused with 409 `stale_base` while that copy is kept.
+    replaces_digest: str | None = None
 
 
 class WorkingCopySaved(Out):
@@ -871,6 +883,7 @@ async def save_working_copy(rt: Rt, me: Me, workflow_id: str, body: WorkingCopyI
             base=base,
             now=now_iso(),
             by=me.email,
+            replaces=body.replaces_digest,
         )
     except StaleWorkingCopy as e:
         refuse_stale(base, e.version, e.digest, saved_by=e.saved_by, saved_at=e.saved_at)
@@ -880,36 +893,12 @@ async def save_working_copy(rt: Rt, me: Me, workflow_id: str, body: WorkingCopyI
     return ok({"workingCopy": _copy_view(copy), "saveBase": _save_base(copy)})
 
 
-class VersionFromCopyInput(In):
-    """The working copy the person is publishing, as `saveBase` named it when they read it."""
-
-    base_version: int
-    base_digest: str
-
-
-@router.post(
-    "/definitions/{workflow_id}/versions",
-    response_model=Envelope[DefinitionPublished],
-    status_code=201,
-    responses={200: {"model": Envelope[DefinitionPublished], "description": "The copy equals a stored version"}},
-)
-async def version_from_working_copy(rt: Rt, me: Me, workflow_id: str, body: VersionFromCopyInput) -> JSONResponse:
-    """Makes the next version from the working copy and removes the copy; the version is a draft until its publish
-    request is approved. 422 `definition_checks` while the copy fails a check, and nothing is made; 409
-    `nothing_to_publish` without a working copy; 409 `stale_base` when the copy was saved again after the caller read
-    it. No request transaction, as for a new definition."""
-    data = await _version_from_copy(rt, me, workflow_id, (body.base_version, body.base_digest))
-    return ok(data, status=201 if data["created"] else 200)
-
-
-async def _version_from_copy(
-    rt: Runtime, me: Principal, workflow_id: str, base: tuple[int, str], *, publishing: bool = False
-) -> Json:
-    """Makes the next version from the working copy saved on `base` and removes the copy; returns DefinitionPublished.
-    `publishing` refuses first on every publish blocker, so a copy that cannot go live is not turned into a draft."""
+async def _publish_copy(rt: Runtime, me: Principal, workflow_id: str, base: tuple[int, str], note: str) -> ReviewView:
+    """Makes the next version from the working copy saved on `base`, opens its publish request and removes the copy.
+    Every refusal comes first, so a refused publish leaves the versions and the copy as they were: the publish right,
+    a stale base, then each blocker the publish preview lists."""
     held = await _editable(rt, me, workflow_id)
-    if publishing:
-        engine_lifecycle.require_rights(me, held, "publish")
+    engine_lifecycle.require_rights(me, held, "publish")
     store = definitions(rt)
     copy = await store.working_copy(workflow_id, team=current_team())
     if copy is None:
@@ -917,20 +906,32 @@ async def _version_from_copy(
     if copy.base_version < held.version:
         refuse_stale(base, held.version, held.digest, saved_by=held.created_by, saved_at=held.created_at)
     refuse_stale(base, copy.base_version, copy.digest, saved_by=copy.updated_by, saved_at=copy.updated_at)
-    try:
-        d = parse(copy.definition)
-    except InvalidDefinitionError as e:
-        check = enrich_check({"node": None, "level": "error", "code": "invalid_definition", "message": str(e)})
-        raise Unprocessable(
-            "The working copy is not a whole workflow yet.", code="definition_checks", details={"checks": [check]}
-        ) from e
-    if publishing:
-        engine_lifecycle.refuse(await engine_lifecycle.blockers(rt, me, held, d.wire()))
-    data = await _store_version(rt, me, d, held, reopen=True)
-    # Removed only once the version is stored; a save made since stays, as a change on the new version.
+    d, found = await _publishable(rt, me, held, copy.definition)
+    engine_lifecycle.refuse(found)
+    data = await _store_version(rt, me, cast(WorkflowDefinition, d), held, reopen=True)
+    review = await engine_lifecycle.request_publish(rt, me, workflow_id, cast(int, data["version"]), note, checked=True)
+    # Removed only once the request is open; a save made since stays, as a change on the new version.
     if not await store.drop_working_copy(workflow_id, digest=copy.digest):
         await store.rebase_working_copy(workflow_id, cast(int, data["version"]))
-    return data
+    return review
+
+
+async def _publishable(
+    rt: Runtime, me: Principal, held: StoredDefinition, definition: Json
+) -> tuple[WorkflowDefinition | None, list[engine_lifecycle.Blocker]]:
+    """`definition` as its version would be stored (document types pinned; None when it does not parse), and every
+    blocker to publishing it. The preview and the publish both read this, so the dialog lists each refusal the
+    publish can give."""
+    try:
+        d = parse(definition)
+    except InvalidDefinitionError:
+        return None, await engine_lifecycle.blockers(rt, me, held, definition)
+    pin: list[engine_lifecycle.Blocker] = []
+    try:
+        d = await _pinned_types(rt, me, d, held)
+    except Unprocessable as e:
+        pin.append(engine_lifecycle.Blocker({"node": None, "level": "error", "code": e.code, "message": e.message}, e))
+    return d, pin + await engine_lifecycle.blockers(rt, me, held, definition, digest=None if pin else d.digest())
 
 
 # A side of a comparison: a version number, `live` or `working-copy`.
@@ -1032,7 +1033,7 @@ async def publish_preview(rt: Rt, me: Reader, workflow_id: str) -> JSONResponse:
     # its defaults filled in would otherwise differ from the live version in more than step positions.
     with contextlib.suppress(InvalidDefinitionError):
         new = parse(new).wire()
-    found = await engine_lifecycle.blockers(rt, me, row, copy.definition if copy else row.definition)
+    _, found = await _publishable(rt, me, row, copy.definition if copy else row.definition)
     old = live.definition if live else None
     decision = await decide(
         rt,
@@ -1082,10 +1083,9 @@ async def request_definition_publish(rt: Rt, me: Me, workflow_id: str, body: Def
     No request transaction: the team's accounts (tools-service) and the review deadline (platform-service) are asked
     with none open."""
     if body.base_version is not None and body.base_digest is not None:
-        made = await _version_from_copy(rt, me, workflow_id, (body.base_version, body.base_digest), publishing=True)
-        version = cast(int, made["version"])
-        review = await engine_lifecycle.request_publish(rt, me, workflow_id, version, body.note, checked=True)
-        return ok(review, status=201)
+        return ok(
+            await _publish_copy(rt, me, workflow_id, (body.base_version, body.base_digest), body.note), status=201
+        )
     return ok(await engine_lifecycle.request_publish(rt, me, workflow_id, body.version, body.note), status=201)
 
 
@@ -1129,8 +1129,11 @@ async def option_sources(rt: Rt, me: Me, source: OptionSource) -> JSONResponse:
     """The choices a node form offers for a field with an option source (`ui.fields.*.source`): published agents,
     registry operations, live v2 workflows, the acting team's mailboxes (Channels > Email). `steps` comes from
     the definition being edited; `knowledge` is not served yet, since no built node type reads a knowledge base.
+    403 for agents, tools or workflows without that area's view cell, as its own list answers.
     No request transaction: the tools source is asked of tools-service."""
     options: list[dict[str, str]]
+    if source != "mailboxes":
+        require_view(caller_of(me), source)
     if source == "mailboxes":
         # The team the caller acts in (X-Team-Id), also for a dev-password session, which reads across teams.
         found = await MailboxStore(rt.db).list(team=me.team_id) if me.team_id else []

@@ -1882,15 +1882,6 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
-    "workflows_version_from_working_copy": {
-        "body": "json",
-        "headers": [],
-        "method": "POST",
-        "path": "/v1/workflows/definitions/{workflow_id}/versions",
-        "pathParams": ["workflow_id"],
-        "query": [],
-        "stream": False,
-    },
     "workflows_workflow_refs": {
         "body": None,
         "headers": [],
@@ -3331,12 +3322,6 @@ class Operations:
         "Resume Definition"
         return self._t.call(
             SERVICE, OPERATIONS["workflows_resume_definition"], {"workflow_id": workflow_id}, {}, {}, None
-        )  # type: ignore[no-any-return]
-
-    def workflows_version_from_working_copy(self, workflow_id: str, body: VersionFromCopyInput) -> DefinitionPublished:
-        "Version From Working Copy"
-        return self._t.call(
-            SERVICE, OPERATIONS["workflows_version_from_working_copy"], {"workflow_id": workflow_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
     def workflows_definition_shapes(self, workflow_id: str, version: int) -> DefinitionShapes:
@@ -4962,14 +4947,6 @@ class AsyncOperations:
         "Resume Definition"
         return await self._t.call(
             SERVICE, OPERATIONS["workflows_resume_definition"], {"workflow_id": workflow_id}, {}, {}, None
-        )  # type: ignore[no-any-return]
-
-    async def workflows_version_from_working_copy(
-        self, workflow_id: str, body: VersionFromCopyInput
-    ) -> DefinitionPublished:
-        "Version From Working Copy"
-        return await self._t.call(
-            SERVICE, OPERATIONS["workflows_version_from_working_copy"], {"workflow_id": workflow_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
     async def workflows_definition_shapes(self, workflow_id: str, version: int) -> DefinitionShapes:

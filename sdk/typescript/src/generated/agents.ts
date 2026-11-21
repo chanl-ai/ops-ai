@@ -3312,29 +3312,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/workflows/definitions/{workflow_id}/versions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Version From Working Copy
-         * @description Makes the next version from the working copy and removes the copy; the version is a draft until its publish
-         *     request is approved. 422 `definition_checks` while the copy fails a check, and nothing is made; 409
-         *     `nothing_to_publish` without a working copy; 409 `stale_base` when the copy was saved again after the caller read
-         *     it. No request transaction, as for a new definition.
-         */
-        post: operations["workflows_version_from_working_copy"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/workflows/definitions/{workflow_id}/versions/{version}/shapes": {
         parameters: {
             query?: never;
@@ -3415,6 +3392,7 @@ export interface paths {
          * @description The choices a node form offers for a field with an option source (`ui.fields.*.source`): published agents,
          *     registry operations, live v2 workflows, the acting team's mailboxes (Channels > Email). `steps` comes from
          *     the definition being edited; `knowledge` is not served yet, since no built node type reads a knowledge base.
+         *     403 for agents, tools or workflows without that area's view cell, as its own list answers.
          *     No request transaction: the tools source is asked of tools-service.
          */
         get: operations["workflows_option_sources"];
@@ -11862,16 +11840,6 @@ export interface components {
             /** Version */
             version: number;
         };
-        /**
-         * VersionFromCopyInput
-         * @description The working copy the person is publishing, as `saveBase` named it when they read it.
-         */
-        VersionFromCopyInput: {
-            /** Basedigest */
-            baseDigest: string;
-            /** Baseversion */
-            baseVersion: number;
-        };
         /** WaitingTask */
         WaitingTask: {
             assignee: components["schemas"]["Assignee"] | null;
@@ -12234,6 +12202,8 @@ export interface components {
             definition: {
                 [key: string]: components["schemas"]["JsonValue"];
             };
+            /** Replacesdigest */
+            replacesDigest?: string | null;
         };
         /** WorkingCopySaved */
         WorkingCopySaved: {
@@ -31749,122 +31719,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_DefinitionView_"];
-                };
-            };
-            /** @description Invalid request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description Not signed in */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description Not allowed */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description Conflicts with the current state */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description Refused by a rule */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description Over a budget or rate limit */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description Server error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description Degraded: no model, or the graph runtime did not start */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-        };
-    };
-    workflows_version_from_working_copy: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workflow_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["VersionFromCopyInput"];
-            };
-        };
-        responses: {
-            /** @description The copy equals a stored version */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Envelope_DefinitionPublished_"];
-                };
-            };
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Envelope_DefinitionPublished_"];
                 };
             };
             /** @description Invalid request */

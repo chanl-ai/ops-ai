@@ -12,7 +12,7 @@ export interface EngineApi {
   /** Saves it as the next version, a draft, once every check passes; 422 with the checks otherwise. */
   publish(definition: EngineDefinition): Promise<DefinitionPublished>;
   /** Saves the editor's working copy, failing checks and all; makes no version. 409 `stale_base` when `base` is not the newest copy. */
-  saveWorkingCopy(workflowId: string, definition: EngineDefinition, base: { baseVersion: number; baseDigest: string }): Promise<WorkingCopySaved>;
+  saveWorkingCopy(workflowId: string, definition: EngineDefinition, base: { baseVersion: number; baseDigest: string; replacesDigest?: string }): Promise<WorkingCopySaved>;
   /** What changed between two versions, the live one or the working copy. */
   diff(workflowId: string, from: DiffSide, to: DiffSide): Promise<DefinitionDiff>;
   /** What a publish of the working copy would change, what stops it, and whether it waits for a review. */

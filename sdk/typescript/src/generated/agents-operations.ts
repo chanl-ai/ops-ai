@@ -2387,17 +2387,6 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
-  "workflows_version_from_working_copy": {
-    "body": "json",
-    "headers": [],
-    "method": "POST",
-    "path": "/v1/workflows/definitions/{workflow_id}/versions",
-    "pathParams": [
-      "workflow_id"
-    ],
-    "query": [],
-    "stream": false
-  },
   "workflows_workflow_refs": {
     "body": null,
     "headers": [],

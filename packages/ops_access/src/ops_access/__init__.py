@@ -57,7 +57,7 @@ from .policies import (
     team_writes_need_approval,
     tool_waits,
 )
-from .reads import reader_of
+from .reads import reader_of, require_view
 
 __all__ = [
     "ACTIONS",
@@ -102,6 +102,7 @@ __all__ = [
     "publish_mode",
     "reader_of",
     "require_provisioner",
+    "require_view",
     "scope_in",
     "team_names",
     "team_off",

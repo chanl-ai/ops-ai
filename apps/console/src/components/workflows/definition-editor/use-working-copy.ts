@@ -18,9 +18,11 @@ const AUTOSAVE_MS = 1000;
  * (the agent page re-sends because its saves merge field by field). `stale` says who saved and when, and nothing more
  * is sent until `reload`, which shows the newest copy and drops this page's unsaved change.
  *
- * A save that fails is not sent again until the definition changes or `retry` is pressed.
+ * A save that fails is not sent again until the definition changes or `retry` is pressed. `replacing` names an outdated
+ * copy's digest (one made on an older version) the person chose to start over from: the server keeps another person's
+ * outdated copy until a save names it, so the saves name it until the view holds a working copy again.
  */
-export function useWorkingCopy(view: DefinitionView, enabled: boolean) {
+export function useWorkingCopy(view: DefinitionView, enabled: boolean, replacing?: string | null) {
   const qc = useQueryClient();
   const save = useSaveWorkingCopy(view.workflowId);
   // The definition waiting to be saved; null once what is on screen is stored.
@@ -43,7 +45,7 @@ export function useWorkingCopy(view: DefinitionView, enabled: boolean) {
     if (!edited || !editing) return;
     const sent = editing;
     save.mutate(
-      { definition: edited, base: baseOf(view.saveBase) },
+      { definition: edited, base: { ...baseOf(view.saveBase), ...(replacing && !view.workingCopy ? { replacesDigest: replacing } : {}) } },
       {
         onSuccess: (r) => {
           setChecks(r.workingCopy.checks);

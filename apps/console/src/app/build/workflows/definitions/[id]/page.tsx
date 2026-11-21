@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { DefinitionEditor } from '@/components/workflows/definition-editor/definition-editor';
 import { SaveStateLine, workflowHeader } from '@/components/workflows/definition-editor/editor-shell';
 import { useWorkingCopy } from '@/components/workflows/definition-editor/use-working-copy';
-import { useCan, useCanBuild } from '@/hooks/me-queries';
+import { useCan, useCanBuild, useMe } from '@/hooks/me-queries';
 import { useDefinition, useDefinitionChecks, useNodeTypes, usePublishWorkingCopy, useSetDefinitionPaused, useStartEngineRun, useStartWorkflow } from '@/hooks/engine-queries';
 import type { DefinitionValidation, DefinitionView, EngineNodeType, OutdatedCopy } from '@/lib/types/engine';
 
@@ -61,7 +61,12 @@ function CanvasTab({ view, types }: { view: DefinitionView; types: EngineNodeTyp
   const [showingMine, setShowingMine] = React.useState(false);
   const outdated = canBuild && !startedFresh ? (view.outdatedCopy ?? null) : null;
   const mine = outdated && showingMine ? outdated : null;
-  const copy = useWorkingCopy(view, canBuild && !outdated);
+  // Starting fresh replaces the outdated copy, so the first save names it (the server keeps it until a save does).
+  const kept = startedFresh ? (view.outdatedCopy ?? null) : null;
+  const copy = useWorkingCopy(view, canBuild && !outdated, kept?.digest);
+  const myEmail = useMe().data?.user.email;
+  // Named unless it is the person's own; without their email (off platform sign-in) it is named too.
+  const theirs = outdated && outdated.updatedBy !== myEmail ? outdated.updatedBy : null;
   // Before the first change there is no working copy, so the stored version's checks are read once.
   const stored = useDefinitionChecks(view.workingCopy ? undefined : view.definition, view.digest);
   const checks = copy.checks ?? view.workingCopy?.checks ?? null;
@@ -124,14 +129,14 @@ function CanvasTab({ view, types }: { view: DefinitionView; types: EngineNodeTyp
                 <AlertTitle>A newer version was saved outside the editor</AlertTitle>
                 <AlertDescription>
                   <p>
-                    {outdatedNote(outdated)} Reload to start from it, or copy your changes first. {mine ? 'You are looking at your copy; it cannot be edited.' : `You are looking at version ${outdated.newerVersion}.`}
+                    {outdatedNote(outdated, theirs)} Reload to start from it, or copy {theirs ? 'their' : 'your'} changes first. {mine ? `You are looking at ${theirs ? 'their' : 'your'} copy; it cannot be edited.` : `You are looking at version ${outdated.newerVersion}.`}
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     <Button variant="outline" size="sm" onClick={() => setShowingMine((v) => !v)} data-testid="definition-outdated-open">
-                      {mine ? `Show version ${outdated.newerVersion}` : 'Open my copy'}
+                      {mine ? `Show version ${outdated.newerVersion}` : theirs ? 'Open their copy' : 'Open my copy'}
                     </Button>
                     <Button size="sm" onClick={() => (setShowingMine(false), setStartedFresh(true))} data-testid="definition-outdated-reload">
-                      Reload to start from version {outdated.newerVersion}
+                      {theirs ? `Replace their copy with version ${outdated.newerVersion}` : `Reload to start from version ${outdated.newerVersion}`}
                     </Button>
                   </div>
                 </AlertDescription>
@@ -156,9 +161,10 @@ function CanvasTab({ view, types }: { view: DefinitionView; types: EngineNodeTyp
   );
 }
 
-/** Who saved the newer version and when, for the outdated copy's notice. */
-function outdatedNote(c: OutdatedCopy): string {
+/** Who saved the newer version and when, and whose unpublished changes are kept, for the outdated copy's notice. */
+function outdatedNote(c: OutdatedCopy, theirs: string | null): string {
   const at = c.newerAt ? new Date(c.newerAt) : null;
   const when = at && !Number.isNaN(at.getTime()) ? ` at ${at.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}` : '';
-  return `${c.newerBy || 'Someone'} saved version ${c.newerVersion}${when}; your unpublished changes, made on version ${c.baseVersion}, are kept.`;
+  const whose = theirs ? `${theirs}'s unpublished changes` : 'your unpublished changes';
+  return `${c.newerBy || 'Someone'} saved version ${c.newerVersion}${when}; ${whose}, made on version ${c.baseVersion}, are kept.`;
 }

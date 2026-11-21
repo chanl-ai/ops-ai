@@ -50,7 +50,7 @@ export const useDefinitionChecks = (definition: EngineDefinition | undefined, di
 export function useSaveWorkingCopy(workflowId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ definition, base }: { definition: EngineDefinition; base: SaveBase }) => api.engine.saveWorkingCopy(workflowId, definition, base),
+    mutationFn: ({ definition, base }: { definition: EngineDefinition; base: SaveBase & { replacesDigest?: string } }) => api.engine.saveWorkingCopy(workflowId, definition, base),
     onSuccess: (saved: WorkingCopySaved) =>
       qc.setQueriesData<DefinitionView>({ queryKey: ['engine', 'definition', workflowId, 'latest'] }, (view) => view && { ...view, workingCopy: saved.workingCopy, saveBase: saved.saveBase }),
   });

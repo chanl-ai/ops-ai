@@ -2333,11 +2333,6 @@ class Version(TypedDict, closed=True):
     version: int
 
 
-class VersionFromCopyInput(TypedDict, closed=True):
-    baseDigest: str
-    baseVersion: int
-
-
 class WaitingTask(TypedDict, closed=True):
     assignee: Assignee | None
     dueAt: str | None
@@ -2444,6 +2439,7 @@ class WorkingCopyInput(TypedDict, closed=True):
     baseDigest: str
     baseVersion: int
     definition: dict[str, JsonValue]
+    replacesDigest: NotRequired[str | None]
 
 
 class WorkingCopyView(TypedDict, closed=True):

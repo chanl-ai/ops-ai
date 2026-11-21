@@ -133,12 +133,38 @@ def _on_trigger(definition: Json) -> str | None:
     return None
 
 
-async def blockers(rt: Runtime, me: Principal, row: DefinitionRow, definition: Json) -> list[Blocker]:
-    """Every reason publishing `definition` as a version of `row`'s workflow is refused: its error checks, AI steps
-    while the team has them off, an email trigger on a mailbox the publisher may not bind, and accounts the team does
-    not have. The publish dialog lists them all and the publish refuses on the first, so the two cannot differ.
-    Asks platform-service and tools-service, so it runs with no transaction open."""
+async def blockers(
+    rt: Runtime, me: Principal, row: DefinitionRow, definition: Json, *, digest: str | None = None
+) -> list[Blocker]:
+    """Every reason publishing `definition` as a version of `row`'s workflow is refused: a publish request already
+    open, its error checks, AI steps while the team has them off, an email trigger on a mailbox the publisher may not
+    bind, accounts the team does not have, and with `digest` (the definition as its version would store it) a stored
+    version it equals that is no draft. The publish dialog lists them all and the publish refuses on the first, before
+    any version is made, so the two cannot differ. Asks platform-service and tools-service, so it runs with no
+    transaction open."""
     out: list[Blocker] = []
+    if (request := await pending(rt, row.workflow_id)) is not None:
+        message = f"Version {request.version} is waiting for review ({request.id}); decide it in Reviews first."
+        out.append(
+            Blocker(
+                {"node": None, "level": "error", "code": "review_open", "message": message},
+                Conflict(message, code="review_open"),
+            )
+        )
+    if digest is not None:
+        # The store hands back a stored version with this digest instead of making one; only a draft or a superseded
+        # version (made again as the next one) can then be published.
+        same = next((v for v in reversed(await definitions(rt).versions(row.workflow_id)) if v.digest == digest), None)
+        if same is not None and same.stage not in ("draft", "superseded"):
+            message = (
+                f"These changes are the same as version {same.version}, which is {same.stage}; nothing to publish."
+            )
+            out.append(
+                Blocker(
+                    {"node": None, "level": "error", "code": "not_a_draft", "message": message},
+                    Conflict(message, code="not_a_draft"),
+                )
+            )
     try:
         d = parse(definition)
     except InvalidDefinitionError as e:

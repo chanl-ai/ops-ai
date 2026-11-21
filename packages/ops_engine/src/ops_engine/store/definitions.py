@@ -163,6 +163,16 @@ class WorkingCopy(Out):
     updated_by: str
 
 
+def _newest_locked(tenant: str, workflow_id: str) -> sa.Select[Any]:
+    """The workflow's newest version row, a few columns, locked: what an autosave and a publish both hold, by one
+    statement, so each waits on the other on PostgreSQL and SQL Server alike."""
+    t = engine_definitions
+    query = cast(sa.Select[Any], sa.select(t.c.version, t.c.digest, t.c.created_by, t.c.created_at, t.c.team_id))
+    return locked(
+        query.where(t.c.tenant_id == tenant, t.c.workflow_id == workflow_id).order_by(t.c.version.desc()).limit(1), t
+    )
+
+
 class DefinitionStore:
     # A version is the next number for its workflow unless its digest is stored already; the primary key on the
     # number keeps two saves from taking one (CAS), and the workflow's rows are locked while it is chosen.
@@ -193,9 +203,9 @@ class DefinitionStore:
         listed = self.describe(definition)
         async with self.tx.tenant_tx() as c:
             # The id's existing versions, locked: a workflow id belongs to the team that first published it.
-            rows = (
-                await c.execute(sa.select(t.c.team_id).where(t.c.workflow_id == workflow_id).with_for_update())
-            ).all()
+            rows = (await c.execute(locked(sa.select(t.c.team_id).where(t.c.workflow_id == workflow_id), t))).all()
+            # The autosave's lock as well: on SQL Server a lock read through another index does not block it.
+            await c.execute(_newest_locked(self.tx.tenant(), workflow_id))
             owners = {r.team_id for r in rows}
             if owners and owners != {team} and not (team is None and owners == {None}):
                 raise WorkflowOwnedError(f"workflow id {workflow_id} belongs to another team")
@@ -247,32 +257,20 @@ class DefinitionStore:
         base: tuple[int, str],
         now: str,
         by: str,
+        replaces: str | None = None,
     ) -> WorkingCopy:
         """Stores `definition` as the working copy, whatever its checks say, when `base` (the version and digest the
         save was made on) names the newest copy: the working copy when there is one made on the newest version, the
-        newest version otherwise. The newest version and the copy are locked first, so two saves made on one copy
-        cannot both pass the compare. Raises StaleWorkingCopy when `base` is older, and LookupError when the workflow
-        has no version."""
-        t, w = engine_definitions, engine_working_copies
+        newest version otherwise. Another person's copy made on an older version is replaced only by a save whose
+        `replaces` is that copy's digest. The newest version and the copy are locked first, so two saves made on one
+        copy cannot both pass the compare. Raises StaleWorkingCopy when `base` is older (naming that other person's copy
+        when it is theirs), and LookupError when the workflow has no version."""
+        w = engine_working_copies
         tenant = self.tx.tenant()
         mine = sa.and_(w.c.tenant_id == tenant, w.c.workflow_id == workflow_id)
         async with self.tx.tenant_tx() as c:
-            newest = (
-                await c.execute(
-                    # The newest row alone, without its definition: a publish locks every row of the workflow, so
-                    # holding the newest one still orders this save against it.
-                    locked(
-                        cast(
-                            sa.Select[Any],
-                            sa.select(t.c.version, t.c.digest, t.c.created_by, t.c.created_at, t.c.team_id),
-                        )
-                        .where(t.c.tenant_id == tenant, t.c.workflow_id == workflow_id)
-                        .order_by(t.c.version.desc())
-                        .limit(1),
-                        t,
-                    )
-                )
-            ).first()
+            # The newest row alone, without its definition; a publish takes the same lock, so each waits on the other.
+            newest = (await c.execute(_newest_locked(tenant, workflow_id))).first()
             if newest is None:
                 raise LookupError(f"workflow {workflow_id} has no version")
             held = (await c.execute(locked(w.select().where(mine), w))).first()
@@ -290,6 +288,13 @@ class DefinitionStore:
                 token = (int(newest.version), str(newest.digest), str(newest.created_by), str(newest.created_at))
             if base != token[:2]:
                 raise StaleWorkingCopy(*token)
+            outdated = held if held is not None and current is None else None
+            # Another person's outdated copy holds their unpublished change: it is replaced only by a save naming it
+            # (`replaces`, its digest), so starting from the newest version never drops it unseen.
+            if outdated is not None and str(outdated.updated_by) != by and replaces != str(outdated.digest):
+                raise StaleWorkingCopy(
+                    int(outdated.base_version), str(outdated.digest), str(outdated.updated_by), str(outdated.updated_at)
+                )
             values = {"definition": definition, "digest": digest, "checks": checks, "updated_at": now, "updated_by": by}
             if held is not None:
                 # The compare is part of the write as well, so a writer that skipped the lock still cannot win.
@@ -377,7 +382,9 @@ class DefinitionStore:
         tenant = self.tx.tenant()
         mine = sa.and_(t.c.tenant_id == tenant, t.c.workflow_id == workflow_id)
         async with self.tx.tenant_tx() as c:
-            rows = (await c.execute(sa.select(t.c.version, t.c.stage).where(mine).with_for_update())).all()
+            rows = (
+                await c.execute(locked(cast(sa.Select[Any], sa.select(t.c.version, t.c.stage).where(mine)), t))
+            ).all()
             if version not in {r.version for r in rows}:
                 raise LookupError(f"{workflow_id} version {version} no longer exists")
             stage = "paused" if any(r.stage == "paused" for r in rows) else "live"
@@ -532,12 +539,15 @@ class DefinitionStore:
         t, r = engine_definitions, engine_runs
         tenant = self.tx.tenant()
         async with self.tx.tenant_tx() as c:
-            locked = await c.execute(
-                sa.select(t.c.version)
-                .where(t.c.tenant_id == tenant, t.c.workflow_id == workflow_id, _seen_by(team))
-                .with_for_update()
+            held = await c.execute(
+                locked(
+                    sa.select(t.c.version).where(
+                        t.c.tenant_id == tenant, t.c.workflow_id == workflow_id, _seen_by(team)
+                    ),
+                    t,
+                )
             )
-            if locked.first() is None:
+            if held.first() is None:
                 return "missing"  # none, or another team's
             runs = (
                 await c.execute(

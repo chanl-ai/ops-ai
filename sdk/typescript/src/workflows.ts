@@ -101,12 +101,6 @@ export class Workflows {
     return this.raw.agents.workflows_save_working_copy({ path: { workflow_id: id }, body: based(body(definition), read) as never });
   }
 
-  /** Makes the next version from the working copy: refused with `definition_checks` while it fails a check. */
-  async makeVersion(id: string, base?: { version: number; digest: string }) {
-    const read = base ?? ((await this.getDefinition(id)) as { saveBase: { version: number; digest: string } }).saveBase;
-    return this.raw.agents.workflows_version_from_working_copy({ path: { workflow_id: id }, body: based({}, read) as never });
-  }
-
   /** The steps added, removed, changed and moved between two versions, `live` or `working-copy`. */
   diff(id: string, from: string | number = 'live', to: string | number = 'working-copy') {
     return this.raw.agents.workflows_diff_definitions({ path: { workflow_id: id }, query: { from: String(from), to: String(to) } });
@@ -117,10 +111,15 @@ export class Workflows {
     return this.raw.agents.workflows_publish_preview({ path: { workflow_id: id } });
   }
 
-  publish(id: string, note = '') {
+  /**
+   * Requests the publish of the newest draft or, with `workingCopy`, makes the next version from the working copy and
+   * requests its publish in one call, refused before any version is made while the publish preview lists a blocker.
+   */
+  async publish(id: string, note = '', workingCopy = false) {
+    const read = workingCopy ? ((await this.getDefinition(id)) as { saveBase: { version: number; digest: string } }).saveBase : null;
     return this.raw.agents.workflows_request_definition_publish({
       path: { workflow_id: id },
-      body: { note } as never,
+      body: (read ? based({ note }, read) : { note }) as never,
     });
   }
 

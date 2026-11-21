@@ -238,13 +238,6 @@ STEPS: list[Step] = [
     ),
     (
         "POST",
-        "make a version from the working copy",
-        lambda k: ("/v1/workflows/definitions/c115_refunds/versions", {}),
-        201,
-        N,
-    ),
-    (
-        "POST",
         "ask to publish a definition",
         lambda k: ("/v1/workflows/definitions/c115_refunds/publish-requests", {}),
         201,
@@ -277,7 +270,7 @@ async def _send(c: AsyncClient, method: str, path: str, body: Any, headers: dict
 
 async def _based(c: AsyncClient, what: str, path: str, body: Any) -> Any:
     """The saves that name the copy they were made from get it read as the owning builder, right before the send."""
-    if what in ("save a definition's working copy", "make a version from the working copy"):
+    if what == "save a definition's working copy":
         base = _data(await c.get(path.rsplit("/", 1)[0], headers=BUILDER))["saveBase"]
         return {**body, "baseVersion": base["version"], "baseDigest": base["digest"]}
     if what not in ("save a skill draft", "edit an agent"):

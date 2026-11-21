@@ -64,7 +64,6 @@ def main(argv: list[str]) -> int:
     save_copy = sub.add_parser("save-copy", help="save a definition as the working copy; makes no version")
     save_copy.add_argument("id")
     save_copy.add_argument("definition")
-    sub.add_parser("make-version", help="make the next version from the working copy").add_argument("id")
     diff = sub.add_parser("diff", help="what changed between two versions, live or the working copy")
     diff.add_argument("id")
     diff.add_argument("--from", dest="from_", default="live")
@@ -72,6 +71,7 @@ def main(argv: list[str]) -> int:
     publish = sub.add_parser("publish", help="request or complete publish")
     publish.add_argument("id")
     publish.add_argument("--note", default="")
+    publish.add_argument("--working-copy", action="store_true", help="publish the working copy in one call")
     for name in ("pause", "archive"):
         sub.add_parser(name, help=f"{name} a definition").add_argument("id")
     run = sub.add_parser("run", help="start a run; test is the default")
@@ -165,14 +165,11 @@ def _dispatch(ns: argparse.Namespace) -> int:
         saved = wf.save_working_copy(ns.id, definition_in(ns.definition))
         errors = [c for c in saved["workingCopy"]["checks"] if c.get("level") == "error"]
         return emit(ns, saved, text=f"{ns.id} working copy saved, {len(errors)} problem(s)")
-    if ns.verb == "make-version":
-        made = wf.make_version(ns.id)
-        return emit(ns, made, text=f"{made.get('workflowId')} v{made.get('version')} made from the working copy")
     if ns.verb == "diff":
         changes = wf.diff(ns.id, from_=ns.from_, to=ns.to)
         return emit(ns, changes, text=_diff_text(changes))
     if ns.verb == "publish":
-        review = wf.publish(ns.id, note=ns.note)
+        review = wf.publish(ns.id, note=ns.note, working_copy=ns.working_copy)
         stage = "waiting for review" if review.get("id") and not review.get("liveVersion") else "live"
         return emit(ns, review, text=f"{ns.id} {stage}")
     if ns.verb == "pause":
