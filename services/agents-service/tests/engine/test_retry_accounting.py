@@ -41,8 +41,12 @@ async def claim_of(w: Worker, run_id: str) -> Work | None:
 
 
 async def work_row(engine: AsyncEngine, tenant: str, run_id: str) -> dict[str, Any]:
+    """The run's one work row, as it stands; the run is then cancelled, so a later test's claim never takes the row
+    this test gave back."""
     with tenant_scope(tenant):
-        (row,) = await RunStore(EngineTransactions(engine)).work(run_id)
+        runs = RunStore(EngineTransactions(engine))
+        (row,) = await runs.work(run_id)
+        await runs.cancel(run_id, reason="test over")
     return row
 
 
