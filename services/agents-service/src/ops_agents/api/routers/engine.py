@@ -908,11 +908,14 @@ async def _publish_copy(rt: Runtime, me: Principal, workflow_id: str, base: tupl
     refuse_stale(base, copy.base_version, copy.digest, saved_by=copy.updated_by, saved_at=copy.updated_at)
     d, found = await _publishable(rt, me, held, copy.definition)
     engine_lifecycle.refuse(found)
+    # Read before the version is made: a failure after it would leave a draft the copy is outdated behind.
+    reads = await engine_lifecycle.policy_reads(rt)
     data = await _store_version(rt, me, cast(WorkflowDefinition, d), held, reopen=True)
-    review = await engine_lifecycle.request_publish(rt, me, workflow_id, cast(int, data["version"]), note, checked=True)
+    version = cast(int, data["version"])
+    review = await engine_lifecycle.request_publish(rt, me, workflow_id, version, note, checked=True, reads=reads)
     # Removed only once the request is open; a save made since stays, as a change on the new version.
     if not await store.drop_working_copy(workflow_id, digest=copy.digest):
-        await store.rebase_working_copy(workflow_id, cast(int, data["version"]))
+        await store.rebase_working_copy(workflow_id, version)
     return review
 
 

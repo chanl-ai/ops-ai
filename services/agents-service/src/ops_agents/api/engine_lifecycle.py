@@ -11,7 +11,7 @@ only in `request_publish`.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import cast
+from typing import Literal, cast
 
 from pydantic import JsonValue
 
@@ -35,7 +35,7 @@ from .agent_registry import ReviewView, registry, review_view
 from .auth import Principal, require_builder
 from .deps import Runtime
 from .email_trigger import EMAIL_TRIGGER, require_binding
-from .publish_policy import decide
+from .publish_policy import decide, team_document
 from .review_sla import sla_hours
 
 KIND = "engine"
@@ -205,11 +205,33 @@ def refuse(found: list[Blocker]) -> None:
         raise found[0].error
 
 
+@dataclass(frozen=True)
+class PolicyReads:
+    """What opening a publish request reads from platform-service: the publishReview document (None when unread) and
+    the review deadline. A publish that makes its version first reads these before it, so a failed read leaves the
+    versions and the working copy as they were and the same publish can be sent again."""
+
+    document: Json | None
+    sla_hours: float
+
+
+async def policy_reads(rt: Runtime) -> PolicyReads:
+    return PolicyReads(await team_document(rt), await sla_hours(rt))
+
+
 async def request_publish(
-    rt: Runtime, me: Principal, workflow_id: str, version: int | None, note: str, *, checked: bool = False
+    rt: Runtime,
+    me: Principal,
+    workflow_id: str,
+    version: int | None,
+    note: str,
+    *,
+    checked: bool = False,
+    reads: PolicyReads | None = None,
 ) -> ReviewView:
     """Opens the publish request for a draft (the newest version when `version` is None) and returns it as a Review.
-    Approved at once only where the publish policy says no review is needed, which makes the version live."""
+    Approved at once only where the publish policy says no review is needed, which makes the version live. `reads`:
+    the policy reads the caller made before making the version (policy_reads)."""
     store = definitions(rt)
     row = await store.row(workflow_id, version, team=current_team())
     if row is None:
@@ -223,8 +245,10 @@ async def request_publish(
         refuse(await blockers(rt, me, row, row.definition))
     current = await store.serving(workflow_id, team=current_team())
     team = current_team() or (row.team_id or "")
-    req = await open_publish(rt, workflow_id, row, current, by=me.email, team=team, note=note)
-    return review_view(req, name=row.name, slug="", sla_hours=await sla_hours(rt))
+    if reads is None:
+        reads = await policy_reads(rt)
+    req = await open_publish(rt, workflow_id, row, current, by=me.email, team=team, note=note, document=reads.document)
+    return review_view(req, name=row.name, slug="", sla_hours=reads.sla_hours)
 
 
 async def open_publish(
@@ -236,6 +260,7 @@ async def open_publish(
     by: str,
     team: str,
     note: str,
+    document: Json | Literal["read"] | None = "read",
 ) -> PublishRequestRow:
     """The publish request for a checked draft `row` over the live `current`, decided by the team's publishReview read
     now: approved and live at once where no review is needed, otherwise waiting in Reviews. A person's publish and a
@@ -256,7 +281,12 @@ async def open_publish(
         "digest": row.digest,
     }
     decision = await decide(
-        rt, area="workflows", team_id=team, old=current.definition if current else None, new=row.definition
+        rt,
+        area="workflows",
+        team_id=team,
+        old=current.definition if current else None,
+        new=row.definition,
+        document=document,
     )
     body |= decision.record()
     approved = not decision.review_required

@@ -85,7 +85,7 @@ engine_working_copies = sa.Table(
     sa.Column("checks", sa.JSON, nullable=False),
     sa.Column("updated_at", sa.String(32), nullable=False),
     sa.Column("updated_by", sa.String(200), nullable=False),
-    info=TENANT_SCOPED,
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 # One row per run. The id is also the run's thread id (lease, checkpoints, events) and carries RUN_PREFIX, so the v1

@@ -105,6 +105,54 @@ async def _refused_and_kept(client: AsyncClient, base: dict[str, Any], code: str
     assert after["workingCopy"] is not None and after["saveBase"] == base
 
 
+class _PolicyDown:
+    """platform-service failing in a way the policy reader does not turn into PolicyUnread."""
+
+    async def value(self, key: str) -> Any:
+        raise RuntimeError(f"{key}: connection reset")
+
+
+async def test_a_policy_read_that_fails_leaves_versions_and_copy_and_the_publish_can_be_sent_again(
+    graph_models: FakeGraphModels, database_url: str
+) -> None:
+    settings = Settings(database_url=database_url, seed_dir=SEED)
+    async with empty_engine(database_url) as engine, started(engine, settings, graph_models) as (app, client):
+        view = await _published(client)
+        base = (await _save(client, basic() | {"name": "Refund check v2"}, view["saveBase"])).json()["data"]["saveBase"]
+        rt = app.state.runtime
+        working, rt.policies = rt.policies, _PolicyDown()
+        failed = await _publish(client, base)
+        assert failed.status_code == 500, failed.text
+        rt.policies = working
+        after = (await client.get(WF)).json()["data"]
+        assert [v["version"] for v in after["versions"]] == [1]
+        assert after["workingCopy"] is not None and after["saveBase"] == base
+        again = await _publish(client, base)
+        assert again.status_code == 201, again.text
+        assert [v["version"] for v in (await client.get(WF)).json()["data"]["versions"]] == [1, 2]
+
+
+async def test_a_document_type_that_cannot_be_pinned_is_listed_and_refused_before_a_version_is_made(
+    client: AsyncClient,
+) -> None:
+    view = await _published(client)
+    named = basic()
+    # A document type named without a version is pinned to its newest when the version is made; this service has no
+    # documents-service to read it from.
+    read = {"file": "$.input.fileId", "documentType": {"id": "supplier_invoice"}}
+    named["nodes"].append(
+        {"id": "read", "type": "ops.ai.extract", "typeVersion": 1, "name": "Read", "parameters": read}
+    )
+    base = (await _save(client, named, view["saveBase"])).json()["data"]["saveBase"]
+    preview = (await client.get(f"{WF}/publish-preview")).json()["data"]
+    assert "document_type_unreachable" in [b["code"] for b in preview["blockers"]], preview["blockers"]
+    refused = await _publish(client, base)
+    assert refused.status_code == 422 and refused.json()["error"]["code"] == "document_type_unreachable", refused.text
+    after = (await client.get(WF)).json()["data"]
+    assert [v["version"] for v in after["versions"]] == [1]
+    assert after["workingCopy"] is not None and after["saveBase"] == base
+
+
 @pytest.fixture
 async def reviewed(graph_models: FakeGraphModels, database_url: str) -> AsyncIterator[AsyncClient]:
     """The app with the dev auto-approve off, so a publish waits in Reviews."""
@@ -200,6 +248,10 @@ async def test_a_save_on_a_copy_older_than_a_version_saved_outside_the_editor_is
     refused = await client.put(f"{WF}/working-copy", json=on_two, headers=other)
     assert refused.status_code == 409 and refused.json()["error"]["code"] == "stale_base", refused.text
     assert refused.json()["error"]["details"]["savedBy"] == kept["updatedBy"], refused.text
+    assert (await client.get(WF)).json()["data"]["outdatedCopy"]["definition"]["name"] == "Editor change"
+    # A digest that is not the kept copy's names no copy, so the copy stays.
+    wrong = await client.put(f"{WF}/working-copy", json=on_two | {"replacesDigest": "0" * 64}, headers=other)
+    assert wrong.status_code == 409 and wrong.json()["error"]["code"] == "stale_base", wrong.text
     assert (await client.get(WF)).json()["data"]["outdatedCopy"]["definition"]["name"] == "Editor change"
     # A save that names the copy it replaces is the builder choosing to start from version 2.
     replacing = on_two | {"replacesDigest": kept["digest"]}
