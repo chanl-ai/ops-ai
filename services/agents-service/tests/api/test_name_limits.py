@@ -39,7 +39,7 @@ async def test_a_long_guardrail_name_makes_a_slug_that_fits_the_column(client: A
     assert too_long.status_code == 400, too_long.text
 
 
-@pytest.mark.parametrize("bad", ["", "   ", "Wire\r\nreview", "Wire\x00review", "\t"])
+@pytest.mark.parametrize("bad", ["", "   ", "Wire\x00review", "\t", "\r\n"])
 async def test_a_blank_or_control_character_name_is_refused_with_400_by_every_route(
     client: AsyncClient, bad: str
 ) -> None:
@@ -56,3 +56,10 @@ async def test_two_guardrail_names_equal_in_their_first_120_letters_say_so(clien
     ok(await client.post("/v1/guardrails", json={"name": LONG + "one", **GUARDRAIL}, headers=OPS), 201)
     again = await client.post("/v1/guardrails", json={"name": LONG + "two", **GUARDRAIL}, headers=OPS)
     assert again.status_code == 409 and "first 120 letters" in again.json()["error"]["message"], again.text
+
+
+async def test_a_name_with_a_line_break_or_tab_is_saved_on_one_line(client: AsyncClient) -> None:
+    made = ok(
+        await client.post("/v1/agents", json={"name": "  Wire\r\n\treview   desk ", "role": "r"}, headers=OPS), 201
+    )
+    assert made["name"] == "Wire review desk"

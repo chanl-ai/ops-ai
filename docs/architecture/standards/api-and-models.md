@@ -211,7 +211,7 @@ A row leaves a store through `ops_store.rows.rows()` or `one()`.
 ### MD5 A name a person types is a `Name`
 
 Rule: a request model's `name`, `title`, `label` or `display_name` field is `ops_service_kit.names.Name` (or `Name80`,
-`Name120`, `Name255`, sized to the column that stores it), unless it carries a `pattern`. A slug made from a name is cut
+`Name120`, sized to the column that stores it; `FileName` for a file name), unless it carries a `pattern`. A slug made from a name is cut
 by `names.cap_slug`.
 Why: a bare `str` takes a blank name, a line break or a value wider than its column; the last answered 500 on PostgreSQL
 (`value too long for type character varying(120)`).
@@ -222,4 +222,5 @@ than the cap its model gives.
 Pattern (`services/agents-service/src/ops_agents/api/routers/agents.py`): `name: Name`.
 
 Check: `ops_service_kit.standards.check_names`, run by `services/agents-service/scripts/check_standards.py`; the baseline
-only shrinks. A name is trimmed on save: a stored name with a line break inside it is refused until it is renamed.
+only shrinks. A name is put on one line on save (each run of whitespace, a line break included, becomes one space, then it is
+trimmed), so an old row with a line break re-saves unchanged; NUL and other control characters answer 400.
