@@ -14736,7 +14736,8 @@
               "already_published",
               "deprecated",
               "too_long",
-              "mention"
+              "mention",
+              "hint"
             ],
             "title": "Kind",
             "type": "string"

@@ -167,8 +167,11 @@ the hold, and a value that is missing takes the guarded path, as a failed check 
 condition leads to ends the skill without a hold. A path that reaches the end before the last line still asks for the
 skill's results before it ends as done.
 
-Nothing in the text stops a save. A line the reader cannot use is a hint on that line; a write tool with no check is a
-hint, not a refusal. A mention of something that no longer exists blocks a publish, with the line it is on
+Nothing in the text stops a save. A line the reader cannot use is a hint on that line, and so is a tool that changes
+something on a path the agent decides (on either side of the `if`, at any depth under it); hints never stop a save or
+a publish, and the publish check lists them as warnings of kind `hint`. A team that turns on **Strict skill
+publishing** (the `skillPublishStrict` setting on Governance › Policies) refuses that one hint at publish instead, as a
+`bad_check` problem on its line. A mention of something that no longer exists blocks a publish, with the line it is on
 (`position.field` `source`, `position.index` the line), and so does a text that makes more than 30 steps: none of its
 tools or paths could be enforced, so it is a `bad_step` problem on the 31st step's line. Each step's prompt carries
 only that step's lines, not the whole text. `POST /v1/skills/{id}/text` reads a text without saving it,
@@ -358,6 +361,7 @@ confirming a caller. A rule on the step can read how the sub-skill ended:
 | A step that runs its own skill, or a skill whose steps run a skill | On save |
 | A step that names a tool your team no longer offers | On publish. The error names each problem and the step it is on |
 | A skill written as text mentions something that no longer exists, or makes more than 30 steps | On publish only; the draft saves. The error names the line |
+| A skill written as text runs a tool that changes something on a path the agent decides, in a team with Strict skill publishing on | On publish only; the draft saves. The error names the line |
 
 ## Next steps
 

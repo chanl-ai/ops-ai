@@ -274,7 +274,17 @@ async def render_skill(
     return ok(await render_published(rt, skill_id, body.part, body.inputs))
 
 
-async def _request_review(rt: Runtime, skill_id: str, version: int, note: str, by: str) -> None:
+async def _request_review(rt: Runtime, skill_id: str, note: str, by: str) -> None:
+    """Opens a publish request for the newest draft once its publish check passes, read fresh from the tools
+    directory; both the publish route and a create with `requestReview` come through here (422 `cannot_request`)."""
+    d = await detail(rt, skill_id, fresh=True)
+    if not d["publishCheck"]["canRequest"]:
+        raise ValidationFailed(
+            " ".join(d["publishCheck"]["blockers"]),
+            code="cannot_request",
+            details={"problems": d["publishCheck"]["problems"]},
+        )
+    version = int(d["version"])
     reg = skills(rt)
     v = await reg.version(skill_id, version)
     assert v is not None
@@ -292,7 +302,6 @@ async def _request_review(rt: Runtime, skill_id: str, version: int, note: str, b
             "skillId": skill_id,
             "skillName": v.content["name"],
             "savedBy": v.saved_by,
-            **decision.record(),
             **decision.record(),
             "changes": v.changes,
         },
@@ -328,7 +337,7 @@ async def create_skill(rt: Rt, me: Me, body: SkillCreateInput) -> JSONResponse:
         )
         if not body.request_review:
             return ok(await detail(rt, sid), 201)
-    await _request_review(rt, sid, 1, body.review_note, me.email)
+    await _request_review(rt, sid, body.review_note, me.email)
     return ok(await detail(rt, sid), 201)
 
 
@@ -383,14 +392,7 @@ async def request_skill_publish(rt: Rt, me: Me, skill_id: str, body: ReviewInput
     or saved it); approved at once under the dev auto-approve setting. Off the request transaction: the team's
     publish-review policy is read from platform-service between the reads and the writes."""
     await changeable(rt, me, skill_id, "publish")
-    d = await detail(rt, skill_id, fresh=True)
-    if not d["publishCheck"]["canRequest"]:
-        raise ValidationFailed(
-            " ".join(d["publishCheck"]["blockers"]),
-            code="cannot_request",
-            details={"problems": d["publishCheck"]["problems"]},
-        )
-    await _request_review(rt, skill_id, int(d["version"]), body.note, me.email)
+    await _request_review(rt, skill_id, body.note, me.email)
     return ok(await detail(rt, skill_id), 201)
 
 

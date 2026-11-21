@@ -3,8 +3,8 @@ into its `else`; an `if` nested inside an `else` jumping to the wrong step; a me
 step or being checked; a path the agent decides taken on the model's silence, or counted as a failed check that holds
 tools; a guard written as `if not <rule>:` letting a missing value through; a skill saved as a list of steps not
 reading back to the same steps, retries, locks and jumps back included; a condition on the tool's words left to the
-model; a guard written after a sentence holding nothing; a stop holding only on one side of its `if`; and a path that
-reaches done early skipping the results the skill owes."""
+model; a guard written after a sentence holding nothing; a stop holding only on one side of its `if`; a path that
+reaches done early skipping the results the skill owes; and a write on a path the agent decides showing no hint."""
 
 from __future__ import annotations
 
@@ -251,3 +251,22 @@ def test_a_procedure_pasted_from_a_document_reads_as_its_paths() -> None:
     assert branch and branch.test.by == "rule" and branch.otherwise.exit == "policy_lapsed"
     assert r.hints == [], "list items and pasted spaces earn no indent hint"
     assert [m["depth"] for m in r.marks] == [0, 1, 1, 0, 0, 1, 0, 1]
+
+
+def test_a_write_on_a_path_the_agent_decides_is_a_hint_and_one_behind_a_checked_path_is_not() -> None:
+    text = (
+        "Find them with @tool:find_customer\n"
+        "if found:\n"
+        "    Hold it with @tool:place_wire_hold\n"
+        "Ask how they feel.\n"
+        "if they sound upset:\n"
+        "    Say sorry.\n"
+        "else:\n"
+        "    Hold it with @tool:place_wire_hold\n"
+    )
+    access = {"find_customer": "read", "place_wire_hold": "write"}
+    r = read(text, fields=FIELDS, access=access)
+    assert [m["how"] for m in r.marks if m["kind"] == "if"] == ["checked", "agent"]
+    assert [n["line"] for n in r.unguarded] == [8], "the else side of a path the agent decides is unguarded too"
+    assert {"line": 8, "message": r.unguarded[0]["message"]} in r.hints
+    assert not read(text, fields=FIELDS).unguarded, "with the directory unread no tool is taken as a write"

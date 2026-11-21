@@ -1,6 +1,7 @@
 """A skill written as text through /v1/skills, by failure mode: a mention of a tool that no longer exists refusing
 the save, or not blocking the publish, or not pointing at its line; a write tool with no rule check refusing a text
-save; the editor's read call reading a text differently from the save; a skill saved as steps showing no text."""
+save; a hint blocking a publish; a team with strict publishing publishing a write the agent decides; the editor's
+read call reading a text differently from the save; a skill saved as steps showing no text."""
 
 from __future__ import annotations
 
@@ -8,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .test_agent_registry import _app, _ok  # pyright: ignore[reportPrivateUsage]
+from .test_ai_step_route import policies
 
 TEXT = """Look the customer up with @tool:lookup_customer
 if they sound upset:
@@ -42,6 +44,28 @@ async def test_a_text_with_a_deleted_tool_saves_and_only_its_publish_is_blocked_
         fixed = TEXT.replace("@tool:retired_lookup", "@tool:lookup_customer")
         d = _ok(await c.put(f"/v1/skills/{s['id']}/draft", json={"source": fixed, "baseVersion": 1}))
         assert d["publishCheck"]["canRequest"], d["publishCheck"]
+        hints = [(w["kind"], w["position"]["index"]) for w in d["publishCheck"]["warnings"]]
+        assert ("hint", 3) in hints, "the hold the agent decides on is shown on its line"
+        _ok(await c.post(f"/v1/skills/{s['id']}/publish-requests", json={"note": ""}), 201)
+
+
+async def test_a_strict_team_cannot_publish_a_write_the_agent_decides_but_can_one_that_runs_on_its_line(
+    tmp_path: Path,
+) -> None:
+    async with _app(str(tmp_path / "db.sqlite")) as c:
+        policies(c, {"skillPublishStrict": {"team_ops": True}})
+        s = _ok(await c.post("/v1/skills", json=SKILL), 201)
+        fixed = TEXT.replace("@tool:retired_lookup", "@tool:lookup_customer")
+        _ok(await c.put(f"/v1/skills/{s['id']}/draft", json={"source": fixed, "baseVersion": 1}))
+        r = await c.post(f"/v1/skills/{s['id']}/publish-requests", json={"note": ""})
+        assert (r.status_code, r.json()["error"]["code"]) == (422, "cannot_request"), r.text
+        refused = [(p["kind"], p["position"]["index"]) for p in r.json()["error"]["details"]["problems"]]
+        assert refused == [("bad_check", 3)]
+        plain = "Look the customer up with @tool:lookup_customer\nPlace a hold with @tool:place_wire_hold\n"
+        r = await c.post("/v1/skills", json={**SKILL, "name": "Hold", "source": fixed, "requestReview": True})
+        assert (r.status_code, r.json()["error"]["code"]) == (422, "cannot_request"), "a create asks the same check"
+        _ok(await c.put(f"/v1/skills/{s['id']}/draft", json={"source": plain, "baseVersion": 1}))
+        _ok(await c.post(f"/v1/skills/{s['id']}/publish-requests", json={"note": ""}), 201)
 
 
 async def test_a_text_past_the_step_cap_saves_but_cannot_publish_and_a_plain_text_keeps_the_form_keys(

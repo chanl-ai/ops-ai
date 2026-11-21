@@ -15,6 +15,7 @@ from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any, NotRequired, TypedDict, cast
 
+from ops_access import team_on
 from ops_agent_kernel.types import Skill as KernelSkill
 from ops_contracts.chat import SkillPick
 from ops_contracts.skill_run import Ref, SkillProgram, SkillStep
@@ -30,10 +31,12 @@ from ..app.skill_content import KnownSkill, Problem
 from ..store.agent_registry import PublishRequestRow
 from ..store.skill_list import pinning_agents, published_pinning
 from ..store.skills import SkillRegistry, SkillRow, SkillVersionRow, slug_of
+from ..store.tenancy import NoTenantError
 from .agent_registry import SEED_BY, SEED_TEAM, AgentSpec, SkillPin, seed_agent_version
 from .agent_registry import registry as agent_registry
 from .child_runs import published_workflows
 from .deps import Runtime
+from .platform_policies import PolicyUnread
 from .routers.tool_catalog import known_tools
 from .step_shapes import ServiceLookups
 
@@ -55,6 +58,9 @@ LIMITS: dict[str, int] = {
     "tokenBudget": TOKEN_BUDGET,
     "useWhenMaxChars": USE_WHEN_MAX,
 }
+
+# The team setting that refuses a write behind a condition the agent decides (ops_access.policies).
+STRICT_KEY = "skillPublishStrict"
 
 
 def skills(rt: Runtime) -> SkillRegistry:
@@ -704,11 +710,27 @@ class SkillDetailView(SkillListRow):
     publishCheck: PublishCheck
 
 
-async def _offered_tools(rt: Runtime, *, fresh: bool) -> dict[str, str] | None:
-    """The access of each tool the tools directory offers, by id; None when it cannot answer."""
+async def _directory(rt: Runtime, *, fresh: bool = False) -> tuple[dict[str, str] | None, dict[str, str]]:
+    """The access of each tool the tools directory offers, by id (None when it cannot answer), and each tool's name by
+    its `@tool:` token, for the reader's hints."""
     try:
-        return {str(t["id"]): str(t["access"]) for t in await known_tools(rt, fresh=fresh)}
+        rows = await known_tools(rt, fresh=fresh)
     except ToolsUnavailable:
+        return None, {}
+    offered = {str(t["id"]): str(t["access"]) for t in rows}
+    return offered, {f"@tool:{t['id']}": str(t.get("title") or t["name"]) for t in rows if ":" not in str(t["id"])}
+
+
+async def strict_publishing(rt: Runtime, team: str | None) -> bool | None:
+    """Whether `team` turned skillPublishStrict on, read live from platform-service as publishReview is; None when it
+    could not be read. Off with no platform URL or no tenant (the start-up seed)."""
+    if team is None or rt.policies is None:
+        return False
+    try:
+        return team_on(await rt.policies.value(STRICT_KEY), team)
+    except NoTenantError:
+        return False
+    except PolicyUnread:
         return None
 
 
@@ -762,12 +784,7 @@ async def read_text(
     """The editor's read of a text it has not saved: the same reader a save runs, with what each tool returns and
     which mentions no longer exist."""
     refs = Ref.found_in(source)
-    try:
-        rows = await known_tools(rt)
-    except ToolsUnavailable:
-        rows = None
-    offered = {str(t["id"]): str(t["access"]) for t in rows} if rows is not None else None
-    labels = {f"@tool:{t['id']}": str(t.get("title") or t["name"]) for t in rows or [] if ":" not in str(t["id"])}
+    offered, labels = await _directory(rt)
     bases = await _bases(rt) if any(r.kind == "knowledge" for r in refs) else None
     labels |= {f"@knowledge:{i}": n for i, n in (bases or {}).items()}
     gone = await skill_content.missing(refs, offered, bases, team_id=team_id, skills=_TeamSkills(rt))
@@ -778,6 +795,7 @@ async def read_text(
         missing=gone,
         plain=_plain(loading, has_parts),
         exits=exits,
+        access=offered,
     )
 
 
@@ -864,10 +882,19 @@ async def detail(rt: Runtime, skill_id: str, *, fresh: bool = False) -> SkillDet
         block("too_long", too_long)
     warnings: list[Problem] = []
     if (newest.content.get("steps") or newest.content.get("source") is not None) and newest.published_at is None:
-        offered = await _offered_tools(rt, fresh=fresh)
-        bases = await _bases(rt) if newest.content.get("source") is not None else None
+        offered, labels = await _directory(rt, fresh=fresh)
+        source = newest.content.get("source")
+        bases = await _bases(rt) if source is not None else None
+        fields = await _fields(rt, Ref.found_in(source)) if isinstance(source, str) else None
         blocking, warnings = await skill_content.publish_problems(
-            newest.content, offered, team_id=row.team_id, skills=_TeamSkills(rt), bases=bases
+            newest.content,
+            offered,
+            team_id=row.team_id,
+            skills=_TeamSkills(rt),
+            bases=bases,
+            fields=fields,
+            labels=labels,
+            strict=lambda: strict_publishing(rt, row.team_id or None),
         )
         problems += blocking
     blockers = [p["message"] for p in problems]
@@ -1062,7 +1089,7 @@ async def pin_problems(rt: Runtime, agent_spec: Json) -> list[Problem]:
     pins = cast(list[Json], agent_spec.get("skillPins") or [])
     if not any(p.get("steps") for p in pins):
         return []
-    return skill_content.pin_problems(pins, await _offered_tools(rt, fresh=True))
+    return skill_content.pin_problems(pins, (await _directory(rt, fresh=True))[0])
 
 
 def check_pins_hold(agent_spec: AgentSpec) -> None:

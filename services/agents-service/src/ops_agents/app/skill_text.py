@@ -12,8 +12,9 @@ The text is a prompt with three things the kernel also enforces:
 - under `if not <check>:`, a block of only `try again` (`try again 2 times`) or `go back to step 3` makes the check
   the step's own, retried or sent back when it fails; a step line ending in `(locked)` keeps even a read tool to it.
 
-Nothing here refuses a text. Free text is valid and saves; what the reader cannot use becomes a hint on its line.
-The only error is a mention of something that no longer exists (`missing`), which blocks a publish, never a save.
+Nothing here refuses a text. Free text is valid and saves; what the reader cannot use becomes a hint on its line,
+and so does a tool that changes something on a path the agent decides. The errors are a mention of something that no
+longer exists (`missing`) and a text whose steps cannot run (`unrun`); each blocks a publish, never a save.
 
 A condition made of words the step's tool returns is turned into a rule the kernel checks on the result
 ("checked"); any other condition is a sentence the model decides from the conversation ("agent decides"), and it
@@ -144,6 +145,9 @@ class Reading:
     # Why a text that has steps runs none of them (more than the kernel takes, or not readable as steps). It blocks
     # a publish, like a missing mention: the tools it mentions still join the skill, and none would be held to a line.
     unrun: list[Note] = field(default_factory=list[Note])
+    # Each line that runs a tool that changes something under a condition the agent decides, outermost condition
+    # first: a hint on its line, and what a team with strict publishing refuses (`skill_content.publish_problems`).
+    unguarded: list[Note] = field(default_factory=list[Note])
 
     def json(self) -> Json:
         return {
@@ -729,12 +733,15 @@ def read(
     missing: Mapping[str, str] | None = None,
     plain: str | None = None,
     exits: Mapping[str, str] | None = None,
+    access: Mapping[str, str] | None = None,
 ) -> Reading:
     """The text as the kernel will run it. `fields` is what each mentioned tool returns (by its `@kind:id` token),
     from its output schema; `labels` the names of what the text mentions; `missing` the mentions (token to label)
     that no longer exist. With `plain` (a reason), the text is read as plain instructions whatever it holds: a skill
     that is always on, or written in parts, cannot run step by step. `exits` are the endings declared beside the text
-    (name to meaning): the program keeps them, and a bare `stop <name>` ends the skill only with one of them."""
+    (name to meaning): the program keeps them, and a bare `stop <name>` ends the skill only with one of them.
+    `access` is each offered tool's access by grant id, None when the directory could not answer: with it, a line
+    whose tool changes something behind a condition the agent decides is a hint (`Reading.unguarded`)."""
     fields, labels, missing, declared = fields or {}, labels or {}, missing or {}, dict(exits or {})
     text = normalised(text)
     hints: list[Note] = []
@@ -840,7 +847,45 @@ def read(
         if p.kind != "bad_use":
             line = c.out[p.step - 1].line if p.step else 1
             hints.append({"line": line, "message": p.message})
-    return Reading(program, hints, errors, uses, list(marks.values()), phrases, [s.line for s in c.out], refs)
+    unguarded = _unguarded(tree, marks, labels, access) if access is not None else []
+    hints += unguarded
+    return Reading(
+        program, hints, errors, uses, list(marks.values()), phrases, [s.line for s in c.out], refs, [], unguarded
+    )
+
+
+def _unguarded(
+    items: Sequence[_Item], marks: Mapping[int, Mark], labels: Mapping[str, str], access: Mapping[str, str]
+) -> list[Note]:
+    """The lines whose tool changes something (`steps.changes`, by the directory's `access` for each grant id) and
+    that run only on a path the agent decides, on either side of it and at any depth below it."""
+    out: list[Note] = []
+
+    def walk(block: Sequence[_Item], cond: str | None) -> None:
+        for item in block:
+            if isinstance(item, _If):
+                decided = cond if cond is not None else item.cond if marks[item.line]["how"] == "agent" else None
+                walk(item.body, decided)
+                walk(item.orelse, decided)
+            elif isinstance(item, _Text) and cond is not None:
+                runs = [r for r in Ref.found_in(item.text) if r.kind in _STEP_KINDS]
+                name = runs[0].tool_name if runs else None
+                if name is None or not steps.changes(name, access.get(runs[0].grant or "")):
+                    continue
+                label = labels.get(runs[0].token, runs[0].id)
+                out.append(
+                    {
+                        "line": item.line,
+                        "message": (
+                            f"{label} changes something, and it runs only when the agent decides “{cond}” from the "
+                            "conversation. To check it on a tool's result instead, put the line with the tool that "
+                            "returns the answer just above the “if”."
+                        ),
+                    }
+                )
+
+    walk(items, None)
+    return out
 
 
 def stop_exits(text: str) -> dict[str, str]:

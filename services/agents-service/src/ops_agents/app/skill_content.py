@@ -12,7 +12,7 @@ It reads the team's skills through `TeamSkills` and is given the tools the direc
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal, Protocol, TypedDict
 
@@ -79,6 +79,8 @@ class Problem(TypedDict):
         "too_long",
         # Only ever a warning: a tool a step's sentence names and the step does not run.
         "mention",
+        # Only ever a warning: a hint the reader put on a line of a skill written as text.
+        "hint",
     ]
     id: str | None
     position: Position | None
@@ -263,9 +265,10 @@ def unrunnable(
     rule check, and a step that runs nothing and names exactly one tool. The one list a draft's publish check, an
     attach and an agent's publish check all read, so a version published before a check existed is held to it too.
 
-    A skill written as text (`text`) is held to neither: free text always publishes, its step's tool is the one its
-    line mentions, and an unchecked write is a hint on its line (`skill_text.read`); only a mention of something that
-    no longer exists stops it (`publish_problems`)."""
+    A skill written as text (`text`) is held to neither, here or when it is attached: its step's tool is the one its
+    line mentions, and a tool that changes something behind a condition the agent decides is a hint on its line
+    (`skill_text.read`). Its publish is stopped only by a mention of something that no longer exists, by steps that
+    cannot run, and, in a team with strict publishing, by that hint (`publish_problems`)."""
     if text:
         return [], []
     found, warnings = _mentions(program)
@@ -337,11 +340,19 @@ async def publish_problems(
     team_id: str,
     skills: TeamSkills,
     bases: Mapping[str, str] | None = None,
+    fields: Mapping[str, skill_text.Fields] | None = None,
+    labels: Mapping[str, str] | None = None,
+    strict: Callable[[], Awaitable[bool | None]] | None = None,
 ) -> tuple[list[Problem], list[Problem]]:
     """What in the skill's steps blocks a publish, and the warnings that do not. `offered` is the access of each tool
     the directory offers now, by id; None when it could not answer, which blocks the publish with one problem, since
-    nothing can be checked. A skill written as text is blocked only by a mention of something that no longer
-    exists, pointed at by its line (`position.index`, from 1, in the field `source`)."""
+    nothing can be checked.
+
+    A skill written as text is read as the editor reads it (`fields`, `labels`), and is blocked only by a mention of
+    something that no longer exists or by steps that cannot run, each pointed at by its line (`position.index`, from
+    1, in the field `source`); every hint is a warning. `strict` answers whether the owning team publishes a tool
+    that changes something only behind a checked condition (None when the setting could not be read, which counts as
+    on); it is asked only when the text has such a line, and on it each one blocks."""
     source = content.get("source")
     if isinstance(source, str):
         refs = Ref.found_in(source)
@@ -358,7 +369,9 @@ async def publish_problems(
         declared = {str(k): str(v) for k, v in narrow.json_object(content.get("exit")).items()}
         # Always on or in parts, the text never runs as steps, so its length blocks nothing.
         plain = "plain" if content.get("loading") == "always" or content.get("parts") else None
-        reading = skill_text.read(source, missing=gone, exits=declared, plain=plain)
+        reading = skill_text.read(
+            source, fields=fields, labels=labels, missing=gone, exits=declared, plain=plain, access=offered
+        )
         found: list[Problem] = [
             {
                 "kind": "missing_reference",
@@ -377,7 +390,29 @@ async def publish_problems(
             }
             for n in reading.unrun
         ]
-        return [*found, *unrun], []
+        # Read only when a line would be refused by it; an unread setting counts as on.
+        held = bool(reading.unguarded) and strict is not None and (await strict()) is not False
+        refused: list[Problem] = [
+            {
+                "kind": "bad_check",
+                "id": None,
+                "position": {"field": "source", "step": None, "index": n["line"]},
+                "message": f"This team publishes a change only behind a condition checked on a tool's result. "
+                f"{n['message']}",
+            }
+            for n in (reading.unguarded if held else [])
+        ]
+        hints: list[Problem] = [
+            {
+                "kind": "hint",
+                "id": None,
+                "position": {"field": "source", "step": None, "index": n["line"]},
+                "message": n["message"],
+            }
+            for n in reading.hints
+            if not (held and n in reading.unguarded)
+        ]
+        return [*found, *unrun, *refused], hints
     program = program_of(content)
     if program is None:
         return [], []

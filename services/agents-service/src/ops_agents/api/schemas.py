@@ -1681,6 +1681,7 @@ class PublishBlocker(Out):
         "too_long",
         # Only ever a warning: a tool a step's sentence names and the step does not run.
         "mention",
+        "hint",
     ]
     id: str | None = None
     position: BlockerPosition | None = None

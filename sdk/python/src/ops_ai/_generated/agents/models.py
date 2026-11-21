@@ -1346,6 +1346,7 @@ class PublishBlocker(TypedDict, closed=True):
         "deprecated",
         "too_long",
         "mention",
+        "hint",
     ]
     message: str
     position: NotRequired[BlockerPosition | None]
