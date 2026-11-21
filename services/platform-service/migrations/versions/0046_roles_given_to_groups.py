@@ -16,13 +16,18 @@ Security team. Nothing is taken away, so no person loses access; each tenant's p
 version rises. Running it again adds nothing. Stored policy values are left as they are: a `requesterMayDecide`
 stored as true still means on in every team and area.
 
-The downgrade removes the approvals cells and every group's assignment, then the two tables.
+The downgrade removes the approvals cells and every group's assignment, then the two tables. It also collapses a
+per-team `requesterMayDecide` ({team or `*`: ...}) to one boolean, true only when the workspace's own part `*` is true:
+the code before this revision reads any stored object as on, so a rollback would otherwise let whoever asked decide
+their own request in every team.
 
 Revision ID: 0046_roles_given_to_groups
 Revises: 0045_api_key_revision
 """
 
 from __future__ import annotations
+
+from typing import Any, cast
 
 import sqlalchemy as sa
 from alembic import op
@@ -60,7 +65,9 @@ def upgrade() -> None:
     dialect = op.get_bind().dialect.name
     op.create_table(
         "groups",
-        sa.Column("tenant_id", sa.String(64), sa.ForeignKey("tenants.id"), primary_key=True),
+        sa.Column(
+            "tenant_id", sa.String(64), sa.ForeignKey("tenants.id", name="groups_tenant_id_fkey"), primary_key=True
+        ),
         sa.Column("id", sa.String(64), primary_key=True),
         sa.Column("name", sa.String(200), nullable=False),
         sa.Column("provider_id", sa.String(64)),
@@ -114,6 +121,19 @@ def downgrade() -> None:
         for name in TABLES:
             for statement in isolation_drop_ddl(_marked(name), dialect):
                 op.execute(statement)
+    bind = op.get_bind()
+    stored = sa.table(
+        "policies", sa.column("tenant_id", sa.String), sa.column("key", sa.String), sa.column("value", sa.JSON)
+    )
+    rows = bind.execute(sa.select(stored.c.tenant_id, stored.c.value).where(stored.c.key == "requesterMayDecide")).all()
+    for tenant_id, value in rows:
+        if isinstance(value, dict):
+            whole = cast(dict[str, Any], value)
+            bind.execute(
+                stored.update()
+                .where(stored.c.tenant_id == tenant_id, stored.c.key == "requesterMayDecide")
+                .values(value=whole.get("*") is True)
+            )
     op.execute("DELETE FROM role_permissions WHERE area = 'approvals'")
     op.execute("DELETE FROM role_assignments WHERE subject_kind = 'group'")
     op.execute("UPDATE tenants SET permission_version = permission_version + 1")

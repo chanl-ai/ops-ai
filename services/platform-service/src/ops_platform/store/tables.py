@@ -270,7 +270,8 @@ groups = sa.Table(
     # A set of people a role is given to (migration 0046). A group a sign-in provider keeps names the provider and the
     # exact value it sends (`external_value`); one kept by hand names neither. A group's assignment never carries a
     # privileged cell (`ops_access.PRIVILEGED`): the store refuses one and `holdings_with` leaves one out.
-    sa.Column("tenant_id", sa.String(64), sa.ForeignKey("tenants.id"), primary_key=True),
+    # The key is named so SQL Server keeps one name across a down and up (it names an unnamed one at random).
+    sa.Column("tenant_id", sa.String(64), sa.ForeignKey("tenants.id", name="groups_tenant_id_fkey"), primary_key=True),
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("name", sa.String(200), nullable=False),
     sa.Column("provider_id", sa.String(64)),

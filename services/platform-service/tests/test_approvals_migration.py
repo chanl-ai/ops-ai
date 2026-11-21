@@ -8,6 +8,7 @@ per team. Synchronous: Alembic's environment runs its own event loop."""
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Any
 
 import sqlalchemy as sa
@@ -141,3 +142,39 @@ def test_no_one_gains_or_loses_access_and_team_admins_keep_their_approval_rules(
     command.downgrade(alembic_config(), "0045_api_key_revision")
     command.upgrade(alembic_config(), "head")
     assert {m: _cells(database_url, tenant, u, [ops, security]) for m, u in people.items()} == after
+
+
+def test_a_rollback_leaves_self_approval_on_only_where_the_workspace_had_it_on(database_url: str) -> None:
+    # The code before 0046 reads any stored object as on, so a per-team value must reach it as one boolean.
+    now, team = now_iso(), new_id("team")
+    stored = {new_id("ten"): ({"*": False, team: True}, False), new_id("ten"): ({"*": True, team: False}, True)}
+    writes: list[tuple[str, dict[str, Any]]] = []
+    for tenant, (value, _) in stored.items():
+        writes.append(
+            (
+                "INSERT INTO tenants (id, name, status, allowed_domains, created_at) "
+                "VALUES (:t, :t, 'active', '[]', :now)",
+                {"t": tenant, "now": now},
+            )
+        )
+        writes.append(
+            (
+                "INSERT INTO policies (tenant_id, key, value, updated_by, updated_at) "
+                "VALUES (:t, 'requesterMayDecide', :v, 'test', :now)",
+                {"t": tenant, "v": json.dumps(value), "now": now},
+            )
+        )
+    asyncio.run(_run(database_url, writes))
+    command.downgrade(alembic_config(), "0045_api_key_revision")
+    try:
+        for tenant, (_, after) in stored.items():
+            [rows] = asyncio.run(
+                _run(
+                    database_url,
+                    [("SELECT value FROM policies WHERE tenant_id = :t AND key = 'requesterMayDecide'", {"t": tenant})],
+                )
+            )
+            value = rows[0][0]
+            assert (json.loads(value) if isinstance(value, str) else value) is after, tenant
+    finally:
+        command.upgrade(alembic_config(), "head")
