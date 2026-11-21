@@ -1,5 +1,7 @@
 'use client';
 
+import { RecordActions } from '@/components/shared/record-actions';
+import { SaveState } from '@/components/shared/save-state';
 import * as React from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
@@ -318,70 +320,77 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
           !canBuild ? (
             newest?.state === 'draft' && agent.canPublish === false ? <LockedReason area="agents" action="publish" label="Request publish" /> : undefined
           ) : (
-          <>
-            {agent.wrapperWorkflowId && (
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setTab('channels');
-                  setDeployOpen(true);
-                }}
-                data-testid="embed-agent"
-              >
-                <Send className="size-4" /> Embed on a page
-              </Button>
-            )}
-            {newest?.state === 'draft' && agent.canPublish !== false && (
-              <Button variant="outline" onClick={() => (purposeMissing ? goTo('brief.purpose') : setPublishOpen(true))} disabled={dirty && !purposeMissing} title={dirty && !purposeMissing ? 'Saving your changes first' : undefined} data-testid="request-agent-publish">
-                <Rocket className="size-4" /> {preview.data && !preview.data.reviewRequired ? 'Publish' : 'Request publish'}
-              </Button>
-            )}
-            {newest?.state === 'in_review' && newest.reviewId && (
-              <Button variant="outline" asChild data-testid="agent-publish-in-review">
-                <Link href={`/work/tasks?review=${newest.reviewId}`}>In review · {newest.reviewId}</Link>
-              </Button>
-            )}
-            {canBuild && (
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setTab('settings');
-                  setTestTab('test');
-                  requestAnimationFrame(() => panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-                }}
-                data-testid="test-agent-button"
-              >
-                <FlaskConical className="size-4" /> Test
-              </Button>
-            )}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" aria-label="More actions">
-                  <MoreHorizontal className="size-4" />
+            <RecordActions
+              status={<SaveState status={stale ? 'stale' : update.isPending ? 'saving' : saveError ? 'failed' : dirty ? 'unsaved' : 'saved'} detail={stale ?? saveError ?? (dirty && !valid ? 'Fix the highlighted fields to save' : null)} onRetry={saveNow} />}
+              save={{ onSave: saveNow, disabled: !dirty || !valid || !editable || !!stale, saving: update.isPending, testId: 'agent-save' }}
+              test={
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setTab('settings');
+                    setTestTab('test');
+                    requestAnimationFrame(() => panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+                  }}
+                  data-testid="test-agent-button"
+                >
+                  <FlaskConical className="size-4" /> Test
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {pausable && (
-                  <DropdownMenuItem onClick={togglePaused}>
-                    {agent.paused ? <Play className="size-4" /> : <Pause className="size-4" />} {agent.paused ? 'Resume agent' : 'Pause agent'}
-                  </DropdownMenuItem>
-                )}
-                {isAdmin && agent.availability === 'published' && agent.id !== defaultId && (
-                  <DropdownMenuItem onClick={() => setMakeDefaultOpen(true)} data-testid="agent-make-default">
-                    <Star className="size-4" /> Make default for chat
-                  </DropdownMenuItem>
-                )}
-                {assist.menuItem}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem className="flex-col items-start text-destructive-text" disabled={liveUse.length > 0 || agent.canDelete === false} onClick={() => setDeleteOpen(true)}>
-                  <span className="flex items-center gap-2">
-                    <Trash2 className="size-4" /> Delete agent
-                  </span>
-                  {liveUse.length > 0 && <span className="pl-6 text-xs text-muted-foreground">Used by a live workflow</span>}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </>
+              }
+              primary={
+                <>
+                  {newest?.state === 'draft' && agent.canPublish !== false && (
+                    <Button onClick={() => (purposeMissing ? goTo('brief.purpose') : setPublishOpen(true))} disabled={dirty && !purposeMissing} title={dirty && !purposeMissing ? 'Saving your changes first' : preview.data?.reviewRequired ? 'Goes to a reviewer first' : undefined} data-testid="request-agent-publish">
+                      <Rocket className="size-4" /> Publish
+                    </Button>
+                  )}
+                  {newest?.state === 'in_review' && newest.reviewId && (
+                    <Button variant="outline" asChild title="Opens the request" data-testid="agent-publish-in-review">
+                      <Link href={`/work/tasks?review=${newest.reviewId}`}>In review</Link>
+                    </Button>
+                  )}
+                </>
+              }
+              menu={
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="icon" aria-label="More actions">
+                      <MoreHorizontal className="size-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {agent.wrapperWorkflowId && (
+                      <DropdownMenuItem
+                        onClick={() => {
+                          setTab('channels');
+                          setDeployOpen(true);
+                        }}
+                        data-testid="embed-agent"
+                      >
+                        <Send className="size-4" /> New embed
+                      </DropdownMenuItem>
+                    )}
+                    {pausable && (
+                      <DropdownMenuItem onClick={togglePaused}>
+                        {agent.paused ? <Play className="size-4" /> : <Pause className="size-4" />} {agent.paused ? 'Resume agent' : 'Pause agent'}
+                      </DropdownMenuItem>
+                    )}
+                    {isAdmin && agent.availability === 'published' && agent.id !== defaultId && (
+                      <DropdownMenuItem onClick={() => setMakeDefaultOpen(true)} data-testid="agent-make-default">
+                        <Star className="size-4" /> Make default
+                      </DropdownMenuItem>
+                    )}
+                    {assist.menuItem}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem className="flex-col items-start text-destructive-text" disabled={liveUse.length > 0 || agent.canDelete === false} onClick={() => setDeleteOpen(true)}>
+                      <span className="flex items-center gap-2">
+                        <Trash2 className="size-4" /> Delete agent
+                      </span>
+                      {liveUse.length > 0 && <span className="pl-6 text-xs text-muted-foreground">Used by a live workflow</span>}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              }
+            />
           )
         }
       >
@@ -442,9 +451,6 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
                 <Button type="button" variant="outline" size="sm" className="max-w-full" onClick={() => (setLimitsOpen(true), requestAnimationFrame(() => document.getElementById('ag-model')?.scrollIntoView({ block: 'center' })))} data-testid="agent-model-button">
                   <span className="truncate">{draft.model || 'No model'}</span>
                 </Button>
-                <span role="status" data-testid="agent-save-status" className={saveError ? 'text-xs text-destructive-text' : 'text-xs text-muted-foreground'}>
-                  {!canBuild ? `v${agent.version}` : update.isPending ? 'Saving…' : stale ? 'Not saved: someone else saved first' : saveError ? `Not saved: ${saveError}` : dirty ? (valid ? 'Saving soon…' : 'Fix the highlighted fields to save') : update.isSuccess ? `Draft v${agent.version} saved` : `v${agent.version}`}
-                </span>
               </div>
               <BuilderFieldset canEdit={locked ? false : agent.canEdit}>
               {briefEdit !== null && agent.brief === null && (

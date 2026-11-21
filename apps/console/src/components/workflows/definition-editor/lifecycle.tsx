@@ -122,15 +122,15 @@ export function LifecycleActions({
       )}
       {review ? (
         <Button type="button" variant="outline" asChild data-testid="definition-review-link">
-          <Link href={`/work/tasks?review=${encodeURIComponent(review.id)}`}>Version {review.version} in review</Link>
+          <Link href={`/work/tasks?review=${encodeURIComponent(review.id)}`} title={`Version ${review.version} is waiting in Reviews`}>In review</Link>
         </Button>
       ) : (
         (changed || stage === 'draft') &&
         (!canPublish ? (
-          <LockedReason area="workflows" action="publish" label="Publish…" />
+          <LockedReason area="workflows" action="publish" label="Publish" />
         ) : (
           <Button type="button" onClick={onPublish} disabled={saving} title={saving ? 'Saving your change first' : undefined} data-testid="definition-publish">
-            <Rocket /> Publish…
+            <Rocket /> Publish
           </Button>
         ))
       )}

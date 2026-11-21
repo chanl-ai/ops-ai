@@ -182,7 +182,7 @@ export function ImportSkillDialog({
             }}
             data-testid="import-skill-submit"
           >
-            Import as draft
+            Import
           </LoadingButton>
         </div>
       }
@@ -275,7 +275,7 @@ export function RequestReviewDialog({ open, onOpenChange, skill, isPending, onSu
             }}
             data-testid="request-review-submit"
           >
-            Send to Reviews
+            Send
           </LoadingButton>
         </div>
       }

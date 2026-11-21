@@ -28,6 +28,8 @@ export interface PaletteAction {
   keywords?: string;
   /** `teams` opens the team list inside the palette instead of running. */
   opens?: 'teams';
+  /** The keys that run it without the menu, shown at the right. */
+  shortcut?: string;
   run?: () => void;
 }
 
@@ -190,6 +192,7 @@ export function CommandPalette({
                   <a.icon />
                   <span className="flex-1">{a.label}</span>
                   {a.opens && <CommandShortcut>›</CommandShortcut>}
+                  {a.shortcut && <CommandShortcut>{a.shortcut}</CommandShortcut>}
                 </CommandItem>
               ))}
             </CommandGroup>

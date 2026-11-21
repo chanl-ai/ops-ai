@@ -143,7 +143,7 @@ export function PartsSection({ parts, onChange, disabled }: { parts: SkillPartCo
                       </div>
                     ))}
                     <Button variant="outline" size="sm" className="self-start" disabled={disabled || p.inputs.length >= 20} onClick={() => put(i, { inputs: [...p.inputs, { name: '', type: 'string', description: '', required: false }] })}>
-                      <Plus className="size-4" /> Add an input
+                      <Plus className="size-4" /> Add
                     </Button>
                   </div>
                 </CollapsibleContent>
@@ -153,7 +153,7 @@ export function PartsSection({ parts, onChange, disabled }: { parts: SkillPartCo
         </div>
       )}
       <Button variant="outline" size="sm" className="self-start" onClick={add} disabled={disabled || parts.length >= MAX_PARTS} data-testid="add-skill-part">
-        <Plus className="size-4" /> Add a part
+        <Plus className="size-4" /> Add
       </Button>
       </div>
     </SettingsSection>

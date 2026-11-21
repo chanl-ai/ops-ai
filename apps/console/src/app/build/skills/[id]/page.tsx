@@ -1,5 +1,6 @@
 'use client';
 
+import { RecordActions } from '@/components/shared/record-actions';
 import * as React from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
@@ -117,17 +118,22 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
           </>
         }
         actions={
-          <>
-            <Button variant="outline" onClick={() => setPanel('tests')} data-testid="skill-open-tests">
-              <FlaskConical className="size-4" /> Tests · {s.tests.length}
-            </Button>
-            {canBuild && (
-              <DisabledReason reason={reviewReason}>
-                <Button onClick={() => setDialog('review')} disabled={!s.publishCheck.canRequest} data-testid="request-review-button">
-                  <Send className="size-4" /> Request review
-                </Button>
-              </DisabledReason>
-            )}
+          <RecordActions
+            test={
+              <Button variant="outline" onClick={() => setPanel('tests')} title={`${plural(s.tests.length, 'test')}`} data-testid="skill-open-tests">
+                <FlaskConical className="size-4" /> Test
+              </Button>
+            }
+            primary={
+              canBuild && (
+                <DisabledReason reason={reviewReason}>
+                  <Button onClick={() => setDialog('review')} disabled={!s.publishCheck.canRequest} title="Goes to a reviewer first" data-testid="request-review-button">
+                    <Send className="size-4" /> Publish
+                  </Button>
+                </DisabledReason>
+              )
+            }
+            menu={
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="icon" aria-label="More actions" data-testid="skill-more">
@@ -180,7 +186,8 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
                 )}
               </DropdownMenuContent>
             </DropdownMenu>
-          </>
+            }
+          />
         }
       >
           <div className="flex flex-col gap-4">

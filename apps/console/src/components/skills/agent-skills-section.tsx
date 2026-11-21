@@ -138,7 +138,7 @@ export function AgentSkillsSection({
                     {p.upgradeAvailable && (
                       <DisabledReason reason={blockedReason ?? p.upgradeBlocked}>
                         <Button variant="outline" size="sm" disabled={!!blockedReason || !!p.upgradeBlocked || busy} onClick={() => onAttach(p.skillId, p.latestPublished!, p.name, true)} data-testid="agent-skill-upgrade">
-                          <ArrowUpCircle className="size-3.5" /> Move to v{p.latestPublished}
+                          <ArrowUpCircle className="size-3.5" /> Update
                         </Button>
                       </DisabledReason>
                     )}

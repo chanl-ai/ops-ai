@@ -47,7 +47,7 @@ export function VersionsTab({ skill: s, onExport }: { skill: SkillDetail; onExpo
                 <>
                   {prev && (
                     <Button variant="outline" size="sm" onClick={() => setDiff({ from: prev.version, to: v.version })} data-testid="compare-version">
-                      <GitCompare className="size-3.5" /> Compare with v{prev.version}
+                      <GitCompare className="size-3.5" /> Compare
                     </Button>
                   )}
                   <Button variant="ghost" size="sm" onClick={() => onExport(v.version)} aria-label={`Export v${v.version}`}>
@@ -126,7 +126,7 @@ export function VersionsTab({ skill: s, onExport }: { skill: SkillDetail; onExpo
                 }
               }}
             >
-              Restore as draft
+              Restore
             </LoadingButton>
           </div>
         }

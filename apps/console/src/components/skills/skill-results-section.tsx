@@ -89,7 +89,7 @@ export function SkillResultsSection({ value, onChange, onValidity, disabled }: {
           ))}
           {errors.exits?.root?.message && <p className="text-sm text-destructive-text">{errors.exits.root.message}</p>}
           <Button type="button" variant="outline" size="sm" className="self-start" disabled={exits.fields.length >= 8} onClick={() => exits.append({ name: '', meaning: '' })} data-testid="add-skill-exit">
-            <Plus className="size-4" /> Add an ending
+            <Plus className="size-4" /> Add
           </Button>
         </div>
 
@@ -132,7 +132,7 @@ export function SkillResultsSection({ value, onChange, onValidity, disabled }: {
             </div>
           ))}
           <Button type="button" variant="outline" size="sm" className="self-start" disabled={returns.fields.length >= 12} onClick={() => returns.append({ name: '', type: 'text', required: true, description: '' })} data-testid="add-skill-result">
-            <Plus className="size-4" /> Add a result
+            <Plus className="size-4" /> Add
           </Button>
         </div>
 
@@ -149,7 +149,7 @@ export function SkillResultsSection({ value, onChange, onValidity, disabled }: {
             </div>
           ))}
           <Button type="button" variant="outline" size="sm" className="self-start" disabled={success.fields.length >= 8} onClick={() => success.append({ line: '' })} data-testid="add-skill-success">
-            <Plus className="size-4" /> Add a check
+            <Plus className="size-4" /> Add
           </Button>
         </div>
       </fieldset>

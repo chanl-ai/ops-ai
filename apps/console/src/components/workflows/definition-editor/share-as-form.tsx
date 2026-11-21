@@ -89,7 +89,7 @@ export function ShareAsForm({ workflowId, schema: raw, readOnly }: { workflowId:
         actions={
           !readOnly && (
             <Button type="button" variant="outline" size="sm" disabled={noInputs} onClick={() => setOpen(true)} data-testid="share-as-form">
-              <Link2 /> Share as a form
+              <Link2 /> Share form
             </Button>
           )
         }

@@ -75,7 +75,7 @@ export function SkillInputsSection({ value, onChange, onValidity, disabled }: { 
         ))}
         {errors?.root?.message && <p className="text-sm text-destructive-text">{errors.root.message}</p>}
         <Button type="button" variant="outline" size="sm" className="self-start" disabled={inputs.fields.length >= MAX_INPUTS} onClick={() => inputs.append({ name: '', description: '', required: true })} data-testid="add-skill-input">
-          <Plus className="size-4" /> Add an input
+          <Plus className="size-4" /> Add
         </Button>
       </fieldset>
     </SettingsSection>

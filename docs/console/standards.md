@@ -144,3 +144,13 @@ grep-provable ones in `apps/console/scripts/check-standards.mjs`.
 | 8 | States are designed | Load the page with `?mock=slow`, `?mock=error`, `?mock=empty` | A spinner alone, a blank page, an empty list with no action, or a failed save that clears the form |
 | 9 | Fits a phone | Chrome device toolbar at 375 px | The page scrolls sideways or text overflows its cell |
 | 10 | No console errors | Load every changed route in Chrome | Any error in the console, or a route that is not 200 |
+
+## Record page header, labels, sizes and save state (rules 24-28)
+
+| Rule | Text | Check |
+|---|---|---|
+| 24 Header order | A record page's header holds, in order: save state, Save, Test, one primary action, an overflow menu. At most one filled button. Pages pass them through `RecordActions`; Save answers Cmd/Ctrl+S and is listed in the command menu | `check-standards.mjs` fails a `PageLayout` under `app/build/{agents,skills,workflows/definitions}/[id]` with inline `actions` |
+| 25 Labels | A button label is one or two words, verb first; detail goes in a tooltip | `check-standards.mjs`; `scripts/rules-baseline.json` (labels) may only shrink |
+| 26 Sizes | Size comes from the size prop; no `h-*`, `size-*`, `px-*`, `py-*`, `text-xs` or `variant="link"` with `p-0` on a Button, Input, SelectTrigger, Switch, Checkbox or ToggleGroupItem outside `components/ui` and `components/shared` | same; `rules-baseline.json` (sizes) |
+| 27 Sections | One Section shape, one spacing scale | no check yet |
+| 28 Save state | `SaveState` is the only save wording: Saved, Unsaved, Saving…, Not saved. Saving… shows only after 300 ms and stays 600 ms (`lib/save-state-gate.ts`) | `check-standards.mjs` fails "Saving soon" and "Draft vN saved" |

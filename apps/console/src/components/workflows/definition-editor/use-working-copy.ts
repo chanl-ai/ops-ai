@@ -84,6 +84,7 @@ export function useWorkingCopy(view: DefinitionView, enabled: boolean, replacing
   const state: SaveState = stale ? 'stale' : save.isPending ? 'saving' : failed && failed.sent === editing ? 'failed' : editing ? 'unsaved' : 'saved';
   return {
     onChange: setEdited,
+    saveNow,
     state,
     checks,
     savedAt,

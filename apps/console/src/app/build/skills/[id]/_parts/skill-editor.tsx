@@ -240,10 +240,10 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried, keptTe
           actions={
             <>
               <Button variant="outline" size="sm" disabled={readOnly} onClick={takeMine} data-testid="skill-kept-copy-use">
-                Use my text instead
+                Use mine
               </Button>
               <Button variant="ghost" size="sm" onClick={dropMine} data-testid="skill-kept-copy-drop">
-                Drop my copy
+                Discard
               </Button>
             </>
           }
@@ -277,12 +277,12 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried, keptTe
                 <span>{p.message}</span>
                 {p.position?.field === 'steps' && p.position.step && (
                   <Button variant="link" size="sm" className="h-auto p-0" onClick={() => textDoc.current?.focusLine(lineOfStep(p.position!.step!))}>
-                    Go to step {p.position.step}
+                    Step {p.position.step}
                   </Button>
                 )}
                 {p.position?.field === 'source' && p.position.index && (
                   <Button variant="link" size="sm" className="h-auto p-0" onClick={() => textDoc.current?.focusLine(p.position!.index!)} data-testid="skill-problem-line">
-                    Go to line {p.position.index}
+                    Line {p.position.index}
                   </Button>
                 )}
               </p>
@@ -311,10 +311,10 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried, keptTe
                     <AtSign className="size-4" /> Mention
                   </Button>
                   <Button variant="ghost" size="sm" onClick={() => textDoc.current?.insert('\nif ')} data-testid="sop-add-path">
-                    <GitBranch className="size-4" /> Add a path
+                    <GitBranch className="size-4" /> Path
                   </Button>
                   <Button variant="ghost" size="sm" onClick={() => textDoc.current?.insert('\nstop "')} data-testid="sop-end-here">
-                    <Square className="size-4" /> End here
+                    <Square className="size-4" /> End
                   </Button>
                   <span className="w-full text-xs text-muted-foreground sm:ml-auto sm:w-auto">Type @ to mention · click a mention to change it · Tab indents, Esc then Tab leaves</span>
                   <span className="w-full text-xs text-muted-foreground" data-testid="sop-how-legend">
@@ -339,7 +339,7 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried, keptTe
                   <p key={k} className="flex flex-wrap items-baseline gap-x-2 text-xs text-muted-foreground" data-testid="sop-hint">
                     <span>{h.message}</span>
                     <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => textDoc.current?.focusLine(h.line)}>
-                      Go to line {h.line}
+                      Line {h.line}
                     </Button>
                   </p>
                 ))}
@@ -430,7 +430,7 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried, keptTe
               </p>
             ) : (
             <AddMenu
-              label="Add a tool operation"
+              label="Add"
               items={tools
                 .filter((t) => !form.toolIds.includes(t.toolId))
                 .map((t) => ({
@@ -479,13 +479,14 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried, keptTe
         <PageSaveActions
           dirty={dirty}
           saving={save.isPending}
+          status={save.isPending ? 'saving' : dirty ? 'unsaved' : 'saved'}
           onDiscard={discard}
           save={
             // Saving asks for a version note and says what this kind of edit needs before it goes live.
             <Popover open={noting} onOpenChange={(open) => (open ? void askNote() : setNoting(false))}>
               <PopoverTrigger asChild>
-                <Button size="sm" disabled={!dirty || !!errors.name || !!errors.parts || !endingValid || !inputsValid || save.isPending || reloading} data-testid="save-skill-draft">
-                  Save {target}
+                <Button size="sm" disabled={!dirty || !!errors.name || !!errors.parts || !endingValid || !inputsValid || save.isPending || reloading} title={`Saves ${target}`} data-testid="save-skill-draft">
+                  Save
                 </Button>
               </PopoverTrigger>
               <PopoverContent align="end" className="flex w-80 flex-col gap-3">
@@ -494,8 +495,8 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried, keptTe
                   <p className="text-sm text-muted-foreground">{errors.parts ?? EDIT_CLASS[editClass].hint}</p>
                 </div>
                 <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Add the joint account rule" aria-label="Version note" />
-                <Button size="sm" className="self-end" onClick={() => (setNoting(false), submit())} disabled={save.isPending || reloading} data-testid="save-skill-draft-confirm">
-                  Save {target}
+                <Button size="sm" className="self-end" onClick={() => (setNoting(false), submit())} disabled={save.isPending || reloading} title={`Saves ${target}`} data-testid="save-skill-draft-confirm">
+                  Save
                 </Button>
               </PopoverContent>
             </Popover>

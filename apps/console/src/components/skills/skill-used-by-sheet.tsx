@@ -83,7 +83,7 @@ function SkillUsage({ skill: s, canEdit }: { skill: SkillDetail; canEdit: boolea
               ) : u.upgradeAvailable ? (
                 <DisabledReason reason={u.upgradeBlocked}>
                   <Button variant="outline" size="sm" disabled={!!u.upgradeBlocked} onClick={() => setTarget(u)} data-testid="move-pin-button">
-                    <ArrowUpCircle className="size-3.5" /> Move to v{u.latestPublished}
+                    <ArrowUpCircle className="size-3.5" /> Update
                   </Button>
                 </DisabledReason>
               ) : (
@@ -122,7 +122,7 @@ function SkillUsage({ skill: s, canEdit }: { skill: SkillDetail; canEdit: boolea
               }}
               data-testid="move-pin-confirm"
             >
-              Move to v{target?.latestPublished}
+              Update
             </LoadingButton>
           </div>
         }

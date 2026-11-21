@@ -12,7 +12,8 @@ import { QueryError } from '@/components/shared/query-states';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { DefinitionEditor } from '@/components/workflows/definition-editor/definition-editor';
-import { SaveStateLine, workflowHeader } from '@/components/workflows/definition-editor/editor-shell';
+import { SaveState } from '@/components/shared/save-state';
+import { workflowHeader } from '@/components/workflows/definition-editor/editor-shell';
 import { useWorkingCopy } from '@/components/workflows/definition-editor/use-working-copy';
 import { useCan, useCanBuild, useMe } from '@/hooks/me-queries';
 import { useDefinition, useDefinitionChecks, useNodeTypes, usePublishWorkingCopy, useSetDefinitionPaused, useStartEngineRun, useStartWorkflow } from '@/hooks/engine-queries';
@@ -113,7 +114,8 @@ function CanvasTab({ view, types }: { view: DefinitionView; types: EngineNodeTyp
         onChange={copy.onChange}
         changed={!!view.workingCopy || copy.unsaved}
         saving={copy.unsaved}
-        saveState={canBuild ? <SaveStateLine state={copy.state} savedAt={copy.savedAt} error={copy.error} onRetry={copy.retry} /> : undefined}
+        saveState={canBuild ? <SaveState status={copy.state} detail={copy.stale ?? copy.error} onRetry={copy.retry} /> : undefined}
+        save={canBuild ? { onSave: copy.saveNow, disabled: !copy.unsaved || !!copy.stale, saving: copy.state === 'saving' } : undefined}
         startRun={startRun}
         startByHand={startByHand}
         lifecycle={view}
@@ -135,7 +137,7 @@ function CanvasTab({ view, types }: { view: DefinitionView; types: EngineNodeTyp
                 closeLabel={`Show version ${outdated.newerVersion}`}
                 actions={
                   <Button size="sm" onClick={() => (setShowingMine(false), setStartedFresh(true))} data-testid="definition-outdated-reload">
-                    {theirs ? `Replace their copy with version ${outdated.newerVersion}` : `Reload to start from version ${outdated.newerVersion}`}
+                    {theirs ? 'Replace theirs' : 'Reload'}
                   </Button>
                 }
               >
@@ -150,7 +152,7 @@ function CanvasTab({ view, types }: { view: DefinitionView; types: EngineNodeTyp
                 <AlertDescription>
                   <p>{copy.stale} Nothing more is saved from this page until you reload. Reloading shows their copy; your unsaved change on this page is dropped.</p>
                   <Button variant="outline" size="sm" className="mt-2" onClick={() => void copy.reload()} disabled={copy.reading} data-testid="definition-stale-reload">
-                    Reload their copy
+                    Reload
                   </Button>
                 </AlertDescription>
               </Alert>
