@@ -95,13 +95,12 @@ await withUiStack(
         await page.keyboard.press('Escape');
         await page.getByTestId('definition-publish').click();
         await page.getByTestId('definition-publish-blockers').waitFor({ timeout: 30_000 });
-        await page.getByTestId('definition-publish-submit').click();
-        await page.waitForTimeout(800);
+        const submitDisabled = await page.getByTestId('definition-publish-submit').isDisabled();
         const v = await view(J);
         const fixes = await page.getByTestId('definition-publish-fix').count();
         await shootBothWidths(page, 'console', 'uc-761-publish-blocked', async () => page.waitForTimeout(300));
         await page.setViewportSize({ width: 1440, height: 1000 });
-        check('5 publish lists the problem and sends nothing', fixes >= 1 && v.versions.length === 1 && (await page.getByRole('dialog').count()) === 1, { fixes, versions: v.versions.length });
+        check('5 publish lists the problem and sends nothing', submitDisabled && fixes >= 1 && v.versions.length === 1 && (await page.getByRole('dialog').count()) === 1, { fixes, versions: v.versions.length });
         await page.getByTestId('definition-publish-fix').first().click();
       });
 
@@ -139,10 +138,11 @@ await withUiStack(
         await saved();
         await page.getByTestId('definition-publish').click();
         await page.getByTestId('definition-publish-next').getByText(/goes live at once/).waitFor({ timeout: 30_000 });
+        const blockers = await page.getByTestId('definition-publish-blockers').count();
         await page.getByTestId('definition-publish-submit').click();
         await page.waitForTimeout(1500);
         const v = await view(J);
-        check('8 moving a step alone goes live with no review', v.liveVersion === 3 && !v.review, { live: v.liveVersion, review: v.review });
+        check('8 moving a step alone goes live with no review', blockers === 0 && v.liveVersion === 3 && !v.review, { blockers, live: v.liveVersion, review: v.review });
       });
 
       await step('9 Versions compares a setting old and new', async () => {
@@ -175,6 +175,46 @@ await withUiStack(
         const seen = { save: await ravi.getByTestId('definition-save-state').count(), publish: await ravi.getByTestId('definition-publish').count(), viewOnly: await ravi.getByTestId('definition-view-only').count() };
         await shootBothWidths(ravi, 'console', 'uc-761-viewer', async () => ravi.waitForTimeout(300));
         check('11 a viewer sees the canvas with no save state and no Publish', seen.save === 0 && seen.publish === 0 && seen.viewOnly === 1, seen);
+      });
+
+      // The race: Reload refetches the workflow, and the canvas must open on that copy, not on the one read before it.
+      // Five times in a row, each with the second person's page opened before the first person's save.
+      await step('12 Reload shows the newest saved copy every time, five times in a row', async () => {
+        const P = await as(PRIYA);
+        const priya = await consoleSignIn(browser, consoleUrl, PRIYA, PASSWORD, errors);
+        // A busy main thread: the cache tells its readers a moment after the read lands, which is when a Reload that
+        // takes the page's props at once would still hold the copy read before.
+        await priya.addInitScript(() => {
+          const real = window.setTimeout.bind(window);
+          window.setTimeout = ((fn, ms, ...rest) => real(fn, ms === undefined || ms === 0 ? 60 : ms, ...rest));
+        });
+        const shown = [];
+        for (let n = 1; n <= 5; n += 1) {
+          await priya.goto(`${consoleUrl}/build/workflows/definitions/${ID}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await priya.locator('[data-testid="definition-node"]').first().waitFor({ timeout: 120_000 });
+          const read = await view(J);
+          const mine = JSON.parse(JSON.stringify(read.workingCopy?.definition ?? read.definition));
+          mine.nodes.find((x) => x.id === 'note').parameters = { values: { limit: '$.input.limit', from: `james${n}` } };
+          const put = await fetch(`${agents}${path}/working-copy`, { method: 'PUT', headers: J, body: JSON.stringify({ definition: mine, baseVersion: read.saveBase.version, baseDigest: read.saveBase.digest }) });
+          const theirs = JSON.stringify({ values: { limit: '$.input.limit', from: `priya${n}` } });
+          await priya.locator('[data-testid="definition-node"]', { hasText: 'Note the new limit' }).click();
+          await priya.getByTestId('step-sheet').waitFor();
+          if (!(await priya.getByTestId('definition-node-parameters').isVisible())) await priya.getByTestId('definition-node-all-settings').click();
+          await priya.getByTestId('definition-node-parameters').fill(theirs);
+          await priya.getByTestId('definition-stale').waitFor({ timeout: 30_000 });
+          await priya.getByTestId('definition-stale-reload').click();
+          await priya.getByTestId('definition-stale').waitFor({ state: 'detached', timeout: 30_000 });
+          await priya.locator('[data-testid="definition-node"]', { hasText: 'Note the new limit' }).click();
+          await priya.getByTestId('step-sheet').waitFor();
+          if (!(await priya.getByTestId('definition-node-parameters').isVisible())) await priya.getByTestId('definition-node-all-settings').click();
+          const val = await priya.getByTestId('definition-node-parameters').inputValue();
+          // Long enough for an autosave to land, were one going to.
+          await priya.waitForTimeout(1500);
+          const after = JSON.stringify((await view(P)).workingCopy?.definition.nodes.find((x) => x.id === 'note').parameters);
+          shown.push({ n, put: put.status, val: val.includes(`james${n}`), kept: after.includes(`james${n}`) && !after.includes(`priya${n}`) });
+        }
+        check('12 Reload shows the newest saved copy every time, five times in a row', shown.every((r) => r.put === 200 && r.val && r.kept), shown);
+        await priya.close();
       });
       check('no page errors', errors.length === 0, errors);
     } finally {

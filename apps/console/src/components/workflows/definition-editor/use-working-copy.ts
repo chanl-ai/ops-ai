@@ -36,10 +36,8 @@ export function useWorkingCopy(view: DefinitionView, enabled: boolean, replacing
   const [revision, setRevision] = React.useState(0);
   const editing = edited ? JSON.stringify(edited) : null;
 
-  const readAgain = () => {
-    setReading(true);
-    return qc.refetchQueries({ queryKey: ['engine', 'definition', view.workflowId, 'latest'] }).finally(() => setReading(false));
-  };
+  // The digest of the newest copy a Reload read; the page starts over only once `view` holds it.
+  const [awaiting, setAwaiting] = React.useState<string | null>(null);
 
   const saveNow = () => {
     if (!edited || !editing) return;
@@ -71,14 +69,26 @@ export function useWorkingCopy(view: DefinitionView, enabled: boolean, replacing
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editing, enabled, save.isPending, reading, stale, failed, view.saveBase.digest]);
 
+  // The refetch resolves before the cache has told this page's props about the new copy, so starting over on the
+  // resolved promise would remount the editor on the copy read before. `reading` (which pauses autosave) therefore
+  // lasts until `view` itself carries the digest that was read.
   const reload = async () => {
-    await readAgain();
+    setReading(true);
+    await qc.refetchQueries({ queryKey: ['engine', 'definition', view.workflowId, 'latest'] });
+    const read = qc.getQueriesData<DefinitionView>({ queryKey: ['engine', 'definition', view.workflowId, 'latest'] }).find(([, v]) => v)?.[1];
+    setAwaiting(read?.saveBase.digest ?? view.saveBase.digest);
+  };
+
+  React.useEffect(() => {
+    if (awaiting === null || view.saveBase.digest !== awaiting) return;
+    setAwaiting(null);
     setEdited(null);
     setStale(null);
     setFailed(null);
     setChecks(null);
     setRevision((r) => r + 1);
-  };
+    setReading(false);
+  }, [awaiting, view.saveBase.digest]);
 
   const state: SaveState = stale ? 'stale' : save.isPending ? 'saving' : failed && failed.sent === editing ? 'failed' : editing ? 'unsaved' : 'saved';
   return {
