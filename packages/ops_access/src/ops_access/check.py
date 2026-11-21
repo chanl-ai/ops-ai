@@ -262,8 +262,8 @@ class Access:
 def granted_by(area: str, action: str, grids: Mapping[str, Iterable[Grant]] | None = None) -> list[BuiltinRole]:
     """The built-in roles that grant a cell, the narrowest first: a role holding fewer cells names the cell's purpose
     better than one holding every cell. `grids` are the workspace's own cells for the roles it names (an admin may have
-    edited them); any other role answers from its seed grid."""
-    held = {r.id: tuple((grids or {}).get(r.id, r.grants)) for r in BUILTIN_ROLES}
+    edited them), read as `effective_grids` reads them."""
+    held = effective_grids(grids or {}, BUILTIN_GRIDS)
     return sorted(
         (r for r in BUILTIN_ROLES if any((a, x) == (area, action) for a, x, _ in held[r.id])),
         key=lambda r: len(held[r.id]),

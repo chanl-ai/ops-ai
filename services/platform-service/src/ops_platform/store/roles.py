@@ -150,25 +150,10 @@ class RoleStore(TenantDb):
         """The roles on the shared list contract, with their permission and assignment counts: built-in roles first in
         their fixed order, then custom roles by name, then by id; searched on name; `builtin` and `canDecideReviews`
         ("true" or "false") keep built-in or custom roles and roles that do or do not grant reviews.decide."""
-        perms = (
-            sa.select(role_permissions.c.role_id, sa.func.count().label("n"))
-            .group_by(role_permissions.c.role_id)
-            .subquery()
-        )
         held = (
             sa.select(role_assignments.c.role_id, sa.func.count().label("n"))
             .group_by(role_assignments.c.role_id)
             .subquery()
-        )
-        q = sa.select(
-            roles.c.id,
-            roles.c.name,
-            roles.c.builtin,
-            roles.c.description,
-            sa.func.coalesce(perms.c.n, 0).label("permission_count"),
-            sa.func.coalesce(held.c.n, 0).label("assignment_count"),
-        ).select_from(
-            roles.outerjoin(perms, perms.c.role_id == roles.c.id).outerjoin(held, held.c.role_id == roles.c.id)
         )
         # One sort key: a built-in role's place in BUILTIN_ROLES ("0" and two digits), else "1" and the lower-case name.
         place = sa.case(
@@ -176,25 +161,31 @@ class RoleStore(TenantDb):
             value=roles.c.id,
             else_=sa.literal("1") + sa.func.lower(roles.c.name),
         )
-        # The filters compare query text, so each is the "true" or "false" its condition reads as. A role decides
-        # reviews when it holds the reviews.decide cell at any scope; the cells' primary key serves the lookup.
-        decides = (
-            sa.select(role_permissions.c.role_id)
-            .where(
-                role_permissions.c.tenant_id == roles.c.tenant_id,
-                role_permissions.c.role_id == roles.c.id,
-                role_permissions.c.area == "reviews",
-                role_permissions.c.action == "decide",
-            )
-            .exists()
-        )
-        flags = {
-            "builtin": sa.case((roles.c.builtin == sa.true(), "true"), else_="false"),
-            "canDecideReviews": sa.case((decides, "true"), else_="false"),
-        }
         async with self.tenant_tx(tenant_id) as c:
+            # The cells come from grids_in, as the live check reads them, never counted off the table: a built-in
+            # role with no rows holds its seed.
+            grids = await grids_in(c, [str(r) for r in (await c.execute(sa.select(roles.c.id))).scalars()])
+            deciding = sorted(r for r, g in grids.items() if any((a, x) == ("reviews", "decide") for a, x, _ in g))
+            decides = roles.c.id.in_(deciding) if deciding else sa.false()
+            # The filters compare query text, so each is the "true" or "false" its condition reads as.
+            flags = {
+                "builtin": sa.case((roles.c.builtin == sa.true(), "true"), else_="false"),
+                "canDecideReviews": sa.case((decides, "true"), else_="false"),
+            }
+            q = sa.select(
+                roles.c.id,
+                roles.c.name,
+                roles.c.builtin,
+                roles.c.description,
+                sa.func.coalesce(held.c.n, 0).label("assignment_count"),
+            ).select_from(roles.outerjoin(held, held.c.role_id == roles.c.id))
             page = await list_page(c, q, params, search=[roles.c.name], default_sort=place.asc(), filters=flags)
-        page["data"] = [RoleSummary.model_validate(r).model_dump(by_alias=True) for r in page["data"]]
+        page["data"] = [
+            RoleSummary.model_validate({**r, "permission_count": len(grids.get(str(r["id"]), []))}).model_dump(
+                by_alias=True
+            )
+            for r in page["data"]
+        ]
         return page
 
     async def role_by_id(self, tenant_id: str, role_id: str) -> RoleRow | None:

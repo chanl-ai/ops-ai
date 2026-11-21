@@ -132,7 +132,8 @@ class Roles:
         """Sets a role's cells, built-in or custom. Admin keeps every cell: 409 `admin_holds_every_cell`; Owner and
         Security admin are not edited either (`FIXED_ROLES`), 409 `role_set_by_rule`, refused before the cells are
         read so an empty list is refused too. A cell outside the catalogue is 400 `unknown_cell`; `workspace.manage`
-        on another built-in role is 400 `owner_only`.
+        on another built-in role is 400 `owner_only`; an empty list on any other built-in role is 400
+        `builtin_role_empty` (reset puts it back to its seed).
         The caller's right to change roles is checked by the route."""
         if role_id == ADMIN.id:
             raise Conflict("Admin holds every permission in its team; it is not edited.", code="admin_holds_every_cell")
@@ -144,6 +145,12 @@ class Roles:
             )
         _checked(cells)
         role = await self.store.role_by_id(tenant_id, role_id)
+        if role is not None and role.builtin and not cells:
+            # A built-in role with no rows reads as its seed, so an empty list would remove nothing.
+            raise ValidationFailed(
+                "A built-in role keeps at least one permission; reset it to go back to the cells it ships with.",
+                code="builtin_role_empty",
+            )
         if role is not None and not role.builtin:
             self._custom_cells(cells)
         elif any((a, x) == OWNER_CELL for a, x, _ in cells):

@@ -320,9 +320,12 @@ every cell (409 `admin_holds_every_cell`). Owner and Security admin come by rule
 Security team's admins, and hold privileged cells, so an edit to either is refused whatever it sends, an empty list
 included (409 `role_set_by_rule`, `FIXED_ROLES` in `catalogue.py`); reset still puts them back to the seed. Only
 Owner holds `workspace.manage` (row E42): a custom role refuses it (400 `not_for_custom_roles`) and an edited
-built-in role refuses it (400 `owner_only`). `can()` decides from the token's `grids` claim, and platform-service from
+built-in role refuses it (400 `owner_only`). An empty list on any other built-in role is refused (400
+`builtin_role_empty`): a built-in role with no rows reads as its seed, so clearing it would remove nothing; reset is
+the way back to the seed. `can()` decides from the token's `grids` claim, and platform-service from
 the rows it reads at the moment of the check. Every reader of a role's cells (the token's claim, the live check, the
-group guard and the roles page) goes through `effective_grids` (`check.py`): the stored rows, or for a built-in role
+group guard, the roles list's counts and its can-decide-reviews filter, and who holds a cell) goes through
+`effective_grids` (`check.py`): the stored rows, or for a built-in role
 with none, its seed. A token minted without the claim (a test token, the dev header caller) is answered from the
 seed.
 

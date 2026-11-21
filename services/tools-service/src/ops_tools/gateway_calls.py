@@ -343,11 +343,13 @@ class GatewayCalls:
             return {"callId": out.call_id, "status": out.status, "code": out.code, "reasons": out.reasons}
         return {"callId": out.call_id, "ok": out.ok, "output": out.output}
 
-    async def _with_live_policy(self, caller: Principal) -> Principal:
-        """`caller` carrying the tenant's requesterMayDecide as read at this call, in place of the token's copy."""
+    async def _with_live_policy(self, caller: Principal, team: str | None) -> Principal:
+        """`caller` carrying `team`'s requesterMayDecide as read at this call, in place of the token's copy. `team` is
+        the team the call asks in: a caller with no team of its own would otherwise read the workspace's value where
+        the team turned it off."""
         if self.requester_may_decide is None:
             return caller
-        may_decide = await self.requester_may_decide(caller.tenant_id, caller.team_id)
+        may_decide = await self.requester_may_decide(caller.tenant_id, team)
         return caller.model_copy(update={"policies": {**caller.policies, "requesterMayDecide": may_decide}})
 
     async def _asker_refusal(self, tenant_id: str, req: CallRequest) -> Forbidden | None:
@@ -556,7 +558,11 @@ class GatewayCalls:
             needs
             and req.approval_token is None
             and self.approver
-            and self.approver(await self._with_live_policy(caller))
+            and self.approver(
+                await self._with_live_policy(
+                    caller, caller.team_id or (req.acting_for.team_id if req.acting_for else None) or row["team_id"]
+                )
+            )
         )
         if (
             needs

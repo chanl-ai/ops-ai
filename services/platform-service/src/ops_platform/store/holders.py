@@ -14,7 +14,8 @@ from ops_service_kit.ids import now_iso
 from ops_store import Guarantee
 from ops_store.rows import rows
 
-from .tables import members, role_assignments, role_permissions, roles, teams, users
+from .roles import grids_in
+from .tables import members, role_assignments, roles, teams, users
 from .tenancy import TenantDb
 
 
@@ -54,12 +55,7 @@ class HolderStore(TenantDb):
         """The roles granting `area.action` and the active people they reach in `team_id`: assigned there or in every
         team (`*`), directly or through a team they are an active member of. Expired assignments reach nobody."""
         now = now_iso()
-        granting = (
-            sa.select(roles.c.id, roles.c.name)
-            .join(role_permissions, role_permissions.c.role_id == roles.c.id)
-            .where(role_permissions.c.area == area, role_permissions.c.action == action)
-            .order_by(roles.c.builtin.desc(), roles.c.name)
-        )
+        every = sa.select(roles.c.id, roles.c.name).order_by(roles.c.builtin.desc(), roles.c.name)
         live = sa.and_(
             role_assignments.c.team_id.in_([team_id, ANY_TEAM]),
             sa.or_(role_assignments.c.expires_at.is_(None), role_assignments.c.expires_at > now),
@@ -84,7 +80,10 @@ class HolderStore(TenantDb):
         )
         held = sa.union(direct, via_team).subquery()
         async with self.tenant_tx(tenant_id) as c:
-            found = await rows(c, granting, GrantingRole)
+            named = await rows(c, every, GrantingRole)
+            # The cells come from grids_in, as the live check reads them: a built-in role with no rows holds its seed.
+            grids = await grids_in(c, [r.id for r in named])
+            found = [r for r in named if any((a, x) == (area, action) for a, x, _ in grids.get(r.id, []))]
             reached = await rows(
                 c,
                 sa.select(users.c.id, users.c.name, users.c.email, held.c.role_id, held.c.here)

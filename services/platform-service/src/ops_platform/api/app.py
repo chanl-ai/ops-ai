@@ -1210,7 +1210,9 @@ def create_public_app(
     ) -> Any:
         """Sets a role's cells, built-in or custom; every service decides from them once the holders' tokens refresh.
         A workspace admin's (access.manage in every team): roles apply in every team. Audited; 409
-        `admin_holds_every_cell` for Admin, 400 `unknown_cell` for a cell outside the catalogue."""
+        `admin_holds_every_cell` for Admin, 409 `role_set_by_rule` for Owner and Security admin, 400 `owner_only` for
+        workspace.manage on another built-in role, 400 `builtin_role_empty` for an empty list on a built-in role (reset
+        it instead), 400 `unknown_cell` for a cell outside the catalogue."""
         await people.require_admin(actor, "access", "manage")
         cells: list[Grant] = [(c.area, c.action, c.scope) for c in body.permissions]
         edited = await roles.edit(actor.tenant_id, role_id, cells, by=actor.user_id, request_id=actor.request_id)
