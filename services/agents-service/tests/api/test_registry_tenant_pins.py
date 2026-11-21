@@ -205,19 +205,28 @@ async def test_a_seed_agent_id_another_tenant_holds_does_not_stop_the_start(empt
     other = f"t_{new_id('held')}"
     async with started(emptied_database) as (_client, _rt):
         pass
-    engine = create_async_engine(emptied_database)
+    await move_seed_agent(emptied_database, other)
+    try:
+        async with started(emptied_database) as (_client, rt), rt.db.connect() as c:
+            held = (
+                await c.execute(sa.select(registry_agents.c.tenant_id).where(registry_agents.c.id == "ag_fraud"))
+            ).scalars()
+            assert list(held) == [other]
+    finally:
+        # Later tests on the shared database start the app and run ag_fraud in the local tenant.
+        await move_seed_agent(emptied_database, LOCAL_TENANT)
+
+
+async def move_seed_agent(url: str, tenant: str) -> None:
+    """Moves the seed agent ag_fraud and the rows keyed by it into `tenant`."""
+    engine = create_async_engine(url)
     try:
         async with engine.begin() as c:
             for table in ("registry_agent_versions", "agent_skill_pins"):
                 key = sa.table(table, sa.column("agent_id"), sa.column("tenant_id"))
-                await c.execute(sa.update(key).where(key.c.agent_id == "ag_fraud").values(tenant_id=other))
+                await c.execute(sa.update(key).where(key.c.agent_id == "ag_fraud").values(tenant_id=tenant))
             await c.execute(
-                sa.update(registry_agents).where(registry_agents.c.id == "ag_fraud").values(tenant_id=other)
+                sa.update(registry_agents).where(registry_agents.c.id == "ag_fraud").values(tenant_id=tenant)
             )
     finally:
         await engine.dispose()
-    async with started(emptied_database) as (_client, rt), rt.db.connect() as c:
-        held = (
-            await c.execute(sa.select(registry_agents.c.tenant_id).where(registry_agents.c.id == "ag_fraud"))
-        ).scalars()
-        assert list(held) == [other]
