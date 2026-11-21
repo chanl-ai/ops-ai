@@ -55,8 +55,17 @@ await withUiStack(
       page.on('requestfailed', (r) => !dropped(r) && failed.push(`${who}: ${r.method()} ${r.url()} ${r.failure()?.errorText}`));
       // A save refused because someone else saved first (409) is the step under test, for the agent and the skill draft.
       const stale = (r) => r.status() === 409 && ((r.request().method() === 'PATCH' && /\/v1\/agents\/[^/]+$/.test(r.url())) || (r.request().method() === 'PUT' && /\/v1\/skills\/[^/]+\/draft$/.test(r.url())));
-      page.on('response', (r) => r.status() >= 400 && !stale(r) && failed.push(`${who}: ${r.status()} ${r.request().method()} ${r.url()}`));
+      // The walk's policy change ends the pages' tokens, so a page's next call answers 401 and the console renews the
+      // token and sends it again (request-identity.ts). Such a 401 fails the walk only if that resend never succeeds.
+      page.on('response', (r) => {
+        const call = `${who}: ${r.request().method()} ${r.url()}`;
+        if (r.status() === 401) renewed.set(call, (renewed.get(call) ?? 0) + 1);
+        else if (r.status() < 300 && renewed.get(call)) renewed.set(call, renewed.get(call) - 1);
+        else if (r.status() >= 400 && !stale(r)) failed.push(`${who}: ${r.status()} ${r.request().method()} ${r.url()}`);
+      });
     };
+    const renewed = new Map();
+    const unrenewed = () => [...renewed].filter(([, n]) => n > 0).map(([call]) => `401 never resent with success: ${call}`);
     const signIn = async (email) => {
       const page = await (await browser.newContext({ viewport: { width: 1440, height: 1000 } })).newPage();
       watch(page, email.split('@')[0]);
@@ -431,6 +440,7 @@ await withUiStack(
       const shown = await pane.getByTestId('review-approve').waitFor({ timeout: 60_000 }).then(() => true, () => false);
       check('23 a skill publish opened from Human Tasks shows in the review sheet with its approve button', policy.status === 200 && request.status === 'in_review' && shown, { policy: policy.status, request: request.status, shown });
       check('23 the workflows list and canvas, the skill editor while typing and Human Tasks, reached by sidebar links, log no errors', errors.length === seen, errors.slice(seen));
+      failed.push(...unrenewed());
       check('19 no page errors and no failed requests', errors.length === 0 && failed.length === 0, { errors, failed });
       console.log(`walk: ${errors.length} console errors, ${failed.length} failed requests`, errors, failed);
     } finally {
