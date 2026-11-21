@@ -30,7 +30,7 @@ from ..assurance_schemas import GateList, RunList, SuiteList
 from ..auth import Principal, caller_of, principal, reader_of
 from ..deps import Runtime, runtime
 from ..envelope import ok
-from ..schemas import EvalRunRecord
+from ..schemas import EvalRunRecord, EvalRunRow
 from .agents import EvalCaseInput
 
 router = APIRouter(dependencies=[Depends(principal)])
@@ -210,13 +210,13 @@ async def delete_eval_case(rt: Rt, me: Me, _: Tx, case_id: str) -> Response:
     return Response(status_code=204)
 
 
-@router.get("/v1/agents/{agent_id}/eval-runs", response_model=Envelope[ListResult[EvalRunRecord]])
+@router.get("/v1/agents/{agent_id}/eval-runs", response_model=Envelope[ListResult[EvalRunRow]])
 async def agent_eval_runs(rt: Rt, _: Reader, __: Tx, agent_id: str, q: ListQuery) -> JSONResponse:
-    """The agent's kept runs on the shared list contract, newest first, then by id. Each row carries its case
-    results, so the tab opens a run without another request."""
+    """The agent's kept runs on the shared list contract, newest first, then by id. A row leaves out the case
+    results; `GET /v1/eval-runs/{id}` carries them."""
     await agent_registry(rt).row(agent_id)
     page = await EvalStore(rt.db).runs_page(ASSET_AGENT, agent_id, q)
-    return ok({**page, "data": [stored_run(r) for r in page["data"]]})
+    return ok({**page, "data": [stored_run(r, results=False) for r in page["data"]]})
 
 
 @router.get("/v1/eval-runs/{run_id}", response_model=Envelope[EvalRunRecord])

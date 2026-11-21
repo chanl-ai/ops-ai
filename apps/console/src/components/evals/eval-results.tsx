@@ -5,7 +5,7 @@ import * as React from 'react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ms, pct } from '@/lib/format';
-import type { EvalCaseOutcome, EvalCaseResult, EvalRun } from '@/lib/types/evals';
+import type { EvalCaseOutcome, EvalCaseResult, EvalRun, EvalRunRow } from '@/lib/types/evals';
 import { cn } from '@/lib/utils';
 
 import { OutcomeText, RegressionBadge } from './eval-meta';
@@ -31,7 +31,7 @@ function failure(o: EvalCaseOutcome) {
 }
 
 /** Pass rate, regressions and cost of one kept run. */
-export function EvalRunSummary({ run }: { run: EvalRun }) {
+export function EvalRunSummary({ run }: { run: EvalRunRow }) {
   const s = run.summary;
   const tiles = [
     { label: 'Pass rate', value: s.total ? pct(s.passed / s.total) : '—', sub: `${s.passed} of ${s.total} cases`, tone: s.passed < s.total ? 'warn' : undefined },

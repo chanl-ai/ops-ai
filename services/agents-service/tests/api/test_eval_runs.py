@@ -105,6 +105,7 @@ async def test_a_kept_run_stores_the_priced_usage_of_its_turns_and_judge(
             assert (await c.put(f"/v1/agents/{AGENT}/eval-cases", json={"cases": [case]})).status_code == 200
             ran = (await c.post(f"/v1/agents/{AGENT}/eval-runs")).json()["data"]
             stored = (await c.get(f"/v1/eval-runs/{ran['id']}")).json()["data"]
+            listed = (await c.get(f"/v1/agents/{AGENT}/eval-runs")).json()["data"]["data"][0]
     found = await judge.verdict(scripted_model(), rubric, judge_evidence(turn_from_test(turn)))
     assert found.passed is True
     spent = Usage(
@@ -116,3 +117,6 @@ async def test_a_kept_run_stores_the_priced_usage_of_its_turns_and_judge(
     assert stored["costUsd"] > 0
     assert stored["costUsd"] == expected
     assert stored["unpriced"] is False
+    # A list row leaves the case results to the single read.
+    assert "results" not in listed
+    assert listed["id"] == stored["id"] and listed["unpriced"] is False

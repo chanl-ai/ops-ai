@@ -22,9 +22,13 @@ export const useEvalCases = (agentId: string) => useTeamQuery({ queryKey: ek.cas
 export const useEvalRuns = (agentId: string, p: ListParams) => usePagedQuery({ queryKey: ek.runs(agentId, p), queryFn: () => api.evals.runs(agentId, p) });
 export const useEvalRun = (runId: string | null) => useTeamQuery({ queryKey: ek.run(runId ?? ''), queryFn: () => api.evals.getRun(runId!), enabled: !!runId });
 
-/** The newest kept run: page 1 of the runs list with a page size of 1; null when none has run. */
+/** The newest kept run with its results: the id from page 1 of the runs list at a page size of 1, then the single read; null when none has run. */
 export const useLatestEvalRun = (agentId: string) =>
-  useTeamQuery({ queryKey: ek.latest(agentId), queryFn: async () => (await api.evals.runs(agentId, { page: 1, pageSize: 1 })).data[0] ?? null });
+  useTeamQuery({ queryKey: ek.latest(agentId), queryFn: async () => {
+      const newest = (await api.evals.runs(agentId, { page: 1, pageSize: 1 })).data[0];
+      return newest ? api.evals.getRun(newest.id) : null;
+    },
+  });
 
 function useEvalWrite<A, R>(agentId: string, fn: (a: A) => Promise<R>) {
   const qc = useQueryClient();

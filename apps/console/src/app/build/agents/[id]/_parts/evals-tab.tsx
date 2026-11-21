@@ -32,10 +32,10 @@ import { useCreatedRows } from '@/hooks/use-created-rows';
 import { useSticky } from '@/hooks/use-sticky';
 import { pct, relativeTime, shortId } from '@/lib/format';
 import type { Agent } from '@/lib/types/domain';
-import type { EvalCase, EvalCaseInput, EvalRun } from '@/lib/types/evals';
+import type { EvalCase, EvalCaseInput, EvalRunRow } from '@/lib/types/evals';
 
 type CaseRow = EvalCase & { rowTestId: string };
-type RunRow = EvalRun & { onRowClick: (r: EvalRun) => void; rowTestId: string };
+type RunRow = EvalRunRow & { onRowClick: (r: EvalRunRow) => void; rowTestId: string };
 type RunFilters = { trigger?: string[] };
 
 function caseColumns(onDelete: ((c: EvalCase) => void) | null): ColumnDef<CaseRow>[] {
@@ -178,7 +178,7 @@ export function EvalsTab({ agent }: { agent: Agent }) {
   const toolNames = React.useMemo(() => (grantable.data ?? []).filter((t) => agent.toolIds.includes(t.id)).map((t) => t.name), [grantable.data, agent.toolIds]);
   const caseRows: CaseRow[] = React.useMemo(() => (cases.data ?? []).map((c) => ({ ...c, rowTestId: `eval-case-${c.id}` })), [cases.data]);
   const caseCols = React.useMemo(() => caseColumns(mayRun ? setDeleting : null), [mayRun]);
-  const runRows: RunRow[] = React.useMemo(() => (runs.data?.data ?? []).map((r) => ({ ...r, onRowClick: (x: EvalRun) => setOpenRunId(x.id), rowTestId: `eval-run-${r.id}` })), [runs.data]);
+  const runRows: RunRow[] = React.useMemo(() => (runs.data?.data ?? []).map((r) => ({ ...r, onRowClick: (x: EvalRunRow) => setOpenRunId(x.id), rowTestId: `eval-run-${r.id}` })), [runs.data]);
   const runIndex = runRows.findIndex((r) => r.id === openRunId);
   const runFacets = runs.data?.facets ?? {};
   const hasCases = (cases.data?.length ?? 0) > 0;

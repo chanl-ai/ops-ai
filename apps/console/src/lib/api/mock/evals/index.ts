@@ -288,6 +288,7 @@ export function createEvalsMock(deps: EvalsDeps) {
   const publicCase = (c: EvalCase): PublicCase => ({ id: c.id, name: c.name, input: c.input, checks: c.checks.filter((k) => ['calls_tool', 'reply_contains', 'refuses', 'judge'].includes(k.type)) as PublicCase['checks'], collections: c.context.collections, status: 'active', source: c.source, createdBy: c.createdBy, createdAt: c.createdAt });
   const outcomeOf = (o: EvalCaseOutcome) => ({ status: o.status, reply: o.reply, latencyMs: o.latencyMs, checks: o.checks.map((c) => ({ label: c.label, status: c.status === 'fail' ? ('fail' as const) : ('pass' as const), reason: c.detail ?? null })) });
   /** One run as the service answers it: only the agent's own cases, and its cost with the judge checks on top. */
+  const omitResults = ({ results: _results, ...row }: PublicRun) => row;
   const publicRun = (r: StoredRun): PublicRun => {
     const own = settle(r).results.filter((x) => x.suite === 'agent');
     const live = r.compared?.label === 'live' ? r.compared.version : null;
@@ -339,7 +340,7 @@ export function createEvalsMock(deps: EvalsDeps) {
     runs: (aid, p) =>
       respond((m) => {
         agentOr404(aid);
-        return list(m === 'empty' ? [] : keptRuns(aid).map(publicRun), p, { text: (r) => `${r.id} v${r.version} ${r.startedBy}`, value: field, facetKeys: ['trigger'] }, m);
+        return list(m === 'empty' ? [] : keptRuns(aid).map((r) => omitResults(publicRun(r))), p, { text: (r) => `${r.id} v${r.version} ${r.startedBy}`, value: field, facetKeys: ['trigger'] }, m);
       }),
     getRun: (rid) => respond(() => publicRun(runs.find((r) => r.id === rid && r.trigger === 'manual') ?? notFound('Eval run'))),
   };

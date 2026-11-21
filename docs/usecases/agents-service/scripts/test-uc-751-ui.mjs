@@ -2,6 +2,8 @@
 // Headless Chromium, signed in through platform-service. A builder's saved cases and two runs show on Govern > Evals as
 // an admin and as a viewer: three tabs (no Evidence or Judges), counts equal rows, no sample data. S6: on the agent's
 // Evals tab a builder adds a judge case, runs it and reads the result and its cost; a viewer sees the tab without Add case or Run evals.
+// S7: with a failing case run on the newest version, Request publish names the failing step and Publish is disabled; once the case
+// is fixed and run again, it is enabled.
 import { AGENTS_PORT, asRole, check, chromium, consoleSignIn, finish, shootBothWidths, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
@@ -69,6 +71,34 @@ await withUiStack(
       await shootBothWidths(james, 'agents-service', 'uc-751-agent-evals-tab', async () => {
         await james.waitForTimeout(300);
       });
+      // S7: a failed blocking eval step stops the publish dialog; fixing the case and running again opens it.
+      // A new agent is a draft with nothing published, so its header offers Request publish.
+      const made = (await (await fetch(`${agents}/v1/agents`, { method: 'POST', headers: builder, body: JSON.stringify({ name: 'Wire hold desk', role: 'Checks wires before they leave' }) })).json()).data;
+      const FAILING = { cases: [{ name: 'Never says it', input: 'Hello', checks: [{ type: 'reply_contains', text: 'zzq-never-said-zzq' }] }] };
+      const PASSING = { cases: [{ name: 'Replies with words', input: 'Hello', checks: [{ type: 'reply_contains', text: 'could not find' }] }] };
+      const rerun = async (set) => {
+        const put = await fetch(`${agents}/v1/agents/${made.id}/eval-cases`, { method: 'PUT', headers: builder, body: JSON.stringify(set) });
+        const run = await fetch(`${agents}/v1/agents/${made.id}/eval-runs`, { method: 'POST', headers: builder });
+        return [put.status, run.status];
+      };
+      check('22 a failing case is saved and run on the newest version', (await rerun(FAILING)).every((c) => c === 200), null);
+      await james.goto(`${consoleUrl}/build/agents/${made.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await james.getByTestId('request-agent-publish').click({ timeout: 90_000 });
+      await james.getByTestId('eval-problem-step-pass_rate').waitFor({ timeout: 60_000 });
+      const stepText = (await james.getByTestId('eval-problem-step-pass_rate').innerText()).replace(/\s+/g, ' ');
+      check('23 Request publish names the failing pass-rate step and Publish is disabled', /Pass rate/.test(stepText) && (await james.getByTestId('confirm-agent-publish').isDisabled()), stepText);
+      check('24 the dialog shows no raw code and links to the Evals tab', (await james.getByTestId('publish-problems').getByText(/eval_failed|cannot_publish/).count()) === 0 && (await james.getByTestId('publish-problem-evals').count()) === 1, null);
+      await shootBothWidths(james, 'agents-service', 'uc-751-publish-blocked', async () => {
+        await james.waitForTimeout(300);
+      });
+      await james.keyboard.press('Escape');
+      check('25 the fixed case is saved and run again', (await rerun(PASSING)).every((c) => c === 200), null);
+      await james.goto(`${consoleUrl}/build/agents/${made.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await james.getByTestId('request-agent-publish').click({ timeout: 90_000 });
+      await james.getByTestId('confirm-agent-publish').waitFor({ timeout: 60_000 });
+      await james.waitForTimeout(1500);
+      const left = (await james.getByTestId('publish-problems').allInnerTexts()).join(' | ').replace(/\s+/g, ' ');
+      check('26 Publish is enabled once the case passes', (await james.getByTestId('eval-problem-steps').count()) === 0 && (await james.getByTestId('confirm-agent-publish').isEnabled()), left);
       const ravi = await consoleSignIn(browser, consoleUrl, VIEWER, PASSWORD, errors);
       await ravi.goto(tab, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await ravi.getByTestId('agent-evals-tab').waitFor({ timeout: 90_000 });

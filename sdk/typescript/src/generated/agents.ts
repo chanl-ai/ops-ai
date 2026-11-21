@@ -376,8 +376,8 @@ export interface paths {
         };
         /**
          * Agent Eval Runs
-         * @description The agent's kept runs on the shared list contract, newest first, then by id. Each row carries its case
-         *     results, so the tab opens a run without another request.
+         * @description The agent's kept runs on the shared list contract, newest first, then by id. A row leaves out the case
+         *     results; `GET /v1/eval-runs/{id}` carries them.
          */
         get: operations["assurance_agent_eval_runs"];
         put?: never;
@@ -6322,9 +6322,9 @@ export interface components {
              */
             success: true;
         };
-        /** Envelope[ListResult[EvalRunRecord]] */
-        Envelope_ListResult_EvalRunRecord__: {
-            data: components["schemas"]["ListResult_EvalRunRecord_"];
+        /** Envelope[ListResult[EvalRunRow]] */
+        Envelope_ListResult_EvalRunRow__: {
+            data: components["schemas"]["ListResult_EvalRunRow_"];
             /**
              * Success
              * @constant
@@ -7212,9 +7212,7 @@ export interface components {
         };
         /**
          * EvalRunRecord
-         * @description A kept run of an agent's saved cases (`app.evals.stored_run`): `version` is the newest version it ran on and
-         *     `live_version` the live one it was compared with, when that was another. `trigger` is manual or
-         *     publish_request; `started_by` is a person's email or `key:<id>`.
+         * @description One kept run with each case's result.
          */
         EvalRunRecord: {
             /** Agentid */
@@ -7230,6 +7228,39 @@ export interface components {
             ranAt: string;
             /** Results */
             results: components["schemas"]["EvalCaseResult"][];
+            /** Startedby */
+            startedBy: string;
+            /**
+             * Status
+             * @constant
+             */
+            status: "complete";
+            summary: components["schemas"]["EvalSummary"];
+            /** Trigger */
+            trigger: string;
+            /** Unpriced */
+            unpriced: boolean;
+            /** Version */
+            version: number;
+        };
+        /**
+         * EvalRunRow
+         * @description A kept run as a row of an agent's runs list (`app.evals.stored_run`): everything but the case results, which
+         *     the single read (`EvalRunRecord`) carries. `version` is the newest version it ran on and `live_version` the live
+         *     one it was compared with, when that was another. `trigger` is manual or publish_request; `started_by` is a
+         *     person's email or `key:<id>`.
+         */
+        EvalRunRow: {
+            /** Agentid */
+            agentId: string;
+            /** Costusd */
+            costUsd: number;
+            /** Id */
+            id: string;
+            /** Liveversion */
+            liveVersion: number | null;
+            /** Ranat */
+            ranAt: string;
             /** Startedby */
             startedBy: string;
             /**
@@ -8128,10 +8159,10 @@ export interface components {
             };
             pagination: components["schemas"]["Pagination"];
         };
-        /** ListResult[EvalRunRecord] */
-        ListResult_EvalRunRecord_: {
+        /** ListResult[EvalRunRow] */
+        ListResult_EvalRunRow_: {
             /** Data */
-            data: components["schemas"]["EvalRunRecord"][];
+            data: components["schemas"]["EvalRunRow"][];
             /** Facets */
             facets: {
                 [key: string]: {
@@ -14982,7 +15013,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_ListResult_EvalRunRecord__"];
+                    "application/json": components["schemas"]["Envelope_ListResult_EvalRunRow__"];
                 };
             };
             /** @description Invalid request */

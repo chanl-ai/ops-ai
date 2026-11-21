@@ -165,10 +165,10 @@ async def run_eval(
     }
 
 
-def stored_run(row: Json) -> Json:
-    """A kept run as the API answers it (`EvalRunRecord`): the start of a run, each row of an agent's runs and the
-    read of one."""
-    return {
+def stored_run(row: Json, *, results: bool = True) -> Json:
+    """A kept run as the API answers it: the start of a run and the read of one (`EvalRunRecord`), or with
+    `results=False` a row of an agent's runs list (`EvalRunRow`), which leaves the case results out."""
+    shaped: Json = {
         "id": row["id"],
         "agentId": row["asset_id"],
         "version": row["version"],
@@ -176,12 +176,12 @@ def stored_run(row: Json) -> Json:
         "trigger": row["trigger"],
         "status": EVAL_STATUS_COMPLETE,
         "summary": {"passed": row["passed"], "total": row["total"], "regressions": row["regressions"]},
-        "results": row["results"],
         "costUsd": row["cost_usd"],
         "unpriced": any(json_object(r).get("unpriced") is True for r in json_list(row["results"])),
         "startedBy": row["started_by"],
         "ranAt": row["ran_at"],
     }
+    return {**shaped, "results": row["results"]} if results else shaped
 
 
 def _case(item: Any) -> EvalCase:

@@ -2141,7 +2141,7 @@ class Operations:
         sort_by: str | None = None,
         sort_order: str | None = None,
         ids: list[str] | None = None,
-    ) -> ListResultEvalRunRecord:
+    ) -> ListResultEvalRunRow:
         "Agent Eval Runs"
         return self._t.call(
             SERVICE,
@@ -3755,7 +3755,7 @@ class AsyncOperations:
         sort_by: str | None = None,
         sort_order: str | None = None,
         ids: list[str] | None = None,
-    ) -> ListResultEvalRunRecord:
+    ) -> ListResultEvalRunRow:
         "Agent Eval Runs"
         return await self._t.call(
             SERVICE,

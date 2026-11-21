@@ -1,4 +1,4 @@
-import type { EvalCase, EvalCaseInput, EvalRun } from '@/lib/types/evals';
+import type { EvalCase, EvalCaseInput, EvalRun, EvalRunRow } from '@/lib/types/evals';
 import type { ListParams, ListResult } from '@/lib/types/query';
 
 /**
@@ -12,7 +12,7 @@ export interface EvalsApi {
   removeCase(id: string): Promise<void>;
   /** Runs the agent's saved cases and keeps the run; no saved cases is 422. */
   run(agentId: string): Promise<EvalRun>;
-  /** Kept runs, newest first; the newest is page 1 with a page size of 1. */
-  runs(agentId: string, params: ListParams): Promise<ListResult<EvalRun>>;
+  /** Kept runs without their case results, newest first; `getRun` has them. */
+  runs(agentId: string, params: ListParams): Promise<ListResult<EvalRunRow>>;
   getRun(runId: string): Promise<EvalRun>;
 }

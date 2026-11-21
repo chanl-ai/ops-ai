@@ -8026,11 +8026,11 @@
         "title": "Envelope[ListResult[DefinitionRow]]",
         "type": "object"
       },
-      "Envelope_ListResult_EvalRunRecord__": {
+      "Envelope_ListResult_EvalRunRow__": {
         "additionalProperties": false,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/ListResult_EvalRunRecord_"
+            "$ref": "#/components/schemas/ListResult_EvalRunRow_"
           },
           "success": {
             "const": true,
@@ -8042,7 +8042,7 @@
           "success",
           "data"
         ],
-        "title": "Envelope[ListResult[EvalRunRecord]]",
+        "title": "Envelope[ListResult[EvalRunRow]]",
         "type": "object"
       },
       "Envelope_ListResult_FormView__": {
@@ -10051,7 +10051,7 @@
       },
       "EvalRunRecord": {
         "additionalProperties": false,
-        "description": "A kept run of an agent's saved cases (`app.evals.stored_run`): `version` is the newest version it ran on and\n`live_version` the live one it was compared with, when that was another. `trigger` is manual or\npublish_request; `started_by` is a person's email or `key:<id>`.",
+        "description": "One kept run with each case's result.",
         "properties": {
           "agentId": {
             "title": "Agentid",
@@ -10130,13 +10130,85 @@
           "trigger",
           "status",
           "summary",
-          "results",
+          "costUsd",
+          "unpriced",
+          "startedBy",
+          "ranAt",
+          "results"
+        ],
+        "title": "EvalRunRecord",
+        "type": "object"
+      },
+      "EvalRunRow": {
+        "additionalProperties": false,
+        "description": "A kept run as a row of an agent's runs list (`app.evals.stored_run`): everything but the case results, which\nthe single read (`EvalRunRecord`) carries. `version` is the newest version it ran on and `live_version` the live\none it was compared with, when that was another. `trigger` is manual or publish_request; `started_by` is a\nperson's email or `key:<id>`.",
+        "properties": {
+          "agentId": {
+            "title": "Agentid",
+            "type": "string"
+          },
+          "costUsd": {
+            "title": "Costusd",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "liveVersion": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Liveversion"
+          },
+          "ranAt": {
+            "title": "Ranat",
+            "type": "string"
+          },
+          "startedBy": {
+            "title": "Startedby",
+            "type": "string"
+          },
+          "status": {
+            "const": "complete",
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/EvalSummary"
+          },
+          "trigger": {
+            "title": "Trigger",
+            "type": "string"
+          },
+          "unpriced": {
+            "title": "Unpriced",
+            "type": "boolean"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "agentId",
+          "version",
+          "liveVersion",
+          "trigger",
+          "status",
+          "summary",
           "costUsd",
           "unpriced",
           "startedBy",
           "ranAt"
         ],
-        "title": "EvalRunRecord",
+        "title": "EvalRunRow",
         "type": "object"
       },
       "EvalSummary": {
@@ -12575,12 +12647,12 @@
         "title": "ListResult[DefinitionRow]",
         "type": "object"
       },
-      "ListResult_EvalRunRecord_": {
+      "ListResult_EvalRunRow_": {
         "additionalProperties": false,
         "properties": {
           "data": {
             "items": {
-              "$ref": "#/components/schemas/EvalRunRecord"
+              "$ref": "#/components/schemas/EvalRunRow"
             },
             "title": "Data",
             "type": "array"
@@ -12604,7 +12676,7 @@
           "pagination",
           "facets"
         ],
-        "title": "ListResult[EvalRunRecord]",
+        "title": "ListResult[EvalRunRow]",
         "type": "object"
       },
       "ListResult_FormView_": {
@@ -31050,7 +31122,7 @@
     },
     "/v1/agents/{agent_id}/eval-runs": {
       "get": {
-        "description": "The agent's kept runs on the shared list contract, newest first, then by id. Each row carries its case\nresults, so the tab opens a run without another request.",
+        "description": "The agent's kept runs on the shared list contract, newest first, then by id. A row leaves out the case\nresults; `GET /v1/eval-runs/{id}` carries them.",
         "operationId": "assurance_agent_eval_runs",
         "parameters": [
           {
@@ -31226,7 +31298,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_ListResult_EvalRunRecord__"
+                  "$ref": "#/components/schemas/Envelope_ListResult_EvalRunRow__"
                 }
               }
             },

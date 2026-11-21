@@ -3302,6 +3302,20 @@ class EvalRunRecord(TypedDict, closed=True):
     version: int
 
 
+class EvalRunRow(TypedDict, closed=True):
+    agentId: str
+    costUsd: float
+    id: str
+    liveVersion: int | None
+    ranAt: str
+    startedBy: str
+    status: Literal["complete"]
+    summary: EvalSummary
+    trigger: str
+    unpriced: bool
+    version: int
+
+
 class FieldRead(TypedDict, closed=True):
     boxes: NotRequired[list[ReadBox]]
     bySource: NotRequired[dict[str, JsonValue] | None]
@@ -3398,8 +3412,8 @@ class ListResultDefinitionRow(TypedDict, closed=True):
     pagination: Pagination
 
 
-class ListResultEvalRunRecord(TypedDict, closed=True):
-    data: list[EvalRunRecord]
+class ListResultEvalRunRow(TypedDict, closed=True):
+    data: list[EvalRunRow]
     facets: dict[str, dict[str, int]]
     pagination: Pagination
 
@@ -4170,8 +4184,8 @@ class EnvelopeListResultDefinitionRow(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeListResultEvalRunRecord(TypedDict, closed=True):
-    data: ListResultEvalRunRecord
+class EnvelopeListResultEvalRunRow(TypedDict, closed=True):
+    data: ListResultEvalRunRow
     success: Literal[True]
 
 

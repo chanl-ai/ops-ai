@@ -389,10 +389,11 @@ class AgentEvalRun(Out):
     unpriced: bool
 
 
-class EvalRunRecord(Out):
-    """A kept run of an agent's saved cases (`app.evals.stored_run`): `version` is the newest version it ran on and
-    `live_version` the live one it was compared with, when that was another. `trigger` is manual or
-    publish_request; `started_by` is a person's email or `key:<id>`."""
+class EvalRunRow(Out):
+    """A kept run as a row of an agent's runs list (`app.evals.stored_run`): everything but the case results, which
+    the single read (`EvalRunRecord`) carries. `version` is the newest version it ran on and `live_version` the live
+    one it was compared with, when that was another. `trigger` is manual or publish_request; `started_by` is a
+    person's email or `key:<id>`."""
 
     id: str
     agent_id: str
@@ -401,11 +402,16 @@ class EvalRunRecord(Out):
     trigger: str
     status: Literal["complete"]
     summary: EvalSummary
-    results: list[EvalCaseResult]
     cost_usd: float
     unpriced: bool
     started_by: str
     ran_at: str
+
+
+class EvalRunRecord(EvalRunRow):
+    """One kept run with each case's result."""
+
+    results: list[EvalCaseResult]
     # Only on the reply of the run that was just made (`run_saved`); the CLI exits on it.
     gate: EvalGate | None = None
 

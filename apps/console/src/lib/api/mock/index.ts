@@ -816,7 +816,12 @@ export function createMockApi(): OpsApi {
       runs: (aid) => respond(() => (agentOr404(aid), [])),
       requestPublish: (aid, version, note) => respond(() => agentPublish.requestPublish(aid, version, note)),
       // The mock's requestPublish always opens a review, so its preview says so.
-      publishCheck: (aid) => respond(() => publishCheckOf(agentOr404(aid))),
+      publishCheck: (aid, version) =>
+        respond(() => {
+          const c = publishCheckOf(agentOr404(aid));
+          const problems = [...c.problems, ...agentPublish.evalProblems(aid, version)];
+          return { canRequest: problems.length === 0, problems };
+        }),
       publishPreview: () => respond(() => ({ reviewRequired: true, policy: 'major' as const, majorChange: true, reviewReason: 'major_change' as const })),
       restore: (aid, version) =>
         respond(() => {

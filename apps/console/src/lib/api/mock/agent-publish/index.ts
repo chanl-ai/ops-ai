@@ -1,3 +1,4 @@
+import type { PublishBlocker } from '@/lib/types/references';
 import type { Agent, AgentPublishRequest, AgentVersion, AgentVersionState, Review, Risk, Version, WorkflowGraph } from '@/lib/types/domain';
 
 import { ApiError, type OpsApi } from '../../contract';
@@ -237,8 +238,27 @@ export function createAgentPublishMock(deps: AgentPublishDeps) {
     },
   });
 
+  /** The eval problem a version with a failing saved case shows, as the service words it. */
+  const evalProblems = (aid: string, version: number): PublishBlocker[] => {
+    const sum = deps.evals.summaryFor(aid, version);
+    const failed = sum ? sum.total - sum.passed : 0;
+    if (!sum || failed <= 0) return [];
+    const detail = `${sum.passed} of ${sum.total} cases pass; at least 90% must.`;
+    return [
+      {
+        kind: 'eval_failed',
+        id: null,
+        position: null,
+        message: `A blocking eval step failed on version ${version}. Pass rate: ${detail}`,
+        details: { steps: [{ step: 'pass_rate', label: 'Pass rate', mode: 'blocking', result: 'fail', detail }] },
+      },
+    ];
+  };
+
   const requestPublish = (aid: string, version: number, note: string): Review => {
     const a = agentOr404(aid);
+    const stop = evalProblems(aid, version);
+    if (stop.length) throw new ApiError(`This version cannot be published yet: ${stop.map((p) => p.message).join(' ')}`, 422, undefined, 'cannot_publish', { problems: stop });
     if (openReviewOf(aid)) throw new ApiError(`${a.name} already has a publish request waiting (${openReviewOf(aid)!.id}). Decide or return it first.`, 409);
     if (version !== a.version) throw new ApiError(`Only the newest version, v${a.version}, can be sent for publish.`, 422);
     if (store.publishedOf(aid) === version) throw new ApiError(`v${version} is already published.`, 422);
@@ -261,5 +281,5 @@ export function createAgentPublishMock(deps: AgentPublishDeps) {
     });
   };
 
-  return { requestPublish, versionsView, wrapReviews, unpublishedPins, seedReviews, withBody: enrich };
+  return { requestPublish, evalProblems, versionsView, wrapReviews, unpublishedPins, seedReviews, withBody: enrich };
 }

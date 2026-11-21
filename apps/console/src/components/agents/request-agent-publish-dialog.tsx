@@ -2,7 +2,6 @@
 
 import * as React from 'react';
 
-import { EvalSummaryLine } from '@/components/evals/eval-meta';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
@@ -11,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { PublishProblems } from '@/components/agents/publish-problems';
 import { useAgentPublishCheck, useAgentPublishPreview } from '@/hooks/queries';
 import type { Ref } from '@/lib/types/references';
-import type { EvalVersionSummary } from '@/lib/types/evals';
+import type { PublishBlocker } from '@/lib/types/references';
 import type { PublishPreview } from '@/lib/types/publish-preview';
 
 /**
@@ -40,12 +39,12 @@ export function RequestAgentPublishDialog({
   version,
   publishedVersion,
   owner,
-  evalSummary,
   onSubmit,
   isPending,
   agentId,
   onGoTo,
   onAddBack,
+  onOpenEvals,
   adding,
 }: {
   open: boolean;
@@ -53,19 +52,22 @@ export function RequestAgentPublishDialog({
   version: number;
   publishedVersion: number | null;
   owner: string;
-  evalSummary?: EvalVersionSummary;
   onSubmit: (note: string) => Promise<unknown>;
   isPending: boolean;
   agentId: string;
   /** Closes the dialog and puts the caret on the heading a problem names. */
   onGoTo: (field: string) => void;
   onAddBack: (ref: Ref) => void;
+  /** Closes the dialog and shows the agent's Evals tab. */
+  onOpenEvals: () => void;
   adding?: boolean;
 }) {
   const preview = useAgentPublishPreview(agentId, version, open);
   const check = useAgentPublishCheck(agentId, version, open);
-  const problems = check.data?.problems ?? [];
-  const blocked = check.data ? !check.data.canRequest : false;
+  // A publish the service refuses (422 `cannot_publish`) shows its own list here, the same one the check returns.
+  const [refused, setRefused] = React.useState<PublishBlocker[] | null>(null);
+  const problems = refused ?? check.data?.problems ?? [];
+  const blocked = refused ? true : check.data ? !check.data.canRequest : false;
   const p = preview.data;
   const live = p ? !p.reviewRequired : false;
   const [note, setNote] = React.useState('');
@@ -74,6 +76,7 @@ export function RequestAgentPublishDialog({
     if (open) {
       setNote('');
       setError(null);
+      setRefused(null);
     }
   }, [open]);
 
@@ -106,7 +109,9 @@ export function RequestAgentPublishDialog({
                 await onSubmit(note.trim());
                 onOpenChange(false);
               } catch (e) {
-                setError((e as Error).message);
+                const err = e as { code?: string; details?: { problems?: PublishBlocker[] } };
+                if (err.code === 'cannot_publish' && err.details?.problems?.length) setRefused(err.details.problems);
+                else setError((e as Error).message);
               }
             }}
           >
@@ -119,16 +124,8 @@ export function RequestAgentPublishDialog({
         <FormField id="agent-publish-note" label="What changed" error={error ?? undefined}>
           <Input id="agent-publish-note" autoFocus value={note} onChange={(e) => (setNote(e.target.value), setError(null))} placeholder="e.g. Require a callback before any release" aria-invalid={!!error} />
         </FormField>
-        <div className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">Evals on v{version}</span>
-          {evalSummary ? (
-            <EvalSummaryLine summary={evalSummary} />
-          ) : (
-            <span className="text-muted-foreground">{live ? 'No completed run yet; publishing does not wait for one.' : 'No completed run yet. The request waits for it, and approving is blocked until it finishes.'}</span>
-          )}
-        </div>
         {check.isError && <p className="text-sm text-destructive-text">Couldn’t check the brief just now. Close this and try again.</p>}
-        <PublishProblems problems={problems} onGoTo={(f) => (onOpenChange(false), onGoTo(f))} onAddBack={onAddBack} adding={adding} />
+        <PublishProblems problems={problems} onGoTo={(f) => (onOpenChange(false), onGoTo(f))} onAddBack={onAddBack} adding={adding} onOpenEvals={() => (onOpenChange(false), onOpenEvals())} />
         {p && !live && (
           <div className="flex flex-col gap-1 text-sm" data-testid="publish-review-reason">
             <span className="font-medium">Who approves</span>

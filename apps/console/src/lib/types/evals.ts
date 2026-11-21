@@ -90,6 +90,9 @@ export interface EvalRun {
   ranAt: string;
 }
 
+/** A row of the runs list: a kept run without its case results, which the single read carries. */
+export type EvalRunRow = Omit<EvalRun, 'results'>;
+
 /** Eval result shown against one agent version (version history, publish requests). */
 export interface EvalVersionSummary {
   runId: string;
