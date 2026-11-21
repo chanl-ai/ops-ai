@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-20",
+  "title": "Workflows keep your changes until you publish",
+  "description": "The workflow editor saves your changes as you go without making a version, and Publish waits until every problem is fixed. If someone else saved first, you are told who and when instead of their work being replaced.",
+  "tag": "new"
+}

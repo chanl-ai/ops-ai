@@ -3070,7 +3070,7 @@ export interface paths {
          * @description The team's v2 workflows on the shared list contract, each at its latest version: search over name and id,
          *     `status` facets (draft, in review, live, paused, archived) under the search and before the status filter, sorted
          *     by `sortBy` then by the key, a page at a time; an archived workflow is listed only when `status` asks for it.
-         *     v1 workflows stay on /v1/workflows.
+         *     v1 workflows stay on /v1/workflows. 403 unless the caller may view the team's workflows.
          */
         get: operations["workflows_list_definitions"];
         put?: never;
@@ -3098,7 +3098,8 @@ export interface paths {
         };
         /**
          * Account Uses
-         * @description The team's workflow drafts and published versions, and agents, that name the account `name` of `app`.
+         * @description The team's workflow drafts and published versions, and agents, that name the account `name` of `app`. 403 unless
+         *     the caller may view the team's workflows.
          */
         get: operations["workflows_account_uses"];
         put?: never;
@@ -3141,7 +3142,8 @@ export interface paths {
         };
         /**
          * Get Definition
-         * @description One definition at a version (its newest when left out), its versions and its open review.
+         * @description One definition at a version (its newest when left out), its versions, its open review and its working copy.
+         *     403 unless the caller may view the team's workflows; an API key reads it without its working copy.
          */
         get: operations["workflows_get_definition"];
         put?: never;
@@ -3178,6 +3180,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/workflows/definitions/{workflow_id}/diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Diff Definitions
+         * @description The steps added, removed, changed (every setting that differs, old and new) and moved between two versions of
+         *     a workflow, its live version or its working copy. 403 unless the caller may view the team's workflows.
+         */
+        get: operations["workflows_diff_definitions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/workflows/definitions/{workflow_id}/pause": {
         parameters: {
             query?: never;
@@ -3199,6 +3222,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/workflows/definitions/{workflow_id}/publish-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Publish Preview
+         * @description What a publish of the working copy would change, what stops it (each error check), and whether the team's
+         *     publish policy would wait for a review; a change of step positions alone needs none. Nothing is made or opened.
+         *     No request transaction: the policy is read from platform-service.
+         */
+        get: operations["workflows_publish_preview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/workflows/definitions/{workflow_id}/publish-requests": {
         parameters: {
             query?: never;
@@ -3213,7 +3258,10 @@ export interface paths {
          * @description Opens a publish request for a draft in Reviews; the version goes live when a second person approves it (at once
          *     under the dev auto-approve setting). 409 when the version is not a draft or a request is already open, 422 when it
          *     no longer passes its checks, 403 unless the caller is a builder or admin of the owning team (an admin for a
-         *     workflow no team owns). The request lists what each step acts on: its operation, agent and approver.
+         *     workflow no team owns). With `baseVersion` and `baseDigest` it publishes the working copy: every blocker the
+         *     publish preview lists refuses it (422, or 403 for a mailbox the caller may not watch) before any version is made,
+         *     then the next version is made and its request opened. The request lists what each step acts on: its operation,
+         *     agent and approver.
          *     No request transaction: the team's accounts (tools-service) and the review deadline (platform-service) are asked
          *     with none open.
          */
@@ -3274,11 +3322,35 @@ export interface paths {
         /**
          * Definition Shapes
          * @description What each step of a saved version outputs, by port, before it has run: fixed by its type, built from
-         *     its settings, or read from its document type or operation. A mapping picker reads it.
+         *     its settings, or read from its document type or operation. A mapping picker reads it. 403 unless the caller may
+         *     view the team's workflows.
          *     No request transaction: the version is read, then documents-service is asked with none open.
          */
         get: operations["workflows_definition_shapes"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/workflows/definitions/{workflow_id}/working-copy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Save Working Copy
+         * @description Saves the editor's working copy as it is, failing checks and all, and answers with its checks. It makes no
+         *     version: publishing does. 409 `stale_base` when `baseVersion` and `baseDigest` are not the newest copy, with who
+         *     saved it and when: read the workflow again and repeat the change. No request transaction: documents-service is
+         *     asked for field shapes before the write.
+         */
+        put: operations["workflows_save_working_copy"];
         post?: never;
         delete?: never;
         options?: never;
@@ -3320,6 +3392,7 @@ export interface paths {
          * @description The choices a node form offers for a field with an option source (`ui.fields.*.source`): published agents,
          *     registry operations, live v2 workflows, the acting team's mailboxes (Channels > Email). `steps` comes from
          *     the definition being edited; `knowledge` is not served yet, since no built node type reads a knowledge base.
+         *     403 for agents, tools or workflows without that area's view cell, as its own list answers.
          *     No request transaction: the tools source is asked of tools-service.
          */
         get: operations["workflows_option_sources"];
@@ -5436,6 +5509,23 @@ export interface components {
             /** Suggestion */
             suggestion?: string | null;
         };
+        /** DefinitionDiffView */
+        DefinitionDiffView: {
+            /** Added */
+            added: components["schemas"]["StepRefView"][];
+            /** Changed */
+            changed: components["schemas"]["StepChangeView"][];
+            /** Connected */
+            connected: string[];
+            /** Disconnected */
+            disconnected: string[];
+            /** Moved */
+            moved: components["schemas"]["StepRefView"][];
+            /** Removed */
+            removed: components["schemas"]["StepRefView"][];
+            /** Workflow */
+            workflow: components["schemas"]["FieldChangeView"][];
+        };
         /**
          * DefinitionInput
          * @description Exactly one of `yaml` (YAML or JSON text) and `definition` (the parsed object).
@@ -5450,6 +5540,10 @@ export interface components {
         };
         /** DefinitionPublishInput */
         DefinitionPublishInput: {
+            /** Basedigest */
+            baseDigest?: string | null;
+            /** Baseversion */
+            baseVersion?: number | null;
             /**
              * Note
              * @default
@@ -5551,9 +5645,11 @@ export interface components {
             liveVersion: number | null;
             /** Name */
             name: string;
+            outdatedCopy?: components["schemas"]["OutdatedCopyView"] | null;
             /** Paused */
             paused: boolean;
             review: components["schemas"]["OpenPublishRequest"] | null;
+            saveBase: components["schemas"]["SaveBase"];
             /**
              * Stage
              * @enum {string}
@@ -5566,6 +5662,7 @@ export interface components {
             versions: components["schemas"]["DefinitionVersion"][];
             /** Workflowid */
             workflowId: string;
+            workingCopy?: components["schemas"]["WorkingCopyView"] | null;
         };
         /** DefinitionWarning */
         DefinitionWarning: {
@@ -6012,6 +6109,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[DefinitionDiffView] */
+        Envelope_DefinitionDiffView_: {
+            data: components["schemas"]["DefinitionDiffView"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[DefinitionPublished] */
         Envelope_DefinitionPublished_: {
             data: components["schemas"]["DefinitionPublished"];
@@ -6367,6 +6473,15 @@ export interface components {
         /** Envelope[PublishDecisionFields] */
         Envelope_PublishDecisionFields_: {
             data: components["schemas"]["PublishDecisionFields"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[PublishPreview] */
+        Envelope_PublishPreview_: {
+            data: components["schemas"]["PublishPreview"];
             /**
              * Success
              * @constant
@@ -6789,6 +6904,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[WorkingCopySaved] */
+        Envelope_WorkingCopySaved_: {
+            data: components["schemas"]["WorkingCopySaved"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[dict[str, list[ToolUser]]] */
         Envelope_dict_str__list_ToolUser___: {
             /** Data */
@@ -7090,6 +7214,13 @@ export interface components {
             kind: string;
             /** Label */
             label: string;
+        };
+        /** FieldChangeView */
+        FieldChangeView: {
+            after?: components["schemas"]["JsonValue"];
+            before?: components["schemas"]["JsonValue"];
+            /** Field */
+            field: string;
         };
         /**
          * FieldRead
@@ -8421,6 +8552,32 @@ export interface components {
             /** Nextcursor */
             nextCursor?: string | null;
         };
+        /**
+         * OutdatedCopyView
+         * @description A working copy made on an older version than the newest, kept so its change is not lost.
+         */
+        OutdatedCopyView: {
+            /** Baseversion */
+            baseVersion: number;
+            /** Checks */
+            checks: components["schemas"]["DefinitionCheck"][];
+            /** Definition */
+            definition: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Digest */
+            digest: string;
+            /** Newerat */
+            newerAt: string | null;
+            /** Newerby */
+            newerBy: string | null;
+            /** Newerversion */
+            newerVersion: number;
+            /** Updatedat */
+            updatedAt: string;
+            /** Updatedby */
+            updatedBy: string;
+        };
         /** OverviewCaseRow */
         OverviewCaseRow: {
             /** Customername */
@@ -8729,6 +8886,25 @@ export interface components {
         PublishIn: {
             /** Version */
             version: number;
+        };
+        /**
+         * PublishPreview
+         * @description What publishing the working copy (or the newest draft, without one) would do.
+         */
+        PublishPreview: {
+            /** Blockers */
+            blockers: components["schemas"]["DefinitionCheck"][];
+            changes: components["schemas"]["DefinitionDiffView"];
+            /** Liveversion */
+            liveVersion: number | null;
+            /** Majorchange */
+            majorChange?: boolean | null;
+            /** Policy */
+            policy?: ("always" | "major" | "never") | null;
+            /** Reviewreason */
+            reviewReason?: ("policy_always" | "security_change" | "policy_never" | "major_change" | "dev_auto_approve" | "minor_change") | null;
+            /** Reviewrequired */
+            reviewRequired?: boolean | null;
         };
         /** PublishRequestInfo */
         PublishRequestInfo: {
@@ -9598,6 +9774,17 @@ export interface components {
             payload: {
                 [key: string]: components["schemas"]["JsonValue"];
             };
+        };
+        /**
+         * SaveBase
+         * @description The copy a save is made on: its version and digest (save-base.ts `baseOf` reads it as `baseVersion` and
+         *     `baseDigest`).
+         */
+        SaveBase: {
+            /** Digest */
+            digest: string;
+            /** Version */
+            version: number;
         };
         /** SavedCase */
         SavedCase: {
@@ -10480,6 +10667,17 @@ export interface components {
             /** Status */
             status: string;
         };
+        /** StepChangeView */
+        StepChangeView: {
+            /** Fields */
+            fields: components["schemas"]["FieldChangeView"][];
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Type */
+            type: string;
+        };
         /**
          * StepCheck
          * @description What must hold before a step is done. `by` is set when the skill is saved: a rule is run on the step's result
@@ -10497,6 +10695,15 @@ export interface components {
             by?: ("rule" | "model") | null;
             /** Text */
             text: string;
+        };
+        /** StepRefView */
+        StepRefView: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Type */
+            type: string;
         };
         /** StepUpInput */
         StepUpInput: {
@@ -11981,6 +12188,44 @@ export interface components {
             status: "completed" | "stopped";
             /** Visited */
             visited: string[];
+        };
+        /**
+         * WorkingCopyInput
+         * @description The definition as the editor holds it, and the copy it was made on (`saveBase` of the view last read).
+         */
+        WorkingCopyInput: {
+            /** Basedigest */
+            baseDigest: string;
+            /** Baseversion */
+            baseVersion: number;
+            /** Definition */
+            definition: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Replacesdigest */
+            replacesDigest?: string | null;
+        };
+        /** WorkingCopySaved */
+        WorkingCopySaved: {
+            saveBase: components["schemas"]["SaveBase"];
+            workingCopy: components["schemas"]["WorkingCopyView"];
+        };
+        /** WorkingCopyView */
+        WorkingCopyView: {
+            /** Baseversion */
+            baseVersion: number;
+            /** Checks */
+            checks: components["schemas"]["DefinitionCheck"][];
+            /** Definition */
+            definition: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Digest */
+            digest: string;
+            /** Updatedat */
+            updatedAt: string;
+            /** Updatedby */
+            updatedBy: string;
         };
         /** WouldPause */
         WouldPause: {
@@ -30934,6 +31179,112 @@ export interface operations {
             };
         };
     };
+    workflows_diff_definitions: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+            };
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_DefinitionDiffView_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     workflows_pause_definition: {
         parameters: {
             query?: never;
@@ -30952,6 +31303,109 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_DefinitionView_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    workflows_publish_preview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_PublishPreview_"];
                 };
             };
             /** @description Invalid request */
@@ -31369,6 +31823,113 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_DefinitionShapes_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    workflows_save_working_copy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkingCopyInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_WorkingCopySaved_"];
                 };
             };
             /** @description Invalid request */

@@ -20,6 +20,29 @@ in [workflow nodes](../design/workflows/workflow-nodes.md) §3; edit classes, re
 
 An agent follows the same path: publish compiles a one-node plan (`ag_x@7`), and deployments name its pointer.
 
+### A workflow's working copy
+
+The workflow editor (`/build/workflows/definitions/<id>`) edits a working copy, not a version. Each change saves the
+copy a second later with the server's checks, failing ones included (`PUT /v1/workflows/definitions/{id}/working-copy`,
+`engine_working_copies`, agents migration 0121), and makes no version. Publishing is one call
+(`POST …/publish-requests` with `baseVersion` and `baseDigest`): it refuses on every blocker before anything is made,
+then makes the next version from the copy and opens its publish request; the team's publish policy lets a change of
+step positions alone go live with no review (`publish_policy.is_major`). The copy is removed only once the request is
+open. No route makes a version from the copy without publishing it.
+
+| Rule | Where |
+|---|---|
+| A save names the copy it was made on (`saveBase` of the view: the copy, or the newest version without one) and is refused with 409 `stale_base` otherwise, naming who saved first | `DefinitionStore.put_working_copy` compares under a row lock in the write's transaction, reading the copy through `team_visible` (the table is `TEAM_OWNED`); the answer is `refuse_stale` (`store/agent_registry.py`), as for agents and skills |
+| A copy made on an older version than the newest (a version saved since through `POST …/definitions`, the SDK or CLI `workflows save`) is outdated: its saves and its publish are refused with 409 `stale_base` naming that version. The view returns it as `outdatedCopy` with who saved the newer version and when, never hiding it; the editor says so, names whose copy it is, holds autosave and lets the person open the copy read-only until they choose to start from the newer version. A save on the newest version by someone other than the copy's author is refused with 409 `stale_base` naming the copy and its author, unless it names that copy (`replacesDigest`, the `digest` of `outdatedCopy`), which is how the editor's start-over replaces it | `DefinitionStore.put_working_copy`, `engine.py` `definition_view`, `_publish_copy`; the definition page |
+| What stops a publish is one list, `engine_lifecycle.blockers`, read through `engine.py` `_publishable`: a publish request already open (409 `review_open`), a copy equal to a stored version that is live or paused (409 `not_a_draft`), error checks, AI steps while the team has them off, an email trigger on a mailbox the publisher may not watch, accounts the team does not have, and a document type that cannot be pinned. The publish right and a stale base are refused before it. The preview lists all of them and the publish refuses on the first before any version is made; the policy reads that open the request (publishReview and the review deadline, `engine_lifecycle.policy_reads`) are made before the version too, so a failed read leaves the versions and the copy as they were and the same publish can be sent again, so the dialog never shows fewer problems than the publish refuses on; Publish and Send for review stay disabled while one is listed | `engine_lifecycle.blockers`, `engine.py` `_publishable`, `_publish_copy`, `publish_preview`; `publish-state.ts` |
+| An autosave locks the newest version row only, a few columns, and the copy; a publish locks every row of the workflow and also takes the autosave's own newest-row statement, because on SQL Server a lock read through another index does not block it. Every lock goes through `ops_store.dialect.locked` (FOR UPDATE on PostgreSQL, UPDLOCK and ROWLOCK on SQL Server). After the wait SQL Server reads the new version and refuses the save as stale; PostgreSQL writes it on the version it waited on, so it shows as an outdated copy. `test_stale_saves.py` holds a real publish and an older row's lock in a second session on both databases | `DefinitionStore.put_working_copy`, `publish`, `go_live`, `delete_draft` |
+| A refused workflow save is never sent again, even after the person's own save from another tab: the canvas is one field, so a resend would replace that tab's whole canvas. The page says who saved and offers Reload. Agents resend their own (field-merged) saves | `use-working-copy.ts`; `lib/save-base.ts` for agents |
+| Publish waits while a change on screen is unsaved, so the version and its preview are made from what is on screen | `lifecycle.tsx`, the definition page's `saving` |
+| A copy equal to an older, superseded version (a restore) publishes as a new draft version; the copy is removed only after the version is stored. A save that waited on the publish's lock ends differently on each database: PostgreSQL writes it on the version it waited on, kept as an outdated copy behind the new version, and SQL Server refuses it as stale, so the editor reloads and saves again. Either way no acknowledged save is lost. One definition may sit at several versions (agents migration 0122) | `DefinitionStore.publish(reopen=True)`, `rebase_working_copy` |
+| The publish preview decides on the copy as its version will store it (parsed, defaults filled), as the publish does | `engine.py` `publish_preview` |
+| Who may save: `workflows.edit`; who may publish: `workflows.publish`, both through `can()`. The view's working copy and `GET …/diff` need `workflows.view`; the rest of the view does not check it yet | `engine_lifecycle.require_rights`, `engine.py` `definition_view`, `diff_definitions` |
+| What changed between two versions, the live one or the copy, every setting old and new | `ops_engine/diff.py`; `GET …/diff?from=&to=`; the reviewer's change list reads the same diff |
+
 ## The pin
 
 | Rule | Detail |

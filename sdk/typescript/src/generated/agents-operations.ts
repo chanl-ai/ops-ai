@@ -1932,6 +1932,20 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "workflows_diff_definitions": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/workflows/definitions/{workflow_id}/diff",
+    "pathParams": [
+      "workflow_id"
+    ],
+    "query": [
+      "from",
+      "to"
+    ],
+    "stream": false
+  },
   "workflows_discard_draft": {
     "body": null,
     "headers": [],
@@ -2148,6 +2162,17 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "workflows_publish_preview": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/workflows/definitions/{workflow_id}/publish-preview",
+    "pathParams": [
+      "workflow_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "workflows_request_definition_publish": {
     "body": "json",
     "headers": [],
@@ -2263,6 +2288,17 @@ export const agentsOperations = {
     "headers": [],
     "method": "PUT",
     "path": "/v1/workflows/{workflow_id}/draft",
+    "pathParams": [
+      "workflow_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "workflows_save_working_copy": {
+    "body": "json",
+    "headers": [],
+    "method": "PUT",
+    "path": "/v1/workflows/definitions/{workflow_id}/working-copy",
     "pathParams": [
       "workflow_id"
     ],

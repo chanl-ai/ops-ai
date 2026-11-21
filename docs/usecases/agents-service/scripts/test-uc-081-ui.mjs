@@ -93,11 +93,11 @@ await withUiStack(
       const lookup = page.locator('[data-testid="definition-node"][data-node-id="lookup"]');
       const ports = (await lookup.locator('[data-port]').evaluateAll((els) => els.map((e) => e.getAttribute('data-port')))).sort();
       const expected = [...tool.inputs, ...tool.outputs].map((p) => p.name).sort();
-      await page.getByTestId('definition-checks-count').getByText(/No problems/).waitFor({ timeout: 30_000 }).catch(() => undefined);
-      const clean = (await page.getByTestId('definition-checks-count').innerText()).includes('No problems');
+      await page.getByTestId('definition-problems').getByText(/No problems/).waitFor({ timeout: 30_000 }).catch(() => undefined);
+      const clean = (await page.getByTestId('definition-problems').innerText()).includes('No problems');
       check('the editor draws every node with the ports its server type declares, and the server finds no problem', nodes === 9 && JSON.stringify(ports) === JSON.stringify(expected) && clean, { nodes, ports, expected, clean });
 
-      // A parameter the type's schema refuses is the server's check, on that node; Save waits until it is fixed.
+      // A parameter the type's schema refuses is the server's check, on that node; the header counts it until it is fixed.
       const bigNode = page.locator('[data-testid="definition-node"][data-node-id="big"]');
       await bigNode.dblclick({ timeout: 10_000 });
       // The node's form is generated from its type; All settings shows the same parameters as JSON.
@@ -107,12 +107,12 @@ await withUiStack(
       await params.fill('{"conditions": "not a list"}');
       // The step's sheet names the check at its top; the floating count says one error.
       const shown = await page.getByTestId('step-sheet-errors').waitFor({ timeout: 30_000 }).then(() => true, () => false);
-      const blocked = await page.getByTestId('definition-save').isDisabled();
+      const blocked = await page.getByTestId('definition-problems').getByText('1 problem').waitFor({ timeout: 30_000 }).then(() => true, () => false);
       const marked = (await page.locator('[data-testid="definition-node"][data-node-id="big"][data-error]').count()) === 1;
       await params.fill(original);
-      await page.getByTestId('definition-checks-count').getByText(/No problems/).waitFor({ timeout: 30_000 }).catch(() => undefined);
-      const cleared = (await page.getByTestId('definition-checks-count').innerText()).includes('No problems') && !(await page.getByTestId('definition-save').isDisabled());
-      check('a parameter the schema refuses shows as the server check on that node and blocks Save until fixed', shown && blocked && marked && cleared, { shown, blocked, marked, cleared });
+      await page.getByTestId('definition-problems').getByText(/No problems/).waitFor({ timeout: 30_000 }).catch(() => undefined);
+      const cleared = (await page.getByTestId('definition-problems').innerText()).includes('No problems');
+      check('a parameter the schema refuses shows as the server check on that node and counts as a problem until fixed', shown && blocked && marked && cleared, { shown, blocked, marked, cleared });
 
       // Start a run from the editor with no worker (a test run: the definition is a draft): it waits in the queue and
       // the run page says so.

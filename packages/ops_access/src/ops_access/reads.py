@@ -12,10 +12,16 @@ from ops_identity import CurrentCaller, Principal
 from .check import can
 
 
+def require_view(p: Principal, area: str) -> None:
+    """The check `reader_of` mounts, for a route that lists another area's records (a picker's options): 403
+    `forbidden` without `<area>.view`. An API key is not asked, as on a read route."""
+    if p.kind != "api_key":
+        can(p, area, "view", team=p.team_id or None, what=f"the team's {area}", code="forbidden")
+
+
 def reader_of(area: str) -> Callable[..., Awaitable[Principal]]:
     async def dependency(p: CurrentCaller) -> Principal:
-        if p.kind != "api_key":
-            can(p, area, "view", team=p.team_id or None, what=f"the team's {area}", code="forbidden")
+        require_view(p, area)
         return p
 
     return dependency

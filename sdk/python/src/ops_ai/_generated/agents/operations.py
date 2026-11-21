@@ -1531,6 +1531,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "workflows_diff_definitions": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/workflows/definitions/{workflow_id}/diff",
+        "pathParams": ["workflow_id"],
+        "query": ["from", "to"],
+        "stream": False,
+    },
     "workflows_discard_draft": {
         "body": None,
         "headers": [],
@@ -1684,6 +1693,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "workflows_publish_preview": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/workflows/definitions/{workflow_id}/publish-preview",
+        "pathParams": ["workflow_id"],
+        "query": [],
+        "stream": False,
+    },
     "workflows_request_definition_publish": {
         "body": "json",
         "headers": [],
@@ -1779,6 +1797,15 @@ OPERATIONS: dict[str, Operation] = {
         "headers": [],
         "method": "PUT",
         "path": "/v1/workflows/{workflow_id}/draft",
+        "pathParams": ["workflow_id"],
+        "query": [],
+        "stream": False,
+    },
+    "workflows_save_working_copy": {
+        "body": "json",
+        "headers": [],
+        "method": "PUT",
+        "path": "/v1/workflows/definitions/{workflow_id}/working-copy",
         "pathParams": ["workflow_id"],
         "query": [],
         "stream": False,
@@ -3254,10 +3281,29 @@ class Operations:
             SERVICE, OPERATIONS["workflows_archive_definition"], {"workflow_id": workflow_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
+    def workflows_diff_definitions(
+        self, workflow_id: str, *, from_: str | None = None, to: str | None = None
+    ) -> DefinitionDiffView:
+        "Diff Definitions"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["workflows_diff_definitions"],
+            {"workflow_id": workflow_id},
+            {"from": from_, "to": to},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
     def workflows_pause_definition(self, workflow_id: str) -> DefinitionView:
         "Pause Definition"
         return self._t.call(
             SERVICE, OPERATIONS["workflows_pause_definition"], {"workflow_id": workflow_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    def workflows_publish_preview(self, workflow_id: str) -> PublishPreview:
+        "Publish Preview"
+        return self._t.call(
+            SERVICE, OPERATIONS["workflows_publish_preview"], {"workflow_id": workflow_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
     def workflows_request_definition_publish(self, workflow_id: str, body: DefinitionPublishInput) -> PublishReview:
@@ -3287,6 +3333,12 @@ class Operations:
             {},
             {},
             None,
+        )  # type: ignore[no-any-return]
+
+    def workflows_save_working_copy(self, workflow_id: str, body: WorkingCopyInput) -> WorkingCopySaved:
+        "Save Working Copy"
+        return self._t.call(
+            SERVICE, OPERATIONS["workflows_save_working_copy"], {"workflow_id": workflow_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
     def workflows_node_types(self) -> list[NodeTypeView]:
@@ -4852,10 +4904,29 @@ class AsyncOperations:
             SERVICE, OPERATIONS["workflows_archive_definition"], {"workflow_id": workflow_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
+    async def workflows_diff_definitions(
+        self, workflow_id: str, *, from_: str | None = None, to: str | None = None
+    ) -> DefinitionDiffView:
+        "Diff Definitions"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["workflows_diff_definitions"],
+            {"workflow_id": workflow_id},
+            {"from": from_, "to": to},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
     async def workflows_pause_definition(self, workflow_id: str) -> DefinitionView:
         "Pause Definition"
         return await self._t.call(
             SERVICE, OPERATIONS["workflows_pause_definition"], {"workflow_id": workflow_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def workflows_publish_preview(self, workflow_id: str) -> PublishPreview:
+        "Publish Preview"
+        return await self._t.call(
+            SERVICE, OPERATIONS["workflows_publish_preview"], {"workflow_id": workflow_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
     async def workflows_request_definition_publish(
@@ -4887,6 +4958,12 @@ class AsyncOperations:
             {},
             {},
             None,
+        )  # type: ignore[no-any-return]
+
+    async def workflows_save_working_copy(self, workflow_id: str, body: WorkingCopyInput) -> WorkingCopySaved:
+        "Save Working Copy"
+        return await self._t.call(
+            SERVICE, OPERATIONS["workflows_save_working_copy"], {"workflow_id": workflow_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
     async def workflows_node_types(self) -> list[NodeTypeView]:

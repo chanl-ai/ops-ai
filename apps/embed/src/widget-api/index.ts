@@ -5,6 +5,7 @@ import type { ChatApi } from '@/lib/api/chat-contract';
 import { ApiError, type OpsApi } from '@/lib/api/contract';
 import { readSse } from '@/lib/api/sse';
 import { AuthError, type AuthProvider } from '@/lib/auth/provider';
+import type { SignInPolicy } from '@/lib/types/sign-in';
 
 let deployment = '';
 let session: string | null = null;
@@ -126,3 +127,6 @@ export const authProvider: AuthProvider = {
 
 /** The widget has no sign-in; shared console hooks import this name from @/lib/api. */
 export const demoSignInOffered = false;
+
+/** The widget has no sign-in, so no sign-in policy; shared console hooks import this name from @/lib/api. */
+export const readShellSignInPolicy = (): Promise<SignInPolicy | null> => Promise.resolve(null);
