@@ -10,6 +10,7 @@ or, during start, while the `make wt` process that is starting it is."""
 from __future__ import annotations
 
 import argparse
+import contextlib
 import html
 import json
 import os
@@ -20,12 +21,19 @@ import sys
 import time
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[1]
 LIMIT = 3
 # Clear of the default stack and of the offsets tests and lanes use. Not 50000: the mail ports move by offset/10 and
 # GreenMail's SMTP (3025 + 5000) would land on the default stack's Mailpit (8025).
 FIRST_OFFSET = 51000
 STEP = 1000
+# Offsets tried, in order. Those whose highest port is over MAX_PORT are listed and refused by name, so a machine with
+# every usable offset taken says why instead of "no free slot".
+CANDIDATES = 10
+MAX_PORT = 65535
 CONSOLE_BASE = 3016
+# Ports the stack does not bind when OPS_INFRA=external (postgres, opa and the mail servers run as side containers).
+INFRA_PORTS = ("OPS_PG_PORT", "OPS_OPA_PORT", "OPS_GREENMAIL_", "OPS_MAILPIT_")
 
 
 def alive(pid: int) -> bool:
@@ -45,8 +53,9 @@ def slug(branch: str) -> str:
 
 
 class Previews:
-    def __init__(self, run_root: Path, page: Path | None):
+    def __init__(self, run_root: Path, page: Path | None, data_root: Path | None = None):
         self.run_root, self.page = run_root, page
+        self.data_root = data_root or run_root.parent / ".data"
         self.reg = run_root / "previews"
 
     def entries(self) -> list[dict]:
@@ -124,12 +133,59 @@ class Previews:
         if len(live) >= LIMIT:
             names = ", ".join(f"{e['branch']} ({self.url(e)})" for e in live)
             return 0, f"refused: {LIMIT} previews already run: {names}. Stop one with make wt-stop BRANCH=<branch>."
-        used = {int(e["offset"]) for e in live}
-        for n in range(LIMIT):
+        return self.first_usable(branch, live)
+
+    def data_owner(self, offset: int) -> str | None:
+        """The branch the offset's data folder belongs to: its marker, else the registry entry at that offset.
+        None when the folder holds data nobody here claims."""
+        marker = self.data_root / f"offset-{offset}" / "branch"
+        try:
+            return marker.read_text().strip() or None
+        except OSError:
+            pass
+        for e in self.entries():
+            if int(e["offset"]) == offset:
+                self.mark_data(offset, e["branch"])
+                return e["branch"]
+        return None
+
+    def data_size(self, offset: int) -> str:
+        total = sum(f.stat().st_size for f in (self.data_root / f"offset-{offset}").rglob("*") if f.is_file())
+        return f"{total / 1e6:.0f} MB" if total >= 1e6 else f"{total // 1000} KB"
+
+    def mark_data(self, offset: int, branch: str) -> None:
+        d = self.data_root / f"offset-{offset}"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "branch").write_text(branch)
+
+    def own_pids(self, offset: int) -> set[int]:
+        pids: set[int] = set()
+        for f in (self.run_root / f"offset-{offset}").glob("*.pid"):
+            with contextlib.suppress(OSError, ValueError):
+                pids.add(int(f.read_text().strip()))
+        return pids
+
+    def first_usable(self, branch: str, live: list[dict]) -> tuple[int, str | None]:
+        listeners = listening()
+        taken = {int(e["offset"]): e for e in live}
+        why: list[str] = []
+        for n in range(CANDIDATES):
             off = FIRST_OFFSET + n * STEP
-            if off not in used:
-                return off, None
-        return 0, "refused: no free slot"
+            if off in taken:
+                why.append(f"{off} (preview {taken[off]['branch']})")
+                continue
+            held = blockers(ports_for(off, clean_env()), listeners, set())
+            if (self.data_root / f"offset-{off}").is_dir() and self.data_owner(off) != branch:
+                owner = self.data_owner(off)
+                held.append(
+                    f"data in .data/offset-{off} ({self.data_size(off)}) belongs to "
+                    + (owner or "no known branch; the owner can remove the folder to reuse the offset")
+                )
+            if held:
+                why.append(f"{off} ({brief(held)})")
+                continue
+            return off, None
+        return 0, "refused: no usable offset: " + ", ".join(why)
 
     def register(self, branch: str, offset: int, directory: Path) -> Path:
         self.reg.mkdir(parents=True, exist_ok=True)
@@ -161,9 +217,94 @@ def run(*cmd: str, cwd: Path | None = None, check: bool = True) -> subprocess.Co
     return subprocess.run(cmd, cwd=cwd, check=check)
 
 
-def port_free(port: int) -> bool:
-    r = subprocess.run(["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN"], capture_output=True, text=True, check=False)
-    return not r.stdout.strip()
+def ports_for(offset: int, env: dict[str, str]) -> dict[int, str]:
+    """Every port the stack binds at this offset, as {port: variable}. They come from make/env.mk through
+    `make port-list`, the one place the ports are defined; this script keeps no list of its own."""
+    cmd = ["make", "-s", "-C", str(ROOT), "port-list", f"OPS_PORT_OFFSET={offset}"]
+    r = subprocess.run(cmd, capture_output=True, text=True, env=env, check=False)
+    out: dict[int, str] = {}
+    for line in r.stdout.splitlines():
+        name, _, val = line.partition("=")
+        if not val.strip().isdigit():
+            continue
+        if env.get("OPS_INFRA") == "external" and name.startswith(INFRA_PORTS):
+            continue
+        out[int(val)] = name
+    if not out:
+        raise SystemExit(f"preview: make port-list printed no ports: {r.stderr.strip()}")
+    return out
+
+
+def tool_output(cmd: list[str]) -> str:
+    """A helper tool's stdout; a tool that is not installed (CI, a devcontainer) is skipped with a one-line warning,
+    and the rest of the check still runs."""
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, check=False).stdout
+    except FileNotFoundError:
+        print(f"warning: {cmd[0]} not found; skipping the part of the port check that needs it", file=sys.stderr)
+        return ""
+
+
+def with_descendants(pids: set[int]) -> set[int]:
+    """The pids plus every process below them: a stack's pid file holds the launcher (pnpm, uv), and the process
+    that listens is its child."""
+    kids: dict[int, list[int]] = {}
+    for line in tool_output(["ps", "-A", "-o", "pid=,ppid="]).splitlines():
+        parts = line.split()
+        if len(parts) == 2 and all(x.isdigit() for x in parts):
+            kids.setdefault(int(parts[1]), []).append(int(parts[0]))
+    out, todo = set(pids), list(pids)
+    while todo:
+        for k in kids.get(todo.pop(), []):
+            if k not in out:
+                out.add(k)
+                todo.append(k)
+    return out
+
+
+def listening() -> dict[int, list[tuple[int, str]]]:
+    """{port: [(pid, command)]} for every TCP listener, from one lsof call."""
+    out: dict[int, list[tuple[int, str]]] = {}
+    pid, cmd = 0, ""
+    for line in tool_output(["lsof", "-nP", "-iTCP", "-sTCP:LISTEN", "-Fpcn"]).splitlines():
+        if line[:1] == "p" and line[1:].isdigit():
+            pid, cmd = int(line[1:]), ""
+        elif line[:1] == "c":
+            cmd = line[1:]
+        elif line[:1] == "n" and ":" in line:
+            tail = line.rsplit(":", 1)[1]
+            if tail.isdigit():
+                out.setdefault(int(tail), []).append((pid, cmd))
+    return out
+
+
+def docker_ports(project: str) -> set[int]:
+    """Host ports the compose project's containers publish; docker's own process holds them, not the stack's pids."""
+    cmd = ["docker", "ps", "--filter", f"label=com.docker.compose.project={project}", "--format", "{{.Ports}}"]
+    return {int(m) for m in re.findall(r":(\d+)->", tool_output(cmd))}
+
+
+def brief(held: list[str], limit: int = 2) -> str:
+    """The first few blockers of one offset, so a refusal stays one readable line."""
+    more = f" (+{len(held) - limit} more)" if len(held) > limit else ""
+    return "; ".join(held[:limit]) + more
+
+
+def blockers(
+    ports: dict[int, str], listeners: dict[int, list[tuple[int, str]]], own: set[int], own_ports: set[int] | None = None
+) -> list[str]:
+    """What stops a stack using these ports: a port over MAX_PORT, or a listener that is not in `own`."""
+    out = []
+    if max(ports) > MAX_PORT:
+        out.append(f"ports run up to {max(ports)}, above {MAX_PORT}")
+    for port in sorted(ports):
+        if port > MAX_PORT:
+            continue
+        for pid, cmd in listeners.get(port, []):
+            if pid in own or port in (own_ports or set()):
+                continue
+            out.append(f"port {port} ({ports[port]}) held by pid {pid} {cmd}")
+    return out
 
 
 def start(p: Previews, a: argparse.Namespace) -> int:
@@ -171,14 +312,12 @@ def start(p: Previews, a: argparse.Namespace) -> int:
     if why:
         print(why, file=sys.stderr)
         return 1
-    if not port_free(CONSOLE_BASE + off):
-        print(f"refused: port {CONSOLE_BASE + off} is held by something else", file=sys.stderr)
-        return 1
     home, wt = Path(a.home), Path(a.worktrees) / a.branch
     if a.dry_run:
         print(f"would start {a.branch} at offset {off} in {wt}")
         return 0
     entry = p.register(a.branch, off, wt)
+    p.mark_data(off, a.branch)
     try:
         git = ["git", "-C", str(home)]
         run(*git, "fetch", "-q", "origin", f"+refs/heads/{a.branch}:refs/remotes/origin/{a.branch}", check=False)
@@ -230,6 +369,35 @@ def start(p: Previews, a: argparse.Namespace) -> int:
     return 0
 
 
+def check_offset(p: Previews, a: argparse.Namespace) -> int:
+    """`make up OPS_PORT_OFFSET=N`: refuse when a port of N is held by something that is not this checkout's stack at N,
+    or N belongs to another preview's worktree. Same blockers() as the offset picker."""
+    off, root = a.offset, Path(a.root).resolve()
+    held = []
+    for e in p.entries():
+        if int(e["offset"]) == off and e["running"] and Path(e["dir"]).resolve() != root:
+            held.append(f"offset {off} runs the preview of {e['branch']} ({e['dir']})")
+    branch = (
+        a.branch
+        or subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True, text=True, check=False
+        ).stdout.strip()
+    )
+    if branch and branch != "HEAD" and (p.data_root / f"offset-{off}").is_dir():
+        marker = p.data_root / f"offset-{off}" / "branch"
+        if not marker.exists():
+            p.mark_data(off, branch)  # a hand-started stack's folder, claimed by the worktree restarting it
+        elif marker.read_text().strip() != branch:
+            held.append(f"data in .data/offset-{off} belongs to {marker.read_text().strip()}, not {branch}")
+    ports = ports_for(off, dict(os.environ))
+    own_ports = docker_ports(f"ops-runtime-{off}") if any(v > 0 for v in ports) else set()
+    held += blockers(ports, listening(), with_descendants(p.own_pids(off)), own_ports)
+    if held:
+        print(f"refused: offset {off} is in use: " + brief(held, 4), file=sys.stderr)
+        return 1
+    return 0
+
+
 def stop(p: Previews, a: argparse.Namespace) -> int:
     mine = [e for e in p.entries() if e["branch"] == a.branch]
     if not mine:
@@ -253,15 +421,20 @@ def stop(p: Previews, a: argparse.Namespace) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["start", "list", "stop"])
+    ap.add_argument("cmd", choices=["start", "list", "stop", "check-offset"])
     ap.add_argument("--branch", default="")
     ap.add_argument("--home", default=".")
     ap.add_argument("--worktrees", default="")
     ap.add_argument("--run-root", required=True)
     ap.add_argument("--page", default="")
+    ap.add_argument("--data-root", default="")
+    ap.add_argument("--offset", type=int, default=0)
+    ap.add_argument("--root", default=str(ROOT))
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
-    p = Previews(Path(a.run_root), Path(a.page) if a.page else None)
+    p = Previews(Path(a.run_root), Path(a.page) if a.page else None, Path(a.data_root) if a.data_root else None)
+    if a.cmd == "check-offset":
+        return check_offset(p, a)
     if a.cmd == "list":
         return p.listing()
     if not a.branch:
