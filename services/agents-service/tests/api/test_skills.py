@@ -133,6 +133,8 @@ async def test_names_and_bodies_over_their_caps_are_refused(tmp_path: Path) -> N
     async with _app(str(tmp_path / "db.sqlite")) as c:
         r = await c.post("/v1/skills", json={**HARDSHIP, "name": "x" * 201})
         assert (r.status_code, r.json()["error"]["code"]) == (400, "name_too_long")
+        r = await c.post("/v1/skills", json={**HARDSHIP, "name": "Hard\x00ship"})
+        assert (r.status_code, r.json()["error"]["code"]) == (400, "bad_name")
         r = await c.post("/v1/skills", json={**HARDSHIP, "instructions": "x" * 24001})
         assert (r.status_code, r.json()["error"]["code"]) == (400, "instructions_too_long")
 

@@ -1,6 +1,6 @@
 ---
 name: ops-debug
-description: Diagnose a failing Ops AI service: which one is down, its log, its port, a stale process, or a second stack in the way. Use when a page errors, a make target fails, or a service will not start.
+description: Diagnose a failing Ops AI service: which one is down, its log, its port, a stale process, or a second stack in the way. Use when a page, target or service fails.
 allowed-tools: Bash(make *) Bash(uv run *) Bash(python3 *) Read Grep Glob
 ---
 

@@ -2,7 +2,9 @@
 name: leak-scan
 
 on:
+  # edited: a fixed title or body is scanned again; a rerun replays the old event's body.
   pull_request:
+    types: [opened, synchronize, reopened, edited]
 
 permissions:
   contents: read

@@ -89,7 +89,7 @@ await withUiStack(
       );
       check(
         '2b the sheet names the workflow, its version and the step and links the run, offers no Return on a workflow step, and shows money to two decimals',
-        /^Mailed document v\d+ · Check the read/.test(subtitle) && runHref === `/workflows/runs/${started.runId}` && returnable === 0 && amount === '100.00',
+        /^Mailed document v\d+ · Check the read/.test(subtitle) && runHref === `/build/runs/${started.runId}` && returnable === 0 && amount === '100.00',
         { subtitle, runHref, returnable, amount },
       );
 
@@ -132,7 +132,7 @@ await withUiStack(
       const taskHref = decisionsShown ? await decisions.getByRole('link').first().getAttribute('href') : null;
       check(
         '3c the run page lists the decision with the person, when, and a link to the task',
-        decisionsShown && /Check the read/.test(decisionText) && /Approve by Maya Okafor/.test(decisionText) && /(just now|\dm ago)/.test(decisionText) && new RegExp(`^/reviews/${started.runId}%3Acheck%3A\\d+$`).test(taskHref ?? ""),
+        decisionsShown && /Check the read/.test(decisionText) && /Approve by Maya Okafor/.test(decisionText) && /(just now|\dm ago)/.test(decisionText) && new RegExp(`^/work/tasks/${started.runId}%3Acheck%3A\\d+$`).test(taskHref ?? ""),
         { decisionText, taskHref },
       );
 
@@ -287,7 +287,7 @@ await withUiStack(
       await page.locator('[data-testid="node-repeats"]').first().screenshot({ path: join(eachShots, 'node-repeats-1280.png') });
       check(
         '4d the run lists the levy case it started for the debtor with its status, and the canvas says the step runs for each debtor read',
-        childrenShown && childLinks.some((h) => h === `/workflows/runs/${encodeURIComponent(levy.id)}` || h === `/workflows/runs/${levy.id}`) && childStatus.length > 0 && repeats.some((t) => /^for each \w+ from /i.test(t.trim())),
+        childrenShown && childLinks.some((h) => h === `/build/runs/${encodeURIComponent(levy.id)}` || h === `/build/runs/${levy.id}`) && childStatus.length > 0 && repeats.some((t) => /^for each \w+ from /i.test(t.trim())),
         { childLinks, childStatus, repeats },
       );
 
