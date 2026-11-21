@@ -86,12 +86,17 @@ with agents() as api:
         ).text
     )
     refused = [e["data"] for e in logged if e["type"] == "agent_call_refused"]
+    outcomes = [
+        e["data"]["output"].get("status")
+        for e in logged
+        if isinstance(e.get("data"), dict)
+        and e["data"].get("tool") == "agent__ag_dispute"
+        and isinstance(e["data"].get("output"), dict)
+    ]
     check(
-        "7 a scheduled run with no person is refused its granted agent, and the thread's log says so",
-        published.status_code == 201
-        and refused == [{"agentId": "ag_branch", "withheld": ["ag_dispute"], "code": "no_caller"}]
-        and '"answered"' not in str(logged).replace("'", '"'),
-        {"publish": published.status_code, "job": job, "refused": refused},
+        "7 a scheduled run with no person acts as its agent and asks the agent of its own team",
+        published.status_code == 201 and refused == [] and "answered" in outcomes,
+        {"publish": published.status_code, "job": job, "refused": refused, "outcomes": outcomes},
     )
 
     again = data(api.post("/chat/threads", json={"agentId": "ag_branch", "kbIds": []}, headers=TEAM))
@@ -100,6 +105,43 @@ with agents() as api:
         "8 the same agent in a person's chat still asks it",
         [(c["name"], (c.get("output") or {}).get("status")) for c in ended] == [("agent__ag_dispute", "answered")],
         ended,
+    )
+
+    capped = data(api.post("/v1/threads", json={"graph": "agent:ag_branch", "budget": {"maxCalls": 3}}, headers=TEAM))
+    runs = f"/v1/threads/{capped['threadId']}/runs/stream"
+    state = f"/v1/threads/{capped['threadId']}/state"
+    asked = sse(api.post(runs, json={"input": {"message": ask}}, headers=TEAM, timeout=120).text)
+    outputs = [e["data"].get("output") for e in asked if isinstance(e.get("data"), dict)]
+    path = [step.split("@")[0] for out in outputs if isinstance(out, dict) for step in out.get("path") or []]
+    spent = data(api.get(state, headers=TEAM))["cost"]["calls"]
+    api.post(runs, json={"input": {"message": "And the deadline?"}}, headers=TEAM, timeout=120)
+    paused = (data(api.get(state, headers=TEAM)).get("interrupt") or {}).get("payload") or {}
+    check(
+        "9 the specialist's model call is spent from the asking run's budget, which then waits for its person",
+        (path, spent, paused.get("kind"), paused.get("limit")) == (["ag_branch", "ag_dispute"], 3, "budget_exhausted", "calls"),
+        {"path": path, "spent": spent, "paused": paused},
+    )
+
+    api.post(runs, json={"resume": {"decision": "approved"}}, headers=TEAM, timeout=120)
+    after = data(api.get(state, headers=TEAM))
+    check(
+        "10 continuing the budget finishes the waiting turn",
+        not after.get("interrupt") and after["cost"]["calls"] > 3,
+        {"interrupt": after.get("interrupt"), "cost": after["cost"]},
+    )
+
+    tight = data(api.post("/v1/threads", json={"graph": "agent:ag_branch", "budget": {"maxCalls": 1}}, headers=TEAM))
+    cut = sse(
+        api.post(
+            f"/v1/threads/{tight['threadId']}/runs/stream", json={"input": {"message": ask}}, headers=TEAM, timeout=120
+        ).text
+    )
+    stopped = [o.get("status") for e in cut if isinstance(e.get("data"), dict) and isinstance(o := e["data"].get("output"), dict)]
+    closed = data(api.get(f"/v1/threads/{tight['threadId']}/state", headers=TEAM))
+    check(
+        "11 a specialist asked at the cap makes no model call, and the asking agent answers once from what it has",
+        "budget_reached" in stopped and closed["cost"]["calls"] == 2 and not closed.get("interrupt"),
+        {"stopped": stopped, "cost": closed["cost"], "interrupt": closed.get("interrupt")},
     )
 
 src = ROOT / "services" / "agents-service" / "src" / "ops_agents"

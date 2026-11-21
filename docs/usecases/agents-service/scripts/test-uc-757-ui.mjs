@@ -123,9 +123,10 @@ await withUiStack(
       const chip = await page.getByTestId('skill-document').getByRole('group', { name: 'Step 2' }).getByTestId('reference-chip').boundingBox();
       await page.mouse.click(chip.x - 2, chip.y + chip.height / 2);
       await page.keyboard.press('Enter');
-      // A step's spoken label keeps its old number until the step is drawn again, so the new last step is found by place.
       const stepGroups = page.getByTestId('skill-document').getByRole('group', { name: /^Step \d/ });
       await stepGroups.nth(3).waitFor({ timeout: 60_000 });
+      const spoken = await stepGroups.evaluateAll((els) => els.map((el) => el.getAttribute('aria-label')));
+      check('10 after a step is added above, each step is announced by its new number', spoken.join() === 'Step 1,Step 2,Step 3,Step 4', spoken);
       await stepGroups.nth(3).click();
       await page.keyboard.press('End');
       // One insert, as a paste is: the check is about what Reload keeps, not about key-by-key typing.

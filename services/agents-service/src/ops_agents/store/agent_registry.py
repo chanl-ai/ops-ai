@@ -17,6 +17,7 @@ from ops_service_kit.errors import Conflict, NotFound
 from ops_service_kit.http import Json, JsonList, Out
 from ops_service_kit.ids import canonical_json, new_id, now_iso
 from ops_service_kit.listing import ListParams
+from ops_service_kit.names import SLUG_SUFFIX, cap_slug
 from ops_store import Guarantee, isolation
 from ops_store.dialect import json_text
 from ops_store.listing import LISTED, ListPage, list_page
@@ -191,7 +192,9 @@ def refuse_stale(base: tuple[int, str], version: int, digest: str, *, saved_by: 
 
 
 def slugify(name: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "agent"
+    # Cut before `_unique_slug` adds "-n": the column is 120 wide and a name may be 200 long.
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    return cap_slug(slug, 120, reserve=SLUG_SUFFIX) or "agent"
 
 
 def changes_between(old: Json | None, new: Json) -> list[str]:

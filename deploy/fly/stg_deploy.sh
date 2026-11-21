@@ -9,6 +9,8 @@
 #   5 signed in  the first admin signs in and lists agents through the public origin (platform issues, agents verifies)
 #   6 walk    docs/usecases/lib/stg_click_walk.mjs signs in and opens every console page and the first row of each list;
 #             SKIP_WALK=1 leaves it out
+#   7 smoke   deploy/fly/smoke.mjs makes, publishes and runs things through the public origin in OPS_SMOKE_TEAM (default
+#             team_security) and removes them; SKIP_SMOKE=1 leaves it out
 # STG_ROLLBACK=1 (make stg-rollback) is a different run: REF's image is already pushed, so it only replaces the machine
 # with it (step 2, `fly machine update`, so the release command does not run) and waits for every process (step 4). No grants, OCR, plugin, sign-in or walk step: migrations only
 # add, so the older image runs on the newer schema, and grants for an older ref are already applied.
@@ -71,15 +73,6 @@ if [ "$rollback" = 1 ]; then
   done
   step "rollback (machines updated)"
 else
-  # The release command migrates on a machine of its own while the app's machine would keep serving the old release;
-  # some migrations rewrite rows that release still writes (agents 0120), so the machine is stopped first
-  # (docs/deploy/upgrade.md). A request during the release command can still wake it (fly.toml auto_start_machines).
-  # Only a started machine; one already stopped or suspended runs nothing.
-  for m in $(fly machine list -a "$app" --json | python3 -c \
-    "import json,sys; print(' '.join(x['id'] for x in json.load(sys.stdin) if x.get('state') == 'started'))"); do
-    fly machine stop "$m" -a "$app" --wait-timeout 120s
-  done
-  step "stop (every process)"
   fly deploy "$work/src" -c "$work/src/deploy/fly/fly.toml" -a "$app" --image "$image" --ha=false \
     --wait-timeout 10m
   step "deploy (release command and machine)"
@@ -181,5 +174,16 @@ fi
 ok=$(grep -c '^OK' "$work/walk.txt" || true)
 fail=$(grep -c '^FAIL' "$work/walk.txt" || true)
 step "click walk ($ok OK, $fail FAIL)"
+smoke_ok=0
+if [ "${SKIP_SMOKE:-0}" = 1 ]; then
+  echo "stg-deploy: smoke skipped (SKIP_SMOKE=1)"
+  smoke_ok=1
+else
+  # The smoke walk renews its session through the SDK's transport, which runs from its build.
+  pnpm -C "$root/sdk/typescript" build >"$work/sdk-build.log" 2>&1 || { tail -20 "$work/sdk-build.log"; exit 1; }
+  if OPS_SMOKE_EMAIL=$(pair OPS_BOOTSTRAP_ADMIN_EMAIL) OPS_SMOKE_PASSWORD=$(pair OPS_BOOTSTRAP_ADMIN_PASSWORD) \
+    OPS_SMOKE_TEAM="${OPS_SMOKE_TEAM:-team_security}" node "$root/deploy/fly/smoke.mjs" "$origin"; then smoke_ok=1; else echo "FAIL smoke exited $?"; fi
+  step "smoke"
+fi
 echo "stg-deploy: $app at $sha in $(( $(date +%s) - begin ))s; $origin"
-[ "$fail" = 0 ] && [ "$ok" -gt 0 ]
+[ "$fail" = 0 ] && [ "$ok" -gt 0 ] && [ "$smoke_ok" = 1 ]

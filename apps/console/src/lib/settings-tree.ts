@@ -15,6 +15,10 @@ export const WEBHOOKS: NavNeed = { area: 'webhooks', action: 'view' };
 export const USAGE: NavNeed = { area: 'usage', action: 'view' };
 /** platform-service lists a team's API keys to whoever manages its access. */
 export const API_KEYS: NavNeed = { area: 'access', action: 'manage' };
+/** platform-service reads the workspace's policies (GET /v1/policies) to whoever holds access.view where they act. */
+export const POLICIES_VIEW: NavNeed = { area: 'access', action: 'view' };
+/** The gates belong to the team's reviews: who reads Human Tasks reads them. */
+export const GATES_VIEW: NavNeed = { area: 'reviews', action: 'view' };
 
 export interface SettingsEntry {
   id: string;
@@ -38,10 +42,10 @@ export const SETTINGS_NAV: SettingsEntry[] = [
   { id: 'notifications', title: 'Notifications', href: '/settings/team/notifications', icon: IconBell, description: 'Where approvals, SLA warnings and alerts go', group: 'Team' },
   { id: 'webhooks', title: 'Webhooks', href: '/settings/team/webhooks', icon: IconWebhook, description: 'Send events to the bank’s other systems', group: 'Team', needs: WEBHOOKS },
   { id: 'api-keys', title: 'API keys', href: '/settings/team/api-keys', icon: IconKey, description: 'Keys for systems that start runs or read logs', group: 'Team', needs: API_KEYS },
-  { id: 'policies', title: 'Workspace policies', href: '/govern/policies', icon: IconShieldCheck, description: 'Who may decide what, and how long things may wait', group: 'Govern', section: 'Policies' },
-  { id: 'approvals', title: 'Approvals', href: '/settings/approvals', icon: IconShieldCheck, description: 'Whether agents ask before they change an app, and who answers', group: 'Govern', section: 'Policies' },
-  { id: 'publish-reviews', title: 'Publish reviews', href: '/settings/policies/publish-reviews', icon: IconGitPullRequest, description: 'Which publishes need a second person’s review', group: 'Govern', section: 'Policies' },
-  { id: 'gates', title: 'Gate policies', href: '/settings/policies/gates', icon: IconGavel, description: 'Who reviews at each gate and how long they have', group: 'Govern', section: 'Policies' },
+  { id: 'policies', title: 'Workspace policies', href: '/govern/policies', icon: IconShieldCheck, description: 'Who may decide what, and how long things may wait', group: 'Govern', section: 'Policies', needs: POLICIES_VIEW },
+  { id: 'approvals', title: 'Approvals', href: '/settings/approvals', icon: IconShieldCheck, description: 'Whether agents ask before they change an app, and who answers', group: 'Govern', section: 'Policies', needs: POLICIES_VIEW },
+  { id: 'publish-reviews', title: 'Publish reviews', href: '/settings/policies/publish-reviews', icon: IconGitPullRequest, description: 'Which publishes need a second person’s review', group: 'Govern', section: 'Policies', needs: POLICIES_VIEW },
+  { id: 'gates', title: 'Gate policies', href: '/settings/policies/gates', icon: IconGavel, description: 'Who reviews at each gate and how long they have', group: 'Govern', section: 'Policies', needs: GATES_VIEW },
   { id: 'sign-in', title: 'Sign-in', href: '/settings/security/sign-in', icon: IconLogin, description: 'Sign-in methods, single sign-on, two-step verification and sessions', group: 'Govern', section: 'Security' },
   { id: 'egress', title: 'Egress', href: '/settings/security/egress', icon: IconWorld, description: 'Hosts and private ranges tool calls may reach', group: 'Govern', section: 'Security' },
 ];
@@ -119,3 +123,17 @@ export const LIVE_TREE: SidebarTree = {
   personal: PERSONAL_SETTINGS,
   find: findInSettings,
 };
+
+/**
+ * The groups the sidebar draws for a person: each row and child whose `needs` they hold (lib/nav.ts `Allows`). A section
+ * whose every page is hidden is left out, so no heading opens onto nothing.
+ */
+export function offeredGroups(tree: SidebarTree, allows: (needs?: NavNeed) => boolean | undefined): SidebarTree['groups'] {
+  return tree.groups.map((g) => ({
+    ...g,
+    items: g.items
+      .filter((i) => allows(i.needs) === true)
+      .map((i) => ({ ...i, children: i.children?.filter((c) => allows(c.needs) === true) }))
+      .filter((i) => !i.children || i.children.length > 0),
+  }));
+}

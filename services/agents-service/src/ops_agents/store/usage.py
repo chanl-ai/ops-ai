@@ -7,6 +7,7 @@ from decimal import Decimal
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
+from pydantic import JsonValue
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_agents.graphs.metering import CallSite
@@ -17,9 +18,11 @@ from ops_store import Guarantee
 from ops_store.dialect import db_now, upsert
 from ops_store.rows import one
 from ops_store.schema import TENANT_SCOPED, system
+from ops_store.team_scope import team_visible
 
 from .base import metadata
-from .model_calls import UNATTRIBUTED, ModelCall, ModelCallLedger
+from .graphs import graph_threads
+from .model_calls import UNATTRIBUTED, ModelCall, ModelCallLedger, model_call_records
 from .tenancy import RuntimeStore, current_tenant
 
 thread_budgets = sa.Table(
@@ -66,6 +69,21 @@ def _micros(amount: Decimal) -> int:
 
 def _amount(micros: int | None) -> Decimal:
     return Decimal(micros or 0) * MICRO
+
+
+def _asked_by(meta: JsonValue) -> str | None:
+    """The thread whose agent asked this thread's agent, from the two keys api/agent_calls.py writes on a specialist's
+    thread; None for any other thread, a workflow an agent started included, whose spend stays on its own budget.
+    Neither key can come from a request body (routers/graphs.py SERVER_META)."""
+    if not isinstance(meta, dict):
+        return None
+    parent = meta.get("parentThreadId")
+    return str(parent) if parent and meta.get("calledBy") else None
+
+
+def _agent_conversation(graph: str) -> bool:
+    """Whether a thread on `graph` is an agent's conversation: the shared chat graph or a published agent's own."""
+    return graph == "agent_wrapper" or graph.startswith("agent:")
 
 
 class UsageLedger(RuntimeStore):
@@ -117,7 +135,40 @@ class UsageLedger(RuntimeStore):
         )
 
     async def totals(self, thread_id: str) -> Totals:
-        return (await self.calls.sums(thread_id, by_run=False)).get(None, Totals())
+        """What the thread has spent, with what the specialists it asked spent on their own threads. A specialist's
+        calls are recorded once, on its thread, and counted here, so a chain's spend is charged to the thread it
+        started on and never twice."""
+        m, t = model_call_records.c, graph_threads.c
+        children = sa.select(t.id).where(t.parent_thread_id == thread_id, team_visible(graph_threads))
+        spent = [sa.func.coalesce(sa.func.sum(x), 0) for x in (m.calls, m.input_tokens, m.output_tokens, m.cost_micros)]
+        per_thread = (
+            sa.select(
+                m.thread_id,
+                *(s.label(n) for s, n in zip(spent, ("calls", "tokens_in", "tokens_out", "micros"), strict=True)),
+            )
+            .where(sa.or_(m.thread_id == thread_id, m.thread_id.in_(children)))
+            .group_by(m.thread_id)
+            .subquery()
+        )
+        # One statement: each thread's sums with its meta, which says whether a child thread is a specialist's. Only
+        # the acting team's threads are joined, so a thread of another team, the first one included, counts nothing.
+        q = (
+            sa.select(
+                per_thread.c.thread_id,
+                per_thread.c.calls,
+                per_thread.c.tokens_in,
+                per_thread.c.tokens_out,
+                per_thread.c.micros,
+                t.meta,
+            )
+            .select_from(per_thread.join(graph_threads, t.id == per_thread.c.thread_id))
+            .where(team_visible(graph_threads))
+        )
+        async with self.tx() as c:
+            found: list[tuple[Any, ...]] = [tuple(r) for r in (await c.execute(q)).all()]
+        counted = [r for r in found if r[0] == thread_id or _asked_by(r[5]) == thread_id]
+        calls, tokens_in, tokens_out, micros = (sum(int(r[i]) for r in counted) for i in (1, 2, 3, 4))
+        return Totals(calls, tokens_in, tokens_out, _amount(micros))
 
     async def totals_by_run(self, thread_id: str) -> dict[str | None, Totals]:
         return await self.calls.sums(thread_id, by_run=True)
@@ -152,3 +203,29 @@ class UsageLedger(RuntimeStore):
         if budget is None or budget.is_empty():
             return None
         return exhausted(await self.totals(thread_id), budget)
+
+    async def chain_root(self, thread_id: str) -> str | None:
+        """The thread whose budget an agent's reply on `thread_id` counts against: itself, or for a specialist's
+        thread the thread its chain started on, read from what api/agent_calls.py wrote when the specialist was asked.
+        None for a thread that is not an agent's conversation."""
+        t = graph_threads.c
+        q = sa.select(t.graph, t.meta).where(t.id == thread_id, team_visible(graph_threads))
+        async with self.tx() as c:
+            row = (await c.execute(q)).first()
+        if row is None or not _agent_conversation(str(row[0] or "")):
+            return None
+        meta: JsonValue = row[1]
+        asked = _asked_by(meta)
+        if asked is None or not isinstance(meta, dict):
+            return thread_id
+        chain = meta.get("chain")
+        return str((chain.get("rootThreadId") if isinstance(chain, dict) else None) or asked)
+
+    async def spent_before_call(self, thread_id: str) -> str | None:
+        """Asked before every model call of a graph run: the thread whose spent budget the call would count against,
+        or None when the call may run. Only an agent's conversation is stopped here. A workflow's agent step is
+        checked where the step starts (graphs/metering.py `guard`), which pauses it for a person: ending it part-way
+        would hand a half-done step to the next node. `totals` counts a chain one call deep, as deep as chains go
+        today (ops_contracts.chain.MAX_DEPTH)."""
+        root = await self.chain_root(thread_id)
+        return root if root is not None and await self.exhausted(root) is not None else None

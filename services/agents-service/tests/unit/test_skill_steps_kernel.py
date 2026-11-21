@@ -625,11 +625,12 @@ async def test_an_ending_stays_final_however_many_skills_end_after_it_in_the_rep
     aside: list[Action] = [("switch_skill", {"slug": "small-talk"}), ("exit", {"name": "failed"})] * 6
     model = Script(START, over, *aside, START, over, "CH-1 is over the limit.")
     one, _ = await reply(ask, model, systems)
-    refunds = [e for e in ended(run_of(one)) if e[0] == "sk_refund"]
-    assert refunds == [("sk_refund", "blocked", 1)], f"the blocked skill ran once: {ended(run_of(one))}"
-    # A second lookup of the same charge would be answered from the reply's kept reads, so the refusal is read
-    # from what the second start was told.
-    assert "cannot start again in this reply" in json.dumps(model.returned[-2:]), model.returned[-2:]
+    # A forgotten ending lets the skill start a second time, and its second ending then reads the same on the
+    # record. What tells the two apart is how often the model was put on the skill's first step.
+    told = json.dumps(model.returned)
+    assert told.count("Now on Refund a charge, step 1") == 1, model.returned[-3:]
+    assert "cannot start again in this reply" in told, model.returned[-3:]
+    assert ("sk_refund", "blocked", 1) in ended(run_of(one)) and len(ended(run_of(one))) == 7, ended(run_of(one))
 
     # The next reply starts with the usual few, none marked as this reply's.
     later, _ = await reply(replace(carrying(ask, run_of(one)), turn_id="t2", user_turn="Thanks."), Script("Ok."))
@@ -659,3 +660,27 @@ async def test_a_read_a_builder_locked_to_its_step_runs_only_as_that_step() -> N
     assert "locked" not in program({"do": "Look up.", "use": {"kind": "tool", "id": "x"}}).steps[0].model_dump(
         exclude_none=True
     )
+
+
+async def test_a_workflow_a_step_runs_is_refused_outside_the_skill_and_runs_as_its_step() -> None:
+    """A step names a workflow by its id; the service grants it under another spelling. Matched by the wrong one,
+    the workflow is free to start with no skill running, and its step never sees it run."""
+    steps = program(
+        {
+            "do": "Close the case.",
+            "use": {"kind": "workflow", "id": "wf_close"},
+            "check": {"text": 'result.status == "closed"', "by": "rule"},
+        },
+        {"do": "Say it is closed."},
+    )
+    skill = stepped("sk_close", 1, "Close a case", "close-a-case", steps)
+    close = tool("workflow__wf_close", "workflow")
+    systems = Systems(**{"workflow__wf_close": {"status": "closed"}})
+    ask = TurnRequest("t1", "th1", agent([skill], max_steps=12), [LOOKUP, close], user_turn="Close case 7.")
+    free: Call = ("workflow__wf_close", {"case": "1"})
+    start: Call = ("workflow__wf_close", {"case": "7"})
+    model = Script(free, ("switch_skill", {"slug": "close-a-case"}), start, "It is closed.")
+    result, _ = await reply(ask, model, systems)
+    assert "workflow__wf_close" not in model.offered[0], model.offered[0]
+    assert systems.calls == [start], f"refused with no skill running, run once as the step: {model.returned}"
+    assert run_of(result).running.step == 2, "the step saw its workflow's result and passed its rule"

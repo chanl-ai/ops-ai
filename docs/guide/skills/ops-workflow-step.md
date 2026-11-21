@@ -3,7 +3,7 @@
 Status: current. Proven by `make skills-proof`.
 
 skill: ops-workflow-step
-description: Add a new workflow step type (node kind) to the engine: its definition, ports, parameters and form, its executor, and its tests. Use when someone needs a step that no existing type can be configured to do.
+description: Add a new workflow step type (node kind) to the engine: its definition, ports, parameters and form, its executor, and its tests. Use for a step no existing type can do.
 targets: uv run pytest packages/ops_engine/tests, make usecase-test UC=uc-081
 
 ## When to use it

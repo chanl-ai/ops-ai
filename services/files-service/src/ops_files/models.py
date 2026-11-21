@@ -11,6 +11,7 @@ from typing import Literal
 from pydantic import ConfigDict, Field
 
 from ops_service_kit.http import In, ListResult, Out
+from ops_service_kit.names import FileName
 
 FilePurpose = Literal[
     "knowledge_source",
@@ -195,7 +196,7 @@ class StoredFile(FileDetail):
 
 
 class UploadRequest(In):
-    name: str
+    name: FileName
     size: int = Field(gt=0)
     mime: str
     purpose: FilePurpose

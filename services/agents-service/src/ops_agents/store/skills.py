@@ -20,6 +20,7 @@ from ops_service_kit import narrow
 from ops_service_kit.errors import Conflict
 from ops_service_kit.http import Json, JsonList, Out
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.names import cap_slug
 from ops_store import Guarantee
 from ops_store.dialect import json_text
 from ops_store.listing import LISTED
@@ -87,7 +88,7 @@ registry_skill_versions = sa.Table(
 
 
 def slug_of(name: str) -> str:
-    return (re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "skill")[:64].rstrip("-")
+    return cap_slug(re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-"), 64) or "skill"
 
 
 LABELS = {

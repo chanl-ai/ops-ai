@@ -9680,6 +9680,8 @@
             "type": "string"
           },
           "name": {
+            "maxLength": 200,
+            "minLength": 1,
             "title": "Name",
             "type": "string"
           }
@@ -10177,6 +10179,7 @@
             "anyOf": [
               {
                 "maxLength": 200,
+                "minLength": 1,
                 "type": "string"
               },
               {
@@ -10826,6 +10829,8 @@
             "type": "string"
           },
           "name": {
+            "maxLength": 200,
+            "minLength": 1,
             "title": "Name",
             "type": "string"
           },
@@ -21962,17 +21967,6 @@
             "title": "Metadata",
             "type": "object"
           },
-          "parentThreadId": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Parentthreadid"
-          },
           "version": {
             "anyOf": [
               {
@@ -23933,6 +23927,8 @@
             "type": "object"
           },
           "name": {
+            "maxLength": 200,
+            "minLength": 1,
             "title": "Name",
             "type": "string"
           },

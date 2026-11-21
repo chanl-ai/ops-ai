@@ -16,7 +16,7 @@ import { selectColumn } from '@/components/shared/select-column';
 import { StopRowClick } from '@/components/shared/form-field';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { ReadOnlyNotice } from '@/components/shared/builder-only';
-import { ListEmpty, QueryError } from '@/components/shared/query-states';
+import { ListEmpty, NoAccess, QueryError } from '@/components/shared/query-states';
 import { Button } from '@/components/ui/button';
 import { useBulkDeletePolicies, useBulkUpdatePolicies, useCreatePolicy, useDeletePolicy, useLookups, usePolicies, useUpdatePolicy } from '@/hooks/queries';
 import { useCan } from '@/hooks/me-queries';
@@ -110,6 +110,7 @@ function columns(onEdit: (p: GatePolicy) => void, onDelete: (p: GatePolicy) => v
 export default function GatePoliciesPage() {
   const list = useListParams<PolicyFilters>('name');
   // Everyone in the team reads the gates (reviews.view); whoever manages the team's reviews changes them.
+  const mayRead = useCan('reviews', 'view');
   const canManage = useCan('reviews', 'manage') === true;
   const query = usePolicies(list.params);
   const { data: lookups } = useLookups();
@@ -151,8 +152,11 @@ export default function GatePoliciesPage() {
         )
       }
     >
-      <ReadOnlyNotice noun="gates" area="reviews" canEdit={canManage} />
-      {query.isPending ? (
+      {mayRead !== false && <ReadOnlyNotice noun="gates" area="reviews" canEdit={canManage} />}
+      {/* The rows are sample data, which no server refuses: the page checks the cell itself. */}
+      {mayRead === false ? (
+        <NoAccess what="gate policies" />
+      ) : query.isPending ? (
         <PageSkeleton statCards={0} tableRows={7} />
       ) : query.isError && !query.data ? (
         <QueryError what="gate policies" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />

@@ -86,6 +86,7 @@ from ops_service_kit.http import (
 )
 from ops_service_kit.listing import ListQuery
 from ops_service_kit.logging import get_logger
+from ops_service_kit.names import FileName
 from ops_service_kit.settings import Settings
 from ops_storage.base import ObjectLockedError, ObjectNotFoundError, content_disposition
 from ops_store import isolation
@@ -137,7 +138,7 @@ class BulkDeleteIn(In):
 class ReferenceIn(In):
     type: FileReferenceType
     ref_id: str
-    name: str
+    name: FileName
     href: str | None = None
 
 

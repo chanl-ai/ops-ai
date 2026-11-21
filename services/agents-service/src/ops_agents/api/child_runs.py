@@ -28,6 +28,7 @@ from ops_service_kit.logging import get_logger
 
 from ..store.engine import DatabaseError, EngineTransactions
 from ..store.events import EventLog
+from ..store.graphs import StoredThread
 from ..store.leases import LeaseHeldError
 from ..store.tenancy import NoTenantError, current_team
 from .auth import Principal, caller_of
@@ -38,11 +39,31 @@ from .workflow_registry import registry, thread_pin
 
 log = get_logger("ops_agents.api.child_runs")
 
-# The person a chat turn runs for. A workflow an agent holds as a tool is offered and started only when that
-# person may start it: the turn's authority is the person's rights and the agent's grants together. A run with no person
-# (an unattended agent run) acts as the agent; a chat turn whose person is not known (a turn resumed after a decision)
-# starts no workflow.
+# The person a chat turn runs for. A workflow or an agent that an agent holds as a tool is offered and started only
+# when that person may reach it: the turn's authority is the person's rights and the agent's grants together. A turn
+# with no person follows `refused_with_no_person`.
 TURN_PERSON: ContextVar[Principal | None] = ContextVar("ops_turn_person", default=None)
+
+
+def refused_with_no_person(parent: StoredThread | None, team: str | None, what: str) -> ApiError | None:
+    """Why a turn with no person, on thread `parent`, may not reach `what` (a workflow or an agent owned by `team`);
+    None when it may. The one rule for such a turn, whatever it reaches: a chat turn whose person is not known (one
+    resumed after a decision) reaches nothing; any other run (a scheduled or otherwise unattended agent run) acts as
+    its agent, which reaches what its own team owns and what no team owns. Both teams are the server's: the thread's
+    was set from its starter's token, the target's by its registry."""
+    if parent is None:
+        return None
+    if parent.meta_object().get("chat"):
+        return Forbidden(
+            f"This conversation's person is not known to this turn, so it does not reach {what}; ask again.",
+            code="person_required",
+        )
+    if team and team != parent.team_id:
+        return Forbidden(
+            f"A run with no person acts as its agent, in its own team, so it does not reach {what} of another team.",
+            code="other_team",
+        )
+    return None
 
 
 @contextmanager
@@ -261,17 +282,12 @@ class ChildRuns:
     async def _refused_for_person(
         self, workflow: str, team: str | None, parent_thread_id: str | None
     ) -> ApiError | None:
-        """Why the turn's person may not start `workflow` (owned by `team`), or None when they may, or when the run has
-        no person and is not a chat (an unattended agent run, which acts as the agent)."""
+        """Why the turn's person may not start `workflow` (owned by `team`), or None when they may; for a turn with
+        no person, `refused_with_no_person`."""
         person = TURN_PERSON.get()
         if person is None:
             parent = await graph_store(self.rt).thread_row(parent_thread_id) if parent_thread_id else None
-            if parent is not None and parent.meta_object().get("chat"):
-                return Forbidden(
-                    "This conversation's person is not known to this turn, so it starts no workflow; ask again.",
-                    code="person_required",
-                )
-            return None
+            return refused_with_no_person(parent, team, f"workflow {workflow}")
         try:
             can(caller_of(person), "workflows", "run", team=team, what=f"workflow {workflow}")
         except Forbidden as e:

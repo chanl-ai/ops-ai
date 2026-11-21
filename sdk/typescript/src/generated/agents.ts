@@ -11057,8 +11057,6 @@ export interface components {
             metadata?: {
                 [key: string]: unknown;
             };
-            /** Parentthreadid */
-            parentThreadId?: string | null;
             /** Version */
             version?: number | null;
         };

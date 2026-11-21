@@ -4,6 +4,7 @@ a route check that sees no route fails instead of passing."""
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 from fastapi import Depends, FastAPI
@@ -88,3 +89,14 @@ def test_the_settings_module_alone_may_read_the_environment() -> None:
     kit = Path(standards.__file__).parent
     found = standards.check(_app(), settings_module="ops_service_kit.settings", authenticated={signed_in}, roots=[kit])
     assert [line for line in found if "rule 4" in line] == [], found
+
+
+def test_a_request_models_bare_str_name_is_found_and_a_name_type_is_not() -> None:
+    tree = ast.parse(
+        "class A(In):\n    name: str\n    title: str | None = None\n"
+        "class B(In):\n    name: Name\n    label: str = Field(pattern='^[a-z]+$')\n"
+        "class C(Out):\n    name: str\n"
+    )
+    found = standards.check_names(Path("x.py"), tree, set())
+    assert [f.split(" names: ")[1].split(" is")[0] for f in found] == ["A.name", "A.title"]
+    assert standards.check_names(Path("x.py"), tree, {"x.py:A.name", "x.py:A.title"}) == []

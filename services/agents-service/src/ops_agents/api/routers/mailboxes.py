@@ -25,6 +25,7 @@ from ops_identity.fastapi import Tx
 from ops_service_kit.errors import Conflict, NotFound, Unprocessable
 from ops_service_kit.http import Envelope, In, Json, Out
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.names import Name
 
 from ...store.channel_list import ChannelList, LiveDefinition
 from ...store.mailboxes import AddressTakenError, MailboxRow, MailboxStore
@@ -48,7 +49,7 @@ Provider = Literal["gmail", "imap", "graph"]
 
 
 class MailboxIn(In):
-    name: str = Field(min_length=1, max_length=200)
+    name: Name
     address: str = Field(pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$", max_length=320)
     provider: Provider
     imap_host: str | None = Field(default=None, max_length=255)
@@ -75,7 +76,7 @@ class MailboxPatch(In):
     """The mailbox's name and connection. Pausing is the channel's, through PATCH /v1/channels/{id} alone, so there is
     one way to pause a mailbox."""
 
-    name: str | None = Field(default=None, min_length=1, max_length=200)
+    name: Name | None = None
     address: str | None = Field(default=None, pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$", max_length=320)
     imap_host: str | None = Field(default=None, max_length=255)
     imap_port: int | None = Field(default=None, ge=1, le=65535)
