@@ -64,7 +64,7 @@ from ops_service_kit.errors import (
     ValidationFailed,
 )
 from ops_service_kit.errors import ServiceUnavailable as Unavailable
-from ops_service_kit.http import Envelope, Json
+from ops_service_kit.http import Envelope, Json, OptionsPage, options_page, options_window
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.logging import get_logger
 from ops_service_kit.narrow import json_object
@@ -195,6 +195,26 @@ async def agents(rt: Rt, me: Me) -> JSONResponse:
             if a.id in ours
         ]
     )
+
+
+@router.get("/agents/options", response_model=Envelope[OptionsPage])
+async def agent_options(  # noqa: PLR0917 - FastAPI reads each query parameter from the signature
+    rt: Rt,
+    me: Me,
+    search: str = "",
+    cursor: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 25,
+    ids: Annotated[list[str] | None, Query()] = None,
+) -> JSONResponse:
+    """The composer's `@` list: the team's published agents that are not paused, searched on name and paged in the
+    store query as an `/options` source, through the same search the agent pickers use; another team's agent never
+    matches, and `ids=` answers only those of them the team sees."""
+    if not me.is_key:
+        require_chat_use(me, team_id=me.team_id or None)
+    offset, window = options_window(None if ids else cursor, limit)
+    found = await registry(rt).search_published(None, search, offset, window, ids=ids)
+    opts: list[Json] = [{"id": i, "label": n, "hint": r or None} for i, n, r in found]
+    return ok(options_page(opts, offset, limit))
 
 
 # ── threads ──

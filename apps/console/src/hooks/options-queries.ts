@@ -39,6 +39,8 @@ const agentsWhere = (key: string, filters: AgentFilters = {}): OptionSource => (
   },
 });
 export const agentOptions = agentsWhere('agent-options');
+/** The agents the person may hand a chat to, as GET /chat/agents lists them: the composer's `@` list. */
+export const chatAgentOptions: OptionSource = { key: 'chat-agent-options', fetch: (p) => api.chat.agentOptions(p) };
 /** The agents an embed can serve: published ones. */
 export const publishedAgentOptions = agentsWhere('published-agent-options', { availability: ['published'] });
 /** The team's workflows (both engines) under `filters`, searched and paged by the workflows list route; a page number is the cursor. */

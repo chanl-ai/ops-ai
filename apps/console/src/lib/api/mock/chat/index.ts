@@ -8,6 +8,7 @@ import type { Memory } from '@/lib/types/memory';
 import type { PlaygroundAnswer, RetrievalSettings, RetrieveInput } from '@/lib/types/knowledge';
 
 import type { FileLinks } from '../files';
+import { pageOptions } from '../../options';
 import { bulk, id, list, mode, notFound, respond } from '../runtime';
 import { guardTeam, inTeam } from '../teams';
 import { GENERAL_SUGGESTIONS, SUGGESTIONS, planTurn, type QueueSla, type TurnPlan } from './scripts';
@@ -315,6 +316,14 @@ export function createChatMock(deps: Deps): ChatApi {
             })),
       );
     },
+
+    agentOptions: async (p) =>
+      respond((m) =>
+        pageOptions(
+          m === 'empty' ? [] : deps.agents().filter((a) => inTeam(deps.agentOwner(a.id))).map((a) => ({ id: a.id, label: a.name, hint: a.role || null })),
+          p,
+        ),
+      ),
 
     threads: {
       list: async ({ cursor, ...p }) => {
