@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { AlertTriangle, CheckCircle2, FileArchive, FileText, XCircle } from 'lucide-react';
 
+import { PublishDialog, type BlockerRow } from '@/components/shared/publish-dialog';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FileUpload, type UploadItem, uploadsBlocker, uploadsReady } from '@/components/shared/file-upload';
 import { FormField } from '@/components/shared/form-field';
@@ -236,49 +237,26 @@ function ImportPreview({ preview: p }: { preview: SkillImportPreview }) {
 }
 
 /** Sends the newest draft to Reviews. Shows what the reviewer will see: edit class, approvers needed and the test result. */
-export function RequestReviewDialog({ open, onOpenChange, skill, isPending, onSubmit }: { open: boolean; onOpenChange: (o: boolean) => void; skill: SkillDetail; isPending: boolean; onSubmit: (note: string) => Promise<unknown> }) {
-  const [note, setNote] = React.useState('');
-  const [error, setError] = React.useState<string | null>(null);
-  React.useEffect(() => {
-    if (open) {
-      setNote(skill.versions[0]?.note ?? '');
-      setError(null);
-    }
-  }, [open, skill.versions]);
+export function RequestReviewDialog({ open, onOpenChange, skill, isPending, onSubmit, onJump }: { open: boolean; onOpenChange: (o: boolean) => void; skill: SkillDetail; isPending: boolean; onSubmit: (note: string) => Promise<unknown>; onJump?: (b: BlockerRow) => void }) {
   const v = skill.versions[0];
   const check = skill.publishCheck;
   const run = v?.testRun;
   return (
-    <DialogShell
+    <PublishDialog
       open={open}
       onOpenChange={onOpenChange}
-      size="md"
+      testId="request-review"
       title={`Request review of v${v?.version}`}
       description={`A publisher in ${skill.ownerTeam} other than you decides it in Reviews. Agents keep their pinned version until someone moves them.`}
-      footer={
-        <div className="flex w-full items-center justify-end gap-2">
-          <span className="mr-auto text-xs text-destructive-text">{error}</span>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
-            Cancel
-          </Button>
-          <LoadingButton
-            isLoading={isPending}
-            disabled={!check.canRequest}
-            onClick={async () => {
-              if (!note.trim()) return setError('Say what changed and why.');
-              try {
-                await onSubmit(note.trim());
-                onOpenChange(false);
-              } catch (e) {
-                setError((e as Error).message);
-              }
-            }}
-            data-testid="request-review-submit"
-          >
-            Send
-          </LoadingButton>
-        </div>
-      }
+      blockers={[...check.blockers, ...(check.warnings ?? []).map((w) => ({ node: null, field: w.position?.field ?? null, level: 'warning', code: w.kind, message: w.message }))]}
+      onJump={onJump}
+      note={{ label: 'What changed and why', placeholder: 'e.g. Adds the posted-payment warning Lending Servicing asked for.', multiline: true, required: true, missing: 'Say what changed and why.' }}
+      submitLabel="Send"
+      submittingLabel="Sending…"
+      submitTestId="request-review-submit"
+      disabled={!check.canRequest}
+      pending={isPending}
+      onSubmit={onSubmit}
     >
       <div className="flex flex-col gap-4 text-sm">
         <div className="flex flex-wrap items-center gap-2">
@@ -295,26 +273,8 @@ export function RequestReviewDialog({ open, onOpenChange, skill, isPending, onSu
             'No test run on this version.'
           )}
         </p>
-        {!check.canRequest && (
-          <ul className="flex flex-col gap-1 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-destructive-text" data-testid="request-review-blockers">
-            {check.blockers.map((b) => (
-              <li key={`${b.code}:${b.field ?? ''}:${b.message}`}>{b.message}</li>
-            ))}
-          </ul>
-        )}
-        {!!check.warnings?.length && (
-          <ul className="flex flex-col gap-1 rounded-md border border-warning/30 bg-warning/5 p-3 text-warning-text" data-testid="request-review-warnings">
-            <li className="font-medium">Does not block the request</li>
-            {check.warnings.map((w) => (
-              <li key={w.message}>{w.message}</li>
-            ))}
-          </ul>
-        )}
-        <FormField id="rr-note" label="What changed and why">
-          <Textarea id="rr-note" value={note} onChange={(e) => (setNote(e.target.value), setError(null))} className="min-h-20" placeholder="e.g. Adds the posted-payment warning Lending Servicing asked for." />
-        </FormField>
       </div>
-    </DialogShell>
+    </PublishDialog>
   );
 }
 

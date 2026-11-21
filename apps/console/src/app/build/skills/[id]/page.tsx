@@ -339,6 +339,7 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
           </DetailSheet>
 
           <RequestReviewDialog
+            onJump={() => setDialog(null)}
             open={dialog === 'review'}
             onOpenChange={(o) => !o && setDialog(null)}
             skill={s}

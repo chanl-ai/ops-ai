@@ -80,6 +80,8 @@ export interface AddedReferences {
 export interface AgentPublishCheck {
   canRequest: boolean;
   problems: PublishBlocker[];
+  /** The same problems in the one shape every publish check returns, in the same order. */
+  blockers: Blocker[];
 }
 
 /** One reason a publish is refused, in the one shape the agent, skill and workflow publish checks return: the workflow

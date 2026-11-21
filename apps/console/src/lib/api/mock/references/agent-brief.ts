@@ -41,5 +41,5 @@ export function publishCheckOf(a: Pick<Agent, 'brief' | 'promptMode'>): AgentPub
       for (const m of String(b[key]).matchAll(TOKEN))
         if (!isOffered(`${m[1]}:${m[2]}`)) problems.push({ kind: 'missing_reference', id: `${m[1]}:${m[2]}`, position: { field: `brief.${key}`, step: null, index: null }, message: `${m[2]} is no longer offered to this team.` });
   }
-  return { canRequest: problems.length === 0, problems };
+  return { canRequest: problems.length === 0, problems, blockers: problems.map((p) => ({ node: null, field: p.position?.field ?? null, level: 'error' as const, code: p.kind, message: p.message })) };
 }
