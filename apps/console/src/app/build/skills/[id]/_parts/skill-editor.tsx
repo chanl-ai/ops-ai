@@ -24,7 +24,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { useReferenceLabels, useReferenceSearch } from '@/hooks/references-queries';
+import { useReferenceLabels } from '@/hooks/references-queries';
 import { useSaveSkillDraft, useSkill, useSkillOptions, useSkillTextReading } from '@/hooks/skill-queries';
 import { SKILL_LOADING_OPTIONS } from '@/components/skills/skill-loading';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -93,7 +93,7 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried }: { sk
   const setInputs = React.useCallback((inputs: SkillInputField[]) => setForm((f) => ({ ...f, inputs })), []);
   const whenForm = React.useRef<SkillWhenHandle>(null);
   const textDoc = React.useRef<SopEditorHandle>(null);
-  const search = useReferenceSearch({ forSkill: sk.id });
+  const context = React.useMemo(() => ({ forSkill: sk.id }), [sk.id]);
   const reading = useSkillTextReading(sk.id, form.text, { loading: form.loading, hasParts: form.parts.length > 0, exit: form.ending.exit });
   const mentioned = React.useMemo(() => [...new Set(parseText(form.text).flatMap((x) => (x.t === 'ref' ? [refToken(x).slice(1)] : [])))], [form.text]);
   const labels = useReferenceLabels({ forSkill: sk.id }, mentioned);
@@ -250,7 +250,7 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried }: { sk
                   </span>
                 </div>
               )}
-              <SopEditor value={form.text} onChange={(text) => (setRefused(null), setForm((f) => ({ ...f, text })))} readOnly={readOnly} reading={reading.reading} readingFor={reading.forText} labels={labels.data} search={(q) => search(q)} controls={textDoc} placeholder={EXAMPLE} />
+              <SopEditor value={form.text} onChange={(text) => (setRefused(null), setForm((f) => ({ ...f, text })))} readOnly={readOnly} reading={reading.reading} readingFor={reading.forText} labels={labels.data} context={context} controls={textDoc} placeholder={EXAMPLE} />
             </div>
             {!!reading.reading?.hints.length && reading.forText === form.text && (
               <div className="flex flex-col gap-1 rounded-md border px-3 py-2" data-testid="sop-hints">

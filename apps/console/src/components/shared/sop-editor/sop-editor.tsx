@@ -8,13 +8,14 @@ import { indentUnit } from '@codemirror/language';
 import { EditorState, Prec, RangeSetBuilder, StateEffect, StateField, type Extension } from '@codemirror/state';
 import { Decoration, type DecorationSet, EditorView, highlightActiveLine, hoverTooltip, keymap, lineNumbers, placeholder as placeholderText, showTooltip, type Tooltip, ViewPlugin, type ViewUpdate, WidgetType } from '@codemirror/view';
 
-import { CaretMenu, type MenuRow, type MenuSection } from '@/components/shared/instruction-document/reference-menu';
+import { CaretMenu, type MenuRow, type MenuSection } from '@/components/shared/caret-menu';
 import { chipFor, parseText, refToken } from '@/components/shared/instruction-document/document-model';
-import { KIND_ICON } from '@/components/shared/reference-kinds';
+import { KIND_ICON, KIND_LABEL } from '@/components/shared/reference-kinds';
 import { HOW_SAYS } from './how';
 import { badgeVariants } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import type { Ref, ReferenceGroup, ReferenceItem, ReferenceSearch, RefKind } from '@/lib/types/references';
+import { referenceGroupsFor, referenceOptionsFor, useGroupedOptionSearch, useOptionSearch } from '@/hooks/options-queries';
+import type { Ref, ReferenceContext, ReferenceItem, RefKind } from '@/lib/types/references';
 import type { SkillTextReading } from '@/lib/types/skills';
 
 const UNIT = '    ';
@@ -37,8 +38,8 @@ export interface SopEditorProps {
   readingFor?: string;
   /** The current names of what the text mentions; undefined while loading. One left out is drawn as missing. */
   labels?: readonly ReferenceItem[];
-  /** The `@` menu's search. */
-  search: (query: string) => Promise<ReferenceSearch>;
+  /** Whose mentions the `@` list searches: the skill or agent being edited. */
+  context: ReferenceContext;
   placeholder?: string;
   controls?: React.Ref<SopEditorHandle>;
   ariaLabel?: string;
@@ -90,7 +91,7 @@ class MentionWidget extends WidgetType {
     el.dataset.testid = missing ? 'sop-mention-missing' : 'sop-mention';
     // A wrapped line's hanging indent is inherited by inline blocks; a badge draws from its own left edge.
     el.style.textIndent = '0';
-    el.title = missing ? `${this.ref.id} no longer exists` : this.label;
+    el.title = `${missing ? `${this.ref.id} no longer exists` : this.label}. Click it, or press Alt+Enter beside it, to replace or remove it.`;
     return el;
   }
   ignoreEvent() {
@@ -279,13 +280,14 @@ function menuAt(state: EditorState, armed: number | null): Menu | null {
  * each condition and a wavy underline with a hover card to each hint. Nothing here reads the text's structure: the
  * service's reader is the one owner of that, and this draws what it said.
  */
-export function SopEditor({ value, onChange, readOnly = false, reading, readingFor, labels, search, placeholder, controls, ariaLabel = 'Skill text' }: SopEditorProps) {
+export function SopEditor({ value, onChange, readOnly = false, reading, readingFor, labels, context, placeholder, controls, ariaLabel = 'Skill text' }: SopEditorProps) {
   const host = React.useRef<HTMLDivElement>(null);
   const view = React.useRef<EditorView | null>(null);
-  const latest = React.useRef({ onChange, search, reading });
-  latest.current = { onChange, search, reading };
+  const latest = React.useRef({ onChange, reading });
+  latest.current = { onChange, reading };
   const [menu, setMenu] = React.useState<Menu | null>(null);
-  const [found, setFound] = React.useState<{ status: 'loading' | 'ready' | 'error'; groups: ReferenceGroup[] }>({ status: 'loading', groups: [] });
+  // The `@` list narrowed to one kind (“More tools…”), paged as it scrolls; null shows every kind's first rows.
+  const [scope, setScope] = React.useState<RefKind | null>(null);
   const [active, setActive] = React.useState('');
   const menuId = React.useId();
   const menuRef = React.useRef<{ menu: Menu | null; rows: MenuRow[]; active: string; pick: (row: MenuRow) => void }>({ menu: null, rows: [], active: '', pick: () => {} });
@@ -297,18 +299,24 @@ export function SopEditor({ value, onChange, readOnly = false, reading, readingF
   const chose = React.useRef(false);
   // A clicked badge's menu: change what it mentions, or take it out.
   const [badge, setBadge] = React.useState<{ from: number; to: number } | null>(null);
+  const [badgeActive, setBadgeActive] = React.useState('replace');
+  const badgeRef = React.useRef<{ open: boolean; active: string; pick: (key: string) => void }>({ open: false, active: 'replace', pick: () => {} });
 
   React.useEffect(() => {
     if (!host.current) return;
     const keys: Extension = Prec.highest(
       keymap.of([
-        { key: 'ArrowDown', run: () => move(1) },
-        { key: 'ArrowUp', run: () => move(-1) },
-        { key: 'Enter', run: () => pickActive() },
+        { key: 'ArrowDown', run: () => moveBadge() || move(1) },
+        { key: 'ArrowUp', run: () => moveBadge() || move(-1) },
+        { key: 'Enter', run: () => pickBadge() || pickActive() },
         { key: 'Tab', run: () => pickActive() },
+        // The keyboard's way to a badge's menu (a click opens it too): Alt+Enter with the caret beside a mention.
+        { key: 'Alt-Enter', run: (v) => openBadgeAtCaret(v) },
+        { key: 'Shift-F10', run: (v) => openBadgeAtCaret(v) },
         {
           key: 'Escape',
           run: () => {
+            if (badgeRef.current.open) return (setBadge(null), true);
             if (menuRef.current.menu) return (setMenu(null), (armed.current = null), true);
             escaped.current = Date.now();
             return false;
@@ -323,6 +331,26 @@ export function SopEditor({ value, onChange, readOnly = false, reading, readingF
       chose.current = true;
       setActive(rows[i < 0 ? (by > 0 ? 0 : rows.length - 1) : (i + by + rows.length) % rows.length].key);
       return true;
+    };
+    const moveBadge = () => {
+      if (!badgeRef.current.open) return false;
+      setBadgeActive((a) => (a === 'replace' ? 'remove' : 'replace'));
+      return true;
+    };
+    const pickBadge = () => {
+      if (!badgeRef.current.open) return false;
+      badgeRef.current.pick(badgeRef.current.active);
+      return true;
+    };
+    const openBadgeAtCaret = (v: EditorView) => {
+      const head = v.state.selection.main.head;
+      const line = v.state.doc.lineAt(head);
+      for (const m of line.text.matchAll(new RegExp(MENTION_AT.source.slice(1), 'g'))) {
+        const from = line.from + (m.index ?? 0);
+        const to = from + m[0].length;
+        if (head >= from && head <= to + 1) return (setBadgeActive('replace'), setBadge({ from, to }), true);
+      }
+      return false;
     };
     const leaving = () => Date.now() - escaped.current < 2000;
     const pickActive = () => {
@@ -359,7 +387,7 @@ export function SopEditor({ value, onChange, readOnly = false, reading, readingF
               if (el && !readOnly) {
                 const from = v.posAtDOM(el);
                 const token = v.state.doc.sliceString(from, from + 140).match(MENTION_AT);
-                if (token) return (setBadge({ from, to: from + token[0].length }), true);
+                if (token) return (setBadgeActive('replace'), setBadge({ from, to: from + token[0].length }), true);
               }
               const pos = v.posAtCoords({ x: e.clientX, y: e.clientY });
               v.dispatch({ effects: pinHint.of(pos === null ? null : pos) });
@@ -427,23 +455,20 @@ export function SopEditor({ value, onChange, readOnly = false, reading, readingF
     },
   }));
 
-  // The @ list: one search per pause in typing; an answer for text since changed is dropped.
+  // The @ list: the first rows of every kind, or every row of one kind page by page; both searched on the server.
   const mentionQuery = menu?.kind === 'mention' ? menu.query : null;
   React.useEffect(() => {
-    if (mentionQuery === null) return;
-    let stale = false;
-    setFound((f) => ({ ...f, status: 'loading' }));
-    const timer = setTimeout(() => {
-      latest.current.search(mentionQuery).then(
-        (r) => !stale && setFound({ status: 'ready', groups: r.groups }),
-        () => !stale && setFound({ status: 'error', groups: [] }),
-      );
-    }, 150);
-    return () => {
-      stale = true;
-      clearTimeout(timer);
-    };
+    if (mentionQuery === null) setScope(null);
   }, [mentionQuery]);
+  const groupsSource = React.useMemo(() => referenceGroupsFor(context), [context]);
+  const scopedSource = React.useMemo(() => referenceOptionsFor(context, scope ?? 'tool'), [context, scope]);
+  const grouped = useGroupedOptionSearch(groupsSource, mentionQuery ?? '', mentionQuery !== null && scope === null && !readOnly);
+  const scoped = useOptionSearch(scopedSource, mentionQuery ?? '', mentionQuery !== null && scope !== null && !readOnly);
+  const found = scope === null ? grouped : scoped;
+  const foundStatus: 'loading' | 'ready' | 'error' = found.isError ? 'error' : found.data === undefined ? 'loading' : 'ready';
+  const loadMore = React.useCallback(() => {
+    if (scope !== null && scoped.hasNextPage && !scoped.isFetchingNextPage) void scoped.fetchNextPage();
+  }, [scope, scoped]);
 
   const replace = React.useCallback((m: Menu, insert: string) => {
     const v = view.current;
@@ -457,11 +482,17 @@ export function SopEditor({ value, onChange, readOnly = false, reading, readingF
 
   const sections = React.useMemo<MenuSection[]>(() => {
     if (!menu) return [];
-    if (menu.kind === 'mention')
-      return found.groups.map((g) => ({
+    if (menu.kind === 'mention') {
+      const row = (o: { id: string; label: string; hint?: string | null; disabled?: string | null }) => ({ key: o.id, label: o.label, icon: KIND_ICON[o.id.split(':')[0] as RefKind], trailing: o.hint, disabled: o.disabled, pick: () => {} });
+      if (scope !== null) {
+        const rows = (scoped.data?.pages ?? []).flatMap((p) => p.data).map(row);
+        return [{ label: KIND_LABEL[scope], rows: [{ key: 'back', label: 'Every kind', trailing: 'back', pick: () => {} }, ...rows] }];
+      }
+      return (grouped.data ?? []).map((g) => ({
         label: g.label,
-        rows: g.items.map((item) => ({ key: `${item.kind}:${item.id}`, label: item.label, icon: KIND_ICON[item.kind], trailing: item.hint, disabled: item.disabled, pick: () => {} })),
+        rows: [...g.page.data.map(row), ...(g.page.nextCursor ? [{ key: `more:${g.group}`, label: `More ${g.label.toLowerCase()}…`, trailing: 'see all', pick: () => {} }] : [])],
       }));
+    }
     // After `if `: what the tool above returns, checked exactly, then words the agent decides.
     const v = view.current;
     const r = latest.current.reading;
@@ -481,20 +512,23 @@ export function SopEditor({ value, onChange, readOnly = false, reading, readingF
     if (q && !returned.includes(q)) own.unshift(menu.query.trim());
     if (own.length) out.push({ label: 'In your own words, the agent decides', rows: own.map((p) => ({ key: `agent:${p}`, label: p, trailing: 'agent decides', pick: () => {} })) });
     return out;
-  }, [menu, found, labels]);
+  }, [menu, grouped.data, scoped.data, scope, labels]);
   const rows = React.useMemo(() => sections.flatMap((s) => s.rows.filter((r) => !r.disabled)), [sections]);
   // The `@` list highlights its first row; the condition list highlights none until an arrow key does, so Enter at the
   // end of a sentence starting “if” is a new line, never a path made from the typed words.
   const firstActive = menu?.kind === 'mention';
   React.useEffect(() => {
     if (rows.some((r) => r.key === active)) return;
-    setActive(firstActive && rows.length ? rows[0].key : '');
+    setActive(firstActive && rows.length ? (rows.find((r) => r.key !== 'back') ?? rows[0]).key : '');
   }, [rows, active, firstActive]);
 
   const pick = React.useCallback(
     (row: MenuRow) => {
       if (!menu) return;
       if (menu.kind === 'mention') {
+        // “More tools…” narrows the list to that kind and “Every kind” widens it again; the caret stays where it was.
+        if (row.key === 'back') return (setScope(null), setActive(''));
+        if (row.key.startsWith('more:')) return (setScope(row.key.slice(5) as RefKind), setActive(''));
         const [kind, ...rest] = row.key.split(':');
         return replace(menu, `${refToken({ kind: kind as RefKind, id: rest.join(':') })} `);
       }
@@ -515,7 +549,7 @@ export function SopEditor({ value, onChange, readOnly = false, reading, readingF
       ],
     },
   ];
-  const onBadge = (row: MenuRow) => {
+  const onBadge = (row: { key: string }) => {
     const v = view.current;
     if (!v || !badge) return;
     const space = v.state.doc.sliceString(badge.to, badge.to + 1) === ' ' ? 1 : 0;
@@ -526,7 +560,9 @@ export function SopEditor({ value, onChange, readOnly = false, reading, readingF
     v.focus();
   };
 
-  const status = menu?.kind === 'if' ? 'ready' : found.status;
+  badgeRef.current = { open: !!badge && !menu, active: badgeActive, pick: (key) => onBadge({ key }) };
+
+  const status = menu?.kind === 'if' ? 'ready' : foundStatus;
   return (
     <div className="relative" data-testid="sop-editor">
       <div ref={host} className="min-h-40" />
@@ -539,8 +575,8 @@ export function SopEditor({ value, onChange, readOnly = false, reading, readingF
           label="Change this mention"
           status="ready"
           sections={badgeRows}
-          active=""
-          onActive={() => {}}
+          active={badgeActive}
+          onActive={setBadgeActive}
           onPick={onBadge}
           onDismiss={() => setBadge(null)}
           empty=""
@@ -564,6 +600,8 @@ export function SopEditor({ value, onChange, readOnly = false, reading, readingF
           empty={menu.query ? `Nothing called “${menu.query}”. Keep typing, or leave it as plain text.` : 'This team has no tools, knowledge or skills yet. A builder can add them in Apps.'}
           error="Couldn’t load the list. What you typed is kept; try again in a moment."
           id={menuId}
+          onEnd={menu.kind === 'mention' ? loadMore : undefined}
+          loadingMore={menu.kind === 'mention' && scope !== null && scoped.isFetchingNextPage}
         />
       )}
     </div>

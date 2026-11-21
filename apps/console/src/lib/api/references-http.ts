@@ -10,7 +10,13 @@ const query = (context: ReferenceContext, rest: [string, string][]) => new URLSe
 /** agents-service's `/v1/references`; `get` comes from a transport rooted at `/v1`. */
 export function createReferencesHttp(get: Get, send: Send): ReferencesApi {
   return {
-    search: (context, p) => get(`/references?${query(context, [['search', p.search], ...(p.kind ? ([['kind', p.kind]] as [string, string][]) : []), ...(p.limit ? ([['limit', String(p.limit)]] as [string, string][]) : [])])}`),
+    search: (context, p) => {
+      const rest: [string, string][] = [['search', p.search]];
+      if (p.kind) rest.push(['kind', p.kind]);
+      if (p.kind && p.cursor) rest.push(['cursor', p.cursor]);
+      if (p.limit) rest.push(['limit', String(p.limit)]);
+      return get(`/references?${query(context, rest)}`);
+    },
     labels: (context, ids) => get(`/references?${query(context, ids.map((id) => ['ids', id]))}`),
     add: (agentId, ref) => send('POST', `/agents/${agentId}/references`, ref),
   };

@@ -12,7 +12,10 @@ import type { PublishBlocker, Ref, RefKind, ReferenceGroup, ReferenceItem, Refer
 import { type DocNode, type DocumentValue, fromEditorDoc, missingReferences, refsInNode, runsIndex, toEditorDoc } from './document-model';
 import { LOADS_DOCUMENT, type MenuBridge, type MenuPick, type Trigger, addCheck, addIfNot, addStep, canMarkRuns, instructionExtensions, pickReference, setStepLocked, setStepRuns } from './extensions';
 import { DocumentContext, type DocumentContextValue, FixRows, type InvalidField, KIND_ICON } from './node-views';
-import { CaretMenu, type MenuRow, type MenuSection } from './reference-menu';
+import { CaretMenu, type MenuRow as CaretRow, type MenuSection as CaretSection } from '@/components/shared/caret-menu';
+
+type MenuRow = CaretRow<MenuPick>;
+type MenuSection = CaretSection<MenuPick>;
 
 export interface VariableGroup {
   label: string;
