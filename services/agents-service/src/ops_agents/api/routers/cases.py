@@ -16,12 +16,13 @@ from ops_service_kit.http import Envelope
 from ops_store import isolation
 
 from .. import hitl_facade
-from ..auth import principal
+from ..auth import reader_of
 from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..schemas import CaseRun, CaseRunList
 
-router = APIRouter(prefix="/runs", dependencies=[Depends(principal)])
+# The cases list and one case name customers and their steps, so both need cases.view where the request acts.
+router = APIRouter(prefix="/runs", dependencies=[Depends(reader_of("cases"))])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 
 

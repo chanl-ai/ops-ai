@@ -22,7 +22,7 @@ from ops_service_kit.http import Envelope, In, Json, ListResult
 from ops_service_kit.listing import ListQuery
 
 from ... import task_types as tt
-from ..auth import Principal, caller_in, caller_of
+from ..auth import Principal, caller_in, caller_of, reader_of
 from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..task_type_seeds import task_type_store
@@ -30,6 +30,8 @@ from ..typed_record_routes import RecordTypeView, RecordVersionView, by_of, deta
 
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(caller_in("workflows"))]  # noqa: UP040
+# A person reads the task types with workflows.view where the request acts; a chat user holds none.
+Reader: TypeAlias = Annotated[Principal, Depends(reader_of("workflows"))]  # noqa: UP040
 
 router = APIRouter(prefix="/v1/task-types")
 
@@ -85,7 +87,7 @@ def _checked(content: Json) -> Json:
 
 
 @router.get("", response_model=Envelope[ListResult[TaskTypeView]])
-async def list_task_types(rt: Rt, me: Me, _: Tx, q: ListQuery) -> JSONResponse:
+async def list_task_types(rt: Rt, me: Reader, _: Tx, q: ListQuery) -> JSONResponse:
     """Every task type of the team on the shared list contract: the seeded ones first, then the team's own, each by
     name, then by id; `search` matches the name and description and `ids` names types."""
     listed, shown = await (await task_type_store(rt, store_team(me))).page(q)
@@ -93,7 +95,7 @@ async def list_task_types(rt: Rt, me: Me, _: Tx, q: ListQuery) -> JSONResponse:
 
 
 @router.get("/{type_id}", response_model=Envelope[TaskTypeDetail])
-async def get_task_type(rt: Rt, me: Me, _: Tx, type_id: str) -> JSONResponse:
+async def get_task_type(rt: Rt, me: Reader, _: Tx, type_id: str) -> JSONResponse:
     """A type with each of its versions, newest first."""
     return ok(detail(await (await task_type_store(rt, store_team(me))).get(type_id)))
 
