@@ -21,6 +21,7 @@ import json
 import math
 import operator
 import re
+import time
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -32,7 +33,7 @@ from langgraph.graph import END, START, StateGraph  # pyright: ignore[reportMiss
 from langgraph.types import interrupt
 
 from ops_checkpointer import LeaseSupersededError
-from ops_contracts.errors import CODES
+from ops_contracts.errors import CODES, code_of
 from ops_service_kit.http import Json, JsonList, JsonValue
 
 from . import ai_steps
@@ -62,6 +63,8 @@ DEFAULT_OPTIONS = {"approved": "approve", "rejected": "reject"}
 
 # The wait between attempts; tests replace it to record the backoff instead of sleeping through it.
 sleep = asyncio.sleep
+# The clock a step's total duration is read by; tests replace it to move time on without waiting.
+monotonic = time.monotonic
 
 
 def channel(node_id: str) -> str:
@@ -133,7 +136,7 @@ def technical(e: BaseException) -> str:
 def failure_code(e: BaseException) -> str:
     """The error model's code for an exception a step raised: a deadline is `step_too_long`, a step's own refusal its
     code, a service error its code when the model knows it, an error that crossed a port (an app, tool or model call)
-    the app or tool failing, and anything else the engine's own fault."""
+    the app or tool failing, a dropped connection an outage, and anything else the engine's own fault."""
     if isinstance(e, TimeoutError):
         return "step_too_long"
     if isinstance(e, StepError):
@@ -141,7 +144,10 @@ def failure_code(e: BaseException) -> str:
     code = getattr(e, "code", None)
     if isinstance(code, str) and code.lower() in CODES:
         return code.lower()
-    return "tool_failed" if is_outside(e) else "internal_error"
+    if is_outside(e):
+        return "tool_failed"
+    # A connection refused or reset (the gateway or the database restarting) is an outage a later try rides out.
+    return "unavailable" if isinstance(e, OSError) else "internal_error"
 
 
 def retry_after_of(e: BaseException) -> float | None:
@@ -1473,11 +1479,20 @@ class Wrapper:
         attempt = (last.attempt if last else 0) + 1
         first = attempt
         timeout = await self.deadline(params)
+        # The step's total duration counts from its earliest attempt this run knows of, a previous pass's included.
+        began = monotonic() - _since(last.started_at if last is not None else None)
+
+        def next_wait(n: int, retry_after: float | None = None) -> float | None:
+            """The wait before attempt `n` of this pass, or None when it would end past the step's total duration."""
+            wait = policy.wait(n, retry_after)
+            return None if monotonic() - began + wait >= policy.total_seconds else wait
+
         while True:
             r = row(attempt, effects)
             await self.journal.begin(r)
+            left = max(1.0, policy.total_seconds - (monotonic() - began))
             try:
-                outcome = await asyncio.wait_for(executor(call(r)), timeout)
+                outcome = await asyncio.wait_for(executor(call(r)), min(timeout, left))
             except GraphInterrupt:
                 # Paused, not dead: the attempt is marked waiting so a resume continues it.
                 await self.journal.finish(r, status="waiting", port=None, output=None, error=None)
@@ -1498,11 +1513,17 @@ class Wrapper:
                     attempt += 1
                     await sleep(policy.wait(attempt))
                     continue
-                if attempt - first + 1 < policy.attempts:
+                # Only a kind a second try can pass is tried again (CODES); bad input or a refusal fails at once.
+                wait = (
+                    next_wait(attempt - first + 2, retry_after_of(e))
+                    if code_of(failure_code(e)).retryable and attempt - first + 1 < policy.attempts
+                    else None
+                )
+                if wait is not None:
                     await self.journal.finish(r, status="error", port=None, output=None, error=message)
                     await self.ports.hooks.after_step(run_id, nid, "error")
                     attempt += 1
-                    await sleep(policy.wait(attempt - first + 1))
+                    await sleep(wait)
                     continue
                 if "error" in self.type.output_ports(self.node.parameters):
                     return await self.record(r, Outcome("error", {"error": message}), error=message)
@@ -1534,14 +1555,15 @@ class Wrapper:
                     attempt=r.attempt,
                 )
             tried = attempt if reconciled else attempt - first + 1
-            if (never_sent(error) or (not reconciled and sent_and_unanswered(error))) and tried < policy.attempts:
+            outage = never_sent(error) or (not reconciled and sent_and_unanswered(error))
+            if outage and tried < policy.attempts and (wait := next_wait(tried + 1)) is not None:
                 # An outage, not an answer: a read is tried again; a write the system never got is sent again
                 # under the next attempt's key, its first key recorded as failed at the gateway.
                 message = technical_error(outcome.out)
                 await self.journal.finish(r, status="error", port=None, output=outcome.out, error=message)
                 await self.ports.hooks.after_step(run_id, nid, "error")
                 attempt += 1
-                await sleep(policy.wait(tried + 1))
+                await sleep(wait)
                 continue
             return await self.record(r, outcome)
 
@@ -1597,6 +1619,16 @@ class Wrapper:
             reason = found.reason if found is not None else "the gateway has no record of the write"
             outcome = Outcome("error", {"error": found.output if found else None, "reason": reason, "cause": cause})
         return await self.record(dangling, outcome, error=cause if outcome.port == "error" else None)
+
+
+def _since(started_at: str | None) -> float:
+    """Seconds since an attempt began; 0 for one with no start time."""
+    if not started_at:
+        return 0.0
+    began = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+    if began.tzinfo is None:
+        began = began.replace(tzinfo=UTC)
+    return max(0.0, (datetime.now(UTC) - began).total_seconds())
 
 
 def _past(started_at: str | None, seconds: float) -> bool:

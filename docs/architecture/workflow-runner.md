@@ -79,14 +79,21 @@ A dangling write is reconciled by its key, never attempted twice.
 | Effects class | Attempts | On crash mid-node |
 |---|---|---|
 | none | 3 | Runs again; deterministic |
-| read | 3, backoff 1 to 30 s | New attempt row |
+| read | 3, waits up to 5 s and 30 s | New attempt row |
 | model | 2 | New attempt; the model ledger replays recorded responses |
-| write | 1, then a reconciliation read | Found by key means done; absent means the error port |
+| write | 3, only when the gateway proves the write never ran, each under a new key; otherwise a reconciliation read | Found by key means done; absent means the error port |
 | human | not retried | The upsert finds the same review |
 
 Runs keep `durability="sync"` because the fence must refuse a stale owner before its next step. Leases and fencing are
-unchanged. Checkpoints are deleted when a run ends; the journal is the record the console reads. A run whose resume
-fails three times goes to failed with the error and a manual step.
+unchanged. Checkpoints are deleted when a run ends; the journal is the record the console reads.
+Only a failure whose kind is retryable in `ops_contracts.errors.CODES` is tried again, at the step and at the pass;
+a non-retryable kind fails at once. Every wait is drawn over its whole span (full jitter) and is never shorter than
+the error's retry-after. A step's attempts also stop at its total duration (900 s by default), whichever runs out
+first. A run gets four passes (waits up to 5, 30 and 120 s); one whose passes are used pauses as Stuck with its last
+error, and Retry continues it from its last recorded step. A busy lease, a shutdown or a deploy gives the claim back
+without using an attempt, and the heartbeat keeps renewing through a database blip, so a long tool call is not
+reclaimed as lost (`ops_engine/worker.py`). Tests: `packages/ops_engine/tests/test_retry_classes.py`,
+`services/agents-service/tests/engine/test_retry_accounting.py`.
 
 A failed run's `error` is a sentence for people that names the step (`plain_failure`, `ops_engine/compiler.py`); the
 exception's text is kept on the failed step's row and in the run's `failed` event as `detail`. A review that cannot

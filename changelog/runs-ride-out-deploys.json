@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-21",
+  "title": "Deploys and busy runs no longer push runs to Stuck",
+  "description": "A workflow run is tried again only when a second try can help, waits as long as an app asks before trying again, and is not counted as failing when the platform restarts. A run that keeps failing pauses as Stuck with its last error, ready for Retry.",
+  "tag": "fix"
+}

@@ -1,7 +1,8 @@
 """Retries by what an error says, by failure mode: a read the outside system never got failed at once instead of
 being tried again; a read refused for bad input was retried for minutes; a write the gateway never received was dropped
-(the error port) instead of sent again; a write was sent again under its own blocked key; and a worker that died while
-re-sending a write sent it a third time on recovery."""
+(the error port) instead of sent again; a write was sent again under its own blocked key; a worker that died while
+re-sending a write sent it a third time on recovery; a refusal no retry can pass was tried again; a retry came before
+the wait the system asked for; and a slow step kept retrying past its total duration."""
 
 from __future__ import annotations
 
@@ -12,7 +13,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 
 from ops_engine.compiler import channel
 from ops_engine.journal import MemoryJournal
-from ops_engine.ports import ToolResult
+from ops_engine.ports import ToolResult, outside_call
 
 from .test_compiler import PAYLOAD, FakeTools, Killed, build, config
 
@@ -48,13 +49,15 @@ def unsent(code: str = "CONNECT_FAILED") -> ToolResult:
 
 @pytest.fixture
 def waits(monkeypatch: pytest.MonkeyPatch) -> list[float]:
-    """The backoff the wrapper waits between attempts, recorded instead of slept."""
+    """The backoff the wrapper waits between attempts, recorded instead of slept, with jitter pinned to the whole span
+    so each wait reads as its longest."""
     seen: list[float] = []
 
     async def record(seconds: float) -> None:
         seen.append(seconds)
 
     monkeypatch.setattr("ops_engine.compiler.sleep", record)
+    monkeypatch.setattr("ops_engine.node_types.jitter", lambda: 1.0)
     return seen
 
 
@@ -135,3 +138,52 @@ async def test_a_slow_operations_own_deadline_outlasts_the_steps_default() -> No
     )
     with pytest.raises(WriteInDoubtError):
         await build(tools, journal, saver).ainvoke(None, config("u14"), durability="sync")
+
+
+class Refusal(Exception):
+    """An error an outside system raised with its code in the one error model, and the wait it asked for."""
+
+    def __init__(self, code: str, retry_after: float | None = None) -> None:
+        super().__init__(code)
+        self.code, self.retry_after = code, retry_after
+
+
+def raised(code: str, retry_after: float | None = None) -> Refusal:
+    """`Refusal` marked as an outside call's failure, as a port adapter marks what its call raises."""
+    try:
+        with outside_call():
+            raise Refusal(code, retry_after)
+    except Refusal as e:
+        return e
+
+
+async def test_a_refusal_no_retry_can_pass_is_not_tried_again(waits: list[float]) -> None:
+    tools = ScriptedTools("read", [raised("forbidden"), raised("forbidden"), raised("forbidden")])
+    await build(tools, MemoryJournal(), InMemorySaver()).ainvoke({"input": PAYLOAD}, config("u20"), durability="sync")
+    assert len(tools.calls) == 1 and waits == [], (tools.calls, waits)
+
+
+async def test_a_retry_waits_at_least_as_long_as_the_system_asked(waits: list[float]) -> None:
+    tools = ScriptedTools("read", [raised("rate_limited", retry_after=40.0), raised("rate_limited", retry_after=40.0)])
+    await build(tools, MemoryJournal(), InMemorySaver()).ainvoke({"input": PAYLOAD}, config("u21"), durability="sync")
+    # The read's own waits are 5 s and 30 s; the system's retry-after of 40 s is the floor of each.
+    assert len(tools.calls) == 3 and waits == [40.0, 40.0], waits
+
+
+async def test_a_slow_step_stops_retrying_at_its_total_duration(
+    waits: list[float], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    now = [0.0]
+    monkeypatch.setattr("ops_engine.compiler.monotonic", lambda: now[0])
+
+    class Slow(ScriptedTools):
+        async def call(
+            self, operation: str, input: dict[str, Any], key: str, generation: int | None, token: str | None
+        ) -> ToolResult:
+            now[0] += 500.0  # each call takes 500 s before it fails
+            return await super().call(operation, input, key, generation, token)
+
+    tools = Slow("read", [raised("app_unavailable")] * 3)
+    await build(tools, MemoryJournal(), InMemorySaver()).ainvoke({"input": PAYLOAD}, config("u22"), durability="sync")
+    # A read may take 900 s in all: a third attempt would begin past it.
+    assert len(tools.calls) == 2, tools.calls

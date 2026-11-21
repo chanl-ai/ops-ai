@@ -194,13 +194,29 @@ class WorkQueue:
             )
 
     async def release(self, work: Work, delay: float, *, error: str | None = None) -> None:
-        """Back to the queue after `delay` seconds: the run's lease was busy, or the attempt failed and may retry."""
+        """Back to the queue after `delay` seconds, the attempt used: it failed and may be tried again."""
         w = engine_work
         async with self.tx.tenant_tx() as c:
             await c.execute(
                 w.update()
                 .where(w.c.id == work.id, w.c.claimed_by == self.owner)
                 .values(status="queued", available_at=db_now(c) + delay, lease_expires_at=None, error=error)
+            )
+
+    async def give_back(self, work: Work, delay: float) -> None:
+        """Back to the queue after `delay` seconds without using an attempt: nothing failed (the run's lease was busy,
+        or this worker is stopping), so the claim's own attempt is returned and no lapse is counted."""
+        w = engine_work
+        async with self.tx.tenant_tx() as c:
+            await c.execute(
+                w.update()
+                .where(w.c.id == work.id, w.c.claimed_by == self.owner, w.c.status == "claimed")
+                .values(
+                    status="queued",
+                    available_at=db_now(c) + delay,
+                    lease_expires_at=None,
+                    attempts=sa.case((w.c.attempts > 0, w.c.attempts - 1), else_=0),
+                )
             )
 
     async def enqueue(

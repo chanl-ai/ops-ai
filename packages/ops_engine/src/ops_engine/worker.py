@@ -4,7 +4,10 @@ One claimed row is one pass over a run: a start runs it from its trigger (or con
 a crash), a resume answers the review it waits on. While it runs, a heartbeat renews both the thread lease and the
 work claim. A worker that dies leaves both to lapse; the next claim takes the row over with a higher lease generation
 and LangGraph continues from the last checkpoint, where the node wrapper returns every recorded step without running
-it. A pass that raises is retried; the third failure fails the run with its error (workflow-runner.md section 4).
+it. A pass that fails is tried again only when its error's kind is retryable (ops_contracts.errors.CODES), after a
+jittered wait no shorter than the error's retry-after; a non-retryable error fails the run at once, and a run whose
+MAX_PASSES attempts are used pauses as Stuck with its last error, for Retry. A busy lease, a shutdown or a deploy
+gives the claim back without using an attempt (workflow-runner.md section 4).
 
 The sweeper is this claim: a lapsed claim is what a crashed run looks like here. The v1 sweeper in the API process
 leaves engine threads (RUN_PREFIX) alone.
@@ -24,15 +27,23 @@ from typing import Any, cast
 from langgraph.types import Command
 
 from ops_checkpointer import LeaseSupersededError
-from ops_contracts.errors import CODES, RunError, run_error
+from ops_contracts.errors import CODES, RunError, code_of, run_error
 from ops_service_kit.http import Json
 from ops_service_kit.logging import get_logger
 from ops_store import background
 
-from .compiler import CHANNEL, CompiledCache, NodeFailedError, WriteInDoubtError, WriteUncertainError, technical
+from .compiler import (
+    CHANNEL,
+    CompiledCache,
+    NodeFailedError,
+    WriteInDoubtError,
+    WriteUncertainError,
+    failure_code,
+    technical,
+)
 from .definition import parse
 from .journal import RunCancelledError
-from .node_types import TypeRegistry
+from .node_types import TypeRegistry, jittered
 from .ports import EnginePorts, EventPort, LeaseBusyError, LeasePort
 from .store import TERMINAL, DefinitionStore, RunRow, RunStore, SqlJournal, Transactions, Work, WorkQueue
 from .store.clock import now_iso
@@ -40,7 +51,8 @@ from .store.clock import now_iso
 log = get_logger("ops_engine.worker")
 
 MAX_PASSES = 4
-# The wait before a failed pass is tried again: an outage such as a service restart is ridden out.
+# The longest wait before a failed pass is tried again, by attempt: an outage such as a service restart is ridden
+# out. Each wait is jittered over the whole span (node_types.jittered).
 PASS_WAITS = (5.0, 30.0, 120.0)
 # A write still in doubt after this many passes (backoff capped at 30 s, so about ten minutes) fails its run for a
 # person to settle: the gateway expires a stale claim to lost well before, so this is reached only when it cannot.
@@ -52,7 +64,8 @@ UNEXPECTED = "The run stopped on an error outside its steps. The technical detai
 
 def failure_of(e: Exception) -> tuple[str, str, RunError]:
     """(plain message, technical detail, the error model's record) for a pass that failed. A step's failure keeps its
-    code, step and attempt; anything else is ours (`internal_error`)."""
+    code, step and attempt; an outside call that failed before a step ran (the tools service restarting) is that
+    call's failure, and anything else is ours (`internal_error`)."""
     if isinstance(e, NodeFailedError):
         err = run_error(
             e.code,
@@ -64,7 +77,7 @@ def failure_of(e: Exception) -> tuple[str, str, RunError]:
             retry_after_seconds=e.retry_after,
         )
         return e.plain, e.detail, err
-    return UNEXPECTED, technical(e), run_error("internal_error", UNEXPECTED)
+    return UNEXPECTED, technical(e), run_error(failure_code(e), UNEXPECTED)
 
 
 # The error model's code for a step that left by a way of failing and led the run to a failure End.
@@ -78,6 +91,12 @@ PORT_CODES = {
 
 class ClaimLostError(RuntimeError):
     pass
+
+
+def pass_wait(attempts: int, retry_after: float | None) -> float:
+    """The wait before a failed pass's next attempt: jittered over its PASS_WAITS span, and never shorter than the
+    error's retry-after."""
+    return jittered(PASS_WAITS[min(attempts, len(PASS_WAITS)) - 1], retry_after)
 
 
 # The review deadline when the host gives none: the workspace setting's own default.
@@ -213,6 +232,11 @@ class Worker:
             task.add_done_callback(tasks.discard)
         for t in list(tasks):
             t.cancel()
+        # Each cancelled pass gives its claim back before the loop returns (_process); not awaited, the process could
+        # exit first and every deploy would count a lapse toward Stuck.
+        for t in list(tasks):
+            with suppress(asyncio.CancelledError, Exception):
+                await t
 
     async def _due(self) -> int | None:
         try:
@@ -246,11 +270,13 @@ class Worker:
             return
         if self.host.enter_run is not None:
             self.host.enter_run(run)
-        lease_run = f"work_{work.id}_{work.attempts}"
+        # The owner too: a claim given back keeps its attempt count, so a later claim of the row reads the same count.
+        lease_run = f"work_{work.id}_{work.attempts}_{self.host.owner}"
         try:
             generation = await self.host.leases.acquire(run.id, lease_run)
         except LeaseBusyError:
-            await self.queue.release(work, 1.0)
+            # Another pass holds the run: nothing failed, so the claim goes back without using an attempt.
+            await self.queue.give_back(work, 1.0)
             return
         lost = asyncio.Event()
         beat = asyncio.create_task(self._heartbeat(work, run.id, lease_run, lost))
@@ -267,6 +293,15 @@ class Worker:
                 raise ClaimLostError("the lease or the work claim was taken over mid-pass")
             passing.result()
             await self.queue.done(work)
+        except asyncio.CancelledError:
+            # The worker is stopping (a shutdown or a deploy): the claim goes back now, without using an attempt, and
+            # the next worker continues from the last checkpoint.
+            passing.cancel()
+            with suppress(asyncio.CancelledError, Exception):
+                await passing
+            with suppress(Exception):
+                await asyncio.shield(self.queue.give_back(work, 0.0))
+            raise
         except RunCancelledError as e:
             # The step under way when the run was cancelled ended and was recorded; the next one did not begin.
             log.info("engine_pass_cancelled", run=run.id, work=work.id, error=str(e))
@@ -293,13 +328,16 @@ class Worker:
             message, detail, err = failure_of(e)
             log.exception("engine_pass_failed", run=run.id, work=work.id, attempt=work.attempts, code=err.code)
             with suppress(LeaseSupersededError):
-                if work.attempts < MAX_PASSES:
+                if not code_of(err.code).retryable:
+                    # Trying again cannot help (bad input, a rule's refusal, our own fault): it fails now.
+                    await self._fail(run, generation, work, message, detail, err=err)
+                elif work.attempts < MAX_PASSES:
                     await self.runs.update(
                         run.id, generation=generation, status="queued", error=message, failure=err.wire()
                     )
-                    await self.queue.release(work, PASS_WAITS[min(work.attempts, len(PASS_WAITS)) - 1], error=detail)
+                    await self.queue.release(work, pass_wait(work.attempts, err.retry_after_seconds), error=detail)
                 else:
-                    await self._fail(run, generation, work, message, detail, err=err)
+                    await self._stuck(run, generation, work, message, detail, err=err)
         finally:
             watching.cancel()
             beat.cancel()
@@ -308,11 +346,18 @@ class Worker:
             await self.host.leases.release(run.id, lease_run)
 
     async def _heartbeat(self, work: Work, thread_id: str, lease_run: str, lost: asyncio.Event) -> None:
-        """Renews the lease and the claim. A cancel does not stop the pass here: the step under way finishes and is
-        journaled, and the next step's journal row is refused (RunCancelledError), so no call is cut off mid-flight."""
+        """Renews the lease and the claim while the pass runs, a long tool call included. A cancel does not stop the
+        pass here: the step under way finishes and is journaled, and the next step's journal row is refused
+        (RunCancelledError), so no call is cut off mid-flight. A renewal that raises (a database blip) is tried
+        again at the next beat: only a lease or claim another worker has taken stops the pass."""
         while True:
             await asyncio.sleep(self.host.leases.ttl / 3)
-            if not await self.host.leases.heartbeat(thread_id, lease_run) or not await self.queue.renew(work):
+            try:
+                held = await self.host.leases.heartbeat(thread_id, lease_run) and await self.queue.renew(work)
+            except Exception as e:
+                log.warning("engine_heartbeat_failed", run=thread_id, work=work.id, error=type(e).__name__)
+                continue
+            if not held:
                 log.warning("engine_lease_lost", run=thread_id, work=work.id)
                 lost.set()
                 return
@@ -332,6 +377,15 @@ class Worker:
         await self.queue.done(work, status="failed", error=detail)
         await self._drop_checkpoints(run.id)
         await self.runs.settle_parents(run.id, run.created_by)
+
+    async def _stuck(
+        self, run: RunRow, generation: int, work: Work, message: str, detail: str, *, err: RunError
+    ) -> None:
+        """Pauses the run as Stuck with its last error once its attempts are used: its checkpoints and journal stay,
+        so Retry (RunStore.retry) continues it from its last recorded step."""
+        await self.runs.update(run.id, generation=generation, status="stuck", error=message, failure=err.wire())
+        await self._event(run, generation, "stuck", None, {"message": message, "detail": detail, "code": err.code})
+        await self.queue.done(work, status="stuck", error=detail)
 
     async def _drop_checkpoints(self, run_id: str) -> None:
         """The journal is the record the console reads; an ended run's checkpoints are not needed. A failed delete
