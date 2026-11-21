@@ -93,7 +93,8 @@ without console errors, including the `?mock=slow`, `?mock=error` and `?mock=emp
 promotes a release.
 
 CI (`.github/workflows/ci.yml`) runs only the jobs a change needs, chosen by `scripts/ci-plan.sh`, so most pull
-requests skip some of them. The check that decides a merge is `ci-ok`: it always runs, waits for every other CI job,
+requests skip some of them: a change of documents only runs the docs job and the secret scan. To run every job,
+put `[ci full]` in the pull request title or add the `ci:full` label. The check that decides a merge is `ci-ok`: it always runs, waits for every other CI job,
 and fails when any of them failed or was cancelled. A skipped job counts as passed. Wait for `ci-ok` to finish rather
 than reading the other checks one by one; a red `ci-ok` names the failed job in its log. The secret scan (`scan`, in
 `leak-scan.yml`) is a separate workflow and is also required.
