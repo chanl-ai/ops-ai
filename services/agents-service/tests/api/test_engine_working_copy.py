@@ -161,6 +161,7 @@ async def test_a_tool_step_the_team_lacks_is_listed_with_its_step_and_refused(cl
     base = (await _save(client, named, view["saveBase"])).json()["data"]["saveBase"]
     preview = (await client.get(f"{WF}/publish-preview")).json()["data"]
     missing = [b for b in preview["blockers"] if b["code"] == "tool_not_available"]
+    assert {"node", "field", "level", "code", "message"} <= set(missing[0]), "the shape agent and skill checks return"
     assert [(b["node"], b["field"], b["level"]) for b in missing] == [("lookup", "operation", "error")], preview
     refused = await _publish(client, base)
     assert refused.status_code == 422 and refused.json()["error"]["code"] == "tool_not_available", refused.text

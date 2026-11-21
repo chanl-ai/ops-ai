@@ -298,7 +298,7 @@ export function RequestReviewDialog({ open, onOpenChange, skill, isPending, onSu
         {!check.canRequest && (
           <ul className="flex flex-col gap-1 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-destructive-text" data-testid="request-review-blockers">
             {check.blockers.map((b) => (
-              <li key={b}>{b}</li>
+              <li key={`${b.code}:${b.field ?? ''}:${b.message}`}>{b.message}</li>
             ))}
           </ul>
         )}

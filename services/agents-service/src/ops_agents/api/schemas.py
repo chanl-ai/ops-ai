@@ -1702,6 +1702,17 @@ class ReferenceSearch(Out):
     groups: list[ReferenceGroup]
 
 
+class Blocker(Out):
+    """One reason a publish is refused, in the one shape the agent, skill and workflow publish checks return: the
+    workflow step (`node`) or the field it is in, its level and code, and the sentence the publish dialog shows."""
+
+    node: str | None = None
+    field: str | None = None
+    level: Literal["error", "warning"] = "error"
+    code: str
+    message: str
+
+
 class BlockerPosition(Out):
     """Where a publish problem is: the field (`steps`, `notWhen`, `useWhen`, `brief.never`, `source`), and the step
     (from 1) or list index when it has one; for `source`, `index` is the line (from 1)."""
@@ -1741,6 +1752,8 @@ class AgentPublishCheck(Out):
 
     can_request: bool
     problems: list[PublishBlocker] = Field(default_factory=list[PublishBlocker])
+    # The problems in the shape every publish check returns.
+    blockers: list[Blocker] = Field(default_factory=list[Blocker])
 
 
 class ReferenceAdded(Out):
@@ -1753,8 +1766,8 @@ class ReferenceAdded(Out):
 
 class SkillPublishCheck(Out):
     can_request: bool
-    # Each problem's sentence, kept for callers that read only these; `problems` says where each one is.
-    blockers: list[str]
+    # The problems in the shape every publish check returns.
+    blockers: list[Blocker]
     problems: list[PublishBlocker] = Field(default_factory=list[PublishBlocker])
     # What does not block: a tool a step's sentence names and the step does not run.
     warnings: list[PublishBlocker] = Field(default_factory=list[PublishBlocker])

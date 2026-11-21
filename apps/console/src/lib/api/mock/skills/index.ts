@@ -332,7 +332,12 @@ export function createSkillsMock(deps: SkillsDeps) {
     }
     const problems = stepProblems(n.content);
     blockers.push(...problems.map((p) => p.message));
-    return { canRequest: !blockers.length, blockers, problems, warnings: stepWarnings(n.content), editClass: ec, approversNeeded: ec === 're_approval' ? 2 : 1 };
+    // The service's shape: one Blocker per sentence, its field taken from the problem when it has one.
+    const shaped = blockers.map((message) => {
+      const p = problems.find((q) => q.message === message);
+      return { node: null, field: p?.position?.field ?? null, level: 'error' as const, code: p?.kind ?? 'not_ready', message };
+    });
+    return { canRequest: !blockers.length, blockers: shaped, problems, warnings: stepWarnings(n.content), editClass: ec, approversNeeded: ec === 're_approval' ? 2 : 1 };
   };
 
   /** A step that runs one tool and mentions another, which the service tells the builder about without blocking. */
@@ -932,7 +937,7 @@ export function createSkillsMock(deps: SkillsDeps) {
       respond(() => {
         const sk = find(sid);
         const check = publishCheck(sk);
-        if (!check.canRequest) throw new ApiError(check.blockers.join(' '), 422);
+        if (!check.canRequest) throw new ApiError(check.blockers.map((b) => b.message).join(' '), 422);
         if (!note.trim()) throw new ApiError('Say what changed and why.', 400);
         const r = openPublish(sk, me, note.trim());
         audit(sk, 'edited', `Requested review of v${newest(sk).version} (${r.id})`, { reason: note });

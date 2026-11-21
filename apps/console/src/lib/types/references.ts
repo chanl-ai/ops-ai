@@ -81,3 +81,13 @@ export interface AgentPublishCheck {
   canRequest: boolean;
   problems: PublishBlocker[];
 }
+
+/** One reason a publish is refused, in the one shape the agent, skill and workflow publish checks return: the workflow
+ * step (`node`) or the field it is in, its level and code, and the sentence the publish dialog shows. */
+export interface Blocker {
+  node: string | null;
+  field: string | null;
+  level: 'error' | 'warning';
+  code: string;
+  message: string;
+}

@@ -254,6 +254,14 @@ class BlockedBy(TypedDict, closed=True):
     when: Literal["before", "after"]
 
 
+class Blocker(TypedDict, closed=True):
+    code: str
+    field: NotRequired[str | None]
+    level: NotRequired[Literal["error", "warning"]]
+    message: str
+    node: NotRequired[str | None]
+
+
 class BlockerPosition(TypedDict, closed=True):
     field: str
     index: NotRequired[int | None]
@@ -1397,6 +1405,7 @@ class PublishIn(TypedDict, closed=True):
 
 
 class PublishRequestInput(TypedDict, closed=True):
+    follows: NotRequired[str | None]
     note: NotRequired[str]
     version: int
 
@@ -1809,7 +1818,7 @@ class SkillPublishAgent(TypedDict, closed=True):
 
 class SkillPublishCheck(TypedDict, closed=True):
     approversNeeded: int
-    blockers: list[str]
+    blockers: list[Blocker]
     canRequest: bool
     editClass: Literal["free", "re_test", "re_approval"]
     problems: NotRequired[list[PublishBlocker]]
@@ -2688,6 +2697,7 @@ class AgentPatch(TypedDict, closed=True):
 
 
 class AgentPublishCheck(TypedDict, closed=True):
+    blockers: NotRequired[list[Blocker]]
     canRequest: bool
     problems: NotRequired[list[PublishBlocker]]
 
@@ -4422,6 +4432,7 @@ class PublishReview(TypedDict, closed=True):
     decisionReason: NotRequired[str | None]
     egressHost: NotRequired[EgressHostRef | None]
     evidence: list[Evidence]
+    follows: NotRequired[str | None]
     id: str
     kind: Literal["agent_publish", "publish_request", "skill_publish", "egress_host"]
     policy: ReviewPolicy
@@ -4431,7 +4442,7 @@ class PublishReview(TypedDict, closed=True):
     risk: Literal["critical", "high", "medium", "low"]
     skillPublish: NotRequired[SkillPublishInfo | None]
     slaMinutes: NotRequired[int | None]
-    status: Literal["pending", "in_review", "approved", "rejected", "returned"]
+    status: Literal["pending", "in_review", "approved", "rejected", "returned", "withdrawn"]
     title: str
     toolModule: NotRequired[ToolModuleReviewRef | None]
     workflowId: str
@@ -4570,7 +4581,7 @@ class ThreadReview(TypedDict, closed=True):
     runId: NotRequired[str | None]
     slaMinutes: int | None
     sourceFile: NotRequired[str | None]
-    status: Literal["pending", "in_review", "approved", "rejected", "returned"]
+    status: Literal["pending", "in_review", "approved", "rejected", "returned", "withdrawn"]
     stepName: NotRequired[str | None]
     stepUp: bool
     stepUpRef: NotRequired[str | None]

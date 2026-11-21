@@ -37,6 +37,7 @@ from ops_service_kit.listing import ListQuery
 from ops_service_kit.names import Name
 from ops_store import isolation
 
+from ...app.skill_content import Problem, blocker_of
 from ...store.agent_registry import AgentRow, digest_of, refuse_stale
 from ...store.evals import EvalStore
 from ...store.graphs import StoredThread
@@ -755,7 +756,9 @@ async def publish_check(rt: Rt, me: Me, _: Tx, agent_id: str, version: Annotated
     row = await changeable(rt, me, agent_id, "publish")
     require_newest_draft(row, version)
     problems = await _publish_problems(rt, (await registry(rt).version(agent_id, version)).spec)
-    return ok({"canRequest": not problems, "problems": problems})
+    return ok(
+        {"canRequest": not problems, "problems": problems, "blockers": [blocker_of(cast(Problem, p)) for p in problems]}
+    )
 
 
 @router.post("/{agent_id}/publish-requests", response_model=Envelope[PublishReview], status_code=201)

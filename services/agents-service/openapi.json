@@ -1182,6 +1182,13 @@
         "additionalProperties": false,
         "description": "Whether the newest draft can be published, and each thing that stops it with the field it is in.",
         "properties": {
+          "blockers": {
+            "items": {
+              "$ref": "#/components/schemas/Blocker"
+            },
+            "title": "Blockers",
+            "type": "array"
+          },
           "canRequest": {
             "title": "Canrequest",
             "type": "boolean"
@@ -2945,6 +2952,57 @@
           "when"
         ],
         "title": "BlockedBy",
+        "type": "object"
+      },
+      "Blocker": {
+        "additionalProperties": false,
+        "description": "One reason a publish is refused, in the one shape the agent, skill and workflow publish checks return: the\nworkflow step (`node`) or the field it is in, its level and code, and the sentence the publish dialog shows.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field"
+          },
+          "level": {
+            "default": "error",
+            "enum": [
+              "error",
+              "warning"
+            ],
+            "title": "Level",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "node": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "Blocker",
         "type": "object"
       },
       "BlockerPosition": {
@@ -15383,6 +15441,17 @@
       "PublishRequestInput": {
         "additionalProperties": false,
         "properties": {
+          "follows": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Follows"
+          },
           "note": {
             "default": "",
             "title": "Note",
@@ -15527,6 +15596,17 @@
             "title": "Evidence",
             "type": "array"
           },
+          "follows": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Follows"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -15602,7 +15682,8 @@
               "in_review",
               "approved",
               "rejected",
-              "returned"
+              "returned",
+              "withdrawn"
             ],
             "title": "Status",
             "type": "string"
@@ -19810,7 +19891,7 @@
           },
           "blockers": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/Blocker"
             },
             "title": "Blockers",
             "type": "array"
@@ -23502,7 +23583,8 @@
               "in_review",
               "approved",
               "rejected",
-              "returned"
+              "returned",
+              "withdrawn"
             ],
             "title": "Status",
             "type": "string"
@@ -48546,6 +48628,194 @@
           }
         },
         "summary": "Decide Publish Request",
+        "tags": [
+          "Reviews"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/publish-requests/{request_id}/withdraw": {
+      "post": {
+        "description": "The requester takes back their waiting request, so the version can be changed and sent again (a new request\nwith `follows` naming this one). 403 `not_requester` for anyone else; 409 `already_decided` once decided.",
+        "operationId": "reviews_withdraw_publish_request",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_PublishReview_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Withdraw Publish Request",
         "tags": [
           "Reviews"
         ],

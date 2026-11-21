@@ -1874,6 +1874,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/publish-requests/{request_id}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Withdraw Publish Request
+         * @description The requester takes back their waiting request, so the version can be changed and sent again (a new request
+         *     with `follows` naming this one). 403 `not_requester` for anyone else; 409 `already_decided` once decided.
+         */
+        post: operations["reviews_withdraw_publish_request"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/references": {
         parameters: {
             query?: never;
@@ -4048,6 +4069,8 @@ export interface components {
          * @description Whether the newest draft can be published, and each thing that stops it with the field it is in.
          */
         AgentPublishCheck: {
+            /** Blockers */
+            blockers?: components["schemas"]["Blocker"][];
             /** Canrequest */
             canRequest: boolean;
             /** Problems */
@@ -4631,6 +4654,27 @@ export interface components {
              * @enum {string}
              */
             when: "before" | "after";
+        };
+        /**
+         * Blocker
+         * @description One reason a publish is refused, in the one shape the agent, skill and workflow publish checks return: the
+         *     workflow step (`node`) or the field it is in, its level and code, and the sentence the publish dialog shows.
+         */
+        Blocker: {
+            /** Code */
+            code: string;
+            /** Field */
+            field?: string | null;
+            /**
+             * Level
+             * @default error
+             * @enum {string}
+             */
+            level: "error" | "warning";
+            /** Message */
+            message: string;
+            /** Node */
+            node?: string | null;
         };
         /**
          * BlockerPosition
@@ -9005,6 +9049,8 @@ export interface components {
         };
         /** PublishRequestInput */
         PublishRequestInput: {
+            /** Follows */
+            follows?: string | null;
             /**
              * Note
              * @default
@@ -9048,6 +9094,8 @@ export interface components {
             egressHost?: components["schemas"]["EgressHostRef"] | null;
             /** Evidence */
             evidence: components["schemas"]["Evidence"][];
+            /** Follows */
+            follows?: string | null;
             /** Id */
             id: string;
             /**
@@ -9073,7 +9121,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "pending" | "in_review" | "approved" | "rejected" | "returned";
+            status: "pending" | "in_review" | "approved" | "rejected" | "returned" | "withdrawn";
             /** Title */
             title: string;
             toolModule?: components["schemas"]["ToolModuleReviewRef"] | null;
@@ -10448,7 +10496,7 @@ export interface components {
             /** Approversneeded */
             approversNeeded: number;
             /** Blockers */
-            blockers: string[];
+            blockers: components["schemas"]["Blocker"][];
             /** Canrequest */
             canRequest: boolean;
             /**
@@ -11626,7 +11674,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "pending" | "in_review" | "approved" | "rejected" | "returned";
+            status: "pending" | "in_review" | "approved" | "rejected" | "returned" | "withdrawn";
             /** Stepname */
             stepName?: string | null;
             /** Stepup */
@@ -23911,6 +23959,109 @@ export interface operations {
                 "application/json": components["schemas"]["DecisionInput"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_PublishReview_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    reviews_withdraw_publish_request: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

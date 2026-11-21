@@ -87,7 +87,7 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
   const [dialog, setDialog] = React.useState<'review' | 'deprecate' | 'delete' | null>(null);
   const newest = s.versions[0];
   const live = s.usage.filter((u) => u.agentAvailability === 'published');
-  const reviewReason = s.publishCheck.canRequest ? undefined : s.publishCheck.blockers.join(' ');
+  const reviewReason = s.publishCheck.canRequest ? undefined : s.publishCheck.blockers.map((b) => b.message).join(' ');
 
   const runExport = async (version?: number) => {
     try {

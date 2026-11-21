@@ -1333,6 +1333,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "reviews_withdraw_publish_request": {
+        "body": None,
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/publish-requests/{request_id}/withdraw",
+        "pathParams": ["request_id"],
+        "query": [],
+        "stream": False,
+    },
     "templates_list_templates": {
         "body": None,
         "headers": [],
@@ -2701,6 +2710,12 @@ class Operations:
         "Decide Publish Request"
         return self._t.call(
             SERVICE, OPERATIONS["reviews_decide_publish_request"], {"request_id": request_id}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
+    def reviews_withdraw_publish_request(self, request_id: str) -> PublishReview:
+        "Withdraw Publish Request"
+        return self._t.call(
+            SERVICE, OPERATIONS["reviews_withdraw_publish_request"], {"request_id": request_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
     def agents_references_search(
@@ -4314,6 +4329,12 @@ class AsyncOperations:
         "Decide Publish Request"
         return await self._t.call(
             SERVICE, OPERATIONS["reviews_decide_publish_request"], {"request_id": request_id}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
+    async def reviews_withdraw_publish_request(self, request_id: str) -> PublishReview:
+        "Withdraw Publish Request"
+        return await self._t.call(
+            SERVICE, OPERATIONS["reviews_withdraw_publish_request"], {"request_id": request_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
     async def agents_references_search(

@@ -1684,6 +1684,17 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "reviews_withdraw_publish_request": {
+    "body": null,
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/publish-requests/{request_id}/withdraw",
+    "pathParams": [
+      "request_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "templates_list_templates": {
     "body": null,
     "headers": [],
