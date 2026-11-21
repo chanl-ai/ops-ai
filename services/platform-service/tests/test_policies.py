@@ -28,6 +28,8 @@ DEFAULTS: dict[str, Any] = {
     "extractionFloor": 0.8,
     "stepUp": False,
     "publishReview": {},
+    # No team set: a skill written as text publishes with a write the agent decides, shown as a hint.
+    "skillPublishStrict": {},
     "companySignInRequired": False,
     "chatThreadsOwnerOnly": True,
     "egressNewHosts": "ask_security",
