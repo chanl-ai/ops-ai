@@ -64,3 +64,8 @@ async def test_a_text_past_the_step_cap_saves_but_cannot_publish_and_a_plain_tex
         )
         assert {k: d["content"].get(k) for k in kept} == kept, "a text with no mention keeps the form's keys"
         assert d["content"]["instructions"] == "Be warm and brief."
+        # A reworded stop replaces its ending; the one the text no longer says goes with it.
+        for reason in ("Card blocked", "Card held"):
+            sent = {"source": f'Look the customer up with @tool:lookup_customer\nstop "{reason}"', "baseVersion": 1}
+            d = _ok(await c.put(f"/v1/skills/{s['id']}/draft", json={**sent, "exit": d["content"].get("exit", {})}))
+        assert d["content"]["exit"] == {"card_held": "Card held"}

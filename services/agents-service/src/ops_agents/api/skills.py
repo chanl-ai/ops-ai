@@ -389,7 +389,8 @@ def render(content: SkillContent, part: str | None, given: dict[str, str]) -> Re
             code="missing_input",
             details={"missing": missing},
         )
-    text = str(content["instructions"])
+    # A skill written as text renders as written: its stored instructions are empty once the text runs as steps.
+    text = text_of(cast(Json, content)) if content.get("source") is not None else str(content["instructions"])
     if chosen is not None:
         text += "\n\n" + str(chosen["instructions"])
     for n, v in values.items():

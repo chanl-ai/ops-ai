@@ -202,6 +202,10 @@ def test_a_guard_after_a_sentence_reads_the_tool_above_and_holds_on_either_side_
         run = steps.on_result(run, [skill], result, True).run
         assert run.running is None and run.history[-1].why == "check", run.history[-1]
         assert [h.tools for h in run.holds] == [["send_link"]], "a rule's stop holds the write after it"
+        # The holder takes the other path next time: it got past the step, so the hold ends.
+        clear = {"status": "shipped"} if program is guard else {"late": False}
+        run = steps.on_result(steps.start(run, skill, [skill], by="menu"), [skill], clear, True).run
+        assert run.holds == [], "the hold ends once the holder gets past its step"
 
 
 def test_a_path_that_reaches_done_early_waits_for_the_results_the_skill_owes() -> None:

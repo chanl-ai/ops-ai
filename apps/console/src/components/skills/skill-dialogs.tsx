@@ -411,7 +411,8 @@ export function VersionDiffDialog({ open, onOpenChange, versions, from, to, onCh
                 field('Resources', a.content.resources.map((r) => r.name).join(', '), b.content.resources.map((r) => r.name).join(', ')),
               ]}
             </div>
-            <DiffView before={a.content.instructions} after={b.content.instructions} testId="version-diff" />
+            {/* A skill written as text compares its text; its stored instructions are empty once the text has steps. */}
+            <DiffView before={a.content.source ?? a.content.instructions} after={b.content.source ?? b.content.instructions} testId="version-diff" />
           </>
         )}
       </div>

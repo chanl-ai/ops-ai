@@ -356,7 +356,9 @@ async def publish_problems(
             ], []
         gone = await missing(refs, offered, bases, team_id=team_id, skills=skills)
         declared = {str(k): str(v) for k, v in narrow.json_object(content.get("exit")).items()}
-        reading = skill_text.read(source, missing=gone, exits=declared)
+        # Always on or in parts, the text never runs as steps, so its length blocks nothing.
+        plain = "plain" if content.get("loading") == "always" or content.get("parts") else None
+        reading = skill_text.read(source, missing=gone, exits=declared, plain=plain)
         found: list[Problem] = [
             {
                 "kind": "missing_reference",

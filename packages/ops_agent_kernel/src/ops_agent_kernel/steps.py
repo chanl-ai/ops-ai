@@ -542,12 +542,19 @@ def _stop_if_held(run: SkillRunState, skills: Sequence[Skill], told: list[str]) 
     _end(run, "failed", skills, holds=False, why="held")
 
 
+def _release(run: SkillRunState) -> None:
+    """The holder got past its step (rule 4): its hold from that step ends."""
+    r = run.running
+    assert r is not None
+    key = _key(r)
+    run.holds = [h for h in run.holds if not (h.skill_id == r.skill_id and h.step == key)]
+
+
 def _passed(run: SkillRunState, skills: Sequence[Skill], value: Any, told: list[str]) -> None:
     r = run.running
     assert r is not None
     f = _frame(r)
-    key = _key(r)
-    run.holds = [h for h in run.holds if not (h.skill_id == r.skill_id and h.step == key)]
+    _release(run)
     f.results[str(f.step)] = _kept(value, True)
     if (to := _step(f).next) is not None:
         _jump(run, skills, to, told)
@@ -611,6 +618,8 @@ def _otherwise(run: SkillRunState, skills: Sequence[Skill], value: Any, told: li
         else:
             _end(run, to.exit, skills, why="check", check=branch.test.text)
         return
+    # A path that is not a guard gets past the step as much as passing does.
+    _release(run)
     _jump(run, skills, to, told)
 
 

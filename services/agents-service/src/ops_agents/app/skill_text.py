@@ -843,6 +843,25 @@ def read(
     return Reading(program, hints, errors, uses, list(marks.values()), phrases, [s.line for s in c.out], refs)
 
 
+def stop_exits(text: str) -> dict[str, str]:
+    """The endings a text's own `stop "…"` lines make (name to reason). A save drops them from the endings it was
+    sent before it reads the new text, so an ending the text no longer says goes with it, and only the endings the
+    form declares itself are kept."""
+    out: dict[str, str] = {}
+    marks: dict[int, Mark] = {
+        n: {"line": n, "kind": "text", "step": None, "how": None, "tool": None, "depth": 0}
+        for n in range(1, text.count("\n") + 2)
+    }
+    stack: list[_Item] = list(_Parser(normalised(text), [], frozenset(), marks).block(0))
+    while stack:
+        item = stack.pop()
+        if isinstance(item, _If):
+            stack += [*item.body, *item.orelse]
+        elif isinstance(item, _Stop) and item.name not in BUILT_IN_EXITS and item.meaning:
+            out.setdefault(item.name, item.meaning)
+    return out
+
+
 def render(instructions: str, program: SkillProgram | None) -> str:
     """A skill saved as a list of steps, written as text that `read` reads back to the same steps: each step's
     instruction with the line naming its tool last (so its check reads that tool's result), `(locked)` on a step a

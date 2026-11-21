@@ -27,6 +27,7 @@ from ops_service_kit.listing import ListQuery
 from ops_service_kit.logging import get_logger
 from ops_store import isolation
 
+from ...app import skill_text
 from ...app.skill_content import runs_of
 from ...store.skill_list import View, menu_versions, newest_specs, offered_by, skills_page
 from ...store.skills import SkillRow
@@ -361,6 +362,10 @@ async def save_skill_draft(rt: Rt, me: Me, skill_id: str, body: SkillDraftPatch)
         "toolIds": [narrow.an_object(t, "tool")["toolId"] for t in tools],
     }
     merged |= body.model_dump(by_alias=True, exclude_none=True, exclude={"note", "base_version"})
+    if body.source is not None and isinstance(before := newest.content.get("source"), str):
+        # The endings sent back include those the stored text's stop lines made; the new text says its own again.
+        made = skill_text.stop_exits(before)
+        merged["exit"] = {k: v for k, v in narrow.json_object(merged.get("exit")).items() if k not in made}
     merged.pop("slug", None)
     if body.source is None and (body.steps is not None or body.instructions is not None):
         # Steps or instructions sent without a text replace the text: the stored one would be read over them.

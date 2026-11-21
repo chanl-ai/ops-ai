@@ -254,8 +254,9 @@ class SubRun(RunModel):
     return_to: int
     program: SkillProgram
     rules: str = ""
-    # A path reached done before the last step and the skill still owes its results: it waits for exit.
-    owing: bool = False
+    # A path reached done before the last step and the skill still owes its results: it waits for exit. Written only
+    # when on, so a record of a skill that never owes reads the same to a build without the field.
+    owing: bool | None = Field(default=None, exclude_if=lambda v: v is None)
 
 
 class RunningSkill(RunModel):
@@ -278,8 +279,9 @@ class RunningSkill(RunModel):
     # The steps and shared notes of the version that started, which the skill finishes on.
     program: SkillProgram
     rules: str = ""
-    # A path reached done before the last step and the skill still owes its results: it waits for exit.
-    owing: bool = False
+    # A path reached done before the last step and the skill still owes its results: it waits for exit. Written only
+    # when on, so a record of a skill that never owes reads the same to a build without the field.
+    owing: bool | None = Field(default=None, exclude_if=lambda v: v is None)
 
 
 # Why a skill ended when it did not finish: a check did not pass, a person rejected its action, a step could not be
