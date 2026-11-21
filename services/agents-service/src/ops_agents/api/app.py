@@ -250,7 +250,8 @@ def _no_team() -> str | None:
     return None
 
 
-def create_app(
+@asynccontextmanager
+async def open_runtime(
     settings: Settings,
     *,
     model: Model | None = None,
@@ -260,14 +261,13 @@ def create_app(
     gateway: httpx.AsyncClient | None = None,
     models_client: httpx.AsyncClient | None = None,
     completions_client: httpx2.AsyncClient | None = None,
-    auth: Auth | None = None,
     kb_client: httpx.AsyncClient | None = None,
     knowledge: Knowledge | None = None,
-) -> FastAPI:
-    """Tests inject a scripted model, an in-memory database, an in-memory checkpointer and fake graph models;
-    `completions_client` reaches an in-process models-service; `auth` resolves callers against a stand-in for
-    platform-service; `kb_client` reaches a stand-in for kb-service; `knowledge` replaces kb-service outright (tests
-    with fixture passages)."""
+) -> AsyncGenerator[tuple[Runtime, AsyncExitStack]]:
+    """The runtime a chat turn runs on (model, tools, knowledge, graphs, leases), built once for every process that
+    runs one: the API (create_app) and the workflow worker (api/worker.py). Yields it with the exit stack its
+    resources close on, so the caller adds its own loops to the same stack. Nothing is seeded and no loop starts
+    here; the API does both. Tests inject what create_app's docstring lists."""
     catalog = load_catalog(
         settings.seed_dir,
         settings.agents_seed_file,
@@ -330,105 +330,146 @@ def create_app(
     # The review deadline policy (reviewSlaHours) lives in platform-service; with no platform URL the default holds.
     policies_http = httpx.AsyncClient(base_url=settings.platform_url, timeout=10) if settings.platform_url else None
 
-    @asynccontextmanager
-    async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
-        rt = Runtime(settings=settings, catalog=catalog, db=db, ports=ports, model_error=model_error)
-        rt.platform_keys = app.state.ops_auth.identity.keys
-        if policies_http is not None:
-            platform = service_client(settings, policies_http, "platform")
-            rt.review_sla = PlatformReviewSla(platform)
-            rt.policies = PlatformPolicies(platform)
-            rt.team_names = PlatformTeamNames(platform)
-            rt.people_names = PlatformPeopleNames(platform)
-        rt.gateway = gateway_client is not None
-        rt.model_aliases = (
-            HttpModelAliases(service_client(settings, models_http, "models"))
-            if models_http is not None
-            else StaticModelAliases({settings.model_alias})
+    rt = Runtime(settings=settings, catalog=catalog, db=db, ports=ports, model_error=model_error)
+    if policies_http is not None:
+        platform = service_client(settings, policies_http, "platform")
+        rt.review_sla = PlatformReviewSla(platform)
+        rt.policies = PlatformPolicies(platform)
+        rt.team_names = PlatformTeamNames(platform)
+        rt.people_names = PlatformPeopleNames(platform)
+    rt.gateway = gateway_client is not None
+    rt.model_aliases = (
+        HttpModelAliases(service_client(settings, models_http, "models"))
+        if models_http is not None
+        else StaticModelAliases({settings.model_alias})
+    )
+    rt.tools = gateway_client
+    rt.tool_reviews = gateway_client or (
+        GatewayClient(
+            required_client(settings, httpx.AsyncClient(base_url=settings.tools_url, timeout=30), "tools", timeout=30)
         )
-        rt.tools = gateway_client
-        rt.tool_reviews = gateway_client or (
-            GatewayClient(
-                required_client(
-                    settings, httpx.AsyncClient(base_url=settings.tools_url, timeout=30), "tools", timeout=30
-                )
+        if settings.tools_url
+        else None
+    )
+    rt.tool_directory = directory
+    if settings.files_url:
+        files = FilesClient.from_settings(settings, service="agents", scopes=["files:view"])
+        rt.file_names = FilesServiceNames(files)
+        # A test email's attachments are read back and stored as the mailbox listener stores them.
+        rt.start_files = FilesClient.from_settings(settings, service="agents", scopes=["files:view", "files:create"])
+        if settings.documents_url:
+            # A chat turn reads its attached files as the person's team.
+            rt.chat_attachments = ChatAttachmentReader(
+                FilesClient.from_settings(settings, service="agents", scopes=["files:view"]),
+                DocumentsClient.from_settings(settings, service="agents", scopes=["documents:view", "documents:run"]),
+                ocr=settings.attachments_ocr,
             )
-            if settings.tools_url
-            else None
-        )
-        rt.tool_directory = directory
-        if settings.files_url:
-            files = FilesClient.from_settings(settings, service="agents", scopes=["files:view"])
-            rt.file_names = FilesServiceNames(files)
-            # A test email's attachments are read back and stored as the mailbox listener stores them.
-            rt.start_files = FilesClient.from_settings(
-                settings, service="agents", scopes=["files:view", "files:create"]
+    rt.knowledge_bases = knowledge
+    if gateway_client is not None:
+        gateway_client.renewer = ApprovalRenewal(rt)
+        gateway_client.people = CallPeople.on(acting_for_tokens(settings, gateway_client.http), db)
+        if gateway_http is not None:
+            # The Tools page's app states, on a client of its own: only this read claims connections:view.
+            apps_client = ServiceClient.for_settings(
+                settings, gateway_http, service="agents", audience="tools",
+                scopes=["tools:view", "connections:view"], tenant=current_tenant, team=current_team, timeout=30,
+            )  # fmt: skip
+            rt.app_states = ToolsApps(apps_client, gateway_client.people.tokens)
+    # Published versions and the registry are database rows: they load, list and publish with no model key.
+    rt.graph_store = GraphStore(db)
+    async with AsyncExitStack() as stack:
+        if ports is not None and model is not None:
+            # LangGraph's checkpoint tables live on the same database as the chat tables.
+            saver = checkpointer or await stack.enter_async_context(open_checkpointer(settings.database_url))
+            rt.usage = usage
+            models = MeteredModels(
+                CountingModels(graph_models or PydanticAiModels(model)), rt.usage, settings.model_alias
             )
-            if settings.documents_url:
-                # A chat turn reads its attached files as the person's team.
-                rt.chat_attachments = ChatAttachmentReader(
-                    FilesClient.from_settings(settings, service="agents", scopes=["files:view"]),
-                    DocumentsClient.from_settings(
-                        settings, service="agents", scopes=["documents:view", "documents:run"]
-                    ),
+            channels = ChannelStore(db)
+            rt.channels = channels
+            rt.apps_line = AppsLine(rt)
+            deps = GraphDeps(
+                catalog,
+                ports,
+                models,
+                replies,
+                settings.model_alias,
+                files=ReadingText(
+                    DocumentsClient.from_settings(settings, service="agents", scopes=["documents:run"]),
                     ocr=settings.attachments_ocr,
                 )
-        rt.knowledge_bases = knowledge
-        if gateway_client is not None:
-            gateway_client.renewer = ApprovalRenewal(rt)
-            gateway_client.people = CallPeople.on(acting_for_tokens(settings, gateway_client.http), db)
-            if gateway_http is not None:
-                # The Tools page's app states, on a client of its own: only this read claims connections:view.
-                apps_client = ServiceClient.for_settings(
-                    settings, gateway_http, service="agents", audience="tools",
-                    scopes=["tools:view", "connections:view"], tenant=current_tenant, team=current_team, timeout=30,
-                )  # fmt: skip
-                rt.app_states = ToolsApps(apps_client, gateway_client.people.tokens)
-        # Published versions and the registry are database rows: they load, list and publish with no model key.
-        rt.graph_store = GraphStore(db)
-        async with AsyncExitStack() as stack:
-            if ports is not None and model is not None:
-                # LangGraph's checkpoint tables live on the same database as the chat tables.
-                saver = checkpointer or await stack.enter_async_context(open_checkpointer(settings.database_url))
-                rt.usage = usage
-                models = MeteredModels(
-                    CountingModels(graph_models or PydanticAiModels(model)), rt.usage, settings.model_alias
-                )
-                channels = ChannelStore(db)
-                rt.channels = channels
-                rt.apps_line = AppsLine(rt)
-                deps = GraphDeps(
-                    catalog,
-                    ports,
-                    models,
-                    replies,
-                    settings.model_alias,
-                    files=ReadingText(
-                        DocumentsClient.from_settings(settings, service="agents", scopes=["documents:run"]),
-                        ocr=settings.attachments_ocr,
-                    )
-                    if settings.documents_url
-                    else None,
-                    meter=rt.usage,
-                    workflows=ChildRuns(rt),
-                    agents=AgentCalls(rt),
-                    memory=MemoryReads(rt),
-                    apps=rt.apps_line,
-                    ops=OpsReads(rt),
-                    tools=directory,
-                    held_agents=AgentRegistry(db),
-                )
-                rt.graphs = build_graphs(deps, saver)
-                rt.saver = saver
-                rt.workflows = CompiledCache(deps, saver)
-                rt.leases = Leases(
-                    db,
-                    owner=instance_owner(settings.port),
-                    ttl=settings.lease_ttl_seconds,
-                    on_takeover=ToolsFence(gateway_client, rt.graph_store) if gateway_client else None,
-                )
-                rt.agent_graph = lambda agent_id: agent_wrapper.build(deps, saver, agent_id=agent_id)
-                rt.graph_deps = deps
+                if settings.documents_url
+                else None,
+                meter=rt.usage,
+                workflows=ChildRuns(rt),
+                agents=AgentCalls(rt),
+                memory=MemoryReads(rt),
+                apps=rt.apps_line,
+                ops=OpsReads(rt),
+                tools=directory,
+                held_agents=AgentRegistry(db),
+            )
+            rt.graphs = build_graphs(deps, saver)
+            rt.saver = saver
+            rt.workflows = CompiledCache(deps, saver)
+            rt.leases = Leases(
+                db,
+                owner=instance_owner(settings.port),
+                ttl=settings.lease_ttl_seconds,
+                on_takeover=ToolsFence(gateway_client, rt.graph_store) if gateway_client else None,
+            )
+            rt.agent_graph = lambda agent_id: agent_wrapper.build(deps, saver, agent_id=agent_id)
+            rt.graph_deps = deps
+        yield rt, stack
+    if gateway_http is not None and gateway is None:
+        await gateway_http.aclose()
+    if models_http is not None and models_client is None:
+        await models_http.aclose()
+    if policies_http is not None:
+        await policies_http.aclose()
+    if through_models is not None and completions_client is None:
+        await through_models.client.close()
+    await db.dispose()
+
+
+def create_app(
+    settings: Settings,
+    *,
+    model: Model | None = None,
+    engine: Database | None = None,
+    checkpointer: Any = None,
+    graph_models: GraphModels | None = None,
+    gateway: httpx.AsyncClient | None = None,
+    models_client: httpx.AsyncClient | None = None,
+    completions_client: httpx2.AsyncClient | None = None,
+    auth: Auth | None = None,
+    kb_client: httpx.AsyncClient | None = None,
+    knowledge: Knowledge | None = None,
+) -> FastAPI:
+    """Tests inject a scripted model, an in-memory database, an in-memory checkpointer and fake graph models;
+    `completions_client` reaches an in-process models-service; `auth` resolves callers against a stand-in for
+    platform-service; `kb_client` reaches a stand-in for kb-service; `knowledge` replaces kb-service outright (tests
+    with fixture passages)."""
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
+        async with open_runtime(
+            settings,
+            model=model,
+            engine=engine,
+            checkpointer=checkpointer,
+            graph_models=graph_models,
+            gateway=gateway,
+            models_client=models_client,
+            completions_client=completions_client,
+            kb_client=kb_client,
+            knowledge=knowledge,
+        ) as (rt, stack):
+            rt.platform_keys = app.state.ops_auth.identity.keys
+            db, catalog, ports = rt.db, rt.catalog, rt.ports
+            store = rt.graph_store
+            assert store is not None, "open_runtime always opens the graph store"
+            if rt.graph_deps is not None:
                 # Listed background processes: each writes its heartbeat and logs its jobs in the job's team.
                 beats, jobs = heartbeats(db), BackgroundJobs(db)
                 # SQLite tests share one connection. A sweep or expiry commit rolls back a request's half-done
@@ -455,7 +496,7 @@ def create_app(
             # Everything seeded (workflows, publish requests, deployments) is the dev seed's tenant's, as
             # engine_seed's records are; the stores write in the caller's tenant.
             with isolation.tenant_wide(SEED, tenant_id=LOCAL_TENANT):
-                seeded = await seed_workflows(rt.graph_store, seed_dir) if seed_dir else {}
+                seeded = await seed_workflows(store, seed_dir) if seed_dir else {}
                 await agent_registry.load(rt, load_catalog(seed_dir, settings.agents_seed_file))
                 if seed_dir:
                     await guardrails.load_seed(rt, guardrails.seed_path(seed_dir, settings.agents_seed_file))
@@ -475,15 +516,6 @@ def create_app(
                 "runtime_started", agents=len(catalog.agents), graphs=len(rt.graphs), model="ok" if ports else "missing"
             )
             yield
-        if gateway_http is not None and gateway is None:
-            await gateway_http.aclose()
-        if models_http is not None and models_client is None:
-            await models_http.aclose()
-        if policies_http is not None:
-            await policies_http.aclose()
-        if through_models is not None and completions_client is None:
-            await through_models.client.close()
-        await db.dispose()
 
     app = FastAPI(
         title="Ops AI Runtime",
