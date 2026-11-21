@@ -16,7 +16,7 @@ from pydantic import Field, model_validator
 from sse_starlette import EventSourceResponse
 
 from ops_agent_kernel.pii import masked
-from ops_contracts.errors import RunError, run_error
+from ops_contracts.errors import Detail, RunError, run_error
 from ops_documents_client import DocumentNotFound, DocumentsClient
 from ops_engine import default_registry
 from ops_engine.definition import InvalidDefinitionError, WorkflowDefinition, advise, parse, validate
@@ -853,6 +853,8 @@ class RunFailure(Out):
     trace_id: str | None = None
     # What to do next, for the builder: Retry, Redrive from the failed step, or fix the step.
     suggestion: str | None = None
+    # The error's plain values: which clock ran out, which End the run reached, a code the table did not know.
+    details: dict[str, Detail] = Field(default_factory=dict)
 
 
 class RunRow(Out):
@@ -1116,6 +1118,7 @@ class RunFailureView(TypedDict):
     of: int | None
     traceId: str | None
     suggestion: str
+    details: dict[str, Detail]
 
 
 class RunWaitingView(TypedDict):
@@ -1212,6 +1215,7 @@ def run_failure(run: StoredRun, steps: list[Json]) -> RunFailureView | None:
         "of": err.of,
         "traceId": err.trace_id,
         "suggestion": suggestion,
+        "details": err.details,
     }
 
 

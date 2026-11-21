@@ -65,6 +65,22 @@ CODES: dict[str, Code] = {
     "sensitivity_not_cleared": Code("refused", False, "This assistant may not use data this sensitive."),
     "guardrail_unavailable": Code("upstream", True, "The assistant's safety checks could not run. Please try again."),
     "schema_error": Code("input", False, "The answer did not have the shape that was asked for."),
+    # models-service's other refusals: a key or budget an admin fixes, a model no longer offered, a provider failing.
+    "key_revoked": Code("refused", False, "The assistant's model key is no longer valid."),
+    "key_expired": Code("refused", False, "The assistant's model key is no longer valid."),
+    "key_not_registered": Code("refused", False, "The assistant has no model key yet."),
+    "invalid_key": Code("refused", False, "The assistant's model key was not accepted."),
+    "tenant_budget_exhausted": Code("refused", False, "The team's budget for the assistant is spent for now."),
+    "images_not_cleared": Code("refused", False, "This assistant may not read images or files."),
+    "provider_key_missing": Code("refused", False, "The assistant's model provider is not set up yet."),
+    "provider_auth_failed": Code("refused", False, "The assistant's model provider refused its key."),
+    "alias_not_found": Code("input", False, "The assistant's model is no longer offered."),
+    "unknown_model_alias": Code("input", False, "The assistant's model is no longer offered."),
+    "provider_bad_request": Code("input", False, "The assistant's model provider refused the request."),
+    "provider_unreachable": Code("upstream", True, "The assistant could not be reached. Please try again."),
+    "provider_rate_limited": Code("upstream", True, "The assistant is busy right now. Please try again shortly."),
+    "provider_timeout": Code("upstream", True, "The assistant did not answer in time. Please try again."),
+    "provider_error": Code("upstream", True, "The assistant could not answer. Please try again."),
     # timeout: which clock ran out is in details.clock.
     "queued_too_long": Code("timeout", False, "This waited too long to start, so it was stopped."),
     "step_too_long": Code("timeout", True, "A step took too long. Please try again."),
@@ -75,6 +91,20 @@ CODES: dict[str, Code] = {
     "worker_crashed": Code("internal", False, _TRY_AGAIN),
     "stuck": Code("internal", False, _TRY_AGAIN),
     "internal_error": Code("internal", False, _TRY_AGAIN),
+    # The HTTP error family's own codes (ops_service_kit.errors), so a refused call reads its kind from this table too.
+    "validation_failed": Code("input", False, "The request could not be run as it was sent."),
+    "not_found": Code("input", False, "The request named something that does not exist."),
+    "conflict": Code("input", False, "This clashes with a change made since. Please reload and try again."),
+    "too_large": Code("input", False, "What was sent is too large."),
+    # A 422 from a rule ("a read may not call a write"), as the error family documents it.
+    "unprocessable": Code("refused", False, "This is not allowed here."),
+    # Tried again after the sign-in or the step-up, as `sign_in_needed` is.
+    "unauthorized": Code("refused", True, "Please sign in again."),
+    "step_up_required": Code("refused", True, "Please confirm it is you, then try again."),
+    # Our own limit: the caller waits the Retry-After it names.
+    "too_many_requests": Code("refused", True, "Too many requests right now. Please try again shortly."),
+    "unavailable": Code("upstream", True, "A service this needs could not be reached. Please try again."),
+    "internal": Code("internal", False, _TRY_AGAIN),
 }
 
 

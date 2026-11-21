@@ -6786,10 +6786,17 @@ export interface components {
             code: string;
             /** Details */
             details?: unknown;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "input" | "refused" | "upstream" | "timeout" | "internal";
             /** Message */
             message: string;
             /** Requestid */
             requestId: string;
+            /** Retryable */
+            retryable: boolean;
             /** Status */
             status: number;
         };
@@ -9184,6 +9191,10 @@ export interface components {
             attempt?: number | null;
             /** Code */
             code: string;
+            /** Details */
+            details?: {
+                [key: string]: string | number | boolean | null;
+            };
             /**
              * Kind
              * @enum {string}

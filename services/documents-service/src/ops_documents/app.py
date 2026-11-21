@@ -239,7 +239,7 @@ def create_documents_app(
     @app.exception_handler(DocumentsError)
     async def documents_error(request: Request, e: DocumentsError) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         api = _status(e)
-        return JSONResponse(error_body(api.status, api.code, api.message), status_code=api.status)
+        return JSONResponse(error_body(api.status, api.code, api.message, row=api.row), status_code=api.status)
 
     errors = error_responses({409: "Not ready or already in another state"})
 

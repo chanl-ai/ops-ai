@@ -56,16 +56,19 @@ export type RunFailure = {
   of?: number | null;
 };
 
-/** The run page's heading for a failure, by its kind, so a builder sees at once whose move it is. */
-const KIND_TITLE: Record<RunFailure['kind'], string> = {
-  input: 'The run could not use what it was given',
-  refused: 'A rule stopped the run',
-  upstream: 'An app or model the run uses failed',
-  timeout: 'The run ran out of time',
-  internal: 'The run stopped on an error on our side',
+/** What failed, by its kind, so a reader sees at once whose move it is: the one set of words for a run and a reply. */
+const KIND_WORDS: Record<RunFailure['kind'], (what: string) => string> = {
+  input: (what) => `The ${what} could not use what it was given`,
+  refused: (what) => `A rule stopped the ${what}`,
+  upstream: (what) => `An app or model the ${what} uses failed`,
+  timeout: (what) => `The ${what} ran out of time`,
+  internal: (what) => `The ${what} stopped on an error on our side`,
 };
 
-export const failureTitle = (f?: RunFailure | null) => (f ? KIND_TITLE[f.kind] : 'The run failed');
+export const failureKindWords = (kind: RunFailure['kind'], what: 'run' | 'reply') => KIND_WORDS[kind](what);
+
+/** The run page's heading for a failure, by its kind. */
+export const failureTitle = (f?: RunFailure | null) => (f ? failureKindWords(f.kind, 'run') : 'The run failed');
 
 /** Where it failed and whether trying again helps, as one line under the message: `Find customer · attempt 3 of 3 · retrying may help`. */
 export function failureWhere(f?: RunFailure | null): string {

@@ -935,12 +935,13 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
         if assistant.error:
             # A refusal with a code carries models-service's own sentence; a failure without one carries an exception's
             # text, which stays on the stored message for the builder and is never streamed to the person.
-            err = run_error(assistant.error_code or "model_unavailable", assistant.error)
+            # A missing code is our own fault, never the model's, so it reads `internal_error` and Try again is not
+            # offered; the streamed partial carries the sentence too (a reload reads the stored text).
+            err = run_error(assistant.error_code or "internal_error", assistant.error)
             said = assistant.error if assistant.error_code else err.user_message
+            partial = assistant if assistant.error_code else assistant.model_copy(update={"error": said})
             yield _frame(
-                ErrorEvent(
-                    message=said, partial=assistant, code=assistant.error_code, kind=err.kind, retryable=err.retryable
-                )
+                ErrorEvent(message=said, partial=partial, code=err.code, kind=err.kind, retryable=err.retryable)
             )
         else:
             yield _frame(DoneEvent(message=assistant))

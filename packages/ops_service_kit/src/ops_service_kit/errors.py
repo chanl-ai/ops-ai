@@ -1,9 +1,12 @@
-"""Errors the Runtime API turns into the console's envelope: `{success: false, error: {code, message, status}}`."""
+"""Errors the Runtime API turns into the console's envelope: `{success: false, error: {code, message, status, kind,
+retryable}}`, the kind and retryable read from the one error model (ops_contracts.errors.CODES)."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 from typing import Any, TypedDict, Unpack
+
+from ops_contracts.errors import CODES, Code, code_of
 
 
 class ErrorOptions(TypedDict, total=False):
@@ -31,6 +34,16 @@ class ApiError(Exception):
         self.details: dict[str, Any] | None = details if details is None or isinstance(details, dict) else dict(details)
         if code := options.get("code"):
             self.code = code
+
+    @property
+    def row(self) -> Code:
+        """The error model's row for this error. A specific code the table does not name (`approval_token_required`)
+        takes the row of its class's code, and a class of a service's own (`ModelsUnavailable`) the row its status has
+        in this family, so a refusal never reads as our fault."""
+        classes = type(self).__mro__[: type(self).__mro__.index(ApiError)]
+        family = [c.__dict__["code"] for c in classes if "code" in c.__dict__]
+        known = next((c for c in (self.code, *family) if c in CODES), None)
+        return CODES[known] if known else row_for_status(self.status)
 
 
 class ValidationFailed(ApiError):
@@ -97,3 +110,35 @@ class ServiceUnavailable(ApiError):
 class StepUpRequired(ApiError):
     status = 422
     code = "step_up_required"
+
+
+# The family in the order a status is matched: the first class with a status names its row (422 reads as Unprocessable,
+# a rule's refusal, before StepUpRequired).
+_FAMILY: tuple[type[ApiError], ...] = (
+    ValidationFailed,
+    Unauthorized,
+    Forbidden,
+    NotFound,
+    Conflict,
+    Unprocessable,
+    TooLarge,
+    TooManyRequests,
+    ServiceUnavailable,
+    StepUpRequired,
+)
+
+
+def row_for_status(status: int) -> Code:
+    """The row of the family's class for `status`; another 4xx is an input that cannot run, a 502 or 504 a service we
+    call that failed, anything else our fault."""
+    named = next((c for c in _FAMILY if c.status == status), None)
+    if named:
+        return CODES[named.code]
+    if status in (502, 504):
+        return CODES[ServiceUnavailable.code]
+    return CODES["validation_failed"] if 400 <= status < 500 else code_of(None)
+
+
+def error_row(status: int, code: str) -> Code:
+    """The row for an error body built from a status and a code: the code's own, else its status's."""
+    return CODES.get(code) or row_for_status(status)

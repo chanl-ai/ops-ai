@@ -69,7 +69,7 @@ def failure_of(e: Exception) -> tuple[str, str, RunError]:
 
 # The error model's code for a step that left by a way of failing and led the run to a failure End.
 PORT_CODES = {
-    "error": "tool_failed",
+    "error": "ended_as_failure",
     "refused": "forbidden",
     "unreadable": "schema_mismatch",
     "timeout": "step_too_long",

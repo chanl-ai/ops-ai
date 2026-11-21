@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 from ops_documents_client import DocumentsClient
+from ops_engine.ports import outside_call
 from ops_engine.store import RunStore
 from ops_files_client import FilesClient
 from ops_service_kit.http import Json
@@ -26,10 +27,13 @@ class DocumentsExtractions:
         run = await RunStore(self.tx).row(run_id)
         if run is None:
             raise LookupError(f"run {run_id} is gone")
-        return await self.client.extract(current_tenant(), run.team_id, file_id, request, idempotency_key=key)
+        with outside_call():
+            return await self.client.extract(current_tenant(), run.team_id, file_id, request, idempotency_key=key)
 
     async def purge(self, run_id: str, file_id: str) -> Json:
-        return await self.client.purge(current_tenant(), await _team(self.tx, run_id), file_id)
+        team = await _team(self.tx, run_id)
+        with outside_call():
+            return await self.client.purge(current_tenant(), team, file_id)
 
     async def fields(self, run_id: str, type_id: str, version: int | None) -> list[Json]:
         """The DocumentTypesPort: a document type's fields at `version`, the newest when None, read as the run's team
@@ -43,13 +47,16 @@ class RunFileData:
     tx: EngineTransactions
 
     async def set_data(self, run_id: str, file_id: str, data: Json) -> Json:
-        return await self.client.set_data(current_tenant(), await _team(self.tx, run_id), file_id, data)
+        team = await _team(self.tx, run_id)
+        with outside_call():
+            return await self.client.set_data(current_tenant(), team, file_id, data)
 
 
 async def type_fields(client: DocumentsClient, team: str, type_id: str, version: int | None) -> list[Json]:
     """A document type's fields at `version`, the newest when None, read as `team`: a workflow's Extract from text step
     and the AI step route read them here alike. A version the type does not have is LookupError."""
-    found = await client.document_type(current_tenant(), team, type_id)
+    with outside_call():
+        found = await client.document_type(current_tenant(), team, type_id)
     versions = [cast(Json, v) for v in cast(list[Any], found.get("versions") or [])]
     chosen = (
         next((v for v in versions if v.get("version") == version), None)

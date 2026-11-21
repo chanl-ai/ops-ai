@@ -1308,6 +1308,17 @@
           "details": {
             "title": "Details"
           },
+          "kind": {
+            "enum": [
+              "input",
+              "refused",
+              "upstream",
+              "timeout",
+              "internal"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
           "message": {
             "title": "Message",
             "type": "string"
@@ -1315,6 +1326,10 @@
           "requestId": {
             "title": "Requestid",
             "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
           },
           "status": {
             "title": "Status",
@@ -1325,7 +1340,9 @@
           "code",
           "message",
           "status",
-          "requestId"
+          "requestId",
+          "kind",
+          "retryable"
         ],
         "title": "ErrorBody",
         "type": "object"

@@ -5,7 +5,7 @@ export { actionBody, Chat, connectCard } from './chat.js';
 export { Templates } from './templates.js';
 export { Workflows, WorkflowCheck } from './workflows.js';
 export {
-  BadRequest, Conflict, type ErrorKind, Forbidden, NotFound, OpsError, RateLimited, type RunFailure, RunFailed, ServerError,
+  BadRequest, codeOf, Conflict, type ErrorKind, Forbidden, NotFound, OpsError, RateLimited, type RunFailure, RunFailed, ServerError,
   Unauthorized,
 } from './errors.js';
 export type { Config, Service, ServerEvent } from './transport.js';

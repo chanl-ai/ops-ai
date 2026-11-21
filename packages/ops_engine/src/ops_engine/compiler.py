@@ -46,11 +46,13 @@ from .ports import (
     CaseNotFoundError,
     CaseTypeNotFoundError,
     EnginePorts,
+    OutsideAnswerError,
     ReviewPort,
     RunPort,
     RunRefusedError,
     StartedRun,
     ToolResult,
+    is_outside,
 )
 
 CHANNEL = "node:"
@@ -66,7 +68,7 @@ def channel(node_id: str) -> str:
     return f"{CHANNEL}{node_id}"
 
 
-class WriteInDoubtError(RuntimeError):
+class WriteInDoubtError(OutsideAnswerError):
     """A write's gateway call is still running, so whether it happened is not known yet. Never a reason to send it
     again; the run is tried again later."""
 
@@ -130,7 +132,8 @@ def technical(e: BaseException) -> str:
 
 def failure_code(e: BaseException) -> str:
     """The error model's code for an exception a step raised: a deadline is `step_too_long`, a step's own refusal its
-    code, a service error its code when the model knows it, anything else the app or tool failing."""
+    code, a service error its code when the model knows it, an error that crossed a port (an app, tool or model call)
+    the app or tool failing, and anything else the engine's own fault."""
     if isinstance(e, TimeoutError):
         return "step_too_long"
     if isinstance(e, StepError):
@@ -138,7 +141,7 @@ def failure_code(e: BaseException) -> str:
     code = getattr(e, "code", None)
     if isinstance(code, str) and code.lower() in CODES:
         return code.lower()
-    return "tool_failed"
+    return "tool_failed" if is_outside(e) else "internal_error"
 
 
 def retry_after_of(e: BaseException) -> float | None:
@@ -832,7 +835,7 @@ async def ai_extract(call: NodeCall) -> Outcome:
             return Outcome(
                 "error", {"error": error.get("message"), "code": "schema_error", "details": error.get("details")}
             )
-        raise RuntimeError(f"the extraction failed ({error.get('code')}): {error.get('message')}")
+        raise OutsideAnswerError(f"the extraction failed ({error.get('code')}): {error.get('message')}")
     # The extraction's id stays on the output: the run page links the read to it, and its model call is logged under it.
     out = {k: v for k, v in answer.items() if k not in ("id", "status", "outcome", "corrections")} | {
         "extractionId": answer.get("id")
@@ -845,7 +848,7 @@ async def ai_extract(call: NodeCall) -> Outcome:
         return Outcome("review", out)
     if status != "done" or answer.get("outcome") not in ("ok", "review"):
         # A state this step does not know is raised, never turned into a port it does not have.
-        raise RuntimeError(f"documents-service answered status {status!r} with outcome {answer.get('outcome')!r}")
+        raise OutsideAnswerError(f"documents-service answered status {status!r} with outcome {answer.get('outcome')!r}")
     return Outcome(str(answer["outcome"]), out)
 
 

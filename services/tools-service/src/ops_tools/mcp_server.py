@@ -427,7 +427,7 @@ def _structured(output: Any) -> Json:
 
 
 async def _refuse(send: Send, e: ApiError, metadata_url: str | None = None) -> None:
-    body = error_body(e.status, e.code, e.message)
+    body = error_body(e.status, e.code, e.message, row=e.row)
     headers = [(b"content-type", b"application/json")]
     if e.status == 401:
         challenge = 'Bearer realm="ops-ai-tools"' + (f', resource_metadata="{metadata_url}"' if metadata_url else "")

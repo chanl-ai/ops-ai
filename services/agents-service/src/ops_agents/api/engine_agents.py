@@ -26,7 +26,7 @@ from ops_agents.activities.overrides import resolve as resolve_settings
 from ops_agents.activities.tool_directory import CatalogTools, ToolDirectory, ToolsOperations, grants_for
 from ops_agents.activities.tools import LocalToolExecutor
 from ops_agents.domain.accounts import chosen_accounts
-from ops_engine.ports import AgentRequest, AgentResult, PromptRequest
+from ops_engine.ports import AgentRequest, AgentResult, PromptRequest, outside_call
 from ops_identity import ServiceClient
 from ops_metering import PriceTable
 from ops_service_kit.errors import NotFound, Unprocessable
@@ -84,17 +84,18 @@ class KernelPrompts:
         rules = await self.rules.rules(request.run_id) if self.rules is not None else StepRules(True, True)
         if not rules.allowed:
             return AgentResult(False, error=AI_STEPS_OFF, code="ai_steps_off")
-        result = await kernel_call(
-            self.ports,
-            key=request.turn_id,
-            instructions=request.instructions,
-            message=request.message,
-            schema=request.output_schema,
-            model_alias=request.model_alias or self.model_alias,
-            agent_id="workflow_step",
-            # Real in the step's output, for the steps after it; masked where people read the run.
-            redact_pii=False,
-        )
+        with outside_call():
+            result = await kernel_call(
+                self.ports,
+                key=request.turn_id,
+                instructions=request.instructions,
+                message=request.message,
+                schema=request.output_schema,
+                model_alias=request.model_alias or self.model_alias,
+                agent_id="workflow_step",
+                # Real in the step's output, for the steps after it; masked where people read the run.
+                redact_pii=False,
+            )
         if result.status == "completed":
             return AgentResult(True, result.output, result.text)
         if result.stop_reason in ("schema_error", "no_output"):
@@ -185,7 +186,7 @@ class KernelAgents:
         )
         result: TurnResult | None = None
         # The agent's own account per app, under the choice of the chat or agent that started the run.
-        with using_accounts(chosen_accounts(agent=agent.accounts, chat=current_run_context().accounts)):
+        with using_accounts(chosen_accounts(agent=agent.accounts, chat=current_run_context().accounts)), outside_call():
             async for event in run_turn(req, self.ports):
                 if isinstance(event, TurnFinished):
                     result = event.result
@@ -229,15 +230,16 @@ class KernelModels:
     model_alias: str
 
     async def structured(self, system: str, user: str, schema: Json, *, key: str) -> Any:
-        result = await kernel_call(
-            self.ports,
-            key=key,
-            instructions=system,
-            message=user,
-            schema=schema,
-            model_alias=self.model_alias,
-            agent_id="extract",
-        )
+        with outside_call():
+            result = await kernel_call(
+                self.ports,
+                key=key,
+                instructions=system,
+                message=user,
+                schema=schema,
+                model_alias=self.model_alias,
+                agent_id="extract",
+            )
         if result.status == "completed":
             return result.output
         if result.stop_reason == "schema_error":

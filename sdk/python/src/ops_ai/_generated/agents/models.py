@@ -656,8 +656,10 @@ class EnvelopeListAgentVersion(TypedDict, closed=True):
 class ErrorBody(TypedDict, closed=True):
     code: str
     details: NotRequired[Any]
+    kind: Literal["input", "refused", "upstream", "timeout", "internal"]
     message: str
     requestId: str
+    retryable: bool
     status: int
 
 
@@ -1555,6 +1557,7 @@ class RunChild(TypedDict, closed=True):
 class RunFailure(TypedDict, closed=True):
     attempt: NotRequired[int | None]
     code: str
+    details: NotRequired[dict[str, str | int | float | bool | None]]
     kind: Literal["input", "refused", "upstream", "timeout", "internal"]
     message: str
     nodeId: NotRequired[str | None]
