@@ -1,5 +1,4 @@
-import type { EvalCheck } from '@/lib/types/evals';
-import type { SkillCitation, SkillSectionKey, SkillStart } from '@/lib/types/skills';
+import type { SkillCheck, SkillCitation, SkillSectionKey, SkillStart } from '@/lib/types/skills';
 
 import { DOCUMENTS, SKILL_SEEDS, TEMPLATES } from './seed';
 
@@ -14,7 +13,7 @@ export interface Pack {
   tools: string[];
   knowledgeBases: string[];
   guardrails: string[];
-  tests: { name: string; input: string; checks: EvalCheck[] }[];
+  tests: { name: string; input: string; checks: SkillCheck[] }[];
   matchTerms: string[];
 }
 

@@ -1,5 +1,4 @@
-import type { EvalCheck } from '@/lib/types/evals';
-import type { SkillCitation, SkillContent, SkillEditClass, SkillLoading, SkillOrigin, SkillVersionState } from '@/lib/types/skills';
+import type { SkillCheck, SkillCitation, SkillContent, SkillEditClass, SkillLoading, SkillOrigin, SkillVersionState } from '@/lib/types/skills';
 
 /**
  * Eight Harbor & Pine Bank skills. Tools are named by operation and resolved to tool ids when the mock starts, so the
@@ -28,7 +27,7 @@ export interface VersionSeed {
 export interface TestSeed {
   name: string;
   input: string;
-  checks: EvalCheck[];
+  checks: SkillCheck[];
   source: 'generated' | 'manual' | 'case' | 'document' | 'imported';
   sourceRef?: string;
 }
@@ -67,11 +66,11 @@ export interface SkillSeed {
 const md = (steps: string[], rules: string[], examples: string, output: string) =>
   [`## Steps`, ...steps.map((s, i) => `${i + 1}. ${s}`), '', `## Rules`, ...rules.map((r) => `- ${r}`), '', `## Examples`, examples, '', `## Output format`, output].join('\n');
 
-const calls = (tool: string): EvalCheck => ({ type: 'calls_tool', tool });
-const notCalls = (tool: string): EvalCheck => ({ type: 'not_calls_tool', tool });
-const cites = (source: string, section?: string): EvalCheck => ({ type: 'cites', source, section });
-const says = (text: string): EvalCheck => ({ type: 'reply_contains', text });
-const never = (text: string): EvalCheck => ({ type: 'reply_not_contains', text });
+const calls = (tool: string): SkillCheck => ({ type: 'calls_tool', tool });
+const notCalls = (tool: string): SkillCheck => ({ type: 'not_calls_tool', tool });
+const cites = (source: string, section?: string): SkillCheck => ({ type: 'cites', source, section });
+const says = (text: string): SkillCheck => ({ type: 'reply_contains', text });
+const never = (text: string): SkillCheck => ({ type: 'reply_not_contains', text });
 
 const HARDSHIP_V3 = md(
   [

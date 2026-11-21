@@ -1,5 +1,4 @@
 import type { LifecycleStatus, ToolAccess } from './domain';
-import type { EvalCheck, EvalCheckResult } from './evals';
 
 /**
  * Skills: versioned, reusable procedures an agent loads when a task matches its "use when" line. A skill adds
@@ -189,12 +188,39 @@ export interface ChatMenuSkill extends Skill {
   needs?: string[];
 }
 
+export type SkillCheckType = 'calls_tool' | 'not_calls_tool' | 'cites' | 'reply_contains' | 'reply_not_contains' | 'refuses' | 'extracts' | 'rubric';
+
+/** One argument a skill test's tool call must carry. */
+export interface SkillArgMatcher {
+  path: string;
+  equals: string;
+}
+
+/** One expectation on a skill test; only the fields its `type` needs are set. */
+export interface SkillCheck {
+  type: SkillCheckType;
+  tool?: string;
+  args?: SkillArgMatcher[];
+  source?: string;
+  section?: string;
+  text?: string;
+  field?: string;
+  value?: string;
+}
+
+/** Result of one skill test check; `advisory` is a rubric check, recorded and never pass or fail. */
+export interface SkillCheckResult {
+  label: string;
+  status: 'pass' | 'fail' | 'advisory';
+  detail?: string;
+}
+
 export interface SkillTestCase {
   id: string;
   name: string;
   input: string;
-  /** Reuses the agent eval checks: expected tool calls, must cite, must not say. */
-  checks: EvalCheck[];
+  /** Expected tool calls, must cite, must not say. */
+  checks: SkillCheck[];
   source: 'generated' | 'manual' | 'case' | 'document' | 'imported';
   /** The case, run or document the input came from. */
   sourceRef?: string;
@@ -209,7 +235,7 @@ export interface SkillTestResult {
   caseId: string;
   caseName: string;
   status: 'pass' | 'fail';
-  checks: EvalCheckResult[];
+  checks: SkillCheckResult[];
   failure?: string;
   reply: string;
   /** False when the runtime did not choose the skill for this input: the use-when line missed. */

@@ -11,38 +11,21 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import type { EvalCaseInput, EvalCaseOptions, EvalCheck, EvalCheckType } from '@/lib/types/evals';
-import { cn } from '@/lib/utils';
+import type { EvalCaseInput, EvalCheck, EvalCheckType } from '@/lib/types/evals';
 
 import { CHECK_TYPES } from './eval-meta';
 
 
-/** Whether a check has the values its type needs. */
+/** Whether a check has the values its type needs; a judge without its rubric is refused by the service too. */
 export function checkComplete(c: EvalCheck) {
-  if (c.type === 'calls_tool' || c.type === 'not_calls_tool') return !!c.tool;
-  if (c.type === 'cites') return !!c.source;
-  if (c.type === 'extracts') return !!c.field?.trim() && !!c.value?.trim();
+  if (c.type === 'calls_tool') return !!c.tool;
+  if (c.type === 'judge') return !!c.rubric?.trim();
   return !!c.text?.trim();
 }
 
-/** One check's editor; reused by the skill test dialog. */
-export function CheckRow({ check, onChange, onRemove, options, index }: { check: EvalCheck; onChange: (c: EvalCheck) => void; onRemove: () => void; options?: EvalCaseOptions; index: number }) {
+/** One check's editor: its type and the one value that type needs. */
+function CheckRow({ check, onChange, onRemove, tools, index }: { check: EvalCheck; onChange: (c: EvalCheck) => void; onRemove: () => void; tools: string[]; index: number }) {
   const meta = CHECK_TYPES.find((t) => t.value === check.type)!;
-  const tools = options?.tools ?? [];
-  const sel = (id: string, value: string | undefined, items: string[], placeholder: string, set: (v: string) => void, mono = false) => (
-    <Select value={value ?? ''} onValueChange={set}>
-      <SelectTrigger id={id} className={cn('w-full', mono && 'font-mono text-xs')} aria-label={placeholder}>
-        <SelectValue placeholder={placeholder} />
-      </SelectTrigger>
-      <SelectContent>
-        {items.map((t) => (
-          <SelectItem key={t} value={t} className={mono ? 'font-mono text-xs' : undefined}>
-            {t}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
   return (
     <div className="flex flex-col gap-2 rounded-lg border p-3" data-testid="eval-check-row">
       <div className="flex items-start gap-2">
@@ -59,70 +42,62 @@ export function CheckRow({ check, onChange, onRemove, options, index }: { check:
           </SelectContent>
         </Select>
         <div className="min-w-0 flex-1">
-          {(check.type === 'calls_tool' || check.type === 'not_calls_tool') && sel(`chk-${index}-tool`, check.tool, tools, 'Choose a tool', (tool) => onChange({ ...check, tool }), true)}
-          {check.type === 'cites' && sel(`chk-${index}-src`, check.source, options?.collections ?? [], 'Choose a knowledge base', (source) => onChange({ ...check, source }))}
-          {check.type === 'extracts' && (
-            <div className="grid gap-2">
-              <Input aria-label="Field" value={check.field ?? ''} onChange={(e) => onChange({ ...check, field: e.target.value })} placeholder="e.g. amount" className="font-mono text-xs" />
-              <Input aria-label="Value" value={check.value ?? ''} onChange={(e) => onChange({ ...check, value: e.target.value })} placeholder="e.g. 1240.18" />
-            </div>
+          {check.type === 'calls_tool' && (
+            <Select value={check.tool ?? ''} onValueChange={(tool) => onChange({ ...check, tool })}>
+              <SelectTrigger className="w-full font-mono text-xs" aria-label="Choose a tool">
+                <SelectValue placeholder="Choose a tool" />
+              </SelectTrigger>
+              <SelectContent>
+                {tools.map((t) => (
+                  <SelectItem key={t} value={t} className="font-mono text-xs">
+                    {t}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           )}
-          {['reply_contains', 'reply_not_contains', 'refuses', 'rubric'].includes(check.type) && (
-            <Input
-              aria-label={meta.label}
-              value={check.text ?? ''}
-              onChange={(e) => onChange({ ...check, text: e.target.value })}
-              placeholder={check.type === 'refuses' ? 'e.g. Investment advice' : check.type === 'rubric' ? 'e.g. Explains the decision in plain language' : 'e.g. callback'}
-            />
+          {(check.type === 'reply_contains' || check.type === 'refuses') && (
+            <Input aria-label={meta.label} value={check.text ?? ''} onChange={(e) => onChange({ ...check, text: e.target.value })} placeholder={check.type === 'refuses' ? 'e.g. Investment advice' : 'e.g. callback'} />
+          )}
+          {check.type === 'judge' && (
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor={`chk-${index}-rubric`} className="text-xs font-medium">
+                What a good reply does
+              </label>
+              <Textarea id={`chk-${index}-rubric`} value={check.rubric ?? ''} onChange={(e) => onChange({ ...check, rubric: e.target.value })} className="min-h-16" placeholder="e.g. Explains the decision in plain language" />
+            </div>
           )}
         </div>
         <Button variant="ghost" size="icon" className="size-9 shrink-0" aria-label={`Remove check ${index + 1}`} onClick={onRemove}>
           <X className="size-4" />
         </Button>
       </div>
-      {check.type === 'cites' && check.source && (
-        <Input aria-label="Section" value={check.section ?? ''} onChange={(e) => onChange({ ...check, section: e.target.value || undefined })} placeholder="e.g. Wire Fraud Playbook §3.2 (optional)" />
-      )}
-      {check.type === 'calls_tool' && check.tool && (
-        <div className="flex flex-col gap-1.5">
-          {(check.args ?? []).map((a, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <Input aria-label="Argument" value={a.path} onChange={(e) => onChange({ ...check, args: check.args!.map((x, j) => (j === i ? { ...x, path: e.target.value } : x)) })} placeholder="e.g. amount" className="font-mono text-xs" />
-              <span className="text-xs text-muted-foreground">equals</span>
-              <Input aria-label="Expected value" value={a.equals} onChange={(e) => onChange({ ...check, args: check.args!.map((x, j) => (j === i ? { ...x, equals: e.target.value } : x)) })} placeholder="e.g. 1240.18" />
-              <Button variant="ghost" size="icon" className="size-8 shrink-0" aria-label="Remove argument" onClick={() => onChange({ ...check, args: check.args!.filter((_, j) => j !== i) })}>
-                <X className="size-3.5" />
-              </Button>
-            </div>
-          ))}
-          <Button variant="ghost" size="sm" className="self-start" onClick={() => onChange({ ...check, args: [...(check.args ?? []), { path: '', equals: '' }] })}>
-            <Plus className="size-3.5" /> Match an argument
-          </Button>
-        </div>
-      )}
-      <p className={cn('text-xs', check.type === 'rubric' ? 'text-warning-text' : 'text-muted-foreground')}>{meta.hint}</p>
+      <p className="text-xs text-muted-foreground">{meta.hint}</p>
     </div>
   );
 }
 
 /**
- * Add a case to the agent's test set: what is sent, who it runs as, which knowledge is attached, and the checks.
- * Every check except `rubric` is scored deterministically.
+ * Add a case to the agent's saved cases: what is sent, which knowledge is attached, and the checks. The tools and
+ * knowledge bases offered are the ones the agent already holds. A judge check is graded by a model, so a run with one
+ * costs more.
  */
 export function EvalCaseDialog({
   open,
   onOpenChange,
-  options,
+  tools,
+  collections,
   onSubmit,
   isPending,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
-  options?: EvalCaseOptions;
+  tools: string[];
+  collections: string[];
   onSubmit: (i: EvalCaseInput) => Promise<unknown>;
   isPending: boolean;
 }) {
-  const blank = (): EvalCaseInput => ({ name: '', input: '', context: { collections: [] }, checks: [{ type: 'calls_tool' }] });
+  const blank = (): EvalCaseInput => ({ name: '', input: '', collections: [], checks: [{ type: 'calls_tool' }] });
   const [v, setV] = React.useState<EvalCaseInput>(blank);
   const [errors, setErrors] = React.useState<{ name?: string; input?: string; checks?: string; submit?: string }>({});
   React.useEffect(() => {
@@ -147,7 +122,7 @@ export function EvalCaseDialog({
       setErrors({ submit: (err as Error).message });
     }
   };
-  const toggleKb = (kb: string) => setV((s) => ({ ...s, context: { ...s.context, collections: s.context.collections.includes(kb) ? s.context.collections.filter((x) => x !== kb) : [...s.context.collections, kb] } }));
+  const toggleKb = (kb: string) => setV((s) => ({ ...s, collections: s.collections.includes(kb) ? s.collections.filter((x) => x !== kb) : [...s.collections, kb] }));
 
   return (
     <DialogShell
@@ -155,7 +130,7 @@ export function EvalCaseDialog({
       onOpenChange={onOpenChange}
       size="lg"
       title="Add eval case"
-      description="Runs on every save of the agent and when someone runs evals."
+      description="Runs when someone presses Run evals or runs opsai agents eval."
       footer={
         <div className="flex w-full items-center justify-end gap-2">
           {errors.submit && <p className="mr-auto text-xs text-destructive-text">{errors.submit}</p>}
@@ -178,8 +153,8 @@ export function EvalCaseDialog({
         <div className="grid gap-4">
           <FormField id="ec-kbs" label="Knowledge bases" optional hint="Attached for this case only.">
             <div id="ec-kbs" className="flex flex-wrap gap-1.5">
-              {(options?.collections ?? []).map((kb) => {
-                const on = v.context.collections.includes(kb);
+              {collections.map((kb) => {
+                const on = v.collections.includes(kb);
                 return (
                   <button key={kb} type="button" onClick={() => toggleKb(kb)} aria-pressed={on} className="rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
                     <Badge variant={on ? 'default' : 'outline'} className="cursor-pointer font-normal">
@@ -203,7 +178,7 @@ export function EvalCaseDialog({
               key={i}
               index={i}
               check={c}
-              options={options}
+              tools={tools}
               onChange={(next) => (setV({ ...v, checks: v.checks.map((x, j) => (j === i ? next : x)) }), setErrors({ ...errors, checks: undefined }))}
               onRemove={() => setV({ ...v, checks: v.checks.filter((_, j) => j !== i) })}
             />

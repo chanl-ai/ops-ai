@@ -546,7 +546,7 @@ export function createMockApi(): OpsApi {
     r.slaMinutes = 385;
   }
 
-  const evals = createEvalsMock({ agents: () => agents.map(agentRow), toolName: (tid) => tools.find((t) => t.id === tid)?.name, toolAccess: (n) => tools.find((t) => t.name === n)?.access, collections: () => knowledge.kbNames(), me, files: files.links });
+  const evals = createEvalsMock({ agents: () => agents.map(agentRow), toolName: (tid) => tools.find((t) => t.id === tid)?.name, toolAccess: (n) => tools.find((t) => t.name === n)?.access, collections: () => knowledge.kbNames(), me });
   /** Attaching, detaching or moving a skill pin is an agent change, so it saves a new agent version. */
   const bumpAgent = (aid: string, note: string) => {
     const a = agentOr404(aid);
@@ -598,7 +598,7 @@ export function createMockApi(): OpsApi {
     people: F.REVIEWERS,
     me,
   });
-  const templates = createTemplatesMock(templateDeps({ agents, tools, toolInTeam, versions, snapAgent, me, kbNames: () => knowledge.kbNames(), addCase: (aid, c) => evals.api.createCase(aid, c), reviews: () => reviews, skills: { ...skills.newAgentPins, pinnedOn: skills.pinnedOn, name: skills.skillName } }));
+  const templates = createTemplatesMock(templateDeps({ agents, tools, toolInTeam, versions, snapAgent, me, kbNames: () => knowledge.kbNames(), addCase: (aid, c) => evals.api.addCases(aid, [c]), reviews: () => reviews, skills: { ...skills.newAgentPins, pinnedOn: skills.pinnedOn, name: skills.skillName } }));
   const prompts = createPromptsMock({ toolNames: () => tools.map((t) => t.name) });
 
   const signIn = createSignInPolicyMock({ me });

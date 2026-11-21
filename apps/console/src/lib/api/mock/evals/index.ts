@@ -1,12 +1,12 @@
 import type { Agent, AgentGuardrails, AgentVersion } from '@/lib/types/domain';
-import type { EvalCase, EvalCaseInput, EvalCaseOutcome, EvalCaseResult, EvalCheck, EvalCheckResult, EvalRun, EvalRunTrigger, EvalSuite, EvalSuiteKind, EvalSummary, EvalVersionStats, EvalVersionSummary } from '@/lib/types/evals';
+import type { EvalCaseInput as PublicCaseInput, EvalCase as PublicCase, EvalRun as PublicRun, EvalVersionSummary } from '@/lib/types/evals';
 
 import { ApiError } from '../../contract';
+import type { EvalCase, EvalCaseInput, EvalCaseOutcome, EvalCaseResult, EvalCheck, EvalCheckResult, EvalRun, EvalRunTrigger, EvalSuiteKind, EvalSummary, EvalVersionStats } from './model';
 import type { EvalsApi } from '../../evals-contract';
 import type { OpsApi } from '../../contract';
 import { PRINCIPALS } from '../knowledge/principals';
-import type { FileLinks } from '../files';
-import { bulk, field, id, list, notFound, respond } from '../runtime';
+import { field, id, list, notFound, respond } from '../runtime';
 import { AGENT_CASES, GENERIC_CASES, GENERIC_PREVIOUS_FAILURES, PLATFORM_TEMPLATES, RULE_OF, SEED_FAILURES, SUITE_META } from './seed';
 
 /** What an eval scores: the settings of one agent version. */
@@ -24,30 +24,6 @@ export interface EvalsDeps {
   toolAccess: (name: string) => string | undefined;
   collections: () => string[];
   me: string;
-  /** Imported CSVs are files; the eval set is recorded as a reference. */
-  files: FileLinks;
-}
-
-/** Name, version and pins of agents another service serves, so their stand-ins (below) carry the real labels. */
-const servedAgents = new Map<string, Pick<Agent, 'name' | 'version' | 'usedIn'>>();
-
-/**
- * Evals beside a real agents service: before an agent's first eval read, its name, version and pins are read from
- * that service, so sample runs are labelled with the agent's own versions. A failed read keeps the stand-in defaults.
- */
-export function withServedAgents(evals: EvalsApi, getAgent: (id: string) => Promise<Agent>): EvalsApi {
-  const learn = async (aid: string) => {
-    if (servedAgents.has(aid)) return;
-    const a = await getAgent(aid).catch(() => null);
-    if (a) servedAgents.set(aid, { name: a.name, version: a.version, usedIn: a.usedIn ?? [] });
-  };
-  const first =
-    <A extends unknown[], R>(fn: (aid: string, ...rest: A) => Promise<R>) =>
-    async (aid: string, ...rest: A) => {
-      await learn(aid);
-      return fn(aid, ...rest);
-    };
-  return { ...evals, suites: first(evals.suites), cases: first(evals.cases), createCase: first(evals.createCase), importCases: first(evals.importCases), caseFromTurn: first(evals.caseFromTurn), run: first(evals.run), runs: first(evals.runs), latest: first(evals.latest), options: first(evals.options) };
 }
 
 const RUN_MS = 3500;
@@ -76,6 +52,7 @@ const CHECK_LABEL: Record<EvalCheck['type'], (c: EvalCheck) => string> = {
   refuses: (c) => `Refuses: ${c.text}`,
   extracts: (c) => `Extracts ${c.field} = ${c.value}`,
   rubric: (c) => `Rubric: ${c.text}`,
+  judge: (c) => `Judge: ${c.rubric}`,
 };
 export const checkLabel = (c: EvalCheck) => CHECK_LABEL[c.type](c);
 
@@ -245,54 +222,25 @@ export function createEvalsMock(deps: EvalsDeps) {
     if (r.status === 'running' && Date.now() >= r.completesAt) Object.assign(r, { status: 'complete', finishedAt: new Date(r.completesAt).toISOString(), summary: r.finalSummary });
     return r;
   };
-  const publicRun = (r: StoredRun): EvalRun => {
+  const historyRun = (r: StoredRun): EvalRun => {
     const { completesAt: _c, finalSummary: _f, ...rest } = settle(r);
     void _c;
     void _f;
     return rest.status === 'running' ? { ...rest, results: [] } : rest;
   };
-  const row = (r: StoredRun) => {
-    const { results: _r, ...rest } = publicRun(r);
-    void _r;
-    return rest;
-  };
-
   // Seed history: the last three versions of each agent, oldest first, a day or more apart.
   const seedHistory = (a: Agent) => {
     giveGenericCases(a);
     const versions = [a.version - 2, a.version - 1, a.version].filter((v) => v >= 1);
     versions.forEach((v, i) => {
       const at = Date.now() - (versions.length - i) * 86_400_000 * (1 + hash(a.id + v) * 3);
-      runs.push(settle(execute(a, v, i === versions.length - 1 ? 'save' : 'manual', i % 2 ? 'Maya Okafor' : 'Daniel Brooks', at)));
+      runs.push(settle(execute(a, v, 'manual', i % 2 ? 'Maya Okafor' : 'Daniel Brooks', at)));
     });
   };
   for (const a of deps.agents()) seedHistory(a);
   runs.sort((x, y) => y.startedAt.localeCompare(x.startedAt));
 
-  /**
-   * Agents another service owns (agents-service, while evals have no service) are unknown here. Each gets a
-   * stand-in on first read, with a sample agent's tools, knowledge and guardrails and the generic test set, so
-   * every agent, including ones created later, shows cases, suites and a finished run. Kept, so ids stay stable.
-   */
-  const standIns = new Map<string, Agent>();
-  const standInFor = (aid: string): Agent | undefined => {
-    if (!aid.startsWith('ag_')) return undefined;
-    const known = standIns.get(aid);
-    if (known) return known;
-    const pool = deps.agents().filter((a) => contentOf(a).toolNames.some((t) => deps.toolAccess(t) === 'write'));
-    const base = pool[Math.floor(hash(aid) * pool.length)] ?? deps.agents()[0];
-    if (!base) return undefined;
-    const words = aid.slice(3).replace(/_/g, ' ');
-    const served = servedAgents.get(aid);
-    const a: Agent = { ...structuredClone(base), id: aid, name: served?.name ?? words.charAt(0).toUpperCase() + words.slice(1), version: Math.max(1, served?.version ?? 3), usedIn: structuredClone(served?.usedIn ?? []) };
-    standIns.set(aid, a);
-    seedContent[aid] = contentOf(a);
-    snapshots[aid] = { [a.version]: contentOf(a) };
-    seedHistory(a);
-    runs.sort((x, y) => y.startedAt.localeCompare(x.startedAt));
-    return a;
-  };
-  const agentOr404 = (aid: string) => deps.agents().find((a) => a.id === aid) ?? standInFor(aid) ?? notFound('Agent');
+  const agentOr404 = (aid: string) => deps.agents().find((a) => a.id === aid) ?? notFound('Agent');
   const start = (aid: string, trigger: EvalRunTrigger) => {
     const a = agentOr404(aid);
     snapshots[a.id] = { ...snapshots[a.id], [a.version]: contentOf(a) };
@@ -302,28 +250,23 @@ export function createEvalsMock(deps: EvalsDeps) {
   };
   const latestComplete = (aid: string, version?: number) => runs.map(settle).find((r) => r.agentId === aid && r.status === 'complete' && (version === undefined || r.draftVersion === version));
 
-  const withOutcome = (k: EvalCase, a: Agent): EvalCase => {
-    const r = latestComplete(a.id, a.version)?.results.find((x) => x.caseId === k.id);
-    return { ...k, lastOutcome: r ? r.draft.status : null };
-  };
-
-  const validateInput = (i: EvalCaseInput): string | undefined => {
+  const validateInput = (i: PublicCaseInput): string | undefined => {
     if (!i.name?.trim()) return 'Name is required';
     if (!i.input?.trim()) return 'Input is required';
     if (!i.checks?.length) return 'Add at least one check';
-    const bad = i.checks.find((c) => (['calls_tool', 'not_calls_tool'].includes(c.type) && !c.tool) || (c.type === 'cites' && !c.source) || (c.type === 'extracts' && (!c.field || !c.value)) || (['reply_contains', 'reply_not_contains', 'refuses', 'rubric'].includes(c.type) && !c.text?.trim()));
+    if (i.checks.some((c) => c.type === 'judge' && !c.rubric?.trim())) return `A judge check needs a rubric (case ${i.name})`;
+    const bad = i.checks.find((c) => (c.type === 'calls_tool' && !c.tool) || ((c.type === 'reply_contains' || c.type === 'refuses') && !c.text?.trim()));
     if (bad) return `The ${checkLabel(bad).split(' ')[0].toLowerCase()} check is missing a value`;
-    if (i.context.runAsId && !principalName(i.context.runAsId)) return 'Run-as person or role not found';
     return undefined;
   };
-  const addCase = (aid: string, i: EvalCaseInput, source: EvalCase['source']): EvalCase => {
+  const addCase = (aid: string, i: PublicCaseInput, source: EvalCase['source']): EvalCase => {
     const c: EvalCase = {
       id: id('ec'),
       agentId: aid,
       suite: 'agent',
       name: i.name.trim(),
       input: i.input.trim(),
-      context: { runAsId: i.context.runAsId, runAsName: principalName(i.context.runAsId), collections: i.context.collections ?? [] },
+      context: { collections: i.collections ?? [] },
       checks: i.checks,
       source,
       readOnly: false,
@@ -341,86 +284,64 @@ export function createEvalsMock(deps: EvalsDeps) {
     ownCases.splice(i, 1);
   };
 
+  // ── The console's contract: the agent's own saved cases, and kept runs that finish when asked for ──
+  const publicCase = (c: EvalCase): PublicCase => ({ id: c.id, name: c.name, input: c.input, checks: c.checks.filter((k) => ['calls_tool', 'reply_contains', 'refuses', 'judge'].includes(k.type)) as PublicCase['checks'], collections: c.context.collections, status: 'active', source: c.source, createdBy: c.createdBy, createdAt: c.createdAt });
+  const outcomeOf = (o: EvalCaseOutcome) => ({ status: o.status, reply: o.reply, latencyMs: o.latencyMs, checks: o.checks.map((c) => ({ label: c.label, status: c.status === 'fail' ? ('fail' as const) : ('pass' as const), reason: c.detail ?? null })) });
+  /** One run as the service answers it: only the agent's own cases, and its cost with the judge checks on top. */
+  const publicRun = (r: StoredRun): PublicRun => {
+    const own = settle(r).results.filter((x) => x.suite === 'agent');
+    const live = r.compared?.label === 'live' ? r.compared.version : null;
+    const judged = own.reduce((n, x) => n + x.draft.checks.filter((c) => c.label.startsWith('Judge')).length * (live === null ? 1 : 2), 0);
+    return {
+      id: r.id,
+      agentId: r.agentId,
+      version: r.draftVersion,
+      liveVersion: live,
+      trigger: r.trigger,
+      status: 'complete',
+      summary: { passed: own.filter((x) => x.draft.status === 'pass').length, total: own.length, regressions: own.filter((x) => x.regression).length },
+      results: own.map((x) => ({ caseName: x.caseName, draft: outcomeOf(x.draft), live: x.live && live !== null ? outcomeOf(x.live) : null, regression: x.regression, unpriced: false })),
+      costUsd: Math.round((own.length * (live === null ? 1 : 2) * 0.012 + judged * 0.003) * 10_000) / 10_000,
+      unpriced: false,
+      startedBy: r.requestedBy,
+      ranAt: new Date(r.completesAt).toISOString(),
+    };
+  };
+  const keptRuns = (aid: string) => runs.filter((r) => r.agentId === aid && r.trigger === 'manual' && settle(r).status === 'complete');
+
   const api: EvalsApi = {
-    suites: (aid) =>
+    cases: (aid) =>
       respond((m) => {
         const a = agentOr404(aid);
-        const last = m === 'empty' ? undefined : latestComplete(aid, a.version);
-        return SUITES.map((kind): EvalSuite => {
-          const s = last?.summary?.suites.find((x) => x.kind === kind);
-          return { kind, ...SUITE_META[kind], caseCount: m === 'empty' ? 0 : casesOf(a).filter((c) => c.suite === kind).length, passed: s?.passed ?? null, total: s?.total ?? null, regressions: s?.regressions ?? null };
-        });
+        return m === 'empty' ? [] : ownCases.filter((c) => c.agentId === a.id).map(publicCase);
       }),
-    cases: (aid, p) =>
-      respond((m) => {
-        const a = agentOr404(aid);
-        return list(casesOf(a).map((k) => withOutcome(k, a)), p, { text: (c) => `${c.name} ${c.input}`, value: (c, k) => (k === 'lastOutcome' ? (c.lastOutcome ?? 'not_run') : field(c, k)), facetKeys: ['suite', 'source', 'lastOutcome'] }, m);
-      }),
-    createCase: (aid, input) =>
-      respond(() => {
-        agentOr404(aid);
-        const err = validateInput(input);
-        if (err) throw new ApiError(`${err}.`, 400);
-        return addCase(aid, input, 'manual');
-      }),
-    importCases: (aid, rows, fileId) =>
+    addCases: (aid, input) =>
       respond(() => {
         const a = agentOr404(aid);
-        if (fileId) deps.files.link(fileId, { type: 'eval_set', id: aid, name: `${a.name} eval cases`, href: `/agents/${aid}?tab=evals` }, ['test_import']);
-        const held = contentOf(a).toolNames;
-        return bulk(rows.map((_, i) => String(i)), (i) => {
-          const err = validateInput(rows[Number(i)]);
-          if (err) return err;
-          const unknown = rows[Number(i)].checks.find((c) => (c.type === 'calls_tool' || c.type === 'not_calls_tool') && c.tool && !held.includes(c.tool));
-          if (unknown && 'tool' in unknown) return `Unknown tool ${unknown.tool}: the agent doesn’t hold it`;
-          addCase(aid, rows[Number(i)], 'csv');
-        });
-      }),
-    caseFromTurn: (aid, { message, turn, runAsId }) =>
-      respond(() => {
-        const a = agentOr404(aid);
-        const checks: EvalCheck[] = [
-          ...turn.toolCalls.map((t) => ({ type: 'calls_tool' as const, tool: t.name })),
-          ...turn.citations.slice(0, 2).map((c) => ({ type: 'cites' as const, source: a.collections[0] ?? c.source, section: `${c.source} · ${c.section}` })),
-        ];
-        if (!checks.length) checks.push({ type: 'reply_contains', text: turn.reply.split(/[.!?]/)[0].split(' ').slice(0, 4).join(' ') });
-        return addCase(aid, { name: message.length > 60 ? `${message.slice(0, 57)}…` : message, input: message, context: { runAsId, collections: [...a.collections] }, checks }, 'test_turn');
+        if (!input.length) throw new ApiError('cases must not be empty.', 422);
+        const err = input.map(validateInput).find(Boolean);
+        if (err) throw new ApiError(`${err}.`, 422);
+        for (const c of input) addCase(aid, c, 'manual');
+        return ownCases.filter((c) => c.agentId === a.id).map(publicCase);
       }),
     removeCase: (cid) =>
       respond(() => {
-        const err = removeOwn(cid);
-        if (err === 'Not found') notFound('Case');
-        if (err) throw new ApiError('Platform cases are read-only. They are maintained by the platform team for every agent.', 403);
+        if (removeOwn(cid)) notFound('Eval case');
       }),
-    bulkRemoveCases: (ids) => respond(() => bulk(ids, removeOwn)),
     run: (aid) =>
       respond(() => {
-        if (runs.some((r) => r.agentId === aid && settle(r).status === 'running')) throw new ApiError('A run for this agent is already in progress.', 409);
-        return publicRun(start(aid, 'manual'));
+        const a = agentOr404(aid);
+        if (!ownCases.some((c) => c.agentId === a.id)) throw new ApiError('cases must not be empty.', 422);
+        const r = start(aid, 'manual');
+        r.completesAt = Date.now();
+        return publicRun(r);
       }),
     runs: (aid, p) =>
       respond((m) => {
         agentOr404(aid);
-        return list(runs.filter((r) => r.agentId === aid).map(row), p, { text: (r) => `${r.id} v${r.draftVersion} ${r.requestedBy}`, value: field, facetKeys: ['status', 'trigger'] }, m);
+        return list(m === 'empty' ? [] : keptRuns(aid).map(publicRun), p, { text: (r) => `${r.id} v${r.version} ${r.startedBy}`, value: field, facetKeys: ['trigger'] }, m);
       }),
-    getRun: (rid) => respond(() => publicRun(runs.find((r) => r.id === rid) ?? notFound('Eval run'))),
-    latest: (aid) =>
-      respond((m) => {
-        if (m === 'empty') return null;
-        agentOr404(aid);
-        const r = runs.find((x) => x.agentId === aid);
-        return r ? publicRun(r) : null;
-      }),
-    options: (aid) =>
-      respond(() => {
-        const a = agentOr404(aid);
-        const granted = contentOf(a).toolNames;
-        return {
-          tools: [...granted],
-          collections: deps.collections(),
-          documents: a.collections.map((c) => ({ collection: c, title: c, sections: [] })),
-        };
-      }),
+    getRun: (rid) => respond(() => publicRun(runs.find((r) => r.id === rid && r.trigger === 'manual') ?? notFound('Eval run'))),
   };
 
   /** Eval result for one agent version: the newest completed run on it. Null while running or never run. */
@@ -454,7 +375,7 @@ export function createEvalsMock(deps: EvalsDeps) {
   });
 
   /** Every completed run with its results, newest first, for Assurance. */
-  const history = () => runs.map(settle).filter((r) => r.status === 'complete').map(publicRun);
+  const history = () => runs.map(settle).filter((r) => r.status === 'complete').map(historyRun);
 
   return { api, wrapAgents, summaryFor, isRunning, passRates, history, casesOf };
 }
