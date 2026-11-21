@@ -69,12 +69,12 @@ def test_a_service_change_runs_that_service_and_no_repo_job(tmp_path: Path) -> N
     assert json.loads(p["service_jobs"]) == [{"service": "kb-service", "part": "verify"}], p
 
 
-def test_a_documents_only_change_runs_only_the_docs_job_and_a_store_change_runs_sql_server(tmp_path: Path) -> None:
+def test_a_documents_only_change_runs_only_the_docs_job_and_a_service_change_runs_sql_server(tmp_path: Path) -> None:
     p = plan(tmp_path, "docs/guide/plugins.md", "README.md")
     picked = (p["code"], p["mssql"], p["console"], p["scripts"], p["service_jobs"], p["packages"], p["docs"])
     assert picked == ("false", "false", "false", "false", "[]", "[]", "true"), p
-    assert plan(tmp_path, "services/kb-service/src/ops_kb/store/kbs.py")["mssql"] == "true"
-    assert plan(tmp_path, "services/kb-service/src/ops_kb/app.py")["mssql"] == "false"
+    assert plan(tmp_path, "services/kb-service/src/ops_kb/app.py")["mssql"] == "true"
+    assert plan(tmp_path, "apps/console/src/app.tsx")["mssql"] == "false"
 
 
 def test_ci_full_runs_every_job_whatever_changed(tmp_path: Path) -> None:

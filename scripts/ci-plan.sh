@@ -65,9 +65,10 @@ echo "scripts=$(flag '^scripts/')"
 # code=false for a change of documents only (markdown or docs/): the checks job then has nothing to check, and the
 # leak scan and docs job still run.
 if [ "$full" = true ] || grep -vqE '(\.md$|^docs/)' <<<"$changed"; then echo "code=true"; else echo "code=false"; fi
-# The SQL Server job runs the store, kit and identity suites and each service's store tests, so it runs for a change to
-# a store, a migration, those packages or the database scripts.
+# The SQL Server job runs the store, kit and identity suites and, per service, route tests that reach the database too
+# (platform-service's policies and reply pins among them), so any service, package or database script change runs it;
+# documents, the console, the SDK and scripts alone do not.
 if [ "$full" = true ]; then echo "mssql=true"; else
-  echo "mssql=$(flag '(/store/|/migrations/|^packages/(ops_store|ops_service_kit|ops_identity)/|^deploy/database/)')"
+  echo "mssql=$(flag '^(services/|packages/|deploy/database/)')"
 fi
 if [ "${#jobs_json[@]}" -eq 0 ]; then echo "service_jobs=[]"; else echo "service_jobs=[$(IFS=,; echo "${jobs_json[*]}")]"; fi

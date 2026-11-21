@@ -34,10 +34,10 @@ standards). The pull-request `checks` job, `make verify` (through `python-verify
 pre-commit (`make checks STAGED=1`, which runs a check when a staged path can change it) all run `make checks`. The
 leak scan and CodeQL run and are not required on the development trunk.
 
-Pattern (`.github/workflows/ci.yml`): `ci-ok` is the one required job; `scripts/ci-plan.sh` picks what runs. from the changed
+Pattern (`.github/workflows/ci.yml`): `ci-ok` is the one required job; `scripts/ci-plan.sh` picks what runs from the changed
 paths: a documents-only change (markdown or `docs/`) runs the docs job and the leak scan; a service's jobs run when
-it, its packages or a shared package changes; the console job on `apps/` or `sdk/`; `store-mssql` on a store, a
-migration, `ops_store`, `ops_service_kit`, `ops_identity` or `deploy/database/`. A skipped job counts as passed in
+it, its packages or a shared package changes; the console job on `apps/` or `sdk/`; `store-mssql` on any change
+under `services/`, `packages/` or `deploy/database/`. A skipped job counts as passed in
 `ci-ok`. `[ci full]` in the pull request title, or the `ci:full` label, runs every job.
 
 Check: `.github/workflows/ci.yml` job `ci-ok`; `make checks`; `scripts/tests/test_checks_list.py` (every check named
