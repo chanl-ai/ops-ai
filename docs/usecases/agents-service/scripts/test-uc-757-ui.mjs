@@ -42,16 +42,30 @@ await withUiStack(
     const errors = [];
     const failed = [];
     const watch = (page, who) => {
-      page.on('pageerror', (e) => errors.push(`${who}: ${e.message}`));
-      page.on('console', (m) => m.type() === 'error' && !/Failed to load resource/.test(m.text()) && errors.push(`${who}: ${m.text()}`));
+      page.on('pageerror', (e) => errors.push(`${who}: ${e.message} ${(e.stack ?? '').split('\n').slice(1, 4).join(' ')}`));
+      // React's warnings arrive as a format string with `%s`; the arguments name the components.
+      page.on('console', (m) => {
+        if (m.type() !== 'error' || /Failed to load resource/.test(m.text())) return;
+        const at = errors.push(`${who}: ${m.text()}`) - 1;
+        void Promise.all(m.args().map((a) => a.jsonValue().catch(() => '?'))).then((args) => (errors[at] = `${who}: ${args.map(String).join(' | ').slice(0, 600)}`));
+      });
       // A reply's stream is closed by the browser when the page is resized or left after the reply ended; that is not a failure.
       // So is a link's prefetch (`_rsc`) the browser drops when the page is left before it answers.
       const dropped = (r) => (r.method() === 'POST' && /\/chat\/threads\/[^/]+\/messages$/.test(r.url())) || (/[?&]_rsc=/.test(r.url()) && r.failure()?.errorText === 'net::ERR_ABORTED');
       page.on('requestfailed', (r) => !dropped(r) && failed.push(`${who}: ${r.method()} ${r.url()} ${r.failure()?.errorText}`));
       // A save refused because someone else saved first (409) is the step under test, for the agent and the skill draft.
       const stale = (r) => r.status() === 409 && ((r.request().method() === 'PATCH' && /\/v1\/agents\/[^/]+$/.test(r.url())) || (r.request().method() === 'PUT' && /\/v1\/skills\/[^/]+\/draft$/.test(r.url())));
-      page.on('response', (r) => r.status() >= 400 && !stale(r) && failed.push(`${who}: ${r.status()} ${r.request().method()} ${r.url()}`));
+      // The walk's policy change ends the pages' tokens, so a page's next call answers 401 and the console renews the
+      // token and sends it again (request-identity.ts). Such a 401 fails the walk only if that resend never succeeds.
+      page.on('response', (r) => {
+        const call = `${who}: ${r.request().method()} ${r.url()}`;
+        if (r.status() === 401) renewed.set(call, (renewed.get(call) ?? 0) + 1);
+        else if (r.status() < 300 && renewed.get(call)) renewed.set(call, renewed.get(call) - 1);
+        else if (r.status() >= 400 && !stale(r)) failed.push(`${who}: ${r.status()} ${r.request().method()} ${r.url()}`);
+      });
     };
+    const renewed = new Map();
+    const unrenewed = () => [...renewed].filter(([, n]) => n > 0).map(([call]) => `401 never resent with success: ${call}`);
     const signIn = async (email) => {
       const page = await (await browser.newContext({ viewport: { width: 1440, height: 1000 } })).newPage();
       watch(page, email.split('@')[0]);
@@ -109,7 +123,8 @@ await withUiStack(
         drawn === 1 && ['tool', 'agent', 'workflow'].includes(kept.use?.kind) && kept.do?.includes(`@${kept.use.kind}:${kept.use.id}`),
         { drawn, kept, keptSteps },
       );
-      // Someone else saves first: James's save is refused, and Reload keeps what he typed on top of their version.
+      // Someone else saves first: James's save is refused. Reload shows their text and keeps his as a read-only copy,
+      // and nothing saves over their text unless he chooses to.
       // The button is off while the save is in flight, so the saved toast is waited for first.
       await page.getByText(/Saved draft v1/).first().waitFor({ timeout: 60_000 });
       await page.waitForFunction(() => document.querySelector('[data-testid="save-skill-draft"]')?.disabled === true, null, { timeout: 60_000 });
@@ -118,33 +133,111 @@ await withUiStack(
       await page.keyboard.press('End');
       // One insert, as a paste is: the check is about what Reload keeps, not about key-by-key typing.
       await page.keyboard.insertText(' Then thank them.');
+      // A resize to phone width and back draws the page's columns again; the unsaved text and its save stay.
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.waitForTimeout(800);
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await lineOf('Then thank them.').waitFor({ timeout: 10_000 }).catch(() => undefined);
+      check('10 unsaved text survives a resize to 390 and back, still unsaved', /Then thank them\./.test(await doc.innerText()) && (await page.getByTestId('save-skill-draft').isEnabled()), await doc.innerText());
       await made(`/v1/skills/${skill.id}/publish-requests`, { note: 'use case' });
       const open = (await (await fetch(`${agents}/v1/skills/${skill.id}`, { headers: J })).json()).data;
-      await made(`/v1/skills/${skill.id}/draft`, { name: `Card dispute renamed ${RUN}`, baseVersion: open.version, baseDigest: open.digest }, 'PUT');
+      const THEIRS = 'Ask whether there is anything else.';
+      await made(`/v1/skills/${skill.id}/draft`, { name: `Card dispute renamed ${RUN}`, source: `${open.text}\n${THEIRS}`, baseVersion: open.version, baseDigest: open.digest }, 'PUT');
       await page.getByTestId('save-skill-draft').click();
       await page.getByTestId('save-skill-draft-confirm').click();
       const staleAlert = page.getByTestId('skill-stale-base');
       const refusedStale = await staleAlert.waitFor({ timeout: 60_000 }).then(() => true, () => false);
       await page.getByTestId('skill-stale-reload').click();
       await staleAlert.waitFor({ state: 'detached', timeout: 60_000 }).catch(() => undefined);
-      await lineOf('Then thank them.').waitFor({ timeout: 60_000 }).catch(() => undefined);
+      await lineOf(THEIRS).waitFor({ timeout: 60_000 }).catch(() => undefined);
       const afterReload = await doc.innerText();
       const fields = await page.locator('input').evaluateAll((els) => els.map((el) => el.value));
       check(
-        '10 after someone else saves first, Reload shows their version and keeps the unsaved text',
-        refusedStale && /Then thank them\./.test(afterReload) && fields.includes(`Card dispute renamed ${RUN}`),
+        '10 after someone else saves first, Reload shows their text and name, not his',
+        refusedStale && afterReload.includes(THEIRS) && !/Then thank them\./.test(afterReload) && fields.includes(`Card dispute renamed ${RUN}`),
         { refusedStale, afterReload, fields },
       );
+      const notice = page.getByTestId('skill-kept-copy');
+      await page.getByTestId('skill-kept-copy-open').click();
+      const copy = page.getByTestId('skill-kept-copy-text');
+      await copy.waitFor({ timeout: 10_000 }).catch(() => undefined);
+      const copyText = (await copy.innerText().catch(() => '')) ?? '';
+      const copyLocked = await copy.locator('[contenteditable="true"]').count();
+      check('10 his text is kept as a read-only copy he can open', (await notice.count()) === 1 && /Then thank them\./.test(copyText) && copyLocked === 0, { copyText, copyLocked });
+      await shootBothWidths(page, AREA, 'uc-757-skill-kept-copy', async () => {
+        await page.waitForTimeout(600);
+        await notice.scrollIntoViewIfNeeded().catch(() => undefined);
+      });
+      // He copies his sentence across by hand; the save keeps their text with it, and their name.
+      await lineOf(THEIRS).click();
+      await page.keyboard.press('End');
+      await page.keyboard.insertText(' Then thank them.');
       const onTop = armed(page.waitForResponse((r) => r.request().method() === 'PUT' && r.url() === `${agents}/v1/skills/${skill.id}/draft`, { timeout: 60_000 }));
       await page.getByTestId('save-skill-draft').click();
       await page.getByTestId('save-skill-draft-confirm').click();
       const top = (await (await onTop).json()).data ?? {};
       const topSteps = top.content?.steps ?? [];
-      check('10 the kept text then saves on top of their version', top.name === `Card dispute renamed ${RUN}` && topSteps.some((s) => /Then thank them\./.test(s.do ?? '')) && topSteps.some((s) => s.use?.id === kept.use?.id), { name: top.name, topSteps });
+      const said = topSteps.map((s) => s.do ?? '').join('\n');
+      check('10 the save after Reload keeps their text and what he copied in', top.name === `Card dispute renamed ${RUN}` && said.includes(THEIRS) && /Then thank them\./.test(said) && topSteps.some((s) => s.use?.id === kept.use?.id), { name: top.name, topSteps });
+      await page.getByTestId('skill-kept-copy-drop').click();
+      check('10 dropping the copy closes the notice', (await notice.count()) === 0, await notice.count());
+      // The race: Reload refetches the skill, and the editor must open on that copy, not on the one read before it.
+      // Five rounds in a row on a page whose timers run late, so the cache tells the page a moment after the read lands.
+      const raced = await made('/v1/skills', { name: `Reload race ${RUN}`, ownerTeam: 'team_ops', useWhen: 'The cardholder asks what happens next.', instructions: '', source: 'Say hello to the cardholder.\nTell them what happens next.' });
+      const slow = await page.context().newPage();
+      watch(slow, 'james-slow');
+      await slow.addInitScript(() => {
+        const real = window.setTimeout.bind(window);
+        window.setTimeout = (fn, ms, ...rest) => real(fn, ms === undefined || ms === 0 ? 60 : ms, ...rest);
+      });
+      const slowLine = (text) => slow.getByTestId('sop-editor').locator('.cm-line', { hasText: text });
+      const rounds = [];
+      for (let n = 1; n <= 5; n += 1) {
+        await slow.goto(`${consoleUrl}/build/skills/${raced.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await slowLine('Tell them what happens next').waitFor({ timeout: 120_000 });
+        await slowLine('Tell them what happens next').click();
+        await slow.keyboard.press('End');
+        await slow.keyboard.insertText(` mine${n}.`);
+        const read = (await (await fetch(`${agents}/v1/skills/${raced.id}`, { headers: J })).json()).data;
+        const put = await fetch(`${agents}/v1/skills/${raced.id}/draft`, { method: 'PUT', headers: J, body: JSON.stringify({ source: `${read.text}\nSay theirs${n}.`, baseVersion: read.version, baseDigest: read.digest }) });
+        await slow.getByTestId('save-skill-draft').click();
+        await slow.getByTestId('save-skill-draft-confirm').click();
+        await slow.getByTestId('skill-stale-base').waitFor({ timeout: 30_000 });
+        await slow.getByTestId('skill-stale-reload').click();
+        await slow.getByTestId('skill-stale-base').waitFor({ state: 'detached', timeout: 30_000 }).catch(() => undefined);
+        await slowLine(`theirs${n}`).waitFor({ timeout: 30_000 }).catch(() => undefined);
+        const shown = await slow.getByTestId('sop-editor-content').innerText();
+        await slow.getByTestId('skill-kept-copy-open').click().catch(() => undefined);
+        const copied = await slow.getByTestId('skill-kept-copy-text').innerText().catch(() => '');
+        // Long enough for a save to land, were one going to.
+        await slow.waitForTimeout(1500);
+        const stored = (await (await fetch(`${agents}/v1/skills/${raced.id}`, { headers: J })).json()).data?.text ?? '';
+        rounds.push({ n, put: put.status, shown: shown.includes(`theirs${n}`) && !shown.includes(`mine${n}`), copy: copied.includes(`mine${n}`), kept: stored.includes(`theirs${n}`) && !stored.includes(`mine${n}`) });
+        await slow.getByTestId('skill-kept-copy-drop').click().catch(() => undefined);
+      }
+      check('10 Reload shows the newest saved text and keeps his as a copy, five times in a row', rounds.every((r) => r.put === 200 && r.shown && r.copy && r.kept), rounds);
+      await slow.close();
       await shootBothWidths(page, AREA, 'uc-757-skill-admin', async () => {
         await page.waitForTimeout(600);
         await page.getByTestId('skill-results-section').scrollIntoViewIfNeeded().catch(() => undefined);
       });
+
+      // 10. A skill written as text with an if line: each condition is marked, "checked" when the tool above returns what it
+      // tests and "agent decides" when it is the agent's own words.
+      const guarded = await made('/v1/skills', {
+        name: `Guarded walk ${RUN}`,
+        ownerTeam: 'team_ops',
+        useWhen: 'The cardholder disputes a charge.',
+        instructions: '',
+        source: `Look the charge up with @${kept.use.kind}:${kept.use.id}\nif the cardholder sounds unsure:\n    Offer to explain the review.\nTell the cardholder what happens next`,
+      });
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.goto(`${consoleUrl}/build/skills/${guarded.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await lineOf('Offer to explain the review').waitFor({ timeout: 60_000 });
+      const legend = page.getByTestId('sop-condition-how');
+      await legend.first().waitFor({ timeout: 30_000 }).catch(() => undefined);
+      check('10 an if line shows that the agent decides', (await legend.count()) >= 1 && /^agent decides$/.test(await legend.first().innerText()), await legend.allInnerTexts());
+      await shootBothWidths(page, AREA, 'uc-757-skill-text-admin', async () => {});
 
       await page.setViewportSize({ width: 1440, height: 1000 });
       // 11. The agent page: @ in the brief lists a tool the agent lacks, with what picking it adds; the save lands.
@@ -289,6 +382,65 @@ await withUiStack(
       await maya.getByTestId('sop-editor-content').waitFor({ timeout: 120_000 });
       await shootBothWidths(maya, AREA, 'uc-757-skill-member', async () => {});
 
+      // 23. Pages reached by the sidebar's links, not by loading their URL: a client navigation keeps the shell mounted,
+      // and the walks saw update loops only that way, at both widths.
+      const viaSidebar = async (p, href) => {
+        const link = p.locator(`[data-sidebar="sidebar"] a[href="${href}"]`).first();
+        if (!(await link.isVisible())) await p.getByRole('button', { name: /toggle sidebar/i }).first().click();
+        await link.click();
+        // Unsaved text asks first; the walk leaves it.
+        const leave = p.getByTestId('leave-guard-discard');
+        await leave.waitFor({ timeout: 2_000 }).then(() => leave.click(), () => undefined);
+        await p.waitForURL((u) => u.pathname === href, { timeout: 60_000 });
+        await p.waitForTimeout(1500);
+      };
+      const seen = errors.length;
+      for (const [who, p] of [['james', page], ['maya', maya]]) {
+        for (const width of [1440, 390]) {
+          await p.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
+          await viaSidebar(p, '/build/workflows');
+          const flow = p.locator('main a[href^="/build/workflows/definitions/"]').first();
+          if (await flow.count()) {
+            await flow.dispatchEvent('click');
+            await p.waitForURL((u) => /^\/build\/workflows\/[^/]+/.test(u.pathname), { timeout: 60_000 });
+            await p.waitForTimeout(2000);
+          }
+          await viaSidebar(p, '/build/skills');
+          // The row's link lies under its label; a click event on the link is the row click a person makes.
+          await p.locator(`main a[href="/build/skills/${skill.id}"]`).first().dispatchEvent('click');
+          await p.getByTestId('sop-editor-content').waitFor({ timeout: 60_000 });
+          if (who === 'james') {
+            await p.getByTestId('sop-editor-content').click();
+            await p.keyboard.press('ControlOrMeta+End');
+            await p.keyboard.type(' Then say goodbye with @', { delay: 20 });
+            await p.getByTestId('caret-menu').getByRole('option').first().waitFor({ timeout: 60_000 });
+            await p.keyboard.press('Enter');
+            // The walks typed, then resized to the other width with the text unsaved.
+            await p.setViewportSize(width === 1440 ? { width: 390, height: 844 } : { width: 1440, height: 1000 });
+            await p.waitForTimeout(1000);
+            await p.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
+            await p.waitForTimeout(1000);
+          }
+          await viaSidebar(p, '/work/tasks');
+        }
+        await p.setViewportSize({ width: 1440, height: 1000 });
+      }
+      // A skill publish waiting on Maya, the way the walk made one: the team's skill publishes always need a review.
+      const policy = await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/policies/publishReview`, { method: 'PUT', headers: as(await tokenFor(PRIYA)), body: JSON.stringify({ value: { skills: 'always' } }) });
+      // A policy change ends the tokens issued before it.
+      const fresh = as(await tokenFor(JAMES));
+      const post = async (path, body) => (await (await fetch(`${agents}${path}`, { method: 'POST', headers: fresh, body: JSON.stringify(body) })).json()).data ?? {};
+      const asked = await post('/v1/skills', { name: `Reviewed walk ${RUN}`, ownerTeam: 'team_ops', useWhen: 'The cardholder asks for a statement.', instructions: 'Send the latest statement.', steps: [{ do: 'Say where the statement is.' }] });
+      const request = await post(`/v1/skills/${asked.id}/publish-requests`, { note: 'uc-757 walk' });
+      await viaSidebar(maya, '/build/skills');
+      await viaSidebar(maya, '/work/tasks');
+      // The publish is the one task waiting on Maya here; its row names the review, not the skill.
+      await maya.locator('[data-testid^="queue-item-"]').first().click();
+      const pane = maya.getByTestId('review-sheet');
+      const shown = await pane.getByTestId('review-approve').waitFor({ timeout: 60_000 }).then(() => true, () => false);
+      check('23 a skill publish opened from Human Tasks shows in the review sheet with its approve button', policy.status === 200 && request.status === 'in_review' && shown, { policy: policy.status, request: request.status, shown });
+      check('23 the workflows list and canvas, the skill editor while typing and Human Tasks, reached by sidebar links, log no errors', errors.length === seen, errors.slice(seen));
+      failed.push(...unrenewed());
       check('19 no page errors and no failed requests', errors.length === 0 && failed.length === 0, { errors, failed });
       console.log(`walk: ${errors.length} console errors, ${failed.length} failed requests`, errors, failed);
     } finally {

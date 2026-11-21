@@ -89,6 +89,9 @@ check enforces it. Edited only through a reviewed pull request, never by this ag
 
 - (none yet)
 
+## Fixes
+Fixes follow the ops-fix-the-class skill (`docs/guide/skills/ops-fix-the-class.md`): sweep for the same fault, fix every place once in the layer that owns the job, and end the commit with a `Siblings:` trailer.
+
 ## Report (at most 10 lines)
 Commits; the routes added or changed with their operation ids; the settings added; tests and use cases run per layer
 with what they printed; each new test's first failure; anything not run.

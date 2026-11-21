@@ -1718,6 +1718,7 @@
         "version": 1,
         "versions": [
           {
+            "approvedBy": null,
             "changes": [
               "Created"
             ],
@@ -1748,6 +1749,7 @@
             "note": "",
             "publishedAt": "<timeZ>",
             "publishedBy": "auto-approve (dev)",
+            "requestedBy": "j.richardson@harborpine.example",
             "reviewId": "<SKP>",
             "savedAt": "<timeZ>",
             "savedBy": "j.richardson@harborpine.example",

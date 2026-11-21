@@ -28,6 +28,8 @@ DEFAULTS: dict[str, Any] = {
     "extractionFloor": 0.8,
     "stepUp": False,
     "publishReview": {},
+    # No team set: a skill written as text publishes with a write the agent decides, shown as a hint.
+    "skillPublishStrict": {},
     "companySignInRequired": False,
     "chatThreadsOwnerOnly": True,
     "egressNewHosts": "ask_security",
@@ -51,7 +53,6 @@ DEFAULTS: dict[str, Any] = {
     # Per team and on unless a team turns it off: {} names no team, so every team masks.
     "aiStepsMaskPersonalData": {},
     # Per team and off until a team turns them on: strict skill publishing, and evals required to publish an agent.
-    "skillPublishStrict": {},
     "evalsRequired": {},
     # No plugin is on until the platform admin turns it on for the install.
 }

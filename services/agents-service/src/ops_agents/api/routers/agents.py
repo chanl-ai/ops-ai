@@ -33,6 +33,7 @@ from ops_service_kit.errors import Conflict, NotFound, Unprocessable, Validation
 from ops_service_kit.http import Envelope, In, Json, JsonList, ListResult, Out
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.listing import ListQuery
+from ops_service_kit.names import Name
 from ops_store import isolation
 
 from ...store.agent_registry import AgentRow, digest_of, refuse_stale
@@ -115,7 +116,7 @@ class Guardrails(In):
 
 
 class AgentInput(In):
-    name: str = Field(min_length=1, max_length=200)
+    name: Name
     role: str = Field(min_length=1, max_length=400)
     # A models-service alias; empty runs the agent on the runtime's alias.
     model: str = ""
@@ -144,7 +145,7 @@ class AgentPatch(In):
     # refused (409 `stale_base`), so it never writes over a grant or an edit saved in between.
     base_version: int
     base_digest: str
-    name: str | None = Field(default=None, min_length=1, max_length=200)
+    name: Name | None = None
     role: str | None = Field(default=None, min_length=1, max_length=400)
     model: str | None = None
     channels: list[Channel] | None = None
@@ -212,7 +213,7 @@ class EvalCaseContextInput(In):
 
 
 class EvalCaseInput(In):
-    name: str
+    name: Name
     input: str
     context: EvalCaseContextInput | None = None
     checks: list[EvalCheckInput] = Field(default_factory=list[EvalCheckInput])

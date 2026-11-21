@@ -63,6 +63,21 @@ export function scopeProblems(message, paths, packageDirs = []) {
   return out;
 }
 
+// A fix that changes product code names what else it swept (docs/guide/skills/ops-fix-the-class.md). Docs-only and
+// test-only fixes are exempt, and fix(qa) is already limited by qa-fix-check.
+const PRODUCT = /^(services|apps|packages|sdk)\//;
+const TEST_PATH = /(^|\/)(tests?|__tests__|e2e)\/|\.(test|spec)\.[a-z]+$|(^|\/)test_[^/]*$/;
+const SIBLINGS = /^Siblings: (\d+ fixed via \S.*|none, searched \S.*)$/m;
+
+export function siblingsProblems(message, paths) {
+  const subject = (message.split('\n').find((l) => !l.startsWith('#')) ?? '').trim();
+  const m = /^fix(?:\(([^)]*)\))?!?:/.exec(subject);
+  if (!m || m[1] === 'qa') return [];
+  if (!paths.some((p) => PRODUCT.test(p) && !TEST_PATH.test(p))) return [];
+  if (SIBLINGS.test(message)) return [];
+  return ['fix commit has no "Siblings: <N> fixed via <owner>" or "Siblings: none, searched <pattern>" trailer; run the ops-fix-the-class skill (docs/guide/skills/ops-fix-the-class.md)'];
+}
+
 function packageDirs() {
   try { return readdirSync('packages'); } catch { return []; }
 }
@@ -84,6 +99,19 @@ function selfTest() {
     ['fix(x): y\n\nPreviously the walk read the sidebar too early.\n', 1],
   ];
   let failed = 0;
+  const code = ['services/kb-service/src/kb/api.py'];
+  const sibCases = [
+    ['fix(kb): x\n\nWhy.\n', code, 1],
+    ['fix(kb): x\n\nWhy.\n\nSiblings: 6 fixed via shared_name_field\n', code, 0],
+    ['fix(kb): x\n\nWhy.\n\nSiblings: none, searched max_length on request models\n', code, 0],
+    ['fix(kb): x\n\nWhy.\n\nSiblings: none, searched \n', code, 1],
+    ['fix(kb): x\n\nWhy.\n', ['docs/a.md', 'services/kb-service/tests/test_a.py'], 0],
+    ['fix(qa): x\n\nWhy.\n', code, 0],
+    ['feat(kb): x\n', code, 0],
+  ];
+  for (const [msg, paths, want] of sibCases) {
+    if (siblingsProblems(msg, paths).length !== want) { failed++; console.log(`FAIL siblings ${JSON.stringify(msg)} ${paths}`); }
+  }
   const pk = ['ops_store', 'ops_service_kit', 'contracts'];
   const scopeCases = [
     ['fix(platform): x\n', ['services/agents-service/src/chat_connectors.py'], 1],
@@ -111,7 +139,7 @@ const [flag, file] = process.argv.slice(2);
 if (flag === '--self-test') selfTest();
 else if (flag === '--commit' && file) {
   const text = readFileSync(file, 'utf8');
-  const found = [...problems(text), ...scopeProblems(text, stagedPaths(), packageDirs())];
+  const found = [...problems(text), ...scopeProblems(text, stagedPaths(), packageDirs()), ...siblingsProblems(text, stagedPaths())];
   if (found.length) {
     console.error('commit message refused (scripts/commit-message-check.mjs):');
     for (const p of found) console.error(`  - ${p}`);

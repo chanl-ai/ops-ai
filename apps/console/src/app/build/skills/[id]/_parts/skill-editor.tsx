@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { AddMenu } from '@/components/shared/add-menu';
 import { FormField } from '@/components/shared/form-field';
 import { LeaveGuard } from '@/components/shared/leave-guard';
+import { NewerCopyNotice } from '@/components/shared/newer-copy-notice';
 import { SettingsSection } from '@/components/shared/settings-section';
 import { TagInput } from '@/components/shared/tag-input';
 import { parseText, refToken } from '@/components/shared/instruction-document/document-model';
@@ -25,6 +26,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useReferenceLabels } from '@/hooks/references-queries';
+import { useReloadToRead } from '@/hooks/use-reload-to-read';
 import { useSaveSkillDraft, useSkill, useSkillOptions, useSkillTextReading } from '@/hooks/skill-queries';
 import { SKILL_LOADING_OPTIONS } from '@/components/skills/skill-loading';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -65,6 +67,15 @@ const usesLine = (uses: Record<(typeof KINDS)[number][0], number> | undefined) =
   const parts = KINDS.filter(([k]) => uses?.[k]).map(([k, one, many]) => `${uses![k]} ${uses![k] === 1 ? one : many}`);
   return parts.length ? parts.join(' · ') : 'nothing yet';
 };
+/**
+ * The person's own text, kept read-only on the page after someone else saved first and the person reloaded: the
+ * editor shows the other person's text, and nothing saves over it unless the person uses this copy.
+ */
+export interface KeptText {
+  text: string;
+  note: string;
+}
+
 const same = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x));
 
 /**
@@ -73,18 +84,15 @@ const same = (a: string[], b: string[]) => a.length === b.length && a.every((x) 
  * publisher approves it. The unsaved bar says which edit class the change is. A person who may not change the team's
  * skills (`canEdit` false) reads the same form with every field off and no save.
  */
-export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried }: { skill: SkillDetail; canEdit: boolean; onDirtyChange?: (dirty: boolean) => void; carried?: React.RefObject<Carried<Form> | null> }) {
+export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried, keptText }: { skill: SkillDetail; canEdit: boolean; onDirtyChange?: (dirty: boolean) => void; carried?: React.RefObject<Carried<Form> | null>; keptText?: React.RefObject<KeptText | null> }) {
   const save = useSaveSkillDraft(sk.id);
   const current = useSkill(sk.id);
   const [noting, setNoting] = React.useState(false);
   const options = useSkillOptions();
   const saved = React.useMemo(() => formOf(sk), [sk]);
-  // Drawn again on a newer version after Reload, the form starts from that version with the person's unsaved edits
-  // on top (`carried`, which the page holds across the remount).
+  // The page owns the unsaved edits (`carried`): the form is drawn again on a resize (the page's columns stack below
+  // 1024px) and on a newer version after Reload, and each time starts from the saved version with those edits on top.
   const [form, setForm] = React.useState<Form>(() => (carried?.current ? keptEdits(carried.current.readBefore, carried.current.edited, saved) : saved));
-  React.useEffect(() => {
-    if (carried) carried.current = null;
-  }, [carried]);
   const [mode, setMode] = React.useState<'edit' | 'preview'>('edit');
   const [note, setNote] = React.useState('');
   const [endingValid, setEndingValid] = React.useState(true);
@@ -105,6 +113,12 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried }: { sk
   const lineOfStep = (step: number) => reading.reading?.stepLines[step - 1] ?? 1;
   // A save refused because a newer version exists: what the service said. Cleared by Reload.
   const [stale, setStale] = React.useState<string | null>(null);
+  // The person's text from before a Reload, held by the page so a redraw keeps it until they use it or drop it.
+  const [mine, setMine] = React.useState<KeptText | null>(() => keptText?.current ?? null);
+  const [mineOpen, setMineOpen] = React.useState(false);
+  React.useEffect(() => {
+    if (keptText) keptText.current = mine;
+  }, [keptText, mine]);
   // A save that did not go through for any other reason: what the service said, kept with a Retry until a save works.
   const [failed, setFailed] = React.useState<string | null>(null);
   // A save refused for one step, shown on that step until the steps change.
@@ -120,6 +134,13 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried }: { sk
     scope: !same(form.toolIds, saved.toolIds) || !same(form.knowledgeBases, saved.knowledgeBases) || !same(form.guardrails, saved.guardrails) || form.refusal.trim() !== saved.refusal.trim(),
   };
   const dirty = changed.wording || changed.scope;
+  // Set while a save is in flight: the saved version redraws the form, and the edits it saved are not carried onto it.
+  const saving = React.useRef(false);
+  const formNow = React.useRef(form);
+  formNow.current = form;
+  React.useEffect(() => {
+    if (carried && !saving.current) carried.current = dirty ? { readBefore: saved, edited: form } : null;
+  }, [carried, dirty, saved, form]);
   // The page holds back what would redraw this form (a file added, a version restored) while there is unsaved text.
   React.useEffect(() => {
     onDirtyChange?.(dirty);
@@ -143,12 +164,16 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried }: { sk
   // The tab remounts once the saved version arrives, so the toast follows the awaited result rather than mutate callbacks.
   const submit = async () => {
     setFailed(null);
+    saving.current = true;
+    if (carried) carried.current = null;
     try {
       // A skill saved as a list of steps keeps them until its text is changed; one written as text sends its text.
       const text = form.text !== saved.text || sk.content.source !== undefined ? { source: form.text } : {};
       const d = await save.mutateAsync({ name: form.name, useWhen: form.when.useWhen, loading: form.loading, ...(stepped ? {} : { instructions: form.instructions }), toolIds: form.toolIds, knowledgeBases: form.knowledgeBases, guardrails: form.guardrails, refusal: form.refusal.trim(), parts: form.parts, ...(stepped ? { inputs: form.inputs, ...text, notWhen: form.when.notWhen.trim(), exit: form.ending.exit, returns: form.ending.returns, success: form.ending.success } : {}), note: note.trim() || undefined, ...baseOf(sk) });
       toast.success(`Saved draft v${d.versions[0].version}`, { description: `${EDIT_CLASS[d.versions[0].editClass].hint} Run the tests before requesting review.` });
     } catch (e) {
+      // Still this form: what it holds now, typed during the save included, is carried again.
+      if (carried) carried.current = { readBefore: saved, edited: formNow.current };
       // In review and deprecated are 409 as well; only a newer version offers a reload.
       const newer = staleSave(e);
       if (newer) return setStale(staleNote(newer));
@@ -161,17 +186,29 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried }: { sk
       // The toast goes away; the page keeps saying so, with a way to try again, while the text is still unsaved.
       setFailed((e as Error).message);
       toast.error('Couldn’t save the draft', { description: (e as Error).message });
+    } finally {
+      saving.current = false;
     }
   };
   // The page remounts this form when a newer version arrives, and the new form takes the person's unsaved edits from
   // `carried`. With nothing newer the form stays as it is. Either way nothing the person typed is dropped.
-  const reload = async () => {
-    if (carried) carried.current = { readBefore: saved, edited: form };
-    const read = await current.refetch();
-    const newer = read.data?.versions[0];
-    if (carried && newer && newer.version === newest.version && newer.savedAt === newest.savedAt) carried.current = null;
+  // The text is one field, so carried whole it would replace theirs: the form takes their text, and the person's own
+  // text is kept read-only beside it. Every other field the person changed is carried onto their version. The page
+  // draws a new form once its props hold the copy read; this one stays paused until then, and finishes the reload
+  // itself only when nothing newer was read.
+  const readAgain = React.useCallback(async () => (await current.refetch({ throwOnError: true })).data?.digest, [current]);
+  const { reload: readNewest, reading: reloading } = useReloadToRead(sk.digest, readAgain, () => {
+    // Nothing newer was read, so this form is still the newest one and keeps the person's text as it is.
     setStale(null);
+    if (keptText) keptText.current = null;
+  });
+  const reload = async () => {
+    if (keptText) keptText.current = form.text !== saved.text ? { text: form.text, note: stale ?? '' } : null;
+    if (carried) carried.current = { readBefore: saved, edited: { ...form, text: saved.text } };
+    await readNewest();
   };
+  const takeMine = () => mine && (setForm((f) => ({ ...f, text: mine.text })), setMine(null), setMineOpen(false));
+  const dropMine = () => (setMine(null), setMineOpen(false));
   const askNote = async () => {
     if (whenValid) return setNoting(true);
     await whenForm.current?.check();
@@ -179,19 +216,40 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried }: { sk
 
   return (
     <div className="flex flex-col gap-4" data-testid="skill-editor">
-      <LeaveGuard unsaved={dirty && !readOnly} failed={!!failed} />
+      {/* The kept copy lives only on this page, so leaving with it asks first. */}
+      <LeaveGuard unsaved={(dirty && !readOnly) || !!mine} failed={!!failed} />
       {locked && <p className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">{locked} Fields are read-only.</p>}
       {stale && (
         <Alert data-testid="skill-stale-base">
           <Users />
           <AlertTitle>Someone else saved this skill</AlertTitle>
           <AlertDescription>
-            <p>{stale} Your unsaved changes are kept on this page. Reloading shows their version with your changes on top; save again once you have looked.</p>
-            <Button variant="outline" size="sm" onClick={() => void reload()} disabled={current.isFetching} data-testid="skill-stale-reload">
+            <p>{stale} Nothing was saved. Reload shows their text; yours is kept on this page as a read-only copy beside it, and your other changes stay on their version. Nothing is saved over their text unless you choose to.</p>
+            <Button variant="outline" size="sm" onClick={() => void reload()} disabled={reloading} data-testid="skill-stale-reload">
               <RefreshCw className="size-3.5" /> Reload
             </Button>
           </AlertDescription>
         </Alert>
+      )}
+      {mine && (
+        <NewerCopyNotice
+          testId="skill-kept-copy"
+          title="You are looking at their text"
+          copyOpen={mineOpen}
+          onToggleCopy={() => setMineOpen((v) => !v)}
+          actions={
+            <>
+              <Button variant="outline" size="sm" disabled={readOnly} onClick={takeMine} data-testid="skill-kept-copy-use">
+                Use my text instead
+              </Button>
+              <Button variant="ghost" size="sm" onClick={dropMine} data-testid="skill-kept-copy-drop">
+                Drop my copy
+              </Button>
+            </>
+          }
+        >
+          <p>{mine.note} Your unsaved text is kept on this page, read-only, until you drop it or leave. Copy what you need from it into theirs, or use it in place of theirs.</p>
+        </NewerCopyNotice>
       )}
       {failed && !stale && (
         <Alert data-testid="skill-save-failed">
@@ -266,6 +324,14 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried }: { sk
               )}
               <SopEditor value={form.text} onChange={(text) => (setRefused(null), setForm((f) => ({ ...f, text })))} readOnly={readOnly} reading={reading.reading} readingFor={reading.forText} labels={labels.data} context={context} controls={textDoc} placeholder={EXAMPLE} />
             </div>
+            {mine && mineOpen && (
+              <div className="rounded-lg border bg-muted/40" data-testid="skill-kept-copy-text">
+                <p className="flex items-center gap-2 border-b px-3 py-2 text-xs text-muted-foreground">
+                  <Lock className="size-3.5" /> Your copy, read only. It is not saved.
+                </p>
+                <SopEditor value={mine.text} onChange={() => undefined} readOnly labels={labels.data} context={context} ariaLabel="Your copy of the skill text" />
+              </div>
+            )}
             {!!reading.reading?.hints.length && reading.forText === form.text && (
               <div className="flex flex-col gap-1 rounded-md border px-3 py-2" data-testid="sop-hints">
                 <span className="text-xs font-medium">{plural(reading.reading.hints.length, 'hint')} · nothing here stops a save</span>
@@ -418,7 +484,7 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried }: { sk
             // Saving asks for a version note and says what this kind of edit needs before it goes live.
             <Popover open={noting} onOpenChange={(open) => (open ? void askNote() : setNoting(false))}>
               <PopoverTrigger asChild>
-                <Button size="sm" disabled={!dirty || !!errors.name || !!errors.parts || !endingValid || !inputsValid || save.isPending} data-testid="save-skill-draft">
+                <Button size="sm" disabled={!dirty || !!errors.name || !!errors.parts || !endingValid || !inputsValid || save.isPending || reloading} data-testid="save-skill-draft">
                   Save {target}
                 </Button>
               </PopoverTrigger>
@@ -428,7 +494,7 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried }: { sk
                   <p className="text-sm text-muted-foreground">{errors.parts ?? EDIT_CLASS[editClass].hint}</p>
                 </div>
                 <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Add the joint account rule" aria-label="Version note" />
-                <Button size="sm" className="self-end" onClick={() => (setNoting(false), submit())} disabled={save.isPending} data-testid="save-skill-draft-confirm">
+                <Button size="sm" className="self-end" onClick={() => (setNoting(false), submit())} disabled={save.isPending || reloading} data-testid="save-skill-draft-confirm">
                   Save {target}
                 </Button>
               </PopoverContent>

@@ -17,23 +17,20 @@ import {
   useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { AlertTriangle, CheckCircle2, Keyboard, Play, Save } from 'lucide-react';
+import { Keyboard, Play } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { LockedReason } from '@/components/shared/locked-reason';
-import { LoadingButton } from '@/components/shared/loading-button';
 import { Row, Rows } from '@/components/shared/surface';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
-import { ApiError } from '@/lib/api/contract';
-import type { DefinitionCheck, DefinitionPublished, DefinitionValidation, EngineDefinition, EngineNode, EngineNodeType } from '@/lib/types/engine';
+import type { DefinitionValidation, EngineDefinition, EngineNode, EngineNodeType } from '@/lib/types/engine';
 
 import { CanvasControls } from '../canvas-controls';
 import { MIN_ZOOM, readableFit, wholeFit } from './canvas-view';
-import { ChecksPanel } from './checks-panel';
 import { type DefinitionFlowNode, definitionNodeTypes } from './definition-node';
 import { connectionId, definitionNodeData, inPorts, indexTypes, outPorts, typeKey, uniqueNodeId } from './graph';
 import { RoutedLines, routedEdgeTypes } from './routed-edge';
@@ -41,6 +38,7 @@ import { useLayout } from '../layout/use-layout';
 import { applyLayout, layoutDefinition } from '../layout/definition-layout';
 import { LifecycleActions, ViewOnlyLine, type Lifecycle } from './lifecycle';
 import type { StepRef, StepRefs } from './node-form';
+import { ProblemsChip } from './problems-chip';
 import { PublishDefinitionDialog } from './publish-dialog';
 import { type RunMode, StartDefinitionRunDialog } from '@/components/workflows/start-run-dialog';
 import { StepList } from './step-list';
@@ -50,26 +48,36 @@ export interface DefinitionEditorProps {
   definition: EngineDefinition;
   /** Every registered node type at every version, from the server. */
   types: EngineNodeType[];
-  validate: (definition: EngineDefinition) => Promise<DefinitionValidation>;
-  /** Rejects with the server's message on a 422. */
-  publish: (definition: EngineDefinition) => Promise<DefinitionPublished>;
-  publishing: boolean;
+  /** The server's checks of the working copy as last saved (or of the stored version before any change); null while they load. */
+  validation: DefinitionValidation | null;
+  /** Why the checks could not be read; null when they were. */
+  validateError?: string | null;
+  /** Each change to the steps, for the working copy to save; positions filled in on open are not a change. */
+  onChange?: (definition: EngineDefinition) => void;
+  /** Where the working copy's save stands, shown beside the problems in the header. */
+  saveState?: React.ReactNode;
+  /** True while the working copy differs from the newest version, so there is something to publish. */
+  changed?: boolean;
+  /** True while a change on screen is not saved yet: Publish waits, so the version is made from what is on screen. */
+  saving?: boolean;
   /** Starts a live run on the live version, or a test run of the latest saved one; the page navigates to it. */
   startRun: (input: Record<string, unknown>, mode: RunMode) => Promise<void>;
   /** Starts a run from the start form the saved trigger declares; the page navigates to it. */
   startByHand?: (values: Record<string, unknown>, mode: RunMode) => Promise<void>;
   /** Where the saved versions stand: the latest one's stage, the live version, an open publish request. */
   lifecycle: Lifecycle;
-  /** Sends the latest saved draft to Reviews. */
+  /** Makes a version from the working copy and sends it to Reviews (goes live at once where no review is needed). */
   requestPublish: (note: string) => Promise<{ status: string }>;
   setPaused: (paused: boolean) => Promise<unknown>;
   pausing: boolean;
   /** For a person who may not change the workflow: the graph shows, with no palette, editing, save, publish or pause. */
   readOnly?: boolean;
+  /** Why the canvas is read-only, when it is not the person's role (an outdated copy held for their choice). */
+  readOnlyNote?: string;
   /** Whether the person may publish workflows; false shows Publish locked with the reason, read-only or not. */
   canPublish?: boolean;
   /**
-   * Lays out the editor's actions (lifecycle, Test run, Save version) and its canvas, so the page can put the actions
+   * Lays out the editor's actions (save state, problems, lifecycle, Test run) and its canvas, so the page can put the actions
    * in its own header. Without it the actions sit in a row above the canvas.
    */
   frame?: (parts: { actions: React.ReactNode; canvas: React.ReactNode }) => React.ReactNode;
@@ -114,8 +122,6 @@ function upstream(def: EngineDefinition, id: string): Set<string> {
   return seen;
 }
 
-const VALIDATE_DEBOUNCE_MS = 400;
-
 /**
  * Applies an inspector edit. When the edit changes an `outputsFrom` list, connections leaving a port that no longer
  * exists are dropped: the canvas cannot draw them, so they could not be selected and deleted.
@@ -139,19 +145,15 @@ function EditorInner(props: DefinitionEditorProps) {
   return <EditorBody {...props} definition={placed} />;
 }
 
-function EditorBody({ definition: initial, types, validate, publish, publishing, startRun, startByHand, lifecycle, requestPublish, setPaused, pausing, readOnly = false, canPublish, frame }: DefinitionEditorProps) {
+function EditorBody({ definition: initial, types, validation, validateError = null, onChange, saveState, changed = false, saving = false, startRun, startByHand, lifecycle, requestPublish, setPaused, pausing, readOnly = false, readOnlyNote, canPublish, frame }: DefinitionEditorProps) {
   const [def, setDef] = React.useState<EngineDefinition>(initial);
   const [dirty, setDirty] = React.useState(false);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   // The step whose sheet is open; clicking another step while it is open moves the sheet there.
   const [sheetId, setSheetId] = React.useState<string | null>(null);
-  const [validation, setValidation] = React.useState<DefinitionValidation | null>(null);
-  const [checking, setChecking] = React.useState(true);
-  const [validateError, setValidateError] = React.useState<string | null>(null);
   const [runOpen, setRunOpen] = React.useState(false);
   const [publishOpen, setPublishOpen] = React.useState(false);
   const [paletteOpen, setPaletteOpen] = React.useState(() => initial.nodes.length === 0);
-  const [checksOpen, setChecksOpen] = React.useState(false);
   const [fullscreen, setFullscreen] = React.useState(false);
   const canvasRef = React.useRef<HTMLDivElement>(null);
   const flow = useReactFlow();
@@ -168,36 +170,13 @@ function EditorBody({ definition: initial, types, validate, publish, publishing,
     setDirty(true);
   }, []);
 
-  // The server's checks, on load and after each change; a response for an older definition is dropped.
-  const seq = React.useRef(0);
-  const loaded = React.useRef(false);
-  const validateRef = React.useRef(validate);
+  // Each change goes to the working copy, which saves it and answers with its checks.
+  const onChangeRef = React.useRef(onChange);
+  onChangeRef.current = onChange;
   React.useEffect(() => {
-    validateRef.current = validate;
-  }, [validate]);
-  React.useEffect(() => {
-    const mine = ++seq.current;
-    setChecking(true);
-    const t = window.setTimeout(
-      () => {
-        validateRef.current(def)
-          .then((v) => {
-            if (mine !== seq.current) return;
-            setValidation(v);
-            setValidateError(null);
-          })
-          .catch((e: unknown) => {
-            if (mine === seq.current) setValidateError(e instanceof Error ? e.message : 'The check request failed');
-          })
-          .finally(() => {
-            if (mine === seq.current) setChecking(false);
-          });
-      },
-      loaded.current ? VALIDATE_DEBOUNCE_MS : 0,
-    );
-    loaded.current = true;
-    return () => window.clearTimeout(t);
-  }, [def]);
+    if (dirty) onChangeRef.current?.(def);
+  }, [def, dirty]);
+  const checking = !validation && !validateError;
 
   const errorNodes = React.useMemo(() => new Set((validation?.checks ?? []).filter((c) => c.level === 'error' && c.node).map((c) => c.node as string)), [validation]);
   // A warning (a fork with no Join, a mapping to a field the step never outputs) marks its step but never blocks a save.
@@ -395,29 +374,12 @@ function EditorBody({ definition: initial, types, validate, publish, publishing,
     return () => window.removeEventListener('keydown', onKey);
   });
 
-  const save = async () => {
-    try {
-      const p = await publish(def);
-      setDirty(false);
-      toast.success(p.created ? `Saved as version ${p.version}` : `No changes since version ${p.version}`);
-    } catch (e) {
-      // A refused publish carries the server's checks; show them on the canvas and in the panel, not only as a toast.
-      const checks = e instanceof ApiError ? (e.details?.checks as DefinitionCheck[] | undefined) : undefined;
-      if (checks) setValidation({ ok: false, workflowId: def.id, digest: validation?.digest ?? null, checks });
-      toast.error(e instanceof Error ? e.message : 'The version was not saved');
-    }
-  };
-
-  // Saving makes a new version, so it needs a change since the last save as well as a valid definition.
-  const canSave = dirty && !!validation?.ok && !checking && !validateError;
-
-  const errorCount = (validation?.checks ?? []).filter((c) => c.level === 'error').length;
-  const warningCount = (validation?.checks ?? []).filter((c) => c.level === 'warning').length;
-
   const actions = (
     <div className="flex flex-wrap items-center justify-end gap-2">
-      {!readOnly && <LifecycleActions lifecycle={lifecycle} dirty={dirty} onPublish={() => setPublishOpen(true)} onSetPaused={setPaused} pausing={pausing} canPublish={canPublish !== false} />}
-      {readOnly && <ViewOnlyLine stage={lifecycle.stage} />}
+      {saveState}
+      <ProblemsChip validation={validation} checking={checking} failed={validateError} nodeName={nodeName} onSelectNode={(id) => { selectNode(id); setSheetId(id); }} />
+      {!readOnly && <LifecycleActions lifecycle={lifecycle} changed={changed} saving={saving} onPublish={() => setPublishOpen(true)} onSetPaused={setPaused} pausing={pausing} canPublish={canPublish !== false} />}
+      {readOnly && <ViewOnlyLine lifecycle={lifecycle} note={readOnlyNote} />}
       {/* Someone who may only read a draft still sees that it waits on a publish, and why they cannot start it. */}
       {readOnly && canPublish === false && lifecycle.stage === 'draft' && !lifecycle.review && <LockedReason area="workflows" action="publish" label="Publish…" />}
       {/* Starting any run is a builder's or admin's step (runs/start); the server refuses the rest, so the
@@ -426,11 +388,6 @@ function EditorBody({ definition: initial, types, validate, publish, publishing,
         <Button type="button" variant="outline" onClick={() => setRunOpen(true)} data-testid="definition-start-run">
           <Play /> {lifecycle.liveVersion !== null && !lifecycle.paused ? 'Start run' : 'Test run'}
         </Button>
-      )}
-      {!readOnly && (
-        <LoadingButton type="button" onClick={save} disabled={!canSave} isLoading={publishing} loadingText="Saving…" data-testid="definition-save">
-          <Save /> Save version
-        </LoadingButton>
       )}
     </div>
   );
@@ -510,28 +467,6 @@ function EditorBody({ definition: initial, types, validate, publish, publishing,
             <CanvasControls isFullscreen={fullscreen} onToggleFullscreen={() => setFullscreen((f) => !f)} onFit={fit} onTidy={readOnly ? undefined : () => void tidy()} />
           </div>
         </Panel>
-        <Panel position="bottom-left">
-          <Popover open={checksOpen} onOpenChange={setChecksOpen}>
-            <PopoverTrigger asChild>
-              <Button type="button" variant="outline" size="sm" className={cn('bg-card shadow-sm', errorCount > 0 && 'border-destructive text-destructive-text')} data-testid="definition-checks-count">
-                {errorCount > 0 ? <AlertTriangle /> : warningCount > 0 ? <AlertTriangle className="text-warning-text" /> : <CheckCircle2 className="text-success-text" />}
-                {checking && !validation ? 'Checking…' : errorCount > 0 ? (errorCount === 1 ? '1 error' : `${errorCount} errors`) : warningCount > 0 ? (warningCount === 1 ? '1 warning' : `${warningCount} warnings`) : 'No problems'}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="start" side="top" className="w-96 max-w-[calc(100vw-2rem)] p-0">
-              <ChecksPanel
-                validation={validation}
-                checking={checking}
-                failed={validateError}
-                nodeName={nodeName}
-                onSelectNode={(id) => {
-                  setChecksOpen(false);
-                  selectNode(id);
-                }}
-              />
-            </PopoverContent>
-          </Popover>
-        </Panel>
         {def.nodes.length > 0 && (
           <MiniMap
             pannable
@@ -578,11 +513,16 @@ function EditorBody({ definition: initial, types, validate, publish, publishing,
       <PublishDefinitionDialog
         open={publishOpen}
         onOpenChange={setPublishOpen}
-        version={lifecycle.version}
-        liveVersion={lifecycle.liveVersion}
+        workflowId={def.id}
+        nodeName={nodeName}
+        onFix={(id) => {
+          setPublishOpen(false);
+          selectNode(id);
+          setSheetId(id);
+        }}
         onRequest={async (note) => {
           const r = await requestPublish(note);
-          toast.success(r.status === 'approved' ? `Version ${lifecycle.version} is live` : `Version ${lifecycle.version} sent for review`);
+          toast.success(r.status === 'approved' ? 'Published: the new version is live' : 'Sent for review');
         }}
       />
     </>

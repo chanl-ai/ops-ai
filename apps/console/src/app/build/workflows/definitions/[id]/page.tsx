@@ -2,36 +2,86 @@
 
 import * as React from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Workflow } from 'lucide-react';
 
 import { PageLayout } from '@/components/page-layout';
 import { useCollapsedSidebar } from '@/components/shared/collapsed-sidebar';
+import { LeaveGuard } from '@/components/shared/leave-guard';
+import { NewerCopyNotice } from '@/components/shared/newer-copy-notice';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { QueryError } from '@/components/shared/query-states';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { DefinitionEditor } from '@/components/workflows/definition-editor/definition-editor';
-import { useCan, useCanBuild } from '@/hooks/me-queries';
-import { useDefinition, useNodeTypes, usePublishDefinition, useRequestDefinitionPublish, useSetDefinitionPaused, useStartEngineRun, useStartWorkflow, useValidateDefinition } from '@/hooks/engine-queries';
-import type { EngineDefinition } from '@/lib/types/engine';
+import { SaveStateLine, workflowHeader } from '@/components/workflows/definition-editor/editor-shell';
+import { useWorkingCopy } from '@/components/workflows/definition-editor/use-working-copy';
+import { useCan, useCanBuild, useMe } from '@/hooks/me-queries';
+import { useDefinition, useDefinitionChecks, useNodeTypes, usePublishWorkingCopy, useSetDefinitionPaused, useStartEngineRun, useStartWorkflow } from '@/hooks/engine-queries';
+import type { DefinitionValidation, DefinitionView, EngineNodeType, OutdatedCopy } from '@/lib/types/engine';
+
+const layout = {
+  // The canvas fills what is left of the window under the header, so the page itself does not scroll.
+  className: 'min-h-0 py-4 lg:py-4',
+  contentClassName: 'flex min-h-0 flex-col gap-3',
+};
 
 export default function WorkflowDefinitionPage() {
   const { id } = useParams<{ id: string }>();
-  const router = useRouter();
   const definition = useDefinition(id);
   const nodeTypes = useNodeTypes();
-  const canBuild = useCanBuild('workflows');
-  const canPublish = useCan('workflows', 'publish');
-  const { mutateAsync: validateAsync } = useValidateDefinition();
-  const { mutateAsync: publishAsync, isPending: publishing } = usePublishDefinition();
-  const { mutateAsync: startAsync } = useStartEngineRun();
-  const { mutateAsync: startByFormAsync } = useStartWorkflow();
-  const { mutateAsync: requestAsync } = useRequestDefinitionPublish(id);
-  const { mutateAsync: pauseAsync, isPending: pausing } = useSetDefinitionPaused(id);
-  const requestPublish = React.useCallback((note: string) => requestAsync({ note }), [requestAsync]);
   // The canvas needs the width; the sidebar comes back as it was when the person leaves the page.
   useCollapsedSidebar();
+  const header = { ...workflowHeader(id, definition.data), ...layout };
 
-  const validate = React.useCallback((d: EngineDefinition) => validateAsync(d), [validateAsync]);
-  const publish = React.useCallback((d: EngineDefinition) => publishAsync(d), [publishAsync]);
+  if (definition.data && nodeTypes.data && !definition.isError) return <CanvasTab view={definition.data} types={nodeTypes.data} />;
+  return (
+    <PageLayout {...header}>
+      {definition.isPending || nodeTypes.isPending ? (
+        <PageSkeleton statCards={0} tableRows={8} showToolbar />
+      ) : definition.isError ? (
+        <QueryError what="this workflow" error={definition.error} back={{ label: 'Back to workflows', href: '/build/workflows' }} onRetry={() => definition.refetch()} retrying={definition.isFetching} />
+      ) : (
+        nodeTypes.isError && <QueryError what="step types" error={nodeTypes.error} onRetry={() => nodeTypes.refetch()} retrying={nodeTypes.isFetching} />
+      )}
+    </PageLayout>
+  );
+}
+
+/**
+ * The canvas over the workflow's working copy: every change saves itself a second later without making a version,
+ * the header says where the save stands and how many problems remain, and leaving with a change not yet saved asks
+ * first. Publish makes the version.
+ */
+function CanvasTab({ view, types }: { view: DefinitionView; types: EngineNodeType[] }) {
+  const id = view.workflowId;
+  const router = useRouter();
+  const canBuild = useCanBuild('workflows');
+  const canPublish = useCan('workflows', 'publish');
+  // A copy made on a version older than one saved outside the editor since is kept: nothing saves over it until the
+  // person chooses to start from the newer version, and they may open their copy read-only to copy their changes out.
+  const [startedFresh, setStartedFresh] = React.useState(false);
+  const [showingMine, setShowingMine] = React.useState(false);
+  const outdated = canBuild && !startedFresh ? (view.outdatedCopy ?? null) : null;
+  const mine = outdated && showingMine ? outdated : null;
+  // Starting fresh replaces the outdated copy, so the first save names it (the server keeps it until a save does).
+  const kept = startedFresh ? (view.outdatedCopy ?? null) : null;
+  const copy = useWorkingCopy(view, canBuild && !outdated, kept?.digest);
+  const myEmail = useMe().data?.user.email;
+  // Named unless it is the person's own; without their email (off platform sign-in) it is named too.
+  const theirs = outdated && outdated.updatedBy !== myEmail ? outdated.updatedBy : null;
+  // Before the first change there is no working copy, so the stored version's checks are read once.
+  const stored = useDefinitionChecks(view.workingCopy ? undefined : view.definition, view.digest);
+  const checks = copy.checks ?? view.workingCopy?.checks ?? null;
+  const validation: DefinitionValidation | null = checks ? { ok: !checks.some((c) => c.level === 'error'), workflowId: id, digest: null, checks } : (stored.data ?? null);
+  const { mutateAsync: startAsync } = useStartEngineRun();
+  const { mutateAsync: startByFormAsync } = useStartWorkflow();
+  const { mutateAsync: publishAsync } = usePublishWorkingCopy(id);
+  const { mutateAsync: pauseAsync, isPending: pausing } = useSetDefinitionPaused(id);
+  const header = { ...workflowHeader(id, view, { liveChip: false }), ...layout };
+  // The canvas opens on the copy read when the page opened (or reloaded). A save puts the saved copy in the cache;
+  // handing it back to the editor would lay the steps out again and remount it, closing the open step mid-edit.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const opened = React.useMemo(() => mine?.definition ?? view.workingCopy?.definition ?? view.definition, [copy.revision, !!mine]);
+
   const startRun = React.useCallback(
     async (input: Record<string, unknown>, mode: 'live' | 'test') => {
       const run = await startAsync({ workflowId: id, input, mode });
@@ -46,54 +96,77 @@ export default function WorkflowDefinitionPage() {
     },
     [startByFormAsync, id, router],
   );
+  // The publish reads the newest copy the cache holds, so a save that landed after the page opened is the one published.
+  const viewRef = React.useRef(view);
+  viewRef.current = view;
+  const requestPublish = React.useCallback((note: string) => publishAsync({ view: viewRef.current, note }), [publishAsync]);
 
-  const view = definition.data;
-
-  const header = {
-    icon: Workflow,
-    title: view?.name || view?.definition.name || id,
-    description: view ? `Latest version ${view.version}` : undefined,
-    backHref: '/build/workflows',
-    // The canvas fills what is left of the window under the header, so the page itself does not scroll.
-    className: 'min-h-0 py-4 lg:py-4',
-    contentClassName: 'flex min-h-0 flex-col',
-  };
-
-  if (view && nodeTypes.data && !definition.isError) {
-    return (
+  return (
+    <>
+      <LeaveGuard unsaved={canBuild && copy.unsaved} failed={copy.state === 'failed'} />
       <DefinitionEditor
-        key={view.workflowId}
-        definition={view.definition}
-        types={nodeTypes.data}
-        validate={validate}
-        publish={publish}
-        publishing={publishing}
+        key={`${id}-${copy.revision}-${mine ? 'mine' : 'newest'}`}
+        definition={opened}
+        types={types}
+        validation={validation}
+        validateError={stored.isError ? (stored.error as Error).message : null}
+        onChange={copy.onChange}
+        changed={!!view.workingCopy || copy.unsaved}
+        saving={copy.unsaved}
+        saveState={canBuild ? <SaveStateLine state={copy.state} savedAt={copy.savedAt} error={copy.error} onRetry={copy.retry} /> : undefined}
         startRun={startRun}
         startByHand={startByHand}
         lifecycle={view}
         requestPublish={requestPublish}
         setPaused={pauseAsync}
         pausing={pausing}
-        readOnly={!canBuild}
+        readOnly={!canBuild || !!outdated}
+        readOnlyNote={outdated ? 'Nothing is saved until you choose below.' : undefined}
         canPublish={canPublish}
         frame={({ actions, canvas }) => (
           <PageLayout {...header} actions={actions}>
+            {outdated && (
+              <NewerCopyNotice
+                testId="definition-outdated-copy"
+                title="A newer version was saved outside the editor"
+                copyOpen={!!mine}
+                onToggleCopy={() => setShowingMine((v) => !v)}
+                openLabel={theirs ? 'Open their copy' : 'Open my copy'}
+                closeLabel={`Show version ${outdated.newerVersion}`}
+                actions={
+                  <Button size="sm" onClick={() => (setShowingMine(false), setStartedFresh(true))} data-testid="definition-outdated-reload">
+                    {theirs ? `Replace their copy with version ${outdated.newerVersion}` : `Reload to start from version ${outdated.newerVersion}`}
+                  </Button>
+                }
+              >
+                <p>
+                  {outdatedNote(outdated, theirs)} Reload to start from it, or copy {theirs ? 'their' : 'your'} changes first. {mine ? `You are looking at ${theirs ? 'their' : 'your'} copy; it cannot be edited.` : `You are looking at version ${outdated.newerVersion}.`}
+                </p>
+              </NewerCopyNotice>
+            )}
+            {copy.stale && (
+              <Alert data-testid="definition-stale">
+                <AlertTitle>Your change was not saved</AlertTitle>
+                <AlertDescription>
+                  <p>{copy.stale} Nothing more is saved from this page until you reload. Reloading shows their copy; your unsaved change on this page is dropped.</p>
+                  <Button variant="outline" size="sm" className="mt-2" onClick={() => void copy.reload()} disabled={copy.reading} data-testid="definition-stale-reload">
+                    Reload their copy
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
             {canvas}
           </PageLayout>
         )}
       />
-    );
-  }
-
-  return (
-    <PageLayout {...header}>
-      {definition.isPending || nodeTypes.isPending ? (
-        <PageSkeleton statCards={0} tableRows={8} showToolbar />
-      ) : definition.isError ? (
-        <QueryError what="this workflow" error={definition.error} back={{ label: 'Back to workflows', href: '/build/workflows' }} onRetry={() => definition.refetch()} retrying={definition.isFetching} />
-      ) : (
-        nodeTypes.isError && <QueryError what="step types" error={nodeTypes.error} onRetry={() => nodeTypes.refetch()} retrying={nodeTypes.isFetching} />
-      )}
-    </PageLayout>
+    </>
   );
+}
+
+/** Who saved the newer version and when, and whose unpublished changes are kept, for the outdated copy's notice. */
+function outdatedNote(c: OutdatedCopy, theirs: string | null): string {
+  const at = c.newerAt ? new Date(c.newerAt) : null;
+  const when = at && !Number.isNaN(at.getTime()) ? ` at ${at.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}` : '';
+  const whose = theirs ? `${theirs}'s unpublished changes` : 'your unpublished changes';
+  return `${c.newerBy || 'Someone'} saved version ${c.newerVersion}${when}; ${whose}, made on version ${c.baseVersion}, are kept.`;
 }

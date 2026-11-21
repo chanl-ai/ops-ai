@@ -349,6 +349,41 @@ with bank_stack() as s:
         (listed.status_code, thread in listed.text, opened.status_code, mine.status_code, thread in mine.text),
     )
 
+    # 4, written as text. The guard is a sentence in the skill's text, read into a rule on the read's result: on an
+    # account that owes money the run stops at it and holds the write after it. Without the `if not` lines the same
+    # run goes on to step 2 and holds nothing.
+    guarded = (
+        f"Look up the account with @tool:{read}\n"
+        "if not result.balance > 0:\n"
+        '    stop "The account has nothing to hold."\n'
+        f"Place a hold on the account with @tool:{write}"
+    )
+    texted = made(
+        s.api.post(
+            "/v1/skills",
+            json={
+                "name": f"Hold as text api {RUN}",
+                "ownerTeam": "team_ops",
+                "useWhen": "The caller asks for a hold on an account.",
+                "instructions": "",
+                "source": guarded,
+            },
+            headers=me,
+        )
+    )
+    made(s.api.post(f"/v1/skills/{texted['id']}/publish-requests", json={"note": "use case"}, headers=me))
+    made(s.api.post(f"/v1/agents/{aid}/references", json={"kind": "skill", "id": texted["id"]}, headers=me))
+    thread = test_chat()
+    say("call switch_skill " + json.dumps({"slug": texted["slug"]}))
+    say(f"call {read} {owing}")
+    stopped = last_reply().get("skillRun") or {}
+    held = [(h.get("skillId"), h.get("tools")) for h in stopped.get("holds") or []]
+    check(
+        "4 a guard written in a skill's text stops the run on the read's result and holds the write after it",
+        stopped.get("running") is None and held == [(texted["id"], [write])],
+        (stopped.get("running"), held, [h.get("ended") for h in stopped.get("history") or []]),
+    )
+
 # 6, continued. A step that asks another agent, on the dev stack, where the team's default agent may ask a specialist.
 # The hand-off is one more tool a skill owns: refused before the skill starts, and run as its step.
 DEV = {"X-Team-Id": "team_ops", "X-Dev-User": "m.okafor@harborpine.example"}

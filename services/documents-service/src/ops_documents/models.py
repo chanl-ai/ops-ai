@@ -11,6 +11,7 @@ from pydantic import ConfigDict, Field
 
 from ops_ingest.reading import OcrMode
 from ops_service_kit.http import In, JsonValue, ListResult, Out
+from ops_service_kit.names import Name
 
 
 class Reply(Out):
@@ -158,7 +159,7 @@ class DocumentTypeIn(In):
     """A new document type and its version 1. `id` is the caller's (lowercase, e.g. levy_notice) or generated."""
 
     id: str | None = Field(default=None, max_length=64)
-    name: str = Field(min_length=1, max_length=200)
+    name: Name
     description: str | None = Field(default=None, max_length=1000)
     fields: list[dict[str, Any]] = Field(
         min_length=1,

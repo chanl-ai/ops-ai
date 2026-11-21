@@ -1,6 +1,6 @@
 ---
 name: usecase
-description: List, add, update and run end-to-end use cases (docs/usecases) as plain user stories at the api, sdk or cli layer. Use when someone asks to prove a change end to end, says which stories work, or types /usecase list|add|update|run.
+description: List, add, update and run end-to-end use cases (docs/usecases) as plain user stories at the api, sdk or cli layer. Use to prove a change end to end or when someone types /usecase.
 allowed-tools: Bash(make *) Bash(uv run *) Bash(python3 *) Read Grep Glob
 ---
 

@@ -8,7 +8,12 @@ reaches done early skipping the results the skill owes; and a write on a path th
 
 from __future__ import annotations
 
+import ast
+import re
+from pathlib import Path
 from typing import Any
+
+import pytest
 
 from ops_agent_kernel import step_tools, steps
 from ops_agent_kernel.types import Skill
@@ -259,6 +264,32 @@ def test_a_procedure_pasted_from_a_document_reads_as_its_paths() -> None:
     assert r.hints == [], "list items and pasted spaces earn no indent hint"
     assert [m["kind"] for m in r.marks][4:] == ["if", "step", "if", "step", "else", "stop"]
     assert [m["depth"] for m in r.marks] == [0, 1, 1, 0, 0, 1, 1, 2, 0, 1]
+    assert r.program.steps[0].do.split("\n")[:3] == [
+        "Check what the caller needs:",
+        "their policy number",
+        "the date of the claim",
+    ], "a list marker is not part of the step the agent reads"
+
+
+def _starter() -> str:
+    """The console's starter text (`WORKED_EXAMPLE`), read from its source so the check follows what a builder sees."""
+    meta = Path(__file__).parents[4] / "apps/console/src/components/skills/skill-meta.tsx"
+    block = re.search(r"WORKED_EXAMPLE = \[(.*?)\]\.join", meta.read_text(), re.S)
+    assert block, meta
+    return "\n".join(ast.literal_eval(f"[{block.group(1)}]"))
+
+
+def test_the_starter_text_runs_as_the_steps_it_shows() -> None:
+    # With its tool picked: the starter says to type @ at the end of the line that looks the order up.
+    starter = "\n".join(
+        f"{line} @tool:find_order" if "Type @" in line or "type @" in line else line for line in _starter().split("\n")
+    )
+    r = read(starter)
+    assert r.program is not None
+    shown = [n for n, line in enumerate(starter.split("\n"), start=1) if not line.strip().endswith(":")]
+    assert r.step_lines == shown, "each line the starter shows outside its if and else is one step"
+    first = r.program.steps[0]
+    assert first.use is not None and first.use.id == "find_order" and first.branch is not None
 
 
 def test_a_write_on_a_path_the_agent_decides_is_a_hint_and_one_behind_a_checked_path_is_not() -> None:
@@ -278,3 +309,153 @@ def test_a_write_on_a_path_the_agent_decides_is_a_hint_and_one_behind_a_checked_
     assert [n["line"] for n in r.unguarded] == [8], "the else side of a path the agent decides is unguarded too"
     assert {"line": 8, "message": r.unguarded[0]["message"]} in r.hints
     assert not read(text, fields=FIELDS).unguarded, "with the directory unread no tool is taken as a write"
+
+
+_POLICY: dict[str, Any] = {"active": {"type": "boolean"}}
+
+
+@pytest.mark.parametrize(
+    ("text", "kinds", "hints", "exit", "dos", "shape"),
+    [
+        pytest.param(
+            "Find it with @tool:find_policy\n- if active:\n    Open it with @tool:open_claim\n"
+            '- else:\n    - Stop "Lapsed"',
+            ["step", "if", "step", "else", "stop"],
+            [],
+            {"lapsed": "Lapsed"},
+            ["Find it with @tool:find_policy", "Open it with @tool:open_claim"],
+            (None, 1, 1),
+            id="a list-marked else is its if's other path and a list-marked stop on it ends the skill",
+        ),
+        pytest.param(
+            "Say hello\n- else:\n    Say goodbye",
+            ["text", "else", "text"],
+            [2],
+            None,
+            None,
+            None,
+            id="a list-marked else with no if above is hinted",
+        ),
+        pytest.param(
+            "Find it with @tool:find_policy\nStop now",
+            ["step", "text"],
+            [],
+            {},
+            ["Find it with @tool:find_policy", "Stop now"],
+            (2, 0, 0),
+            id="a stop that runs on is an instruction",
+        ),
+        pytest.param(
+            "1. Find the policy with @tool:find_policy\n2. If active:\n3. Open the claim with @tool:open_claim\n"
+            "4. Otherwise:\n5. Stop",
+            ["step", "text", "step", "text", "text"],
+            [2, 4, 5],
+            {},
+            [
+                "Find the policy with @tool:find_policy",
+                "If active:",
+                "Open the claim with @tool:open_claim",
+                "Otherwise:",
+                "Stop",
+            ],
+            (5, 0, 0),
+            id="a flat numbered list with mentions keeps one step per line and builds no path",
+        ),
+        pytest.param(
+            "1. Find the policy with @tool:find_policy\n2. Check the policy is active\n3. Open the claim with "
+            '@tool:open_claim\n4. Tell the customer\n5. Stop "Policy lapsed"\n6. Say goodbye',
+            ["step", "text", "step", "text", "text", "text"],
+            [5],
+            {},
+            [
+                "Find the policy with @tool:find_policy",
+                "Check the policy is active",
+                "Open the claim with @tool:open_claim",
+                "Tell the customer",
+                'Stop "Policy lapsed"',
+                "Say goodbye",
+            ],
+            (6, 0, 0),
+            id="a top-level Stop with a reason in a flat list is text and every step runs",
+        ),
+        pytest.param(
+            "Find it with @tool:find_policy\n- if active:\n    Open it with @tool:open_claim\nOtherwise:\nSay goodbye",
+            ["step", "if", "step", "text", "text"],
+            [4],
+            {},
+            ["Find it with @tool:find_policy", "Open it with @tool:open_claim", "Otherwise:\nSay goodbye"],
+            (None, 1, 0),
+            id="a flat else after a real if is text with a hint",
+        ),
+        pytest.param(
+            '1. Look up the policy\n2. If active:\n3. Open the claim\n4. Otherwise:\n5. Stop "Policy lapsed"',
+            ["text"] * 5,
+            [2, 4, 5],
+            {},
+            ["Look up the policy", "If active:", "Open the claim", "Otherwise:", 'Stop "Policy lapsed"'],
+            (5, 0, 0),
+            id="a flat numbered list with no mention keeps one step per line, with no paths",
+        ),
+        pytest.param(
+            "- Look up the policy\n- Check it is active\n- Tell the customer",
+            ["text"] * 3,
+            [],
+            {},
+            ["Look up the policy", "Check it is active", "Tell the customer"],
+            (3, 0, 0),
+            id="a bulleted list with no mention keeps one step per line",
+        ),
+        pytest.param(
+            "- Find it with @tool:find_policy\n- Check it is active\n- Open it with @tool:open_claim\n- Thank them",
+            ["step", "text", "step", "text"],
+            [],
+            {},
+            ["Find it with @tool:find_policy", "Check it is active", "Open it with @tool:open_claim", "Thank them"],
+            (4, 0, 0),
+            id="a bulleted list with mentions keeps one step per line",
+        ),
+        pytest.param(
+            "Be brief with the customer.\nLook up the policy and tell them what it covers.",
+            ["text"] * 2,
+            [],
+            None,
+            None,
+            None,
+            id="plain paragraphs with no mention stay instructions",
+        ),
+        pytest.param(
+            "  1. Gather what they need:\n      - their policy number\n  2. Find it with @tool:find_policy",
+            ["text", "text", "step"],
+            [],
+            {},
+            ["Gather what they need:\ntheir policy number", "Find it with @tool:find_policy"],
+            (2, 0, 0),
+            id="a list pasted indented is still a list, and a sub-list stays in its line's step",
+        ),
+    ],
+)
+def test_the_reader_reads_each_keyword_with_or_without_a_list_marker(
+    text: str,
+    *,
+    kinds: list[str],
+    hints: list[int],
+    exit: dict[str, str] | None,
+    dos: list[str] | None,
+    shape: tuple[int | None, int, int] | None,
+) -> None:
+    r = read(text, fields={"@tool:find_policy": _POLICY, "@tool:open_claim": _POLICY})
+    assert [m["kind"] for m in r.marks] == kinds
+    assert [h["line"] for h in r.hints] == hints, r.hints
+    assert (r.program and r.program.exit) == exit
+    assert (r.program and [s.do for s in r.program.steps]) == dos, "a list marker is not part of the step"
+    if shape is not None and r.program is not None:
+        count, branches, exits = shape
+        assert (len(r.program.steps) if count is not None else None) == count
+        assert sum(s.branch is not None for s in r.program.steps) == branches
+        assert len(r.program.exit) == exits
+    # The editor highlights and indents from these spans, past the list marker, never from its own matching.
+    lines = text.split("\n")
+    spans = [
+        (k["word"], lines[m["line"] - 1].strip()[k["start"] : k["end"]].lower()) for m in r.marks if (k := m["keyword"])
+    ]
+    assert all(said in ({"else", "otherwise"} if word == "else" else {word}) for word, said in spans), spans

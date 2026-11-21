@@ -52,6 +52,9 @@ You review one change you did not build. You change nothing on the branch; you r
 | A test fails for the right reason | revert one fix in your own throwaway worktree and run its test; quote the failure |
 | Effectiveness | the audit's mutation score on changed lines and its survivors |
 
+## Fixes
+A fix commit with no sweep goes back: it needs the `Siblings:` trailer and every sibling on the one owner (`docs/guide/skills/ops-fix-the-class.md`).
+
 ## Report (at most 10 lines)
 Verdict (approve or send back); blocking findings, then should and nice, each as "`DA5`, file:line: finding" (the
 standards id, or the document when no id covers it); what you re-ran and what it printed; findings no rule covers.

@@ -5083,6 +5083,7 @@
       "requesterMayDecide": false,
       "reviewSlaHours": 8,
       "securityTeamAddsSecrets": false,
+      "skillPublishStrict": {},
       "stepUp": false,
       "taskAssist": {},
       "toolWritesNeedApproval": {}

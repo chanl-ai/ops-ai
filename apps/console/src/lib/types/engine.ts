@@ -1,3 +1,4 @@
+import type { PublishPreview } from './publish-preview';
 import type { DocumentRead } from '@/lib/types/domain';
 
 // The workflow runner (agents-service /v1/workflows/node-types, /v1/workflows/definitions, /v1/runs): v2 definitions
@@ -137,6 +138,71 @@ export interface DefinitionView {
   review: { id: string; version: number; requestedBy: string; createdAt: string } | null;
   /** How a person starts it by hand; null for a trigger only its source starts. */
   startForm?: StartForm | null;
+  /** What the editor saves to; null until the first change after the newest version. */
+  workingCopy: WorkingCopy | null;
+  /** A copy made on an older version than the newest (one saved outside the editor since): kept, shown read-only. */
+  outdatedCopy?: OutdatedCopy | null;
+  /** The copy the next save names: the working copy, else the newest version (`baseOf` reads it). */
+  saveBase: { version: number; digest: string };
+}
+
+/** A workflow's one mutable copy: saved on every change, checks and all, and never run. */
+export interface WorkingCopy {
+  definition: EngineDefinition;
+  digest: string;
+  /** The newest version when the copy was first saved. */
+  baseVersion: number;
+  checks: DefinitionCheck[];
+  updatedAt: string;
+  updatedBy: string;
+}
+
+export interface OutdatedCopy extends WorkingCopy {
+  /** The version saved since outside the editor, who saved it and when. */
+  newerVersion: number;
+  newerBy: string | null;
+  newerAt: string | null;
+}
+
+export interface WorkingCopySaved {
+  workingCopy: WorkingCopy;
+  saveBase: { version: number; digest: string };
+}
+
+/** One setting of a step that differs: `name`, `type`, `onError`, or `parameters.<key>`. */
+export interface FieldChange {
+  field: string;
+  before?: unknown;
+  after?: unknown;
+}
+
+export interface StepRef {
+  id: string;
+  name: string;
+  type: string;
+}
+
+/** The steps added, removed, changed (every setting, old and new) and moved between two versions of a workflow. */
+export interface DefinitionDiff {
+  added: StepRef[];
+  removed: StepRef[];
+  changed: (StepRef & { fields: FieldChange[] })[];
+  /** Steps that only moved on the canvas. */
+  moved: StepRef[];
+  connected: string[];
+  disconnected: string[];
+  workflow: FieldChange[];
+}
+
+/** A side of a comparison: a version number, the live version or the working copy. */
+export type DiffSide = number | 'live' | 'working-copy';
+
+/** What publishing the working copy would change, what stops it, and whether the team's policy waits for a review. */
+export interface WorkflowPublishPreview extends PublishPreview {
+  liveVersion: number | null;
+  changes: DefinitionDiff;
+  /** The error checks that stop the publish. */
+  blockers: DefinitionCheck[];
 }
 
 export interface DefinitionPublishRequest {

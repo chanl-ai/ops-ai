@@ -177,7 +177,8 @@ export default function HumanTasksPage() {
               ) : null
             ) : (
               task && (
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+                // `review-sheet` names the open task wherever it opens, as on /govern/reviews; both decide through TaskDecision.
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3" data-testid="review-sheet">
                   {twoPanes && (
                     <Tabs value={pane} onValueChange={(v) => setPane(v as 'decide' | 'evidence')} className="lg:hidden">
                       <TabsList className="w-full">

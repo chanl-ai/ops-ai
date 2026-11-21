@@ -7,8 +7,9 @@ The text is a prompt with three things the kernel also enforces:
 - a line that mentions a tool, an agent, a workflow or a skill (`@tool:find_customer`) is a step that may use it;
   plain lines before it are part of that step's instruction;
 - `if <condition>:` with an indented block is a path, and `else:` at the same indent is the other one;
-- `stop "reason"` (or `stop <exit> "reason"`) ends the skill with that reason; a bare `stop <exit>` names an exit the
-  skill declares (or `done`, `failed`), and any other bare `stop …` line is an instruction;
+- `stop "reason"` (or `stop <exit> "reason"`) under an `if` or `else` ends the skill with that reason; at the top
+  level it is text. A bare `stop <exit>` on a path names an exit the skill declares (or `done`, `failed`), and any
+  other bare `stop …` line is an instruction;
 - under `if not <check>:`, a block of only `try again` (`try again 2 times`) or `go back to step 3` makes the check
   the step's own, retried or sent back when it fails; a step line ending in `(locked)` keeps even a read tool to it.
 
@@ -71,7 +72,7 @@ _FLIP = {">": "<=", "<": ">=", ">=": "<", "<=": ">"}
 # A path is a line that starts with "if" (any case) and ends in a colon; `else:` or `otherwise:` is the other one. A
 # stop line holds nothing but an exit name and a quoted reason, so prose that starts with "If", "Else" or "Stop" and
 # runs on stays an instruction.
-_IF = re.compile(r"^if\s+(.+?)\s*:\s*$", re.IGNORECASE)
+_IF = re.compile(r"^if\s+(\S(?:.*\S)?)\s*:\s*$", re.IGNORECASE)
 _ELSE = re.compile(r"^(?:else|otherwise)\s*:\s*$", re.IGNORECASE)
 # A pasted list item: `•`, `-`, `*`, `1.` or `1)`. Its indent opens nothing, and its marker is not read: `2. If
 # found:` is a path like `If found:`.
@@ -109,6 +110,16 @@ class Missing(Note):
     id: str
 
 
+class Keyword(TypedDict):
+    """The keyword a line is written with, where it sits in the line after its indent (a list marker before it is
+    skipped). It is set whether or not the line reads as one: a `2. If found:` with nothing indented under it reads as
+    text, and the editor still indents the line after it."""
+
+    word: Literal["if", "else", "stop"]
+    start: int
+    end: int
+
+
 class Mark(TypedDict):
     """What one line of the text is, for the editor: its kind, the step it belongs to, how its condition is decided
     and the tool of its step."""
@@ -120,6 +131,7 @@ class Mark(TypedDict):
     tool: str | None
     # How many path levels in the line is, as the reader counts its indent.
     depth: int
+    keyword: Keyword | None
 
 
 class Uses(TypedDict):
@@ -170,6 +182,9 @@ class Reading:
 class _Text:
     line: int
     text: str
+    # A line with a list marker (`1.`, `-`, `•`) at the top level, not indented under another line: the author's own
+    # step, whatever it mentions.
+    listed: bool = False
 
 
 @dataclass
@@ -261,6 +276,10 @@ class _Parser:
         self.marks = marks
         self.i = 0
 
+    def top(self) -> list[_Item]:
+        """The text's top level, at its least indented line: a list pasted with every line indented is still a list."""
+        return self.block(min((ind for _, ind, _ in self.rows), default=0))
+
     def block(self, level: int, depth: int = 0) -> list[_Item]:
         items: list[_Item] = []
         while self.i < len(self.rows):
@@ -280,11 +299,26 @@ class _Parser:
                 )
             self.i += 1
             word = _bare(txt)
-            if m := _IF.match(word):
+            # An `if …:` or `else:` starts a path only with lines indented under it: a flat numbered list
+            # (`2. If active:` / `3. Open the claim` / `4. Otherwise:`) stays its steps.
+            if (_IF.match(word) or _ELSE.match(word)) and not self._opens(ind):
+                self.marks[line]["kind"] = "text"
+                self.hints.append(
+                    {
+                        "line": line,
+                        "message": (
+                            "Nothing is indented under this line, so it is read as an ordinary line, not a path. "
+                            "Indent the lines that belong to it."
+                        ),
+                    }
+                )
+                items.append(_Text(line, word, listed=depth == 0 and ind == level and word != txt))
+            elif m := _IF.match(word):
                 body = self._inner(line, ind, depth)
                 orelse: list[_Item] = []
-                if self.i < len(self.rows) and self.rows[self.i][1] == ind and _ELSE.match(_bare(self.rows[self.i][2])):
-                    else_line = self.rows[self.i][0]
+                nxt = self.i < len(self.rows) and self.rows[self.i]
+                if nxt and nxt[1] == ind and _ELSE.match(_bare(nxt[2])) and self._opens(ind, self.i + 1):
+                    else_line = nxt[0]
                     self.i += 1
                     self.marks[else_line]["depth"] = depth
                     orelse = self._inner(else_line, ind, depth)
@@ -300,7 +334,7 @@ class _Parser:
                     }
                 )
                 items.extend(self._inner(line, ind, depth))
-            elif (stop := _stop_of(word, self.declared)) is not None:
+            elif (stop := _stop_of(word, self.declared)) is not None and depth > 0:
                 name, rest = stop
                 ruled = name in BUILT_IN_EXITS or name in self.declared
                 rest = rest or (name.replace("_", " ") if name and not ruled else "")
@@ -309,8 +343,24 @@ class _Parser:
             else:
                 if _STOP.match(word):
                     self.marks[line]["kind"] = "text"
-                items.append(_Text(line, txt))
+                    if depth == 0 and _stop_of(word, self.declared) is not None:
+                        self.hints.append(
+                            {
+                                "line": line,
+                                "message": (
+                                    "A “Stop” ends the skill only on a path, under an indented “if …:” line, so here "
+                                    "it is read as an ordinary line. Indent it under its “if”."
+                                ),
+                            }
+                        )
+                # The step the agent reads drops a pasted list marker, as the keywords above do.
+                items.append(_Text(line, word, listed=depth == 0 and ind == level and word != txt))
         return items
+
+    def _opens(self, ind: int, at: int | None = None) -> bool:
+        """Whether the row at `at` (the next one) is indented past `ind`, so the line before it starts a path."""
+        at = self.i if at is None else at
+        return at < len(self.rows) and self.rows[at][1] > ind
 
     def _inner(self, line: int, ind: int, depth: int) -> list[_Item]:
         if self.i < len(self.rows) and self.rows[self.i][1] > ind:
@@ -482,6 +532,9 @@ class _Compiler:
         start = _Label()
         waiting: list[_Label] = [start]
         buffer: list[tuple[int, str]] = []
+        # The lines of `buffer` that carry a list marker: the next list line starts a step after them, and the lines
+        # under a list line (a sub-list, a note) stay part of its step.
+        listed: set[int] = set()
         last: int | None = None
         dead = False
 
@@ -519,10 +572,16 @@ class _Compiler:
                 continue
             if isinstance(item, _Text):
                 runs = [r for r in Ref.found_in(item.text) if r.kind in _STEP_KINDS]
+                # A list names its steps itself: each list line starts a step, with the plain lines above it that
+                # no list line holds. A plain line waits for the next line that runs something.
+                if item.listed and any(n in listed for n, _ in buffer):
+                    last = flush()
                 if not runs:
                     if sum(len(t) for _, t in buffer) + len(item.text) > DO_MAX - 50 and buffer:
                         last = flush()
                     buffer.append((item.line, item.text))
+                    if item.listed:
+                        listed.add(item.line)
                     continue
                 if len(runs) > 1:
                     name = self.labels.get(runs[0].token, runs[0].id)
@@ -756,19 +815,24 @@ def read(
     marks: dict[int, Mark] = {}
     for n, raw in enumerate(text.split("\n"), start=1):
         t = _bare(raw.strip())
-        kind: LineKind = (
-            "blank"
-            if not t
-            else "if"
-            if _IF.match(t)
-            else "else"
-            if _ELSE.match(t)
-            else "stop"
-            if _STOP.match(t)
-            else "text"
+        at = len(raw.strip()) - len(t)
+        word: Literal["if", "else", "stop"] | None = (
+            "if" if _IF.match(t) else "else" if _ELSE.match(t) else "stop" if _STOP.match(t) else None
         )
-        marks[n] = {"line": n, "kind": kind, "step": None, "how": None, "tool": None, "depth": _indent(raw) // 4}
-    tree = _Parser(text, hints, frozenset(declared), marks).block(0) if text.strip() else []
+        kind: LineKind = "blank" if not t else word or "text"
+        keyword: Keyword | None = None
+        if word is not None:
+            keyword = {"word": word, "start": at, "end": at + len(t.split(None, 1)[0].rstrip(":"))}
+        marks[n] = {
+            "line": n,
+            "kind": kind,
+            "step": None,
+            "how": None,
+            "tool": None,
+            "depth": _indent(raw) // 4,
+            "keyword": keyword,
+        }
+    tree = _Parser(text, hints, frozenset(declared), marks).top() if text.strip() else []
     refs = Ref.found_in(text)
     errors: list[Missing] = []
     for n, raw in enumerate(text.split("\n"), start=1):
@@ -794,7 +858,10 @@ def read(
         "workflows": counts["workflow"],
     }
     phrases = {tok: p for tok, f in fields.items() if (p := phrases_of(f))}
-    structured = any(not isinstance(i, _Text) for i in tree) or any(r.kind in _STEP_KINDS for r in refs)
+    # Every top-level list line is a step, with or without a mention; plain paragraphs with nothing to run stay
+    # instructions the agent reads as it sees fit.
+    listed = any(isinstance(i, _Text) and i.listed for i in tree)
+    structured = listed or any(not isinstance(i, _Text) for i in tree) or any(r.kind in _STEP_KINDS for r in refs)
     if not structured:
         return Reading(None, hints, errors, uses, list(marks.values()), phrases, [], refs)
     if plain is not None:
@@ -902,10 +969,10 @@ def stop_exits(text: str) -> dict[str, str]:
     form declares itself are kept."""
     out: dict[str, str] = {}
     marks: dict[int, Mark] = {
-        n: {"line": n, "kind": "text", "step": None, "how": None, "tool": None, "depth": 0}
+        n: {"line": n, "kind": "text", "step": None, "how": None, "tool": None, "depth": 0, "keyword": None}
         for n in range(1, text.count("\n") + 2)
     }
-    stack: list[_Item] = list(_Parser(normalised(text), [], frozenset(), marks).block(0))
+    stack: list[_Item] = list(_Parser(normalised(text), [], frozenset(), marks).top())
     while stack:
         item = stack.pop()
         if isinstance(item, _If):

@@ -1,7 +1,7 @@
 """Each kept eval run records the digest of the content it ran on, and its trigger is indexed
 
-Revision ID: 0121_eval_run_digest
-Revises: 0120_skill_step_tools
+Revision ID: 0123_eval_run_digest
+Revises: 0122_definition_digest_index
 
 A draft is rewritten in place under one version number, so a run of "version 1" says nothing about the version 1 a
 publish asks for once the draft was saved again. eval_runs gains `digest`, the version's content digest when the run
@@ -18,8 +18,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0121_eval_run_digest"
-down_revision = "0120_skill_step_tools"
+revision = "0123_eval_run_digest"
+down_revision = "0122_definition_digest_index"
 branch_labels = None
 depends_on = None
 
