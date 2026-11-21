@@ -389,6 +389,11 @@ opsai agents publish-check "$AGENT"
 opsai agents publish "$AGENT" --note "First version"
 ```
 
+The publish check also carries the agent's evals. A blocking step that failed on the newest run of that exact version
+is `eval_failed`, and the publish is refused; an approval of a request whose version failed after it opened is 409
+`eval_blocked`. With the team's "Require passing evals to publish" setting (`evalsRequired`) on, no saved cases is
+`eval_no_cases` and no run on the version is `eval_not_run`; a setting that cannot be read is `eval_setting_unread`.
+
 | Field | What it does |
 |---|---|
 | `brief.purpose` | What the agent is for. Required |

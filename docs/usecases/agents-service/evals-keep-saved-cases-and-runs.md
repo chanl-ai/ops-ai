@@ -32,6 +32,7 @@ and agents and the scripted model, so no real model is called.
 | S3 | Evidence and judges are not offered while nothing backs them | api | 7 | 7 |
 | S4 | The same flow works through the Python SDK, and another team still sees nothing | sdk | 11, 12, 13, 14, 15 | 15 |
 | S5 | An admin and a viewer open Govern > Evals: three tabs, counts equal rows, no sample data | ui | 1, 2, 3, 4, 5, 6 | 3 |
+| S6 | James opens the agent's Evals tab, adds a judge case, runs it and sees the result and its cost; Ravi sees the tab without Add case or Run evals | ui | 16, 17, 18, 19, 20, 21 | 20 |
 
 ## Preconditions
 
@@ -50,6 +51,8 @@ and agents and the scripted model, so no real model is called.
 | 5 | The viewer tries to save cases | 403 |
 | 6 | A member of another team reads suites and tries to save | No rows, zero runs counted, 404 on save |
 | 7 | Anyone reads the tab counts and asks for Evidence | Only suites, runs and gates are counted; 404 for evidence |
+| 16 to 20 | James opens the agent's Evals tab (real cases, no preview badge or sample text), adds a judge case (refused without its rubric), saves it and runs the saved cases | One run is kept and shown with its pass rate and a cost that includes judging |
+| 21 | Ravi opens the same tab | The latest run shows; no Add case or Run evals |
 | 11 to 15 | The same through the Python SDK | As steps 1 to 6 |
 
 ## Acceptance layers

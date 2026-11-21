@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import secrets
 
-from usecase_harness import bearer, check, data, finish, invited, people_stack, signed_in
+from usecase_harness import bearer, check, data, finish, invited, people_stack, save_agent, signed_in
 
 PRIYA = "p.shah@harborpine.example"
 
@@ -23,7 +23,7 @@ with people_stack(agents_env={"OPS_REGISTRY_AUTO_APPROVE": "false"}) as (api, ag
     r = agents.post("/v1/agents", json={"name": f"Desk {secrets.token_hex(2)}", "role": "Answers"}, headers=h)
     agent = data(r) if r.status_code in (200, 201) else {}
     check("the builder creates an agent in the team", bool(agent.get("id")), r.text[:200])
-    r = agents.patch(f"/v1/agents/{agent.get('id', 'ag_x')}", json={"role": "Answers branch questions"}, headers=h)
+    r = save_agent(agents, agent.get("id", "ag_x"), {"role": "Answers branch questions"}, headers=h)
     check("the builder edits it (200)", r.status_code == 200, r.text[:200])
     version = data(r).get("version", agent.get("version", 1)) if r.status_code == 200 else 1
     r = agents.post(f"/v1/agents/{agent.get('id', 'ag_x')}/publish-requests", json={"version": version}, headers=h)

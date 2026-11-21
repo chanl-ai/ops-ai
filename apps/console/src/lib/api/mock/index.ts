@@ -26,6 +26,7 @@ import { sampleBackground } from './background';
 import { createCasesMock } from './cases';
 import { createChatMock } from './chat';
 import { createKnowledgeMock } from './knowledge';
+import { digestOf } from './knowledge/ingest';
 import { createKnowledgeChangesMock } from './knowledge-changes';
 import { createNotificationsMock } from './notifications';
 import { createSearchMock } from './search';
@@ -58,6 +59,7 @@ import { createAssuranceMock } from './assurance';
 import { createAgentPublishMock, createAgentVersionStore } from './agent-publish';
 import { createMcpLinksMock } from './mcp-links';
 import { createReferencesMock } from './references';
+import { composeBrief, publishCheckOf, SEED_BRIEF } from './references/agent-brief';
 import { createAgentWrappers } from './agent-wrappers';
 import { createWikiMock } from './wiki';
 import { auditSink } from './governance';
@@ -85,6 +87,9 @@ export function createMockApi(): OpsApi {
   const workflows = F.WORKFLOWS.map((w) => ({ ...w }));
   const graphs: Record<string, WorkflowGraph> = Object.fromEntries(Object.entries(SEED_GRAPHS).map(([k, g]) => [k, { workflowId: k, ...g }]));
   const agents = F.AGENTS.map((a) => ({ ...a, guardrails: { ...a.guardrails } }));
+  // One agent is written as a brief; the others are legacy text, as agents saved before briefs are.
+  const briefAgent = agents.find((a) => a.id === 'ag_dispute');
+  if (briefAgent) Object.assign(briefAgent, { brief: SEED_BRIEF, promptMode: 'brief' as const, role: SEED_BRIEF.purpose, instructions: composeBrief(SEED_BRIEF) });
   // Which agent version is published; graph pins and agent rows read it, the agent publish flow writes it.
   const agentStore = createAgentVersionStore(agents);
   // Agent wrapper workflows and console chat deployments; assigned once the stores they read exist, read at request time.
@@ -304,7 +309,9 @@ export function createMockApi(): OpsApi {
     // As agents-service derives them for a version saved without limits; the mock offers every control.
     const limits = a.limits ?? { allowedModels: [a.model], defaultModel: a.model, allowedKnowledgeBaseIds: a.collections, switchableToolIds: a.toolIds, callersMayAddInstructions: false, publicKeyMay: ['tools', 'knowledge', 'budget', 'outputSchema', 'variables'] as const satisfies readonly AgentPublicKeyOverride[] };
     const controls = { channels: ['voice', 'chat', 'email', 'api'] as Channel[], guardrails: ['redactPii', 'maxToolCallsPerTurn', 'whenUnsure', 'blockedTopics'] as (keyof AgentGuardrails)[], evals: true };
-    return { ...a, limits: { ...limits, publicKeyMay: [...limits.publicKeyMay] }, controls, staleToolIds, publishedVersion, availability: a.paused ? ('paused' as const) : publishedVersion !== null ? ('published' as const) : ('not_published' as const), usedIn, workflowIds: usedIn.map((u) => u.workflowId), wrapperWorkflowId: wrappers?.wrapperOf(a.id) };
+    const uses = { tools: a.toolIds.length, knowledgeBases: a.collections.length, skills: a.brief ? 1 : 0, agents: 0, workflows: 0 };
+    // Changes with every save, as the service's digest of the stored agent does.
+    return { ...a, digest: digestOf(JSON.stringify(a)), brief: a.brief ?? null, promptMode: a.promptMode ?? null, patterns: a.patterns ?? { thinking: 'default' as const, parallelReads: true }, uses, limits: { ...limits, publicKeyMay: [...limits.publicKeyMay] }, controls, staleToolIds, publishedVersion, availability: a.paused ? ('paused' as const) : publishedVersion !== null ? ('published' as const) : ('not_published' as const), usedIn, workflowIds: usedIn.map((u) => u.workflowId), wrapperWorkflowId: wrappers?.wrapperOf(a.id) };
   };
 
   const policyRow = (p: GatePolicy): GatePolicy => ({ ...p, workflowName: wfName(p.workflowId) });
@@ -546,7 +553,7 @@ export function createMockApi(): OpsApi {
     r.slaMinutes = 385;
   }
 
-  const evals = createEvalsMock({ agents: () => agents.map(agentRow), toolName: (tid) => tools.find((t) => t.id === tid)?.name, toolAccess: (n) => tools.find((t) => t.name === n)?.access, collections: () => knowledge.kbNames(), me, files: files.links });
+  const evals = createEvalsMock({ agents: () => agents.map(agentRow), toolName: (tid) => tools.find((t) => t.id === tid)?.name, toolAccess: (n) => tools.find((t) => t.name === n)?.access, collections: () => knowledge.kbNames(), me });
   /** Attaching, detaching or moving a skill pin is an agent change, so it saves a new agent version. */
   const bumpAgent = (aid: string, note: string) => {
     const a = agentOr404(aid);
@@ -598,7 +605,7 @@ export function createMockApi(): OpsApi {
     people: F.REVIEWERS,
     me,
   });
-  const templates = createTemplatesMock(templateDeps({ agents, tools, toolInTeam, versions, snapAgent, me, kbNames: () => knowledge.kbNames(), addCase: (aid, c) => evals.api.createCase(aid, c), reviews: () => reviews, skills: { ...skills.newAgentPins, pinnedOn: skills.pinnedOn, name: skills.skillName } }));
+  const templates = createTemplatesMock(templateDeps({ agents, tools, toolInTeam, versions, snapAgent, me, kbNames: () => knowledge.kbNames(), addCase: (aid, c) => evals.api.addCases(aid, [c]), reviews: () => reviews, skills: { ...skills.newAgentPins, pinnedOn: skills.pinnedOn, name: skills.skillName } }));
   const prompts = createPromptsMock({ toolNames: () => tools.map((t) => t.name) });
 
   const signIn = createSignInPolicyMock({ me });
@@ -778,7 +785,13 @@ export function createMockApi(): OpsApi {
       update: (aid, patch) =>
         respond(() => {
           const a = agentOr404(aid);
-          const { note, ...fields } = patch;
+          const { note, baseVersion, baseDigest, ...fields } = patch;
+          // As the service answers a save made from an older copy.
+          if (baseVersion !== a.version || baseDigest !== digestOf(JSON.stringify(a))) throw new ApiError('The draft was saved after it was read; reload and try again.', 409, undefined, 'stale_base', { version: a.version, savedBy: me, savedAt: a.updatedAt });
+          // As the service answers: a brief agent's prompt is written from its brief, so text sent without one is refused.
+          if (a.promptMode === 'brief' && !fields.brief && fields.promptMode !== 'full' && (fields.instructions !== undefined || fields.role !== undefined)) throw new ApiError('This agent’s prompt is written from its brief. Edit the brief, or switch to plain text.', 422, undefined, 'brief_owns_prompt');
+          if (fields.brief) Object.assign(fields, { role: fields.brief.purpose, instructions: composeBrief(fields.brief), promptMode: fields.promptMode ?? 'brief' });
+          else if (fields.promptMode === 'brief' && a.brief) Object.assign(fields, { role: a.brief.purpose, instructions: composeBrief(a.brief) });
           if (fields.toolIds) for (const t of tools) t.grantedAgentIds = fields.toolIds.includes(t.id) ? [...new Set([...t.grantedAgentIds, aid])] : t.grantedAgentIds.filter((x) => x !== aid);
           const list = versionsOf(aid, a.version, 'agent');
           // One draft: rewrite the newest version unless it is published or a publish request names it.
@@ -803,6 +816,7 @@ export function createMockApi(): OpsApi {
       runs: (aid) => respond(() => (agentOr404(aid), [])),
       requestPublish: (aid, version, note) => respond(() => agentPublish.requestPublish(aid, version, note)),
       // The mock's requestPublish always opens a review, so its preview says so.
+      publishCheck: (aid) => respond(() => publishCheckOf(agentOr404(aid))),
       publishPreview: () => respond(() => ({ reviewRequired: true, policy: 'major' as const, majorChange: true, reviewReason: 'major_change' as const })),
       restore: (aid, version) =>
         respond(() => {

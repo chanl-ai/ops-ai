@@ -6,6 +6,7 @@
         "allTeamKnowledgeBases": false,
         "autoResolvedRate": 0,
         "availability": "not_published",
+        "brief": null,
         "channels": [
           "chat"
         ],
@@ -23,6 +24,7 @@
             "maxCostPerConversation"
           ]
         },
+        "digest": "<hex>",
         "guardrailPins": [],
         "guardrails": {
           "blockedTopics": [],
@@ -62,7 +64,12 @@
         },
         "model": "",
         "name": "Branch Desk",
+        "patterns": {
+          "parallelReads": true,
+          "thinking": "default"
+        },
         "paused": false,
+        "promptMode": null,
         "protection": null,
         "publishedVersion": null,
         "role": "Answers branch questions",
@@ -75,6 +82,13 @@
         "toolIds": [],
         "updatedAt": "<timeZ>",
         "usedIn": [],
+        "uses": {
+          "agents": 0,
+          "knowledgeBases": 0,
+          "skills": 0,
+          "tools": 0,
+          "workflows": 0
+        },
         "version": 1,
         "widgetPins": [],
         "widgets": {
@@ -117,6 +131,7 @@
             "allTeamKnowledgeBases": false,
             "autoResolvedRate": 0,
             "availability": "published",
+            "brief": null,
             "channels": [
               "chat"
             ],
@@ -180,7 +195,12 @@
             },
             "model": "default",
             "name": "Branch Concierge",
+            "patterns": {
+              "parallelReads": true,
+              "thinking": "default"
+            },
             "paused": false,
+            "promptMode": null,
             "protection": null,
             "publishedVersion": 3,
             "role": "Books appointments and answers product questions",
@@ -204,6 +224,13 @@
                 "workflowName": "Its own one-step workflow"
               }
             ],
+            "uses": {
+              "agents": 0,
+              "knowledgeBases": 1,
+              "skills": 0,
+              "tools": 2,
+              "workflows": 0
+            },
             "version": 3,
             "widgetPins": [],
             "widgets": {
@@ -218,6 +245,7 @@
             "allTeamKnowledgeBases": false,
             "autoResolvedRate": 0,
             "availability": "published",
+            "brief": null,
             "channels": [
               "chat"
             ],
@@ -282,7 +310,12 @@
             },
             "model": "default",
             "name": "Card Dispute Resolver",
+            "patterns": {
+              "parallelReads": true,
+              "thinking": "default"
+            },
             "paused": false,
+            "promptMode": null,
             "protection": null,
             "publishedVersion": 4,
             "role": "Investigates and drafts card dispute outcomes",
@@ -307,6 +340,13 @@
                 "workflowName": "Its own one-step workflow"
               }
             ],
+            "uses": {
+              "agents": 0,
+              "knowledgeBases": 1,
+              "skills": 0,
+              "tools": 2,
+              "workflows": 1
+            },
             "version": 4,
             "widgetPins": [],
             "widgets": {
@@ -321,6 +361,7 @@
             "allTeamKnowledgeBases": false,
             "autoResolvedRate": 0,
             "availability": "published",
+            "brief": null,
             "channels": [
               "chat"
             ],
@@ -386,7 +427,12 @@
             },
             "model": "default",
             "name": "Wire Fraud Sentinel",
+            "patterns": {
+              "parallelReads": true,
+              "thinking": "default"
+            },
             "paused": false,
+            "promptMode": null,
             "protection": null,
             "publishedVersion": 7,
             "role": "Scores outbound wires and places holds",
@@ -416,6 +462,13 @@
                 "workflowName": "Wire hold review"
               }
             ],
+            "uses": {
+              "agents": 0,
+              "knowledgeBases": 2,
+              "skills": 0,
+              "tools": 2,
+              "workflows": 0
+            },
             "version": 7,
             "widgetPins": [],
             "widgets": {
@@ -576,6 +629,7 @@
         "allTeamKnowledgeBases": false,
         "autoResolvedRate": 0,
         "availability": "published",
+        "brief": null,
         "canDelete": true,
         "canEdit": true,
         "canPublish": true,
@@ -599,6 +653,7 @@
             "maxCostPerConversation"
           ]
         },
+        "digest": "<hex>",
         "guardrailPins": [],
         "guardrails": {
           "blockedTopics": [],
@@ -644,7 +699,12 @@
         },
         "model": "default",
         "name": "Wire Fraud Sentinel",
+        "patterns": {
+          "parallelReads": true,
+          "thinking": "default"
+        },
         "paused": false,
+        "promptMode": null,
         "protection": null,
         "publishedVersion": 7,
         "role": "Scores outbound wires and places holds",
@@ -675,6 +735,13 @@
             "workflowName": "Wire hold review"
           }
         ],
+        "uses": {
+          "agents": 0,
+          "knowledgeBases": 2,
+          "skills": 0,
+          "tools": 2,
+          "workflows": 0
+        },
         "version": 7,
         "widgetPins": [],
         "widgets": {
@@ -697,6 +764,7 @@
         "allTeamKnowledgeBases": false,
         "autoResolvedRate": 0,
         "availability": "published",
+        "brief": null,
         "canDelete": true,
         "canEdit": true,
         "canPublish": true,
@@ -717,6 +785,7 @@
             "maxCostPerConversation"
           ]
         },
+        "digest": "<hex>",
         "guardrailPins": [],
         "guardrails": {
           "blockedTopics": [],
@@ -756,7 +825,12 @@
         },
         "model": "",
         "name": "Branch Desk",
+        "patterns": {
+          "parallelReads": true,
+          "thinking": "default"
+        },
         "paused": false,
+        "promptMode": null,
         "protection": null,
         "publishedVersion": 1,
         "role": "Answers branch hours",
@@ -778,6 +852,13 @@
             "workflowName": "Its own one-step workflow"
           }
         ],
+        "uses": {
+          "agents": 0,
+          "knowledgeBases": 0,
+          "skills": 0,
+          "tools": 0,
+          "workflows": 0
+        },
         "version": 1,
         "widgetPins": [],
         "widgets": {
@@ -798,6 +879,7 @@
         "allTeamKnowledgeBases": false,
         "autoResolvedRate": 0,
         "availability": "not_published",
+        "brief": null,
         "channels": [
           "chat"
         ],
@@ -815,6 +897,7 @@
             "maxCostPerConversation"
           ]
         },
+        "digest": "<hex>",
         "guardrailPins": [],
         "guardrails": {
           "blockedTopics": [],
@@ -854,7 +937,12 @@
         },
         "model": "",
         "name": "Branch Desk",
+        "patterns": {
+          "parallelReads": true,
+          "thinking": "default"
+        },
         "paused": false,
+        "promptMode": null,
         "protection": null,
         "publishedVersion": null,
         "role": "Answers branch hours",
@@ -867,6 +955,13 @@
         "toolIds": [],
         "updatedAt": "<timeZ>",
         "usedIn": [],
+        "uses": {
+          "agents": 0,
+          "knowledgeBases": 0,
+          "skills": 0,
+          "tools": 0,
+          "workflows": 0
+        },
         "version": 1,
         "widgetPins": [],
         "widgets": {
@@ -1238,6 +1333,7 @@
           ],
           "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship."
         },
+        "digest": "<hex>",
         "draftVersion": 1,
         "id": "<sk>",
         "inputs": [],
@@ -1259,13 +1355,15 @@
           "blockers": [],
           "canRequest": true,
           "editClass": "re_test",
-          "problems": []
+          "problems": [],
+          "warnings": []
         },
         "publishedVersion": null,
         "runs": [],
         "slug": "hardship-request-triage",
         "status": "draft",
         "tests": [],
+        "text": "Steps: confirm the customer, record the reason, offer the hardship form.",
         "tokens": 36,
         "toolCount": 1,
         "updatedAt": "<timeZ>",
@@ -1570,6 +1668,7 @@
           ],
           "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship."
         },
+        "digest": "<hex>",
         "draftVersion": null,
         "id": "<sk>",
         "inputs": [],
@@ -1600,13 +1699,15 @@
               "message": "v1 is already published; save a change to open a draft.",
               "position": null
             }
-          ]
+          ],
+          "warnings": []
         },
         "publishedVersion": 1,
         "runs": [],
         "slug": "hardship-request-triage",
         "status": "published",
         "tests": [],
+        "text": "Steps: confirm the customer, record the reason, offer the hardship form.",
         "tokens": 36,
         "toolCount": 1,
         "updatedAt": "<timeZ>",
@@ -1694,6 +1795,7 @@
           ],
           "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship."
         },
+        "digest": "<hex>",
         "draftVersion": 1,
         "id": "<sk>",
         "inputs": [],
@@ -1715,13 +1817,15 @@
           "blockers": [],
           "canRequest": true,
           "editClass": "re_test",
-          "problems": []
+          "problems": [],
+          "warnings": []
         },
         "publishedVersion": null,
         "runs": [],
         "slug": "hardship-request-triage",
         "status": "draft",
         "tests": [],
+        "text": "Steps: confirm the customer, record the reason, offer the hardship form.",
         "tokens": 36,
         "toolCount": 1,
         "updatedAt": "<timeZ>",

@@ -8,6 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from ..saves import save_skill_draft
 from .test_agent_registry import _app, _ok  # pyright: ignore[reportPrivateUsage]
 from .test_skills import HARDSHIP, _published  # pyright: ignore[reportPrivateUsage]
 
@@ -47,7 +48,7 @@ async def test_only_the_published_version_renders(tmp_path: Path) -> None:
         assert (r.status_code, r.json()["error"]["code"]) == (422, "skill_not_published")
 
         s = await _published(c, BRIEF)
-        _ok(await c.put(f"/v1/skills/{s['id']}/draft", json={"instructions": "DRAFT {{client}}", "baseVersion": 1}))
+        _ok(await save_skill_draft(c, s["id"], {"instructions": "DRAFT {{client}}"}))
         got = _ok(await c.post(f"/v1/skills/{s['id']}/render", json={"inputs": {"client": "Okafor"}}))
         assert got["version"] == 1 and got["text"].startswith("Prepare a brief for Okafor."), got
 

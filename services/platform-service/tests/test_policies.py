@@ -50,6 +50,9 @@ DEFAULTS: dict[str, Any] = {
     "pageImages": {},
     # Per team and on unless a team turns it off: {} names no team, so every team masks.
     "aiStepsMaskPersonalData": {},
+    # Per team and off until a team turns them on: strict skill publishing, and evals required to publish an agent.
+    "skillPublishStrict": {},
+    "evalsRequired": {},
     # No plugin is on until the platform admin turns it on for the install.
 }
 # The AI uses: the one documented exception to open defaults, off until a team turns them on.

@@ -15,6 +15,7 @@ import { join } from 'node:path';
 
 import { AGENTS_PORT, KB_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack, replyDone, required } from '@ops-ai/usecase-runner/harness';
 import { writeApprovalsOn } from '../../lib/workflow_ui.mjs';
+import { agentBase } from '../../lib/agent_save.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
@@ -152,7 +153,7 @@ try {
       const agent = required(await call(agents, 'POST', '/v1/agents', priya, { name: 'Case helper', role: 'Works Salesforce cases and answers from the Salesforce articles' }), 'create the agent');
       const grant = { toolIds: ['salesforce_query', 'salesforce_update_record'], collections: [base.id] };
       // agents-service keeps the grantable tools for 30 s, so the plugin's operations are offered within that.
-      const patched = await until(() => call(agents, 'PATCH', `/v1/agents/${agent.id}`, priya, grant), (r) => r.status !== 400);
+      const patched = await until(async () => call(agents, 'PATCH', `/v1/agents/${agent.id}`, priya, { ...grant, ...(await agentBase(agents, priya, agent.id)) }), (r) => r.status !== 400);
       const asked = await call(agents, 'POST', `/v1/agents/${agent.id}/publish-requests`, priya, { version: patched.data?.version, note: 'uc-564' });
       const live = asked.data?.status === 'pending' ? await call(agents, 'POST', `/v1/publish-requests/${asked.data.id}/decision`, maya, { decision: 'approved' }) : asked;
       check(

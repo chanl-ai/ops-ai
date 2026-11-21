@@ -1,5 +1,5 @@
-"""`opsai skills`: list and show the team's skills, write one from a file, publish it, and search what its steps can
-mention."""
+"""`opsai skills`: list and show the team's skills and who asked for, approved and published each version, write one
+from a file, publish it, and search what its steps can mention."""
 
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ def apply(ops: OpsAI, data: dict[str, Any], *, note: str = "") -> Any:
     fields = {k: data[k] for k in SKILL_KEYS if k in data}
     current = _stored(ops, data)
     if current is not None:
-        return ops.skills.save_draft(str(current["id"]), fields, note=note, base_version=int(current["version"]))
+        return ops.skills.save_draft(str(current["id"]), fields, note=note, base=current)
     return ops.skills.create({**fields, **{k: data[k] for k in CREATE_ONLY if k in data}})
 
 
@@ -54,13 +54,15 @@ def made(skill: dict[str, Any]) -> str:
 
 
 def main(argv: list[str]) -> int:
-    ap = parser("opsai skills", "The team's skills: list, show, apply, export, publish, references.")
+    ap = parser("opsai skills", "The team's skills: list, show, versions, apply, export, publish, references.")
     sub = ap.add_subparsers(dest="verb", required=True)
     common = [verb_options()]
     listing = sub.add_parser("list", parents=common, help="skills")
     listing.add_argument("--search")
     listing.add_argument("--id", action="append", help="only this one; repeat for several")
     sub.add_parser("show", parents=common, help="one of the skills").add_argument("id")
+    history = sub.add_parser("versions", parents=common, help="each version, who asked for, approved and published it")
+    history.add_argument("id")
     applying = sub.add_parser("apply", parents=common, help="create a skill from a file, or save it as a draft")
     applying.add_argument("definition", help="a YAML or JSON file; ownerTeam is needed to create")
     applying.add_argument("--note", default="")
@@ -86,6 +88,10 @@ def _dispatch(ns: argparse.Namespace, ops: OpsAI) -> int:
         return table(ns, ops.skills.list(search=ns.search, ids=ns.id), "id", "name", "status", "liveAgents")
     if ns.verb == "show":
         return emit(ns, ops.skills.get(ns.id))
+    if ns.verb == "versions":
+        # approvedBy prints "-" when the team's publish policy let the version go live without a review.
+        versions = ops.skills.get(ns.id)["versions"]
+        return table(ns, versions, "version", "state", "savedBy", "requestedBy", "approvedBy", "publishedBy")
     if ns.verb == "apply":
         saved = apply(ops, load_definition(Path(ns.definition)), note=ns.note)
         return emit(ns, saved, text=made(saved))

@@ -1,6 +1,6 @@
 import type { AssetRef, AssuranceGate, AssuranceJudge, AssuranceRun, AssuranceRunTrigger, AssuranceStats, AssuranceSuite, AssuranceTab, CaseOutcome, EvidenceBundleRow, GateStep, SuiteDraftCase } from '@/lib/types/assurance';
 import type { Agent, Review, Risk, TestCase, ValidationRun, Workflow } from '@/lib/types/domain';
-import type { EvalRunTrigger } from '@/lib/types/evals';
+import type { EvalRunTrigger } from '../evals/model';
 import type { EvidenceBundle } from '@/lib/types/model-risk';
 import type { SkillTestRun } from '@/lib/types/skills';
 

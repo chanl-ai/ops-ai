@@ -278,6 +278,32 @@
         "title": "AddCell",
         "type": "object"
       },
+      "AddReference": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "tool",
+              "knowledge",
+              "skill",
+              "agent",
+              "workflow"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id"
+        ],
+        "title": "AddReference",
+        "type": "object"
+      },
       "Agent": {
         "additionalProperties": false,
         "properties": {
@@ -305,6 +331,16 @@
             ],
             "title": "Availability",
             "type": "string"
+          },
+          "brief": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BriefView"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "canDelete": {
             "anyOf": [
@@ -356,6 +392,17 @@
           "controls": {
             "$ref": "#/components/schemas/AgentControls"
           },
+          "digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Digest"
+          },
           "guardrailPins": {
             "items": {
               "$ref": "#/components/schemas/GuardrailPin"
@@ -388,9 +435,27 @@
             "title": "Name",
             "type": "string"
           },
+          "patterns": {
+            "$ref": "#/components/schemas/PatternsView"
+          },
           "paused": {
             "title": "Paused",
             "type": "boolean"
+          },
+          "promptMode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "brief",
+                  "full"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Promptmode"
           },
           "protection": {
             "anyOf": [
@@ -497,6 +562,9 @@
             },
             "title": "Usedin",
             "type": "array"
+          },
+          "uses": {
+            "$ref": "#/components/schemas/AgentUses"
           },
           "version": {
             "title": "Version",
@@ -608,10 +676,15 @@
       },
       "AgentEvalRun": {
         "additionalProperties": false,
+        "description": "Cases sent in the body, scored and not kept.",
         "properties": {
           "agentId": {
             "title": "Agentid",
             "type": "string"
+          },
+          "costUsd": {
+            "title": "Costusd",
+            "type": "number"
           },
           "id": {
             "title": "Id",
@@ -631,6 +704,10 @@
           },
           "summary": {
             "$ref": "#/components/schemas/EvalSummary"
+          },
+          "unpriced": {
+            "title": "Unpriced",
+            "type": "boolean"
           }
         },
         "required": [
@@ -638,7 +715,9 @@
           "agentId",
           "status",
           "summary",
-          "results"
+          "results",
+          "costUsd",
+          "unpriced"
         ],
         "title": "AgentEvalRun",
         "type": "object"
@@ -840,6 +919,24 @@
             ],
             "title": "Allteamknowledgebases"
           },
+          "baseDigest": {
+            "title": "Basedigest",
+            "type": "string"
+          },
+          "baseVersion": {
+            "title": "Baseversion",
+            "type": "integer"
+          },
+          "brief": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Brief"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "channels": {
             "anyOf": [
               {
@@ -964,6 +1061,31 @@
             ],
             "title": "Note"
           },
+          "patterns": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Patterns"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "promptMode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "brief",
+                  "full"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Promptmode"
+          },
           "protection": {
             "anyOf": [
               {
@@ -1060,7 +1182,33 @@
             ]
           }
         },
+        "required": [
+          "baseVersion",
+          "baseDigest"
+        ],
         "title": "AgentPatch",
+        "type": "object"
+      },
+      "AgentPublishCheck": {
+        "additionalProperties": false,
+        "description": "Whether the newest draft can be published, and each thing that stops it with the field it is in.",
+        "properties": {
+          "canRequest": {
+            "title": "Canrequest",
+            "type": "boolean"
+          },
+          "problems": {
+            "items": {
+              "$ref": "#/components/schemas/PublishBlocker"
+            },
+            "title": "Problems",
+            "type": "array"
+          }
+        },
+        "required": [
+          "canRequest"
+        ],
+        "title": "AgentPublishCheck",
         "type": "object"
       },
       "AgentPublishRequest": {
@@ -1547,6 +1695,9 @@
             "title": "Tools",
             "type": "array"
           },
+          "usage": {
+            "$ref": "#/components/schemas/TurnUsage"
+          },
           "wouldPause": {
             "anyOf": [
               {
@@ -1563,9 +1714,43 @@
           "toolCalls",
           "citations",
           "tookMs",
-          "model"
+          "model",
+          "usage"
         ],
         "title": "AgentTestTurn",
+        "type": "object"
+      },
+      "AgentUses": {
+        "additionalProperties": false,
+        "description": "How many of each kind the agent holds, for the page's one-line summary.",
+        "properties": {
+          "agents": {
+            "default": 0,
+            "title": "Agents",
+            "type": "integer"
+          },
+          "knowledgeBases": {
+            "default": 0,
+            "title": "Knowledgebases",
+            "type": "integer"
+          },
+          "skills": {
+            "default": 0,
+            "title": "Skills",
+            "type": "integer"
+          },
+          "tools": {
+            "default": 0,
+            "title": "Tools",
+            "type": "integer"
+          },
+          "workflows": {
+            "default": 0,
+            "title": "Workflows",
+            "type": "integer"
+          }
+        },
+        "title": "AgentUses",
         "type": "object"
       },
       "AgentUsing": {
@@ -2779,7 +2964,7 @@
       },
       "BlockerPosition": {
         "additionalProperties": false,
-        "description": "Where a publish problem is: the field (`steps`, `notWhen`, `useWhen`, `brief.never`), and the step (from 1)\nor list index when it has one.",
+        "description": "Where a publish problem is: the field (`steps`, `notWhen`, `useWhen`, `brief.never`, `source`), and the step\n(from 1) or list index when it has one; for `source`, `index` is the line (from 1).",
         "properties": {
           "field": {
             "title": "Field",
@@ -2836,6 +3021,130 @@
           "version"
         ],
         "title": "BoundWorkflow",
+        "type": "object"
+      },
+      "Branch": {
+        "additionalProperties": false,
+        "description": "A path, written `if <test>:` in a skill's text. Once the step is done its test decides: when it holds the\nskill goes on (to the step's `next`, or the step after it); when it does not, to `otherwise`. A test that does\nnot hold is a path the author wrote, not a failed check: it counts no attempt and takes no hold, unless\n`otherwise` ends the skill with an exit other than done, which is how a guard is written\n(`if not ...: stop \"...\"`). A stop that a rule test's path reaches takes the hold on either side\n(`if found: stop \"...\"` as much as `else: stop \"...\"`); one a sentence test's path reaches takes none, since the\nmodel decided it. A rule test runs in code on the step's result; a sentence is decided by the model,\nwhich says which way it went (`step_done` with `holds`).",
+        "properties": {
+          "otherwise": {
+            "$ref": "#/components/schemas/Jump"
+          },
+          "test": {
+            "$ref": "#/components/schemas/StepCheck"
+          }
+        },
+        "required": [
+          "test",
+          "otherwise"
+        ],
+        "title": "Branch",
+        "type": "object"
+      },
+      "BranchOut": {
+        "additionalProperties": false,
+        "description": "A path written `if <test>:`: when the test does not hold, the skill goes to `otherwise`.",
+        "properties": {
+          "otherwise": {
+            "$ref": "#/components/schemas/JumpOut"
+          },
+          "test": {
+            "$ref": "#/components/schemas/StepCheckOut"
+          }
+        },
+        "required": [
+          "test",
+          "otherwise"
+        ],
+        "title": "BranchOut",
+        "type": "object"
+      },
+      "Brief": {
+        "additionalProperties": false,
+        "description": "What a builder writes instead of one block of instructions. Persona, tone and glossary are text inside\n`how_to_answer`. `success` is kept for grading and is never sent to the model.",
+        "properties": {
+          "goal": {
+            "default": "",
+            "maxLength": 600,
+            "title": "Goal",
+            "type": "string"
+          },
+          "howToAnswer": {
+            "default": "",
+            "maxLength": 24000,
+            "title": "Howtoanswer",
+            "type": "string"
+          },
+          "never": {
+            "items": {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Never",
+            "type": "array"
+          },
+          "purpose": {
+            "maxLength": 400,
+            "minLength": 1,
+            "title": "Purpose",
+            "type": "string"
+          },
+          "success": {
+            "items": {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Success",
+            "type": "array"
+          }
+        },
+        "required": [
+          "purpose"
+        ],
+        "title": "Brief",
+        "type": "object"
+      },
+      "BriefView": {
+        "additionalProperties": false,
+        "description": "An agent's brief as replied (`ops_agent_kernel.prompt_writer.Brief` is the request form).",
+        "properties": {
+          "goal": {
+            "default": "",
+            "title": "Goal",
+            "type": "string"
+          },
+          "howToAnswer": {
+            "default": "",
+            "title": "Howtoanswer",
+            "type": "string"
+          },
+          "never": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Never",
+            "type": "array"
+          },
+          "purpose": {
+            "title": "Purpose",
+            "type": "string"
+          },
+          "success": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Success",
+            "type": "array"
+          }
+        },
+        "required": [
+          "purpose"
+        ],
+        "title": "BriefView",
         "type": "object"
       },
       "BudgetCaps": {
@@ -6881,11 +7190,11 @@
         "title": "Envelope[AccountUses]",
         "type": "object"
       },
-      "Envelope_AgentEvalRun_": {
+      "Envelope_AgentPublishCheck_": {
         "additionalProperties": false,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/AgentEvalRun"
+            "$ref": "#/components/schemas/AgentPublishCheck"
           },
           "success": {
             "const": true,
@@ -6897,7 +7206,7 @@
           "success",
           "data"
         ],
-        "title": "Envelope[AgentEvalRun]",
+        "title": "Envelope[AgentPublishCheck]",
         "type": "object"
       },
       "Envelope_AgentSkills_": {
@@ -7375,6 +7684,25 @@
         "title": "Envelope[DeploymentView]",
         "type": "object"
       },
+      "Envelope_EvalRunRecord_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/EvalRunRecord"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[EvalRunRecord]",
+        "type": "object"
+      },
       "Envelope_EventOut_": {
         "additionalProperties": false,
         "properties": {
@@ -7696,6 +8024,25 @@
           "data"
         ],
         "title": "Envelope[ListResult[DefinitionRow]]",
+        "type": "object"
+      },
+      "Envelope_ListResult_EvalRunRecord__": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ListResult_EvalRunRecord_"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[ListResult[EvalRunRecord]]",
         "type": "object"
       },
       "Envelope_ListResult_FormView__": {
@@ -8079,6 +8426,25 @@
         "title": "Envelope[Received]",
         "type": "object"
       },
+      "Envelope_ReferenceAdded_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ReferenceAdded"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[ReferenceAdded]",
+        "type": "object"
+      },
       "Envelope_ReferenceSearch_": {
         "additionalProperties": false,
         "properties": {
@@ -8402,6 +8768,25 @@
         "title": "Envelope[SkillRendered]",
         "type": "object"
       },
+      "Envelope_SkillTextReading_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SkillTextReading"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[SkillTextReading]",
+        "type": "object"
+      },
       "Envelope_StepUpToken_": {
         "additionalProperties": false,
         "properties": {
@@ -8674,6 +9059,33 @@
           "data"
         ],
         "title": "Envelope[Union[DryRun, BatchStarted]]",
+        "type": "object"
+      },
+      "Envelope_Union_EvalRunRecord__AgentEvalRun__": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EvalRunRecord"
+              },
+              {
+                "$ref": "#/components/schemas/AgentEvalRun"
+              }
+            ],
+            "title": "Data"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[Union[EvalRunRecord, AgentEvalRun]]",
         "type": "object"
       },
       "Envelope_Union_ThreadReview__PublishReview__": {
@@ -9455,6 +9867,11 @@
             "default": false,
             "title": "Regression",
             "type": "boolean"
+          },
+          "unpriced": {
+            "default": false,
+            "title": "Unpriced",
+            "type": "boolean"
           }
         },
         "required": [
@@ -9482,6 +9899,17 @@
       "EvalCheckInput": {
         "additionalProperties": false,
         "properties": {
+          "rubric": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rubric"
+          },
           "text": {
             "anyOf": [
               {
@@ -9518,9 +9946,31 @@
       "EvalCheckResult": {
         "additionalProperties": false,
         "properties": {
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
           "label": {
             "title": "Label",
             "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
           },
           "status": {
             "enum": [
@@ -9536,6 +9986,46 @@
           "status"
         ],
         "title": "EvalCheckResult",
+        "type": "object"
+      },
+      "EvalGate": {
+        "additionalProperties": false,
+        "description": "Whether the version a run scored may publish on its evals, and each step, as a publish check reads it.",
+        "properties": {
+          "blocked": {
+            "title": "Blocked",
+            "type": "boolean"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/GateStep"
+            },
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "blocked",
+          "steps"
+        ],
+        "title": "EvalGate",
+        "type": "object"
+      },
+      "EvalGateDetails": {
+        "additionalProperties": false,
+        "properties": {
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/GateStep"
+            },
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "steps"
+        ],
+        "title": "EvalGateDetails",
         "type": "object"
       },
       "EvalRunInput": {
@@ -9557,6 +10047,96 @@
           }
         },
         "title": "EvalRunInput",
+        "type": "object"
+      },
+      "EvalRunRecord": {
+        "additionalProperties": false,
+        "description": "A kept run of an agent's saved cases (`app.evals.stored_run`): `version` is the newest version it ran on and\n`live_version` the live one it was compared with, when that was another. `trigger` is manual or\npublish_request; `started_by` is a person's email or `key:<id>`.",
+        "properties": {
+          "agentId": {
+            "title": "Agentid",
+            "type": "string"
+          },
+          "costUsd": {
+            "title": "Costusd",
+            "type": "number"
+          },
+          "gate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EvalGate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "liveVersion": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Liveversion"
+          },
+          "ranAt": {
+            "title": "Ranat",
+            "type": "string"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/EvalCaseResult"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "startedBy": {
+            "title": "Startedby",
+            "type": "string"
+          },
+          "status": {
+            "const": "complete",
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/EvalSummary"
+          },
+          "trigger": {
+            "title": "Trigger",
+            "type": "string"
+          },
+          "unpriced": {
+            "title": "Unpriced",
+            "type": "boolean"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "agentId",
+          "version",
+          "liveVersion",
+          "trigger",
+          "status",
+          "summary",
+          "results",
+          "costUsd",
+          "unpriced",
+          "startedBy",
+          "ranAt"
+        ],
+        "title": "EvalRunRecord",
         "type": "object"
       },
       "EvalSummary": {
@@ -11527,6 +12107,71 @@
         "type": "object"
       },
       "JsonValue": {},
+      "Jump": {
+        "additionalProperties": false,
+        "description": "Where a skill goes from a step: a step further on, or an exit that ends it. Exactly one of the two.",
+        "properties": {
+          "exit": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z][a-z0-9_]{0,31}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "maximum": 30.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step"
+          }
+        },
+        "title": "Jump",
+        "type": "object"
+      },
+      "JumpOut": {
+        "additionalProperties": false,
+        "properties": {
+          "exit": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z][a-z0-9_]{0,31}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "maximum": 30.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step"
+          }
+        },
+        "title": "JumpOut",
+        "type": "object"
+      },
       "KindRow": {
         "additionalProperties": false,
         "properties": {
@@ -11928,6 +12573,38 @@
           "facets"
         ],
         "title": "ListResult[DefinitionRow]",
+        "type": "object"
+      },
+      "ListResult_EvalRunRecord_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/EvalRunRecord"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "facets": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Facets",
+            "type": "object"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        },
+        "required": [
+          "data",
+          "pagination",
+          "facets"
+        ],
+        "title": "ListResult[EvalRunRecord]",
         "type": "object"
       },
       "ListResult_FormView_": {
@@ -13864,6 +14541,54 @@
         "title": "Pagination",
         "type": "object"
       },
+      "Patterns": {
+        "additionalProperties": false,
+        "description": "How the agent's turn runs: how hard the model thinks, and whether reads may run side by side.",
+        "properties": {
+          "parallelReads": {
+            "default": true,
+            "title": "Parallelreads",
+            "type": "boolean"
+          },
+          "thinking": {
+            "default": "default",
+            "enum": [
+              "default",
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Thinking",
+            "type": "string"
+          }
+        },
+        "title": "Patterns",
+        "type": "object"
+      },
+      "PatternsView": {
+        "additionalProperties": false,
+        "description": "How the agent's turn runs, as replied (`Patterns` is the request form).",
+        "properties": {
+          "parallelReads": {
+            "default": true,
+            "title": "Parallelreads",
+            "type": "boolean"
+          },
+          "thinking": {
+            "default": "default",
+            "enum": [
+              "default",
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Thinking",
+            "type": "string"
+          }
+        },
+        "title": "PatternsView",
+        "type": "object"
+      },
       "PauseInput": {
         "additionalProperties": false,
         "properties": {
@@ -14270,6 +14995,16 @@
         "additionalProperties": false,
         "description": "One thing that blocks a publish. `id` names the reference for a reference problem, as `<kind>:<id>`.",
         "properties": {
+          "details": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EvalGateDetails"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "id": {
             "anyOf": [
               {
@@ -14294,7 +15029,13 @@
               "review_open",
               "already_published",
               "deprecated",
-              "too_long"
+              "too_long",
+              "mention",
+              "hint",
+              "eval_failed",
+              "eval_not_run",
+              "eval_no_cases",
+              "eval_setting_unread"
             ],
             "title": "Kind",
             "type": "string"
@@ -14710,6 +15451,7 @@
             "enum": [
               "agent_publish",
               "publish_request",
+              "skill_publish",
               "egress_host"
             ],
             "title": "Kind",
@@ -14748,6 +15490,16 @@
             ],
             "title": "Risk",
             "type": "string"
+          },
+          "skillPublish": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SkillPublishInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "slaMinutes": {
             "anyOf": [
@@ -15023,7 +15775,7 @@
       },
       "Ref-Input": {
         "additionalProperties": false,
-        "description": "Something a text or a step names: a tool, a knowledge base, a skill, an agent or a workflow, by its id. An\nagent or a workflow is named by its bare id; a grant stores them as `agent:<id>` and `workflow:<id>`.",
+        "description": "Something a text or a step names: a tool, a knowledge base, a skill, an agent or a workflow, by its id. An\nagent or a workflow is named by its bare id; `grant` and `tool_name` are its two other spellings.",
         "properties": {
           "id": {
             "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,126}[A-Za-z0-9_])?$",
@@ -15103,6 +15855,29 @@
           "id"
         ],
         "title": "RefOut",
+        "type": "object"
+      },
+      "ReferenceAdded": {
+        "additionalProperties": false,
+        "description": "What an insert granted the agent: the reference and anything it brought with it (a skill's tools, knowledge\nbases and the skills its steps run). Empty when the agent already held it; `agent_version` is then unchanged.",
+        "properties": {
+          "added": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceItem"
+            },
+            "title": "Added",
+            "type": "array"
+          },
+          "agentVersion": {
+            "title": "Agentversion",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "added",
+          "agentVersion"
+        ],
+        "title": "ReferenceAdded",
         "type": "object"
       },
       "ReferenceGroup": {
@@ -17207,6 +17982,17 @@
       "SavedCaseCheck": {
         "additionalProperties": false,
         "properties": {
+          "rubric": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rubric"
+          },
           "text": {
             "anyOf": [
               {
@@ -17795,6 +18581,17 @@
             "title": "Slug",
             "type": "string"
           },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
           "steps": {
             "items": {
               "$ref": "#/components/schemas/SkillStepOut"
@@ -17950,6 +18747,17 @@
             ],
             "title": "Slug"
           },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
           "steps": {
             "items": {
               "$ref": "#/components/schemas/SkillStep"
@@ -17997,6 +18805,10 @@
           },
           "content": {
             "$ref": "#/components/schemas/SkillContent"
+          },
+          "digest": {
+            "title": "Digest",
+            "type": "string"
           },
           "draftVersion": {
             "anyOf": [
@@ -18163,6 +18975,10 @@
             "title": "Tests",
             "type": "array"
           },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
           "tokens": {
             "title": "Tokens",
             "type": "integer"
@@ -18227,6 +19043,8 @@
           "updatedBy",
           "origin",
           "content",
+          "text",
+          "digest",
           "versions",
           "tests",
           "runs",
@@ -18241,6 +19059,10 @@
       "SkillDraftPatch": {
         "additionalProperties": false,
         "properties": {
+          "baseDigest": {
+            "title": "Basedigest",
+            "type": "string"
+          },
           "baseVersion": {
             "title": "Baseversion",
             "type": "integer"
@@ -18399,6 +19221,17 @@
             ],
             "title": "Returns"
           },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
           "steps": {
             "anyOf": [
               {
@@ -18458,7 +19291,8 @@
           }
         },
         "required": [
-          "baseVersion"
+          "baseVersion",
+          "baseDigest"
         ],
         "title": "SkillDraftPatch",
         "type": "object"
@@ -18848,6 +19682,32 @@
         "title": "SkillProvenance",
         "type": "object"
       },
+      "SkillPublishAgent": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "pinnedVersion": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinnedversion"
+          }
+        },
+        "required": [
+          "name",
+          "pinnedVersion"
+        ],
+        "title": "SkillPublishAgent",
+        "type": "object"
+      },
       "SkillPublishCheck": {
         "additionalProperties": false,
         "properties": {
@@ -18881,6 +19741,13 @@
             },
             "title": "Problems",
             "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/PublishBlocker"
+            },
+            "title": "Warnings",
+            "type": "array"
           }
         },
         "required": [
@@ -18890,6 +19757,150 @@
           "approversNeeded"
         ],
         "title": "SkillPublishCheck",
+        "type": "object"
+      },
+      "SkillPublishInfo": {
+        "additionalProperties": false,
+        "description": "A skill publish request as its reviewer reads it, kept as it was when the request opened: the published\nversion it replaces, both texts, the hints on the new text and what it adds.",
+        "properties": {
+          "agents": {
+            "items": {
+              "$ref": "#/components/schemas/SkillPublishAgent"
+            },
+            "title": "Agents",
+            "type": "array"
+          },
+          "approvalsNeeded": {
+            "title": "Approvalsneeded",
+            "type": "integer"
+          },
+          "changes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "editClass": {
+            "title": "Editclass",
+            "type": "string"
+          },
+          "failing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Failing",
+            "type": "array"
+          },
+          "fromVersion": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fromversion"
+          },
+          "guardrails": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Guardrails",
+            "type": "array"
+          },
+          "hints": {
+            "items": {
+              "$ref": "#/components/schemas/TextHint"
+            },
+            "title": "Hints",
+            "type": "array"
+          },
+          "kbsAdded": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Kbsadded",
+            "type": "array"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "ownerTeam": {
+            "title": "Ownerteam",
+            "type": "string"
+          },
+          "requestedBy": {
+            "title": "Requestedby",
+            "type": "string"
+          },
+          "skillId": {
+            "title": "Skillid",
+            "type": "string"
+          },
+          "skillName": {
+            "title": "Skillname",
+            "type": "string"
+          },
+          "testRun": {
+            "title": "Testrun",
+            "type": "null"
+          },
+          "textAfter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Textafter"
+          },
+          "textBefore": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Textbefore"
+          },
+          "toVersion": {
+            "title": "Toversion",
+            "type": "integer"
+          },
+          "toolsAdded": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Toolsadded",
+            "type": "array"
+          }
+        },
+        "required": [
+          "skillId",
+          "skillName",
+          "ownerTeam",
+          "fromVersion",
+          "toVersion",
+          "editClass",
+          "requestedBy",
+          "note",
+          "changes",
+          "failing",
+          "toolsAdded",
+          "kbsAdded",
+          "guardrails",
+          "agents",
+          "approvalsNeeded",
+          "hints"
+        ],
+        "title": "SkillPublishInfo",
         "type": "object"
       },
       "SkillRenderInput": {
@@ -19072,6 +20083,16 @@
       "SkillStep": {
         "additionalProperties": false,
         "properties": {
+          "branch": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Branch"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "check": {
             "anyOf": [
               {
@@ -19092,6 +20113,27 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/IfNot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "locked": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locked"
+          },
+          "next": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Jump"
               },
               {
                 "type": "null"
@@ -19119,6 +20161,16 @@
         "additionalProperties": false,
         "description": "One step: what to do, what it runs, what must hold after it and what happens when it does not.",
         "properties": {
+          "branch": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BranchOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "check": {
             "anyOf": [
               {
@@ -19143,6 +20195,28 @@
               }
             ]
           },
+          "locked": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "True when the builder locked the step's tool to this step: the agent reaches it only as the step, even when it is a read. Absent otherwise; a tool that changes something is kept to its step either way.",
+            "title": "Locked"
+          },
+          "next": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JumpOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "use": {
             "anyOf": [
               {
@@ -19158,6 +20232,251 @@
           "do"
         ],
         "title": "SkillStepOut",
+        "type": "object"
+      },
+      "SkillTextError": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "line": {
+            "title": "Line",
+            "type": "integer"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "line",
+          "message",
+          "id"
+        ],
+        "title": "SkillTextError",
+        "type": "object"
+      },
+      "SkillTextInput": {
+        "additionalProperties": false,
+        "properties": {
+          "exit": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Exit",
+            "type": "object"
+          },
+          "hasParts": {
+            "default": false,
+            "title": "Hasparts",
+            "type": "boolean"
+          },
+          "loading": {
+            "default": "on_match",
+            "enum": [
+              "on_match",
+              "always"
+            ],
+            "title": "Loading",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 24000,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "SkillTextInput",
+        "type": "object"
+      },
+      "SkillTextLine": {
+        "additionalProperties": false,
+        "description": "One line of the text: its kind, the step (from 1) it is part of, how its condition is decided (an `if`\nline: `checked` on the tool's result, or `agent`, decided from the conversation) and the tool its line runs.",
+        "properties": {
+          "depth": {
+            "default": 0,
+            "title": "Depth",
+            "type": "integer"
+          },
+          "how": {
+            "anyOf": [
+              {
+                "enum": [
+                  "checked",
+                  "agent"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "How"
+          },
+          "kind": {
+            "enum": [
+              "text",
+              "step",
+              "if",
+              "else",
+              "stop",
+              "blank"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "line": {
+            "title": "Line",
+            "type": "integer"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step"
+          },
+          "tool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool"
+          }
+        },
+        "required": [
+          "line",
+          "kind"
+        ],
+        "title": "SkillTextLine",
+        "type": "object"
+      },
+      "SkillTextNote": {
+        "additionalProperties": false,
+        "properties": {
+          "line": {
+            "title": "Line",
+            "type": "integer"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "line",
+          "message"
+        ],
+        "title": "SkillTextNote",
+        "type": "object"
+      },
+      "SkillTextReading": {
+        "additionalProperties": false,
+        "description": "POST /v1/skills/{id}/text: how a skill's text reads, as a save will read it. Hints never block anything;\n`errors` (a mention of something that no longer exists) block a publish, never a save.",
+        "properties": {
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/SkillTextError"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "hints": {
+            "items": {
+              "$ref": "#/components/schemas/SkillTextNote"
+            },
+            "title": "Hints",
+            "type": "array"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/SkillTextLine"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "phrases": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Phrases",
+            "type": "object"
+          },
+          "stepLines": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Steplines",
+            "type": "array"
+          },
+          "steps": {
+            "title": "Steps",
+            "type": "integer"
+          },
+          "uses": {
+            "$ref": "#/components/schemas/SkillTextUses"
+          }
+        },
+        "required": [
+          "hints",
+          "errors",
+          "uses",
+          "lines",
+          "phrases",
+          "steps",
+          "stepLines"
+        ],
+        "title": "SkillTextReading",
+        "type": "object"
+      },
+      "SkillTextUses": {
+        "additionalProperties": false,
+        "properties": {
+          "agents": {
+            "title": "Agents",
+            "type": "integer"
+          },
+          "knowledge": {
+            "title": "Knowledge",
+            "type": "integer"
+          },
+          "skills": {
+            "title": "Skills",
+            "type": "integer"
+          },
+          "tools": {
+            "title": "Tools",
+            "type": "integer"
+          },
+          "workflows": {
+            "title": "Workflows",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tools",
+          "knowledge",
+          "skills",
+          "agents",
+          "workflows"
+        ],
+        "title": "SkillTextUses",
         "type": "object"
       },
       "SkillToolRef": {
@@ -19360,6 +20679,17 @@
       "SkillVersion": {
         "additionalProperties": false,
         "properties": {
+          "approvedBy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approvedby"
+          },
           "changes": {
             "items": {
               "type": "string"
@@ -19404,6 +20734,17 @@
               }
             ],
             "title": "Publishedby"
+          },
+          "requestedBy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requestedby"
           },
           "reviewId": {
             "anyOf": [
@@ -21427,6 +22768,26 @@
         "title": "TestView",
         "type": "object"
       },
+      "TextHint": {
+        "additionalProperties": false,
+        "description": "A hint the reader put on one line of a skill's text (from 1).",
+        "properties": {
+          "line": {
+            "title": "Line",
+            "type": "integer"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "line",
+          "message"
+        ],
+        "title": "TextHint",
+        "type": "object"
+      },
       "ThreadCreated": {
         "additionalProperties": false,
         "properties": {
@@ -22862,6 +24223,31 @@
           "count"
         ],
         "title": "ToolsNotAdded",
+        "type": "object"
+      },
+      "TurnUsage": {
+        "additionalProperties": false,
+        "description": "Tokens one test turn spent, on the alias it ran on.",
+        "properties": {
+          "inputTokens": {
+            "title": "Inputtokens",
+            "type": "integer"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "outputTokens": {
+            "title": "Outputtokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "inputTokens",
+          "outputTokens",
+          "model"
+        ],
+        "title": "TurnUsage",
         "type": "object"
       },
       "TypeRef": {
@@ -28886,7 +30272,7 @@
         "x-ops-public": "sdk"
       },
       "patch": {
-        "description": "Saves the patched spec as a new draft version; what is live does not change until it is published.",
+        "description": "Saves the patched spec as the agent's draft; what is live does not change until it is published.\n\n409 `stale_base` when `baseVersion` and `baseDigest` are not the newest copy (its details name who saved it and\nwhen): read the agent again and repeat the change.",
         "operationId": "agents_update_agent",
         "parameters": [
           {
@@ -29269,6 +30655,202 @@
         ],
         "x-ops-public": "sdk"
       },
+      "post": {
+        "description": "Adds these cases after the agent's last one and leaves the others, so two people adding at once each keep\ntheirs; answers the saved set. No cases, or an unknown check type, is 422 and nothing changes.",
+        "operationId": "assurance_add_agent_cases",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvalCasesInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SavedCases_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Add Agent Cases",
+        "tags": [
+          "Assurance"
+        ],
+        "x-ops-public": "sdk"
+      },
       "put": {
         "description": "Replaces the agent's active cases with these. An unknown check type is 422 and nothing changes.",
         "operationId": "assurance_save_agent_cases",
@@ -29467,8 +31049,288 @@
       }
     },
     "/v1/agents/{agent_id}/eval-runs": {
+      "get": {
+        "description": "The agent's kept runs on the shared list contract, newest first, then by id. Each row carries its case\nresults, so the tab opens a run without another request.",
+        "operationId": "assurance_agent_eval_runs",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ListResult_EvalRunRecord__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Agent Eval Runs",
+        "tags": [
+          "Assurance"
+        ],
+        "x-ops-public": "sdk"
+      },
       "post": {
-        "description": "Scores cases on the newest version through the same one-turn test path. With no cases in the body it runs the\nagent's saved cases, also on the live version when that is another one, and keeps the run, so repeating it makes a\nsecond run. With cases in the body it scores them and keeps nothing. Empty cases and an unknown check type are\n422.",
+        "description": "Scores cases on the newest version through the same one-turn test path. With no cases in the body it runs the\nagent's saved cases, also on the live version when that is another one, and keeps the run (`EvalRunRecord`), so\nrepeating it makes a second run. With cases in the body it scores them and keeps nothing (`AgentEvalRun`). Empty\ncases and an unknown check type are 422.",
         "operationId": "agents_create_eval_run",
         "parameters": [
           {
@@ -29559,7 +31421,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_AgentEvalRun_"
+                  "$ref": "#/components/schemas/Envelope_Union_EvalRunRecord__AgentEvalRun__"
                 }
               }
             },
@@ -30247,6 +32109,203 @@
         "x-ops-public": "sdk"
       }
     },
+    "/v1/agents/{agent_id}/publish-check": {
+      "get": {
+        "description": "What stops the newest draft from being published, each with the field it is in (`position`): a reference the\nbrief names that the agent does not hold. Nothing is opened or changed; the publish refuses the same list\n(422 `cannot_publish`). 422 `not_newest_draft` for any other version.",
+        "operationId": "agents_publish_check",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "title": "Version",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_AgentPublishCheck_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Publish Check",
+        "tags": [
+          "Agents"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
     "/v1/agents/{agent_id}/publish-preview": {
       "get": {
         "description": "Whether publishing the newest draft would wait for review, and why; nothing is opened or changed.",
@@ -30636,6 +32695,204 @@
           }
         },
         "summary": "Request Publish",
+        "tags": [
+          "Agents"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/agents/{agent_id}/references": {
+      "post": {
+        "description": "Grants the agent what its brief mentions, as one new draft version: a tool, an agent or a workflow joins its\ntools, a knowledge base its knowledge, a skill its skills. A skill brings the tools and knowledge bases it names\nand the skills its steps run. `added` lists everything granted; repeating the call answers `added: []` and saves\nnothing.\n\n403 `forbidden` without agents: edit in the agent's team or the view right of the reference's area; 422\n`unknown_reference` for something the team does not offer; 422 `not_published` for a skill, agent or workflow\nthat is not live; 409 `stale_base` when the draft was saved while this ran (read the agent again and repeat).",
+        "operationId": "agents_add_reference",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddReference"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ReferenceAdded_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Add Reference",
         "tags": [
           "Agents"
         ],
@@ -39372,6 +41629,375 @@
         "summary": "List Document Type Uses",
         "tags": [
           "Workflows"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/eval-cases/{case_id}": {
+      "delete": {
+        "description": "Deletes one active case of an agent or a skill. Another team's case, a draft or one already gone is 404.",
+        "operationId": "assurance_delete_eval_case",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Delete Eval Case",
+        "tags": [
+          "Assurance"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/eval-runs/{run_id}": {
+      "get": {
+        "description": "One kept run of an agent with each case's result. Another team's run is 404.",
+        "operationId": "assurance_eval_run",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_EvalRunRecord_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Eval Run",
+        "tags": [
+          "Assurance"
         ],
         "x-ops-public": "sdk"
       }
@@ -51010,7 +53636,7 @@
     },
     "/v1/skills/{skill_id}/draft": {
       "put": {
-        "description": "Edits the newest draft, or opens the next version on top of the published one. 409 when `baseVersion` is\nnot the newest version, or the skill is deprecated or in review. The checks run again in the transaction that\nwrites, after the tools are checked against tools-service with nothing open, so a save landing in between answers\n`stale_base`.",
+        "description": "Edits the newest draft, or opens the next version on top of the published one. 409 `stale_base` when\n`baseVersion` and `baseDigest` are not the newest copy (its details name who saved it and when); 409 too when the\nskill is deprecated or in review. The checks run again in the transaction that writes, after the tools are checked\nagainst tools-service with nothing open, so a save landing in between answers `stale_base`.",
         "operationId": "agents_save_skill_draft",
         "parameters": [
           {
@@ -51978,6 +54604,204 @@
           }
         },
         "summary": "Render Skill",
+        "tags": [
+          "Agents"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/skills/{skill_id}/text": {
+      "post": {
+        "description": "How a text reads as this skill's steps, without saving it: the hints on its lines, the mentions of things\nthat no longer exist, what it uses, how each condition is decided and what each mentioned tool returns. The same\nreader a save runs. skills: view in the skill's team (403 `forbidden`).",
+        "operationId": "agents_read_skill_text",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "skill_id",
+            "required": true,
+            "schema": {
+              "title": "Skill Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SkillTextInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SkillTextReading_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Read Skill Text",
         "tags": [
           "Agents"
         ],

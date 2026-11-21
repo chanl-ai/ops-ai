@@ -19,6 +19,17 @@ export const agentsOperations = {
     ],
     "stream": false
   },
+  "agents_add_reference": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/agents/{agent_id}/references",
+    "pathParams": [
+      "agent_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "agents_agent_skill_options": {
     "body": null,
     "headers": [],
@@ -401,6 +412,19 @@ export const agentsOperations = {
     ],
     "stream": false
   },
+  "agents_publish_check": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/agents/{agent_id}/publish-check",
+    "pathParams": [
+      "agent_id"
+    ],
+    "query": [
+      "version"
+    ],
+    "stream": false
+  },
   "agents_publish_preview": {
     "body": null,
     "headers": [],
@@ -412,6 +436,17 @@ export const agentsOperations = {
     "query": [
       "version"
     ],
+    "stream": false
+  },
+  "agents_read_skill_text": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/skills/{skill_id}/text",
+    "pathParams": [
+      "skill_id"
+    ],
+    "query": [],
     "stream": false
   },
   "agents_recent_runs": {
@@ -638,6 +673,17 @@ export const agentsOperations = {
     ],
     "stream": false
   },
+  "assurance_add_agent_cases": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/agents/{agent_id}/eval-cases",
+    "pathParams": [
+      "agent_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "assurance_agent_cases": {
     "body": null,
     "headers": [],
@@ -645,6 +691,46 @@ export const agentsOperations = {
     "path": "/v1/agents/{agent_id}/eval-cases",
     "pathParams": [
       "agent_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "assurance_agent_eval_runs": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/agents/{agent_id}/eval-runs",
+    "pathParams": [
+      "agent_id"
+    ],
+    "query": [
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
+    ],
+    "stream": false
+  },
+  "assurance_delete_eval_case": {
+    "body": null,
+    "headers": [],
+    "method": "DELETE",
+    "path": "/v1/eval-cases/{case_id}",
+    "pathParams": [
+      "case_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "assurance_eval_run": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/eval-runs/{run_id}",
+    "pathParams": [
+      "run_id"
     ],
     "query": [],
     "stream": false

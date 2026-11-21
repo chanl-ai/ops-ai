@@ -35,6 +35,9 @@ UPDATE_KEYS = (
     "limits",
     "guardrails",
     "memory",
+    "brief",
+    "promptMode",
+    "patterns",
 )
 
 
@@ -45,6 +48,17 @@ def _agent_body(source: Definition) -> dict[str, Any]:
 
 def _update_body(data: dict[str, Any]) -> dict[str, Any]:
     return {key: data[key] for key in UPDATE_KEYS if key in data}
+
+
+def based(fields: dict[str, Any], read: dict[str, Any]) -> dict[str, Any]:
+    """`fields` naming the copy they were made on: the `version` and `digest` of the agent or skill as `read`. The
+    service refuses a save made from an older copy (`stale_base`), so it never writes over a change saved since."""
+    return {**fields, "baseVersion": read["version"], "baseDigest": read["digest"]}
+
+
+def _read(base: dict[str, Any] | None) -> bool:
+    # A list row carries no digest, so it cannot name a copy.
+    return bool(base and base.get("digest"))
 
 
 class Agents:
@@ -84,6 +98,11 @@ class Agents:
             return None
         return None
 
+    def update(self, id: str, fields: dict[str, Any], *, base: dict[str, Any] | None = None) -> Any:
+        """Saves `fields` on the agent's draft. `base` is the agent as last read, naming the copy the change was made
+        on; left out, the agent is read first. A save from an older copy is refused with `stale_base`."""
+        return self._raw.agents.agents_update_agent(id, based(fields, base if _read(base) else self.get(id)))
+
     def apply(self, definition: Definition) -> Any:
         data = load_definition(definition)
         current = None
@@ -96,12 +115,12 @@ class Agents:
         if current is None and data.get("name"):
             current = self._named(str(data["name"]))
         if current:
-            return self._raw.agents.agents_update_agent(str(current["id"]), _update_body(data))
+            return self.update(str(current["id"]), _update_body(data), base=current)
         created = self._raw.agents.agents_create_agent(_agent_body(definition))
         extra = _update_body(data)
         extra = {key: extra[key] for key in extra if key not in CREATE_KEYS}
         if extra and created.get("id"):
-            return self._raw.agents.agents_update_agent(str(created["id"]), extra)
+            return self.update(str(created["id"]), extra, base=created)
         return created
 
     def publish(self, id: str, *, note: str = "", version: int | None = None) -> Any:
@@ -116,15 +135,26 @@ class Agents:
     def grant_tools(self, id: str, tools: list[str]) -> Any:
         """Adds tools (their ids from `tool_options`) to the agent's draft, keeping the ones it holds. Publish it
         for the grant to take effect."""
-        held = list(self.get(id).get("toolIds") or [])
+        agent = self.get(id)
+        held = list(agent.get("toolIds") or [])
         wanted = held + [t for t in tools if t not in held]
-        return self._raw.agents.agents_update_agent(id, {"toolIds": wanted})
+        return self.update(id, {"toolIds": wanted}, base=agent)
 
     def references(self, search: str = "", *, for_agent: str, **query: Any) -> Any:
         """What the agent's brief can mention with @, grouped by kind; each item says whether the agent holds it.
         `ids` (`kind:id` each) answers the labels of what a saved text names."""
         asked = {k: v for k, v in {"search": search or None, **query}.items() if v is not None}
         return self._raw.agents.agents_references_search(for_agent=for_agent, **asked)
+
+    def add_reference(self, id: str, kind: str, ref_id: str) -> Any:
+        """Grants the agent a tool, knowledge base, skill, agent or workflow its brief mentions, as a new draft. A
+        skill brings the tools and knowledge bases it names. `added` is empty when the agent already held it."""
+        return self._raw.agents.agents_add_reference(id, {"kind": kind, "id": ref_id})
+
+    def publish_check(self, id: str, *, version: int | None = None) -> Any:
+        """What stops the agent's newest draft from being published, each problem with the field it is in."""
+        pin = version if version is not None else self.get(id).get("version")
+        return self._raw.agents.agents_publish_check(id, version=pin)
 
     def pause(self, id: str) -> Any:
         return self._raw.agents.agents_set_paused(id, {"paused": True})
@@ -230,6 +260,10 @@ class AsyncAgents:
             return None
         return None
 
+    async def update(self, id: str, fields: dict[str, Any], *, base: dict[str, Any] | None = None) -> Any:
+        read = base if _read(base) else await self.get(id)
+        return await self._raw.agents.agents_update_agent(id, based(fields, read))
+
     async def apply(self, definition: Definition) -> Any:
         data = load_definition(definition)
         current = None
@@ -242,12 +276,12 @@ class AsyncAgents:
         if current is None and data.get("name"):
             current = await self._named(str(data["name"]))
         if current:
-            return await self._raw.agents.agents_update_agent(str(current["id"]), _update_body(data))
+            return await self.update(str(current["id"]), _update_body(data), base=current)
         created = await self._raw.agents.agents_create_agent(_agent_body(definition))
         extra = _update_body(data)
         extra = {key: extra[key] for key in extra if key not in CREATE_KEYS}
         if extra and created.get("id"):
-            return await self._raw.agents.agents_update_agent(str(created["id"]), extra)
+            return await self.update(str(created["id"]), extra, base=created)
         return created
 
     async def publish(self, id: str, *, note: str = "", version: int | None = None) -> Any:
@@ -262,13 +296,21 @@ class AsyncAgents:
     async def grant_tools(self, id: str, tools: list[str]) -> Any:
         """Adds tools (their ids from `tool_options`) to the agent's draft, keeping the ones it holds. Publish it
         for the grant to take effect."""
-        held = list((await self.get(id)).get("toolIds") or [])
+        agent = await self.get(id)
+        held = list(agent.get("toolIds") or [])
         wanted = held + [t for t in tools if t not in held]
-        return await self._raw.agents.agents_update_agent(id, {"toolIds": wanted})
+        return await self.update(id, {"toolIds": wanted}, base=agent)
 
     async def references(self, search: str = "", *, for_agent: str, **query: Any) -> Any:
         asked = {k: v for k, v in {"search": search or None, **query}.items() if v is not None}
         return await self._raw.agents.agents_references_search(for_agent=for_agent, **asked)
+
+    async def add_reference(self, id: str, kind: str, ref_id: str) -> Any:
+        return await self._raw.agents.agents_add_reference(id, {"kind": kind, "id": ref_id})
+
+    async def publish_check(self, id: str, *, version: int | None = None) -> Any:
+        pin = version if version is not None else (await self.get(id)).get("version")
+        return await self._raw.agents.agents_publish_check(id, version=pin)
 
     async def pause(self, id: str) -> Any:
         return await self._raw.agents.agents_set_paused(id, {"paused": True})

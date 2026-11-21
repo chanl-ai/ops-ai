@@ -179,8 +179,8 @@ export function createRegistryToolsDirectory(baseUrl: string): Pick<OpsApi['tool
   };
 }
 
-export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' | 'workflows' | 'engine' | 'channels' | 'skills' | 'references' | 'widgets' | 'widgetDeployments' | 'batches' | 'caseRecords' | 'activity' | 'overview' | 'assurance'> {
-  const { agents, workflows, engine, channels, skills, references, widgets, widgetDeployments, batches, caseRecords, activity, overview, assurance } = createHttpApi(`${baseUrl}/v1`);
+export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' | 'workflows' | 'engine' | 'channels' | 'skills' | 'references' | 'widgets' | 'widgetDeployments' | 'batches' | 'caseRecords' | 'activity' | 'overview' | 'assurance' | 'evals'> {
+  const { agents, workflows, engine, channels, skills, references, widgets, widgetDeployments, batches, caseRecords, activity, overview, assurance, evals } = createHttpApi(`${baseUrl}/v1`);
   const { bulkUpdate: _au, bulkRemove: _ar, ...agentCalls } = agents;
   const { bulkUpdate: _wu, ...workflowCalls } = workflows;
   const notServed = (what: string) => () => Promise.reject(new ApiError(`${what} is not available on this backend yet.`, 501));
@@ -197,6 +197,8 @@ export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' |
     activity,
     // Suites, runs and publish checks are joined and counted on agents-service; sealed evidence and judges are not served.
     assurance,
+    // The agent's saved cases and kept runs (`/v1/agents/{id}/eval-cases`, `/eval-runs`).
+    evals,
     // Counted on the server from the same review list Human Tasks reads and the team's cases.
     overview,
     skills: {
@@ -258,6 +260,7 @@ export function createHttpApi(baseUrl: string): OpsApi {
       restore: (id, version) => send('POST', `/agents/${id}/versions/${version}/restore`),
       requestPublish: (id, version, note) => send('POST', `/agents/${id}/publish-requests`, { version, note }),
       publishPreview: (id, version) => get(`/agents/${id}/publish-preview?version=${version}`),
+      publishCheck: (id, version) => get(`/agents/${id}/publish-check?version=${version}`),
       setPaused: (id, paused) => send('POST', `/agents/${id}/paused`, { paused }),
       // GET /tools answers one page of the Tools page's rows (each a grantable tool with its app and users): the agent
       // page reads the largest page the route serves.
@@ -329,7 +332,7 @@ export function createHttpApi(baseUrl: string): OpsApi {
     activity: createActivityHttp(get),
     assurance: createAssuranceHttp(get, send, qs),
     mcpLinks: createMcpLinksHttp(get, send),
-    references: createReferencesHttp(get),
+    references: createReferencesHttp(get, send),
     wiki: createWikiHttp(get, send, qs),
     tools: {
       list: (p) => get(`/tools?${qs(p)}`),

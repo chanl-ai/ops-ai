@@ -4,6 +4,7 @@
 // through platform-service as James. UC084_UNGRANTED=1 drops the workflow from ag_advisor's tools first, so search
 // finds nothing and the checks must fail. A workflow runner worker takes the run.
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
+import { saveAgent } from '../../lib/agent_save.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const JAMES = 'j.richardson@harborpine.example';
@@ -38,7 +39,7 @@ await withUiStack(
     if (UNGRANTED) {
       const agent = (await (await fetch(`${agents}/v1/agents/${AGENT}`, { headers: J })).json()).data;
       const toolIds = (agent?.toolIds ?? []).filter((t) => t !== `workflow:${WORKFLOW}`);
-      const res = await fetch(`${agents}/v1/agents/${AGENT}`, { method: 'PATCH', headers: J, body: JSON.stringify({ toolIds }) });
+      const res = await saveAgent(agents, J, AGENT, { toolIds });
       if (!res.ok) throw new Error(`setup: ungrant answered ${res.status}: ${await res.text()}`);
       // A save is a new version; the live agent changes once it is published.
       const body = JSON.stringify({ version: (await res.json()).data.version, note: 'uc-084 ungrant' });

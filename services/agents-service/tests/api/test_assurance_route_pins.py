@@ -1,8 +1,8 @@
 """Every Evals route's reply, status and error object, value by value, by failure mode: a suite, run or publish check
-row changing a key the Evals page reads; a saved case's reply changing shape; a refusal (a viewer saving, an unknown
-check type, a case for an agent or skill that is not there, a stray body field) changing its status or code; and an
-eval-case route opening a transaction per store call, so a replace and the cases read back come from different
-moments. Regenerate with `AGENTS_REPIN=1` only for an intended change."""
+row changing a key the Evals page reads; a saved case's or a kept run's reply changing shape; a refusal (a viewer
+saving, adding or deleting, an unknown check type, no cases, a case or run that is not there, a stray body field)
+changing its status or code; and an eval-case route opening a transaction per store call, so a change and the cases
+read back come from different moments. Regenerate with `AGENTS_REPIN=1` only for an intended change."""
 
 from __future__ import annotations
 
@@ -68,7 +68,8 @@ async def test_every_evals_route_keeps_its_reply_status_and_error_object(client:
     seen["skill.save"] = _seen(await c.put(skill_cases, json={"cases": [PASSING]}, headers=OPS))
     seen["skill.read"] = _seen(await c.get(skill_cases, headers=OPS))
     seen["skill.missing"] = _seen(await c.put("/v1/skills/sk_missing1/eval-cases", json={"cases": []}, headers=OPS))
-    assert (await c.post(f"/v1/agents/{aid}/eval-runs", headers=OPS)).status_code < 300
+    started = await c.post(f"/v1/agents/{aid}/eval-runs", headers=OPS)
+    assert started.status_code < 300, started.text
     for tab in ("suites", "runs", "gates"):
         seen[tab] = _seen(await c.get(f"/v1/assurance/{tab}", params={"pageSize": 5}, headers=OPS))
     seen["suites.filtered"] = _seen(
@@ -76,6 +77,19 @@ async def test_every_evals_route_keeps_its_reply_status_and_error_object(client:
     )
     seen["runs.pastEnd"] = _seen(await c.get("/v1/assurance/runs", params={"pageSize": 5, "page": 9}, headers=OPS))
     seen["suites.chatUser"] = _seen(await c.get("/v1/assurance/suites", headers=who("usr_c", "chat_user")))
+    seen["run.start"] = _seen(started)
+    added = await c.post(agent_cases, json={"cases": [PASSING]}, headers=OPS)
+    seen["agent.add"] = _seen(added)
+    seen["agent.viewerAdds"] = _seen(await c.post(agent_cases, json={"cases": [PASSING]}, headers=viewer))
+    seen["agent.addNone"] = _seen(await c.post(agent_cases, json={"cases": []}, headers=OPS))
+    seen["agent.addUnknownCheck"] = _seen(await c.post(agent_cases, json={"cases": [bad]}, headers=OPS))
+    one = f"/v1/eval-cases/{added.json()['data']['cases'][-1]['id']}"
+    seen["case.viewerDeletes"] = _seen(await c.delete(one, headers=viewer))
+    seen["case.delete"] = _seen(await c.delete(one, headers=OPS))
+    seen["case.deleteAgain"] = _seen(await c.delete(one, headers=OPS))
+    seen["agent.runs"] = _seen(await c.get(f"/v1/agents/{aid}/eval-runs", params={"pageSize": 5}, headers=viewer))
+    seen["run.read"] = _seen(await c.get(f"/v1/eval-runs/{started.json()['data']['id']}", headers=viewer))
+    seen["run.missing"] = _seen(await c.get("/v1/eval-runs/evr_missing1", headers=OPS))
     compare(seen, FIXTURES / "reply-pins-assurance.json")
 
 
@@ -87,6 +101,7 @@ async def test_each_eval_case_route_holds_one_transaction(client: AsyncClient) -
         ("agent.read", "GET", f"/v1/agents/{aid}/eval-cases", None),
         ("skill.save", "PUT", f"/v1/skills/{sid}/eval-cases", {"cases": [PASSING]}),
         ("skill.read", "GET", f"/v1/skills/{sid}/eval-cases", None),
+        ("agent.add", "POST", f"/v1/agents/{aid}/eval-cases", {"cases": [FAILING]}),
     ]
     begun: list[int] = []
 
@@ -98,6 +113,6 @@ async def test_each_eval_case_route_holds_one_transaction(client: AsyncClient) -
     for name, method, path, body in steps:
         begun.clear()
         r = await c.request(method, path, json=body, headers=OPS)
-        assert r.status_code == 200, (name, r.text)
+        assert r.status_code < 300, (name, r.text)
         counts[name] = len(begun)
     assert counts == {name: 1 for name, *_ in steps}, counts

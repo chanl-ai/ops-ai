@@ -1,4 +1,5 @@
 import type { PublishPreview } from '@/lib/types/publish-preview';
+import type { SaveBase } from '@/lib/save-base';
 import type { CasesApi } from './cases-contract';
 import type { ChannelsApi } from './channels-contract';
 import type { EngineApi } from './engine-contract';
@@ -36,6 +37,7 @@ import type { ActivityApi } from './activity-contract';
 import type { CaseRecordsApi } from './case-records-contract';
 import type { AssuranceApi } from './assurance-contract';
 import type { McpLinksApi } from './mcp-links-contract';
+import type { AgentPublishCheck } from '@/lib/types/references';
 import type { ReferencesApi } from './references-contract';
 import type { WikiApi } from './wiki-contract';
 import type {
@@ -107,7 +109,8 @@ export interface OpsApi {
     get(id: string): Promise<Agent>;
     create(input: AgentInput): Promise<Agent>;
     /** Saves a new draft version. Workflows keep pinning the published one until it is published and they republish. */
-    update(id: string, patch: AgentPatch): Promise<Agent>;
+    /** 409 `stale_base` when the base is not the newest copy; the details name who saved it and when. */
+    update(id: string, patch: AgentPatch & SaveBase): Promise<Agent>;
     remove(id: string): Promise<void>;
     versions(id: string): Promise<AgentVersion[]>;
     /** The agent's newest threads in the selected team, newest first. */
@@ -120,6 +123,8 @@ export interface OpsApi {
      * author, publishes the version (spec 04 5.11).
      */
     requestPublish(id: string, version: number, note: string): Promise<Review>;
+    /** What stops the newest draft from publishing, each with the field it is in; opens and changes nothing. */
+    publishCheck(id: string, version: number): Promise<AgentPublishCheck>;
     /** Whether publishing the newest draft would wait for review, and why; opens and changes nothing. */
     publishPreview(id: string, version: number): Promise<PublishPreview>;
     /** Pauses or resumes the agent for new runs. 409 when pausing an agent that has never been published. */

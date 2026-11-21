@@ -67,6 +67,19 @@ export function splitSections(instructions: string): Record<SkillSectionKey, str
 }
 export const joinSections = (s: Record<SkillSectionKey, string>) => SECTIONS.map((k) => `## ${SECTION_TITLE[k]}\n${s[k].trim()}`).join('\n\n');
 
+/** The headings a blank skill was created with. Notes that hold only these read as a second, empty step list, so the step document shows them as empty. */
+export const UNWRITTEN_SECTIONS = joinSections({ steps: '1. ', rules: '- ', examples: '', output_format: '' });
+/** What a new skill opens with: one line to mention a tool on and one path, to show the two things the text enforces.
+ * Every line is the author's to rewrite. */
+export const WORKED_EXAMPLE = [
+  'Greet them and ask for their order number.',
+  'Look up the order. Type @ at the end of this line to pick the tool that finds it.',
+  'if they want a refund:',
+  '    Explain the refund policy and ask them to confirm.',
+  'else:',
+  '    Answer their question from what you found.',
+].join('\n');
+
 export function ToolChips({ tools, max = 4, outOfScope = [] }: { tools: Pick<SkillToolRef, 'toolId' | 'name' | 'access'>[]; max?: number; outOfScope?: string[] }) {
   if (!tools.length) return <span className="text-xs text-muted-foreground">None</span>;
   return (

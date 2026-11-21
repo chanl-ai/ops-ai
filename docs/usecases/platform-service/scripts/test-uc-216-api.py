@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import secrets
 
-from usecase_harness import bearer, check, data, finish, invited, people_stack, signed_in
+from usecase_harness import bearer, check, data, finish, invited, people_stack, save_agent, signed_in
 
 PRIYA = "p.shah@harborpine.example"
 
@@ -26,7 +26,7 @@ with people_stack() as (api, agents):
     agent = rows[0] if rows else {"id": "ag_missing", "version": 1}
     r = agents.post("/v1/agents", json={"name": "Viewer's agent", "role": "Answers"}, headers=h)
     check("the viewer cannot create an agent (403)", r.status_code == 403, r.text[:200])
-    r = agents.patch(f"/v1/agents/{agent['id']}", json={"role": "Changed by a viewer"}, headers=h)
+    r = save_agent(agents, agent["id"], {"role": "Changed by a viewer"}, headers=h)
     check("the viewer cannot edit an agent (403)", r.status_code == 403, r.text[:200])
     r = agents.post(f"/v1/agents/{agent['id']}/publish-requests", json={"version": agent.get("version", 1)}, headers=h)
     check("the viewer cannot ask to publish an agent (403)", r.status_code == 403, r.text[:200])

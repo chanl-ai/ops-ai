@@ -1,10 +1,10 @@
 'use client';
 
 import * as React from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
-import type { RefKind, ReferenceContext, ReferenceItem, ReferenceSearch } from '@/lib/types/references';
+import type { Ref, RefKind, ReferenceContext, ReferenceItem, ReferenceSearch } from '@/lib/types/references';
 
 import { teamKey, useTeamQuery } from './team-query';
 
@@ -36,5 +36,19 @@ export function useReferenceLabels(context: ReferenceContext, ids: string[]) {
     enabled: ids.length > 0,
     // The chips keep their names while a changed document asks again.
     placeholderData: (previous) => previous,
+  });
+}
+
+/**
+ * Grants the agent what its brief now points at: a pick the agent does not hold, or "Add it back". It saves a new
+ * draft version, so the agent and its publish check are read again once it lands.
+ */
+export function useAddReference(agentId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    // The brief saves itself, so its save can land while the grant is being added; the service then refuses the grant
+    // (409 stale_base) and reads the newer draft on the next call, which is made once.
+    mutationFn: (ref: Ref) => api.references.add(agentId, ref).catch((e: { code?: string }) => (e.code === 'stale_base' ? api.references.add(agentId, ref) : Promise.reject(e))),
+    onSuccess: () => Promise.all([client.invalidateQueries({ queryKey: ['agent'] }), client.invalidateQueries({ queryKey: ['agents'] }), client.invalidateQueries({ queryKey: REFERENCES })]),
   });
 }
