@@ -10,6 +10,9 @@
 ["GET /chat/agents"]
 queries = 1
 
+["GET /chat/agents/options"]
+queries = 1
+
 ["GET /chat/connectors"]
 queries = 2
 
@@ -154,6 +157,9 @@ queries = 2
 queries = 2
 
 ["GET /v1/chat/agents"]
+queries = 1
+
+["GET /v1/chat/agents/options"]
 queries = 1
 
 ["GET /v1/chat/connectors"]

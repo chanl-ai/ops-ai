@@ -105,10 +105,12 @@ async def test_running_saved_cases_twice_stores_two_runs_newest_first(dev_platfo
         runs = f"/v1/agents/{aid}/eval-runs"
         newest = _ok(await c.get(runs, params={"pageSize": 1}, headers=OPS))
         older = _ok(await c.get(runs, params={"pageSize": 1, "page": 2}, headers=OPS))
-        made = [{k: v for k, v in run.items() if k != "gate"} for run in (second, first)]
-        assert [*newest["data"], *older["data"]] == made, "each row is the run as it was stored"
+        made = [{k: v for k, v in run.items() if k not in ("gate", "results")} for run in (second, first)]
+        assert [*newest["data"], *older["data"]] == made, "each row is the run as it was stored, without its results"
         assert newest["pagination"]["total"] == 2 and newest["pagination"]["hasNext"] is True
-        assert _ok(await c.get(f"/v1/eval-runs/{first['id']}", headers=OPS)) == made[1]
+        assert _ok(await c.get(f"/v1/eval-runs/{first['id']}", headers=OPS)) == {
+            k: v for k, v in first.items() if k != "gate"
+        }
         suite = (await _tab(c, "suites", OPS))["data"][0]
         assert suite["passRate"] == 0.5 and suite["failing"] is True and suite["cases"] == 2
         assert [r["name"] for r in suite["results"]] == ["greets", "calls lookup"]

@@ -163,42 +163,6 @@
             "id": "<evr>",
             "liveVersion": null,
             "ranAt": "<timeZ>",
-            "results": [
-              {
-                "caseName": "greets",
-                "draft": {
-                  "checks": [
-                    {
-                      "label": "Reply contains \u201ccould not find\u201d",
-                      "status": "pass"
-                    }
-                  ],
-                  "latencyMs": "<latencyMs>",
-                  "reply": "I could not find that.",
-                  "status": "pass"
-                },
-                "live": null,
-                "regression": false,
-                "unpriced": true
-              },
-              {
-                "caseName": "calls lookup",
-                "draft": {
-                  "checks": [
-                    {
-                      "label": "Calls lookup_account",
-                      "status": "fail"
-                    }
-                  ],
-                  "latencyMs": "<latencyMs>",
-                  "reply": "I could not find that.",
-                  "status": "fail"
-                },
-                "live": null,
-                "regression": false,
-                "unpriced": true
-              }
-            ],
             "startedBy": "usr_ops@harborpine.example",
             "status": "complete",
             "summary": {
