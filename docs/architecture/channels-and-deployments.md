@@ -79,7 +79,7 @@ a run holds the thread.
 | `POST /v1/threads/{id}/runs/stream` | Rejects with 409 `run_active`, naming the owner and the run |
 | Channel input (`POST /v1/threads/{id}/inbox`) | Enqueues in `thread_inbox`, unique on `(thread, message key)`, drained in order after the lease is released; with `multitask: reject` it is refused while a run holds the thread. The thread's row lock is held until commit, so no run can take the lease between the check and the write (`services/agents-service/src/ops_agents/api/channels/inbox.py:28-40`) |
 | Reply to a waiting case | Delivered at once; restarts the SLA timers |
-| Reply to a finished case | Opens a follow-up thread linked by `parent_thread_id` |
+| Reply to a finished case | Refused with 409 `thread_closed`; the channel opens a new case. No request links one case to another: `parent_thread_id` is set only where the server opens a child |
 | Timer due during a run | Rejected and retried next poll; cancelled if the run decided the step |
 
 ## Not built yet

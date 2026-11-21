@@ -31,6 +31,7 @@ from ops_plugin_sdk.versions import tools_of
 from ops_service_kit.errors import Conflict, Forbidden, NotFound, ServiceUnavailable, ValidationFailed
 from ops_service_kit.http import Envelope, In, Json, JsonValue, ListResult, Out, ok
 from ops_service_kit.listing import ListParams, ListQuery
+from ops_service_kit.names import Name
 from ops_service_kit.narrow import an_object
 from ops_store import isolation
 from ops_store.listing import ListPage
@@ -400,7 +401,7 @@ class AppCredentialPatchIn(In):
     """An edit of the team's own app credential: any of its name, client id, permissions and settings. Its secret is
     replaced on its own route."""
 
-    name: str | None = Field(default=None, min_length=1, max_length=200)
+    name: Name | None = None
     client_id: str | None = Field(default=None, min_length=1, max_length=500)
     scopes: list[Annotated[str, Field(min_length=1, max_length=200)]] | None = Field(default=None, max_length=100)
     # One of `fields` each; an empty or null value removes it.
@@ -416,7 +417,7 @@ class AppCredentialIn(In):
     # The app as the Apps page names it: `plugin:<id>` for an app from a plugin, the account's id for a custom app.
     app: str = Field(min_length=1, max_length=200)
     # What the auth configs list it as; left out, "<team> app", so it never reads as one of the app's accounts.
-    name: str | None = Field(default=None, min_length=1, max_length=200)
+    name: Name | None = None
     client_id: str = Field(min_length=1, max_length=500)
     # Left out for a public client, or one that proves itself with a signed assertion (each account's signing pair).
     client_secret: str | None = Field(default=None, min_length=1, max_length=2000)
@@ -731,6 +732,7 @@ class Apps:
         only: set[str] | None = None,
         ensured: bool = False,
         facts: dict[str, CardFacts] | None = None,
+        rights: str = "view",
     ) -> list[AppCard]:
         """Every app the team has; `listed`: only the Apps grid's (owner, 2026-11-01), the plugins and the apps a person
         added. A built-in app has its own menu, and an account made to hold a custom tool's address (origin "tool") or
@@ -738,7 +740,8 @@ class Apps:
         the built-in apps in a listed answer, for a picker where they belong (approvals: a mailbox reply). `only` keeps
         the cards it names, and reads just the accounts of the apps it names and the modules their cards count, so a
         page of the grid costs the same at any size. `ensured`: the caller wrote the team's defaults and the plugins'
-        modules already. `facts` is filled with each card's team-level state facts, for its card row."""
+        modules already. `facts` is filled with each card's team-level state facts, for its card row. `rights`
+        `OWN` reads them for the person's own connectors, under the rule their own sign-ins take."""
         if (builtins or not listed) and not ensured:
             # A team made before team.created reached this service has no defaults row, so the start-up catch-up never
             # finds it: listing its built-in apps provisions them, as a first tool lookup does.
@@ -750,11 +753,11 @@ class Apps:
             await self.plugins.ensure(who.tenant_id, self.connections.clock())
         team = who.team.id
         if only is None:
-            conns = await self.connections.team_rows(who)
+            conns = await self.connections.team_rows(who, action=rights)
             modules = await self.modules.card_modules(who.tenant_id, team)
         else:
             conns = await self.connections.team_rows(
-                who, sorted(i for i in only if not i.startswith(("builtin:", "module:")))
+                who, sorted(i for i in only if not i.startswith(("builtin:", "module:"))), action=rights
             )
             apps = [a for a in BUILT_IN if f"builtin:{a['id']}" in only]
             used = {u.id for c in conns for u in c.used_by or []}

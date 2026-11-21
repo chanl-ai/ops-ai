@@ -1,6 +1,6 @@
 ---
 name: wf-builder
-description: Draw a workflow from what a developer describes, check it with the engine, create it on the profile they name and start a test run. Use when someone asks to build, sketch or draft a workflow, or types /wf-builder.
+description: Draw a workflow from what a developer describes, check it with the engine, create it on the profile they name and start a test run. Use to build or draft a workflow.
 agent: agent
 ---
 

@@ -3,14 +3,13 @@
 import * as React from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
-import { ChevronDown, Lock } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { z } from 'zod';
 
 import { SettingsPageLayout } from '@/components/settings/settings-page-layout';
-import { EmptyState } from '@/components/shared/empty-state';
 import { EntityPicker } from '@/components/shared/entity-picker';
-import { QueryError } from '@/components/shared/query-states';
+import { NoAccess, QueryError } from '@/components/shared/query-states';
 import { ChoiceCards } from '@/components/shared/setting/choice-cards';
 import { SettingCard } from '@/components/shared/setting/setting-card';
 import { Button } from '@/components/ui/button';
@@ -74,6 +73,7 @@ export default function ApprovalsPage() {
   const savedByApp = React.useMemo(() => Object.fromEntries(Object.entries(savedAll).filter(([k]) => !k.startsWith(TOOL_KEY))), [savedAll]);
   const savedTools = React.useMemo(() => Object.fromEntries(Object.entries(savedAll).filter(([k]) => k.startsWith(TOOL_KEY))), [savedAll]);
   // Both policies are changed under settings.manage; the cell is held in the Security team or the acting team.
+  const mayRead = useCan('access', 'view');
   const locked = useCan('settings', 'manage') !== true || sample;
 
   const form = useForm<TeamForm>({
@@ -148,12 +148,13 @@ export default function ApprovalsPage() {
 
   return (
     <SettingsPageLayout section="Approvals" description="Whether an agent asks before it changes something in an app. Off until you turn it on." sample={sample}>
-      {policies.isPending || editor.isPending ? (
+      {/* platform-service reads the policies to whoever holds access.view where the request acts. */}
+      {mayRead === false || (policies.error instanceof ApiError && policies.error.status === 403) ? (
+        <NoAccess what="the approval settings" />
+      ) : policies.isPending || editor.isPending ? (
         <div className="flex flex-col gap-4" aria-busy="true">
           <Skeleton className="h-44 w-full" />
         </div>
-      ) : policies.error instanceof ApiError && policies.error.status === 403 ? (
-        <EmptyState icon={Lock} title="You can’t see approvals" description={policies.error.message} testId="approvals-refused" />
       ) : policies.isError ? (
         <QueryError what="the approval settings" error={policies.error} onRetry={() => policies.refetch()} retrying={policies.isFetching} />
       ) : (

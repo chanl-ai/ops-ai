@@ -23,6 +23,7 @@ from ops_service_kit import narrow
 from ops_service_kit.errors import Conflict, NotFound, Unprocessable, ValidationFailed
 from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.logging import get_logger
+from ops_service_kit.names import has_control, tidy
 
 from ..activities.catalog import AgentDefinition, kernel_skills
 from ..activities.tool_directory import ToolsUnavailable
@@ -99,13 +100,15 @@ async def check_content(rt: Runtime, fields: Json, *, skill_id: str | None = Non
     does not offer, or its steps could not run. The tools are kept as references with the directory's names and
     access. `skill_id` is the skill being saved (None for a new one) and `team_id` the team that owns it: a step may
     run only another published skill of that team."""
-    name = str(fields.get("name") or "").strip()
+    name = tidy(str(fields.get("name") or ""))
     loading = str(fields.get("loading") or "on_match")
     use_when = str(fields.get("useWhen") or "").strip()
     if not name:
         raise ValidationFailed("Name the skill.", code="no_name")
     if len(name) > NAME_MAX:
         raise ValidationFailed(f"The name is at most {NAME_MAX} characters.", code="name_too_long")
+    if has_control(name):
+        raise ValidationFailed("The name cannot hold a control character.", code="bad_name")
     if len(str(fields.get("instructions") or "")) > INSTRUCTIONS_MAX:
         raise ValidationFailed(
             f"The instructions are at most {INSTRUCTIONS_MAX:,} characters.", code="instructions_too_long"

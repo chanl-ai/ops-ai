@@ -11,6 +11,10 @@
 // real spend is intended. The read's fields match the fake's committed rules (services/models-service/seed/demo-fake-openai).
 import { createRequire } from 'node:module';
 
+// The SDK's own renewal (sdk/typescript/src/transport.ts): a 401 renews the session once from its refresh token. Needs
+// `pnpm --dir sdk/typescript build`, which `make stg-deploy` runs before this walk.
+import { Transport } from '../../sdk/typescript/dist/transport.js';
+
 const { chromium } = createRequire(new URL('../../packages/usecase-runner/package.json', import.meta.url))('playwright');
 
 const origin = (process.argv[2] ?? '').replace(/\/$/, '');
@@ -42,6 +46,23 @@ const session = await data(
 const team = process.env.OPS_SMOKE_TEAM || session.principal.teamId;
 check('the admin signs in through /api/platform', Boolean(session.token && team), session.principal);
 const as = { Authorization: `Bearer ${session.token}`, 'X-Team-Id': team, 'Content-Type': 'application/json' };
+
+// The walk's own invite changes the team's permissions, and the platform then refuses every token issued before it
+// (401 permissions_changed) until it is renewed. Every call below carries the admin's token, so a 401 renews the admin's
+// session through the SDK's path, updates `as` in place for the calls built after it, and sends the call again once.
+const admin = new Transport({ baseUrl: origin, session: { accessToken: session.token, refreshToken: session.refreshToken } });
+const plainFetch = globalThis.fetch;
+const adminTokens = new Set([`Bearer ${session.token}`]);
+globalThis.fetch = async (input, init) => {
+  const response = await plainFetch(input, init);
+  const sent = init?.headers && !Array.isArray(init.headers) && !(init.headers instanceof Headers) ? { ...init.headers } : null;
+  if (response.status !== 401 || !sent?.Authorization || !adminTokens.has(sent.Authorization) || !(await admin.renew(sent))) {
+    return response;
+  }
+  as.Authorization = sent.Authorization;
+  adminTokens.add(sent.Authorization);
+  return plainFetch(input, { ...init, headers: sent });
+};
 
 // The second person a publish waits for: invited by the admin into the admin's team as an approver, made once.
 let approver;

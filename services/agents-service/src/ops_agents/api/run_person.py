@@ -3,7 +3,8 @@
 A chat turn's request sets TURN_PERSON while it streams. A run of the same thread started any other way (recovered
 after a restart, resumed after an approval or a budget answer, a timer) has no request: it acts for the thread's
 person, its owner, or for a child thread the person its parent acted for (`startedFor`). A chat thread with neither
-acts for nobody, and its calls are refused rather than made as the team (acting_for.CallPeople).
+acts for nobody, and its calls are refused rather than made as the team (acting_for.CallPeople). An agent asked by a
+scheduled run is not such a chat: it acts as that run does.
 """
 
 from __future__ import annotations
@@ -38,7 +39,12 @@ def person_of_thread(row: Json) -> RunPerson | None:
     if row.get("graph") != CHAT_GRAPH:
         return None
     meta = cast(Json, row.get("meta") or {})
-    email = str(meta.get("ownerEmail") or meta.get("startedFor") or "")
+    started_for = str(meta.get("startedFor") or "")
+    if meta.get("calledBy") and started_for.startswith("agent:"):
+        # An agent asked by a run with no person (api/agent_calls.py wrote both keys; a request body cannot set
+        # `calledBy`): it acts as that run does, as the agent, and not as a chat whose person was lost.
+        return None
+    email = str(meta.get("ownerEmail") or started_for or "")
     return RunPerson(email if "@" in email else None, str(row.get("id") or "") or None)
 
 

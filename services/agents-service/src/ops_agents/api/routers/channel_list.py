@@ -23,6 +23,7 @@ from ops_service_kit.errors import Conflict, Forbidden, NotFound, Unprocessable
 from ops_service_kit.http import Envelope, In, Json, ListResult, Out
 from ops_service_kit.ids import now_iso
 from ops_service_kit.listing import ListParams
+from ops_service_kit.names import Name
 from ops_store import isolation
 
 from ...store.channel_list import (
@@ -385,7 +386,7 @@ class ChannelIn(In):
     # Chat is the one made here; a mailbox is connected at /v1/channels/mailboxes, an API key in Settings.
     type: Literal["chat"]
     agent_id: str
-    name: str = Field(min_length=1, max_length=200)
+    name: Name
     origins: list[str] = Field(min_length=1, max_length=20)
 
 
@@ -528,7 +529,7 @@ class ServesPatch(In):
 
 
 class ChannelPatch(In):
-    name: str | None = Field(default=None, min_length=1, max_length=200)
+    name: Name | None = None
     paused: bool | None = None
     serves: ServesPatch | None = None
     # A chat channel's allowed websites; a change follows the team's publish-review setting, as a serves change does.

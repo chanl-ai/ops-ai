@@ -197,8 +197,8 @@ class AgentRunner(Protocol):
     """The API side of specialist agents as tools, so this layer does not import the API."""
 
     async def offers(self, agent_id: str) -> list[ToolGrant]:
-        """`agent__<id>` grants for the specialists `agent_id` may ask on this turn: none unless it is its team's
-        default agent, the turn has a person, and the turn is not itself a specialist's."""
+        """`agent__<id>` grants for the agents `agent_id` may ask on this turn: its own `agent:<id>` grants, every
+        specialist for its team's default agent on a turn with a person, and none its chain refuses."""
         ...
 
     async def run(

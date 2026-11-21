@@ -1,6 +1,6 @@
 ---
 name: ops-workflow-step
-description: Add a new workflow step type (node kind) to the engine: its definition, ports, parameters and form, its executor, and its tests. Use when someone needs a step that no existing type can be configured to do.
+description: Add a new workflow step type (node kind) to the engine: its definition, ports, parameters and form, its executor, and its tests. Use for a step no existing type can do.
 allowed-tools: Bash(make *) Bash(uv run *) Bash(python3 *) Read Grep Glob
 ---
 
