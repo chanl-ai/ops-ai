@@ -671,13 +671,16 @@ class EvalCaseContextInput(TypedDict, closed=True):
 
 
 class EvalCheckInput(TypedDict, closed=True):
+    rubric: NotRequired[str | None]
     text: NotRequired[str | None]
     tool: NotRequired[str | None]
     type: str
 
 
 class EvalCheckResult(TypedDict, closed=True):
+    confidence: NotRequired[float | None]
     label: str
+    reason: NotRequired[str | None]
     status: Literal["pass", "fail"]
 
 
@@ -1626,6 +1629,7 @@ class RunWaiting(TypedDict, closed=True):
 
 
 class SavedCaseCheck(TypedDict, closed=True):
+    rubric: NotRequired[str | None]
     text: NotRequired[str | None]
     tool: NotRequired[str | None]
     type: str
@@ -2188,6 +2192,12 @@ class ToolsNotAdded(TypedDict, closed=True):
     name: str
 
 
+class TurnUsage(TypedDict, closed=True):
+    inputTokens: int
+    model: str
+    outputTokens: int
+
+
 class TypeRef(TypedDict, closed=True):
     id: str
     version: NotRequired[int | None]
@@ -2587,6 +2597,7 @@ class AgentTestTurn(TypedDict, closed=True):
     tookMs: int
     toolCalls: list[ToolCallView]
     tools: NotRequired[list[HeldTool]]
+    usage: TurnUsage
     wouldPause: NotRequired[WouldPause | None]
 
 
@@ -3171,6 +3182,7 @@ class EvalCaseResult(TypedDict, closed=True):
     draft: EvalCaseOutcome
     live: NotRequired[EvalCaseOutcome | None]
     regression: NotRequired[bool]
+    unpriced: NotRequired[bool]
 
 
 class EvalCasesInput(TypedDict, closed=True):
@@ -3192,6 +3204,7 @@ class EvalRunRecord(TypedDict, closed=True):
     status: Literal["complete"]
     summary: EvalSummary
     trigger: str
+    unpriced: bool
     version: int
 
 
@@ -3838,10 +3851,12 @@ class Agent(TypedDict, closed=True):
 
 class AgentEvalRun(TypedDict, closed=True):
     agentId: str
+    costUsd: float
     id: str
     results: list[EvalCaseResult]
     status: Literal["complete"]
     summary: EvalSummary
+    unpriced: bool
 
 
 class CaseDetail(TypedDict, closed=True):

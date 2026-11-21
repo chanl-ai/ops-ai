@@ -6,6 +6,7 @@
           {
             "checks": [
               {
+                "rubric": null,
                 "text": "could not find",
                 "tool": null,
                 "type": "reply_contains"
@@ -24,6 +25,7 @@
           {
             "checks": [
               {
+                "rubric": null,
                 "text": null,
                 "tool": "lookup_account",
                 "type": "calls_tool"
@@ -42,6 +44,7 @@
           {
             "checks": [
               {
+                "rubric": null,
                 "text": "could not find",
                 "tool": null,
                 "type": "reply_contains"
@@ -82,7 +85,7 @@
         "details": {
           "type": "rubric"
         },
-        "message": "Unknown check type: rubric. Allowed: calls_tool, refuses, reply_contains.",
+        "message": "Unknown check type: rubric. Allowed: calls_tool, judge, refuses, reply_contains.",
         "requestId": "<req>",
         "status": 422
       },
@@ -109,6 +112,7 @@
           {
             "checks": [
               {
+                "rubric": null,
                 "text": "could not find",
                 "tool": null,
                 "type": "reply_contains"
@@ -127,6 +131,7 @@
           {
             "checks": [
               {
+                "rubric": null,
                 "text": null,
                 "tool": "lookup_account",
                 "type": "calls_tool"
@@ -173,7 +178,8 @@
                   "status": "pass"
                 },
                 "live": null,
-                "regression": false
+                "regression": false,
+                "unpriced": true
               },
               {
                 "caseName": "calls lookup",
@@ -189,7 +195,8 @@
                   "status": "fail"
                 },
                 "live": null,
-                "regression": false
+                "regression": false,
+                "unpriced": true
               }
             ],
             "startedBy": "usr_ops@harborpine.example",
@@ -200,6 +207,7 @@
               "total": 2
             },
             "trigger": "manual",
+            "unpriced": true,
             "version": 1
           }
         ],
@@ -224,6 +232,7 @@
           {
             "checks": [
               {
+                "rubric": null,
                 "text": "could not find",
                 "tool": null,
                 "type": "reply_contains"
@@ -242,6 +251,7 @@
           {
             "checks": [
               {
+                "rubric": null,
                 "text": null,
                 "tool": "lookup_account",
                 "type": "calls_tool"
@@ -291,7 +301,7 @@
         "details": {
           "type": "rubric"
         },
-        "message": "Unknown check type: rubric. Allowed: calls_tool, refuses, reply_contains.",
+        "message": "Unknown check type: rubric. Allowed: calls_tool, judge, refuses, reply_contains.",
         "requestId": "<req>",
         "status": 422
       },
@@ -454,7 +464,8 @@
               "status": "pass"
             },
             "live": null,
-            "regression": false
+            "regression": false,
+            "unpriced": true
           },
           {
             "caseName": "calls lookup",
@@ -470,7 +481,8 @@
               "status": "fail"
             },
             "live": null,
-            "regression": false
+            "regression": false,
+            "unpriced": true
           }
         ],
         "startedBy": "usr_ops@harborpine.example",
@@ -481,6 +493,7 @@
           "total": 2
         },
         "trigger": "manual",
+        "unpriced": true,
         "version": 1
       },
       "success": true
@@ -510,7 +523,8 @@
               "status": "pass"
             },
             "live": null,
-            "regression": false
+            "regression": false,
+            "unpriced": true
           },
           {
             "caseName": "calls lookup",
@@ -526,7 +540,8 @@
               "status": "fail"
             },
             "live": null,
-            "regression": false
+            "regression": false,
+            "unpriced": true
           }
         ],
         "startedBy": "usr_ops@harborpine.example",
@@ -537,6 +552,7 @@
           "total": 2
         },
         "trigger": "manual",
+        "unpriced": true,
         "version": 1
       },
       "success": true
@@ -674,6 +690,7 @@
           {
             "checks": [
               {
+                "rubric": null,
                 "text": "could not find",
                 "tool": null,
                 "type": "reply_contains"
@@ -702,6 +719,7 @@
           {
             "checks": [
               {
+                "rubric": null,
                 "text": "could not find",
                 "tool": null,
                 "type": "reply_contains"

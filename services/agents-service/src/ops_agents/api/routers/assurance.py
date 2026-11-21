@@ -117,6 +117,7 @@ class SavedCaseCheck(Out):
     type: str
     tool: str | None = None
     text: str | None = None
+    rubric: str | None = None
 
 
 class SavedCase(Out):

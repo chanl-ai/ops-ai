@@ -3832,6 +3832,8 @@ export interface components {
         AgentEvalRun: {
             /** Agentid */
             agentId: string;
+            /** Costusd */
+            costUsd: number;
             /** Id */
             id: string;
             /** Results */
@@ -3842,6 +3844,8 @@ export interface components {
              */
             status: "complete";
             summary: components["schemas"]["EvalSummary"];
+            /** Unpriced */
+            unpriced: boolean;
         };
         /** AgentInput */
         AgentInput: {
@@ -4079,6 +4083,7 @@ export interface components {
             toolCalls: components["schemas"]["ToolCallView"][];
             /** Tools */
             tools?: components["schemas"]["HeldTool"][];
+            usage: components["schemas"]["TurnUsage"];
             wouldPause?: components["schemas"]["WouldPause"] | null;
         };
         /** AgentUsing */
@@ -6914,6 +6919,11 @@ export interface components {
              * @default false
              */
             regression: boolean;
+            /**
+             * Unpriced
+             * @default false
+             */
+            unpriced: boolean;
         };
         /** EvalCasesInput */
         EvalCasesInput: {
@@ -6922,6 +6932,8 @@ export interface components {
         };
         /** EvalCheckInput */
         EvalCheckInput: {
+            /** Rubric */
+            rubric?: string | null;
             /** Text */
             text?: string | null;
             /** Tool */
@@ -6931,8 +6943,12 @@ export interface components {
         };
         /** EvalCheckResult */
         EvalCheckResult: {
+            /** Confidence */
+            confidence?: number | null;
             /** Label */
             label: string;
+            /** Reason */
+            reason?: string | null;
             /**
              * Status
              * @enum {string}
@@ -6973,6 +6989,8 @@ export interface components {
             summary: components["schemas"]["EvalSummary"];
             /** Trigger */
             trigger: string;
+            /** Unpriced */
+            unpriced: boolean;
             /** Version */
             version: number;
         };
@@ -9513,6 +9531,8 @@ export interface components {
         };
         /** SavedCaseCheck */
         SavedCaseCheck: {
+            /** Rubric */
+            rubric?: string | null;
             /** Text */
             text?: string | null;
             /** Tool */
@@ -11331,6 +11351,18 @@ export interface components {
             count: number;
             /** Name */
             name: string;
+        };
+        /**
+         * TurnUsage
+         * @description Tokens one test turn spent, on the alias it ran on.
+         */
+        TurnUsage: {
+            /** Inputtokens */
+            inputTokens: number;
+            /** Model */
+            model: string;
+            /** Outputtokens */
+            outputTokens: number;
         };
         /** TypeRef */
         TypeRef: {

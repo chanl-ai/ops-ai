@@ -614,6 +614,10 @@
             "title": "Agentid",
             "type": "string"
           },
+          "costUsd": {
+            "title": "Costusd",
+            "type": "number"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -632,6 +636,10 @@
           },
           "summary": {
             "$ref": "#/components/schemas/EvalSummary"
+          },
+          "unpriced": {
+            "title": "Unpriced",
+            "type": "boolean"
           }
         },
         "required": [
@@ -639,7 +647,9 @@
           "agentId",
           "status",
           "summary",
-          "results"
+          "results",
+          "costUsd",
+          "unpriced"
         ],
         "title": "AgentEvalRun",
         "type": "object"
@@ -1548,6 +1558,9 @@
             "title": "Tools",
             "type": "array"
           },
+          "usage": {
+            "$ref": "#/components/schemas/TurnUsage"
+          },
           "wouldPause": {
             "anyOf": [
               {
@@ -1564,7 +1577,8 @@
           "toolCalls",
           "citations",
           "tookMs",
-          "model"
+          "model",
+          "usage"
         ],
         "title": "AgentTestTurn",
         "type": "object"
@@ -9502,6 +9516,11 @@
             "default": false,
             "title": "Regression",
             "type": "boolean"
+          },
+          "unpriced": {
+            "default": false,
+            "title": "Unpriced",
+            "type": "boolean"
           }
         },
         "required": [
@@ -9529,6 +9548,17 @@
       "EvalCheckInput": {
         "additionalProperties": false,
         "properties": {
+          "rubric": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rubric"
+          },
           "text": {
             "anyOf": [
               {
@@ -9565,9 +9595,31 @@
       "EvalCheckResult": {
         "additionalProperties": false,
         "properties": {
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
           "label": {
             "title": "Label",
             "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
           },
           "status": {
             "enum": [
@@ -9660,6 +9712,10 @@
             "title": "Trigger",
             "type": "string"
           },
+          "unpriced": {
+            "title": "Unpriced",
+            "type": "boolean"
+          },
           "version": {
             "title": "Version",
             "type": "integer"
@@ -9675,6 +9731,7 @@
           "summary",
           "results",
           "costUsd",
+          "unpriced",
           "startedBy",
           "ranAt"
         ],
@@ -17361,6 +17418,17 @@
       "SavedCaseCheck": {
         "additionalProperties": false,
         "properties": {
+          "rubric": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rubric"
+          },
           "text": {
             "anyOf": [
               {
@@ -23016,6 +23084,31 @@
           "count"
         ],
         "title": "ToolsNotAdded",
+        "type": "object"
+      },
+      "TurnUsage": {
+        "additionalProperties": false,
+        "description": "Tokens one test turn spent, on the alias it ran on.",
+        "properties": {
+          "inputTokens": {
+            "title": "Inputtokens",
+            "type": "integer"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "outputTokens": {
+            "title": "Outputtokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "inputTokens",
+          "outputTokens",
+          "model"
+        ],
+        "title": "TurnUsage",
         "type": "object"
       },
       "TypeRef": {

@@ -59,7 +59,7 @@ from ..auth import Principal, caller, caller_in, caller_of, principal, reader_of
 from ..child_runs import engine_workflows, refusal, team_workflows
 from ..deps import Runtime, runtime
 from ..envelope import ok
-from ..eval_runs import run_saved, version_turn
+from ..eval_runs import judge_for, prices_of, run_saved, version_turn
 from ..guardrails import resolve_pins
 from ..model_aliases import chat_aliases
 from ..publish_policy import Decision, decide, team_document
@@ -189,6 +189,8 @@ class EvalCheckInput(In):
     type: str
     tool: str | None = None
     text: str | None = None
+    # What a `judge` check asks of the reply, in words; required for that type (422 rubric_required).
+    rubric: str | None = None
 
 
 class EvalCaseContextInput(In):
@@ -781,7 +783,8 @@ async def create_eval_run(
     if body.cases is None:
         return ok(await run_saved(rt, me, row, trigger=TRIGGER_MANUAL))
     cases = parse_cases([item.model_dump(by_alias=True) for item in body.cases])
-    return ok(await run_eval(agent_id, cases, version_turn(rt, row, int(row.version))))
+    turn = version_turn(rt, row, int(row.version))
+    return ok(await run_eval(agent_id, cases, turn, judge=judge_for(rt), prices=prices_of(rt)))
 
 
 @router.post("/{agent_id}/jobs", response_model=Envelope[JobArmed], response_model_exclude_none=True)

@@ -299,6 +299,10 @@ class WouldPause(Out):
 class EvalCheckResult(Out):
     label: str
     status: Literal["pass", "fail"]
+    # A judge check's one-line reason, or why the judge did not answer; absent on the string checks.
+    reason: str | None = None
+    # The judge's confidence; not asked for yet, so null.
+    confidence: float | None = None
 
 
 class EvalCaseOutcome(Out):
@@ -313,6 +317,8 @@ class EvalCaseResult(Out):
     draft: EvalCaseOutcome
     live: EvalCaseOutcome | None = None
     regression: bool = False
+    # An alias this case's turns or judge spent tokens on has no price (absent on runs kept before it was recorded).
+    unpriced: bool = False
 
 
 class EvalSummary(Out):
@@ -329,6 +335,10 @@ class AgentEvalRun(Out):
     status: Literal["complete"]
     summary: EvalSummary
     results: list[EvalCaseResult]
+    # Every turn's and judge call's tokens priced by alias (OPS_PRICES); `unpriced` when an alias that spent tokens
+    # has no price, so its tokens count as 0.
+    cost_usd: float
+    unpriced: bool
 
 
 class EvalRunRecord(Out):
@@ -345,6 +355,7 @@ class EvalRunRecord(Out):
     summary: EvalSummary
     results: list[EvalCaseResult]
     cost_usd: float
+    unpriced: bool
     started_by: str
     ran_at: str
 
@@ -361,6 +372,14 @@ class LoadedSkill(Out):
     inputs: dict[str, str] | None = None
 
 
+class TurnUsage(Out):
+    """Tokens one test turn spent, on the alias it ran on."""
+
+    input_tokens: int
+    output_tokens: int
+    model: str
+
+
 class AgentTestTurn(Out):
     reply: str
     tool_calls: list[ToolCallView]
@@ -368,6 +387,7 @@ class AgentTestTurn(Out):
     took_ms: int
     # The model alias the turn ran on: the agent's, or the runtime's when the agent names none.
     model: str
+    usage: TurnUsage
     would_pause: WouldPause | None = None
     # What the reply could use and did: the bases it searched, the tools it holds, and the skills and
     # guardrails the turn loaded and checked.
