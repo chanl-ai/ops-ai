@@ -7,12 +7,13 @@ SHA-256 hashes. Every reference to a team or user carries `tenant_id` too (migra
 checked without row-level security. Audit entries are append only: the tenant role may not update or delete them.
 `team_id` is null for tenant-level events such as sign-in.
 
-Roles are data (migration 0006): `roles` holds the five built-in roles per tenant and any custom ones,
-`role_permissions` one row per (area, action) a role grants with scope `all` or `own`, and `role_assignments` who holds
-which role in which team. An assignment's subject is a person or a team (`subject_kind`, `subject_id`), and its
-`team_id` is the team it applies in or `*` for every team the subject belongs to; both are never null so the unique
-index dedupes on every database. `tenants.permission_version` rises with every change to any of these or to a
-membership, and the platform token carries it so services can cache what a person may do.
+Roles are data (migration 0006): `roles` holds the seven built-in roles per tenant (five people are given, plus
+Security admin and Owner, attached by rule) and any custom ones, `role_permissions` one row per (area, action) a role
+grants with scope `all` or `own`, and `role_assignments` who holds which role in which team. An assignment's subject
+is a person, a team or a group (`subject_kind`, `subject_id`; groups and their people are `groups` and
+`group_members`, migration 0046), and its `team_id` is the team it applies in or `*` for every team; both are never
+null so the unique index dedupes on every database. `tenants.permission_version` rises with every change to any of
+these or to a membership, and the platform token carries it so services can cache what a person may do.
 """
 
 from __future__ import annotations
@@ -228,8 +229,8 @@ role_assignments = sa.Table(
     metadata,
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("tenant_id", sa.String(64), sa.ForeignKey("tenants.id"), nullable=False),
-    sa.Column("subject_kind", sa.String(8), nullable=False),  # person | team
-    sa.Column("subject_id", sa.String(64), nullable=False),  # a user id or a team id
+    sa.Column("subject_kind", sa.String(8), nullable=False),  # person | team | group
+    sa.Column("subject_id", sa.String(64), nullable=False),  # a user id, a team id or a group id
     sa.Column("role_id", sa.String(64), nullable=False),
     sa.Column("team_id", sa.String(64), nullable=False),  # the team it applies in, or * for every team
     sa.Column("expires_at", sa.String(40)),  # null: no expiry
@@ -263,6 +264,44 @@ sa.Index(
 # identity provider: its state and its handoff code are stored hashed and used once; the PKCE verifier is kept as is
 # because the code exchange needs it, and it lives ten minutes. Password credentials and reset tokens are stored as
 # hashes only.
+groups = sa.Table(
+    "groups",
+    metadata,
+    # A set of people a role is given to (migration 0046). A group a sign-in provider keeps names the provider and the
+    # exact value it sends (`external_value`); one kept by hand names neither. A group's assignment never carries a
+    # privileged cell (`ops_access.PRIVILEGED`): the store refuses one and `holdings_with` leaves one out.
+    sa.Column("tenant_id", sa.String(64), sa.ForeignKey("tenants.id"), primary_key=True),
+    sa.Column("id", sa.String(64), primary_key=True),
+    sa.Column("name", sa.String(200), nullable=False),
+    sa.Column("provider_id", sa.String(64)),
+    sa.Column("external_value", sa.String(255)),
+    sa.Column("created_by", sa.String(320), nullable=False),
+    sa.Column("created_at", sa.String(40), nullable=False),
+    # A group is picked by name, as a role is.
+    sa.UniqueConstraint("tenant_id", "name", name="uq_groups_name"),
+    info=TENANT_SCOPED,
+)
+group_members = sa.Table(
+    "group_members",
+    metadata,
+    # Who is in a group: `source` is `manual` (an admin added them) or `provider` (their last sign-in said so), so a
+    # sign-in removes only the people it added.
+    sa.Column("tenant_id", sa.String(64), primary_key=True),
+    sa.Column("group_id", sa.String(64), primary_key=True),
+    sa.Column("user_id", sa.String(64), primary_key=True),
+    sa.Column("source", sa.String(16), nullable=False),
+    sa.Column("added_by", sa.String(320), nullable=False),
+    sa.Column("added_at", sa.String(40), nullable=False),
+    # A person's groups, read on every token issue (`holdings_with`).
+    sa.Index("ix_group_members_user", "tenant_id", "user_id"),
+    sa.ForeignKeyConstraint(
+        ["tenant_id", "group_id"], ["groups.tenant_id", "groups.id"], name="fk_group_members_group", ondelete="CASCADE"
+    ),
+    sa.ForeignKeyConstraint(
+        ["tenant_id", "user_id"], ["users.tenant_id", "users.id"], name="fk_group_members_user", ondelete="CASCADE"
+    ),
+    info=TENANT_SCOPED,
+)
 signin_providers = sa.Table(
     "signin_providers",
     metadata,

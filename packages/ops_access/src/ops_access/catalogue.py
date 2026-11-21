@@ -1,10 +1,12 @@
-"""Roles as data: the fixed catalogue of areas and actions, the six built-in roles, and how a person's assignments add
-up to what they may do in each team.
+"""Roles as data: the fixed catalogue of areas and actions, the five seeded roles people are given (`SEEDED_ROLES`),
+the two grids attached by rule (Security admin, Owner), and how a person's assignments add up to what they may do in
+each team.
 
 Areas and actions are fixed in code; a role is a set of (area, action, scope) rows over them, and scope `own` means only
-records the person created or owns. A person holds roles through assignments, each in one team or in every team they
-belong to (`ANY_TEAM`), directly or through a team they are in. What they may do in a team is the union of the
-unexpired assignments that apply there; `all` beats `own` when two roles grant the same action.
+records the person created or owns. A role is given through assignments, each in one team or in every team
+(`ANY_TEAM`), to a person, a team or a group the person is in. What they may do in a team is the union of the
+unexpired assignments that apply there; `all` beats `own` when two roles grant the same action. A group's assignment
+never carries a privileged cell (`PRIVILEGED`, `privileged_cells`).
 
 platform-service stores these rows and seeds the built-in roles from here (migrations 0006-0008 keep their own frozen
 copy); every service decides with `ops_access.can`, which reads this module. The built-in grid equals what the
@@ -40,6 +42,10 @@ AREAS = (
     # What agents remember about a person: edited (corrected or forgotten) by that person only.
     "memory",
     "reviews",
+    # The team's approval rules: who answers before an agent changes an app, and whether whoever asked may also
+    # decide, per area. `manage` is held in the team (a team admin by default, tickable on a custom role), inside the
+    # floor the Security team sets (`approvalsFloor`).
+    "approvals",
     "cases",
     "deployments",
     "settings",
@@ -117,7 +123,9 @@ _MEMBER: list[Grant] = [
 # Builders do everything in their team except people and access, the workspace's settings, and the team's webhooks and
 # usage, which stay team-admin data (D59): connections, secrets and auth configs included, which builders read
 # (`_READS`) and admins change. What agents remember about a person stays that person's to edit.
-_NOT_BUILDERS = ("access", "settings", "workspace", "webhooks", "usage", "connections", "secrets_egress")
+_NOT_BUILDERS = (
+    "access", "settings", "workspace", "webhooks", "usage", "connections", "secrets_egress", "approvals"
+)  # fmt: skip
 _BUILDS: list[Grant] = [
     (area, action, "own" if (area, action) == ("memory", "edit") else "all")
     for area in AREAS
@@ -207,6 +215,41 @@ OWNER = BuiltinRole(
 )
 BUILTIN_ROLES = (ADMIN, BUILDER, REVIEWER, VIEWER, SECURITY_ADMIN, CHAT_USER, OWNER)
 BUILTIN_IDS = frozenset(r.id for r in BUILTIN_ROLES)
+# The roles a new workspace starts with and people are given, each editable and reset to this seed. Security admin and
+# Owner are seeded too but attached by rule, never picked: Security admin comes with Admin of the Security team, Owner
+# with the workspace's one owner.
+SEEDED_ROLES = (ADMIN, BUILDER, REVIEWER, VIEWER, CHAT_USER)
+
+# Cells a group's assignment never carries, so editing a group at the identity provider never makes anyone an admin:
+# changing who may do what (every `access` action but reading it, which every member holds), the workspace itself, and
+# what every team may reach (the Security team's actions, and the team's secrets beyond reading the list).
+# `secrets_egress.decide` (a module's security review) counts only where it grants something, in the Security team or
+# every team, so a group may still give Reviewer in an ordinary team.
+PRIVILEGED = frozenset(
+    {
+        *(("access", action) for action in ACTIONS if action != "view"),
+        ("workspace", "manage"),
+        ("secrets_egress", "create"),
+        ("secrets_egress", "edit"),
+        ("secrets_egress", "delete"),
+        *SECURITY_TEAM_ACTIONS,
+    }
+)
+_ONLY_IN_SECURITY_TEAM = frozenset({("secrets_egress", "decide")})
+
+
+def privileged_cells(grants: Iterable[Grant], *, team: str, security_team: str | None) -> list[str]:
+    """The privileged cells (`area.action`) a role would carry if a group were given it in `team` (a team id or
+    `ANY_TEAM`); empty when a group may be given it there."""
+    where_it_counts = team in (ANY_TEAM, security_team)
+    return sorted(
+        {
+            f"{a}.{x}"
+            for a, x, _ in grants
+            if (a, x) in PRIVILEGED and ((a, x) not in _ONLY_IN_SECURITY_TEAM or where_it_counts)
+        }
+    )
+
 
 # members.role to the built-in role it becomes; the stored value `approver` is shown as Reviewer.
 MEMBER_ROLE_TO_BUILTIN = {
@@ -237,7 +280,7 @@ class Assignment:
     role_id: str
     role_name: str
     team_id: str  # a team id, or ANY_TEAM
-    via: Literal["person", "team"]
+    via: Literal["person", "team", "group"]
     expires_at: str | None = None
 
 

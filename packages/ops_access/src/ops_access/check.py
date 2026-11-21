@@ -13,10 +13,10 @@ A person's action is held in the team the record belongs to, which must be the t
 `team_forbidden` naming it otherwise), except the Security team's actions (`SECURITY_TEAM_ACTIONS`), held in the
 Security team whatever team the request acts in. Scope `own` passes only for a record whose `owner` is the caller.
 `not_by` names people who may never take the action, such as an earlier approver of a two-person decision (403
-`own_request`); `requested_by` names who asked for it (or saved or started it), refused the same way only while the
-tenant's `requesterMayDecide` policy is off. Both are separation of duties, not role rules, so they bind the
-dev header caller too. A token
-without the `access` claim maps `roles` through the membership mapping, which the grid test proved equal.
+`own_request`); `requested_by` names who asked for it (or saved or started it), refused the same way unless the
+team's `requesterMayDecide` is on for the area and the Security team's `approvalsFloor` does not lock it off. Both
+are separation of duties, not role rules, so they bind the dev header caller too. A token without the `access` claim
+maps `roles` through the membership mapping, which the grid test proved equal.
 
 The grid for a role id comes from `Grids`, cached by (tenant, permission version): the version rises with every role,
 assignment or membership change, so a cached grid is never stale for the token that carries its version. Built-in
@@ -44,7 +44,7 @@ from .catalogue import (
     builtin_roles_for,
     decode_grid,
 )
-from .policies import policy
+from .policies import policy, requester_may_decide
 
 BUILTIN_GRIDS: dict[str, tuple[Grant, ...]] = {r.id: r.grants for r in BUILTIN_ROLES}
 BUILTIN_NAMES = {r.id: r.name for r in BUILTIN_ROLES}
@@ -176,7 +176,10 @@ class Access:
             self._may_change_system(p, area, team=team, owner=owner, what=what, from_any_team=from_any_team)
         if p.kind == "service":
             return _service(p, area, action, team)
-        refused = [*not_by, *(requested_by if not policy(p, "requesterMayDecide") else ())]
+        may_decide = requester_may_decide(
+            policy(p, "requesterMayDecide"), team or p.team_id, area, policy(p, "approvalsFloor")
+        )
+        refused = [*not_by, *(requested_by if not may_decide else ())]
         if any(n and n.lower() in (p.email.lower(), p.sub.lower()) for n in refused):
             raise Forbidden(f"{you} asked for {what}, so someone else has to decide it.", code="own_request")
         if p.auth_method == "dev" and not p.roles and not p.access:

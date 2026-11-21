@@ -1,8 +1,9 @@
 """The rules an admin may set for a workspace, with each default in one place. Most defaults are open, agents' changes
 to apps included (appChanges: no team asks); the ones that hold something back are requesterMayDecide (off) and the
-AI uses (aiSteps, taskAssist, checkBeforeSend). A team changes any of them. Every value is changed through
-`can(settings, manage)` in the security team. platform-service stores the values per tenant and puts them on every
-token; services read them there with `policy(p, key)`."""
+AI uses (aiSteps, taskAssist, checkBeforeSend). A team changes any of them. Each value is changed through `can()` on
+the policy's `changed_by` cell: most in the Security team; the team's approval rules (`approvals.manage`) in the team,
+inside the floor the Security team sets (`approvalsFloor`). platform-service stores the values per tenant and puts
+them on every token; services read them there with `policy(p, key)`."""
 
 from __future__ import annotations
 
@@ -12,6 +13,8 @@ from typing import Any, TypedDict, cast
 from ops_identity import Principal
 from ops_service_kit.http import Json
 from ops_service_kit.narrow import json_object
+
+from .catalogue import AREAS
 
 
 @dataclass(frozen=True)
@@ -25,7 +28,9 @@ class Policy:
     # "hours": a whole number of hours; "publish_modes": one team's {area: mode}, see PUBLISH_AREAS and PUBLISH_MODES.
     # "names": a list of names (appWritesNeedApproval: app ids). "choice": one of `choices`.
     # "app_changes": one team's {ask, answer, reviewerRole, testAccountsNeverAsk} (appChanges); "app_changes_by_app":
-    # one team's {app id: {answer, reviewerRole}} (appChangesByApp).
+    # one team's {app id: {answer, reviewerRole}} (appChangesByApp). "by_area": one team's switch, true or false for
+    # every area, or {area: true or false} (requesterMayDecide). "floor_rules": the Security team's floor under the
+    # teams' approval rules (approvalsFloor, see FLOOR_RULES).
     kind: str = "bool"
     # The grid cell a change needs; the security team holds it.
     changed_by: tuple[str, str] = ("settings", "manage")
@@ -47,7 +52,13 @@ class Policy:
     maximum: int | None = None
 
 
-KINDS = ("bool", "floor", "days", "hours", "publish_modes", "names", "choice", "app_changes", "app_changes_by_app")
+KINDS = (
+    "bool", "floor", "days", "hours", "publish_modes", "names", "choice", "app_changes", "app_changes_by_app",
+    "by_area", "floor_rules",
+)  # fmt: skip
+
+# The team's approval rules: changed by `approvals.manage` in the team, under the Security team's floor.
+APPROVALS = ("approvals", "manage")
 
 
 # Which publishes wait for a second person's review (moved here), per team and area:
@@ -62,10 +73,26 @@ DEFAULT_PUBLISH_MODE = "major"
 POLICIES: tuple[Policy, ...] = (
     Policy(
         "requesterMayDecide",
-        # Off by default: someone other than the person who asked decides. A workspace that set it on keeps that.
+        # Off by default: someone other than the person who asked decides. Per team and per area: a team turns it on
+        # for one area at a time. A stored true from before it was per team means on in every team and area, so a
+        # workspace that set it on keeps that.
         False,
-        "The person who asked for a decision may also make it. Off (the default): someone else has to decide.",
+        "The person who asked for a decision may also make it, in the areas the team turns on. Off (the default): "
+        "someone else has to decide.",
+        kind="by_area",
+        changed_by=APPROVALS,
+        per_team=True,
+        held_in="team",
         title="Requester may decide",
+    ),
+    Policy(
+        "approvalsFloor",
+        # No floor: each team sets its own approval rules.
+        {},
+        "The least every team's approval rules must ask, which no team can loosen: whoever asked never decides, or "
+        "an agent's change to an app always waits for the person or a reviewer.",
+        kind="floor_rules",
+        title="Approval floor",
     ),
     Policy(
         "extractionFloor",
@@ -133,8 +160,8 @@ POLICIES: tuple[Policy, ...] = (
         "Ask before an agent changes anything in an app. Off: agents change apps without asking. On: the person in "
         "the chat confirms, or a reviewer of a chosen role approves.",
         kind="app_changes",
-        # A team admin's: settings.manage in the team.
-        changed_by=("settings", "manage"),
+        # A team admin's by default: approvals.manage in the team.
+        changed_by=APPROVALS,
         per_team=True,
         held_in="team",
         live=True,
@@ -146,7 +173,7 @@ POLICIES: tuple[Policy, ...] = (
         {},
         "Per app: use the team setting, or change without asking, ask the person, or ask a reviewer.",
         kind="app_changes_by_app",
-        changed_by=("settings", "manage"),
+        changed_by=APPROVALS,
         per_team=True,
         held_in="team",
         live=True,
@@ -157,7 +184,8 @@ POLICIES: tuple[Policy, ...] = (
         # Derived from appChanges for one release (on when the team asks a reviewer); a write to it lands in appChanges.
         {},
         "Every tool write by the team waits for a person's approval, including the ones a tool lets run at once.",
-        changed_by=("reviews", "manage"),
+        changed_by=APPROVALS,
+        held_in="team",
         per_team=True,
         live=True,
         title="Approve every tool write",
@@ -169,7 +197,8 @@ POLICIES: tuple[Policy, ...] = (
         {},
         "Writes from the listed apps wait for a person's approval. Other writes run unless their tool asks for one.",
         kind="names",
-        changed_by=("reviews", "manage"),
+        changed_by=APPROVALS,
+        held_in="team",
         per_team=True,
         live=True,
         title="Approve writes of these apps",
@@ -180,8 +209,8 @@ POLICIES: tuple[Policy, ...] = (
         {},
         "Writes from the listed apps run in chat without asking the person first. Every other app asks before changes.",
         kind="names",
-        # A team admin's: settings.manage in the team, which builders and members do not hold.
-        changed_by=("settings", "manage"),
+        # A write lands in appChangesByApp, so it is that key's cell: approvals.manage in the team.
+        changed_by=APPROVALS,
         per_team=True,
         held_in="team",
         live=True,
@@ -343,6 +372,16 @@ def check_value(key: str, value: Any) -> Any:
             out[app] = {"answer": entry["answer"], **({"reviewerRole": role} if isinstance(role, str) else {})}
         else:
             return out
+    if policy.kind == "by_area" and isinstance(value, bool):
+        return value
+    if policy.kind == "by_area" and isinstance(value, dict):
+        areas = cast(dict[Any, Any], value)
+        if all(a in AREAS and isinstance(on, bool) for a, on in areas.items()):
+            return {str(a): bool(on) for a, on in areas.items()}
+    if policy.kind == "floor_rules" and isinstance(value, dict):
+        rules = cast(dict[Any, Any], value)
+        if all(k in FLOOR_RULES and v in FLOOR_RULES[k] for k, v in rules.items()):
+            return {str(k): v for k, v in rules.items()}
     if policy.kind == "publish_modes" and isinstance(value, dict):
         modes = cast(dict[Any, Any], value)
         if all(a in PUBLISH_AREAS and m in PUBLISH_MODES for a, m in modes.items()):
@@ -358,6 +397,8 @@ def check_value(key: str, value: Any) -> Any:
         "app_changes": "{ask, answer (none, person or reviewer), reviewerRole, testAccountsNeverAsk, testRunsAsk, "
         "makersAsk}",
         "app_changes_by_app": "an object of app id to {answer (none, person or reviewer), reviewerRole}",
+        "by_area": "true or false, or an object of area to true or false",
+        "floor_rules": "an object with requesterMayDecide (false) and appChanges (person or reviewer)",
     }
     raise ValueError(f"{key} takes {takes[policy.kind]}")
 
@@ -406,6 +447,51 @@ def publish_mode(modes: dict[str, Any], team: str, area: str) -> str:
 
 
 ANSWERS = ("none", "person", "reviewer")
+
+# What the Security team may lock under every team's approval rules (`approvalsFloor`), each with the values it takes:
+# requesterMayDecide false (nobody decides their own request, in any team or area); appChanges the least answer an
+# agent's change to an app waits for (the person, or a reviewer), at the team, app and tool level alike.
+FLOOR_RULES: dict[str, tuple[Any, ...]] = {"requesterMayDecide": (False,), "appChanges": ("person", "reviewer")}
+
+
+def requester_may_decide(value: object, team: str | None, area: str, floor: object = None) -> bool:
+    """Whether whoever asked for a decision in `area` of `team` may also take it, from `requesterMayDecide` as a token
+    or GET /v1/policies carries it and the Security team's `approvalsFloor`. The one reader of the value's shape: true
+    or false for every team (a value stored before it was per team, or a dev policy); else per team ({team or `*`:
+    true, false or {area: true or false}}), the team's own part over the workspace's `*`. Anything else is off."""
+    if json_object(floor).get("requesterMayDecide") is False:
+        return False
+    if isinstance(value, bool):
+        return value
+    held = json_object(value)
+    part = held.get(team) if team is not None and team in held else held.get("*")
+    if isinstance(part, bool):
+        return part
+    return json_object(part).get(area) is True
+
+
+def below_floor(key: str, value: object, floor: object) -> str | None:
+    """Why one team's value of an approval rule is looser than the Security team's floor, or None when it is not.
+    `value` is the team's part as `check_value` keeps it: requesterMayDecide true or {area: bool}; appChanges {ask,
+    answer}; appChangesByApp {app or tool: {answer}}."""
+    rules = json_object(floor)
+    if key == "requesterMayDecide" and rules.get("requesterMayDecide") is False:
+        on = value is True or True in json_object(value).values()
+        return "The Security team does not let whoever asked decide their own request." if on else None
+    least = rules.get("appChanges")
+    if least not in ("person", "reviewer"):
+        return None
+    rank = {"none": 0, "person": 1, "reviewer": 2}
+    asks = {"person": "the person or a reviewer", "reviewer": "a reviewer"}[str(least)]
+    need = f"The Security team requires every change to an app to ask {asks}."
+    if key == "appChanges":
+        held = json_object(value)
+        answer = held.get("answer", "person") if held.get("ask") else "none"
+        return need if rank.get(str(answer), 0) < rank[str(least)] else None
+    if key == "appChangesByApp":
+        answers = [json_object(e).get("answer") for e in json_object(value).values()]
+        return need if any(rank.get(str(a), 0) < rank[str(least)] for a in answers) else None
+    return None
 
 
 class EffectiveAnswer(TypedDict):
