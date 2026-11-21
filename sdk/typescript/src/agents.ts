@@ -16,6 +16,11 @@ function replyText(data: unknown): string {
   return rec.data !== data ? replyText(rec.data) : '';
 }
 
+type Read = { version: number; digest?: string | null };
+
+/** `fields` naming the copy they were made on: the `version` and `digest` of the agent or skill as `read`. The service refuses a save made from an older copy (`stale_base`), so it never writes over a change saved since. */
+export const based = (fields: Record<string, unknown>, read: Read) => ({ ...fields, baseVersion: read.version, baseDigest: read.digest });
+
 export class Agents {
   constructor(private readonly raw: { agents: any }) {}
 
@@ -31,6 +36,13 @@ export class Agents {
     return this.raw.agents.agents_create_agent({ body: body as never });
   }
 
+  /** Saves `fields` on the agent's draft. `base` is the agent as last read, naming the copy the change was made on; left out, the agent is read first. A save from an older copy is refused with `stale_base`. */
+  async update(id: string, fields: Record<string, unknown>, base?: Read) {
+    // A list row carries no digest, so it cannot name a copy.
+    const read = base?.digest ? base : await this.get(id);
+    return this.raw.agents.agents_update_agent({ path: { agent_id: id }, body: based(fields, read) as never });
+  }
+
   /** The operations an agent may be granted: published ones, as the agent page's picker lists them. */
   async toolOptions(search?: string): Promise<any[]> {
     const rows: any[] = [];
@@ -40,9 +52,9 @@ export class Agents {
 
   /** Adds tools (their ids from `toolOptions`) to the agent's draft, keeping the ones it holds. Publish it for the grant to take effect. */
   async grantTools(id: string, tools: string[]) {
-    const held: string[] = (await this.get(id)).toolIds ?? [];
-    const wanted = [...held, ...tools.filter((t) => !held.includes(t))];
-    return this.raw.agents.agents_update_agent({ path: { agent_id: id }, body: { toolIds: wanted } as never });
+    const agent = await this.get(id);
+    const held: string[] = agent.toolIds ?? [];
+    return this.update(id, { toolIds: [...held, ...tools.filter((t) => !held.includes(t))] }, agent);
   }
 
   /** What the agent's brief can mention with @, grouped by kind; each item says whether the agent holds it. `ids` (`kind:id` each) answers the labels of what a saved text names. */
@@ -86,7 +98,7 @@ export class Agents {
     const later = Object.fromEntries(['brief', 'promptMode', 'patterns'].filter((k) => definition[k] !== undefined).map((k) => [k, definition[k]]));
     const made = this.raw.agents.agents_create_agent({ body: body as never });
     if (!Object.keys(later).length) return made;
-    return made.then((agent: { id: string }) => this.raw.agents.agents_update_agent({ path: { agent_id: agent.id }, body: later as never }));
+    return made.then((agent: Read & { id: string }) => this.update(agent.id, later, agent));
   }
 
   async publish(id: string, note = '', version?: number) {

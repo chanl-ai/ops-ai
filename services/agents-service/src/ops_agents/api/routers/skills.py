@@ -28,8 +28,9 @@ from ops_service_kit.logging import get_logger
 from ops_store import isolation
 
 from ...app.skill_content import runs_of
+from ...store.agent_registry import digest_of, refuse_stale
 from ...store.skill_list import View, menu_versions, newest_specs, offered_by, skills_page
-from ...store.skills import SkillRow
+from ...store.skills import SkillRow, SkillVersionRow
 from ...store.template_copies import TemplateCopies
 from ..agent_registry import AgentSpec, require_owner_or_admin
 from ..agent_registry import registry as agent_registry
@@ -138,7 +139,10 @@ class SkillDraftPatch(In):
     returns: list[ReturnField] | None = Field(default=None, max_length=12)
     success: list[SuccessLine] | None = Field(default=None, max_length=8)
     note: str = ""
+    # The copy the change was made on: the skill's `version` and `digest` as last read. A draft is rewritten in place
+    # under one version number, so the digest is what tells an old copy of it from the newest.
     base_version: int
+    base_digest: str
 
 
 class ReviewInput(In):
@@ -302,41 +306,42 @@ async def create_skill(rt: Rt, me: Me, body: SkillCreateInput) -> JSONResponse:
     return ok(await detail(rt, sid), 201)
 
 
-async def _editable(rt: Runtime, me: Principal, skill_id: str, base_version: int) -> int:
-    """The newest version once a draft save may write it: 409 when the skill is deprecated, `base_version` is not
-    the newest version, or the newest is in review."""
+async def _editable(rt: Runtime, me: Principal, skill_id: str, base: tuple[int, str]) -> SkillVersionRow:
+    """The newest version once a draft save may write it: 409 when the skill is deprecated, `base` (the version and
+    digest the change was made on) is not the newest version, or the newest is in review."""
     row = await changeable(rt, me, skill_id, "edit")
     if row.deprecated_reason:
         raise Conflict("The skill is deprecated; it takes no new versions.", code="skill_deprecated")
-    if base_version != row.version:
-        raise Conflict(f"v{row.version} was saved after v{base_version}; reload and edit again.", code="stale_base")
+    newest = await skills(rt).version(skill_id, row.version)
+    assert newest is not None
+    refuse_stale(base, row.version, newest.digest, saved_by=newest.saved_by, saved_at=newest.saved_at)
     if any(r.status == "pending" for r in await agent_registry(rt).requests("skill", skill_id)):
         raise Conflict("The newest version is in review; decide the review first.", code="review_open")
-    return row.version
+    return newest
 
 
 @router.put("/v1/skills/{skill_id}/draft", response_model=Envelope[SkillDetail])
 async def save_skill_draft(rt: Rt, me: Me, skill_id: str, body: SkillDraftPatch) -> JSONResponse:
-    """Edits the newest draft, or opens the next version on top of the published one. 409 when `baseVersion` is
-    not the newest version, or the skill is deprecated or in review. The checks run again in the transaction that
-    writes, after the tools are checked against tools-service with nothing open, so a save landing in between answers
-    `stale_base`."""
+    """Edits the newest draft, or opens the next version on top of the published one. 409 `stale_base` when
+    `baseVersion` and `baseDigest` are not the newest copy (its details name who saved it and when); 409 too when the
+    skill is deprecated or in review. The checks run again in the transaction that writes, after the tools are checked
+    against tools-service with nothing open, so a save landing in between answers `stale_base`."""
     reg = skills(rt)
+    base = (body.base_version, body.base_digest)
     async with isolation.request_transaction():
-        newest = await reg.version(skill_id, await _editable(rt, me, skill_id, body.base_version))
+        newest = await _editable(rt, me, skill_id, base)
         owner = (await reg.row(skill_id)).team_id
-    assert newest is not None
     tools = narrow.a_list(newest.content["tools"], "tools")
     merged: dict[str, JsonValue] = {
         **newest.content,
         "toolIds": [narrow.an_object(t, "tool")["toolId"] for t in tools],
     }
-    merged |= body.model_dump(by_alias=True, exclude_none=True, exclude={"note", "base_version"})
+    merged |= body.model_dump(by_alias=True, exclude_none=True, exclude={"note", "base_version", "base_digest"})
     merged.pop("slug", None)
     content = await check_content(rt, merged, skill_id=skill_id, team_id=owner)
     async with isolation.request_transaction():
-        await _editable(rt, me, skill_id, body.base_version)
-        await reg.save_draft(skill_id, content, by=me.email, note=body.note)
+        await _editable(rt, me, skill_id, base)
+        await reg.save_draft(skill_id, content, by=me.email, note=body.note, base=base)
         return ok(await detail(rt, skill_id))
 
 
@@ -427,6 +432,8 @@ async def attach_skill(rt: Rt, me: Me, _: Tx, agent_id: str, skill_id: str, body
     reg = agent_registry(rt)
     row = await agent_changeable(rt, me, agent_id, "attach a skill to")
     spec = dict((await reg.version(agent_id, row.version)).spec)
+    # The copy the pin is added to: a save landing before the one below is never written over (409 `stale_base`).
+    base = (row.version, digest_of(spec))
     version = body.version
     if version is None:
         found = await skills(rt).find(skill_id)
@@ -435,7 +442,7 @@ async def attach_skill(rt: Rt, me: Me, _: Tx, agent_id: str, skill_id: str, body
         version = found.published_version
     pins = await pin(rt, cast(AgentSpec, spec), skill_id, version, by=me.email, at=now_iso())
     spec["skillPins"] = cast(JsonList, [*pins])
-    await reg.save(agent_id, spec, by=me.email, note=f"Attached {skill_id} v{version}")
+    await reg.save(agent_id, spec, by=me.email, note=f"Attached {skill_id} v{version}", base=base)
     return ok(await agent_skills(rt, agent_id))
 
 
@@ -444,6 +451,7 @@ async def detach_skill(rt: Rt, me: Me, _: Tx, agent_id: str, skill_id: str) -> J
     reg = agent_registry(rt)
     row = await agent_changeable(rt, me, agent_id, "detach a skill from")
     spec = dict((await reg.version(agent_id, row.version)).spec)
+    base = (row.version, digest_of(spec))
     # A pin that is not an object, or names no skill, raises as indexing it did.
     held = narrow.a_list(spec.get("skillPins") or [], "skill pins")
     pins: JsonList = [p for p in held if narrow.an_object(p, "skill pin")["skillId"] != skill_id]
@@ -461,5 +469,5 @@ async def detach_skill(rt: Rt, me: Me, _: Tx, agent_id: str, skill_id: str) -> J
             code="skill_in_use_by_skill",
         )
     spec["skillPins"] = pins
-    await reg.save(agent_id, spec, by=me.email, note=f"Detached {skill_id}")
+    await reg.save(agent_id, spec, by=me.email, note=f"Detached {skill_id}", base=base)
     return ok(await agent_skills(rt, agent_id))

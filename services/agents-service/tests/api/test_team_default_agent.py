@@ -32,6 +32,7 @@ from ops_service_kit.settings import Settings
 from tests.api.test_action_roles import ADMIN, OUTSIDER, REVIEWER, VIEWER, introspect
 from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model, sse_events
 from tests.engine.test_lifecycle_rights import TENANT, jwks, person
+from tests.saves import save_agent
 
 URL = "/v1/chat/default-agent"
 Stack = tuple[AsyncClient, Runtime]
@@ -177,7 +178,7 @@ async def called(rt: Runtime) -> list[str]:
 async def grant_dispute(c: AsyncClient) -> None:
     """Publishes Branch Concierge holding `agent:ag_dispute`, as a builder grants one agent another."""
     held: list[str] = (await c.get("/v1/agents/ag_branch", headers=ADMIN)).json()["data"]["toolIds"]
-    saved = await c.patch("/v1/agents/ag_branch", json={"toolIds": [*held, "agent:ag_dispute"]}, headers=ADMIN)
+    saved = await save_agent(c, "ag_branch", {"toolIds": [*held, "agent:ag_dispute"]}, headers=ADMIN)
     assert saved.status_code == 200, saved.text
     body = {"version": saved.json()["data"]["version"], "note": "go"}
     asked = await c.post("/v1/agents/ag_branch/publish-requests", json=body, headers=ADMIN)

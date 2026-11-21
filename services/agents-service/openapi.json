@@ -392,6 +392,17 @@
           "controls": {
             "$ref": "#/components/schemas/AgentControls"
           },
+          "digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Digest"
+          },
           "guardrailPins": {
             "items": {
               "$ref": "#/components/schemas/GuardrailPin"
@@ -897,6 +908,14 @@
             ],
             "title": "Allteamknowledgebases"
           },
+          "baseDigest": {
+            "title": "Basedigest",
+            "type": "string"
+          },
+          "baseVersion": {
+            "title": "Baseversion",
+            "type": "integer"
+          },
           "brief": {
             "anyOf": [
               {
@@ -1152,6 +1171,10 @@
             ]
           }
         },
+        "required": [
+          "baseVersion",
+          "baseDigest"
+        ],
         "title": "AgentPatch",
         "type": "object"
       },
@@ -18343,6 +18366,10 @@
           "content": {
             "$ref": "#/components/schemas/SkillContent"
           },
+          "digest": {
+            "title": "Digest",
+            "type": "string"
+          },
           "draftVersion": {
             "anyOf": [
               {
@@ -18572,6 +18599,7 @@
           "updatedBy",
           "origin",
           "content",
+          "digest",
           "versions",
           "tests",
           "runs",
@@ -18586,6 +18614,10 @@
       "SkillDraftPatch": {
         "additionalProperties": false,
         "properties": {
+          "baseDigest": {
+            "title": "Basedigest",
+            "type": "string"
+          },
           "baseVersion": {
             "title": "Baseversion",
             "type": "integer"
@@ -18803,7 +18835,8 @@
           }
         },
         "required": [
-          "baseVersion"
+          "baseVersion",
+          "baseDigest"
         ],
         "title": "SkillDraftPatch",
         "type": "object"
@@ -29272,7 +29305,7 @@
         "x-ops-public": "sdk"
       },
       "patch": {
-        "description": "Saves the patched spec as a new draft version; what is live does not change until it is published.",
+        "description": "Saves the patched spec as the agent's draft; what is live does not change until it is published.\n\n409 `stale_base` when `baseVersion` and `baseDigest` are not the newest copy (its details name who saved it and\nwhen): read the agent again and repeat the change.",
         "operationId": "agents_update_agent",
         "parameters": [
           {
@@ -51791,7 +51824,7 @@
     },
     "/v1/skills/{skill_id}/draft": {
       "put": {
-        "description": "Edits the newest draft, or opens the next version on top of the published one. 409 when `baseVersion` is\nnot the newest version, or the skill is deprecated or in review. The checks run again in the transaction that\nwrites, after the tools are checked against tools-service with nothing open, so a save landing in between answers\n`stale_base`.",
+        "description": "Edits the newest draft, or opens the next version on top of the published one. 409 `stale_base` when\n`baseVersion` and `baseDigest` are not the newest copy (its details name who saved it and when); 409 too when the\nskill is deprecated or in review. The checks run again in the transaction that writes, after the tools are checked\nagainst tools-service with nothing open, so a save landing in between answers `stale_base`.",
         "operationId": "agents_save_skill_draft",
         "parameters": [
           {

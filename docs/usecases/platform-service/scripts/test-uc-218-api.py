@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import secrets
 
-from usecase_harness import INVITED_PASSWORD, bearer, check, data, finish, invited, people_stack, signed_in
+from usecase_harness import INVITED_PASSWORD, bearer, check, data, finish, invited, people_stack, save_agent, signed_in
 
 PRIYA = "p.shah@harborpine.example"
 
@@ -38,7 +38,7 @@ with people_stack(agents_env={"OPS_REGISTRY_AUTO_APPROVE": "false"}) as (api, ag
     )
     r = agents.post("/v1/agents", json={"name": "Reviewer's agent", "role": "Answers"}, headers=reviewer)
     check("the reviewer cannot create an agent (403)", r.status_code == 403, r.text[:200])
-    r = agents.patch(f"/v1/agents/{agent['id']}", json={"role": "Changed by a reviewer"}, headers=reviewer)
+    r = save_agent(agents, agent["id"], {"role": "Changed by a reviewer"}, headers=reviewer)
     check("the reviewer cannot edit the agent they approved (403)", r.status_code == 403, r.text[:200])
 
 finish()

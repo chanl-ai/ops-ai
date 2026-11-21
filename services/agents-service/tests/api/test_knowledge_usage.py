@@ -11,6 +11,8 @@ from httpx import AsyncClient
 from ops_agents.api.agent_registry import SEED_TEAM
 from ops_identity import dev_service_signer, mint_service_token
 
+from ..saves import save_agent
+
 URL = "/v1/knowledge-usage"
 
 
@@ -36,7 +38,7 @@ async def test_a_base_lists_the_agents_whose_live_version_cites_it(client: Async
     assert all(live["id"] in usage[kb] for kb in live["collections"]), (live["id"], live["collections"], usage)
     # A real base the live version does not cite: a save refuses an unknown value.
     extra = next(k for k in ("kb_lending", "kb_legal", "kb_support", "kb_people") if k not in live["collections"])
-    saved = await client.patch(f"/v1/agents/{live['id']}", json={"collections": [*live["collections"], extra]})
+    saved = await save_agent(client, live["id"], {"collections": [*live["collections"], extra]})
     assert saved.status_code == 200, saved.text
     assert live["id"] not in (await _usage(client)).get(extra, []), "a saved, unpublished grant is not live"
 

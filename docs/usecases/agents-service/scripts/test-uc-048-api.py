@@ -14,7 +14,18 @@ from typing import Any
 os.environ["OPS_DEV_POLICIES"] = '{"requesterMayDecide": false}'
 
 from fake_bank_https import HOST, fake_bank
-from usecase_harness import AGENTS_PORT, TOOLS_PORT, agents, approve_tool_review, check, data, finish, sse, tools
+from usecase_harness import (
+    AGENTS_PORT,
+    TOOLS_PORT,
+    agents,
+    approve_tool_review,
+    check,
+    data,
+    finish,
+    save_agent,
+    sse,
+    tools,
+)
 
 # The fixture knowledge bases' team (seed_fixture_knowledge.py, the dev default): a chat sees only its own team's
 # bases, so the chat runs in Operations.
@@ -118,13 +129,13 @@ with (
         api.post("/v1/agents", json={"name": f"Account Checker {RUN}", "role": "Checks accounts"}, headers=TEAM)
     )
     aid = agent["id"]
-    refused = api.patch(f"/v1/agents/{aid}", json={"toolIds": ["lookup_account"]}, headers=TEAM)
+    refused = save_agent(api, aid, {"toolIds": ["lookup_account"]}, headers=TEAM)
     check(
         "granting a tool the registry does not offer is refused (400 unknown_tool)",
         refused.status_code == 400 and refused.json()["error"]["code"] == "unknown_tool",
         refused.text[:200],
     )
-    granted = api.patch(f"/v1/agents/{aid}", json={"toolIds": [READ, WRITE]}, headers=TEAM)
+    granted = save_agent(api, aid, {"toolIds": [READ, WRITE]}, headers=TEAM)
     check("granting the published operations is accepted", granted.status_code == 200, granted.text[:200])
     published = api.post(
         f"/v1/agents/{aid}/publish-requests", json={"version": data(granted)["version"], "note": "uc-048"}, headers=TEAM

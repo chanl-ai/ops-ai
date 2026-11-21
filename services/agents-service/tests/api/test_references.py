@@ -12,6 +12,8 @@ from ops_agents.api.routers import references as route
 from tests.api.test_widget_embed import BUILDER, OUTSIDER, VIEWER
 from tests.api.test_widget_route_pins import client  # pyright: ignore[reportPrivateUsage]
 
+from ..saves import save_agent
+
 __all__ = ["client"]
 
 AGENT = "ag_fraud"
@@ -91,12 +93,12 @@ async def test_references_stay_inside_the_team_and_an_insert_grants_once(
     assert viewer.status_code == 403, viewer.text
 
     # A save that lands while the insert asks another service is not written over: the insert is refused.
-    emptied = await c.patch(f"/v1/agents/{AGENT}", json={"collections": []}, headers=BUILDER)
+    emptied = await save_agent(c, AGENT, {"collections": []}, headers=BUILDER)
     assert emptied.status_code == 200, emptied.text
     asks = getattr(route, "check_knowledge")  # noqa: B009  imported there under this name, not exported
 
     async def saved_meanwhile(*args: Any, **more: Any) -> Any:
-        renamed = await c.patch(f"/v1/agents/{AGENT}", json={"name": "Renamed meanwhile"}, headers=BUILDER)
+        renamed = await save_agent(c, AGENT, {"name": "Renamed meanwhile"}, headers=BUILDER)
         assert renamed.status_code == 200, renamed.text
         return await asks(*args, **more)
 

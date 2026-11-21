@@ -1,6 +1,7 @@
 // uc-095 an agent fills a pinned widget and lays out its own in chat, ui layer:
 // docs/usecases/console/agent-fills-widgets.md. Scripted model only; signed in through platform-service.
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
+import { saveAgent } from '../../lib/agent_save.mjs';
 
 const agentsUrl = `http://127.0.0.1:${AGENTS_PORT}`;
 const TAG = Math.random().toString(36).slice(2, 6);
@@ -47,7 +48,7 @@ await withUiStack(
       await page.keyboard.press('Escape');
       // Off the page first: it saves its draft on its own, and a save landing after this grant would undo it.
       await page.goto('about:blank');
-      const granted = await fetch(`${agentsUrl}/v1/agents/${agent.id}`, { method: 'PATCH', headers: J, body: JSON.stringify({ toolIds: ['lookup_account'] }) });
+      const granted = await saveAgent(agentsUrl, J, agent.id, { toolIds: ['lookup_account'] });
       if (!granted.ok) throw new Error(`setup: granting lookup_account answered ${granted.status}: ${await granted.text()}`);
       await page.goto(`${consoleUrl}/agents/${agent.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await page.getByTestId('agent-widget-pins').getByRole('button', { name: 'Choose widgets' }).click({ timeout: 120_000 });

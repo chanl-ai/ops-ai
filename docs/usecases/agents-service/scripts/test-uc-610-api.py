@@ -16,7 +16,7 @@ import os
 from typing import Any
 
 import httpx
-from usecase_harness import DEMO_JAMES, DEMO_MAYA, chat, check, data, demo, finish, turn_text
+from usecase_harness import DEMO_JAMES, DEMO_MAYA, chat, check, data, demo, finish, save_agent, turn_text
 
 AGENT = "ag_advisor"
 UNGRANTED = "open_dispute"
@@ -39,7 +39,7 @@ def grant_bank(api: httpx.Client) -> list[str]:
         if not str(t["id"]).startswith("workflow:")
     ]
     held = [t for t in tools if t != UNGRANTED]
-    patched = data(api.patch(f"/v1/agents/{AGENT}", json={"toolIds": held}, headers=OPS))
+    patched = data(save_agent(api, AGENT, {"toolIds": held}, headers=OPS))
     body = {"version": patched["version"], "note": "uc-610 many tools"}
     published = api.post(f"/v1/agents/{AGENT}/publish-requests", json=body, headers=OPS)
     assert published.status_code < 300, published.text[:300]

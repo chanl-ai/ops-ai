@@ -41,6 +41,7 @@ from usecase_harness import (
     finish,
     kb,
     platform,
+    save_agent,
     signed_in,
     tools,
 )
@@ -518,7 +519,7 @@ def resource_stories(
 
     # 52. The team edits its copy, then takes the update: the team's edit is never overwritten.
     edit = "Read the ticket and answer in the team's own words."
-    patched = api.patch(f"/v1/agents/{helper_id}", json={"instructions": edit}, headers=OPS) if helper_id else None
+    patched = save_agent(api, helper_id, {"instructions": edit}, headers=OPS) if helper_id else None
     take = api.post(f"/v1/resources/{DESK}:{AGENT}/copies/{helper_id}/update", json={}, headers=OPS)
     after = (data(api.get(f"/v1/agents/{helper_id}", headers=OPS)) or {}).get("instructions") if helper_id else None
     check(
