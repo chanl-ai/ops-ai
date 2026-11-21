@@ -106,3 +106,14 @@ async def test_a_failing_step_shows_people_a_plain_message_and_keeps_the_detail_
     [failed] = [e for e in events if e.type == "failed"]
     data = cast(dict[str, Any], failed.data or {})
     assert data.get("message") == error and "is empty when ack opens" in str(data.get("detail")), failed
+    # The one error model: a step that cannot open on its input is `input`, not retryable, and the sentence a customer
+    # may read carries no step id, code or exception text.
+    failure = shown["failure"]
+    assert (failure["kind"], failure["code"], failure["retryable"], failure["nodeId"]) == (
+        "input",
+        "input_invalid",
+        False,
+        "ack",
+    ), failure
+    assert failure["message"] == error and failure["nodeName"] == "Send the acknowledgement", failure
+    assert "ack" not in failure["userMessage"] and "_" not in failure["userMessage"], failure

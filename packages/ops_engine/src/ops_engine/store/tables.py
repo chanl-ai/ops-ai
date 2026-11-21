@@ -88,6 +88,9 @@ engine_runs = sa.Table(
     sa.Column("outcome", sa.String(64)),
     sa.Column("output", sa.JSON),
     sa.Column("error", sa.Text),
+    # The error as ops_contracts.errors.RunError records it ({kind, code, message, userMessage, retryable, ...}), set
+    # with `error`; None on a run that has not failed and on runs that failed before agents migration 0120.
+    sa.Column("failure", sa.JSON),
     # While waiting: {node, iteration, interruptId, payload}; the Reviews facade reads it.
     sa.Column("waiting", sa.JSON),
     sa.Column("created_by", sa.String(200), nullable=False),

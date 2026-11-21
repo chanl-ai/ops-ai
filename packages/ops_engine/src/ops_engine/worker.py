@@ -24,6 +24,7 @@ from typing import Any, cast
 from langgraph.types import Command
 
 from ops_checkpointer import LeaseSupersededError
+from ops_contracts.errors import CODES, RunError, run_error
 from ops_service_kit.http import Json
 from ops_service_kit.logging import get_logger
 from ops_store import background
@@ -49,11 +50,30 @@ RECURSION_LIMIT = 100
 UNEXPECTED = "The run stopped on an error outside its steps. The technical detail is in the run's events."
 
 
-def failure_of(e: Exception) -> tuple[str, str]:
-    """(plain message, technical detail) for a pass that failed."""
+def failure_of(e: Exception) -> tuple[str, str, RunError]:
+    """(plain message, technical detail, the error model's record) for a pass that failed. A step's failure keeps its
+    code, step and attempt; anything else is ours (`internal_error`)."""
     if isinstance(e, NodeFailedError):
-        return e.plain, e.detail
-    return UNEXPECTED, technical(e)
+        err = run_error(
+            e.code,
+            e.plain,
+            step=e.step,
+            step_name=e.step_name,
+            attempt=e.attempt,
+            of=e.of,
+            retry_after_seconds=e.retry_after,
+        )
+        return e.plain, e.detail, err
+    return UNEXPECTED, technical(e), run_error("internal_error", UNEXPECTED)
+
+
+# The error model's code for a step that left by a way of failing and led the run to a failure End.
+PORT_CODES = {
+    "error": "tool_failed",
+    "refused": "forbidden",
+    "unreadable": "schema_mismatch",
+    "timeout": "step_too_long",
+}
 
 
 class ClaimLostError(RuntimeError):
@@ -263,18 +283,21 @@ class Worker:
             # A write that may have run: the run fails now with the reason, and no pass sends it again.
             log.warning("engine_write_uncertain", run=run.id, work=work.id, error=e.detail)
             with suppress(LeaseSupersededError):
-                await self._fail(run, generation, work, e.plain, e.detail)
+                message, detail, err = failure_of(e)
+                await self._fail(run, generation, work, message, detail, err=err)
         except Exception as e:
             # The run's error is what people read on the run page; the technical text goes on the event and the
             # work row (and on the step's own row for a step that failed).
-            message, detail = failure_of(e)
-            log.exception("engine_pass_failed", run=run.id, work=work.id, attempt=work.attempts)
+            message, detail, err = failure_of(e)
+            log.exception("engine_pass_failed", run=run.id, work=work.id, attempt=work.attempts, code=err.code)
             with suppress(LeaseSupersededError):
                 if work.attempts < MAX_PASSES:
-                    await self.runs.update(run.id, generation=generation, status="queued", error=message)
+                    await self.runs.update(
+                        run.id, generation=generation, status="queued", error=message, failure=err.wire()
+                    )
                     await self.queue.release(work, PASS_WAITS[min(work.attempts, len(PASS_WAITS)) - 1], error=detail)
                 else:
-                    await self._fail(run, generation, work, message, detail)
+                    await self._fail(run, generation, work, message, detail, err=err)
         finally:
             watching.cancel()
             beat.cancel()
@@ -295,10 +318,15 @@ class Worker:
     async def _event(self, run: RunRow, generation: int, type_: str, node: str | None, data: Any) -> None:
         await self.host.events.append(run.id, run.team_id, type_, node, data, generation=generation)
 
-    async def _fail(self, run: RunRow, generation: int, work: Work, message: str, detail: str) -> None:
-        """Ends the run as failed: `message` for people, `detail` on its event and work row."""
-        await self.runs.update(run.id, generation=generation, status="failed", error=message, finished_at=now_iso())
-        await self._event(run, generation, "failed", None, {"message": message, "detail": detail})
+    async def _fail(
+        self, run: RunRow, generation: int, work: Work, message: str, detail: str, *, err: RunError
+    ) -> None:
+        """Ends the run as failed: `message` for people, `err` as the error model records it, `detail` on its event
+        and work row."""
+        await self.runs.update(
+            run.id, generation=generation, status="failed", error=message, failure=err.wire(), finished_at=now_iso()
+        )
+        await self._event(run, generation, "failed", None, {"message": message, "detail": detail, "code": err.code})
         await self.queue.done(work, status="failed", error=detail)
         await self._drop_checkpoints(run.id)
         await self.runs.settle_parents(run.id, run.created_by)
@@ -471,7 +499,7 @@ class Worker:
             await self.host.remind(run, reminder)
         await self._next_reminder(run, payload, interrupt.id, n + 1)
 
-    async def _why_failed(self, run: RunRow, end: str) -> str:
+    async def _why_failed(self, run: RunRow, end: str) -> tuple[str, RunError]:
         """Why a run that reached a failure End failed: the last step that left by a way of failing (error, refused,
         unreadable, timeout) with its own error and how many attempts it took, then where the run ended. With no such
         step the End is the reason, and says so."""
@@ -479,7 +507,8 @@ class Worker:
             s for s in await self.runs.step_rows(run.id) if s.port in FAILING_PORTS and s.node_type != "ops.flow.end"
         ]
         if not failing:
-            return f"Ended at {end}, an end marked as a failure"
+            said = f"Ended at {end}, an end marked as a failure"
+            return said, run_error("ended_as_failure", said, details={"end": end})
         step = failing[-1]
         stored = await self.definitions.row(run.workflow_id, run.version)
         definition: Json = (stored.definition if stored else None) or {}
@@ -490,20 +519,32 @@ class Worker:
         said = plain_error(str(out.get("reason") or out.get("error") or step.error or step.port))
         tries = sum(1 for s in failing if s.node_id == step.node_id and s.iteration == step.iteration)
         attempts = f" after {tries} attempts" if tries > 1 else ""
-        return f"{name} failed{attempts}: {said}. The run ended at {end}."
+        text = f"{name} failed{attempts}: {said}. The run ended at {end}."
+        code = str(out.get("code") or "").lower()
+        err = run_error(
+            code if code in CODES else PORT_CODES[step.port or "error"],
+            text,
+            step=step.node_id,
+            step_name=name if name != step.node_id else None,
+            attempt=tries,
+            details={"end": end},
+        )
+        return text, err
 
     async def _finished(self, run: RunRow, generation: int, graph: Any, cfg: Json) -> None:
         values = cast(Json, (await graph.aget_state(cfg)).values or {})
         end = ending(values) or {}
         outcome = str(end.get("outcome") or "done")
         failed = end.get("result") == "failed"
+        why = await self._why_failed(run, str(end.get("name") or "")) if failed else None
         status = await self.runs.finish(
             run.id,
             generation=generation,
             failed=failed,
             outcome=outcome,
             output=end.get("output"),
-            error=await self._why_failed(run, str(end.get("name") or "")) if failed else None,
+            error=why[0] if why else None,
+            failure=why[1].wire() if why else None,
         )
         await self._event(run, generation, "finished", None, {"outcome": outcome, "status": status})
         await self._drop_checkpoints(run.id)

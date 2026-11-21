@@ -46,7 +46,7 @@ def _runs(ns: argparse.Namespace, ops: OpsAI) -> int:
     if ns.verb == "start":
         started = ops.runs.start(ns.workflow, input=payload(ns.input), mode="live" if ns.live else "test")
         if ns.wait:
-            done = ops.runs.wait(str(started["runId"]))
+            done = ops.runs.wait(str(started["runId"]), check=True)
             return emit(ns, done, text=_status(done))
         return emit(ns, started, text=f"{started.get('runId')} started")
     if ns.verb == "show":

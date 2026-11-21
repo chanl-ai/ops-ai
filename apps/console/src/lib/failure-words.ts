@@ -42,3 +42,35 @@ export type SignInNeed = { app: string; access?: 'read' | 'write' };
 
 /** What the call does with the person's account, by its access: a read reads as them, a write changes in their name. */
 export const actsAs = (need: SignInNeed) => (need.access === 'write' ? `This tool makes the change in ${need.app} in your name` : `This tool reads ${need.app} as you`);
+
+/** A failed run's error in the one error model (the agents service's RunFailure). */
+export type RunFailure = {
+  kind: 'input' | 'refused' | 'upstream' | 'timeout' | 'internal';
+  code: string;
+  message: string;
+  userMessage: string;
+  retryable: boolean;
+  nodeName?: string | null;
+  nodeId?: string | null;
+  attempt?: number | null;
+  of?: number | null;
+};
+
+/** The run page's heading for a failure, by its kind, so a builder sees at once whose move it is. */
+const KIND_TITLE: Record<RunFailure['kind'], string> = {
+  input: 'The run could not use what it was given',
+  refused: 'A rule stopped the run',
+  upstream: 'An app or model the run uses failed',
+  timeout: 'The run ran out of time',
+  internal: 'The run stopped on an error on our side',
+};
+
+export const failureTitle = (f?: RunFailure | null) => (f ? KIND_TITLE[f.kind] : 'The run failed');
+
+/** Where it failed and whether trying again helps, as one line under the message: `Find customer · attempt 3 of 3 · retrying may help`. */
+export function failureWhere(f?: RunFailure | null): string {
+  if (!f) return '';
+  const step = f.nodeName || f.nodeId;
+  const attempt = f.attempt ? (f.of ? `attempt ${f.attempt} of ${f.of}` : `attempt ${f.attempt}`) : '';
+  return [step, attempt, f.retryable ? 'retrying may help' : 'retrying will not help until it is fixed'].filter(Boolean).join(' · ');
+}

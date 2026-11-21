@@ -187,6 +187,8 @@ async def test_a_refusal_ends_a_streamed_turn_with_its_code_and_a_reload_keeps_i
     thread = await new_thread(client)
     _, events = await send(client, thread["id"], {"content": "What is the daily wire limit for a personal account?"})
     assert (events[-1]["type"], events[-1].get("code")) == ("error", "rate_limited")
+    # The error model's kind and retryable reach the chat, so it offers Try again for a busy model.
+    assert (events[-1].get("kind"), events[-1].get("retryable")) == ("upstream", True), events[-1]
     reloaded = (await client.get(f"/chat/threads/{thread['id']}")).json()["data"]
     assert reloaded["messages"][-1]["errorCode"] == "rate_limited", "a reload keeps the refusal's code"
 

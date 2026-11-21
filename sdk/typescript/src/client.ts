@@ -10,6 +10,7 @@
  */
 import type { operations as AgentsOps } from './generated/agents.js';
 import { agentsOperations } from './generated/agents-operations.js';
+import { RunFailed } from './errors.js';
 import type { operations as DocumentsOps } from './generated/documents.js';
 import { documentsOperations } from './generated/documents-operations.js';
 import type { operations as FilesOps } from './generated/files.js';
@@ -202,12 +203,14 @@ export class Runs extends Resource {
     return this.raw.agents.workflows_start_engine_run({ body: { workflowId, input: input ?? {}, ...fields } as never });
   }
 
-  /** The run once it has ended or stopped at a human task (then `taskId` names the task). */
-  async wait(runId: string, { timeoutMs = 600_000, intervalMs = 1000 } = {}): Promise<WaitedRun> {
+  /** The run once it has ended or stopped at a human task (then `taskId` names the task). `check: true` throws
+   * RunFailed for a failed run instead of returning it. */
+  async wait(runId: string, { timeoutMs = 600_000, intervalMs = 1000, check = false } = {}): Promise<WaitedRun> {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
       const run = await this.raw.agents.workflows_get_engine_run({ path: { run_id: runId } });
       if ((TERMINAL as readonly string[]).includes(run.status) || run.status === 'waiting') {
+        if (check && run.status === 'failed') throw new RunFailed(run as never);
         const task = (run.waiting?.payload as { review_id?: string } | undefined)?.review_id;
         return task ? { ...run, taskId: task } : run;
       }

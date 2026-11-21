@@ -27,6 +27,8 @@ from typing import Any, cast
 
 import sqlalchemy as sa
 
+from ops_contracts.errors import run_error
+
 from .clock import now_iso
 from .runs import CHILD_PREFIX, TERMINAL, RunStore
 from .tables import ENGINE_BUILD, engine_definitions, engine_runs, engine_steps, engine_work
@@ -271,7 +273,10 @@ async def settle(tx: Transactions, finding: Finding) -> bool:
         return False
     if finding.action == "child" and finding.parent is not None:
         at = now_iso()
-        await runs.update(finding.run_id, status="failed", error=f"It {finding.reason}.", finished_at=at)
+        said = f"It {finding.reason}."
+        await runs.update(
+            finding.run_id, status="failed", error=said, failure=run_error("stuck", said).wire(), finished_at=at
+        )
         async with tx.tenant_tx() as c:
             await c.execute(
                 w.update()
@@ -287,7 +292,9 @@ async def settle(tx: Transactions, finding: Finding) -> bool:
             {"resume": {"timeout": True}, "node": parent.node, "iteration": parent.iteration},
         )
         return True
-    await runs.update(finding.run_id, status="stuck", error=finding.reason)
+    await runs.update(
+        finding.run_id, status="stuck", error=finding.reason, failure=run_error("stuck", finding.reason).wire()
+    )
     if finding.set_aside:
         async with tx.tenant_tx() as c:
             await c.execute(

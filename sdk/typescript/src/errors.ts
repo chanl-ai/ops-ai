@@ -40,3 +40,45 @@ export function errorFor(status: number, error: Record<string, unknown>, request
     error.details,
   );
 }
+
+/** The one error model's kinds (the agents service's RunFailure): what failed, so a caller knows whose move it is. */
+export type ErrorKind = 'input' | 'refused' | 'upstream' | 'timeout' | 'internal';
+
+/** A run's failure as the agents service returns it on the run. */
+export interface RunFailure {
+  kind: ErrorKind;
+  code: string;
+  message: string;
+  userMessage: string;
+  retryable: boolean;
+  retryAfterSeconds?: number | null;
+  nodeId?: string | null;
+  nodeName?: string | null;
+  attempt?: number | null;
+  of?: number | null;
+  traceId?: string | null;
+}
+
+/** A run that failed, thrown by `runs.wait(id, { check: true })`. `message` is for the builder, `userMessage` is safe
+ * to show an end user, `retryable` says whether trying again can help. */
+export class RunFailed extends Error {
+  readonly kind: ErrorKind;
+  readonly code: string;
+  readonly userMessage: string;
+  readonly retryable: boolean;
+  readonly retryAfter?: number;
+  readonly traceId?: string;
+  readonly step?: string;
+  constructor(readonly run: { id: string; error?: string | null; failure?: RunFailure | null }) {
+    const f = run.failure;
+    super(f?.message ?? run.error ?? 'The run failed.');
+    this.name = 'RunFailed';
+    this.kind = f?.kind ?? 'internal';
+    this.code = f?.code ?? 'internal_error';
+    this.userMessage = f?.userMessage ?? '';
+    this.retryable = Boolean(f?.retryable);
+    this.retryAfter = f?.retryAfterSeconds ?? undefined;
+    this.traceId = f?.traceId ?? undefined;
+    this.step = f?.nodeName ?? f?.nodeId ?? undefined;
+  }
+}

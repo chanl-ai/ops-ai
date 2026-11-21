@@ -1,3 +1,4 @@
+import type { RunFailure } from '@/lib/failure-words';
 import type { DocumentRead } from '@/lib/types/domain';
 
 // The workflow runner (agents-service /v1/workflows/node-types, /v1/workflows/definitions, /v1/runs): v2 definitions
@@ -247,6 +248,8 @@ export interface EngineRunStep {
 
 export interface EngineRunDetail extends EngineRun {
   steps: EngineRunStep[];
+  /** Why it failed, in the one error model: kind, code, message and whether a retry helps; null while it has not. */
+  failure?: RunFailure | null;
   /** Once the run has succeeded: the End step it finished on, its outcome and output. */
   result: { node: string | null; name: string | null; outcome: string; output: unknown } | null;
   /** The runs its steps started (Start workflow, once or for each item), in step and item order, each with its status. */

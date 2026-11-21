@@ -54,6 +54,7 @@ from ops_contracts.chat import (
     ThreadList,
     WidgetAction,
 )
+from ops_contracts.errors import run_error
 from ops_identity.fastapi import Tx
 from ops_service_kit.errors import (
     ApiError,
@@ -932,7 +933,15 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
             )
             builder.apply("memory", {"saved": saved})
         if assistant.error:
-            yield _frame(ErrorEvent(message=assistant.error, partial=assistant, code=assistant.error_code))
+            # A refusal with a code carries models-service's own sentence; a failure without one carries an exception's
+            # text, which stays on the stored message for the builder and is never streamed to the person.
+            err = run_error(assistant.error_code or "model_unavailable", assistant.error)
+            said = assistant.error if assistant.error_code else err.user_message
+            yield _frame(
+                ErrorEvent(
+                    message=said, partial=assistant, code=assistant.error_code, kind=err.kind, retryable=err.retryable
+                )
+            )
         else:
             yield _frame(DoneEvent(message=assistant))
 

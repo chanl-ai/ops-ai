@@ -93,6 +93,29 @@ exception's text is kept on the failed step's row and in the run's `failed` even
 open, because the write it approves reads nothing from the run, is a failed step like any other. Test:
 `services/agents-service/tests/engine/test_step_failure_message.py`.
 
+### One error model
+
+Every failure is recorded once, as `ops_contracts.errors.RunError` (`packages/contracts/src/ops_contracts/errors.py`):
+a kind, a stable code, the builder's `message`, a `userMessage` safe for a customer, `retryable`, `retryAfterSeconds`,
+the step and attempt, and a trace id. `CODES` in that file is the only table of codes, kinds and whether a retry helps.
+The worker stores the record on `engine_runs.failure` beside `error` (agents migration 0120); the run route returns it
+as `failure`; a run that failed before 0120 reads as `internal_error`, or `stuck` when it is Stuck.
+
+| Kind | Means | Retryable |
+|---|---|---|
+| `input` | What was sent cannot run as it is (a step's own refusal is `input_invalid`) | No |
+| `refused` | A rule said no (`forbidden`, `budget_reached`, `ended_as_failure`) | No, except `team_at_capacity` |
+| `upstream` | An app, tool or model failed (`tool_failed`, `model_rate_limited`) | Yes, except `write_uncertain` |
+| `timeout` | A clock ran out (`step_too_long`, `queued_too_long`) | `step_too_long`, `reply_too_long` and `heartbeat_lost` |
+| `internal` | Our fault (`stuck`, `internal_error`) | By Retry or a redrive only |
+
+| Reader | What they get |
+|---|---|
+| Run page | The failure heading by kind, the message, the step, the attempt and whether retrying helps |
+| Chat and widget | An error frame with `kind` and `retryable`; a failure with no code streams its `userMessage`, never the exception |
+| Python and TypeScript SDKs | `runs.wait(id, check=True)` raises `RunFailed` with the fields above; HTTP errors keep their classes and gain `.kind` |
+| CLI | One line, `failed · upstream/tool_failed at "Find customer" · attempt 3 of 3 · retryable`, and an exit status per kind: input 2, refused 3, upstream 4, timeout 5, internal 6 |
+
 ## 5 Scale
 
 | Concern | Design |

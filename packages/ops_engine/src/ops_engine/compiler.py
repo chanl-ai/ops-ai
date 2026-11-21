@@ -32,6 +32,7 @@ from langgraph.graph import END, START, StateGraph  # pyright: ignore[reportMiss
 from langgraph.types import interrupt
 
 from ops_checkpointer import LeaseSupersededError
+from ops_contracts.errors import CODES
 from ops_service_kit.http import Json, JsonList, JsonValue
 
 from . import ai_steps
@@ -71,21 +72,36 @@ class WriteInDoubtError(RuntimeError):
 
 
 class StepError(ValueError):
-    """A step's refusal that carries a sentence for people (`plain`) beside its technical text (`str()`)."""
+    """A step's refusal that carries a sentence for people (`plain`) beside its technical text (`str()`). `code` is
+    its code in the one error model (ops_contracts.errors.CODES); a step's own refusal is an input it cannot run."""
 
-    def __init__(self, plain: str, detail: str) -> None:
+    def __init__(self, plain: str, detail: str, *, code: str = "input_invalid") -> None:
         super().__init__(detail)
         self.plain = plain
+        self.code = code
 
 
 class NodeFailedError(RuntimeError):
     """A node used every attempt its effects class allows and its type has no error port to route the failure to.
     `str()` is the plain message the run shows people; `detail` is the technical text, also kept on the step's row."""
 
-    def __init__(self, plain: str, detail: str) -> None:
+    def __init__(
+        self,
+        plain: str,
+        detail: str,
+        *,
+        code: str = "internal_error",
+        step: str | None = None,
+        step_name: str | None = None,
+        attempt: int | None = None,
+        of: int | None = None,
+        retry_after: float | None = None,
+    ) -> None:
         super().__init__(plain)
         self.plain = plain
         self.detail = detail
+        self.code, self.step, self.step_name, self.attempt, self.of = code, step, step_name, attempt, of
+        self.retry_after = retry_after
 
 
 # What a run says when a write's result is uncertain: it fails, and nothing sends the write again.
@@ -96,9 +112,39 @@ class WriteUncertainError(NodeFailedError):
     """A write that may have happened: the system timed out or answered 5xx after it was sent, the gateway lost the
     call, or it was still running at the step's deadline. The run fails at once, never retried by a pass."""
 
+    def __init__(
+        self,
+        plain: str,
+        detail: str,
+        *,
+        step: str | None = None,
+        step_name: str | None = None,
+        attempt: int | None = None,
+    ) -> None:
+        super().__init__(plain, detail, code="write_uncertain", step=step, step_name=step_name, attempt=attempt)
+
 
 def technical(e: BaseException) -> str:
     return f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
+
+
+def failure_code(e: BaseException) -> str:
+    """The error model's code for an exception a step raised: a deadline is `step_too_long`, a step's own refusal its
+    code, a service error its code when the model knows it, anything else the app or tool failing."""
+    if isinstance(e, TimeoutError):
+        return "step_too_long"
+    if isinstance(e, StepError):
+        return e.code
+    code = getattr(e, "code", None)
+    if isinstance(code, str) and code.lower() in CODES:
+        return code.lower()
+    return "tool_failed"
+
+
+def retry_after_of(e: BaseException) -> float | None:
+    """The wait a provider asked for (a 429's Retry-After), when the exception carries one."""
+    value = getattr(e, "retry_after_s", None) or getattr(e, "retry_after", None)
+    return float(value) if isinstance(value, int | float) and value > 0 else None
 
 
 def plain_failure(step: str, e: BaseException, attempts: int) -> str:
@@ -1381,7 +1427,15 @@ class Wrapper:
                 detail = technical(e)
                 await self.journal.finish(r, status="error", port=None, output=None, error=detail)
                 await self.ports.hooks.after_step(run_id, nid, "error")
-                raise NodeFailedError(plain_failure(self.node.name or nid, e, 1), detail) from e
+                raise NodeFailedError(
+                    plain_failure(self.node.name or nid, e, 1),
+                    detail,
+                    code=failure_code(e),
+                    step=nid,
+                    step_name=self.node.name,
+                    attempt=r.attempt,
+                    of=1,
+                ) from e
             return await self.record(r, outcome)
 
         if last is not None and last.status == "waiting":
@@ -1453,14 +1507,29 @@ class Wrapper:
                 await self.ports.hooks.after_step(run_id, nid, "error")
                 tried = attempt - first + 1
                 detail = f"{nid} failed after {tried} attempts: {message}"
-                raise NodeFailedError(plain_failure(self.node.name or nid, e, tried), detail) from e
+                raise NodeFailedError(
+                    plain_failure(self.node.name or nid, e, tried),
+                    detail,
+                    code=failure_code(e),
+                    step=nid,
+                    step_name=self.node.name,
+                    attempt=tried,
+                    of=policy.attempts,
+                    retry_after=retry_after_of(e),
+                ) from e
             error = _error_of(outcome.out) if outcome.port == "error" else None
             if reconciled and sent_and_unanswered(error):
                 # The system may have acted: the run stops here with the reason, and nothing sends it again.
                 message = technical_error(outcome.out)
                 await self.journal.finish(r, status="error", port=None, output=outcome.out, error=message)
                 await self.ports.hooks.after_step(run_id, nid, "error")
-                raise WriteUncertainError(uncertain_failure(self.node.name or nid), message)
+                raise WriteUncertainError(
+                    uncertain_failure(self.node.name or nid),
+                    message,
+                    step=nid,
+                    step_name=self.node.name,
+                    attempt=r.attempt,
+                )
             tried = attempt if reconciled else attempt - first + 1
             if (never_sent(error) or (not reconciled and sent_and_unanswered(error))) and tried < policy.attempts:
                 # An outage, not an answer: a read is tried again; a write the system never got is sent again

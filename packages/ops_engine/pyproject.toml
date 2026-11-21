@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Workflow runner: node type registry, v2 definitions, the LangGraph compiler, the step journal, the work queue and the worker loop"
 license = "Apache-2.0"
 requires-python = ">=3.12,<3.13"
-dependencies = ["ops-service-kit", "ops-store", "ops-agent-kernel", "ops-checkpointer", "langgraph>=1.0", "sqlalchemy[asyncio]>=2.0", "pyyaml>=6", "jsonschema>=4.23"]
+dependencies = ["ops-contracts", "ops-service-kit", "ops-store", "ops-agent-kernel", "ops-checkpointer", "langgraph>=1.0", "sqlalchemy[asyncio]>=2.0", "pyyaml>=6", "jsonschema>=4.23"]
 
 [build-system]
 requires = ["hatchling>=1.25"]
@@ -14,6 +14,7 @@ build-backend = "hatchling.build"
 packages = ["src/ops_engine"]
 
 [tool.uv.sources]
+ops-contracts = { workspace = true }
 ops-service-kit = { workspace = true }
 ops-store = { workspace = true }
 ops-agent-kernel = { workspace = true }
