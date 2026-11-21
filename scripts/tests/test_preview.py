@@ -28,6 +28,13 @@ def seed(run_root: Path, branch: str, offset: int, live: bool) -> None:
     (d / "console.pid").write_text(str(os.getpid() if live else 2**22 + 12345))
 
 
+def host_env() -> dict[str, str]:
+    """The environment without the stack's ports. CI runs these tests under make, which exports OPS_*_PORT; a port in
+    the environment beats the offset's value, so the guard would check offset 0's ports and see no clash."""
+    drop = ("OPS_", "STACK_HOME", "MAKEFLAGS", "MFLAGS")
+    return {k: v for k, v in os.environ.items() if not k.startswith(drop)}
+
+
 def fake_lsof(tmp: Path, listeners: list[tuple[int, str, int]]) -> dict[str, str]:
     """The machine's listeners, faked at the edge: `lsof -Fpcn` prints what the test says is listening."""
     bin_dir = tmp / "bin"
@@ -38,7 +45,7 @@ def fake_lsof(tmp: Path, listeners: list[tuple[int, str, int]]) -> dict[str, str
     (bin_dir / "lsof").chmod(0o755)
     (bin_dir / "docker").write_text("#!/bin/sh\nexit 0\n")
     (bin_dir / "docker").chmod(0o755)
-    return {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"}
+    return {**host_env(), "PATH": f"{bin_dir}:{os.environ['PATH']}"}
 
 
 def run(tmp: Path, *args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
@@ -171,7 +178,7 @@ def test_missing_lsof_and_docker_warn_and_the_rest_of_the_check_runs(tmp_path: P
     for tool in ("make", "sed", "sh", "git", "od", "tr", "rm", "cat", "uname", "ps"):
         if shutil.which(tool):
             (bin_dir / tool).symlink_to(shutil.which(tool))
-    env = {**os.environ, "PATH": str(bin_dir)}
+    env = {**host_env(), "PATH": str(bin_dir)}
     r = run(tmp_path, "check-offset", "--offset", "57000", env=env)
     assert "lsof not found" in r.stderr and "docker not found" in r.stderr and "65535" in r.stderr
     assert "Traceback" not in r.stderr
