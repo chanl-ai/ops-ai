@@ -256,10 +256,13 @@ function selfTest() {
     const older = sh('git rev-parse HEAD').stdout.trim();
     sh('sh scripts/install-hooks.sh');
     sh('git add .githooks scripts && git commit -q -m "chore: the changelog gate"');
+    // A fix on apps/ also needs a Siblings trailer (commit-message-check), so each fix here carries one and is
+    // refused or passed for its changelog alone.
     const commit = (subject, trailer = '') => {
       writeFileSync(join(dir, 'apps/a.ts'), `${Math.random()}\n`);
       sh('git add apps');
-      return sh(`git commit -q -m "${subject}"${trailer ? ` -m "${trailer}"` : ''}`).status === 0;
+      const siblings = subject.startsWith('fix(') ? ' -m "Siblings: none, searched the self-test"' : '';
+      return sh(`git commit -q -m "${subject}"${trailer ? ` -m "${trailer}"` : ''}${siblings}`).status === 0;
     };
     sh('git checkout -q -b plain');
     expect('refused: feat with no trailer at all', !commit('feat(x): a thing'));
