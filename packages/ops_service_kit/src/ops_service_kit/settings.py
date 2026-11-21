@@ -232,6 +232,10 @@ class Settings(BaseSettings):
     # how many runs one worker process runs at once.
     engine_poll_seconds: float = 0.5
     engine_concurrency: int = 4
+    # How many work rows of one team (or one concurrency key a workflow names) may run at once across every worker; a
+    # team at its cap waits while other teams' rows are claimed. Runs waiting for a person or a timer do not count.
+    # None: no cap.
+    engine_team_cap: int | None = Field(default=None, gt=0)
     # How often the worker's run reconciler looks for runs nothing is working on and marks them Stuck.
     engine_reconcile_seconds: float = Field(default=60.0, gt=0)
     # A Server-Timing header on every response; off by default because it tells a caller how long internal work took.

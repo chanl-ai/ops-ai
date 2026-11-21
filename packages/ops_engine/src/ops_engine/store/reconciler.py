@@ -36,6 +36,8 @@ from .tx import RECONCILE_RUNS, Transactions
 from .work import MAX_LAPSES, WorkQueue
 
 QUIET_S = 600.0
+# Runs read per statement; with the few fixed values each statement carries, well under SQL Server's 2,100 parameters.
+PAGE = 500
 CHILD_LIMIT_S = 24 * 3600.0
 
 NOTHING_BEHIND = "Nothing is working on this run: no worker has picked it up for 10 minutes."
@@ -140,125 +142,140 @@ async def find(
     max_lapses: int = MAX_LAPSES,
     child_limit_s: float = CHILD_LIMIT_S,
     build: str = ENGINE_BUILD,
+    page: int = PAGE,
 ) -> list[Finding]:
     """Every tenant's runs that need a state of their own, read past the tenant and changed by `settle` in it."""
     r, w, s = engine_runs, engine_work, engine_steps
     now = datetime.now(UTC)
     now_s = time.time()
     found: list[Finding] = []
-    async with tx.system_tx(RECONCILE_RUNS) as c:
-        active = (
-            await c.execute(
-                sa.select(
-                    r.c.id,
-                    r.c.tenant_id,
-                    r.c.status,
-                    r.c.waiting,
-                    r.c.updated_at,
-                    r.c.created_by,
-                    r.c.workflow_id,
-                    r.c.version,
-                    r.c.outcome,
-                ).where(
-                    sa.or_(
-                        r.c.status.in_(("queued", "running", "waiting")),
-                        # A run marked Stuck while its graph had ended and the runs it started still went on (#14).
-                        sa.and_(r.c.status == "stuck", r.c.outcome.is_not(None)),
+    # Paged by run id, `page` runs at a time: each IN list below names one page's runs, so no statement passes SQL
+    # Server's 2,100 parameters however many runs are open.
+    after = ""
+    while True:
+        async with tx.system_tx(RECONCILE_RUNS) as c:
+            active = (
+                await c.execute(
+                    sa.select(
+                        r.c.id,
+                        r.c.tenant_id,
+                        r.c.status,
+                        r.c.waiting,
+                        r.c.updated_at,
+                        r.c.created_by,
+                        r.c.workflow_id,
+                        r.c.version,
+                        r.c.outcome,
+                    )
+                    .where(
+                        sa.or_(
+                            r.c.status.in_(("queued", "running", "waiting")),
+                            # A run marked Stuck while its graph had ended and the runs it started still went on (#14).
+                            sa.and_(r.c.status == "stuck", r.c.outcome.is_not(None)),
+                        ),
+                        r.c.id > after,
+                    )
+                    .order_by(r.c.id)
+                    .limit(page)
+                )
+            ).all()
+            if not active:
+                break
+            ids = [a.id for a in active]
+            work = (
+                await c.execute(
+                    sa.select(w.c.run_id, w.c.status, w.c.build, w.c.lapses, w.c.lease_expires_at).where(
+                        w.c.run_id.in_(ids), w.c.status.in_(("queued", "claimed"))
                     )
                 )
-            )
-        ).all()
-        if not active:
-            return found
-        ids = [a.id for a in active]
-        work = (
-            await c.execute(
-                sa.select(w.c.run_id, w.c.status, w.c.build, w.c.lapses, w.c.lease_expires_at).where(
-                    w.c.run_id.in_(ids), w.c.status.in_(("queued", "claimed"))
-                )
-            )
-        ).all()
-        child_ids = [a.id for a in active if str(a.created_by or "").startswith(CHILD_PREFIX)]
-        parents = {str(a.created_by)[len(CHILD_PREFIX) :] for a in active if a.id in child_ids}
-        # Every child of a waiting parent, ended or not, to tell a parent with unfinished children from one none wakes.
-        # A run whose own graph ended (its outcome is set) waits only for the runs it started, whatever its status.
-        waiting_parents = [a.id for a in active if a.status == "waiting" or a.outcome is not None]
-        kids = (
-            await c.execute(
-                sa.select(r.c.created_by, r.c.status).where(
-                    r.c.created_by.in_([f"{CHILD_PREFIX}{p}" for p in waiting_parents])
-                )
-            )
-        ).all()
-        parent_rows = {
-            row.id: row
-            for row in (
-                await c.execute(sa.select(r.c.id, r.c.status, r.c.waiting).where(r.c.id.in_(list(parents))))
             ).all()
-        }
-        steps = (
-            await c.execute(
-                sa.select(s.c.run_id, s.c.status, s.c.effects, s.c.started_at, s.c.finished_at).where(
-                    s.c.run_id.in_(child_ids)
+            child_ids = [a.id for a in active if str(a.created_by or "").startswith(CHILD_PREFIX)]
+            parents = {str(a.created_by)[len(CHILD_PREFIX) :] for a in active if a.id in child_ids}
+            # Every child of a waiting parent, ended or not, to tell a parent with unfinished children from one none
+            # wakes.
+            # A run whose own graph ended (its outcome is set) waits only for the runs it started, whatever its status.
+            waiting_parents = [a.id for a in active if a.status == "waiting" or a.outcome is not None]
+            kids = (
+                await c.execute(
+                    sa.select(r.c.created_by, r.c.status).where(
+                        r.c.created_by.in_([f"{CHILD_PREFIX}{p}" for p in waiting_parents])
+                    )
                 )
-            )
-        ).all()
-    rows_of: dict[str, list[Any]] = {}
-    for row in work:
-        rows_of.setdefault(row.run_id, []).append(row)
-    unfinished_children: set[str] = {str(k.created_by)[len(CHILD_PREFIX) :] for k in kids if k.status not in TERMINAL}
-    ran_s: dict[str, float] = {}
-    for step in steps:
-        if step.status == "waiting" or step.effects == "human":
-            continue  # waited for a person, an event or a timer: not counted (review 6)
-        began, ended = _when(step.started_at), _when(step.finished_at) if step.finished_at else now
-        if began is None or ended is None:
-            continue
-        ran_s[step.run_id] = ran_s.get(step.run_id, 0.0) + max(0.0, (ended - began).total_seconds())
-
-    for a in active:
-        if a.outcome is not None:
-            # Its graph ended: it is waiting for the runs it started, never Stuck. One marked Stuck by mistake, or
-            # one whose last run ended without settling it, is given the status its runs leave it.
-            if a.status == "stuck" or a.id not in unfinished_children:
-                found.append(Finding(a.tenant_id, a.id, "ended", "its graph ended; the runs it started decide"))
-            continue
-        rows = rows_of.get(a.id, [])
-        quiet = _age_s(a.updated_at, now) >= quiet_s
-        if rows and all(x.build != build for x in rows):
-            found.append(Finding(a.tenant_id, a.id, "stuck", OLD_BUILD, set_aside=True))
-            continue
-        worst = max((int(x.lapses or 0) for x in rows), default=0)
-        if worst > max_lapses and not any(_alive(x, now_s) for x in rows):
-            died = max(_deaths(x, now_s) for x in rows)
-            running, after = await _where(tx, a)
-            found.append(Finding(a.tenant_id, a.id, "stuck", lapsed(died, running, after), set_aside=True))
-            continue
-        if a.id in child_ids and a.status in ("queued", "running"):
-            parent_id = str(a.created_by)[len(CHILD_PREFIX) :]
-            parent = parent_rows.get(parent_id)
-            waits = cast(dict[str, Any], (parent.waiting if parent is not None else None) or {})
-            payload = cast(dict[str, Any], waits.get("payload") or {})
-            # A step with its own timeoutHours times out by the parent's timer already, by wall clock.
-            own_limit = payload.get("kind") != "children" or payload.get("timeoutHours")
-            if not own_limit and ran_s.get(a.id, 0.0) > child_limit_s:
-                node = str(payload.get("node") or waits.get("node") or "")
-                iteration = int(payload.get("iteration") or waits.get("iteration") or 1)
-                where = ParentStep(parent_id, node, iteration)
-                found.append(Finding(a.tenant_id, a.id, "child", TOO_LONG, parent=where))
+            ).all()
+            parent_rows = {
+                row.id: row
+                for row in (
+                    await c.execute(sa.select(r.c.id, r.c.status, r.c.waiting).where(r.c.id.in_(list(parents))))
+                ).all()
+            }
+            steps = (
+                await c.execute(
+                    sa.select(s.c.run_id, s.c.status, s.c.effects, s.c.started_at, s.c.finished_at).where(
+                        s.c.run_id.in_(child_ids)
+                    )
+                )
+            ).all()
+        rows_of: dict[str, list[Any]] = {}
+        for row in work:
+            rows_of.setdefault(row.run_id, []).append(row)
+        unfinished_children: set[str] = {
+            str(k.created_by)[len(CHILD_PREFIX) :] for k in kids if k.status not in TERMINAL
+        }
+        ran_s: dict[str, float] = {}
+        for step in steps:
+            if step.status == "waiting" or step.effects == "human":
+                continue  # waited for a person, an event or a timer: not counted (review 6)
+            began, ended = _when(step.started_at), _when(step.finished_at) if step.finished_at else now
+            if began is None or ended is None:
                 continue
-        if rows or not quiet:
-            continue
-        if a.status in ("queued", "running"):
-            found.append(Finding(a.tenant_id, a.id, "stuck", NOTHING_BEHIND))
-            continue
-        payload = cast(dict[str, Any], cast(dict[str, Any], a.waiting or {}).get("payload") or {})
-        kind = payload.get("kind")
-        if kind == "review":
-            continue  # a person decides it: Human Tasks lists it
-        if kind == "children" and a.id in unfinished_children:
-            continue  # a child still running wakes it when it ends
-        found.append(Finding(a.tenant_id, a.id, "stuck", NOTHING_LIVE))
+            ran_s[step.run_id] = ran_s.get(step.run_id, 0.0) + max(0.0, (ended - began).total_seconds())
+
+        for a in active:
+            if a.outcome is not None:
+                # Its graph ended: it is waiting for the runs it started, never Stuck. One marked Stuck by mistake, or
+                # one whose last run ended without settling it, is given the status its runs leave it.
+                if a.status == "stuck" or a.id not in unfinished_children:
+                    found.append(Finding(a.tenant_id, a.id, "ended", "its graph ended; the runs it started decide"))
+                continue
+            rows = rows_of.get(a.id, [])
+            quiet = _age_s(a.updated_at, now) >= quiet_s
+            if rows and all(x.build != build for x in rows):
+                found.append(Finding(a.tenant_id, a.id, "stuck", OLD_BUILD, set_aside=True))
+                continue
+            worst = max((int(x.lapses or 0) for x in rows), default=0)
+            if worst > max_lapses and not any(_alive(x, now_s) for x in rows):
+                died = max(_deaths(x, now_s) for x in rows)
+                running, after = await _where(tx, a)
+                found.append(Finding(a.tenant_id, a.id, "stuck", lapsed(died, running, after), set_aside=True))
+                continue
+            if a.id in child_ids and a.status in ("queued", "running"):
+                parent_id = str(a.created_by)[len(CHILD_PREFIX) :]
+                parent = parent_rows.get(parent_id)
+                waits = cast(dict[str, Any], (parent.waiting if parent is not None else None) or {})
+                payload = cast(dict[str, Any], waits.get("payload") or {})
+                # A step with its own timeoutHours times out by the parent's timer already, by wall clock.
+                own_limit = payload.get("kind") != "children" or payload.get("timeoutHours")
+                if not own_limit and ran_s.get(a.id, 0.0) > child_limit_s:
+                    node = str(payload.get("node") or waits.get("node") or "")
+                    iteration = int(payload.get("iteration") or waits.get("iteration") or 1)
+                    where = ParentStep(parent_id, node, iteration)
+                    found.append(Finding(a.tenant_id, a.id, "child", TOO_LONG, parent=where))
+                    continue
+            if rows or not quiet:
+                continue
+            if a.status in ("queued", "running"):
+                found.append(Finding(a.tenant_id, a.id, "stuck", NOTHING_BEHIND))
+                continue
+            payload = cast(dict[str, Any], cast(dict[str, Any], a.waiting or {}).get("payload") or {})
+            kind = payload.get("kind")
+            if kind == "review":
+                continue  # a person decides it: Human Tasks lists it
+            if kind == "children" and a.id in unfinished_children:
+                continue  # a child still running wakes it when it ends
+            found.append(Finding(a.tenant_id, a.id, "stuck", NOTHING_LIVE))
+        if len(active) < page:
+            break
+        after = active[-1].id
     return found
 
 

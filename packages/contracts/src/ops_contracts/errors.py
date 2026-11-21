@@ -40,17 +40,21 @@ CODES: dict[str, Code] = {
     "schema_mismatch": Code("input", False, "The request did not have the shape this step needs."),
     "unknown_reference": Code("input", False, "The request named something that does not exist."),
     "missing_value": Code("input", False, "A value this step needs was missing."),
-    # refused: a rule said no; only a full team waits and tries again.
+    # refused: a rule said no; only a full team or a missing sign-in is tried again (after the wait or the sign-in).
     "forbidden": Code("refused", False, "This is not allowed for your account."),
     "guardrail_blocked": Code("refused", False, "This was stopped by one of the team's rules."),
     "approval_rejected": Code("refused", False, "The change was not approved."),
     "budget_reached": Code("refused", False, "The team's budget for this ran out, so it stopped."),
+    "app_not_set_up": Code("refused", False, "An app this step uses is not set up for this team yet."),
+    # A person signs in or picks an account, then the same call runs.
+    "sign_in_needed": Code("refused", True, "An app this step uses needs a sign-in first."),
     "team_at_capacity": Code("refused", True, "Your request is waiting for a free slot and will start shortly."),
     # The workflow reached an end its builder marked as a failure.
     "ended_as_failure": Code("refused", False, "This stopped where the workflow says to stop."),
     # upstream: an app, tool or model failed; the step's retry policy tries again, a retry-after wins.
     "tool_failed": Code("upstream", True, "An app this step uses returned an error. Please try again."),
     "app_unavailable": Code("upstream", True, "An app this step uses could not be reached. Please try again."),
+    "app_timed_out": Code("upstream", True, "An app this step uses did not answer in time. Please try again."),
     "model_rate_limited": Code("upstream", True, "The assistant is busy right now. Please try again shortly."),
     "model_unavailable": Code("upstream", True, "The assistant could not be reached. Please try again."),
     # A write that may have happened: never sent again by a retry; a person checks the app first.

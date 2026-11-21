@@ -2,7 +2,7 @@
 
 One test per way it breaks: a code reaches the model (F4, every known code and an unknown one, through the kernel's
 real tool path); the call log loses the code; the Connect card's own line is replaced; an invalid input loses the
-field the model must fix."""
+field the model must fix; `retryable` disagrees with the error model's CODES."""
 
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ from ops_agent_kernel.kernel import run_turn
 from ops_agent_kernel.ports import KernelPorts, ToolOutcome
 from ops_agent_kernel.types import AgentSettings, Passage, PromptFragment, ToolGrant, TurnRequest
 from ops_agents.api.error_words import WORDS, WordedTools
+from ops_contracts import errors
 
 QUERY = ToolGrant("salesforce_query", "Salesforce", "Query", "read", {"type": "object", "properties": {}})
 
@@ -114,3 +115,14 @@ async def test_through_the_kernel_the_model_reads_words_and_the_record_keeps_the
     assert error_code(json.dumps(seen[0])) is None, seen[0]
     assert seen[0]["error"]["what"] == "Salesforce needs you to sign in again"
     assert result.result.tool_calls[0].output["error"]["code"] == "NOT_SIGNED_IN"
+
+
+async def test_retryable_is_the_error_models_answer(monkeypatch: pytest.MonkeyPatch) -> None:
+    # One owner: whether a failed call is worth trying again is CODES' answer, never a second table here.
+    for code, row in list(errors.CODES.items()):
+        monkeypatch.setitem(errors.CODES, code, row._replace(retryable=not row.retryable))
+    for code in [*WORDS, "SOMETHING_NEW"]:
+        outcome = await said(code)
+        named = WORDS.get(code)
+        expected = errors.CODES[getattr(named, "code", None) or "tool_failed"].retryable
+        assert outcome.for_model["retryable"] is expected, code

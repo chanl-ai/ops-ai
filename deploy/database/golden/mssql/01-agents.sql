@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- agents-service, stamped at 0120_run_failure_record
+-- agents-service, stamped at 0123_engine_work_fair_claim
 CREATE TABLE engine_definitions (
 	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
@@ -102,6 +102,10 @@ CREATE TABLE engine_work (
 	lapses INTEGER NOT NULL DEFAULT '0', 
 	error VARCHAR(max) NULL, 
 	created_at VARCHAR(32) NOT NULL, 
+	team_id VARCHAR(64) NULL, 
+	priority INTEGER NULL, 
+	concurrency_key VARCHAR(240) NULL, 
+	rate_key VARCHAR(240) NULL, 
 	CONSTRAINT engine_work_pkey PRIMARY KEY (id), 
 	CONSTRAINT uq_engine_work_dedupe UNIQUE (tenant_id, dedupe_key)
 );
@@ -1634,5 +1638,5 @@ CREATE TABLE alembic_version (
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version (version_num) VALUES ('0120_run_failure_record');
+INSERT INTO alembic_version (version_num) VALUES ('0123_engine_work_fair_claim');
 GO

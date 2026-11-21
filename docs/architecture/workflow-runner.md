@@ -98,13 +98,13 @@ open, because the write it approves reads nothing from the run, is a failed step
 Every failure is recorded once, as `ops_contracts.errors.RunError` (`packages/contracts/src/ops_contracts/errors.py`):
 a kind, a stable code, the builder's `message`, a `userMessage` safe for a customer, `retryable`, `retryAfterSeconds`,
 the step and attempt, and a trace id. `CODES` in that file is the only table of codes, kinds and whether a retry helps.
-The worker stores the record on `engine_runs.failure` beside `error` (agents migration 0120); the run route returns it
-as `failure`; a run that failed before 0120 reads as `internal_error`, or `stuck` when it is Stuck.
+The worker stores the record on `engine_runs.failure` beside `error` (agents migration 0122); the run route returns it
+as `failure`; a run that failed before 0122 reads as `internal_error`, or `stuck` when it is Stuck.
 
 | Kind | Means | Retryable |
 |---|---|---|
 | `input` | What was sent cannot run as it is (a step's own refusal is `input_invalid`) | No |
-| `refused` | A rule said no (`forbidden`, `budget_reached`, `ended_as_failure`) | No, except `team_at_capacity` |
+| `refused` | A rule said no (`forbidden`, `budget_reached`, `ended_as_failure`) | No, except `team_at_capacity` and `sign_in_needed` |
 | `upstream` | An app, tool or model failed (`tool_failed`, `model_rate_limited`) | Yes, except `write_uncertain` |
 | `timeout` | A clock ran out (`step_too_long`, `queued_too_long`) | `step_too_long`, `reply_too_long` and `heartbeat_lost` |
 | `internal` | Our fault (`stuck`, `internal_error`) | By Retry or a redrive only |
@@ -121,7 +121,9 @@ as `failure`; a run that failed before 0120 reads as `internal_error`, or `stuck
 | Concern | Design |
 |---|---|
 | Runs leave the request | `POST /v1/runs` writes the run and a start row in one transaction and returns 202 |
-| Queue | `engine_work`: start, resume (review decision, timer, child end, sweeper), retry, cancel; claimed with `FOR UPDATE SKIP LOCKED`, then the thread lease |
+| Queue | `engine_work`: start, resume (review decision, timer, child end, sweeper), retry, cancel; claimed through `ops_store.dialect.claim` (SKIP LOCKED on PostgreSQL, READPAST on SQL Server), then the thread lease |
+| Fairness | Each row carries its run's `team_id`, a `priority` and a `concurrency_key` (the team when unset); agents migration 0123. With `OPS_ENGINE_TEAM_CAP` set, a key with that many live claims is skipped, so one team at its cap never holds back another, and the key with the fewest rows running is claimed first. Only live claims count: a run waiting for a person, an event or a timer takes no slot. The last check runs under a lock on the key, so the cap is exact (`ops_engine/store/work.py`). `rate_key` is stored for the per-account and per-model-key limits that follow; nothing reads it yet |
+| Run reconciler | Reads open runs 500 at a time by id, so no statement passes SQL Server's 2,100 parameters (`ops_engine/store/reconciler.py`) |
 | Workers | N processes, each running several runs; sweeper and timer poller live here |
 | Tenancy | Each claimed run gets a tenant-scoped saver; per-tenant running cap; 429 with retry-after past the queued limit |
 | Stream | Workers append to `thread_events`; the console re-attaches with `after=seq` |

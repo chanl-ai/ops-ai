@@ -99,6 +99,8 @@ class WorkerHost:
     run_scope: Callable[[str], AbstractContextManager[object]]
     owner: str
     concurrency: int = 4
+    # Work rows one team (or concurrency key) may run at once across every worker; None for no cap (work.py).
+    team_cap: int | None = None
     # Called with the run before its pass, inside the pass's own task: the host records the run's team, so what the
     # pass sends on (a tool call's service token) names the team the run belongs to, as a person's request would.
     enter_run: Callable[[RunRow], None] | None = None
@@ -168,7 +170,7 @@ class Worker:
     def __init__(self, host: WorkerHost, beat: background.Beat | None = None) -> None:
         """`beat` is the workflow worker's heartbeat, written from this loop's own scope, never a pass's."""
         self.host, self.beat = host, beat
-        self.queue = WorkQueue(host.tx, host.owner, host.leases.ttl)
+        self.queue = WorkQueue(host.tx, host.owner, host.leases.ttl, team_cap=host.team_cap)
         self.runs = RunStore(host.tx)
         self.definitions = DefinitionStore(host.tx)
 
