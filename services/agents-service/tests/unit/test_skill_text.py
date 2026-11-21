@@ -314,7 +314,7 @@ _POLICY: dict[str, Any] = {"active": {"type": "boolean"}}
 
 
 @pytest.mark.parametrize(
-    ("text", "kinds", "hints", "exit", "dos"),
+    ("text", "kinds", "hints", "exit", "dos", "shape"),
     [
         pytest.param(
             "Find it with @tool:find_policy\n- if active:\n    Open it with @tool:open_claim\n"
@@ -323,12 +323,14 @@ _POLICY: dict[str, Any] = {"active": {"type": "boolean"}}
             [],
             {"lapsed": "Lapsed"},
             ["Find it with @tool:find_policy", "Open it with @tool:open_claim"],
+            (None, 1, 1),
             id="a list-marked else is its if's other path and a list-marked stop on it ends the skill",
         ),
         pytest.param(
             "Say hello\n- else:\n    Say goodbye",
             ["text", "else", "text"],
             [2],
+            None,
             None,
             None,
             id="a list-marked else with no if above is hinted",
@@ -339,6 +341,7 @@ _POLICY: dict[str, Any] = {"active": {"type": "boolean"}}
             [],
             {},
             ["Find it with @tool:find_policy", "Stop now"],
+            (2, 0, 0),
             id="a stop that runs on is an instruction",
         ),
         pytest.param(
@@ -352,6 +355,7 @@ _POLICY: dict[str, Any] = {"active": {"type": "boolean"}}
                 "If active:\nOpen the claim with @tool:open_claim",
                 "Otherwise:\nStop",
             ],
+            (3, 0, 0),
             id="a flat numbered list builds no path and a top-level Stop is text, each with a hint",
         ),
         pytest.param(
@@ -365,6 +369,7 @@ _POLICY: dict[str, Any] = {"active": {"type": "boolean"}}
                 "Check the policy is active\nOpen the claim with @tool:open_claim",
                 'Tell the customer\nStop "Policy lapsed"\nSay goodbye',
             ],
+            (3, 0, 0),
             id="a top-level Stop with a reason in a flat list is text and every step runs",
         ),
         pytest.param(
@@ -373,18 +378,39 @@ _POLICY: dict[str, Any] = {"active": {"type": "boolean"}}
             [4],
             {},
             ["Find it with @tool:find_policy", "Open it with @tool:open_claim", "Otherwise:\nSay goodbye"],
+            (None, 1, 0),
             id="a flat else after a real if is text with a hint",
+        ),
+        pytest.param(
+            '1. Look up the policy\n2. If active:\n3. Open the claim\n4. Otherwise:\n5. Stop "Policy lapsed"',
+            ["text"] * 5,
+            [2, 4, 5],
+            {},
+            ["Look up the policy", "If active:", "Open the claim", "Otherwise:", 'Stop "Policy lapsed"'],
+            (5, 0, 0),
+            id="a flat numbered list with no mention keeps one step per line, with no paths",
         ),
     ],
 )
 def test_the_reader_reads_each_keyword_with_or_without_a_list_marker(
-    text: str, kinds: list[str], hints: list[int], exit: dict[str, str] | None, dos: list[str] | None
+    text: str,
+    *,
+    kinds: list[str],
+    hints: list[int],
+    exit: dict[str, str] | None,
+    dos: list[str] | None,
+    shape: tuple[int | None, int, int] | None,
 ) -> None:
     r = read(text, fields={"@tool:find_policy": _POLICY, "@tool:open_claim": _POLICY})
     assert [m["kind"] for m in r.marks] == kinds
     assert [h["line"] for h in r.hints] == hints, r.hints
     assert (r.program and r.program.exit) == exit
     assert (r.program and [s.do for s in r.program.steps]) == dos, "a list marker is not part of the step"
+    if shape is not None and r.program is not None:
+        count, branches, exits = shape
+        assert (len(r.program.steps) if count is not None else None) == count
+        assert sum(s.branch is not None for s in r.program.steps) == branches
+        assert len(r.program.exit) == exits
     # The editor highlights and indents from these spans, past the list marker, never from its own matching.
     lines = text.split("\n")
     spans = [
