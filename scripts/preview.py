@@ -235,12 +235,38 @@ def ports_for(offset: int, env: dict[str, str]) -> dict[int, str]:
     return out
 
 
+def tool_output(cmd: list[str]) -> str:
+    """A helper tool's stdout; a tool that is not installed (CI, a devcontainer) is skipped with a one-line warning,
+    and the rest of the check still runs."""
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, check=False).stdout
+    except FileNotFoundError:
+        print(f"warning: {cmd[0]} not found; skipping the part of the port check that needs it", file=sys.stderr)
+        return ""
+
+
+def with_descendants(pids: set[int]) -> set[int]:
+    """The pids plus every process below them: a stack's pid file holds the launcher (pnpm, uv), and the process
+    that listens is its child."""
+    kids: dict[int, list[int]] = {}
+    for line in tool_output(["ps", "-axo", "pid=,ppid="]).splitlines():
+        parts = line.split()
+        if len(parts) == 2 and all(x.isdigit() for x in parts):
+            kids.setdefault(int(parts[1]), []).append(int(parts[0]))
+    out, todo = set(pids), list(pids)
+    while todo:
+        for k in kids.get(todo.pop(), []):
+            if k not in out:
+                out.add(k)
+                todo.append(k)
+    return out
+
+
 def listening() -> dict[int, list[tuple[int, str]]]:
     """{port: [(pid, command)]} for every TCP listener, from one lsof call."""
-    r = subprocess.run(["lsof", "-nP", "-iTCP", "-sTCP:LISTEN", "-Fpcn"], capture_output=True, text=True, check=False)
     out: dict[int, list[tuple[int, str]]] = {}
     pid, cmd = 0, ""
-    for line in r.stdout.splitlines():
+    for line in tool_output(["lsof", "-nP", "-iTCP", "-sTCP:LISTEN", "-Fpcn"]).splitlines():
         if line[:1] == "p" and line[1:].isdigit():
             pid, cmd = int(line[1:]), ""
         elif line[:1] == "c":
@@ -254,13 +280,8 @@ def listening() -> dict[int, list[tuple[int, str]]]:
 
 def docker_ports(project: str) -> set[int]:
     """Host ports the compose project's containers publish; docker's own process holds them, not the stack's pids."""
-    r = subprocess.run(
-        ["docker", "ps", "--filter", f"label=com.docker.compose.project={project}", "--format", "{{.Ports}}"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return {int(m) for m in re.findall(r":(\d+)->", r.stdout)}
+    cmd = ["docker", "ps", "--filter", f"label=com.docker.compose.project={project}", "--format", "{{.Ports}}"]
+    return {int(m) for m in re.findall(r":(\d+)->", tool_output(cmd))}
 
 
 def brief(held: list[str], limit: int = 2) -> str:
@@ -370,7 +391,7 @@ def check_offset(p: Previews, a: argparse.Namespace) -> int:
             held.append(f"data in .data/offset-{off} belongs to {marker.read_text().strip()}, not {branch}")
     ports = ports_for(off, dict(os.environ))
     own_ports = docker_ports(f"ops-runtime-{off}") if any(v > 0 for v in ports) else set()
-    held += blockers(ports, listening(), p.own_pids(off), own_ports)
+    held += blockers(ports, listening(), with_descendants(p.own_pids(off)), own_ports)
     if held:
         print(f"refused: offset {off} is in use: " + brief(held, 4), file=sys.stderr)
         return 1

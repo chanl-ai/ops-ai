@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -151,3 +152,26 @@ def test_make_up_in_its_own_worktree_claims_an_unmarked_folder_and_refuses_anoth
     assert (d / "branch").read_text() == "feat/x"
     r = run(tmp_path, "check-offset", "--offset", "52000", "--branch", "feat/y")
     assert r.returncode == 1 and "belongs to feat/x" in r.stderr
+
+
+def test_listener_that_is_a_child_of_the_stacks_pidfile_pid_is_its_own(tmp_path: Path) -> None:
+    env = fake_lsof(tmp_path, [(98500, "next-server", 56016)])
+    (tmp_path / "bin" / "ps").write_text("#!/bin/sh\necho '98360 1'\necho '98500 98360'\n")
+    (tmp_path / "bin" / "ps").chmod(0o755)
+    (tmp_path / "offset-53000").mkdir()
+    (tmp_path / "offset-53000" / "console.pid").write_text("98360")
+    assert run(tmp_path, "check-offset", "--offset", "53000", env=env).returncode == 0
+    (tmp_path / "offset-53000" / "console.pid").write_text("555")
+    assert run(tmp_path, "check-offset", "--offset", "53000", env=env).returncode == 1
+
+
+def test_missing_lsof_and_docker_warn_and_the_rest_of_the_check_runs(tmp_path: Path) -> None:
+    bin_dir = tmp_path / "nobin"
+    bin_dir.mkdir()
+    for tool in ("make", "sed", "sh", "git", "od", "tr", "rm", "cat", "uname", "ps"):
+        if shutil.which(tool):
+            (bin_dir / tool).symlink_to(shutil.which(tool))
+    env = {**os.environ, "PATH": str(bin_dir)}
+    r = run(tmp_path, "check-offset", "--offset", "57000", env=env)
+    assert "lsof not found" in r.stderr and "docker not found" in r.stderr and "65535" in r.stderr
+    assert "Traceback" not in r.stderr
