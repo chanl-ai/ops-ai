@@ -22,9 +22,13 @@ Two tables hold steps: registry_skill_versions (`content.steps`, with `digest`, 
 `spec`). Every version of both, draft or published, is read in key order BATCH rows at a time and only the rows that
 change are written, with the digest worked out as the stores do (store/agent_registry.py digest_of). `tokens` (the
 lengths of each step's `do` and check) and `changes` do not depend on `use` and stay. Every tenant's rows are read, so
-both tables' own policies are set aside inside the migration's transaction (on SQL Server each is dropped and made
-again before that transaction ends). Before they are put back every row is read again, and the upgrade stops if any
-step would still change. A second run changes nothing. Stop agents-service before upgrading (docs/deploy/upgrade.md).
+each table's own policy is set aside, one batch at a time: a batch sets the policy aside, reads and writes its rows,
+puts the policy back and ends its transaction (on SQL Server the policy is dropped and made again inside that
+transaction). The table is locked for one batch, never for the whole fill, and no other session sees it without its
+policy, so the upgrade runs while agents-service serves. A pass over both tables that writes nothing ends the upgrade;
+a pass that wrote is followed by another, and the upgrade stops if PASSES of them all wrote. A second run changes
+nothing. A version the earlier release saves after the last pass keeps a step with no stored tool: that step runs
+nothing, and the publish check and the attach refuse it until its builder marks the tool.
 
 Two other copies of steps are left as they are. A template copy's `base` (template_copies) is the template's body the
 next update merges against: given the stored tools, it would differ from a template without them, and the update
@@ -43,7 +47,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from typing import Any, cast
 
 import sqlalchemy as sa
@@ -60,6 +64,8 @@ depends_on = None
 CHAIN = "agents"
 # Rows read per statement and written per UPDATE; under 5000, where SQL Server escalates row locks to a table lock.
 BATCH = 1000
+# Passes over both tables before the upgrade gives up on a release that keeps saving steps without their tool.
+PASSES = 4
 REF_TOKEN = re.compile(
     r"(?<![\w@])@(tool|knowledge|skill|agent|workflow):([A-Za-z0-9](?:[A-Za-z0-9_.-]{0,126}[A-Za-z0-9_])?)"
 )
@@ -168,35 +174,43 @@ def _digest(body: Any) -> str:
     return hashlib.sha256(canonical_json(body).encode()).hexdigest()
 
 
-def _pages(t: sa.Table, body: str) -> Iterator[list[tuple[str, int, Any]]]:
-    """Every row's (parent id, version, body), BATCH at a time in key order. SQL Server compares no row values, so the
-    key after the last one read is spelled out."""
-    bind = op.get_bind()
+def _page(t: sa.Table, body: str, last: tuple[str, int] | None) -> list[tuple[str, int, Any]]:
+    """The next BATCH rows after `last` as (parent id, version, body), in key order. SQL Server compares no row
+    values, so the key after the last one read is spelled out."""
     parent, version = t.c[t.primary_key.columns.keys()[0]], t.c.version
-    last: tuple[str, int] | None = None
-    while True:
-        q = sa.select(parent, version, t.c[body]).order_by(parent, version).limit(BATCH)
-        if last is not None:
-            q = q.where(sa.or_(parent > last[0], sa.and_(parent == last[0], version > last[1])))
-        rows = [(str(r[0]), int(r[1]), r[2]) for r in bind.execute(q).all()]
-        if not rows:
-            return
-        yield rows
-        last = (rows[-1][0], rows[-1][1])
+    q = sa.select(parent, version, t.c[body]).order_by(parent, version).limit(BATCH)
+    if last is not None:
+        q = q.where(sa.or_(parent > last[0], sa.and_(parent == last[0], version > last[1])))
+    return [(str(r[0]), int(r[1]), r[2]) for r in op.get_bind().execute(q).all()]
 
 
-def _fill(t: sa.Table, body: str, rewrite: Rewrite) -> tuple[int, int]:
-    """Stores the tools of every version of `t` that needs one; (versions written, steps that gained a tool). Prints
-    each version it writes and each step it leaves for its builder."""
+def _commit() -> None:
+    """Ends the transaction a batch ran in and opens the next one: alembic's autocommit block commits on the way in
+    and begins again on the way out."""
+    with op.get_context().autocommit_block():
+        pass
+
+
+def _fill(t: sa.Table, body: str, rewrite: Rewrite, dialect: str, *, first: bool) -> tuple[int, int]:
+    """One pass over `t`, storing the tools of every version that needs one; (versions written, steps that gained a
+    tool). Each batch is its own transaction: the table's policy is set aside, BATCH rows are read and the changed
+    ones written, the policy is put back, and the transaction ends, so the table is locked for one batch at a time
+    and no other session ever sees it without its policy. The first pass prints each step it leaves for its
+    builder; every pass prints each version it writes."""
     parent = t.primary_key.columns.keys()[0]
     keyed = sa.and_(t.c[parent] == sa.bindparam("k_parent"), t.c.version == sa.bindparam("k_version"))
     update = t.update().where(keyed).values({body: sa.bindparam(body), "digest": sa.bindparam("digest")})
+    before, after = backfill_ddl([t], dialect, chain=CHAIN, kind="tenant")
     versions = steps = 0
-    for rows in _pages(t, body):
+    last: tuple[str, int] | None = None
+    while True:
+        for statement in before:
+            op.execute(statement)
+        rows = _page(t, body, last)
         changed: list[Json] = []
         for key, number, held in rows:
             rewritten, gained, left = rewrite(held)
-            for step in left:
+            for step in left if first else ():
                 print(f"0120_skill_step_tools: left for its builder: {t.name} {key} v{number} {step}")
             if gained:
                 changed.append({"k_parent": key, "k_version": number, body: rewritten, "digest": _digest(rewritten)})
@@ -205,13 +219,12 @@ def _fill(t: sa.Table, body: str, rewrite: Rewrite) -> tuple[int, int]:
         if changed:
             op.get_bind().execute(update, changed)
             versions += len(changed)
-    return versions, steps
-
-
-def _left(t: sa.Table, body: str, rewrite: Rewrite) -> int:
-    """How many stored steps of `t` still name exactly one tool, agent or workflow in their sentence and have no
-    `use`."""
-    return sum(len(rewrite(held)[1]) for rows in _pages(t, body) for _key, _number, held in rows)
+        for statement in after:
+            op.execute(statement)
+        _commit()
+        if len(rows) < BATCH:
+            return versions, steps
+        last = (rows[-1][0], rows[-1][1])
 
 
 def upgrade() -> None:
@@ -219,19 +232,27 @@ def upgrade() -> None:
         return
     dialect = op.get_bind().dialect.name
     tables = ((SKILL_VERSIONS, "content", _with_tools), (AGENT_VERSIONS, "spec", _pins_with_tools))
-    # Every tenant's versions are filled, so each table's own policy is set aside, only ever inside a transaction.
-    before, after = backfill_ddl([t for t, _, _ in tables], dialect, chain=CHAIN, kind="tenant")
-    for statement in before:
-        op.execute(statement)
-    (skills, skill_steps), (agents, pin_steps) = [_fill(t, body, rewrite) for t, body, rewrite in tables]
-    left = sum(_left(t, body, rewrite) for t, body, rewrite in tables)
-    if left:
-        raise RuntimeError(f"0120: {left} stored skill steps still name their one tool only in their sentence")
-    for statement in after:
-        op.execute(statement)
+    versions = {t.name: 0 for t, _, _ in tables}
+    steps = 0
+    # A pass that writes nothing is the proof that no stored step is left. A release still running may save a step
+    # behind a pass, so a pass that wrote is followed by another, up to PASSES.
+    for n in range(PASSES):
+        wrote = 0
+        for t, body, rewrite in tables:
+            v, s = _fill(t, body, rewrite, dialect, first=n == 0)
+            versions[t.name] += v
+            steps += s
+            wrote += v
+        if not wrote:
+            break
+    else:
+        raise RuntimeError(
+            f"0120: versions were still being saved without their step tools after {PASSES} passes; stop the release "
+            "that reads a step's tool from its sentence and run the upgrade again"
+        )
     print(
-        f"0120_skill_step_tools: stored the tool of {skill_steps + pin_steps} steps in {skills} skill versions and "
-        f"{agents} agent versions; 0 steps left naming their one tool only in their sentence"
+        f"0120_skill_step_tools: stored the tool of {steps} steps in {versions[SKILL_VERSIONS.name]} skill versions "
+        f"and {versions[AGENT_VERSIONS.name]} agent versions; a last pass found none left"
     )
 
 

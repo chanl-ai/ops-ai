@@ -62,7 +62,7 @@ Walks and probes act in a test team and remove what they make where a route allo
 
 | Walk | Team | Cleanup |
 |---|---|---|
-| `deploy/fly/smoke.mjs` | `OPS_SMOKE_TEAM` (use `team_security`); default the admin's first team | Deletes its agent, workflow (archived when it has runs), files, chat and approver |
+| `deploy/fly/smoke.mjs` (run by `make stg-deploy` after the click walk; `SKIP_SMOKE=1` leaves it out) | `OPS_SMOKE_TEAM` (`team_security` in a deploy); default the admin's first team | Deletes its agent, workflow (archived when it has runs), files, chat and approver |
 | `docs/usecases/lib/stg_click_walk.mjs` | The first admin's first team; it only reads | None needed |
 | `scripts/team_isolation_probe.py --seed` | The team given as B (use `team_319b708e5de1`) | Deletes what it seeded; a case has no delete route and stays |
 

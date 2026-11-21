@@ -636,10 +636,13 @@ class ConnectionService:
         self._can(who, "view")
         return await self._view(who, await self._get(who, connection_id))
 
-    async def team_rows(self, who: Caller, app_ids: Sequence[str] | None = None) -> list[Account]:
+    async def team_rows(
+        self, who: Caller, app_ids: Sequence[str] | None = None, *, action: str = "view"
+    ) -> list[Account]:
         """The caller's team's accounts as stored, with the modules that use them, for the Apps grid to join;
-        secrets stay names, never values. `app_ids`: only the accounts of those apps, one page of the grid."""
-        self._can(who, "view")
+        secrets stay names, never values. `app_ids`: only the accounts of those apps, one page of the grid. `action`
+        `OWN`: read for the person's own connectors (My apps), under the rule their own sign-ins take."""
+        self._can(who, action)
         if app_ids is not None:
             return await self.store.of_apps(who.tenant_id, who.team.id, app_ids)
         teams = [who.team.id]

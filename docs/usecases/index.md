@@ -173,7 +173,6 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-410 | tools-service | An assistant lists and runs a team's read tools over MCP with an API key; writes, other teams and production are refused | api, ui | `tools-service/mcp-server.md` |
 | uc-267 | console | Admins see roles, a person's effective access and why an action is refused | ui | `console/access-roles-and-checks.md` |
 | uc-233 | console | Start run is a form generated from the trigger's input schema; a file input uploads or picks files and the run gets their ids | ui | `console/run-with-files.md` |
-| uc-234 | console | A Human Task opens as its own page: the question, the document beside the read values, Details folded, and the decision in a footer row that never covers the body | ui | `console/human-task-page.md` |
 | uc-257 | console | Tables size each column by what it holds: names trimmed to one line with the whole value on hover, numbers right-aligned, a dash for an empty cell, and the name pinned on a phone | ui | `console/table-column-kinds.md` |
 | uc-248 | agents-service | A hold on a customer's account: matched, worked out, approved in time or by a supervisor after the deadline, placed, noted on a case, and the outside system told | ui | `agents-service/a-hold-on-a-customer-s.md` |
 | uc-249 | agents-service | A complaint email: each attachment recognised and its read kept, the complaint read and triaged by an agent, a case by urgency, a hold started, and an approved reply | ui | `agents-service/a-complaint-email-is-triaged-attachments.md` |

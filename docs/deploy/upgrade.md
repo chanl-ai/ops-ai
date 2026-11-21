@@ -40,9 +40,10 @@ needs `--admin-url-file <file>` to take the backup.
 - Each step of `upgrade.sql` checks the version it starts from and stops before any change when the database is
   somewhere else, so running it twice is refused.
 - Some steps move rows that the running release still writes. Stop the services before the database step, and start
-  only the new release after it. Agents 0120 (stored skill step tools) requires it: it rewrites every skill and agent
-  version with both tables' policies set aside, so agents-service and its workers must be stopped until it finishes.
-  `make stg-deploy` stops the staging machine before its release command (`deploy/fly/stg_deploy.sh`).
+  only the new release after it. Agents 0120 (stored skill step tools) does not need the stop: it rewrites skill and
+  agent versions one batch per transaction, each batch setting its table's policy aside and putting it back, so the
+  services keep serving. A version the earlier release saves after its last pass is refused by the publish check and
+  the attach until its builder marks the step's tool.
 
 ## Roll back
 
