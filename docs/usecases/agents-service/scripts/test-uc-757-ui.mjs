@@ -42,8 +42,13 @@ await withUiStack(
     const errors = [];
     const failed = [];
     const watch = (page, who) => {
-      page.on('pageerror', (e) => errors.push(`${who}: ${e.message}`));
-      page.on('console', (m) => m.type() === 'error' && !/Failed to load resource/.test(m.text()) && errors.push(`${who}: ${m.text()}`));
+      page.on('pageerror', (e) => errors.push(`${who}: ${e.message} ${(e.stack ?? '').split('\n').slice(1, 4).join(' ')}`));
+      // React's warnings arrive as a format string with `%s`; the arguments name the components.
+      page.on('console', (m) => {
+        if (m.type() !== 'error' || /Failed to load resource/.test(m.text())) return;
+        const at = errors.push(`${who}: ${m.text()}`) - 1;
+        void Promise.all(m.args().map((a) => a.jsonValue().catch(() => '?'))).then((args) => (errors[at] = `${who}: ${args.map(String).join(' | ').slice(0, 600)}`));
+      });
       // A reply's stream is closed by the browser when the page is resized or left after the reply ended; that is not a failure.
       // So is a link's prefetch (`_rsc`) the browser drops when the page is left before it answers.
       const dropped = (r) => (r.method() === 'POST' && /\/chat\/threads\/[^/]+\/messages$/.test(r.url())) || (/[?&]_rsc=/.test(r.url()) && r.failure()?.errorText === 'net::ERR_ABORTED');
@@ -118,6 +123,12 @@ await withUiStack(
       await page.keyboard.press('End');
       // One insert, as a paste is: the check is about what Reload keeps, not about key-by-key typing.
       await page.keyboard.insertText(' Then thank them.');
+      // A resize to phone width and back draws the page's columns again; the unsaved text and its save stay.
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.waitForTimeout(800);
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await lineOf('Then thank them.').waitFor({ timeout: 10_000 }).catch(() => undefined);
+      check('10 unsaved text survives a resize to 390 and back, still unsaved', /Then thank them\./.test(await doc.innerText()) && (await page.getByTestId('save-skill-draft').isEnabled()), await doc.innerText());
       await made(`/v1/skills/${skill.id}/publish-requests`, { note: 'use case' });
       const open = (await (await fetch(`${agents}/v1/skills/${skill.id}`, { headers: J })).json()).data;
       await made(`/v1/skills/${skill.id}/draft`, { name: `Card dispute renamed ${RUN}`, baseVersion: open.version, baseDigest: open.digest }, 'PUT');

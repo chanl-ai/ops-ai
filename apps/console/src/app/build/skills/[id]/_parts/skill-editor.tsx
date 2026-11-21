@@ -79,12 +79,9 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried }: { sk
   const [noting, setNoting] = React.useState(false);
   const options = useSkillOptions();
   const saved = React.useMemo(() => formOf(sk), [sk]);
-  // Drawn again on a newer version after Reload, the form starts from that version with the person's unsaved edits
-  // on top (`carried`, which the page holds across the remount).
+  // The page owns the unsaved edits (`carried`): the form is drawn again on a resize (the page's columns stack below
+  // 1024px) and on a newer version after Reload, and each time starts from the saved version with those edits on top.
   const [form, setForm] = React.useState<Form>(() => (carried?.current ? keptEdits(carried.current.readBefore, carried.current.edited, saved) : saved));
-  React.useEffect(() => {
-    if (carried) carried.current = null;
-  }, [carried]);
   const [mode, setMode] = React.useState<'edit' | 'preview'>('edit');
   const [note, setNote] = React.useState('');
   const [endingValid, setEndingValid] = React.useState(true);
@@ -120,6 +117,13 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried }: { sk
     scope: !same(form.toolIds, saved.toolIds) || !same(form.knowledgeBases, saved.knowledgeBases) || !same(form.guardrails, saved.guardrails) || form.refusal.trim() !== saved.refusal.trim(),
   };
   const dirty = changed.wording || changed.scope;
+  // Set while a save is in flight: the saved version redraws the form, and the edits it saved are not carried onto it.
+  const saving = React.useRef(false);
+  const formNow = React.useRef(form);
+  formNow.current = form;
+  React.useEffect(() => {
+    if (carried && !saving.current) carried.current = dirty ? { readBefore: saved, edited: form } : null;
+  }, [carried, dirty, saved, form]);
   // The page holds back what would redraw this form (a file added, a version restored) while there is unsaved text.
   React.useEffect(() => {
     onDirtyChange?.(dirty);
@@ -143,12 +147,16 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried }: { sk
   // The tab remounts once the saved version arrives, so the toast follows the awaited result rather than mutate callbacks.
   const submit = async () => {
     setFailed(null);
+    saving.current = true;
+    if (carried) carried.current = null;
     try {
       // A skill saved as a list of steps keeps them until its text is changed; one written as text sends its text.
       const text = form.text !== saved.text || sk.content.source !== undefined ? { source: form.text } : {};
       const d = await save.mutateAsync({ name: form.name, useWhen: form.when.useWhen, loading: form.loading, ...(stepped ? {} : { instructions: form.instructions }), toolIds: form.toolIds, knowledgeBases: form.knowledgeBases, guardrails: form.guardrails, refusal: form.refusal.trim(), parts: form.parts, ...(stepped ? { inputs: form.inputs, ...text, notWhen: form.when.notWhen.trim(), exit: form.ending.exit, returns: form.ending.returns, success: form.ending.success } : {}), note: note.trim() || undefined, ...baseOf(sk) });
       toast.success(`Saved draft v${d.versions[0].version}`, { description: `${EDIT_CLASS[d.versions[0].editClass].hint} Run the tests before requesting review.` });
     } catch (e) {
+      // Still this form: what it holds now, typed during the save included, is carried again.
+      if (carried) carried.current = { readBefore: saved, edited: formNow.current };
       // In review and deprecated are 409 as well; only a newer version offers a reload.
       const newer = staleSave(e);
       if (newer) return setStale(staleNote(newer));
@@ -161,15 +169,15 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, carried }: { sk
       // The toast goes away; the page keeps saying so, with a way to try again, while the text is still unsaved.
       setFailed((e as Error).message);
       toast.error('Couldn’t save the draft', { description: (e as Error).message });
+    } finally {
+      saving.current = false;
     }
   };
   // The page remounts this form when a newer version arrives, and the new form takes the person's unsaved edits from
   // `carried`. With nothing newer the form stays as it is. Either way nothing the person typed is dropped.
   const reload = async () => {
     if (carried) carried.current = { readBefore: saved, edited: form };
-    const read = await current.refetch();
-    const newer = read.data?.versions[0];
-    if (carried && newer && newer.version === newest.version && newer.savedAt === newest.savedAt) carried.current = null;
+    await current.refetch();
     setStale(null);
   };
   const askNote = async () => {

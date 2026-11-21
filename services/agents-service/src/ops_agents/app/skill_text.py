@@ -309,7 +309,8 @@ class _Parser:
             else:
                 if _STOP.match(word):
                     self.marks[line]["kind"] = "text"
-                items.append(_Text(line, txt))
+                # The step the agent reads drops a pasted list marker, as the keywords above do.
+                items.append(_Text(line, word))
         return items
 
     def _inner(self, line: int, ind: int, depth: int) -> list[_Item]:

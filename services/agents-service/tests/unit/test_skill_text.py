@@ -8,6 +8,9 @@ reaches done early skipping the results the skill owes; and a write on a path th
 
 from __future__ import annotations
 
+import ast
+import re
+from pathlib import Path
 from typing import Any
 
 from ops_agent_kernel import step_tools, steps
@@ -258,6 +261,32 @@ def test_a_procedure_pasted_from_a_document_reads_as_its_paths() -> None:
     assert r.hints == [], "list items and pasted spaces earn no indent hint"
     assert [m["kind"] for m in r.marks][4:] == ["if", "step", "if", "step", "else", "stop"]
     assert [m["depth"] for m in r.marks] == [0, 1, 1, 0, 0, 1, 1, 2, 0, 1]
+    assert r.program.steps[0].do.split("\n")[:3] == [
+        "Check what the caller needs:",
+        "their policy number",
+        "the date of the claim",
+    ], "a list marker is not part of the step the agent reads"
+
+
+def _starter() -> str:
+    """The console's starter text (`WORKED_EXAMPLE`), read from its source so the check follows what a builder sees."""
+    meta = Path(__file__).parents[4] / "apps/console/src/components/skills/skill-meta.tsx"
+    block = re.search(r"WORKED_EXAMPLE = \[(.*?)\]\.join", meta.read_text(), re.S)
+    assert block, meta
+    return "\n".join(ast.literal_eval(f"[{block.group(1)}]"))
+
+
+def test_the_starter_text_runs_as_the_steps_it_shows() -> None:
+    # With its tool picked: the starter says to type @ at the end of the line that looks the order up.
+    starter = "\n".join(
+        f"{line} @tool:find_order" if "Type @" in line or "type @" in line else line for line in _starter().split("\n")
+    )
+    r = read(starter)
+    assert r.program is not None
+    shown = [n for n, line in enumerate(starter.split("\n"), start=1) if not line.strip().endswith(":")]
+    assert r.step_lines == shown, "each line the starter shows outside its if and else is one step"
+    first = r.program.steps[0]
+    assert first.use is not None and first.use.id == "find_order" and first.branch is not None
 
 
 def test_a_write_on_a_path_the_agent_decides_is_a_hint_and_one_behind_a_checked_path_is_not() -> None:
