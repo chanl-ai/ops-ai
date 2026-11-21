@@ -148,7 +148,7 @@ async function run(qc: QueryClient, threadId: string, input: SendInput, cutFrom?
       else if (ev.type === 'citations') patch(threadId, (t) => ({ ...t, assistant: { ...t.assistant, citations: ev.citations } }));
       else if (ev.type === 'done') patch(threadId, (t) => ({ ...t, assistant: ev.message }));
       // The reply keeps the service's message and the refusal's code; the message view words the code for its reader.
-      else if (ev.type === 'error') patch(threadId, (t) => ({ ...t, assistant: { ...ev.partial, error: ev.message, errorCode: ev.code ?? ev.partial?.errorCode } }));
+      else if (ev.type === 'error') patch(threadId, (t) => ({ ...t, assistant: { ...ev.partial, error: ev.message, errorCode: ev.code ?? ev.partial?.errorCode, errorKind: ev.kind, errorRetryable: ev.retryable } }));
     }
   } catch (e) {
     if (e instanceof IdleTimeout) {

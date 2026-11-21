@@ -293,6 +293,7 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-723 | console | The console lists every area as an open sidebar section, offered only by what the person may open: admin, builder, reviewer, viewer, a chat-only person and a person in two teams; with the area_tabs flag on, the area tabs come back | ui | `console/console-areas.md` |
 | uc-722 | console | The areas rest on server facts: the seeded people hold the cells the areas are built from, and the tool-call list shows one call by its id | api | `console/console-areas-server-facts.md` |
 | uc-workflows-1 | agents-service | A Schedule trigger starts one run when its tick is due, the same tick key starts no second run, and a tick due later stays queued | api, sdk | `(no doc)` |
+| uc-workflows-2 | agents-service | A builder reads why a test run failed: its kind, code, the failed step, a sentence for an end user and the End it stopped at | api, sdk, cli | `(no doc)` |
 | uc-platform-1 | platform-service | A team's running work is counted for that team only, and the delete check names it and stops the deletion | api | `(no doc)` |
 | uc-751 | agents-service | Evals keep saved cases and runs for the team | api, sdk, ui | `agents-service/evals-keep-saved-cases-and-runs.md` |
 | uc-752 | agents-service | An agent answers from a knowledge source with a citation, in mock and real mode | api, sdk, ui | `agents-service/an-agent-answers-from-a-knowledge.md` |

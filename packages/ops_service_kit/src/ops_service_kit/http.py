@@ -22,7 +22,9 @@ from starlette.middleware import Middleware
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from typing_extensions import TypeVar
 
-from .errors import ApiError, TooManyRequests
+from ops_contracts.errors import Code, ErrorKind
+
+from .errors import ApiError, TooManyRequests, error_row
 from .ids import new_id
 from .listing import page_sizes
 from .logging import get_logger
@@ -89,6 +91,10 @@ class ErrorBody(Out):
     message: str
     status: int
     request_id: str
+    # The error model's kind and whether trying the same call again can help (ops_contracts.errors.CODES), so no
+    # caller keeps its own table of what a status means.
+    kind: ErrorKind
+    retryable: bool
     details: Any = None
 
 
@@ -296,6 +302,8 @@ class ErrorJSON(TypedDict):
     message: str
     status: int
     requestId: str
+    kind: ErrorKind
+    retryable: bool
     details: NotRequired[object]
 
 
@@ -306,10 +314,21 @@ class ErrorBodyJSON(TypedDict):
     error: ErrorJSON
 
 
-def error_body(status: int, code: str, message: str) -> ErrorBodyJSON:
+def error_body(status: int, code: str, message: str, *, row: Code | None = None) -> ErrorBodyJSON:
+    """The error envelope; `kind` and `retryable` come from `row` (an ApiError's `row`), else the code's own row or
+    its status's (ops_service_kit.errors.error_row)."""
     # The request's own id, so a reported error leads to its log lines; minted when built outside a request.
     request_id = current_request_id() or new_id("req")
-    return {"success": False, "error": {"code": code, "message": message, "status": status, "requestId": request_id}}
+    said = row or error_row(status, code)
+    error: ErrorJSON = {
+        "code": code,
+        "message": message,
+        "status": status,
+        "requestId": request_id,
+        "kind": said.kind,
+        "retryable": said.retryable,
+    }
+    return {"success": False, "error": error}
 
 
 class _UnhandledAsEnvelope:
@@ -357,7 +376,7 @@ def install_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(ApiError)
     async def api_error(_: Request, e: ApiError) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        body = error_body(e.status, e.code, e.message)
+        body = error_body(e.status, e.code, e.message, row=e.row)
         if e.details:
             body["error"]["details"] = e.details
         wait = e.retry_after_s if isinstance(e, TooManyRequests) else None

@@ -172,8 +172,9 @@ Today: no breach.
 Pattern (`services/agents-service/migrations/versions/0103_eval_cases_runs.py:1`): a docstring saying what the revision
 changes and why, then `revision`, `down_revision`.
 
-Check: each service's test setup upgrades an empty database to head (only for services in the CI plan). Needed: a
-`checks` step that asserts one head per chain.
+Check: `migration-heads` (`scripts/check_migration_heads.py`) in `make checks`, so in `make verify`, the pull request's
+`checks` job and pre-commit, fails a `services/*/migrations/versions` chain with more than one head and names both;
+each service's test setup upgrades an empty database to head (only for services in the CI plan).
 
 ## DA9 Every migration downgrades and runs on both databases
 

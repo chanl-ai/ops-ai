@@ -1312,10 +1312,17 @@ export interface components {
             code: string;
             /** Details */
             details?: unknown;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "input" | "refused" | "upstream" | "timeout" | "internal";
             /** Message */
             message: string;
             /** Requestid */
             requestId: string;
+            /** Retryable */
+            retryable: boolean;
             /** Status */
             status: number;
         };

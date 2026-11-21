@@ -42,6 +42,8 @@ class RunRow(Out):
     outcome: str | None = None
     output: JsonValue = None
     error: str | None = None
+    # The error model's record of `error` (ops_contracts.errors.RunError, on the wire's camelCase keys).
+    failure: Json | None = None
     # While waiting: {node, iteration, interruptId, payload}; its own model comes later.
     waiting: Json | None = None
     created_by: str
@@ -340,7 +342,15 @@ class RunStore:
         return bool(gone.rowcount)
 
     async def finish(
-        self, run_id: str, *, generation: int | None, failed: bool, outcome: str, output: Any, error: str | None
+        self,
+        run_id: str,
+        *,
+        generation: int | None,
+        failed: bool,
+        outcome: str,
+        output: Any,
+        error: str | None,
+        failure: Json | None = None,
     ) -> str:
         """Records the End the run's graph reached and returns the status written. A failure End fails the run. A
         run whose graph ended while runs it started are still going is not done: it reads waiting while one of them
@@ -363,6 +373,7 @@ class RunStore:
                     outcome=outcome,
                     output=output,
                     error=error,
+                    failure=failure,
                     waiting=None,
                     finished_at=at if done else None,
                     updated_at=at,
@@ -386,7 +397,9 @@ class RunStore:
                 return False
             finished = at if status in TERMINAL else None
             await c.execute(
-                r.update().where(mine).values(status=status, error=None, finished_at=finished, updated_at=at)
+                r.update()
+                .where(mine)
+                .values(status=status, error=None, failure=None, finished_at=finished, updated_at=at)
             )
         return True
 
@@ -511,7 +524,7 @@ class RunStore:
                 return None, False
             if found.status != "stuck":
                 return await self.row(run_id), False
-            await c.execute(r.update().where(mine).values(status="queued", error=None, updated_at=at))
+            await c.execute(r.update().where(mine).values(status="queued", error=None, failure=None, updated_at=at))
             await c.execute(
                 w.update()
                 .where(w.c.run_id == run_id, w.c.tenant_id == self.tx.tenant(), w.c.status.in_(("stuck", "queued")))

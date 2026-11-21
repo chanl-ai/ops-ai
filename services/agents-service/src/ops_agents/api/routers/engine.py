@@ -16,6 +16,7 @@ from pydantic import Field, model_validator
 from sse_starlette import EventSourceResponse
 
 from ops_agent_kernel.pii import masked
+from ops_contracts.errors import Detail, RunError, run_error
 from ops_documents_client import DocumentNotFound, DocumentsClient
 from ops_engine import default_registry
 from ops_engine.definition import InvalidDefinitionError, WorkflowDefinition, advise, parse, validate
@@ -836,16 +837,24 @@ class RunWaiting(Out):
 
 
 class RunFailure(Out):
-    """The failing step as a builder reads it: the same sentence as `error`, plus where and whether a retry helps."""
+    """Why a run failed, in the one error model (ops_contracts.errors): a kind, a stable code, the builder's
+    message, a sentence safe for a customer and whether a retry helps, with the failing step and attempt."""
 
-    code: str | None = None
+    kind: Literal["input", "refused", "upstream", "timeout", "internal"]
+    code: str
     message: str
+    user_message: str
+    retryable: bool
+    retry_after_seconds: float | None = None
     node_id: str | None = None
     node_name: str | None = None
-    field: str | None = None
     attempt: int | None = None
-    retryable: bool | None = None
+    of: int | None = None
+    trace_id: str | None = None
+    # What to do next, for the builder: Retry, Redrive from the failed step, or fix the step.
     suggestion: str | None = None
+    # The error's plain values: which clock ran out, which End the run reached, a code the table did not know.
+    details: dict[str, Detail] = Field(default_factory=dict)
 
 
 class RunRow(Out):
@@ -1097,14 +1106,19 @@ def can_cancel(me: Principal, run: StoredRun) -> bool:
 class RunFailureView(TypedDict):
     """Why a run failed (`run_failure`), keys in reply order."""
 
-    code: None
+    kind: str
+    code: str
     message: str
-    nodeId: JsonValue
-    nodeName: None
-    field: None
-    attempt: JsonValue
+    userMessage: str
     retryable: bool
+    retryAfterSeconds: float | None
+    nodeId: str | None
+    nodeName: str | None
+    attempt: int | None
+    of: int | None
+    traceId: str | None
     suggestion: str
+    details: dict[str, Detail]
 
 
 class RunWaitingView(TypedDict):
@@ -1165,25 +1179,43 @@ class RunResultView(TypedDict):
 
 
 def run_failure(run: StoredRun, steps: list[Json]) -> RunFailureView | None:
-    """The stored error sentence plus the last step that failed, so a builder does not parse `error` themselves."""
-    message = run.error
-    if not message:
+    """The run's error as the error model recorded it. A run that failed before the record existed (agents
+    migration 0122) reads as `stuck` when it is Stuck and `internal_error` otherwise, with the last failing step."""
+    if not run.error:
         return None
-    failed = next((s for s in reversed(steps) if s.get("error")), None)
-    attempts = list(cast(Iterable[JsonValue], (failed or {}).get("attempts") or []))
+    if run.failure:
+        err = RunError.model_validate(run.failure)
+    else:
+        failed = next((s for s in reversed(steps) if s.get("error")), None)
+        attempts = list(cast(Iterable[JsonValue], (failed or {}).get("attempts") or []))
+        node = (failed or {}).get("nodeId")
+        err = run_error(
+            "stuck" if run.status == "stuck" else "internal_error",
+            run.error,
+            step=node if isinstance(node, str) else None,
+            attempt=cast(int, an_object(attempts[-1], "a step's attempt")["attempt"]) if attempts else None,
+        )
+    if run.status == "stuck":
+        suggestion = "Retry this stuck run from its last recorded step."
+    elif err.retryable:
+        suggestion = "Retry the run; the step that failed runs again."
+    else:
+        suggestion = "Fix the failing step's input or resource, then start a test run."
     return {
-        "code": None,
-        "message": message,
-        "nodeId": (failed or {}).get("nodeId"),
-        "nodeName": None,
-        "field": None,
-        "attempt": an_object(attempts[-1], "a step's attempt")["attempt"] if attempts else None,
-        "retryable": run.status == "stuck",
-        "suggestion": (
-            "Retry this stuck run from its last recorded step."
-            if run.status == "stuck"
-            else "Inspect the failing step, fix its input or resource, then start a test run."
-        ),
+        "kind": err.kind,
+        "code": err.code,
+        "message": err.message,
+        "userMessage": err.user_message,
+        # A Stuck run is left for Retry whatever its code.
+        "retryable": err.retryable or run.status == "stuck",
+        "retryAfterSeconds": err.retry_after_seconds,
+        "nodeId": err.step.id if err.step else None,
+        "nodeName": err.step.name if err.step else None,
+        "attempt": err.attempt,
+        "of": err.of,
+        "traceId": err.trace_id,
+        "suggestion": suggestion,
+        "details": err.details,
     }
 
 

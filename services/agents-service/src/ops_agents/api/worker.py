@@ -175,6 +175,7 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
             run_scope=engine_pass,
             owner=owner,
             concurrency=settings.engine_concurrency,
+            team_cap=settings.engine_team_cap,
             enter_run=enter_run,
             review_hours=review_sla.hours if review_sla is not None else None,
             remind=reminders(db),

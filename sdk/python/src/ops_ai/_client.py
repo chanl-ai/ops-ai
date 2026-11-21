@@ -63,7 +63,7 @@ from ._words import (
     Usage,
 )
 from ._workflows import AsyncWorkflows, Workflows
-from .errors import OpsError
+from .errors import OpsError, RunFailed
 from .templates import AsyncTemplates, Templates
 
 # A run is over in these states; `waiting` means it stopped at a step that waits on a person or another system.
@@ -110,6 +110,12 @@ def _with_task(run: dict[str, Any]) -> dict[str, Any]:
     waiting = run.get("waiting") or {}
     task = (waiting.get("payload") or {}).get("review_id")
     return {**run, "taskId": task} if task else run
+
+
+def _ended(run: dict[str, Any], check: bool) -> dict[str, Any]:
+    if check and run["status"] == "failed":
+        raise RunFailed(run)
+    return _with_task(run)
 
 
 def _upload_meta(name: str, content: bytes, mime: str, purpose: str) -> tuple[dict[str, Any], str]:
@@ -257,13 +263,16 @@ class Runs(Resource):
         """Starts a run of the workflow's current version; `fields` takes `version`, `runKey` and `mode`."""
         return self._raw.agents.workflows_start_engine_run({"workflowId": workflow_id, "input": input or {}, **fields})
 
-    def wait(self, run_id: str, *, timeout: float = 600.0, interval: float = 1.0) -> dict[str, Any]:
-        """The run once it has ended or stopped at a human task (then `taskId` names the task)."""
+    def wait(
+        self, run_id: str, *, timeout: float = 600.0, interval: float = 1.0, check: bool = False
+    ) -> dict[str, Any]:
+        """The run once it has ended or stopped at a human task (then `taskId` names the task). `check=True` raises
+        RunFailed for a failed run instead of returning it."""
         deadline = time.monotonic() + timeout
         while True:
             run = self._raw.agents.workflows_get_engine_run(run_id)
             if run["status"] in TERMINAL or run["status"] == "waiting":
-                return _with_task(run)
+                return _ended(run, check)
             if time.monotonic() > deadline:
                 raise TimeoutError(f"run {run_id} is still {run['status']} after {timeout:.0f}s")
             time.sleep(interval)
@@ -289,12 +298,14 @@ class AsyncRuns(AsyncResource):
         body = {"workflowId": workflow_id, "input": input or {}, **fields}
         return await self._raw.agents.workflows_start_engine_run(body)
 
-    async def wait(self, run_id: str, *, timeout: float = 600.0, interval: float = 1.0) -> dict[str, Any]:
+    async def wait(
+        self, run_id: str, *, timeout: float = 600.0, interval: float = 1.0, check: bool = False
+    ) -> dict[str, Any]:
         deadline = time.monotonic() + timeout
         while True:
             run = await self._raw.agents.workflows_get_engine_run(run_id)
             if run["status"] in TERMINAL or run["status"] == "waiting":
-                return _with_task(run)
+                return _ended(run, check)
             if time.monotonic() > deadline:
                 raise TimeoutError(f"run {run_id} is still {run['status']} after {timeout:.0f}s")
             await asyncio.sleep(interval)

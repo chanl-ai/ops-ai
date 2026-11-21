@@ -6786,10 +6786,17 @@ export interface components {
             code: string;
             /** Details */
             details?: unknown;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "input" | "refused" | "upstream" | "timeout" | "internal";
             /** Message */
             message: string;
             /** Requestid */
             requestId: string;
+            /** Retryable */
+            retryable: boolean;
             /** Status */
             status: number;
         };
@@ -9176,25 +9183,41 @@ export interface components {
         };
         /**
          * RunFailure
-         * @description The failing step as a builder reads it: the same sentence as `error`, plus where and whether a retry helps.
+         * @description Why a run failed, in the one error model (ops_contracts.errors): a kind, a stable code, the builder's
+         *     message, a sentence safe for a customer and whether a retry helps, with the failing step and attempt.
          */
         RunFailure: {
             /** Attempt */
             attempt?: number | null;
             /** Code */
-            code?: string | null;
-            /** Field */
-            field?: string | null;
+            code: string;
+            /** Details */
+            details?: {
+                [key: string]: string | number | boolean | null;
+            };
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "input" | "refused" | "upstream" | "timeout" | "internal";
             /** Message */
             message: string;
             /** Nodeid */
             nodeId?: string | null;
             /** Nodename */
             nodeName?: string | null;
+            /** Of */
+            of?: number | null;
+            /** Retryafterseconds */
+            retryAfterSeconds?: number | null;
             /** Retryable */
-            retryable?: boolean | null;
+            retryable: boolean;
             /** Suggestion */
             suggestion?: string | null;
+            /** Traceid */
+            traceId?: string | null;
+            /** Usermessage */
+            userMessage: string;
         };
         /** RunFile */
         RunFile: {

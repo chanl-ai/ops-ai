@@ -9304,6 +9304,17 @@
           "details": {
             "title": "Details"
           },
+          "kind": {
+            "enum": [
+              "input",
+              "refused",
+              "upstream",
+              "timeout",
+              "internal"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
           "message": {
             "title": "Message",
             "type": "string"
@@ -9311,6 +9322,10 @@
           "requestId": {
             "title": "Requestid",
             "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
           },
           "status": {
             "title": "Status",
@@ -9321,7 +9336,9 @@
           "code",
           "message",
           "status",
-          "requestId"
+          "requestId",
+          "kind",
+          "retryable"
         ],
         "title": "ErrorBody",
         "type": "object"
@@ -16422,7 +16439,7 @@
       },
       "RunFailure": {
         "additionalProperties": false,
-        "description": "The failing step as a builder reads it: the same sentence as `error`, plus where and whether a retry helps.",
+        "description": "Why a run failed, in the one error model (ops_contracts.errors): a kind, a stable code, the builder's\nmessage, a sentence safe for a customer and whether a retry helps, with the failing step and attempt.",
         "properties": {
           "attempt": {
             "anyOf": [
@@ -16436,26 +16453,42 @@
             "title": "Attempt"
           },
           "code": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Code"
+            "title": "Code",
+            "type": "string"
           },
-          "field": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+          "details": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Details",
+            "type": "object"
+          },
+          "kind": {
+            "enum": [
+              "input",
+              "refused",
+              "upstream",
+              "timeout",
+              "internal"
             ],
-            "title": "Field"
+            "title": "Kind",
+            "type": "string"
           },
           "message": {
             "title": "Message",
@@ -16483,16 +16516,31 @@
             ],
             "title": "Nodename"
           },
-          "retryable": {
+          "of": {
             "anyOf": [
               {
-                "type": "boolean"
+                "type": "integer"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Retryable"
+            "title": "Of"
+          },
+          "retryAfterSeconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retryafterseconds"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
           },
           "suggestion": {
             "anyOf": [
@@ -16504,10 +16552,29 @@
               }
             ],
             "title": "Suggestion"
+          },
+          "traceId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Traceid"
+          },
+          "userMessage": {
+            "title": "Usermessage",
+            "type": "string"
           }
         },
         "required": [
-          "message"
+          "kind",
+          "code",
+          "message",
+          "userMessage",
+          "retryable"
         ],
         "title": "RunFailure",
         "type": "object"

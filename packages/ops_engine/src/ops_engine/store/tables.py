@@ -88,6 +88,9 @@ engine_runs = sa.Table(
     sa.Column("outcome", sa.String(64)),
     sa.Column("output", sa.JSON),
     sa.Column("error", sa.Text),
+    # The error as ops_contracts.errors.RunError records it ({kind, code, message, userMessage, retryable, ...}), set
+    # with `error`; None on a run that has not failed and on runs that failed before agents migration 0122.
+    sa.Column("failure", sa.JSON),
     # While waiting: {node, iteration, interruptId, payload}; the Reviews facade reads it.
     sa.Column("waiting", sa.JSON),
     sa.Column("created_by", sa.String(200), nullable=False),
@@ -161,6 +164,14 @@ engine_work = sa.Table(
     sa.Column("lapses", sa.Integer, nullable=False, server_default="0"),
     sa.Column("error", sa.Text),
     sa.Column("created_at", sa.String(32), nullable=False),
+    # The fair claim (work.py, agents migration 0123). All nullable: a row queued before 0123 reads as its run's team
+    # (null), priority 0 and its team as the concurrency key. Higher priority is claimed first.
+    sa.Column("team_id", sa.String(64)),
+    sa.Column("priority", sa.Integer),
+    # What the team's cap counts; the team when null. A workflow may name its own (one customer, one mailbox).
+    sa.Column("concurrency_key", sa.String(240)),
+    # A connector account or model key with a rate limit of its own; nothing reads it until those limits are added.
+    sa.Column("rate_key", sa.String(240)),
     sa.UniqueConstraint("tenant_id", "dedupe_key", name="uq_engine_work_dedupe"),
     sa.Index("ix_engine_work_due", "status", "build", "available_at"),
     # The claim's other branch: claimed work whose lease lapsed.

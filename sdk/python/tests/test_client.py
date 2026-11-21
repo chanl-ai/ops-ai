@@ -1,7 +1,7 @@
 """The hand-written layer, by failure mode, against httpx's mock transport: a call that loses the key or the team, a
 caller who sees the envelope instead of the data, a refusal that loses the API's code or request id, a list that
-stops after its first page for either paging shape, a write retried without an idempotency key, and a wait that hangs
-on a run stopped at a human task."""
+stops after its first page for either paging shape, a write retried without an idempotency key, a wait that hangs
+on a run stopped at a human task, and a busy model's 429 that reads as a refusal nobody should retry."""
 
 from __future__ import annotations
 
@@ -51,6 +51,19 @@ def test_a_refusal_raises_its_class_with_the_code_and_request_id() -> None:
     with pytest.raises(NotFound) as e:
         client(handler).agents.get("ag_x")
     assert (e.value.code, e.value.request_id, e.value.status) == ("not_found", "req_9", 404)
+
+
+def test_a_429_reads_its_kind_and_retryable_from_the_bodys_code() -> None:
+    def handler(_: httpx.Request) -> httpx.Response:
+        error = {"code": "rate_limited", "message": "The assistant is busy.", "status": 429}
+        return httpx.Response(429, json={"success": False, "error": error})
+
+    c = client(handler)
+    c.config.max_retries = 0
+    with pytest.raises(OpsError) as e:
+        c.agents.get("ag_1")
+    assert e.value.kind == "upstream", "rate_limited is upstream in the one code table, whatever the status"
+    assert getattr(e.value, "retryable", None) is True
 
 
 def test_a_list_walks_every_page_in_both_paging_shapes() -> None:

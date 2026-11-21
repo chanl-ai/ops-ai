@@ -678,6 +678,10 @@ class ErrorEvent(WireModel):
     partial: ChatMessage
     # Why, when the model endpoint refused the call: rate_limited, key_budget_exhausted, sensitivity_not_cleared.
     code: str | None = None
+    # The error model's kind and whether Try again can help (ops_contracts.errors.CODES); `message` is then the
+    # sentence an end user reads, never a code or an exception's text.
+    kind: Literal["input", "refused", "upstream", "timeout", "internal"] | None = None
+    retryable: bool | None = None
 
 
 ChatStreamEvent = (

@@ -126,7 +126,12 @@ Moving from 0.1.0: see [Upgrading to 1.0.0](upgrading.md).
 A refused call raises a subclass of `OpsError` with `status`, `code`, `message`, `request_id` and `details`: `BadRequest` (400,
 422), `Unauthorized` (401), `Forbidden` (403), `NotFound` (404), `Conflict` (409), `RateLimited` (429) and
 `ServerError` (5xx). The fields come from the API's one error body, described on the [HTTP API](../reference/http-api.md#how-it-works) page. Branch on `code`, and quote
-`request_id` when asking for help.
+`request_id` when asking for help. Each also has `.kind` (`input`, `refused`, `upstream`, `timeout` or `internal`).
+
+A run that failed raises `RunFailed` from `ops.runs.wait(run_id, check=True)`, with `kind`, `code`, `message` (for the
+builder), `user_message` (safe to show a customer), `retryable`, `retry_after`, `trace_id`, `step`, `attempt` and `of`.
+Without `check=True` the failed run is returned and its `failure` holds the same fields. The `opsai` command prints one
+line for either and exits with a status per kind: input 2, refused 3, upstream 4, timeout 5, internal 6.
 
 ```python
 from ops_ai import NotFound

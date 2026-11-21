@@ -28,6 +28,7 @@ import { RunStatus } from '@/components/workflows/run-journal/run-status';
 import { StepSheet } from '@/components/workflows/run-journal/step-sheet';
 import { StepsTable } from '@/components/workflows/run-journal/steps-table';
 import { TERMINAL_RUN, useCancelEngineRun, useDefinition, useEngineRun, useNodeTypes, useRetryEngineRun } from '@/hooks/engine-queries';
+import { failureTitle, failureWhere } from '@/lib/failure-words';
 import { relativeTime } from '@/lib/format';
 
 /** An engine word ("not_matched", "approve") as a person reads it ("Not matched", "Approve"). */
@@ -160,9 +161,12 @@ export default function EngineRunPage() {
               </Alert>
             )}
             {run.error && run.status !== 'stuck' && (
-              <Alert variant="destructive">
-                <AlertTitle>The run failed</AlertTitle>
-                <AlertDescription>{run.error}</AlertDescription>
+              <Alert variant="destructive" data-testid="run-failed" data-kind={run.failure?.kind}>
+                <AlertTitle>{failureTitle(run.failure)}</AlertTitle>
+                <AlertDescription>
+                  <p>{run.failure?.message ?? run.error}</p>
+                  {run.failure && <p className="text-muted-foreground">{failureWhere(run.failure)}</p>}
+                </AlertDescription>
               </Alert>
             )}
             {run.status === 'cancelled' && (

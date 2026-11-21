@@ -1,7 +1,14 @@
 """The work queue on engine_work. A worker claims one row at a time past row-level security (it does not know the
-tenant yet), with FOR UPDATE SKIP LOCKED so two workers never take one row, then does the work under the row's tenant.
-A claim lasts `ttl` seconds unless renewed; a dead worker's claim lapses and the row is claimed again with its
-attempt count raised. PostgreSQL only, as the timers' poller."""
+tenant yet), skipping rows another worker holds (SKIP LOCKED on PostgreSQL, READPAST on SQL Server, `ops_store.dialect`)
+so two workers never take one row, then does the work under the row's tenant. A claim lasts `ttl` seconds unless
+renewed; a dead worker's claim lapses and the row is claimed again with its attempt count raised.
+
+Fair claim (workflow-runner.md section 5). Each row carries its run's team, a priority and a concurrency key (the team
+when none is set). With `team_cap` set, a key whose rows already run on `team_cap` live claims is skipped, so one
+team at its cap never holds back another, and among the rest the key with the fewest rows running goes first: keys
+take turns. Only claimed rows with a live lease count; a run waiting for a person, an event or a timer has no claimed
+row and takes no slot. The cap is exact: the last check runs under a lock on the key (`ops_store.dialect.lock_key`).
+"""
 
 from __future__ import annotations
 
@@ -13,9 +20,11 @@ from sqlalchemy.exc import IntegrityError
 
 from ops_service_kit.http import Json
 from ops_store import Guarantee
+from ops_store.dialect import claim as claim_rows
+from ops_store.dialect import lock_key
 
 from .clock import db_now, now_iso
-from .tables import ENGINE_BUILD, engine_work
+from .tables import ENGINE_BUILD, engine_runs, engine_work
 from .tx import CLAIM_WORK, Transactions
 
 # A row whose claim lapsed more often than this is not claimed again: its run kills the worker that takes it, and the
@@ -38,8 +47,10 @@ class WorkQueue:
     # SKIP LOCKED claims (LOCK), expiry by the database's clock (CLOCK), one row per dedupe key (CAS).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.LOCK, Guarantee.CLOCK, Guarantee.CAS})
 
-    def __init__(self, tx: Transactions, owner: str, ttl: float, build: str = ENGINE_BUILD) -> None:
-        self.tx, self.owner, self.ttl, self.build = tx, owner, ttl, build
+    def __init__(
+        self, tx: Transactions, owner: str, ttl: float, build: str = ENGINE_BUILD, *, team_cap: int | None = None
+    ) -> None:
+        self.tx, self.owner, self.ttl, self.build, self.team_cap = tx, owner, ttl, build, team_cap
 
     async def claim(self) -> Work | None:
         w = engine_work
@@ -49,20 +60,34 @@ class WorkQueue:
                 sa.and_(w.c.status == "queued", w.c.available_at <= now),
                 sa.and_(w.c.status == "claimed", w.c.lease_expires_at < now),
             )
-            q = (
-                sa.select(w.c.id)
-                .where(due, w.c.build == self.build, w.c.lapses <= MAX_LAPSES)
-                .order_by(w.c.id)
-                .limit(1)
-                .with_for_update(skip_locked=True)
+            q = sa.select(w.c.id, w.c.tenant_id, _key(w).label("key")).where(
+                due, w.c.build == self.build, w.c.lapses <= MAX_LAPSES
             )
-            found = (await c.execute(q)).scalar_one_or_none()
+            if self.team_cap is None:
+                q = q.order_by(sa.func.coalesce(w.c.priority, 0).desc(), w.c.id)
+            else:
+                running = self._running(now).subquery("running")
+                busy = sa.func.coalesce(running.c.n, 0)
+                q = (
+                    q.select_from(
+                        w.outerjoin(running, sa.and_(running.c.tenant_id == w.c.tenant_id, running.c.key == _key(w)))
+                    )
+                    .where(busy < self.team_cap)
+                    .order_by(sa.func.coalesce(w.c.priority, 0).desc(), busy, w.c.id)
+                )
+            found = (await c.execute(claim_rows(cast(sa.Select[Any], q.limit(1)), w))).one_or_none()
             if found is None:
                 return None
+            if self.team_cap is not None:
+                # Two workers can each read the key one under its cap; the second waits here and reads the first's.
+                await lock_key(c, f"engine_work_cap:{found.tenant_id}:{found.key}")
+                held = self._running(now, found.tenant_id, found.key)
+                if any(int(r.n) >= self.team_cap for r in (await c.execute(held)).all()):
+                    return None
             row = (
                 await c.execute(
                     w.update()
-                    .where(w.c.id == found)
+                    .where(w.c.id == found.id)
                     .values(
                         status="claimed",
                         claimed_by=self.owner,
@@ -75,6 +100,20 @@ class WorkQueue:
                 )
             ).one()
         return Work(int(row.id), row.tenant_id, row.run_id, row.kind, row.payload, int(row.attempts), row.claimed_by)
+
+    def _running(self, now: Any, tenant: str | None = None, key: str | None = None) -> sa.Select[Any]:
+        """Live claims per tenant and key: what the cap counts. A lapsed claim's worker is gone, so it is not
+        counted."""
+        b = engine_work.alias("busy")
+        q = cast(
+            sa.Select[Any],
+            sa.select(b.c.tenant_id, _key(b).label("key"), sa.func.count().label("n")).where(
+                b.c.status == "claimed", b.c.lease_expires_at >= now, b.c.build == self.build
+            ),
+        )
+        if tenant is not None and key is not None:
+            q = q.where(b.c.tenant_id == tenant, _key(b) == key)
+        return q.group_by(b.c.tenant_id, _key(b))
 
     async def due(self) -> int:
         """How many rows wait to be claimed now, for the workflow worker's heartbeat."""
@@ -158,6 +197,10 @@ class WorkQueue:
                         available_at=db_now(c) + after_seconds,
                         attempts=0,
                         created_at=now_iso(),
+                        # The run's team, read in the same statement, so no caller has to name it.
+                        team_id=sa.select(engine_runs.c.team_id)
+                        .where(engine_runs.c.tenant_id == self.tx.tenant(), engine_runs.c.id == run_id)
+                        .scalar_subquery(),
                     )
                 )
             created = True
@@ -170,3 +213,10 @@ class WorkQueue:
                 .one()
             )
         return dict(row), created
+
+
+def _key(t: sa.FromClause) -> sa.ColumnElement[str]:
+    """The key a row's cap counts: its concurrency key, else its team; a row queued before agents migration 0123 has
+    neither and counts under ''. The empty string is literal SQL so the GROUP BY repeats the select's expression
+    exactly; a bound value would be a second parameter PostgreSQL does not match."""
+    return sa.func.coalesce(t.c.concurrency_key, t.c.team_id, sa.literal_column("''"))
