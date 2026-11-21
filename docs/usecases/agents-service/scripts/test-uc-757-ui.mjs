@@ -157,6 +157,23 @@ await withUiStack(
         await page.getByTestId('skill-results-section').scrollIntoViewIfNeeded().catch(() => undefined);
       });
 
+      // 10. A skill written as text with an if line: each condition is marked, "checked" when the tool above returns what it
+      // tests and "agent decides" when it is the agent's own words.
+      const guarded = await made('/v1/skills', {
+        name: `Guarded walk ${RUN}`,
+        ownerTeam: 'team_ops',
+        useWhen: 'The cardholder disputes a charge.',
+        instructions: '',
+        source: `Look the charge up with @${kept.use.kind}:${kept.use.id}\nif the cardholder sounds unsure:\n    Offer to explain the review.\nTell the cardholder what happens next`,
+      });
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.goto(`${consoleUrl}/build/skills/${guarded.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await lineOf('Offer to explain the review').waitFor({ timeout: 60_000 });
+      const legend = page.getByTestId('sop-condition-how');
+      await legend.first().waitFor({ timeout: 30_000 }).catch(() => undefined);
+      check('10 an if line shows whether it is checked or the agent decides', (await legend.count()) >= 1 && /^(checked|agent decides)$/.test(await legend.first().innerText()), await legend.allInnerTexts());
+      await shootBothWidths(page, AREA, 'uc-757-skill-text-admin', async () => {});
+
       await page.setViewportSize({ width: 1440, height: 1000 });
       // 11. The agent page: @ in the brief lists a tool the agent lacks, with what picking it adds; the save lands.
       await page.setViewportSize({ width: 1440, height: 1000 });
