@@ -62,6 +62,9 @@ Every command reads its address and sign-in from your profile ([Install the comm
 |---|---|---|
 | Check | `opsai workflows validate workflow.yaml` | Lists every problem, each with its path, code, message and a suggestion |
 | Save a draft | `opsai workflows apply workflow.yaml` | Creates or updates the draft |
+| Save a working copy | `opsai workflows save-copy <id> workflow.yaml` | Saves it as the workflow's working copy, problems and all, and makes no version; refused with `stale_base` when someone saved since you read it |
+| See what changed | `opsai workflows diff <id> --from live --to working-copy` | Each step added, removed, changed (with its settings) or moved |
+| Make a version | `opsai workflows make-version <id>` | The next version from the working copy; refused while a problem remains |
 | Publish | `opsai workflows publish <id> --note "Ready"` | Requests the publish; a second person reviews it unless the team's publish policy says otherwise |
 | Run | `opsai workflows run <id> --input input.json --wait` | Starts a test run and waits for it to end; `--live` makes a live run |
 | Test from fixtures | `opsai workflows test <folder>` | Runs every fixture case in a folder |

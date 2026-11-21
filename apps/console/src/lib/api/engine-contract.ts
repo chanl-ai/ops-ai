@@ -1,4 +1,4 @@
-import type { DefinitionPublished, DefinitionPublishRequest, DefinitionValidation, DefinitionView, EngineDefinition, EngineNodeType, EngineOption, EngineRun, EngineRunDetail, EngineRunInput, EngineRunStarted, EngineRunsParams, OptionSource, StartWorkflowInput } from '@/lib/types/engine';
+import type { DefinitionDiff, DefinitionPublished, DefinitionPublishRequest, DefinitionValidation, DefinitionView, DiffSide, WorkflowPublishPreview, WorkingCopySaved, EngineDefinition, EngineNodeType, EngineOption, EngineRun, EngineRunDetail, EngineRunInput, EngineRunStarted, EngineRunsParams, OptionSource, StartWorkflowInput } from '@/lib/types/engine';
 import type { ListResult } from '@/lib/types/query';
 
 /** The workflow runner: node types, v2 definitions and runs. */
@@ -11,6 +11,14 @@ export interface EngineApi {
   validate(definition: EngineDefinition): Promise<DefinitionValidation>;
   /** Saves it as the next version, a draft, once every check passes; 422 with the checks otherwise. */
   publish(definition: EngineDefinition): Promise<DefinitionPublished>;
+  /** Saves the editor's working copy, failing checks and all; makes no version. 409 `stale_base` when `base` is not the newest copy. */
+  saveWorkingCopy(workflowId: string, definition: EngineDefinition, base: { baseVersion: number; baseDigest: string }): Promise<WorkingCopySaved>;
+  /** Makes the next version (a draft) from the working copy; 422 `definition_checks` while it fails a check. */
+  makeVersion(workflowId: string, base: { baseVersion: number; baseDigest: string }): Promise<DefinitionPublished>;
+  /** What changed between two versions, the live one or the working copy. */
+  diff(workflowId: string, from: DiffSide, to: DiffSide): Promise<DefinitionDiff>;
+  /** What a publish of the working copy would change, what stops it, and whether it waits for a review. */
+  publishPreview(workflowId: string): Promise<WorkflowPublishPreview>;
   /** Opens a publish request for a draft in Reviews; 409 when one is open or the version is not a draft. */
   requestPublish(workflowId: string, input: { version?: number; note: string }): Promise<DefinitionPublishRequest>;
   /** Stops (true) or restarts live runs of the live version; 409 before a version is live. */

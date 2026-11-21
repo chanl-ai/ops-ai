@@ -69,19 +69,20 @@ export function ViewOnlyLine({ stage }: { stage: DefinitionStage }) {
 export type Lifecycle = Pick<DefinitionView, 'version' | 'stage' | 'liveVersion' | 'paused' | 'review' | 'startForm'> & { digest?: string };
 
 /**
- * Where the saved versions stand and what can move them: send the latest draft to Reviews, follow an open request,
- * pause or resume live runs. A workflow with unsaved changes is saved first, so what is reviewed is what is stored.
+ * Where the versions stand and what can move them: publish the working copy (or the newest draft), follow an open
+ * request, pause or resume live runs. Publish is never greyed out: its dialog lists what stops it.
  */
 export function LifecycleActions({
   lifecycle,
-  dirty,
+  changed,
   onPublish,
   onSetPaused,
   pausing,
   canPublish = true,
 }: {
   lifecycle: Lifecycle;
-  dirty: boolean;
+  /** The working copy differs from the newest version. */
+  changed: boolean;
   /** False when the person may not publish workflows: Publish shows locked with the reason, as on an agent. */
   canPublish?: boolean;
   onPublish: () => void;
@@ -101,7 +102,6 @@ export function LifecycleActions({
             Version {liveVersion} {paused ? 'is paused' : 'is live'}
           </span>
         )}
-        {dirty && <span className="text-muted-foreground">· Unsaved changes</span>}
       </div>
       {liveVersion !== null && (
         <Button type="button" variant="outline" onClick={() => setConfirm(paused ? 'resume' : 'pause')} data-testid={paused ? 'definition-resume' : 'definition-pause'}>
@@ -113,11 +113,11 @@ export function LifecycleActions({
           <Link href={`/work/tasks?review=${encodeURIComponent(review.id)}`}>Version {review.version} in review</Link>
         </Button>
       ) : (
-        stage === 'draft' &&
+        (changed || stage === 'draft') &&
         (!canPublish ? (
           <LockedReason area="workflows" action="publish" label="Publish…" />
         ) : (
-          <Button type="button" variant="outline" onClick={onPublish} disabled={dirty} title={dirty ? 'Save the version first' : undefined} data-testid="definition-publish">
+          <Button type="button" onClick={onPublish} data-testid="definition-publish">
             <Rocket /> Publish…
           </Button>
         ))

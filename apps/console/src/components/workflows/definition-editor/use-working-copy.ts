@@ -1,0 +1,110 @@
+'use client';
+
+import * as React from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+
+import { useWorkspaceIdentity } from '@/hooks/me-queries';
+import { useSaveWorkingCopy } from '@/hooks/engine-queries';
+import { baseOf, onStaleSave, staleSave } from '@/lib/save-base';
+import type { DefinitionCheck, DefinitionView, EngineDefinition } from '@/lib/types/engine';
+
+export type SaveState = 'saved' | 'unsaved' | 'saving' | 'failed' | 'stale';
+
+const AUTOSAVE_MS = 1000;
+
+/**
+ * The workflow editor's working copy saves itself a second after the last change and never makes a version. Each save
+ * names the copy the page read (`saveBase`); one refused because that copy is old is handled as the agent page does
+ * (`useAgentAutosave`, `lib/save-base.ts`):
+ *
+ * - after the person's own save from another tab, the newest copy is read and the change sent once more, no message.
+ * - after another person's save, `stale` says who saved and when, and nothing more is sent until `reload`, which shows
+ *   their copy. The canvas is one field, so their copy replaces this page's unsaved change.
+ *
+ * A save that fails is not sent again until the definition changes or `retry` is pressed.
+ */
+export function useWorkingCopy(view: DefinitionView, enabled: boolean) {
+  const qc = useQueryClient();
+  const save = useSaveWorkingCopy(view.workflowId);
+  const me = useWorkspaceIdentity()?.user.email;
+  // The definition waiting to be saved; null once what is on screen is stored.
+  const [edited, setEdited] = React.useState<EngineDefinition | null>(null);
+  const [failed, setFailed] = React.useState<{ sent: string; message: string } | null>(null);
+  const [stale, setStale] = React.useState<string | null>(null);
+  const [reading, setReading] = React.useState(false);
+  const [checks, setChecks] = React.useState<DefinitionCheck[] | null>(view.workingCopy?.checks ?? null);
+  const [savedAt, setSavedAt] = React.useState<string | null>(view.workingCopy?.updatedAt ?? null);
+  // The editor is mounted again on a reload, so it opens on the copy just read.
+  const [revision, setRevision] = React.useState(0);
+  const resent = React.useRef<string | null>(null);
+  const editing = edited ? JSON.stringify(edited) : null;
+
+  const readAgain = () => {
+    setReading(true);
+    return qc.refetchQueries({ queryKey: ['engine', 'definition', view.workflowId, 'latest'] }).finally(() => setReading(false));
+  };
+
+  const saveNow = () => {
+    if (!edited || !editing) return;
+    const sent = editing;
+    save.mutate(
+      { definition: edited, base: baseOf(view.saveBase) },
+      {
+        onSuccess: (r) => {
+          setChecks(r.workingCopy.checks);
+          setSavedAt(r.workingCopy.updatedAt);
+          setFailed(null);
+          resent.current = null;
+          // A change made while this save was in flight stays waiting for the next one.
+          setEdited((cur) => (cur && JSON.stringify(cur) === sent ? null : cur));
+        },
+        onError: (e) => {
+          const refused = staleSave(e);
+          const next = refused && onStaleSave(refused, me, view.saveBase.version);
+          if (next?.resend && resent.current !== sent) {
+            resent.current = sent;
+            return void readAgain();
+          }
+          if (next && !next.resend) return setStale(next.note);
+          setFailed({ sent, message: e instanceof Error ? e.message : 'The change was not saved' });
+        },
+      },
+    );
+  };
+
+  React.useEffect(() => {
+    if (!enabled || !editing || save.isPending || reading || stale || failed?.sent === editing) return;
+    const t = setTimeout(saveNow, AUTOSAVE_MS);
+    return () => clearTimeout(t);
+    // Saves on a change, once the last save has settled and once a newer base has been read.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing, enabled, save.isPending, reading, stale, failed, view.saveBase.digest]);
+
+  const reload = async () => {
+    await readAgain();
+    setEdited(null);
+    setStale(null);
+    setFailed(null);
+    setChecks(null);
+    setRevision((r) => r + 1);
+  };
+
+  const state: SaveState = stale ? 'stale' : save.isPending ? 'saving' : failed && failed.sent === editing ? 'failed' : editing ? 'unsaved' : 'saved';
+  return {
+    onChange: setEdited,
+    state,
+    checks,
+    savedAt,
+    stale,
+    error: failed?.message ?? null,
+    retry: () => {
+      setFailed(null);
+      saveNow();
+    },
+    reload,
+    reading,
+    revision,
+    /** True while something on screen is not stored, which the leave guard holds the page for. */
+    unsaved: !!editing,
+  };
+}

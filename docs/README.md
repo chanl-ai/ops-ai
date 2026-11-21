@@ -391,6 +391,7 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `usecases/console/policies-page.md` | uc-170: Govern > Policies lists the workspace policies from platform-service; a Security admin saves one, a builder is refused in the server's words |
 | `usecases/console/run-on-the-canvas.md` | uc-115: a run opens on its workflow's canvas with each step marked passed, failed or skipped, and a step's input and output one click away |
 | `usecases/console/workflow-canvas.md` | uc-121: the workflow editor's canvas fills the page with the sidebar collapsed, at a readable zoom, with floating controls, checks and minimap |
+| `usecases/console/workflow-drafts-and-versions.md` | uc-761: the workflow editor saves a working copy with no version, publishes past listed problems, and compares and restores versions |
 | `usecases/console/edit-steps-in-a-sheet.md` | uc-122: a workflow step and the trigger open in a sheet beside the canvas, and steps are added from a panel with a tab per group and a search |
 | `usecases/console/start-run-form.md` | uc-445: Start a run opens the chosen workflow's form at once, names fields by their titles, offers choices as selects, and uploads or picks a file |
 | `usecases/console/start-from-the-trigger.md` | uc-466: Start run draws the trigger's start form; a test email runs as a mailbox email does; Files starts a workflow with a file |

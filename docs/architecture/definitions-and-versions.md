@@ -20,6 +20,21 @@ in [workflow nodes](../design/workflows/workflow-nodes.md) §3; edit classes, re
 
 An agent follows the same path: publish compiles a one-node plan (`ag_x@7`), and deployments name its pointer.
 
+### A workflow's working copy
+
+The workflow editor (`/build/workflows/definitions/<id>`) edits a working copy, not a version. Each change saves the
+copy a second later with the server's checks, failing ones included (`PUT /v1/workflows/definitions/{id}/working-copy`,
+`engine_working_copies`, agents migration 0121), and makes no version. Publishing makes the next version from the copy
+(`POST …/versions`), refused while an error check remains, then opens its publish request; the team's publish policy
+lets a change of step positions alone go live with no review (`publish_policy.is_major`).
+
+| Rule | Where |
+|---|---|
+| A save names the copy it was made on (`saveBase` of the view: the copy, or the newest version without one) and is refused with 409 `stale_base` otherwise, naming who saved first | `DefinitionStore.put_working_copy` compares under a row lock in the write's transaction; the answer is `refuse_stale` (`store/agent_registry.py`), as for agents and skills |
+| The console saves one way for agents and workflows: refused because of the person's own save, it reads again and resends; refused because of another person's, it stops and offers Reload | `use-working-copy.ts`, `lib/save-base.ts` |
+| Who may save or make a version: `workflows.edit`; who may publish: `workflows.publish`, both through `can()` | `engine_lifecycle.require_rights` |
+| What changed between two versions, the live one or the copy, every setting old and new | `ops_engine/diff.py`; `GET …/diff?from=&to=`; the reviewer's change list reads the same diff |
+
 ## The pin
 
 | Rule | Detail |

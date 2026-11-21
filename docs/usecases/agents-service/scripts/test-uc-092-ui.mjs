@@ -3,7 +3,7 @@
 // tools-service as the gateway so the tool form lists real operations, publish requests left pending for a second
 // person, and workflow workers this script starts and stops. No model is called.
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
-import { publishReviewOn } from '../../lib/workflow_ui.mjs';
+import { publishReviewOn, versionFromEditor } from '../../lib/workflow_ui.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const PASSWORD = 'northfield-demo';
@@ -83,10 +83,8 @@ await withUiStack(
       await output.getByRole('combobox', { name: 'Insert a step output' }).click();
       await page.getByRole('option', { name: /Run input/ }).click();
       await page.locator('[data-field="node-done-output"]').fill('$.input.amount');
-      await page.getByTestId('definition-checks-count').getByText(/No problems/).waitFor({ timeout: 30_000 }).catch(() => undefined);
-      const saved = armed(page.waitForResponse((r) => r.request().method() === 'POST' && r.url() === `${agents}/v1/workflows/definitions`, { timeout: 60_000 }));
-      await page.getByTestId('definition-save').click();
-      const v2 = (await (await saved).json()).data;
+      await page.getByTestId('definition-problems').getByText(/No problems/).waitFor({ timeout: 30_000 }).catch(() => undefined);
+      const v2 = await versionFromEditor(page, id, { Authorization: `Bearer ${await tokenFor(JAMES)}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' });
       const stored = (await (await api(`/v1/workflows/definitions/${id}`)).json()).data;
       const done = stored.definition.nodes.find((n) => n.id === 'done');
       await page.waitForFunction(() => document.querySelector('[data-testid="definition-stage"]')?.getAttribute('data-stage') === 'draft', null, { timeout: 30_000 }).catch(() => undefined);
@@ -101,7 +99,7 @@ await withUiStack(
 
       // 5. Publish through Reviews: James asks, the version is in review, and he cannot approve it himself.
       await page.getByTestId('definition-publish').click();
-      await page.getByLabel(/What changed/).fill('Refunds end with the amount as the result');
+      await page.getByLabel(/Note to the reviewer/).fill('Refunds end with the amount as the result');
       const requested = armed(page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/v1/workflows/definitions/${id}/publish-requests`), { timeout: 60_000 }));
       await page.getByTestId('definition-publish-submit').click();
       const review = (await (await requested).json()).data;
