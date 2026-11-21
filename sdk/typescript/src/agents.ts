@@ -21,6 +21,14 @@ type Read = { version: number; digest?: string | null };
 /** `fields` naming the copy they were made on: the `version` and `digest` of the agent or skill as `read`. The service refuses a save made from an older copy (`stale_base`), so it never writes over a change saved since. */
 export const based = (fields: Record<string, unknown>, read: Read) => ({ ...fields, baseVersion: read.version, baseDigest: read.digest });
 
+/** The eval-run body: no cases runs the saved ones, so `cases` is left out rather than sent empty. */
+function evalBody(cases?: unknown[] | { cases: unknown[] }, trigger?: string) {
+  const body: Record<string, unknown> = {};
+  if (cases !== undefined) body.cases = Array.isArray(cases) ? cases : cases.cases;
+  if (trigger !== undefined) body.trigger = trigger;
+  return body;
+}
+
 export class Agents {
   constructor(private readonly raw: { agents: any }) {}
 
@@ -71,6 +79,31 @@ export class Agents {
   async publishCheck(id: string, version?: number) {
     version ??= (await this.get(id)).version;
     return this.raw.agents.agents_publish_check({ path: { agent_id: id }, query: { version } as never });
+  }
+
+  /** With no `cases`, runs the agent's saved cases on its newest version and keeps the run; the reply carries `gate` (`blocked`, `steps`) and `costUsd`. With cases it scores them and keeps nothing. `trigger` (manual or cli) says what started a kept run. */
+  eval(id: string, cases?: unknown[] | { cases: unknown[] }, trigger?: 'manual' | 'cli') {
+    return this.raw.agents.agents_create_eval_run({ path: { agent_id: id }, body: evalBody(cases, trigger) as never });
+  }
+
+  /** The agent's saved eval cases. */
+  evalCases(id: string) {
+    return this.raw.agents.assurance_agent_cases({ path: { agent_id: id } });
+  }
+
+  /** Adds cases to the agent's saved ones. */
+  addEvalCases(id: string, cases: unknown[] | { cases: unknown[] }) {
+    return this.raw.agents.assurance_add_agent_cases({ path: { agent_id: id }, body: evalBody(cases) as never });
+  }
+
+  /** The agent's kept runs, newest first, as rows without the case results. */
+  evalRuns(id: string, query: { page?: number; pageSize?: number } = {}) {
+    return this.raw.agents.assurance_agent_eval_runs({ path: { agent_id: id }, query: { page: 1, pageSize: 25, ...query } as never });
+  }
+
+  /** One kept run with its case results. */
+  evalRun(runId: string) {
+    return this.raw.agents.assurance_eval_run({ path: { run_id: runId } });
   }
 
   validate(definition: Record<string, unknown>) {

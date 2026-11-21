@@ -3284,6 +3284,7 @@ class EvalGateDetails(TypedDict, closed=True):
 
 class EvalRunInput(TypedDict, closed=True):
     cases: NotRequired[list[EvalCaseInput] | None]
+    trigger: NotRequired[str | None]
 
 
 class EvalRunRecord(TypedDict, closed=True):

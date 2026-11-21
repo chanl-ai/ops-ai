@@ -61,6 +61,16 @@ def _read(base: dict[str, Any] | None) -> bool:
     return bool(base and base.get("digest"))
 
 
+def _eval_body(cases: Any, trigger: str | None) -> dict[str, Any]:
+    """The eval-run body: no cases runs the saved ones, so `cases` is left out rather than sent empty."""
+    body: dict[str, Any] = {}
+    if cases is not None:
+        body["cases"] = cases["cases"] if isinstance(cases, dict) and "cases" in cases else cases
+    if trigger is not None:
+        body["trigger"] = trigger
+    return body
+
+
 class Agents:
     def __init__(self, raw: Any) -> None:
         self._raw = raw
@@ -198,9 +208,27 @@ class Agents:
         collected["chunks"] = events
         return collected
 
-    def eval(self, id: str, cases: Any) -> Any:
-        body = cases if isinstance(cases, dict) and "cases" in cases else {"cases": cases}
-        return self._raw.agents.agents_create_eval_run(id, body)
+    def eval(self, id: str, cases: Any = None, *, trigger: str | None = None) -> Any:
+        """With `cases=None` runs the agent's saved cases on its newest version and keeps the run; the reply carries
+        `gate` (`blocked`, `steps`) and `costUsd`. With cases it scores them and keeps nothing. `trigger` (manual or
+        cli) says what started a kept run."""
+        return self._raw.agents.agents_create_eval_run(id, _eval_body(cases, trigger))
+
+    def eval_cases(self, id: str) -> Any:
+        """The agent's saved eval cases."""
+        return self._raw.agents.assurance_agent_cases(id)
+
+    def add_eval_cases(self, id: str, cases: Any) -> Any:
+        """Adds cases to the agent's saved ones; `cases` is a list or `{"cases": [...]}`."""
+        return self._raw.agents.assurance_add_agent_cases(id, _eval_body(cases, None))
+
+    def eval_runs(self, id: str, *, page: int = 1, page_size: int = 25) -> Any:
+        """The agent's kept runs, newest first, as rows without the case results."""
+        return self._raw.agents.assurance_agent_eval_runs(id, page=page, page_size=page_size)
+
+    def eval_run(self, run_id: str) -> Any:
+        """One kept run with its case results."""
+        return self._raw.agents.assurance_eval_run(run_id)
 
     def schedule(self, id: str, message: str, *, due_at: str | None = None, key: str = "job") -> Any:
         """Arm one due tick on the existing timer clock. A repeated key is one run."""
@@ -357,9 +385,20 @@ class AsyncAgents:
         collected["chunks"] = items
         return collected
 
-    async def eval(self, id: str, cases: Any) -> Any:
-        body = cases if isinstance(cases, dict) and "cases" in cases else {"cases": cases}
-        return await self._raw.agents.agents_create_eval_run(id, body)
+    async def eval(self, id: str, cases: Any = None, *, trigger: str | None = None) -> Any:
+        return await self._raw.agents.agents_create_eval_run(id, _eval_body(cases, trigger))
+
+    async def eval_cases(self, id: str) -> Any:
+        return await self._raw.agents.assurance_agent_cases(id)
+
+    async def add_eval_cases(self, id: str, cases: Any) -> Any:
+        return await self._raw.agents.assurance_add_agent_cases(id, _eval_body(cases, None))
+
+    async def eval_runs(self, id: str, *, page: int = 1, page_size: int = 25) -> Any:
+        return await self._raw.agents.assurance_agent_eval_runs(id, page=page, page_size=page_size)
+
+    async def eval_run(self, run_id: str) -> Any:
+        return await self._raw.agents.assurance_eval_run(run_id)
 
     async def schedule(self, id: str, message: str, *, due_at: str | None = None, key: str = "job") -> Any:
         op = {

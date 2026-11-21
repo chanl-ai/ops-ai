@@ -32,6 +32,7 @@ CASE_ASSET_KINDS: Final[frozenset[str]] = frozenset({ASSET_AGENT, ASSET_SKILL})
 CASE_ACTIVE: Final = "active"
 CASE_DRAFT: Final = "draft"
 TRIGGER_MANUAL: Final = "manual"
+TRIGGER_CLI: Final = "cli"
 TRIGGER_PUBLISH_REQUEST: Final = "publish_request"
 # Until the model inventory holds a record, every asset is in this tier.
 DEFAULT_TIER: Final = "medium"

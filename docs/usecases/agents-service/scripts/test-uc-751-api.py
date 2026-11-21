@@ -1,9 +1,12 @@
 """uc-751, api layer: docs/usecases/agents-service/evals-keep-saved-cases-and-runs.md. A builder saves test cases on an
 agent and runs them twice; the Evals page's three reads list the suite and both runs; a viewer reads but cannot save; a
-member of a second team sees nothing of it. Platform sign-in and agents-service on the scripted model."""
+member of a second team sees nothing of it. S7: a failing judged case, run through the CLI's trigger, stops the publish
+request naming its step, and a team that requires evals refuses an agent with no cases. Platform sign-in and
+agents-service on the scripted model."""
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from usecase_harness import (
@@ -23,6 +26,8 @@ AUTH = {
     "OPS_PLATFORM_URL": f"http://127.0.0.1:{PLATFORM_PORT}",
     "OPS_PLATFORM_INTERNAL_PORT": str(PLATFORM_INTERNAL_PORT),
 }
+# The scripted model's alias needs a price, or every run costs 0 and unpriced.
+PRICED = {"OPS_PRICES": json.dumps({"default": {"input": "1000", "output": "3000"}})}
 AGENT = "ag_branch"
 CASES = {
     "cases": [
@@ -37,7 +42,7 @@ def read(api: Any, tab: str, who: dict[str, str]) -> dict[str, Any]:
     return {"status": r.status_code, **(r.json().get("data") or {})}
 
 
-with platform() as (identity, _internal), agents(env=AUTH) as api:
+with platform() as (identity, _internal), agents(env={**AUTH, **PRICED}) as api:
     builder, viewer = as_role(identity, "builder"), as_role(identity, "viewer")
     outsider = as_role(identity, "platform")
 
@@ -80,5 +85,56 @@ with platform() as (identity, _internal), agents(env=AUTH) as api:
         set(suites["tabCounts"]) == {"suites", "runs", "gates"} and api.get("/v1/assurance/evidence", headers=viewer).status_code == 404,
         suites["tabCounts"],
     )
+
+    # S7: a failing case with a judge check, run the way the CLI runs it.
+    admin = as_role(identity, "admin")
+    made = data(api.post("/v1/agents", json={"name": "Fee desk", "role": "Answers questions about fees"}, headers=builder))
+    judged = {
+        "cases": [
+            {
+                "name": "Never says it",
+                "input": "Hello",
+                "checks": [
+                    {"type": "reply_contains", "text": "zzq-never-said-zzq"},
+                    {"type": "judge", "rubric": "Greets the customer politely"},
+                ],
+            }
+        ]
+    }
+    api.put(f"/v1/agents/{made['id']}/eval-cases", json=judged, headers=builder)
+    bad = api.post(f"/v1/agents/{made['id']}/eval-runs", json={"trigger": "other"}, headers=builder)
+    ran = api.post(f"/v1/agents/{made['id']}/eval-runs", json={"trigger": "cli"}, headers=builder)
+    run = data(ran)
+    gate = run.get("gate") or {}
+    step = next((s for s in gate.get("steps", []) if s["step"] == "pass_rate"), {})
+    kept = data(api.get(f"/v1/agents/{made['id']}/eval-runs", headers=builder))["data"]
+    check(
+        "27 the run's reply names the failed step, costs more than 0 with its judge, and is stored with trigger cli; another trigger is 422",
+        bad.status_code == 422
+        and ran.status_code == 200
+        and run["costUsd"] > 0
+        and gate.get("blocked") is True
+        and step.get("result") == "fail"
+        and [r["trigger"] for r in kept] == ["cli"],
+        {"bad": bad.status_code, "cost": run.get("costUsd"), "gate": gate.get("blocked"), "kept": [r["trigger"] for r in kept]},
+    )
+    asked = api.post(f"/v1/agents/{made['id']}/publish-requests", json={"version": made["version"], "note": "go"}, headers=builder)
+    problems = (asked.json().get("error", {}).get("details") or {}).get("problems", [])
+    check(
+        "28 the publish request is refused (422) naming the failing pass-rate step",
+        asked.status_code == 422 and [p["kind"] for p in problems] == ["eval_failed"] and "Pass rate" in problems[0]["message"],
+        asked.text[:300],
+    )
+
+    on = identity.put("/v1/policies/evalsRequired", json={"value": True}, headers=admin)
+    bare = data(api.post("/v1/agents", json={"name": "Bare desk", "role": "Answers questions about hours"}, headers=builder))
+    again = api.post(f"/v1/agents/{bare['id']}/publish-requests", json={"version": bare["version"], "note": "go"}, headers=builder)
+    kinds = [p["kind"] for p in (again.json().get("error", {}).get("details") or {}).get("problems", [])]
+    check(
+        "29 with Require passing evals to publish on, an agent with no saved cases is refused (422)",
+        on.status_code == 200 and again.status_code == 422 and kinds == ["eval_no_cases"],
+        {"policy": on.status_code, "kinds": kinds, "body": again.text[:200]},
+    )
+    identity.put("/v1/policies/evalsRequired", json={"value": False}, headers=admin)
 
 finish()

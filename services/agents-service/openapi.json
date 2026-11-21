@@ -10044,6 +10044,17 @@
               }
             ],
             "title": "Cases"
+          },
+          "trigger": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger"
           }
         },
         "title": "EvalRunInput",

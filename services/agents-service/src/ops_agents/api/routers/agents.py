@@ -26,7 +26,7 @@ from ops_agents.activities.agent_limits import wire as wire_limits
 from ops_agents.activities.tool_directory import ToolsUnavailable
 from ops_agents.app import agent_brief
 from ops_agents.app.evals import parse_cases, run_eval
-from ops_agents.domain.evals import TRIGGER_MANUAL
+from ops_agents.domain.evals import TRIGGER_CLI, TRIGGER_MANUAL
 from ops_identity.fastapi import Tx
 from ops_service_kit import narrow
 from ops_service_kit.errors import Conflict, NotFound, Unprocessable, ValidationFailed
@@ -222,6 +222,8 @@ class EvalRunInput(In):
     # Empty is 422 from the use case, not Pydantic 400.
     # Omitted: run the cases saved on the agent and keep the run. Given: score these and keep nothing.
     cases: list[EvalCaseInput] | None = None
+    # What started a kept run: manual (the default) or cli. Anything else is 422 from the route, not Pydantic's 400.
+    trigger: str | None = None
 
 
 class JobInput(In):
@@ -840,10 +842,12 @@ async def create_eval_run(
     agent's saved cases, also on the live version when that is another one, and keeps the run (`EvalRunRecord`), so
     repeating it makes a second run. With cases in the body it scores them and keeps nothing (`AgentEvalRun`). Empty
     cases and an unknown check type are 422."""
+    if body.trigger not in (None, TRIGGER_MANUAL, TRIGGER_CLI):
+        raise Unprocessable(f"{body.trigger!r} is not a run trigger: use manual or cli.", code="bad_trigger")
     row = await registry(rt).row(agent_id)
     can(caller_of(me), "evals", "run", team=row.team_id, what=f"agent {row.slug}")
     if body.cases is None:
-        return ok(await run_saved(rt, me, row, trigger=TRIGGER_MANUAL))
+        return ok(await run_saved(rt, me, row, trigger=body.trigger or TRIGGER_MANUAL))
     cases = parse_cases([item.model_dump(by_alias=True) for item in body.cases])
     turn = version_turn(rt, row, int(row.version))
     return ok(await run_eval(agent_id, cases, turn, judge=judge_for(rt), prices=prices_of(rt)))

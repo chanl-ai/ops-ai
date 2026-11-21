@@ -7209,6 +7209,8 @@ export interface components {
         EvalRunInput: {
             /** Cases */
             cases?: components["schemas"]["EvalCaseInput"][] | null;
+            /** Trigger */
+            trigger?: string | null;
         };
         /**
          * EvalRunRecord

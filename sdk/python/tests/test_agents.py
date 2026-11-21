@@ -6,6 +6,7 @@ import json
 from typing import Any
 
 import httpx
+import pytest
 from ops_ai import OpsAI
 from ops_ai.cli import main
 
@@ -129,3 +130,37 @@ def test_cli_chat_prints_the_reply(monkeypatch: Any, capsys: Any) -> None:
     monkeypatch.setattr("ops_ai._cli.agents.client", lambda ns: Fake())
     assert main(["agents", "chat", "ag_1", "--message", "What documents open a business account?"]) == 0
     assert "documents" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(("answer", "exit_code"), [("blocked", 1), ("open", 0), ("missing", 2)])
+def test_cli_eval_exits_by_the_runs_gate_so_ci_stops_on_a_blocked_check(
+    monkeypatch: Any, capsys: Any, answer: str, exit_code: int
+) -> None:
+    sent: list[Any] = []
+
+    def handler(r: httpx.Request) -> httpx.Response:
+        sent.append(json.loads(r.content or b"{}"))
+        if answer == "missing":
+            return httpx.Response(404, json={"success": False, "error": {"code": "not_found", "message": "no agent"}})
+        step = {"step": "pass_rate", "label": "Pass rate", "mode": "blocking", "detail": "0 of 1 cases pass."}
+        gate = {
+            "blocked": answer == "blocked",
+            "steps": [{**step, "result": "fail" if answer == "blocked" else "pass"}],
+        }
+        failing = {"label": "Judge", "reason": "Does not name the fee.", "status": "fail"}
+        draft = {"status": "fail", "checks": [failing]} if answer == "blocked" else {"status": "pass", "checks": []}
+        return ok(
+            {
+                "results": [{"caseName": "fees", "draft": draft}],
+                "summary": {"passed": 0 if answer == "blocked" else 1, "total": 1, "regressions": 0},
+                "costUsd": 0.0123,
+                "gate": gate,
+            }
+        )
+
+    monkeypatch.setattr("ops_ai._cli.agents.client", lambda ns: client(handler))
+    assert main(["agents", "eval", "ag_1"]) == exit_code
+    assert sent[0] == {"trigger": "cli"}
+    out = capsys.readouterr()
+    if answer == "blocked":
+        assert "Does not name the fee." in out.out and "BLOCKED" in out.out and "cost: $0.0123" in out.out

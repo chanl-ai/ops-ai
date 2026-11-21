@@ -1,6 +1,6 @@
 # Evals keep saved cases and runs for the team
 
-Status: draft. Id: `uc-751`. Service: `agents-service`. Layers: api, sdk, ui.
+Status: draft. Id: `uc-751`. Service: `agents-service`. Layers: api, sdk, cli, ui.
 
 Short title: Evals keep saved cases and runs for the team
 
@@ -33,6 +33,7 @@ and agents and the scripted model, so no real model is called.
 | S4 | The same flow works through the Python SDK, and another team still sees nothing | sdk | 11, 12, 13, 14, 15 | 15 |
 | S5 | An admin and a viewer open Govern > Evals: three tabs, counts equal rows, no sample data | ui | 1, 2, 3, 4, 5, 6 | 3 |
 | S6 | James opens the agent's Evals tab, adds a judge case, runs it and sees the result and its cost; Ravi sees the tab without Add case or Run evals | ui | 16, 17, 18, 19, 20, 21 | 20 |
+| S7 | A failing judged case run the way CI runs it stops the publish: the run names the failed step and costs above 0, the request is refused naming it, `opsai agents eval` exits 1, and a team that requires evals refuses an agent with no saved cases | api, sdk, cli, ui | 22 to 26 (ui), 27, 28, 29 (api), 30, 31, 32 (sdk), 33 to 37 (cli) | 28 |
 
 ## Preconditions
 
@@ -54,6 +55,9 @@ and agents and the scripted model, so no real model is called.
 | 16 to 20 | James opens the agent's Evals tab (real cases, no preview badge or sample text), adds a judge case (refused without its rubric), saves it and runs the saved cases | One run is kept and shown with its pass rate and a cost that includes judging |
 | 21 | Ravi opens the same tab | The latest run shows; no Add case or Run evals |
 | 11 to 15 | The same through the Python SDK | As steps 1 to 6 |
+| 27 to 29 | James runs a failing judged case as the CLI does (trigger `cli`; another trigger is 422), then asks to publish; Priya turns on Require passing evals to publish and James asks to publish an agent with no cases | The run is blocked at Pass rate, costs above 0 and is stored with trigger `cli`; both publish requests are 422 (`eval_failed`, `eval_no_cases`) |
+| 30 to 32 | The same through the Python SDK (`eval`, `eval_cases`, `add_eval_cases`, `eval_runs`, `eval_run`) | As steps 27 to 29 |
+| 33 to 37 | James runs `opsai agents eval` on the failing case, then the passing case, then a failing `--cases` file, then an unknown agent | Exit 1 with the Pass rate step named; exit 0; exit 1 with no run kept; exit 2 |
 
 ## Acceptance layers
 
@@ -61,6 +65,7 @@ and agents and the scripted model, so no real model is called.
 |---|---|---|
 | api | `agents-service/scripts/test-uc-751-api.py` | written |
 | sdk | `agents-service/scripts/test-uc-751-sdk.py` | written |
+| cli | `agents-service/scripts/test-uc-751-cli.py` | written |
 | ui | `agents-service/scripts/test-uc-751-ui.mjs` | written |
 
 ## Non-vacuous check
