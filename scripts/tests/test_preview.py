@@ -131,3 +131,14 @@ def test_no_usable_offset_refuses_in_one_line_naming_pid_and_command(tmp_path: P
     r = run(tmp_path, "start", "--branch", "feat/a", "--dry-run", env=env)
     assert r.returncode == 1 and len(r.stderr.strip().splitlines()) == 1
     assert "pid 900 holder0" in r.stderr and "pid 903 holder3" in r.stderr
+
+
+def test_unmarked_data_of_a_registered_preview_is_claimed_by_its_branch(tmp_path: Path) -> None:
+    seed(tmp_path, "feat/a", 51000, live=False)  # a preview started before markers existed
+    (tmp_path / "data" / "offset-51000").mkdir(parents=True)
+    (tmp_path / "data" / "offset-52000").mkdir(parents=True)  # nobody's
+    r = run(tmp_path, "start", "--branch", "feat/a", "--dry-run")
+    assert "offset 51000" in r.stdout
+    assert (tmp_path / "data" / "offset-51000" / "branch").read_text() == "feat/a"
+    r = run(tmp_path, "start", "--branch", "feat/b", "--dry-run")
+    assert "offset 53000" in r.stdout and "offset 52000" not in r.stdout

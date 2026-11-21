@@ -145,8 +145,13 @@ class Previews:
             pass
         for e in self.entries():
             if int(e["offset"]) == offset:
+                self.mark_data(offset, e["branch"])
                 return e["branch"]
         return None
+
+    def data_size(self, offset: int) -> str:
+        total = sum(f.stat().st_size for f in (self.data_root / f"offset-{offset}").rglob("*") if f.is_file())
+        return f"{total / 1e6:.0f} MB" if total >= 1e6 else f"{total // 1000} KB"
 
     def mark_data(self, offset: int, branch: str) -> None:
         d = self.data_root / f"offset-{offset}"
@@ -171,8 +176,11 @@ class Previews:
                 continue
             held = blockers(ports_for(off, clean_env()), listeners, set())
             if (self.data_root / f"offset-{off}").is_dir() and self.data_owner(off) != branch:
-                owner = self.data_owner(off) or "no known branch"
-                held.append(f"data in .data/offset-{off} belongs to {owner}; remove it to reuse the offset")
+                owner = self.data_owner(off)
+                held.append(
+                    f"data in .data/offset-{off} ({self.data_size(off)}) belongs to "
+                    + (owner or "no known branch; the owner can remove the folder to reuse the offset")
+                )
             if held:
                 why.append(f"{off} ({brief(held)})")
                 continue
