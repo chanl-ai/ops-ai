@@ -61005,7 +61005,7 @@
     },
     "/v1/workflows/definitions": {
       "get": {
-        "description": "The team's v2 workflows on the shared list contract, each at its latest version: search over name and id,\n`status` facets (draft, in review, live, paused, archived) under the search and before the status filter, sorted\nby `sortBy` then by the key, a page at a time; an archived workflow is listed only when `status` asks for it.\nv1 workflows stay on /v1/workflows.",
+        "description": "The team's v2 workflows on the shared list contract, each at its latest version: search over name and id,\n`status` facets (draft, in review, live, paused, archived) under the search and before the status filter, sorted\nby `sortBy` then by the key, a page at a time; an archived workflow is listed only when `status` asks for it.\nv1 workflows stay on /v1/workflows. 403 unless the caller may view the team's workflows.",
         "operationId": "workflows_list_definitions",
         "parameters": [
           {
@@ -61494,7 +61494,7 @@
     },
     "/v1/workflows/definitions/account-uses": {
       "get": {
-        "description": "The team's workflow drafts and published versions, and agents, that name the account `name` of `app`.",
+        "description": "The team's workflow drafts and published versions, and agents, that name the account `name` of `app`. 403 unless\nthe caller may view the team's workflows.",
         "operationId": "workflows_account_uses",
         "parameters": [
           {
@@ -62063,7 +62063,7 @@
         "x-ops-public": "sdk"
       },
       "get": {
-        "description": "One definition at a version (its newest when left out), its versions and its open review; its working copy\nonly for a caller who may view the team's workflows.",
+        "description": "One definition at a version (its newest when left out), its versions, its open review and its working copy.\n403 unless the caller may view the team's workflows; an API key reads it without its working copy.",
         "operationId": "workflows_get_definition",
         "parameters": [
           {
@@ -63821,7 +63821,7 @@
     },
     "/v1/workflows/definitions/{workflow_id}/versions/{version}/shapes": {
       "get": {
-        "description": "What each step of a saved version outputs, by port, before it has run: fixed by its type, built from\nits settings, or read from its document type or operation. A mapping picker reads it.\nNo request transaction: the version is read, then documents-service is asked with none open.",
+        "description": "What each step of a saved version outputs, by port, before it has run: fixed by its type, built from\nits settings, or read from its document type or operation. A mapping picker reads it. 403 unless the caller may\nview the team's workflows.\nNo request transaction: the version is read, then documents-service is asked with none open.",
         "operationId": "workflows_definition_shapes",
         "parameters": [
           {

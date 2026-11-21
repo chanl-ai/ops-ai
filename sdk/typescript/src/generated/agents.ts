@@ -3070,7 +3070,7 @@ export interface paths {
          * @description The team's v2 workflows on the shared list contract, each at its latest version: search over name and id,
          *     `status` facets (draft, in review, live, paused, archived) under the search and before the status filter, sorted
          *     by `sortBy` then by the key, a page at a time; an archived workflow is listed only when `status` asks for it.
-         *     v1 workflows stay on /v1/workflows.
+         *     v1 workflows stay on /v1/workflows. 403 unless the caller may view the team's workflows.
          */
         get: operations["workflows_list_definitions"];
         put?: never;
@@ -3098,7 +3098,8 @@ export interface paths {
         };
         /**
          * Account Uses
-         * @description The team's workflow drafts and published versions, and agents, that name the account `name` of `app`.
+         * @description The team's workflow drafts and published versions, and agents, that name the account `name` of `app`. 403 unless
+         *     the caller may view the team's workflows.
          */
         get: operations["workflows_account_uses"];
         put?: never;
@@ -3141,8 +3142,8 @@ export interface paths {
         };
         /**
          * Get Definition
-         * @description One definition at a version (its newest when left out), its versions and its open review; its working copy
-         *     only for a caller who may view the team's workflows.
+         * @description One definition at a version (its newest when left out), its versions, its open review and its working copy.
+         *     403 unless the caller may view the team's workflows; an API key reads it without its working copy.
          */
         get: operations["workflows_get_definition"];
         put?: never;
@@ -3344,7 +3345,8 @@ export interface paths {
         /**
          * Definition Shapes
          * @description What each step of a saved version outputs, by port, before it has run: fixed by its type, built from
-         *     its settings, or read from its document type or operation. A mapping picker reads it.
+         *     its settings, or read from its document type or operation. A mapping picker reads it. 403 unless the caller may
+         *     view the team's workflows.
          *     No request transaction: the version is read, then documents-service is asked with none open.
          */
         get: operations["workflows_definition_shapes"];

@@ -77,6 +77,7 @@ from ..auth import (
     caller_of,
     key_scope,
     principal,
+    reader_of,
     require_builder,
     require_key_reaches,
     require_runs_cancel,
@@ -105,6 +106,9 @@ REGISTRY = default_registry()
 log = get_logger("ops_agents.api.routers.engine")
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
+# Every read of a workflow definition: the acting team's workflows view cell, the check the agents and skills routers
+# use for their reads. A read route on /definitions takes it in place of `Me`.
+Reader: TypeAlias = Annotated[Principal, Depends(reader_of("workflows"))]  # noqa: UP040
 
 
 async def starter(me: Annotated[Principal, Depends(caller)], acting: ActingPerson) -> Principal:
@@ -524,24 +528,25 @@ class AccountUses(Out):
 @router.get("/definitions/account-uses", response_model=Envelope[AccountUses])
 async def account_uses(
     rt: Rt,
-    me: Me,
+    me: Reader,
     _: Tx,
     app: Annotated[str, Query(min_length=1, max_length=120)],
     name: Annotated[str, Query(min_length=1, max_length=200)],
 ) -> JSONResponse:
-    """The team's workflow drafts and published versions, and agents, that name the account `name` of `app`."""
+    """The team's workflow drafts and published versions, and agents, that name the account `name` of `app`. 403 unless
+    the caller may view the team's workflows."""
     found = await account_uses_in(rt, current_team() or me.team_id, app, name)
     return ok(AccountUses(**found).model_dump(by_alias=True))
 
 
 @router.get("/definitions", response_model=Envelope[ListResult[DefinitionRow]])
 async def list_definitions(
-    *, rt: Rt, _: Tx, q: ListQuery, status: Annotated[list[str] | None, Query()] = None
+    *, rt: Rt, _me: Reader, _: Tx, q: ListQuery, status: Annotated[list[str] | None, Query()] = None
 ) -> JSONResponse:
     """The team's v2 workflows on the shared list contract, each at its latest version: search over name and id,
     `status` facets (draft, in review, live, paused, archived) under the search and before the status filter, sorted
     by `sortBy` then by the key, a page at a time; an archived workflow is listed only when `status` asks for it.
-    v1 workflows stay on /v1/workflows."""
+    v1 workflows stay on /v1/workflows. 403 unless the caller may view the team's workflows."""
     del status  # read from `q.filters`; declared so the document and the SDKs name it
     listed = await definitions_page(rt.db, q)
     rows = [
@@ -728,9 +733,10 @@ class DefinitionShapes(Out):
 
 
 @router.get("/definitions/{workflow_id}/versions/{version}/shapes", response_model=Envelope[DefinitionShapes])
-async def definition_shapes(rt: Rt, workflow_id: str, version: int) -> JSONResponse:
+async def definition_shapes(rt: Rt, _: Reader, workflow_id: str, version: int) -> JSONResponse:
     """What each step of a saved version outputs, by port, before it has run: fixed by its type, built from
-    its settings, or read from its document type or operation. A mapping picker reads it.
+    its settings, or read from its document type or operation. A mapping picker reads it. 403 unless the caller may
+    view the team's workflows.
     No request transaction: the version is read, then documents-service is asked with none open."""
     row = await definitions(rt).row(workflow_id, version, team=current_team())
     if row is None:
@@ -740,9 +746,9 @@ async def definition_shapes(rt: Rt, workflow_id: str, version: int) -> JSONRespo
 
 
 @router.get("/definitions/{workflow_id}", response_model=Envelope[DefinitionView])
-async def get_definition(rt: Rt, me: Me, _: Tx, workflow_id: str, version: int | None = None) -> JSONResponse:
-    """One definition at a version (its newest when left out), its versions and its open review; its working copy
-    only for a caller who may view the team's workflows."""
+async def get_definition(rt: Rt, me: Reader, _: Tx, workflow_id: str, version: int | None = None) -> JSONResponse:
+    """One definition at a version (its newest when left out), its versions, its open review and its working copy.
+    403 unless the caller may view the team's workflows; an API key reads it without its working copy."""
     return ok(await definition_view(rt, me, workflow_id, version))
 
 
@@ -982,7 +988,7 @@ class DefinitionDiffView(Out):
 @router.get("/definitions/{workflow_id}/diff", response_model=Envelope[DefinitionDiffView])
 async def diff_definitions(
     rt: Rt,
-    me: Me,
+    me: Reader,
     workflow_id: str,
     from_: Annotated[str, Query(alias="from", pattern=DIFF_SIDE)],
     to: Annotated[str, Query(pattern=DIFF_SIDE)],
@@ -992,7 +998,9 @@ async def diff_definitions(
     row = await definitions(rt).row(workflow_id, team=current_team())
     if row is None:
         raise NotFound(f"Workflow definition {workflow_id}")
-    can(caller_of(me), "workflows", "view", team=row.team_id or current_team(), what="this workflow")
+    # An API key reads the team's versions, never a person's unpublished working copy, as on GET /definitions/{id}.
+    if "working-copy" in (from_, to):
+        can(caller_of(me), "workflows", "view", team=row.team_id or current_team(), what="this workflow's working copy")
     return ok(definition_diff(await _side(rt, workflow_id, from_), await _side(rt, workflow_id, to) or {}))
 
 
@@ -1008,7 +1016,7 @@ class PublishPreview(PublishDecisionFields):
 
 
 @router.get("/definitions/{workflow_id}/publish-preview", response_model=Envelope[PublishPreview])
-async def publish_preview(rt: Rt, me: Me, workflow_id: str) -> JSONResponse:
+async def publish_preview(rt: Rt, me: Reader, workflow_id: str) -> JSONResponse:
     """What a publish of the working copy would change, what stops it (each error check), and whether the team's
     publish policy would wait for a review; a change of step positions alone needs none. Nothing is made or opened.
     No request transaction: the policy is read from platform-service."""
