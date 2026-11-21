@@ -1,6 +1,7 @@
 'use client';
 
 import { RecordActions } from '@/components/shared/record-actions';
+import { ReviewNotice } from '@/components/shared/review-notice';
 import * as React from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
@@ -192,22 +193,15 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
       >
           <div className="flex flex-col gap-4">
             <ReadOnlyNotice noun="skills" area="skills" />
-            {s.pendingReview && (
-              <Alert data-testid="skill-pending-review">
-                <Inbox />
-                <AlertTitle>
-                  v{s.pendingReview.version} is waiting in Reviews · {s.pendingReview.approvals} of {plural(s.pendingReview.needed, 'approval')}
-                </AlertTitle>
-                <AlertDescription>
-                  <span>
-                    Editing is paused until it is decided.{' '}
-                    <Link href={`/work/tasks?review=${s.pendingReview.id}`} className="underline underline-offset-2">
-                      Open {s.pendingReview.id}
-                    </Link>
-                  </span>
-                </AlertDescription>
-              </Alert>
-            )}
+            <ReviewNotice
+              testId="skill-pending-review"
+              reviewId={s.pendingReview?.id ?? null}
+              version={s.pendingReview?.version ?? newest.version}
+              detail={s.pendingReview ? `${s.pendingReview.approvals} of ${plural(s.pendingReview.needed, 'approval')}` : undefined}
+              canWithdraw={canBuild}
+              onSendAgain={() => request.mutateAsync(newest.note ?? 'Sent again')}
+              sendingAgain={request.isPending}
+            />
             {s.status === 'deprecated' && (
               <Alert>
                 <Archive />

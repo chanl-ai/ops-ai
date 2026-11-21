@@ -95,6 +95,7 @@ function createReviewsHttp(get: Get, send: Send): OpsApi['reviews'] {
     place: (id, opts) => get(`/reviews/${encodeURIComponent(id)}/place${opts ? `?${new URLSearchParams(Object.entries(opts).filter(([, v]) => v) as [string, string][]).toString()}` : ''}`),
     decide: (id, i) => send('POST', `/reviews/${encodeURIComponent(id)}/decision`, i),
     assign: (ids, assignee) => send('POST', '/reviews/assign', { ids, assignee }),
+    withdraw: (id) => send('POST', `/publish-requests/${encodeURIComponent(id)}/withdraw`),
     bulkDecide: (ids, decision, reason, opts) => send('POST', '/reviews/bulk-decision', { ids, decision, reason, stepUpToken: opts?.stepUpToken }),
   };
 }
@@ -256,7 +257,7 @@ export function createHttpApi(baseUrl: string): OpsApi {
       versions: (id) => get(`/agents/${id}/versions`),
       runs: (id) => get(`/agents/${id}/runs`),
       restore: (id, version) => send('POST', `/agents/${id}/versions/${version}/restore`),
-      requestPublish: (id, version, note) => send('POST', `/agents/${id}/publish-requests`, { version, note }),
+      requestPublish: (id, version, note, follows) => send('POST', `/agents/${id}/publish-requests`, { version, note, follows }),
       publishPreview: (id, version) => get(`/agents/${id}/publish-preview?version=${version}`),
       publishCheck: (id, version) => get(`/agents/${id}/publish-check?version=${version}`),
       setPaused: (id, paused) => send('POST', `/agents/${id}/paused`, { paused }),

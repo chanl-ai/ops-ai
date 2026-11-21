@@ -12,10 +12,11 @@ import { QueryError } from '@/components/shared/query-states';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { DefinitionEditor } from '@/components/workflows/definition-editor/definition-editor';
+import { ReviewNotice } from '@/components/shared/review-notice';
 import { SaveState } from '@/components/shared/save-state';
 import { workflowHeader } from '@/components/workflows/definition-editor/editor-shell';
 import { useWorkingCopy } from '@/components/workflows/definition-editor/use-working-copy';
-import { useCan, useCanBuild, useMe } from '@/hooks/me-queries';
+import { useCan, useCanBuild, useMe, useWorkspaceIdentity } from '@/hooks/me-queries';
 import { useDefinition, useDefinitionChecks, useNodeTypes, usePublishWorkingCopy, useSetDefinitionPaused, useStartEngineRun, useStartWorkflow } from '@/hooks/engine-queries';
 import type { DefinitionValidation, DefinitionView, EngineNodeType, OutdatedCopy } from '@/lib/types/engine';
 
@@ -100,6 +101,7 @@ function CanvasTab({ view, types }: { view: DefinitionView; types: EngineNodeTyp
   // The publish reads the newest copy the cache holds, so a save that landed after the page opened is the one published.
   const viewRef = React.useRef(view);
   viewRef.current = view;
+  const me = useWorkspaceIdentity()?.user.email;
   const requestPublish = React.useCallback((note: string) => publishAsync({ view: viewRef.current, note }), [publishAsync]);
 
   return (
@@ -157,6 +159,13 @@ function CanvasTab({ view, types }: { view: DefinitionView; types: EngineNodeTyp
                 </AlertDescription>
               </Alert>
             )}
+            <ReviewNotice
+              testId="definition-review-notice"
+              reviewId={view.review?.id ?? null}
+              version={view.review?.version ?? view.version}
+              canWithdraw={!!me && view.review?.requestedBy === me}
+              onSendAgain={() => requestPublish('Sent again')}
+            />
             {canvas}
           </PageLayout>
         )}

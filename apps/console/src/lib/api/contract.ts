@@ -122,7 +122,7 @@ export interface OpsApi {
      * 422 when the version is not the newest draft. Approving it, by someone other than the requester and the
      * author, publishes the version (spec 04 5.11).
      */
-    requestPublish(id: string, version: number, note: string): Promise<Review>;
+    requestPublish(id: string, version: number, note: string, follows?: string): Promise<Review>;
     /** What stops the newest draft from publishing, each with the field it is in; opens and changes nothing. */
     publishCheck(id: string, version: number): Promise<AgentPublishCheck>;
     /** Whether publishing the newest draft would wait for review, and why; opens and changes nothing. */
@@ -177,6 +177,8 @@ export interface OpsApi {
     place(id: string, opts?: { view?: string; group?: 'case' }): Promise<ReviewPlace>;
     decide(id: string, input: ReviewDecisionInput): Promise<Review>;
     assign(ids: string[], assignee?: string): Promise<BulkResult>;
+    /** The requester takes back a waiting publish request. 403 for anyone else, 409 once it is decided. */
+    withdraw(id: string): Promise<Review>;
     /** Approving calls that need two approvers needs `stepUpToken` from a re-authentication in the last 5 minutes; one covers the batch. */
     bulkDecide(ids: string[], decision: ReviewDecision, reason?: string, opts?: { stepUpToken?: string }): Promise<BulkResult>;
   };

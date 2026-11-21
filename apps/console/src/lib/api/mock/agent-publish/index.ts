@@ -237,7 +237,7 @@ export function createAgentPublishMock(deps: AgentPublishDeps) {
     },
   });
 
-  const requestPublish = (aid: string, version: number, note: string): Review => {
+  const requestPublish = (aid: string, version: number, note: string, _follows?: string): Review => {
     const a = agentOr404(aid);
     if (openReviewOf(aid)) throw new ApiError(`${a.name} already has a publish request waiting (${openReviewOf(aid)!.id}). Decide or return it first.`, 409);
     if (version !== a.version) throw new ApiError(`Only the newest version, v${a.version}, can be sent for publish.`, 422);

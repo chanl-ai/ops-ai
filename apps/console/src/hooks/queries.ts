@@ -170,7 +170,7 @@ export const useAgentRuns = (id: string) => useTeamQuery({ queryKey: qk.agentRun
 export const useRestoreAgent = (id: string) => useWrite((v: number) => api.agents.restore(id, v), ['agents', 'agent']);
 /** Opens an `agent_publish` review, so Reviews, Overview and Assurance refresh too. */
 export const useRequestAgentPublish = (id: string) =>
-  useWrite(({ version, note }: { version: number; note: string }) => api.agents.requestPublish(id, version, note), ['agents', 'agent', 'reviews', 'overview', 'assurance', 'notifications']);
+  useWrite(({ version, note, follows }: { version: number; note: string; follows?: string }) => api.agents.requestPublish(id, version, note, follows), ['agents', 'agent', 'reviews', 'overview', 'assurance', 'notifications']);
 /** Asked when the publish dialog opens, so it says whether the publish waits for review before anyone presses it. */
 export const useAgentPublishPreview = (id: string, version: number, enabled: boolean) =>
   useTeamQuery({ queryKey: ['agent', id, 'publish-preview', version], queryFn: () => api.agents.publishPreview(id, version), enabled, staleTime: 0 });
@@ -242,6 +242,8 @@ export const workflowsBulkSupported = !!api.workflows.bulkUpdate;
 
 export const useDecideReview = () =>
   useWrite(({ id, ...i }: ReviewDecisionInput & { id: string }) => api.reviews.decide(id, i), ['reviews', 'cases', 'overview', 'model-risk', 'logs', 'skills', 'templates', 'notifications', 'assurance', 'agent', 'agents']);
+/** Takes back the person's own waiting publish request; the version reads as a draft again. */
+export const useWithdrawReview = () => useWrite((id: string) => api.reviews.withdraw(id), ['reviews', 'agent', 'agents', 'skill', 'skills', 'workflow', 'workflows', 'engine', 'overview', 'notifications']);
 export const useAssignReviews = () => useWrite(({ ids, assignee }: { ids: string[]; assignee?: string }) => api.reviews.assign(ids, assignee), ['reviews']);
 export const useBulkDecideReviews = () =>
   useWrite(({ ids, decision, reason, stepUpToken }: { ids: string[]; decision: ReviewDecision; reason?: string; stepUpToken?: string }) => api.reviews.bulkDecide(ids, decision, reason, { stepUpToken }), ['reviews', 'overview']);

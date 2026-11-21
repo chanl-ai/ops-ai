@@ -814,7 +814,7 @@ export function createMockApi(): OpsApi {
         }),
       versions: (aid) => respond(() => agentPublish.versionsView(aid)),
       runs: (aid) => respond(() => (agentOr404(aid), [])),
-      requestPublish: (aid, version, note) => respond(() => agentPublish.requestPublish(aid, version, note)),
+      requestPublish: (aid, version, note, follows) => respond(() => agentPublish.requestPublish(aid, version, note, follows)),
       // The mock's requestPublish always opens a review, so its preview says so.
       publishCheck: (aid) => respond(() => publishCheckOf(agentOr404(aid))),
       publishPreview: () => respond(() => ({ reviewRequired: true, policy: 'major' as const, majorChange: true, reviewReason: 'major_change' as const })),
@@ -1082,6 +1082,14 @@ export function createMockApi(): OpsApi {
             Object.assign(r, { assignee, status: 'in_review' });
           }),
         ),
+      withdraw: (id) =>
+        respond(() => {
+          const r = reviews.find((x) => x.id === id);
+          if (!r) throw new ApiError('Not found', 404);
+          if (!isOpen(r)) throw new ApiError(`${id} was already ${r.status}.`, 409, undefined, 'already_decided');
+          Object.assign(r, { status: 'returned', decidedAt: new Date().toISOString(), decisionReason: 'Withdrawn by the requester', approvals: [] });
+          return r;
+        }),
       bulkDecide: (ids, decision, reason, opts) =>
         respond(() => {
           if (decision !== 'approved' && !reason?.trim()) throw new ApiError('A reason is required to reject or return.', 400);

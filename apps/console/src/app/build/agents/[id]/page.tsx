@@ -1,6 +1,8 @@
 'use client';
 
 import { RecordActions } from '@/components/shared/record-actions';
+import { useWorkspaceIdentity } from '@/hooks/me-queries';
+import { ReviewNotice } from '@/components/shared/review-notice';
 import { SaveState } from '@/components/shared/save-state';
 import * as React from 'react';
 import Link from 'next/link';
@@ -78,6 +80,7 @@ import {
   useLookups,
   useModelAliases,
   useRequestAgentPublish,
+  useReview,
   useRestoreAgent,
   useChangeAgentKnowledge,
   useChangeAgentTools,
@@ -141,6 +144,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
   const setPaused = useAgentPaused(agent.id);
   const restore = useRestoreAgent(agent.id);
   const requestPublish = useRequestAgentPublish(agent.id);
+  const me = useWorkspaceIdentity()?.user.email;
   const [publishOpen, setPublishOpen] = React.useState(false);
   const [deployOpen, setDeployOpen] = React.useState(false);
   const widgetScriptUrl = useWidgetScriptUrl();
@@ -224,6 +228,8 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
   const canBuild = agent.canEdit ?? teamCanBuild;
   // A version waiting in Reviews is read-only: a change goes in after it is decided.
   const locked = newest?.state === 'in_review';
+  const waitingId = locked ? (newest?.reviewId ?? null) : null;
+  const waiting = useReview(waitingId);
   const editable = canBuild && !locked;
   const check = useAgentPublishCheck(agent.id, agent.version, canBuild && newest?.state === 'draft');
   const preview = useAgentPublishPreview(agent.id, agent.version, canBuild && newest?.state === 'draft');
@@ -412,15 +418,14 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
     <div className="flex min-w-0 flex-col gap-4">
               <ReadOnlyNotice noun="agents" canEdit={agent.canEdit} teamId={agent.teamId} teamName={agent.teamName} />
               <LeaveGuard unsaved={dirty && editable} failed={!!saveError} />
-              {locked && (
-                <Alert data-testid="agent-locked">
-                  <Lock />
-                  <AlertTitle>Waiting in Reviews</AlertTitle>
-                  <AlertDescription>
-                    <p>v{agent.version} is with a reviewer, so its fields are read-only. Edit again once it is decided.</p>
-                  </AlertDescription>
-                </Alert>
-              )}
+              <ReviewNotice
+                testId="agent-locked"
+                reviewId={waitingId}
+                version={agent.version}
+                canWithdraw={!!me && waiting.data?.agentPublish?.requestedBy === me}
+                onSendAgain={(follows) => requestPublish.mutateAsync({ version: agent.version, note: newest?.note ?? 'Sent again', follows })}
+                sendingAgain={requestPublish.isPending}
+              />
               {stale && (
                 <Alert data-testid="agent-stale-base">
                   <Users />
