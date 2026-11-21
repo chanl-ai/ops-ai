@@ -6,7 +6,9 @@ reports nothing counts as one call with zero tokens."""
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Generator, Mapping
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, Protocol
@@ -17,6 +19,7 @@ from langgraph.types import interrupt
 from ops_metering import Budget, Exhausted, Usage
 from ops_service_kit import narrow
 from ops_service_kit.http import Json, JsonValue
+from ops_service_kit.ids import new_id
 
 from .models import Facts, Grade, GraphModels
 from .usage import collecting, report_usage
@@ -39,6 +42,33 @@ class Meter(Protocol):
 
 class BudgetStoppedError(Exception):
     """A person rejected raising an exhausted budget; the run ends with this error."""
+
+
+# The replay key of a workflow step (engine_agents.py) or a chat turn (api/chat_turns.py) while it runs, in place
+# of the LangGraph task.
+STEP_KEY: ContextVar[str | None] = ContextVar("ops_agents_ledger_step_key", default=None)
+
+
+@contextmanager
+def step_calls(key: str) -> Generator[None]:
+    """Records and replays the model calls made inside under `key`, a workflow step's id (run:node:iteration): the
+    LangGraph task a re-run gets is new whenever the run continues from another checkpoint, while the step id is not."""
+    token = STEP_KEY.set(key)
+    try:
+        yield
+    finally:
+        STEP_KEY.reset(token)
+
+
+def turn_ids(node: str) -> tuple[str, str]:
+    """(run_id, turn_id) for a kernel turn a graph node starts. Inside a chat turn's `step_calls` they are its turn
+    id with the thread and the node, so a re-run of the turn on another process gives its writes the keys they had
+    (the gateway then answers a sent write from its record) and its model calls the ledger key they had; elsewhere
+    they are new each time."""
+    key, site = STEP_KEY.get(), call_site()
+    if key is None or site is None:
+        return new_id("run"), new_id("turn")
+    return f"{key}:{site.thread_id}", node
 
 
 def call_site() -> CallSite | None:

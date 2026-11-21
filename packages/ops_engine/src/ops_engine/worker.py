@@ -102,6 +102,11 @@ def pass_wait(attempts: int, retry_after: float | None) -> float:
 # The review deadline when the host gives none: the workspace setting's own default.
 DEFAULT_REVIEW_HOURS = 8.0
 
+# A chat reply as queue work: its row's run_id is the thread, its payload names the turn. The host runs it.
+TURN = "turn"
+# What a turn that ran out of time says: on its row, and through the host on the reply.
+TURN_TOO_LONG = "The reply took too long, so it was stopped."
+
 
 @dataclass
 class WorkerHost:
@@ -131,6 +136,14 @@ class WorkerHost:
     # The URL and token an outside system resumes a step parked on its work with, from the run and its waiting
     # state; None gives a parked step no callback, so only its event or its time limit wakes it.
     resume_link: Callable[[RunRow, Json, float], dict[str, str]] | None = None
+    # Runs a chat turn this worker claimed (the process that queued it died): continues its thread and answers None,
+    # or a delay in seconds to give the claim back after (its thread is still held). None: this worker runs no turns,
+    # and leaves their rows to one that does.
+    turn: Callable[[Work], Awaitable[float | None]] | None = None
+    # Ends a turn past its time limit: its reply is stopped with TURN_TOO_LONG and its thread let go.
+    end_turn: Callable[[Work, str], Awaitable[None]] | None = None
+    # A turn's time limit, from when it was queued, whoever runs it (the setting turn_deadline_seconds).
+    turn_limit_s: float = 120.0
     _cache: CompiledCache | None = field(default=None, init=False)
 
     def cache(self) -> CompiledCache:
@@ -177,6 +190,14 @@ _PLAIN_CODES = {
 }
 
 
+def _age_s(iso: str) -> float:
+    """Seconds since an ISO time; 0 for a row with none."""
+    if not iso:
+        return 0.0
+    at = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+    return (datetime.now(UTC) - (at if at.tzinfo else at.replace(tzinfo=UTC))).total_seconds()
+
+
 def plain_error(text: str) -> str:
     """A step's error as the run's reason reads it: the message without the engine's prefix, a bare code in words."""
     said = _ENGINE_PREFIX.sub("", text.strip()).rstrip(".").strip() or text.strip().rstrip(".")
@@ -189,7 +210,13 @@ class Worker:
     def __init__(self, host: WorkerHost, beat: background.Beat | None = None) -> None:
         """`beat` is the workflow worker's heartbeat, written from this loop's own scope, never a pass's."""
         self.host, self.beat = host, beat
-        self.queue = WorkQueue(host.tx, host.owner, host.leases.ttl, team_cap=host.team_cap)
+        self.queue = WorkQueue(
+            host.tx,
+            host.owner,
+            host.leases.ttl,
+            team_cap=host.team_cap,
+            skip_kinds=() if host.turn is not None else (TURN,),
+        )
         self.runs = RunStore(host.tx)
         self.definitions = DefinitionStore(host.tx)
 
@@ -262,6 +289,9 @@ class Worker:
         await asyncio.create_task(scoped())
 
     async def _process(self, work: Work) -> None:
+        if work.kind == TURN:
+            await self._turn(work)
+            return
         run = await self.runs.row(work.run_id)
         # A run whose graph reached its End is done with work, though it may still wait on runs it started: its
         # checkpoints are gone, so a late row (a decided review's deadline) must not start the graph again.
@@ -344,6 +374,57 @@ class Worker:
             with suppress(asyncio.CancelledError):
                 await beat
             await self.host.leases.release(run.id, lease_run)
+
+    async def _turn(self, work: Work) -> None:
+        """A chat turn whose own process died: the host continues its thread from the last checkpoint, under the
+        claim, renewed here. The time limit counts from when the turn was queued, so a takeover never restarts it."""
+        assert self.host.turn is not None
+        left = self.host.turn_limit_s - _age_s(work.created_at)
+        if left <= 0:
+            await self._end_turn(work)
+            return
+        ended: str | None = None  # how the turn ended when it did not run to its end
+        again: float | None = None
+        try:
+            async with asyncio.TaskGroup() as group:
+                renewing = group.create_task(self._renew(work))
+                try:
+                    again = await asyncio.wait_for(self.host.turn(work), left)
+                finally:
+                    renewing.cancel()
+        except* TimeoutError:
+            ended = "late"
+        except* asyncio.CancelledError:
+            with suppress(Exception):
+                await asyncio.shield(self.queue.give_back(work, 0.0))
+            raise
+        except* Exception as group_failed:
+            e = group_failed.exceptions[0]
+            log.error("engine_turn_failed", work=work.id, thread=work.run_id, error=type(e).__name__)
+            ended = technical(e)
+        if ended == "late":
+            await self._end_turn(work)
+        elif ended is not None:
+            await self.queue.done(work, status="failed", error=ended)
+        elif again is None:
+            await self.queue.done(work)
+        else:
+            await self.queue.give_back(work, again)
+
+    async def _end_turn(self, work: Work) -> None:
+        if self.host.end_turn is not None:
+            await self.host.end_turn(work, TURN_TOO_LONG)
+        await self.queue.done(work, status="failed", error=TURN_TOO_LONG)
+
+    async def _renew(self, work: Work) -> None:
+        while True:
+            await asyncio.sleep(self.host.leases.ttl / 3)
+            try:
+                if not await self.queue.renew(work):
+                    log.warning("engine_turn_claim_lost", work=work.id, thread=work.run_id)
+                    return
+            except Exception as e:  # A blip is tried again at the next beat, as the pass heartbeat does.
+                log.warning("engine_turn_renew_failed", work=work.id, error=type(e).__name__)
 
     async def _heartbeat(self, work: Work, thread_id: str, lease_run: str, lost: asyncio.Event) -> None:
         """Renews the lease and the claim while the pass runs, a long tool call included. A cancel does not stop the

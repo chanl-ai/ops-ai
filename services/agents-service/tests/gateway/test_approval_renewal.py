@@ -17,6 +17,7 @@ from sqlalchemy.pool import StaticPool
 
 from ops_agents.api.app import create_app
 from ops_agents.store.base import metadata
+from ops_engine.store.tables import metadata as engine_metadata
 from ops_service_kit.settings import Settings
 from tests.conftest import SEED, FakeGraphModels, decide, fixture_knowledge, last_run, scripted_model
 from tests.gateway.conftest import Gateway
@@ -27,6 +28,8 @@ async def app_with(gateway: Gateway, **settings: Any) -> AsyncIterator[tuple[htt
     engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
     async with engine.begin() as c:
         await c.run_sync(metadata.create_all)
+        # A chat reply is queued as an engine_work turn (api/chat_turns.py).
+        await c.run_sync(engine_metadata.create_all)
     app = create_app(
         Settings(
             database_url="sqlite+aiosqlite://",

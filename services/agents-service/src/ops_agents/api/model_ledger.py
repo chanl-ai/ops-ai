@@ -25,9 +25,8 @@ import contextlib
 import hashlib
 import json
 import time
-from collections.abc import AsyncGenerator, AsyncIterator, Generator
-from contextlib import asynccontextmanager, contextmanager
-from contextvars import ContextVar
+from collections.abc import AsyncGenerator, AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any, Protocol, cast
 
@@ -40,7 +39,7 @@ from pydantic_ai.settings import ModelSettings
 
 from ops_agent_kernel.ports import BudgetReachedError, ModelSource, is_finishing
 from ops_agents.graphs.common import emit
-from ops_agents.graphs.metering import CallSite, call_site
+from ops_agents.graphs.metering import STEP_KEY, CallSite, call_site, step_calls, turn_ids
 from ops_metering import Usage
 from ops_service_kit.http import Json
 from ops_store import isolation
@@ -70,28 +69,13 @@ class _Site:
     task: str | None
 
 
-# A workflow step's replay key while its kernel turn runs (engine_agents.py), in place of the LangGraph task.
-_STEP_KEY: ContextVar[str | None] = ContextVar("ops_agents_ledger_step_key", default=None)
-
-
-@contextmanager
-def step_calls(key: str) -> Generator[None]:
-    """Records and replays the model calls made inside under `key`, a workflow step's id (run:node:iteration): the
-    LangGraph task a re-run gets is new whenever the run continues from another checkpoint, while the step id is not."""
-    token = _STEP_KEY.set(key)
-    try:
-        yield
-    finally:
-        _STEP_KEY.reset(token)
-
-
 def _site() -> _Site | None:
     """Where the request runs: the graph call site and its replay key, a workflow step's id or else the LangGraph
     task, which a crashed node's re-run keeps and a new step does not. None outside a graph run."""
     call = call_site()
     if call is None:
         return None
-    if (key := _STEP_KEY.get()) is not None:
+    if (key := STEP_KEY.get()) is not None:
         return _Site(call, key)
     cfg = get_config()
     task = (cfg.get("configurable") or {}).get("checkpoint_ns") or (cfg.get("metadata") or {}).get(
@@ -264,3 +248,6 @@ class LedgerSource:
         if alias not in self.models:
             self.models[alias] = LedgerModel(self.source.model_for(alias), self.recorder, alias, call_headers=True)
         return self.models[alias]
+
+
+__all__ = ["LedgerModel", "LedgerSource", "request_hash", "step_calls", "turn_ids"]

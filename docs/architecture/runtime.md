@@ -18,7 +18,7 @@ Detail on the kernel is in agent-kernel, on nodes in
 | Graphs | `ops_agents/graphs/` | Three code graphs and the definition compiler; `common.py` bridges a kernel turn into a node |
 | Definition compiler | `graphs/definition.py` | Validates a definition, builds a LangGraph `StateGraph`, caches compiled graphs by digest |
 | Checkpointer | `packages/ops_checkpointer` | `CheckpointSaver`: LangGraph checkpoints on SQLAlchemy Core, on PostgreSQL (SQL Server partial), under the tables' tenant and team policies, with a per-thread fence |
-| Leases and sweeper | `store/leases.py`, `api/sweeper.py` | Per-thread lease with generation; takeover of expired leases; recovery from the last checkpoint |
+| Leases, sweeper and chat turns | `store/leases.py`, `api/sweeper.py`, `api/chat_turns.py` | Per-thread lease with generation; a chat reply is an `engine_work` turn a workflow worker takes over when its process dies; the sweeper recovers the other runs from their last checkpoint. The runtime a turn runs on is built once, by `open_runtime` (`api/app.py`), for the API and the worker |
 | Timers | `api/timers.py`, `api/timer_port.py`, `graphs/sla.py` | SLA timers, the poller, `fire()` |
 | Activities | `ops_agents/activities/` | Seed catalogue, local tools, keyword knowledge store, `GatewayToolExecutor` for tools-service |
 | Channels | `api/channels/inbox.py`, `store/channels.py` | Input delivered to a busy thread; the deployments store |

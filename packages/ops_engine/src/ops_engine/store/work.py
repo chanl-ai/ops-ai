@@ -46,6 +46,7 @@ class Work:
     payload: Any
     attempts: int
     claimed_by: str
+    created_at: str = ""
 
 
 class WorkQueue:
@@ -53,9 +54,18 @@ class WorkQueue:
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.LOCK, Guarantee.CLOCK, Guarantee.CAS})
 
     def __init__(
-        self, tx: Transactions, owner: str, ttl: float, build: str = ENGINE_BUILD, *, team_cap: int | None = None
+        self,
+        tx: Transactions,
+        owner: str,
+        ttl: float,
+        build: str = ENGINE_BUILD,
+        *,
+        team_cap: int | None = None,
+        skip_kinds: tuple[str, ...] = (),
     ) -> None:
+        """`skip_kinds`: kinds this worker cannot run (a chat turn on a worker with no model), left for one that can."""
         self.tx, self.owner, self.ttl, self.build, self.team_cap = tx, owner, ttl, build, team_cap
+        self.skip_kinds = skip_kinds
 
     async def claim(self) -> Work | None:
         w = engine_work
@@ -71,6 +81,8 @@ class WorkQueue:
                 .where(due, w.c.build == self.build, w.c.lapses <= MAX_LAPSES)
                 .order_by(w.c.priority.desc(), w.c.id)
             )
+            if self.skip_kinds:
+                q = q.where(w.c.kind.not_in(self.skip_kinds))
             full: list[tuple[str, str]] = []
             for _ in range(CAP_TRIES):
                 found = await self._first(c, q, now, full)
@@ -99,10 +111,45 @@ class WorkQueue:
                         # Still claimed when taken again: its worker died with the claim, not gave it back.
                         lapses=w.c.lapses + sa.case((w.c.status == "claimed", 1), else_=0),
                     )
-                    .returning(w.c.id, w.c.tenant_id, w.c.run_id, w.c.kind, w.c.payload, w.c.attempts, w.c.claimed_by)
+                    .returning(*_RETURNED)
                 )
             ).one()
-        return Work(int(row.id), row.tenant_id, row.run_id, row.kind, row.payload, int(row.attempts), row.claimed_by)
+        return _work(row)
+
+    async def take(self, work_id: int) -> Work | None:
+        """Claims the queued row `work_id` for this owner: the process that queued a chat turn runs it itself and
+        streams it, and a worker takes it over only once that claim lapses. None when the row is not queued."""
+        w = engine_work
+        async with self.tx.tenant_tx() as c:
+            now = db_now(c)
+            row = (
+                await c.execute(
+                    w.update()
+                    .where(w.c.id == work_id, w.c.tenant_id == self.tx.tenant(), w.c.status == "queued")
+                    .values(
+                        status="claimed",
+                        claimed_by=self.owner,
+                        lease_expires_at=now + self.ttl,
+                        attempts=w.c.attempts + 1,
+                    )
+                    .returning(*_RETURNED)
+                )
+            ).one_or_none()
+        return _work(row) if row is not None else None
+
+    async def live(self, key: str) -> int:
+        """Live claims under one cap key (a team) in the acting tenant: what a refusal at enqueue reads."""
+        async with self.tx.tenant_tx() as c:
+            held = self._running(db_now(c), self.tx.tenant(), key)
+            return sum(int(r.n) for r in (await c.execute(held)).all())
+
+    async def open_of(self, run_id: str, kind: str) -> bool:
+        """Whether a row of `kind` for `run_id` is still queued or claimed, in any tenant: the v1 sweeper leaves a
+        thread to the workers while its chat turn has one."""
+        w = engine_work
+        q = sa.select(w.c.id).where(w.c.run_id == run_id, w.c.kind == kind, w.c.status.in_(("queued", "claimed")))
+        async with self.tx.system_tx(CLAIM_WORK) as c:
+            return (await c.execute(q.limit(1))).first() is not None
 
     async def _first(self, c: Any, q: sa.Select[Any], now: Any, full: list[tuple[str, str]]) -> Any:
         """The first row of `q` this claim may take, locked: with a cap, one whose key is under it and not in
@@ -220,10 +267,18 @@ class WorkQueue:
             )
 
     async def enqueue(
-        self, run_id: str, kind: str, dedupe_key: str, payload: Any = None, *, after_seconds: float = 0.0
+        self,
+        run_id: str,
+        kind: str,
+        dedupe_key: str,
+        payload: Any = None,
+        *,
+        after_seconds: float = 0.0,
+        team_id: str | None = None,
     ) -> tuple[dict[str, Any], bool]:
         """Adds a row, or returns the one already written under `dedupe_key`. Returns (row, created). `after_seconds`
-        holds the row back until then on the database's clock: a review's deadline."""
+        holds the row back until then on the database's clock: a review's deadline. `team_id` names the team of a row
+        with no engine run (a chat turn, whose `run_id` is its thread); a run's row reads its run's team."""
         w = engine_work
         try:
             async with self.tx.tenant_tx() as c:
@@ -241,7 +296,9 @@ class WorkQueue:
                         priority=0,
                         created_at=now_iso(),
                         # The run's team, read in the same statement, so no caller has to name it.
-                        team_id=sa.select(engine_runs.c.team_id)
+                        team_id=team_id
+                        if team_id is not None
+                        else sa.select(engine_runs.c.team_id)
                         .where(engine_runs.c.tenant_id == self.tx.tenant(), engine_runs.c.id == run_id)
                         .scalar_subquery(),
                     )
@@ -256,6 +313,31 @@ class WorkQueue:
                 .one()
             )
         return dict(row), created
+
+
+_RETURNED = (
+    engine_work.c.id,
+    engine_work.c.tenant_id,
+    engine_work.c.run_id,
+    engine_work.c.kind,
+    engine_work.c.payload,
+    engine_work.c.attempts,
+    engine_work.c.claimed_by,
+    engine_work.c.created_at,
+)
+
+
+def _work(row: Any) -> Work:
+    return Work(
+        int(row.id),
+        row.tenant_id,
+        row.run_id,
+        row.kind,
+        row.payload,
+        int(row.attempts),
+        row.claimed_by,
+        str(row.created_at or ""),
+    )
 
 
 def _key(t: sa.FromClause) -> sa.ColumnElement[str]:

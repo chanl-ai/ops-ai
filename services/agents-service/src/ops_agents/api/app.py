@@ -263,11 +263,13 @@ async def open_runtime(
     completions_client: httpx2.AsyncClient | None = None,
     kb_client: httpx.AsyncClient | None = None,
     knowledge: Knowledge | None = None,
+    owner: str | None = None,
 ) -> AsyncGenerator[tuple[Runtime, AsyncExitStack]]:
     """The runtime a chat turn runs on (model, tools, knowledge, graphs, leases), built once for every process that
-    runs one: the API (create_app) and the workflow worker (api/worker.py). Yields it with the exit stack its
-    resources close on, so the caller adds its own loops to the same stack. Nothing is seeded and no loop starts
-    here; the API does both. Tests inject what create_app's docstring lists."""
+        runs one: the API (create_app) and the workflow worker (api/worker.py). Yields it with the exit stack its
+        resources close on, so the caller adds its own loops to the same stack. Nothing is seeded and no loop starts
+        here; the API does both. Tests inject what create_app's docstring lists. `owner` names the process on the thread
+    leases it takes; the API's port when None."""
     catalog = load_catalog(
         settings.seed_dir,
         settings.agents_seed_file,
@@ -414,7 +416,7 @@ async def open_runtime(
             rt.workflows = CompiledCache(deps, saver)
             rt.leases = Leases(
                 db,
-                owner=instance_owner(settings.port),
+                owner=owner or instance_owner(settings.port),
                 ttl=settings.lease_ttl_seconds,
                 on_takeover=ToolsFence(gateway_client, rt.graph_store) if gateway_client else None,
             )
