@@ -224,12 +224,13 @@ async def test_a_turn_that_breaks_with_no_code_streams_internal_error_and_never_
     client, _, models = stack
     models.broken = BROKEN
     thread = await new_thread(client)
-    _, events = await send(client, thread["id"], {"content": "What is the daily wire limit for a personal account?"})
+    raw, events = await send(client, thread["id"], {"content": "What is the daily wire limit for a personal account?"})
     reloaded = (await client.get(f"/chat/threads/{thread['id']}")).json()["data"]
     assert BROKEN in reloaded["messages"][-1]["error"], "the stored message keeps the exception for the builder"
     last = events[-1]
     assert last["type"] == "error" and BROKEN not in last["message"], last
     assert (last.get("code"), last.get("kind"), last.get("retryable")) == ("internal_error", "internal", False), last
+    assert BROKEN not in raw, "the stream carries the exception text beside the sentence"
 
 
 @pytest.mark.parametrize(
