@@ -140,8 +140,14 @@ await withUiStack(
 
       // 7. Pause stops live starts; resume lets them through again.
       await page.goto(`${consoleUrl}/workflows/definitions/${id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await page.getByTestId('definition-pause').click();
-      await page.getByTestId('definition-pause-confirm').click();
+      await page.locator('[data-testid="definition-node"]').first().waitFor({ timeout: 120_000 });
+      // A click before the page hydrates is lost: press Pause again until its dialog opens.
+      const pauseConfirm = page.getByTestId('definition-pause-confirm');
+      for (let tries = 0; tries < 5 && !(await pauseConfirm.isVisible()); tries++) {
+        await page.getByTestId('definition-pause').click();
+        await pauseConfirm.waitFor({ timeout: 4_000 }).catch(() => undefined);
+      }
+      await pauseConfirm.click();
       await page.waitForFunction(() => document.querySelector('[data-testid="definition-stage"]')?.getAttribute('data-stage') === 'paused', null, { timeout: 30_000 }).catch(() => undefined);
       const paused = await api('/v1/runs', { method: 'POST', body: JSON.stringify({ workflowId: id, input: { amount: 42 } }) });
       const pausedCode = (await paused.json()).error?.code;
