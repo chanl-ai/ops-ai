@@ -89,6 +89,9 @@ check enforces it. Edited only through a reviewed pull request, never by this ag
 
 - (none yet)
 
+## Fixes
+Fixes follow the ops-fix-the-class skill (`docs/guide/skills/ops-fix-the-class.md`): sweep for the same fault, fix every place once in the layer that owns the job, and end the commit with a `Siblings:` trailer.
+
 ## Report (at most 10 lines)
 Commits; the migration's revision id and that it downgrades; every new table's marking; tests seen failing and what they
 printed; the portable baseline count before and after; anything not run.
