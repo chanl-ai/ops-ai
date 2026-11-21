@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import NotRequired, TypedDict
 
 from ops_access import ACTIONS, ANY_TEAM, AREAS, BUILTIN_GRIDS, SECURITY_TEAM_ACTIONS, Grant, Granted, effective
-from ops_access.catalogue import ADMIN
+from ops_access.catalogue import ADMIN, OWNER
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
 from ops_service_kit.http import Json
 from ops_service_kit.ids import now_iso
@@ -70,6 +70,10 @@ class TeamCells(TypedDict):
     permissions: list[EffectiveCell]
 
 
+# Transfers, closes and restores the workspace: on Owner and no other role, moved only by a transfer (E42).
+OWNER_CELL = ("workspace", "manage")
+
+
 class PermissionsView(TypedDict):
     """What a person may do, as `PermissionsOut` sends it; the person route adds their name and address."""
 
@@ -83,8 +87,8 @@ class PermissionsView(TypedDict):
 
 def custom_role_refuses(area: str, action: str) -> bool:
     """D40: a custom role holds no secrets or egress cell and no Security-team cell, which only the built-in roles
-    give."""
-    return area == "secrets_egress" or (area, action) in SECURITY_TEAM_ACTIONS
+    give; nor `workspace.manage`, which only Owner holds (E42)."""
+    return area == "secrets_egress" or (area, action) in SECURITY_TEAM_ACTIONS or (area, action) == OWNER_CELL
 
 
 def _checked(cells: list[Grant]) -> None:
@@ -118,22 +122,28 @@ class Roles:
             "grid": [
                 {"area": area, "actions": {action: held.get((area, action)) for action in ACTIONS}} for area in AREAS
             ],
-            # The cells this role may never hold: a custom role's secrets, egress and Security-team ones (D40).
+            # The cells a custom role may never hold: secrets, egress, Security-team and Owner ones (D40, E42).
             "notHeld": []
             if role.builtin
             else [f"{a}.{x}" for a in AREAS for x in ACTIONS if custom_role_refuses(a, x)],
         }
 
     async def edit(self, tenant_id: str, role_id: str, cells: list[Grant], *, by: str, request_id: str) -> RoleView:
-        """Sets a role's cells, built-in or custom. Admin keeps every cell: 409
-        `admin_holds_every_cell`. A cell outside the catalogue is 400 `unknown_cell`. The caller's right to change roles
-        is checked by the route."""
+        """Sets a role's cells, built-in or custom. Admin keeps every cell: 409 `admin_holds_every_cell`. A cell outside
+        the catalogue is 400 `unknown_cell`; `workspace.manage` on a built-in role other than Owner is 400 `owner_only`.
+        The caller's right to change roles is checked by the route."""
         if role_id == ADMIN.id:
             raise Conflict("Admin holds every permission in its team; it is not edited.", code="admin_holds_every_cell")
         _checked(cells)
         role = await self.store.role_by_id(tenant_id, role_id)
         if role is not None and not role.builtin:
             self._custom_cells(cells)
+        elif role_id != OWNER.id and any((a, x) == OWNER_CELL for a, x, _ in cells):
+            raise ValidationFailed(
+                "Only Owner holds workspace.manage; it moves from person to person by a transfer.",
+                code="owner_only",
+                details={"cells": ["workspace.manage"]},
+            )
         if not await self.store.set_grid(tenant_id, role_id, cells, by=by, request_id=request_id, action="role.edit"):
             raise NotFound("No role with that id.")
         return await self.get(tenant_id, role_id)
@@ -143,7 +153,7 @@ class Roles:
         if refused:
             raise ValidationFailed(
                 f"A custom role cannot hold {', '.join(refused)}: secrets, egress and Security-team permissions come "
-                "only with a built-in role.",
+                "only with a built-in role, and workspace.manage only with Owner.",
                 code="not_for_custom_roles",
                 details={"cells": refused},
             )

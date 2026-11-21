@@ -66,10 +66,15 @@ def test_every_write_declares_whether_it_waits_and_only_the_decided_ones_run_at_
 
 
 def _platform(team_level: dict[str, Any], by_app: dict[str, Any]) -> WriteApprovals:
-    """platform-service holding appChanges and appChangesByApp for tenant t_a; any other tenant's read is a 404."""
+    """platform-service holding appChanges, appChangesByApp and no approvalsFloor for tenant t_a; any other tenant's
+    read is a 404."""
 
     def answer(request: httpx.Request) -> httpx.Response:
-        stored = {"/v1/policies/appChanges": team_level, "/v1/policies/appChangesByApp": by_app}
+        stored = {
+            "/v1/policies/appChanges": team_level,
+            "/v1/policies/appChangesByApp": by_app,
+            "/v1/policies/approvalsFloor": {},
+        }
         if request.url.path not in stored or claims(request)["tenant_id"] != "t_a":
             return httpx.Response(404)
         key = request.url.path.rsplit("/", 1)[1]

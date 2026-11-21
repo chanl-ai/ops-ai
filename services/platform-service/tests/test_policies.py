@@ -243,12 +243,16 @@ async def test_a_team_admin_sets_their_teams_approval_rules_and_the_security_tea
     signin: SignInRig,
 ) -> None:
     """D5: the team's approval rules are `approvals.manage` in the team, which its admin holds and a builder does not;
-    the Security team's floor (approvalsFloor) refuses a team's looser value and leaves a stricter one."""
+    the Security team's floor (approvalsFloor) refuses a team's looser value and leaves a stricter one. Until every
+    caller passes the record's own area, the only area a team may turn on alone is reviews."""
     team, ana = await _team_admin(signin, "ana")
     _, bo = await _team_admin(signin, "bo", role="builder")
-    on = {"value": {"agents": True}}
+    for unread in ({"agents": True}, {}):
+        r = await signin.public.put("/v1/policies/requesterMayDecide", json={"value": unread}, headers=ana)
+        assert (r.status_code, r.json()["error"]["code"]) == (400, "policy_value"), r.text
+    on = {"value": {"reviews": True}}
     put = await signin.public.put("/v1/policies/requesterMayDecide", json=on, headers=ana)
-    assert put.status_code == 200 and put.json()["data"]["value"] == {team: {"agents": True}}, put.text
+    assert put.status_code == 200 and put.json()["data"]["value"] == {team: {"reviews": True}}, put.text
     assert put.json()["data"]["changedBy"] == "approvals.manage"
     refused = await signin.public.put("/v1/policies/requesterMayDecide", json=on, headers=bo)
     assert refused.status_code == 403, refused.text

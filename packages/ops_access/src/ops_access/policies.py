@@ -14,8 +14,6 @@ from ops_identity import Principal
 from ops_service_kit.http import Json
 from ops_service_kit.narrow import json_object
 
-from .catalogue import AREAS
-
 
 @dataclass(frozen=True)
 class Policy:
@@ -376,7 +374,9 @@ def check_value(key: str, value: Any) -> Any:
         return value
     if policy.kind == "by_area" and isinstance(value, dict):
         areas = cast(dict[Any, Any], value)
-        if all(a in AREAS and isinstance(on, bool) for a, on in areas.items()):
+        # Only reviews for now: every caller asks `can()` about area reviews whatever the record's own area, so a
+        # value for any other area would never be read. Widened once agents-service and tools-service pass the area.
+        if set(areas) == set(BY_AREA_TAKES) and all(isinstance(on, bool) for on in areas.values()):
             return {str(a): bool(on) for a, on in areas.items()}
     if policy.kind == "floor_rules" and isinstance(value, dict):
         rules = cast(dict[Any, Any], value)
@@ -397,7 +397,7 @@ def check_value(key: str, value: Any) -> Any:
         "app_changes": "{ask, answer (none, person or reviewer), reviewerRole, testAccountsNeverAsk, testRunsAsk, "
         "makersAsk}",
         "app_changes_by_app": "an object of app id to {answer (none, person or reviewer), reviewerRole}",
-        "by_area": "true or false, or an object of area to true or false",
+        "by_area": f"true or false, or {{{', '.join(BY_AREA_TAKES)}: true or false}}",
         "floor_rules": "an object with requesterMayDecide (false) and appChanges (person or reviewer)",
     }
     raise ValueError(f"{key} takes {takes[policy.kind]}")
@@ -447,6 +447,8 @@ def publish_mode(modes: dict[str, Any], team: str, area: str) -> str:
 
 
 ANSWERS = ("none", "person", "reviewer")
+# The areas a `by_area` policy (requesterMayDecide) is saved for one at a time.
+BY_AREA_TAKES = ("reviews",)
 
 # What the Security team may lock under every team's approval rules (`approvalsFloor`), each with the values it takes:
 # requesterMayDecide false (nobody decides their own request, in any team or area); appChanges the least answer an
@@ -514,7 +516,9 @@ def _level(value: object) -> tuple[str | None, str | None]:
     return (answer if answer in ANSWERS else None), cast(str | None, held.get("reviewerRole"))
 
 
-def effective_answer(*, tool: dict[str, Any], app: Any, team: Any, channel: str, test_account: bool) -> EffectiveAnswer:
+def effective_answer(
+    *, tool: dict[str, Any], app: Any, team: Any, channel: str, test_account: bool, floor: object = None
+) -> EffectiveAnswer:
     """Whether a call waits, and who answers, for one tool: the single rule every service reads.
 
     The most specific level wins: the tool's `approvalMode`, then the app's entry of `appChangesByApp`, then the team's
@@ -523,11 +527,13 @@ def effective_answer(*, tool: dict[str, Any], app: Any, team: Any, channel: str,
     always asks a reviewer. A test run (channel "test") of a write on a live account asks the person while `testRunsAsk`
     is on. A team's checkbox `testAccountsNeverAsk` (on unless saved off) lets a test account through.
     "Ask the person" with nobody in the chat (a workflow) goes to the reviewer role. An unreadable team policy (None)
-    fails closed: the write waits for a reviewer.
+    fails closed: the write waits for a reviewer. `floor` is the Security team's `approvalsFloor`: its `appChanges`
+    is the least answer the tool, app and team levels may give, so a looser value saved before the floor was locked
+    still waits for it.
 
     Returns:
-        {waits, answer ("none" | "person" | "reviewer"), reviewerRole, source ("tool" | "app" | "team" | "mcp" |
-        "test-account")}.
+        {waits, answer ("none" | "person" | "reviewer"), reviewerRole, source ("tool" | "app" | "team" |
+        "floor" | "mcp" | "test-account")}.
     """
     if tool.get("access") != "write":
         return {"waits": False, "answer": "none", "reviewerRole": None, "source": "tool"}
@@ -549,6 +555,9 @@ def effective_answer(*, tool: dict[str, Any], app: Any, team: Any, channel: str,
     mode = tool.get("approvalMode")
     if mode in ANSWERS:
         answer, role, source = mode, tool.get("reviewerRole") or role, "tool"
+    least = json_object(floor).get("appChanges")
+    if least in ("person", "reviewer") and ANSWERS.index(answer) < ANSWERS.index(least):
+        answer, source = str(least), "floor"
     if answer == "person" and channel == "workflow":
         answer = "reviewer"
     # A test run of a write on a live account pauses for the person's yes unless the team turned `testRunsAsk` off

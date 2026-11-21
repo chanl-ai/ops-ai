@@ -316,7 +316,8 @@ Every role's cells, built-in or custom, are the `role_permissions` rows platform
 the seed: platform-service writes it for a new workspace and **Reset to default** puts a built-in role back to it.
 A workspace admin edits any role but Admin on Access › Roles (`PUT /v1/roles/{id}/permissions`,
 `POST /v1/roles/{id}/reset`, both audited as `role.edit` and `role.reset` and raising `perm_version`); Admin keeps
-every cell (409 `admin_holds_every_cell`). `can()` decides from the token's `grids` claim, and platform-service from
+every cell (409 `admin_holds_every_cell`), and only Owner holds `workspace.manage` (row E42): a custom role refuses it
+(400 `not_for_custom_roles`) and an edited built-in role refuses it (400 `owner_only`). `can()` decides from the token's `grids` claim, and platform-service from
 the rows it reads at the moment of the check. A token minted without the claim (a test token, the dev header
 caller) is answered from the seed.
 
@@ -330,8 +331,8 @@ fails the commit until it is classified.
 
 | Key | Default | Open? | What on means | Changed by | Per team |
 |---|---|---|---|---|---|
-| `requesterMayDecide` | off | no (row E51) | The person who asked for, saved or started a decision may take it, in the areas the team turns on (`{area: true}`, or true for every area); off: 403 `own_request`. A value stored as true before it was per team means on in every team and area. Read by `requester_may_decide` (`packages/ops_access/src/ops_access/policies.py`) in `can()` | `approvals.manage` in the acting team, under `approvalsFloor` | yes, per area |
-| `approvalsFloor` | `{}`: no floor | yes | The least every team's approval rules ask, which no team can loosen: `requesterMayDecide: false` (nobody decides their own request anywhere) and `appChanges: person` or `reviewer` (every change to an app waits for at least that, at team and app level). A team's looser value is refused with 409 `approval_floor` (row E55); `can()` applies the `requesterMayDecide` floor when deciding | `settings.manage` (Security team) | no |
+| `requesterMayDecide` | off | no (row E51) | The person who asked for, saved or started a decision may take it, in the areas the team turns on (`{area: true}`, or true for every area); off: 403 `own_request`. Until agents-service and tools-service pass the record's own area, every caller asks about `reviews`, so a save takes only true, false or `{reviews: true or false}` (400 `policy_value` otherwise). A value stored as true before it was per team means on in every team and area. Read by `requester_may_decide` (`packages/ops_access/src/ops_access/policies.py`) in `can()` | `approvals.manage` in the acting team, under `approvalsFloor` | yes, per area |
+| `approvalsFloor` | `{}`: no floor | yes | The least every team's approval rules ask, which no team can loosen: `requesterMayDecide: false` (nobody decides their own request anywhere) and `appChanges: person` or `reviewer` (every change to an app waits for at least that, at team and app level). A team's looser value is refused with 409 `approval_floor` (row E55); `can()` and tools-service's `RequesterMayDecide` apply the `requesterMayDecide` floor when deciding, and `effective_answer` applies the `appChanges` floor to a value saved before it (source `floor`; a floor tools-service cannot read counts as `reviewer`) | `settings.manage` (Security team) | no |
 | `stepUp` | off | yes | Every approver steps up, besides operations that ask for it | `settings.manage` | no |
 | `companySignInRequired` | off | yes | People on the workspace's verified company domains sign in only through its provider; the named break-glass Security admins (at most three) keep a password. Cannot turn on with nobody on the list (409 `break_glass_none`) | `settings.manage` | no |
 | `mcpConnectionHours` | `8` hours, at most 720 (30 days) | yes | How long an assistant stays connected to a team's MCP address before the person signs in again; read when the person presses Allow, so a change reaches new connections | `settings.manage` | no |
