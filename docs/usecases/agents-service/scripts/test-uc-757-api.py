@@ -120,6 +120,23 @@ with bank_stack() as s:
         (one.get("version"), code_of(two), told, stored["content"].get("useWhen")),
     )
 
+    # 22. The same race through the text editor's save: two texts sent from one copy, the second refused, the first kept.
+    base = {"baseVersion": stored["version"], "baseDigest": stored["digest"]}
+    first_text = stored["text"].rstrip() + "\n\nSay the first session's closing line."
+    wrote = made(s.api.put(f"/v1/skills/{sid}/draft", json={"source": first_text, **base}, headers=me))
+    late = s.api.put(f"/v1/skills/{sid}/draft", json={"source": stored["text"] + "\n\nSay another line.", **base}, headers=me)
+    error = late.json().get("error") or {}
+    after = data(s.api.get(f"/v1/skills/{sid}", headers=me))
+    check(
+        "22 a text save made from a copy another text save has replaced is refused, and the first text is kept",
+        wrote["version"] == stored["version"]
+        and code_of(late) == (409, "stale_base")
+        and bool(error.get("message") and (error.get("details") or {}).get("savedBy"))
+        and "first session's closing line" in after["text"]
+        and "another line" not in after["text"],
+        (code_of(late), error, after["text"][-120:]),
+    )
+
     # 4. A skill with steps is saved, published and added to the agent with the skill and the tool it needs.
     confirm = made(s.api.post("/v1/skills", json=confirm_skill(RUN, "api"), headers=me))
     made(s.api.post(f"/v1/skills/{confirm['id']}/publish-requests", json={"note": "use case"}, headers=me))
