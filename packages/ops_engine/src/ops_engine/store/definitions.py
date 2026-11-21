@@ -164,7 +164,8 @@ class WorkingCopy(Out):
 
 
 class DefinitionStore:
-    # A version is the next number for its workflow unless its digest is stored already (CAS on the unique digest).
+    # A version is the next number for its workflow unless its digest is stored already; the primary key on the
+    # number keeps two saves from taking one (CAS), and the workflow's rows are locked while it is chosen.
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.CAS})
 
     def __init__(self, tx: Transactions, describe: Describe = unlisted) -> None:
@@ -182,10 +183,12 @@ class DefinitionStore:
         by: str,
         team: str | None = None,
         stage: str = "draft",
+        reopen: bool = False,
     ) -> tuple[int, bool]:
         """Stores the next version at `stage` (a save is a draft; only the dev seed stores one live, through
         `go_live`) with its list columns (`describe`) in the same statement; the same definition again returns its
-        version. Returns (version, created)."""
+        version. With `reopen`, a definition stored before only at a superseded version is stored again as the next
+        version, so a restored older version can be published. Returns (version, created)."""
         t = engine_definitions
         listed = self.describe(definition)
         async with self.tx.tenant_tx() as c:
@@ -197,9 +200,13 @@ class DefinitionStore:
             if owners and owners != {team} and not (team is None and owners == {None}):
                 raise WorkflowOwnedError(f"workflow id {workflow_id} belongs to another team")
             same = (
-                await c.execute(sa.select(t.c.version).where(t.c.workflow_id == workflow_id, t.c.digest == digest))
+                await c.execute(
+                    sa.select(t.c.version, t.c.stage)
+                    .where(t.c.workflow_id == workflow_id, t.c.digest == digest)
+                    .order_by(t.c.version.desc())
+                )
             ).first()
-            if same is not None:
+            if same is not None and not (reopen and same.stage == "superseded"):
                 return int(same.version), False
             latest = (
                 await c.execute(sa.select(sa.func.max(t.c.version)).where(t.c.workflow_id == workflow_id))
@@ -242,9 +249,10 @@ class DefinitionStore:
         by: str,
     ) -> WorkingCopy:
         """Stores `definition` as the working copy, whatever its checks say, when `base` (the version and digest the
-        save was made on) names the newest copy: the working copy when there is one, the newest version otherwise.
-        The workflow's versions and its copy are locked first, so two saves made on one copy cannot both pass the
-        compare. Raises StaleWorkingCopy when `base` is older, and LookupError when the workflow has no version."""
+        save was made on) names the newest copy: the working copy when there is one made on the newest version, the
+        newest version otherwise. The workflow's versions and its copy are locked first, so two saves made on one copy
+        cannot both pass the compare. Raises StaleWorkingCopy when `base` is older, and LookupError when the workflow
+        has no version."""
         t, w = engine_definitions, engine_working_copies
         tenant = self.tx.tenant()
         mine = sa.and_(w.c.tenant_id == tenant, w.c.workflow_id == workflow_id)
@@ -262,8 +270,16 @@ class DefinitionStore:
             if newest is None:
                 raise LookupError(f"workflow {workflow_id} has no version")
             held = (await c.execute(locked(w.select().where(mine), w))).first()
-            if held is not None:
-                token = (int(held.base_version), str(held.digest), str(held.updated_by), str(held.updated_at))
+            # A copy made on an older version than the newest (one saved through the API or CLI since) is outdated:
+            # the newest version is the base, so the editor is told and its next save is made on that version.
+            current = held if held is not None and int(held.base_version) >= int(newest.version) else None
+            if current is not None:
+                token = (
+                    int(current.base_version),
+                    str(current.digest),
+                    str(current.updated_by),
+                    str(current.updated_at),
+                )
             else:
                 token = (int(newest.version), str(newest.digest), str(newest.created_by), str(newest.created_at))
             if base != token[:2]:
@@ -271,14 +287,16 @@ class DefinitionStore:
             values = {"definition": definition, "digest": digest, "checks": checks, "updated_at": now, "updated_by": by}
             if held is not None:
                 # The compare is part of the write as well, so a writer that skipped the lock still cannot win.
-                await c.execute(w.update().where(mine, w.c.digest == held.digest).values(**values))
+                await c.execute(
+                    w.update().where(mine, w.c.digest == held.digest).values(**values, base_version=token[0])
+                )
             else:
                 await c.execute(
                     w.insert().values(
                         tenant_id=tenant,
                         workflow_id=workflow_id,
                         team_id=newest.team_id,
-                        base_version=int(newest.version),
+                        base_version=token[0],
                         **values,
                     )
                 )
@@ -296,6 +314,14 @@ class DefinitionStore:
             where = sa.and_(where, w.c.digest == digest)
         async with self.tx.tenant_tx() as c:
             return bool((await c.execute(w.delete().where(where))).rowcount)
+
+    async def rebase_working_copy(self, workflow_id: str, version: int) -> None:
+        """Moves the working copy onto `version`: a save made while a version was taken from an earlier copy stays a
+        change waiting on that version."""
+        w = engine_working_copies
+        where = sa.and_(w.c.tenant_id == self.tx.tenant(), w.c.workflow_id == workflow_id, w.c.base_version < version)
+        async with self.tx.tenant_tx() as c:
+            await c.execute(w.update().where(where).values(base_version=version))
 
     async def serving(self, workflow_id: str, *, team: str | None = None) -> DefinitionRow | None:
         """The version that serves the workflow, live or paused; None when no version has been approved."""

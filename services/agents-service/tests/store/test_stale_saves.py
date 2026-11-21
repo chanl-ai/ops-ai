@@ -1,5 +1,6 @@
 """Saves that name the copy they read, made at the same moment, by failure mode: the store comparing the base before
-it holds the row, so several saves made from one copy all pass and each writes over the one before it."""
+it holds the row, so several saves made from one copy all pass and each writes over the one before it. A workflow's
+working copy is one field (the whole canvas), so it is held to this even when one person saves from several tabs."""
 
 from __future__ import annotations
 
@@ -16,7 +17,9 @@ from alembic.config import Config
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ops_agents.store.agent_registry import AgentRegistry, digest_of
+from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.skills import SkillRegistry
+from ops_engine.store import DefinitionStore
 from ops_service_kit.errors import Conflict
 from ops_service_kit.settings import Settings
 from ops_store import isolation
@@ -83,3 +86,23 @@ async def test_six_saves_made_from_one_copy_at_once_write_one_and_refuse_five(en
             ]
         )
     assert (on_agent, on_skill) == ((1, ["stale_base"] * 5), (1, ["stale_base"] * 5))
+
+
+async def test_six_tabs_saving_one_workflow_copy_at_once_write_one(engine: AsyncEngine) -> None:
+    store = DefinitionStore(EngineTransactions(engine))
+    wid = f"card_disputes_{uuid4().hex[:8]}"
+    first: dict[str, Any] = {"schemaVersion": 2, "id": wid, "name": "Card disputes", "nodes": [], "connections": {}}
+    with isolation.scope(f"t_{uuid4().hex[:10]}", TEAM):
+        await store.publish(wid, name="Card disputes", definition=first, digest=digest_of(first), now="n", by="maya")
+
+        def save(name: str, base: tuple[int, str]) -> Any:
+            d = first | {"name": name}
+            return store.put_working_copy(
+                wid, definition=d, digest=digest_of(d), checks=[], base=base, now="n", by="maya@x.example"
+            )
+
+        opened = await save("Opened", (1, digest_of(first)))
+        # One person in six tabs, each saving its own canvas on the copy every tab opened on.
+        tabs = [save(f"Tab {i}", (1, opened.digest)) for i in range(SAVERS)]
+        done = await asyncio.gather(*tabs, return_exceptions=True)
+    assert sorted(type(r).__name__ for r in done) == ["StaleWorkingCopy"] * (SAVERS - 1) + ["WorkingCopy"], done

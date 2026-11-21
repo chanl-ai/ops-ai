@@ -161,7 +161,7 @@ function SourceSelect({ id, source, value, steps, onChange }: { id: string; sour
   return (
     <Select value={current || NONE} onValueChange={(v) => onChange(v === NONE ? undefined : v)}>
       <SelectTrigger id={id} className="w-full" data-field={id} aria-busy={remote.isFetching || undefined}>
-        <SelectValue placeholder={remote.isPending && source !== 'steps' ? 'Loading…' : 'Choose'} />
+        <SelectValue placeholder={remote.isLoading ? 'Loading…' : 'Choose'} />
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={NONE}>Not set</SelectItem>

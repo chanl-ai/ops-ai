@@ -70,11 +70,13 @@ export type Lifecycle = Pick<DefinitionView, 'version' | 'stage' | 'liveVersion'
 
 /**
  * Where the versions stand and what can move them: publish the working copy (or the newest draft), follow an open
- * request, pause or resume live runs. Publish is never greyed out: its dialog lists what stops it.
+ * request, pause or resume live runs. Publish is greyed out only while a change is being saved, so the version and the
+ * preview are made from what is on screen; otherwise its dialog lists what stops it.
  */
 export function LifecycleActions({
   lifecycle,
   changed,
+  saving = false,
   onPublish,
   onSetPaused,
   pausing,
@@ -83,6 +85,8 @@ export function LifecycleActions({
   lifecycle: Lifecycle;
   /** The working copy differs from the newest version. */
   changed: boolean;
+  /** A change on screen is not saved yet. */
+  saving?: boolean;
   /** False when the person may not publish workflows: Publish shows locked with the reason, as on an agent. */
   canPublish?: boolean;
   onPublish: () => void;
@@ -117,7 +121,7 @@ export function LifecycleActions({
         (!canPublish ? (
           <LockedReason area="workflows" action="publish" label="Publish…" />
         ) : (
-          <Button type="button" onClick={onPublish} data-testid="definition-publish">
+          <Button type="button" onClick={onPublish} disabled={saving} title={saving ? 'Saving your change first' : undefined} data-testid="definition-publish">
             <Rocket /> Publish…
           </Button>
         ))

@@ -58,6 +58,8 @@ export interface DefinitionEditorProps {
   saveState?: React.ReactNode;
   /** True while the working copy differs from the newest version, so there is something to publish. */
   changed?: boolean;
+  /** True while a change on screen is not saved yet: Publish waits, so the version is made from what is on screen. */
+  saving?: boolean;
   /** Starts a live run on the live version, or a test run of the latest saved one; the page navigates to it. */
   startRun: (input: Record<string, unknown>, mode: RunMode) => Promise<void>;
   /** Starts a run from the start form the saved trigger declares; the page navigates to it. */
@@ -141,7 +143,7 @@ function EditorInner(props: DefinitionEditorProps) {
   return <EditorBody {...props} definition={placed} />;
 }
 
-function EditorBody({ definition: initial, types, validation, validateError = null, onChange, saveState, changed = false, startRun, startByHand, lifecycle, requestPublish, setPaused, pausing, readOnly = false, canPublish, frame }: DefinitionEditorProps) {
+function EditorBody({ definition: initial, types, validation, validateError = null, onChange, saveState, changed = false, saving = false, startRun, startByHand, lifecycle, requestPublish, setPaused, pausing, readOnly = false, canPublish, frame }: DefinitionEditorProps) {
   const [def, setDef] = React.useState<EngineDefinition>(initial);
   const [dirty, setDirty] = React.useState(false);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
@@ -374,7 +376,7 @@ function EditorBody({ definition: initial, types, validation, validateError = nu
     <div className="flex flex-wrap items-center justify-end gap-2">
       {saveState}
       <ProblemsChip validation={validation} checking={checking} failed={validateError} nodeName={nodeName} onSelectNode={(id) => { selectNode(id); setSheetId(id); }} />
-      {!readOnly && <LifecycleActions lifecycle={lifecycle} changed={changed} onPublish={() => setPublishOpen(true)} onSetPaused={setPaused} pausing={pausing} canPublish={canPublish !== false} />}
+      {!readOnly && <LifecycleActions lifecycle={lifecycle} changed={changed} saving={saving} onPublish={() => setPublishOpen(true)} onSetPaused={setPaused} pausing={pausing} canPublish={canPublish !== false} />}
       {readOnly && <ViewOnlyLine stage={lifecycle.stage} />}
       {/* Someone who may only read a draft still sees that it waits on a publish, and why they cannot start it. */}
       {readOnly && canPublish === false && lifecycle.stage === 'draft' && !lifecycle.review && <LockedReason area="workflows" action="publish" label="Publish…" />}

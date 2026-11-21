@@ -100,6 +100,7 @@ function CanvasTab({ view, types }: { view: DefinitionView; types: EngineNodeTyp
         validateError={stored.isError ? (stored.error as Error).message : null}
         onChange={copy.onChange}
         changed={!!view.workingCopy || copy.unsaved}
+        saving={copy.unsaved}
         saveState={canBuild ? <SaveStateLine state={copy.state} savedAt={copy.savedAt} error={copy.error} onRetry={copy.retry} /> : undefined}
         startRun={startRun}
         startByHand={startByHand}

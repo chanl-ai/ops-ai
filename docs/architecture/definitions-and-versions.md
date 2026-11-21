@@ -31,8 +31,12 @@ lets a change of step positions alone go live with no review (`publish_policy.is
 | Rule | Where |
 |---|---|
 | A save names the copy it was made on (`saveBase` of the view: the copy, or the newest version without one) and is refused with 409 `stale_base` otherwise, naming who saved first | `DefinitionStore.put_working_copy` compares under a row lock in the write's transaction; the answer is `refuse_stale` (`store/agent_registry.py`), as for agents and skills |
-| The console saves one way for agents and workflows: refused because of the person's own save, it reads again and resends; refused because of another person's, it stops and offers Reload | `use-working-copy.ts`, `lib/save-base.ts` |
-| Who may save or make a version: `workflows.edit`; who may publish: `workflows.publish`, both through `can()` | `engine_lifecycle.require_rights` |
+| A copy made on an older version than the newest (a version saved since through `POST …/definitions`, the SDK or CLI `workflows save`) is outdated: its saves and its publish are refused with 409 `stale_base` naming that version, and the view leaves it out, so the editor reloads onto the newest version | `DefinitionStore.put_working_copy`, `engine.py` `_open_copy`, `version_from_working_copy` |
+| A refused workflow save is never sent again, even after the person's own save from another tab: the canvas is one field, so a resend would replace that tab's whole canvas. The page says who saved and offers Reload. Agents resend their own (field-merged) saves | `use-working-copy.ts`; `lib/save-base.ts` for agents |
+| Publish waits while a change on screen is unsaved, so the version and its preview are made from what is on screen | `lifecycle.tsx`, the definition page's `saving` |
+| A copy equal to an older, superseded version (a restore) publishes as a new draft version; the copy is removed only after the version is stored, and a save made meanwhile is kept on the new version. One definition may sit at several versions (agents migration 0122) | `DefinitionStore.publish(reopen=True)`, `rebase_working_copy` |
+| The publish preview decides on the copy as its version will store it (parsed, defaults filled), as the publish does | `engine.py` `publish_preview` |
+| Who may save or make a version: `workflows.edit`; who may publish: `workflows.publish`, both through `can()`. The view's working copy and `GET …/diff` need `workflows.view`; the rest of the view does not check it yet | `engine_lifecycle.require_rights`, `engine.py` `definition_view`, `diff_definitions` |
 | What changed between two versions, the live one or the copy, every setting old and new | `ops_engine/diff.py`; `GET …/diff?from=&to=`; the reviewer's change list reads the same diff |
 
 ## The pin

@@ -3141,7 +3141,8 @@ export interface paths {
         };
         /**
          * Get Definition
-         * @description One definition at a version (its newest when left out), its versions and its open review.
+         * @description One definition at a version (its newest when left out), its versions and its open review; its working copy
+         *     only for a caller who may view the team's workflows.
          */
         get: operations["workflows_get_definition"];
         put?: never;
@@ -3188,7 +3189,7 @@ export interface paths {
         /**
          * Diff Definitions
          * @description The steps added, removed, changed (every setting that differs, old and new) and moved between two versions of
-         *     a workflow, its live version or its working copy.
+         *     a workflow, its live version or its working copy. 403 unless the caller may view the team's workflows.
          */
         get: operations["workflows_diff_definitions"];
         put?: never;

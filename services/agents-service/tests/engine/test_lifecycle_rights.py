@@ -65,6 +65,8 @@ NO_MANAGE = tuple((area, "manage") for area in AREAS)
 BUILDER_WITHOUT_MANAGE = person("jo", "team_ops", "builder", unticked=NO_MANAGE)
 ADMIN = person("priya", "team_ops", "admin")
 VIEWER = person("vera", "team_ops", "viewer")
+# A viewer whose role an admin took the workflows view cell off.
+NOT_A_WORKFLOW_READER = person("wes", "team_ops", "viewer", unticked=(("workflows", "view"),))
 
 
 async def jwks() -> dict[str, Any]:
@@ -132,3 +134,21 @@ async def test_a_team_workflow_is_published_by_its_builders_and_admins_only(
     assert refused.status_code == 403, refused.text
     asked = await c.post("/v1/workflows/definitions/ops_refunds/publish-requests", json={}, headers=BUILDER)
     assert asked.status_code == 201, asked.text
+
+
+async def test_a_member_without_the_workflows_view_cell_reads_no_working_copy_or_diff(
+    stack: tuple[AsyncClient, AsyncEngine],
+) -> None:
+    c, _ = stack
+    wf = "/v1/workflows/definitions/ops_refunds"
+    saved = await c.post("/v1/workflows/definitions", json={"definition": definition("ops_refunds")}, headers=BUILDER)
+    assert saved.status_code == 201, saved.text
+    base = (await c.get(wf, headers=BUILDER)).json()["data"]["saveBase"]
+    body = {"definition": definition("ops_refunds") | {"name": "Unpublished"}}
+    body |= {"baseVersion": base["version"], "baseDigest": base["digest"]}
+    assert (await c.put(f"{wf}/working-copy", json=body, headers=BUILDER)).status_code == 200
+    assert (await c.get(wf, headers=VIEWER)).json()["data"]["workingCopy"]["definition"]["name"] == "Unpublished"
+    view = await c.get(wf, headers=NOT_A_WORKFLOW_READER)
+    assert view.json()["data"]["workingCopy"] is None, view.text
+    diff = await c.get(f"{wf}/diff", params={"from": "1", "to": "working-copy"}, headers=NOT_A_WORKFLOW_READER)
+    assert diff.status_code == 403, diff.text

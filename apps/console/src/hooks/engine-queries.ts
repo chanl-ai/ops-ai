@@ -127,7 +127,8 @@ export const useEngineOptions = (source: OptionSource | undefined) =>
   useTeamQuery({
     queryKey: ek.options(source ?? 'none'),
     queryFn: () => api.engine.options(source as Exclude<OptionSource, 'steps'>),
-    enabled: !!source && source !== 'steps',
+    // Knowledge bases are not a list the engine's option route answers (it refuses with 400); the field stays free.
+    enabled: !!source && source !== 'steps' && source !== 'knowledge',
     staleTime: 60_000,
   });
 

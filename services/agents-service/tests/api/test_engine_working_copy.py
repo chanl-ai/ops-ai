@@ -1,6 +1,7 @@
 """A workflow's working copy, by failure mode: a save makes a version; two people's saves overwrite each other; a copy
-with an error check becomes a version; a change of step positions alone asks for a review. Each goes through the routes
-the editor calls, on the PostgreSQL test database."""
+with an error check becomes a version; a change of step positions alone asks for a review; a restored older version
+cannot be published and loses the restore; a version saved outside the editor is written over by the editor's copy.
+Each goes through the routes the editor calls, on the PostgreSQL test database."""
 
 from __future__ import annotations
 
@@ -78,7 +79,8 @@ async def test_a_copy_with_an_error_makes_no_version_and_a_clean_one_does(client
 
 async def test_moving_steps_alone_publishes_without_a_review(client: AsyncClient) -> None:
     view = await _published(client)
-    moved = copy.deepcopy(view["definition"])
+    # The editor sends the definition as it holds it, without the defaults the stored version fills in.
+    moved = basic()
     moved["nodes"][1]["position"] = {"x": 900, "y": 40}
     base = (await _save(client, moved, view["saveBase"])).json()["data"]["saveBase"]
     preview = (await client.get(f"{WF}/publish-preview")).json()["data"]
@@ -89,3 +91,40 @@ async def test_moving_steps_alone_publishes_without_a_review(client: AsyncClient
     await _save(client, changed, base)
     preview = (await client.get(f"{WF}/publish-preview")).json()["data"]
     assert preview["majorChange"] is True and preview["reviewReason"] != "minor_change", preview
+
+
+async def test_a_restored_older_version_publishes_as_a_new_live_version(client: AsyncClient) -> None:
+    view = await _published(client)
+    first = view["definition"]
+    second = (await _save(client, basic() | {"name": "Refund check v2"}, view["saveBase"])).json()["data"]
+    made = await client.post(f"{WF}/versions", json={"baseVersion": 1, "baseDigest": second["saveBase"]["digest"]})
+    assert made.status_code == 201, made.text
+    assert (await client.post(f"{WF}/publish-requests", json={"note": "v2"})).status_code == 201
+    on_two = (await client.get(WF)).json()["data"]
+    assert on_two["liveVersion"] == 2
+    restored = (await _save(client, first, on_two["saveBase"])).json()["data"]["saveBase"]
+    again = await client.post(f"{WF}/versions", json={"baseVersion": 2, "baseDigest": restored["digest"]})
+    assert again.status_code == 201, again.text
+    assert again.json()["data"]["version"] == 3
+    live = await client.post(f"{WF}/publish-requests", json={"version": 3, "note": "roll back"})
+    assert live.status_code == 201, live.text
+    after = (await client.get(WF)).json()["data"]
+    assert after["liveVersion"] == 3 and after["definition"]["name"] == first["name"]
+    assert after["workingCopy"] is None
+
+
+async def test_a_save_on_a_copy_older_than_a_version_saved_outside_the_editor_is_refused(client: AsyncClient) -> None:
+    view = await _published(client)
+    copy_base = (await _save(client, basic() | {"name": "Editor change"}, view["saveBase"])).json()["data"]["saveBase"]
+    # Someone pushes version 2 through the API (the SDK's and CLI's `workflows save`) while the copy is open.
+    pushed = await client.post("/v1/workflows/definitions", json={"definition": basic() | {"name": "CLI change"}})
+    assert pushed.status_code == 201 and pushed.json()["data"]["version"] == 2, pushed.text
+    refused = await _save(client, basic() | {"name": "Editor change, later"}, copy_base)
+    assert refused.status_code == 409, refused.text
+    assert refused.json()["error"]["code"] == "stale_base" and refused.json()["error"]["details"]["version"] == 2
+    made = await client.post(f"{WF}/versions", json={"baseVersion": 1, "baseDigest": copy_base["digest"]})
+    assert made.status_code == 409 and made.json()["error"]["code"] == "stale_base", made.text
+    # Read again, the editor opens on version 2 and its next save is kept.
+    reread = (await client.get(WF)).json()["data"]
+    assert reread["saveBase"]["version"] == 2 and reread["workingCopy"] is None
+    assert (await _save(client, basic() | {"name": "Editor change on v2"}, reread["saveBase"])).status_code == 200

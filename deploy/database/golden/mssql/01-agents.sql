@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- agents-service, stamped at 0121_engine_working_copies
+-- agents-service, stamped at 0122_definition_digest_index
 CREATE TABLE engine_definitions (
 	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
@@ -19,9 +19,10 @@ CREATE TABLE engine_definitions (
 	startable BIT NOT NULL, 
 	takes_files BIT NOT NULL, 
 	mailbox VARCHAR(320) NULL, 
-	CONSTRAINT engine_definitions_pkey PRIMARY KEY (tenant_id, workflow_id, version), 
-	CONSTRAINT uq_engine_definitions_digest UNIQUE (tenant_id, workflow_id, digest)
+	CONSTRAINT engine_definitions_pkey PRIMARY KEY (tenant_id, workflow_id, version)
 );
+GO
+CREATE INDEX ix_engine_definitions_digest ON engine_definitions (tenant_id, workflow_id, digest);
 GO
 CREATE INDEX ix_engine_definitions_live ON engine_definitions (tenant_id, workflow_id) WHERE stage = 'live';
 GO
@@ -1652,5 +1653,5 @@ CREATE TABLE alembic_version (
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version (version_num) VALUES ('0121_engine_working_copies');
+INSERT INTO alembic_version (version_num) VALUES ('0122_definition_digest_index');
 GO

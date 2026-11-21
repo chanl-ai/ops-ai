@@ -61956,7 +61956,7 @@
         "x-ops-public": "sdk"
       },
       "get": {
-        "description": "One definition at a version (its newest when left out), its versions and its open review.",
+        "description": "One definition at a version (its newest when left out), its versions and its open review; its working copy\nonly for a caller who may view the team's workflows.",
         "operationId": "workflows_get_definition",
         "parameters": [
           {
@@ -62348,7 +62348,7 @@
     },
     "/v1/workflows/definitions/{workflow_id}/diff": {
       "get": {
-        "description": "The steps added, removed, changed (every setting that differs, old and new) and moved between two versions of\na workflow, its live version or its working copy.",
+        "description": "The steps added, removed, changed (every setting that differs, old and new) and moved between two versions of\na workflow, its live version or its working copy. 403 unless the caller may view the team's workflows.",
         "operationId": "workflows_diff_definitions",
         "parameters": [
           {

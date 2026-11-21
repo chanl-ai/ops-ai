@@ -45,8 +45,9 @@ engine_definitions = sa.Table(
     # The mailbox its Email received trigger names (`definitions.watched_mailbox`), so the Channels list joins a
     # mailbox to the live workflows that read it in SQL (agents 0118).
     sa.Column("mailbox", sa.String(320)),
-    # One version per definition: publishing the same definition again returns its version.
-    sa.UniqueConstraint("tenant_id", "workflow_id", "digest", name="uq_engine_definitions_digest"),
+    # Publishing a definition stored before finds its version here. Not unique: a restored version published again is
+    # a new version with an older one's definition (agents 0122).
+    sa.Index("ix_engine_definitions_digest", "tenant_id", "workflow_id", "digest"),
     # The v2 workflows list, one team's page by name or update time (agents 0112).
     sa.Index("ix_engine_definitions_team_name", "tenant_id", "team_id", "name"),
     sa.Index("ix_engine_definitions_team_created", "tenant_id", "team_id", "created_at"),
