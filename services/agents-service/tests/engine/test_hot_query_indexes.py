@@ -92,7 +92,9 @@ async def test_a_claim_seeks_both_due_work_and_lapsed_leases(
         await analyse(engine, "engine_work")
         recorded.clear()
         await WorkQueue(tx, owner="plan", ttl=5).claim()
-        [plan] = await plans(tx, [s for s in about(recorded, "engine_work") if "FOR UPDATE" in s[0]], bitmaps=True)
+        # The claim's read of its candidates: the locking read after it seeks them by id.
+        read = [s for s in about(recorded, "engine_work") if "ORDER BY engine_work.priority" in s[0]]
+        [plan] = await plans(tx, read[:1], bitmaps=True)
     assert seeks("ix_engine_work_lease", "status", "build", "lease_expires_at")(plan), plan
     assert seeks("ix_engine_work_due", "status", "build", "available_at")(plan), plan
 

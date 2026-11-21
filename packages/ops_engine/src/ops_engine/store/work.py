@@ -5,9 +5,10 @@ renewed; a dead worker's claim lapses and the row is claimed again with its atte
 
 Fair claim (workflow-runner.md section 5). Each row carries its run's team, a priority and a concurrency key (the team
 when none is set). With `team_cap` set, a key whose rows already run on `team_cap` live claims is skipped, so one
-team at its cap never holds back another, and among the rest the key with the fewest rows running goes first: keys
-take turns. Only claimed rows with a live lease count; a run waiting for a person, an event or a timer has no claimed
-row and takes no slot. The cap is exact: the last check runs under a lock on the key (`ops_store.dialect.lock_key`).
+team at its cap never holds back another, and among the rest the oldest row of the highest priority goes first, read
+in the order of one index (ix_engine_work_claim) rather than sorted per claim. Only claimed rows with a live lease
+count; a run waiting for a person, an event or a timer has no claimed row and takes no slot. The cap is exact: the
+last check runs under a lock on the key (`ops_store.dialect.lock_key`).
 """
 
 from __future__ import annotations
@@ -30,6 +31,10 @@ from .tx import CLAIM_WORK, Transactions
 # A row whose claim lapsed more often than this is not claimed again: its run kills the worker that takes it, and the
 # run reconciler marks it Stuck with that reason.
 MAX_LAPSES = 5
+# Keys a claim passes over when each fills while it waits for its lock, before it gives up until the next poll.
+CAP_TRIES = 3
+# Rows a claim reads before it locks one; another claim holding them all at once is what makes it come back empty.
+CANDIDATES = 16
 
 
 @dataclass(frozen=True)
@@ -60,30 +65,28 @@ class WorkQueue:
                 sa.and_(w.c.status == "queued", w.c.available_at <= now),
                 sa.and_(w.c.status == "claimed", w.c.lease_expires_at < now),
             )
-            q = sa.select(w.c.id, w.c.tenant_id, _key(w).label("key")).where(
-                due, w.c.build == self.build, w.c.lapses <= MAX_LAPSES
+            # Read in ix_engine_work_claim's order, so the claim stops at the first row it may take.
+            q = (
+                cast(sa.Select[Any], sa.select(w.c.id, w.c.tenant_id, _key(w).label("key")))
+                .where(due, w.c.build == self.build, w.c.lapses <= MAX_LAPSES)
+                .order_by(w.c.priority.desc(), w.c.id)
             )
-            if self.team_cap is None:
-                q = q.order_by(sa.func.coalesce(w.c.priority, 0).desc(), w.c.id)
-            else:
-                running = self._running(now).subquery("running")
-                busy = sa.func.coalesce(running.c.n, 0)
-                q = (
-                    q.select_from(
-                        w.outerjoin(running, sa.and_(running.c.tenant_id == w.c.tenant_id, running.c.key == _key(w)))
-                    )
-                    .where(busy < self.team_cap)
-                    .order_by(sa.func.coalesce(w.c.priority, 0).desc(), busy, w.c.id)
-                )
-            found = (await c.execute(claim_rows(cast(sa.Select[Any], q.limit(1)), w))).one_or_none()
-            if found is None:
-                return None
-            if self.team_cap is not None:
+            full: list[tuple[str, str]] = []
+            for _ in range(CAP_TRIES):
+                found = await self._first(c, q, now, full)
+                if found is None:
+                    return None
+                if self.team_cap is None:
+                    break
                 # Two workers can each read the key one under its cap; the second waits here and reads the first's.
                 await lock_key(c, f"engine_work_cap:{found.tenant_id}:{found.key}")
                 held = self._running(now, found.tenant_id, found.key)
-                if any(int(r.n) >= self.team_cap for r in (await c.execute(held)).all()):
-                    return None
+                if not any(int(r.n) >= self.team_cap for r in (await c.execute(held)).all()):
+                    break
+                # That key filled while this claim waited: the next key under its cap is taken instead.
+                full.append((found.tenant_id, found.key))
+            else:
+                return None
             row = (
                 await c.execute(
                     w.update()
@@ -100,6 +103,29 @@ class WorkQueue:
                 )
             ).one()
         return Work(int(row.id), row.tenant_id, row.run_id, row.kind, row.payload, int(row.attempts), row.claimed_by)
+
+    async def _first(self, c: Any, q: sa.Select[Any], now: Any, full: list[tuple[str, str]]) -> Any:
+        """The first row of `q` this claim may take, locked: with a cap, one whose key is under it and not in
+        `full`. The first CANDIDATES ids are read without a lock, and only they are locked: SQL Server keeps an
+        update lock on every row a locking read touches, so one claim reading every due row would hold them all and a
+        second claim (READPAST) would find none."""
+        w = engine_work
+        if self.team_cap is not None:
+            running = self._running(now).subquery("running")
+            q = q.select_from(
+                w.outerjoin(running, sa.and_(running.c.tenant_id == w.c.tenant_id, running.c.key == _key(w)))
+            ).where(sa.func.coalesce(running.c.n, 0) < self.team_cap)
+            for tenant, key in full:
+                q = q.where(sa.not_(sa.and_(w.c.tenant_id == tenant, _key(w) == key)))
+        for _ in range(CAP_TRIES):
+            ids = (await c.execute(q.with_only_columns(w.c.id).limit(CANDIDATES))).scalars().all()
+            if not ids:
+                return None
+            first = q.where(w.c.id.in_(ids)).limit(1)
+            if (found := (await c.execute(claim_rows(first, w))).one_or_none()) is not None:
+                return found
+            # Every candidate was taken, or its key filled, since they were read: read the next ones.
+        return None
 
     def _running(self, now: Any, tenant: str | None = None, key: str | None = None) -> sa.Select[Any]:
         """Live claims per tenant and key: what the cap counts. A lapsed claim's worker is gone, so it is not
@@ -196,6 +222,7 @@ class WorkQueue:
                         build=self.build,
                         available_at=db_now(c) + after_seconds,
                         attempts=0,
+                        priority=0,
                         created_at=now_iso(),
                         # The run's team, read in the same statement, so no caller has to name it.
                         team_id=sa.select(engine_runs.c.team_id)
@@ -216,7 +243,7 @@ class WorkQueue:
 
 
 def _key(t: sa.FromClause) -> sa.ColumnElement[str]:
-    """The key a row's cap counts: its concurrency key, else its team; a row queued before agents migration 0123 has
-    neither and counts under ''. The empty string is literal SQL so the GROUP BY repeats the select's expression
-    exactly; a bound value would be a second parameter PostgreSQL does not match."""
+    """The key a row's cap counts: its concurrency key, else its team (agents migration 0124 filled it in on the rows
+    queued before it); a row with neither counts under ''. The empty string is literal SQL so the GROUP BY repeats the
+    select's expression exactly; a bound value would be a second parameter PostgreSQL does not match."""
     return sa.func.coalesce(t.c.concurrency_key, t.c.team_id, sa.literal_column("''"))

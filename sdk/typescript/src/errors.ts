@@ -1,4 +1,4 @@
-import { CODES } from './generated/codes.js';
+import { CODES, STATUSES } from './generated/codes.js';
 
 /** A code's row in the one error model's table; an unknown code reads as `internal_error`, as the services read it. */
 export function codeOf(code?: string | null): { kind: ErrorKind; retryable: boolean } {
@@ -6,14 +6,14 @@ export function codeOf(code?: string | null): { kind: ErrorKind; retryable: bool
   return { kind: row.kind as ErrorKind, retryable: row.retryable };
 }
 
-/** Only when a refusal carries no code the table knows: a status that a later try can pass. */
-const RETRYABLE_STATUSES = new Set([408, 429, 502, 503, 504]);
+/** The row the services give a refusal by its status alone (generated from `row_for_status`): read only when a
+ * refusal carries no code the table knows and its body names no kind. */
+function statusRow(status: number): { kind: string; retryable: boolean } {
+  return STATUSES[String(status)] ?? STATUSES[status >= 400 && status < 500 ? '400' : '500']!;
+}
 
 export function kindOfStatus(status: number): ErrorKind {
-  if ([400, 404, 413, 422].includes(status)) return 'input';
-  if ([401, 403, 409, 429].includes(status)) return 'refused';
-  if ([408, 504].includes(status)) return 'timeout';
-  return [502, 503].includes(status) ? 'upstream' : 'internal';
+  return statusRow(status).kind as ErrorKind;
 }
 
 /** One error class per kind of refusal, each carrying the API's code, message and request id, and the error model's
@@ -33,7 +33,7 @@ export class OpsError extends Error {
     this.name = new.target.name;
     const row = CODES[code];
     this.kind = (row?.kind as ErrorKind | undefined) ?? said.kind ?? kindOfStatus(status);
-    this.retryable = row?.retryable ?? said.retryable ?? RETRYABLE_STATUSES.has(status);
+    this.retryable = row?.retryable ?? said.retryable ?? statusRow(status).retryable;
   }
 }
 /** 400 or 422: the input was refused, including `step_up_required` and `approval_token_required`. */

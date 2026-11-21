@@ -1,6 +1,9 @@
 """The fair claim on engine_work and the paged run reconciler, by failure mode: one team at its cap holds back another;
 a run waiting for a person takes one of its team's slots; two workers take one row, or a team passes its cap when they
-claim at once (on SQL Server too); the reconciler sends a statement past SQL Server's 2,100 parameters."""
+claim at once (on SQL Server too); behind 5,000 rows of a team at its cap, a claimer that lost the cap check takes no
+work though another team's row waits; the reconciler sends a statement past SQL Server's 2,100 parameters; a step begins
+while a cancel holds its run's row (SQL Server rendered no lock hint, so the second session neither waited nor
+skipped)."""
 
 from __future__ import annotations
 
@@ -19,10 +22,11 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_en
 
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.tenancy import tenant_scope
-from ops_engine.store import WorkQueue, reconciler
+from ops_engine.journal import RunCancelledError, StepRow
+from ops_engine.store import SqlJournal, WorkQueue, reconciler
 from ops_engine.store.clock import now_iso
 from ops_engine.store.tables import engine_runs, engine_work
-from ops_store.dialect import db_epoch
+from ops_store.dialect import db_epoch, locked
 from ops_store.testing import DATABASES, NO_SQL_SERVER, sql_server_schema
 
 SQL_SERVER_PARAMETERS = 2100
@@ -150,6 +154,46 @@ async def test_two_workers_never_take_one_row_and_a_team_keeps_to_its_cap(engine
     assert held.get("team_a", 0) <= 2 and held.get("team_b", 0) <= 2, held
 
 
+async def test_behind_five_thousand_rows_of_a_full_team_two_claimers_still_reach_the_other_team(
+    engine: AsyncEngine,
+) -> None:
+    tenant, build = ids()
+    many = 5000
+
+    def row(team: str) -> dict[str, Any]:
+        return {
+            "tenant_id": tenant,
+            "team_id": team,
+            "run_id": f"wfrun_{uuid4().hex[:12]}",
+            "kind": "start",
+            "dedupe_key": uuid4().hex,
+            "status": "queued",
+            "build": build,
+            "available_at": 0.0,
+            "attempts": 0,
+            "lapses": 0,
+            "priority": 0,
+            "created_at": now_iso(),
+        }
+
+    async with in_tenant(engine, tenant) as c:
+        # 150 rows of 12 values per statement: under SQL Server's parameter limit.
+        team_a = [row("team_a") for _ in range(many)]
+        for start in range(0, many, 150):
+            await c.execute(engine_work.insert(), team_a[start : start + 150])
+        await c.execute(engine_work.insert(), [row("team_b")])
+    # Both read team_a under its cap at once; the second waits on the cap's lock, finds it full, and must go on.
+    got = await asyncio.gather(*(queue(engine, build, cap=1, owner=f"w{i}").claim() for i in range(2)))
+    async with in_tenant(engine, tenant) as c:
+        teams = dict(
+            (await c.execute(sa.select(engine_work.c.id, engine_work.c.team_id).where(engine_work.c.build == build)))
+            .tuples()
+            .all()
+        )
+        await c.execute(engine_work.update().where(engine_work.c.build == build).values(status="done"))
+    assert sorted(teams[g.id] if g else "none" for g in got) == ["team_a", "team_b"]
+
+
 async def test_the_reconciler_never_sends_past_sql_servers_parameter_limit(engine: AsyncEngine) -> None:
     tenant, _ = ids()
     many = SQL_SERVER_PARAMETERS + 100
@@ -193,3 +237,39 @@ async def test_the_reconciler_never_sends_past_sql_servers_parameter_limit(engin
     # Every one of them is found (each has nothing behind it), and no statement carried them all at once.
     assert len([f for f in found if f.tenant_id == tenant]) == many
     assert biggest < SQL_SERVER_PARAMETERS, biggest
+
+
+async def test_a_step_waits_for_a_cancel_that_holds_its_run_and_then_does_not_begin(engine: AsyncEngine) -> None:
+    tenant, _ = ids()
+    run_id, at = f"wfrun_{uuid4().hex[:12]}", now_iso()
+    r = engine_runs
+    async with in_tenant(engine, tenant) as c:
+        await c.execute(
+            r.insert().values(
+                id=run_id,
+                tenant_id=tenant,
+                team_id="team_a",
+                workflow_id="wf",
+                version=1,
+                digest="d",
+                run_key=run_id,
+                mode="live",
+                status="running",
+                created_by="a@x",
+                created_at=at,
+                updated_at=at,
+            )
+        )
+    step = StepRow(run_id, "n1", 1, 1, "running", "read", f"{run_id}:n1:1:1")
+    with tenant_scope(tenant):
+        journal = SqlJournal(EngineTransactions(engine))
+        # The first session locks the run as a cancel does; the second's step must wait for it, then see it.
+        async with EngineTransactions(engine).tenant_tx() as c:
+            await c.execute(locked(sa.select(r.c.status).where(r.c.id == run_id), r))
+            begun = asyncio.create_task(journal.begin(step))
+            await asyncio.sleep(1.0)
+            waited = not begun.done()
+            await c.execute(r.update().where(r.c.id == run_id).values(status="cancelled"))
+        assert waited, "the step began while another session held its run's row"
+        with pytest.raises(RunCancelledError):
+            await begun

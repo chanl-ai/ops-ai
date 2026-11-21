@@ -40,6 +40,8 @@ CODES: dict[str, Code] = {
     "schema_mismatch": Code("input", False, "The request did not have the shape this step needs."),
     "unknown_reference": Code("input", False, "The request named something that does not exist."),
     "missing_value": Code("input", False, "A value this step needs was missing."),
+    # A request field a service refused by name (details.path), whatever status it answered with.
+    "invalid_input": Code("input", False, "The request could not be run as it was sent."),
     # refused: a rule said no; only a full team or a missing sign-in is tried again (after the wait or the sign-in).
     "forbidden": Code("refused", False, "This is not allowed for your account."),
     "guardrail_blocked": Code("refused", False, "This was stopped by one of the team's rules."),
@@ -95,6 +97,13 @@ CODES: dict[str, Code] = {
     "validation_failed": Code("input", False, "The request could not be run as it was sent."),
     "not_found": Code("input", False, "The request named something that does not exist."),
     "conflict": Code("input", False, "This clashes with a change made since. Please reload and try again."),
+    # 409s that name their clash: the base an edit started from moved, or the version is no longer a draft.
+    "stale_base": Code("input", False, "This was changed since you opened it. Please reload and try again."),
+    "not_a_draft": Code("input", False, "Only a draft can be changed this way."),
+    # 409s a rule decides: a review is still open, a role is set by a team rule, or Admin keeps every permission.
+    "review_open": Code("refused", False, "A review of this is still open. Decide it first."),
+    "role_set_by_rule": Code("refused", False, "This role is set by a team rule, so it cannot be changed here."),
+    "admin_holds_every_cell": Code("refused", False, "The Admin role keeps every permission."),
     "too_large": Code("input", False, "What was sent is too large."),
     # A 422 from a rule ("a read may not call a write"), as the error family documents it.
     "unprocessable": Code("refused", False, "This is not allowed here."),

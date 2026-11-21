@@ -1,7 +1,8 @@
 """The hand-written layer, by failure mode, against httpx's mock transport: a call that loses the key or the team, a
 caller who sees the envelope instead of the data, a refusal that loses the API's code or request id, a list that
 stops after its first page for either paging shape, a write retried without an idempotency key, a wait that hangs
-on a run stopped at a human task, and a busy model's 429 that reads as a refusal nobody should retry."""
+on a run stopped at a human task, a busy model's 429 that reads as a refusal nobody should retry, and a conflict
+whose code this SDK does not know that reads (and exits the CLI) as another kind than the services give it."""
 
 from __future__ import annotations
 
@@ -12,6 +13,7 @@ from typing import Any
 import httpx
 import pytest
 from ops_ai import AsyncOpsAI, Conflict, NotFound, OpsAI, OpsError
+from ops_ai.errors import EXIT_CODES
 
 BASE = "https://ops.test"
 
@@ -64,6 +66,18 @@ def test_a_429_reads_its_kind_and_retryable_from_the_bodys_code() -> None:
         c.agents.get("ag_1")
     assert e.value.kind == "upstream", "rate_limited is upstream in the one code table, whatever the status"
     assert getattr(e.value, "retryable", None) is True
+
+
+def test_a_conflict_with_a_code_this_sdk_does_not_know_reads_as_the_services_read_a_409() -> None:
+    def handler(_: httpx.Request) -> httpx.Response:
+        # A newer service's code, from a service old enough to send no kind: only the status is left to read.
+        error = {"code": "draft_saved_elsewhere", "message": "Saved since.", "status": 409}
+        return httpx.Response(409, json={"success": False, "error": error})
+
+    with pytest.raises(OpsError) as e:
+        client(handler).agents.get("ag_1")
+    # The services read a 409 as `conflict`: kind input, so a stale save exits 2 against any service version.
+    assert (e.value.kind, EXIT_CODES[e.value.kind]) == ("input", 2)
 
 
 def test_a_list_walks_every_page_in_both_paging_shapes() -> None:

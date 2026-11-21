@@ -89,7 +89,7 @@ engine_runs = sa.Table(
     sa.Column("output", sa.JSON),
     sa.Column("error", sa.Text),
     # The error as ops_contracts.errors.RunError records it ({kind, code, message, userMessage, retryable, ...}), set
-    # with `error`; None on a run that has not failed and on runs that failed before agents migration 0122.
+    # with `error`; None on a run that has not failed and on runs that failed before agents migration 0123.
     sa.Column("failure", sa.JSON),
     # While waiting: {node, iteration, interruptId, payload}; the Reviews facade reads it.
     sa.Column("waiting", sa.JSON),
@@ -164,8 +164,8 @@ engine_work = sa.Table(
     sa.Column("lapses", sa.Integer, nullable=False, server_default="0"),
     sa.Column("error", sa.Text),
     sa.Column("created_at", sa.String(32), nullable=False),
-    # The fair claim (work.py, agents migration 0123). All nullable: a row queued before 0123 reads as its run's team
-    # (null), priority 0 and its team as the concurrency key. Higher priority is claimed first.
+    # The fair claim (work.py, agents migration 0124). Nullable, so adding them rewrote no row: the migration filled
+    # in the team and priority 0 on every open row, and every row queued since carries both. Higher priority first.
     sa.Column("team_id", sa.String(64)),
     sa.Column("priority", sa.Integer),
     # What the team's cap counts; the team when null. A workflow may name its own (one customer, one mailbox).
@@ -177,6 +177,11 @@ engine_work = sa.Table(
     # The claim's other branch: claimed work whose lease lapsed.
     sa.Index("ix_engine_work_lease", "status", "build", "lease_expires_at"),
     info=TENANT_SCOPED,
+)
+# The claim's order (work.py): highest priority, then oldest, read in index order so a claim stops at the first row
+# it may take instead of sorting every due row.
+sa.Index(
+    "ix_engine_work_claim", engine_work.c.status, engine_work.c.build, engine_work.c.priority.desc(), engine_work.c.id
 )
 
 # One row per step parked on work another service finishes: what a service event or a signed callback looks a

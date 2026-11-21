@@ -1,4 +1,4 @@
-"""Migration 0123 adds the fair claim's columns to engine_work, the live queue, by failure mode: adding them waits for
+"""Migration 0124 adds the fair claim's columns to engine_work, the live queue, by failure mode: adding them waits for
 the table's lock behind a claim still open and holds every later claim behind it, so the queue stalls until that claim
 ends."""
 
@@ -14,9 +14,9 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from .test_drop_publish_policies import ROOT
 
-BEFORE = "0122_run_failure_record"
+BEFORE = "0123_run_failure_record"
 CLAIM = sa.text("SELECT id FROM engine_work ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED")
-# Past 0123's LOCK_TIMEOUT_MS (3 s): a claim that waits longer is held behind the migration.
+# Past 0124's LOCK_TIMEOUT_MS (3 s): a claim that waits longer is held behind the migration.
 CLAIM_WAITS_AT_MOST_S = 6.0
 
 

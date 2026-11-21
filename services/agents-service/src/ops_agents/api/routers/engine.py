@@ -1180,7 +1180,7 @@ class RunResultView(TypedDict):
 
 def run_failure(run: StoredRun, steps: list[Json]) -> RunFailureView | None:
     """The run's error as the error model recorded it. A run that failed before the record existed (agents
-    migration 0122) reads as `stuck` when it is Stuck and `internal_error` otherwise, with the last failing step."""
+    migration 0123) reads as `stuck` when it is Stuck and `internal_error` otherwise, with the last failing step."""
     if not run.error:
         return None
     if run.failure:

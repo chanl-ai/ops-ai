@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from ._generated.codes import CODES
+from ._generated.codes import CODES, STATUSES
 
 # The one error model's kinds (the agents service's RunFailure): what failed, so a caller knows whose move it is.
 Kind = Literal["input", "refused", "upstream", "timeout", "internal"]
@@ -29,24 +29,21 @@ class OpsError(Exception):
         self.status, self.code, self.message, self.request_id, self.details = status, code, message, request_id, details
         # The code's row in the one error model's table wins; then what the body says; the status only when neither.
         row = CODES.get(code)
-        self.kind: Kind = row["kind"] if row else kind or kind_of_status(status)
+        said = status_row(status)
+        self.kind: Kind = row["kind"] if row else kind or said["kind"]
         self.retryable: bool = (
-            bool(row["retryable"]) if row else retryable if retryable is not None else status in RETRYABLE_STATUSES
+            bool(row["retryable"]) if row else retryable if retryable is not None else said["retryable"]
         )
 
 
-# Only when a refusal carries no code the table knows: a status that a later try can pass.
-RETRYABLE_STATUSES = frozenset({408, 429, 502, 503, 504})
+def status_row(status: int) -> dict[str, Any]:
+    """The row the services give a refusal by its status alone (generated from `row_for_status`): read only when a
+    refusal carries no code the table knows and its body names no kind."""
+    return STATUSES.get(status) or STATUSES[400 if 400 <= status < 500 else 500]
 
 
 def kind_of_status(status: int) -> Kind:
-    if status in (400, 404, 413, 422):
-        return "input"
-    if status in (401, 403, 409, 429):
-        return "refused"
-    if status in (408, 504):
-        return "timeout"
-    return "upstream" if status in (502, 503) else "internal"
+    return status_row(status)["kind"]
 
 
 class RunFailed(Exception):

@@ -114,14 +114,15 @@ class RunStore:
                 # The pinned version, locked until the run commits: a delete of the workflow waits for this start
                 # (and then sees its run), or ran first and the start finds the version gone.
                 pinned = await c.execute(
-                    sa.select(d.c.stage, d.c.archived_at)
-                    .where(
-                        d.c.tenant_id == values["tenant_id"],
-                        d.c.workflow_id == run["workflow_id"],
-                        d.c.version == run["version"],
-                        d.c.digest == run["digest"],
+                    locked(
+                        cast(sa.Select[Any], sa.select(d.c.stage, d.c.archived_at)).where(
+                            d.c.tenant_id == values["tenant_id"],
+                            d.c.workflow_id == run["workflow_id"],
+                            d.c.version == run["version"],
+                            d.c.digest == run["digest"],
+                        ),
+                        d,
                     )
-                    .with_for_update()
                 )
                 found = pinned.first()
                 if found is None:
@@ -143,6 +144,9 @@ class RunStore:
                         available_at=db_now(c) + delay,
                         attempts=0,
                         created_at=at,
+                        # The run's team is the cap's key; without it every team's start shares one key.
+                        team_id=values.get("team_id"),
+                        priority=0,
                     )
                 )
         except IntegrityError:
@@ -362,7 +366,7 @@ class RunStore:
             mine = sa.and_(
                 r.c.id == run_id, r.c.tenant_id == self.tx.tenant(), team_visible(r), r.c.status != "cancelled"
             )
-            await c.execute(sa.select(r.c.id).where(mine).with_for_update())
+            await c.execute(locked(sa.select(r.c.id).where(mine), r))
             status = "failed" if failed else (await self._children_left(c, run_id) or "succeeded")
             done = status in TERMINAL
             await c.execute(
@@ -417,7 +421,7 @@ class RunStore:
             wake: tuple[str, str, str | None] | None = None
             async with self.tx.tenant_tx() as c:
                 mine = sa.and_(r.c.id == parent_id, r.c.tenant_id == self.tx.tenant(), team_visible(r))
-                query = sa.select(r.c.status, r.c.outcome, r.c.waiting).where(mine).with_for_update()
+                query = locked(cast(sa.Select[Any], sa.select(r.c.status, r.c.outcome, r.c.waiting)).where(mine), r)
                 found = (await c.execute(query)).first()
                 if found is None or found.status in TERMINAL:
                     return
@@ -493,7 +497,7 @@ class RunStore:
         r, w = engine_runs, engine_work
         async with self.tx.tenant_tx() as c:
             mine = sa.and_(r.c.id == run_id, r.c.tenant_id == self.tx.tenant(), team_visible(r))
-            found = (await c.execute(sa.select(r.c.status).where(mine).with_for_update())).first()
+            found = (await c.execute(locked(sa.select(r.c.status).where(mine), r))).first()
             if found is None:
                 return None, False
             changed = found.status not in TERMINAL
