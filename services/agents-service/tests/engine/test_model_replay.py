@@ -12,7 +12,7 @@ from uuid import uuid4
 
 import pytest
 from langgraph.checkpoint.memory import InMemorySaver
-from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart, UserPromptPart
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
@@ -64,7 +64,8 @@ class Model:
     def model(self) -> FunctionModel:
         def answer(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
             self.calls += 1
-            asked = " ".join(str(getattr(p, "content", "")) for m in messages for p in m.parts)
+            said = [p.content for m in messages for p in m.parts if isinstance(p, TextPart | UserPromptPart)]
+            asked = " ".join(str(c) for c in said)
             return structured(info, {"summary": f"call {self.calls}: {asked[-40:]}"})
 
         async def stream(
