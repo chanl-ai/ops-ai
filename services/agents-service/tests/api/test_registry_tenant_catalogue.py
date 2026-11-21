@@ -68,3 +68,31 @@ async def test_two_tenants_teams_of_one_id_each_get_their_own_assistant(database
         assert rt.catalog.agent(mine) is served, "the other tenant's first chat replaced this tenant's assistant"
         read = await client.get(f"/v1/agents/{theirs}", headers=person(b))
         assert read.status_code == 200, read.text
+
+
+async def test_the_mention_search_offers_only_the_callers_agents(database_url: str) -> None:
+    a, b = tenants()
+    async with started(database_url, seed=False) as (client, rt):
+        theirs = await published_agent(client, rt, a, "Payee desk")
+        mine = await published_agent(client, rt, b, "Payee review")
+        await published_agent(client, rt, b, "Refund desk")
+    async with started(database_url, seed=False) as (client, rt):
+        found = await client.get("/v1/chat/agents/options", params={"search": "payee"}, headers=person(b))
+        assert found.status_code == 200, found.text
+        assert [o["id"] for o in found.json()["data"]["data"]] == [mine], "the search offers another tenant's agent"
+        named = await client.get("/v1/chat/agents/options", params={"ids": [theirs, mine]}, headers=person(b))
+        assert [o["id"] for o in named.json()["data"]["data"]] == [mine], "ids= names another tenant's agent"
+
+
+async def test_the_mention_list_reaches_an_agent_past_the_first_page(database_url: str) -> None:
+    _, b = tenants()
+    async with started(database_url, seed=False) as (client, rt):
+        made = {await published_agent(client, rt, b, f"Desk {n}") for n in range(3)}
+    async with started(database_url, seed=False) as (client, rt):
+        first = (await client.get("/v1/chat/agents/options", params={"limit": 2}, headers=person(b))).json()["data"]
+        assert len(first["data"]) == 2 and first["nextCursor"], first
+        rest = await client.get(
+            "/v1/chat/agents/options", params={"limit": 2, "cursor": first["nextCursor"]}, headers=person(b)
+        )
+        seen = {o["id"] for o in first["data"] + rest.json()["data"]["data"]}
+        assert made <= seen, "an agent past the first page is never offered"

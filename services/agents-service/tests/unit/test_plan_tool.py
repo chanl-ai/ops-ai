@@ -7,15 +7,18 @@ from __future__ import annotations
 import copy
 import json
 from collections.abc import AsyncIterator
+from dataclasses import replace
 from typing import Any
 
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from ops_agent_kernel import plan as planner
+from ops_agent_kernel import steps as skill_steps
 from ops_agent_kernel.events import ToolOutput, TurnFinished
 from ops_agent_kernel.kernel import run_turn
 from ops_agent_kernel.ports import KernelPorts, ToolOutcome
+from ops_agent_kernel.steps import SkillProgram
 from ops_agent_kernel.types import (
     AgentSettings,
     Interrupt,
@@ -23,6 +26,7 @@ from ops_agent_kernel.types import (
     Plan,
     PlanStep,
     PromptFragment,
+    Skill,
     ToolGrant,
     TurnRequest,
     TurnResult,
@@ -32,6 +36,7 @@ from ops_agents.api.chat_history import history_entry
 from ops_agents.api.chat_threads import THINK_HARDER, AssistantBuilder
 from ops_agents.graphs.common import interrupt_from_state, interrupt_to_state
 from ops_contracts.chat import ChatMessage
+from ops_contracts.skill_run import SkillRunState
 from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.narrow import json_list, json_object
 from tests.conftest import SEED
@@ -235,12 +240,30 @@ def test_the_chat_keeps_one_plan_part_on_top_and_hands_an_open_plan_to_the_next_
     assert [p.id for p in parts] == ["wp_plan", "wp_c1"], [p.id for p in parts]
     carried: dict[str, Any] = history_entry(builder.message)
     assert carried["plan"]["steps"][1]["status"] == "blocked" and "reads" in carried, carried
-    # An approval pause keeps the plan through the run's saved state.
+    # An approval pause keeps the plan, the running skill and the tools a stopped skill holds through the run's
+    # saved state: the resumed turn is the same reply and goes on at the same step.
     call = PendingCall("c", "k", "a", "t", "s", "write", {}, "h")
-    kept = Interrupt(
-        "i", "approval", "Approval", call, b"[]", [], {"title": "Check", "steps": steps("done", "blocked", "todo")}
+    program = SkillProgram.model_validate({"steps": [{"do": "Ask which charge."}, {"do": "Open the dispute."}]})
+    skill = replace(
+        Skill("sk_open", 1, "Open a dispute", "open-a-dispute", "Disputes.", "on_match", ""), program=program
     )
-    assert interrupt_from_state(interrupt_to_state(kept)).plan == kept.plan
+    run = skill_steps.start(SkillRunState(), skill, [skill], by="model")
+    held = {"sk_refund": ["refund_charge"]}
+    kept = Interrupt(
+        "i",
+        "approval",
+        "Approval",
+        call,
+        b"[]",
+        [],
+        {"title": "Check", "steps": steps("done", "blocked", "todo")},
+        run,
+        held,
+    )
+    back = interrupt_from_state(interrupt_to_state(kept))
+    assert back.plan == kept.plan
+    assert back.run == run and back.run is not None and back.run.running is not None, back.run
+    assert back.held == held, back.held
 
 
 def test_think_harder_is_offered_on_a_planned_reply_and_not_on_one_already_run_deeper() -> None:

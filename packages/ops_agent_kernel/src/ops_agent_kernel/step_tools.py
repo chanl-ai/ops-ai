@@ -59,7 +59,9 @@ def grants(skills: Sequence[Skill]) -> list[ToolGrant]:
             SWITCH,
             "platform",
             "Starts one of your skills that run step by step, by its slug, when the request matches its use-when "
-            "line. A skill already running ends first: only one runs at a time.",
+            "line. A skill already running ends first: only one runs at a time. A skill ended in this reply because "
+            "a check did not pass, a person rejected its action or a step could not be done does not start again "
+            "until the person's next message.",
             "read",
             {
                 "type": "object",
@@ -79,9 +81,16 @@ def grants(skills: Sequence[Skill]) -> list[ToolGrant]:
             STEP_DONE,
             "platform",
             "Says the current step of the running skill is done. Refused while the step's tool has not run, and "
-            "for a step whose check runs on the tool result.",
+            "for a step whose check runs on the tool result. On a step that asks you to decide which way a path "
+            "goes, say it with holds: true when the condition holds, false when it does not.",
             "read",
-            {"type": "object", "properties": {"summary": {"type": "string", "maxLength": 300}}},
+            {
+                "type": "object",
+                "properties": {
+                    "summary": {"type": "string", "maxLength": 300},
+                    "holds": {"type": "boolean", "description": "Whether the step's condition holds"},
+                },
+            },
         ),
         ToolGrant(
             EXIT,
@@ -105,7 +114,8 @@ def grants(skills: Sequence[Skill]) -> list[ToolGrant]:
 def handle(name: str, run: SkillRunState, skills: Sequence[Skill], arguments: Json) -> Moved:
     """One call to a step tool: the record after it and what the model is told."""
     if name == STEP_DONE:
-        return steps.step_done(run, skills)
+        holds = arguments.get("holds")
+        return steps.step_done(run, skills, holds if isinstance(holds, bool) else None)
     if name == EXIT:
         return steps.leave(run, skills, str(arguments.get("name") or ""), json_object(arguments.get("returns")))
     slug = str(arguments.get("slug") or "")
@@ -115,6 +125,9 @@ def handle(name: str, run: SkillRunState, skills: Sequence[Skill], arguments: Js
     running = run.running
     if running is not None and running.skill_id == skill.skill_id:
         return Moved(run, f"{skill.name} is already running, on step {running.step}. Go on with that step.", ok=False)
+    if (ended := steps.final(run, skill.skill_id)) is not None:
+        # The kernel ended it in this reply: the ending stands until the person's next message.
+        return Moved(run, steps.ending(ended), ok=False)
     inputs = {k: str(v) for k, v in json_object(arguments.get("inputs")).items()}
     if missing := steps.missing_inputs(skill, inputs):
         return Moved(run, needs(skill, missing), ok=False)

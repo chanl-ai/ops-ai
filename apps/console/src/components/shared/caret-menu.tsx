@@ -1,15 +1,14 @@
 'use client';
 
 import * as React from 'react';
-import type { LucideIcon } from 'lucide-react';
+import { Loader2, type LucideIcon } from 'lucide-react';
 
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 import { Skeleton } from '@/components/ui/skeleton';
 
-import type { MenuPick } from './extensions';
-
-export interface MenuRow {
+/** One row; `P` is what picking it does, which only the caller reads. */
+export interface MenuRow<P = unknown> {
   /** Unique in the menu; the highlighted row is tracked by it. */
   key: string;
   label: string;
@@ -20,20 +19,24 @@ export interface MenuRow {
   disabled?: string | null;
   /** Shown under the list while the row is highlighted. */
   note?: string | null;
-  pick: MenuPick;
+  pick: P;
 }
 
-export interface MenuSection {
+export interface MenuSection<P = unknown> {
   label: string;
-  rows: MenuRow[];
+  rows: MenuRow<P>[];
 }
 
 /**
- * The menu a typed `@`, `{{` or `/` opens, under the caret. The caret stays in the document: the document forwards
- * the arrow keys and Enter, and this draws the highlighted row. What was typed after the trigger is the search, so
- * there is no search box of its own.
+ * The one list opened at the caret: a typed `@`, `{{`, `/` or `if `. The caret stays in the text: the text forwards the
+ * arrow keys and Enter, and this draws the highlighted row. What was typed after the trigger is the search, which the
+ * caller runs on the server (hooks/options-queries.ts), so there is no search box and nothing is filtered here.
+ *
+ * The list is capped at 18rem and scrolls under sticky group headings, so a long list never runs off the screen and
+ * every group stays reachable; the highlighted row is kept in view as the arrow keys move it. `onEnd` asks for the
+ * next page when the list is scrolled, or arrowed, to its end.
  */
-export function CaretMenu({
+export function CaretMenu<P>({
   rect,
   label,
   status,
@@ -45,32 +48,49 @@ export function CaretMenu({
   empty,
   error,
   id,
+  onEnd,
+  loadingMore = false,
 }: {
   /** Where the trigger sits on screen. */
   rect: () => DOMRect | null;
   label: string;
   status: 'loading' | 'ready' | 'error';
-  sections: MenuSection[];
+  sections: MenuSection<P>[];
   active: string;
   onActive: (key: string) => void;
-  onPick: (row: MenuRow) => void;
+  onPick: (row: MenuRow<P>) => void;
   onDismiss: () => void;
   empty: string;
   error: string;
-  /** The menu's element id, so the document can point a screen reader at its list and highlighted row. */
+  /** The menu's element id, so the text can point a screen reader at its list and highlighted row. */
   id: string;
+  onEnd?: () => void;
+  loadingMore?: boolean;
 }) {
   const anchor = React.useRef({ getBoundingClientRect: () => rect() ?? new DOMRect() });
   anchor.current.getBoundingClientRect = () => rect() ?? new DOMRect();
-  const note = sections.flatMap((s) => s.rows).find((r) => r.key === active)?.note;
+  const list = React.useRef<HTMLDivElement>(null);
+  const rows = sections.flatMap((s) => s.rows);
+  const note = rows.find((r) => r.key === active)?.note;
+  const last = rows.at(-1)?.key;
+  React.useEffect(() => {
+    // cmdk scrolls only for keys it handles itself; here the text handles them.
+    list.current?.querySelector('[cmdk-item][data-selected="true"]')?.scrollIntoView({ block: 'nearest' });
+    if (active && active === last) onEnd?.();
+  }, [active, last, onEnd]);
+  const onScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 48) onEnd?.();
+  };
   return (
     <Popover open onOpenChange={(open) => !open && onDismiss()}>
       <PopoverAnchor virtualRef={anchor} />
       <PopoverContent
         align="start"
         side="bottom"
+        collisionPadding={16}
         className="w-96 max-w-[calc(100vw-2rem)] p-0"
-        // The caret stays in the document while the menu is open.
+        // The caret stays in the text while the menu is open.
         onOpenAutoFocus={(e) => e.preventDefault()}
         onCloseAutoFocus={(e) => e.preventDefault()}
         onFocusOutside={(e) => e.preventDefault()}
@@ -79,7 +99,7 @@ export function CaretMenu({
         data-testid="caret-menu"
       >
         <Command shouldFilter={false} value={active} onValueChange={onActive}>
-          <CommandList label={label} className="max-h-72">
+          <CommandList ref={list} label={label} onScroll={onScroll} className="max-h-[min(18rem,50vh)] [&_[cmdk-group-heading]]:sticky [&_[cmdk-group-heading]]:top-0 [&_[cmdk-group-heading]]:z-10 [&_[cmdk-group-heading]]:bg-popover">
             {status === 'loading' ? (
               <div className="space-y-2 p-3" role="status" aria-label="Searching">
                 <Skeleton className="h-7" />
@@ -104,6 +124,11 @@ export function CaretMenu({
                     ))}
                   </CommandGroup>
                 ))}
+                {loadingMore && (
+                  <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground" role="status">
+                    <Loader2 className="size-3 animate-spin" /> Loading more…
+                  </div>
+                )}
               </>
             )}
           </CommandList>

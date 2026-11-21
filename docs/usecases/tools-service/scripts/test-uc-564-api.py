@@ -16,16 +16,17 @@ import httpx
 from apps_layer import run_path
 from fake_salesforce import LIST_VIEW_ID, salesforce
 from steps import required
-from usecase_harness import PLUGINS_REPO
 from usecase_harness import (
     PLATFORM_INTERNAL_PORT,
     PLATFORM_PORT,
+    PLUGINS_REPO,
     agents,
     bearer,
     check,
     data,
     finish,
     platform,
+    save_agent,
     service_headers,
     signed_in,
     tools,
@@ -330,12 +331,12 @@ with ExitStack() as stack:
     maya = bearer(signed_in(api, "m.okafor@harborpine.example"), "team_ops")
     helper = required(chat.post("/v1/agents", json={"name": "Case desk", "role": "Finds cases"}, headers=james), "/v1/agents")
     first = (
-required(chat.patch(f"/v1/agents/{helper.get('id')}", json={"instructions": "Find cases."}, headers=james), "set the helper's instructions")
+required(save_agent(chat, helper.get("id"), {"instructions": "Find cases."}, headers=james), "set the helper's instructions")
     )
     waiting = chat.post(
         f"/v1/agents/{helper.get('id')}/publish-requests", json={"version": first.get("version")}, headers=james
     )
-    granted = data(chat.patch(f"/v1/agents/{helper.get('id')}", json={"toolIds": ["salesforce_query"]}, headers=james))
+    granted = data(save_agent(chat, helper.get("id"), {"toolIds": ["salesforce_query"]}, headers=james))
     asked = chat.post(
         f"/v1/agents/{helper.get('id')}/publish-requests",
         json={"version": (granted or {}).get("version")},

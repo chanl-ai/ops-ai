@@ -177,6 +177,19 @@ OPEN_SPEC: dict[str, Any] = {
 }
 
 
+# A credit card as the test bank answers it (services/tools-service/scripts/fake_bank/app.py): the balance is what
+# the cardholder owes, so it is below zero.
+OWING: dict[str, Any] = {
+    "id": "VISA-5521",
+    "customerId": "CUS-1001",
+    "type": "credit card",
+    "currency": "CAD",
+    "balance": -1612.4,
+    "status": "open",
+    "holds": [],
+}
+
+
 @dataclass
 class FakeBank:
     address: str
@@ -231,6 +244,8 @@ def _handler(bank: FakeBank) -> type[BaseHTTPRequestHandler]:
             parts = self.path.split("?")[0].split("/")
             if len(parts) == 5 and parts[2] == "accounts" and parts[4] in SHAPED:
                 return self._send(200, SHAPED[parts[4]])
+            if self.path == f"/v1/accounts/{OWING['id']}":
+                return self._send(200, OWING)
             if self.path.startswith("/v1/accounts/"):
                 return self._send(200, {"accountId": self.path.rsplit("/", 1)[1], "balance": 1200.5})
             if self.path.split("?")[0] == "/v1/limits":

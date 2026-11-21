@@ -180,6 +180,39 @@ export interface ReplyUsage {
   seconds?: number | null;
 }
 
+/** A skill running in a conversation, as the Runtime reports it after a reply (ops_contracts `SkillRunState`). */
+export interface SkillRunStep {
+  skillId: string;
+  version: number;
+  name: string;
+  step: number;
+  stepsTotal: number;
+  stepText: string;
+}
+
+export interface SkillRun {
+  running: (SkillRunStep & { sub?: (SkillRunStep & { slug?: string }) | null }) | null;
+  /**
+   * How skills ended. `ended` is done, failed, switched or an author's exit name such as blocked. The fields after
+   * `atStep` are absent on a reply saved before the Runtime wrote them, and such a reply shows no ending line.
+   */
+  history: {
+    skillId: string;
+    version: number;
+    name: string;
+    ended: string;
+    atStep: number;
+    /** True while this record is the one of the reply the skill ended in; later replies repeat it without the mark. */
+    inReply?: boolean;
+    why?: 'check' | 'denied' | 'error' | 'held' | 'exit' | null;
+    /** The text of the check that did not pass. */
+    check?: string | null;
+    /** What the skill's author wrote that this exit means. */
+    meaning?: string | null;
+  }[];
+  holds?: { skillId: string; name: string; step: string; denied: boolean; tools: string[] }[];
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -205,6 +238,8 @@ export interface ChatMessage {
   /** Tool results agents-service shaped (rows, series, record, metric), drawn by the widget registry. */
   parts?: MessagePart[];
   feedback?: MessageFeedback;
+  /** Assistant messages: the skill running after this reply and the ones that ended. Optional: the embed draws these types too. */
+  skillRun?: SkillRun | null;
   /** Retrieval found nothing above the threshold; the reply says so instead of guessing. */
   noAnswer?: boolean;
   /** The person stopped the reply; the text so far is kept. */
@@ -227,7 +262,7 @@ export interface ChatMessage {
     /** The part of a skill with parts that ran, by its slug. */
     part?: string;
     /** Picked from the / menu, carried from the reply before, loaded on a match, or always on. */
-    how?: 'picked' | 'carried' | 'loaded' | 'always';
+    how?: 'picked' | 'carried' | 'loaded' | 'always' | 'started';
     inputs?: Record<string, string>;
   }[];
   /** The settings the turn ran on, for whoever explains the answer later. */

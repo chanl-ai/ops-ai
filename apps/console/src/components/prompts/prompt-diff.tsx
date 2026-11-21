@@ -23,15 +23,16 @@ function diffLines(before: string, after: string): Line[] {
   return out;
 }
 
-/** Current instructions against the generated ones, removed lines red and added lines green. */
-export function PromptDiff({ before, after }: { before: string; after: string }) {
+/** Current instructions against the generated ones, removed lines red and added lines green. `against` names what
+ * `before` is in the summary line. */
+export function PromptDiff({ before, after, against = 'the current instructions' }: { before: string; after: string; against?: string }) {
   const lines = diffLines(before, after);
   const added = lines.filter((l) => l.kind === 'add').length;
   const removed = lines.filter((l) => l.kind === 'del').length;
   return (
     <div className="flex flex-col gap-2" data-testid="prompt-diff">
       <p className="text-xs text-muted-foreground tabular-nums">
-        <span className="text-success-text">+{added}</span> <span className="text-destructive-text">−{removed}</span> lines against the current instructions
+        <span className="text-success-text">+{added}</span> <span className="text-destructive-text">−{removed}</span> lines against {against}
         {!before.trim() && ' (currently empty)'}
       </p>
       <pre className="overflow-x-auto rounded-md border bg-muted/30 py-2 font-mono text-xs leading-relaxed whitespace-pre-wrap">

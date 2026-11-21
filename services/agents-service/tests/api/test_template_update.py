@@ -32,6 +32,7 @@ from ops_service_kit.settings import Settings
 
 from ..conftest import SEED, FakeGraphModels
 from ..engine.test_lifecycle_rights import person
+from ..saves import save_skill_draft
 from .role_app import ok, role_app
 from .test_reply_pins import FIXTURES, answer, compare
 from .test_template_install import AGENT, SOURCE, TOOLS, wire
@@ -81,7 +82,7 @@ async def add_skill(client: AsyncClient) -> str:
 async def edit_skill(client: AsyncClient, sid: str, **fields: Any) -> None:
     held = ok(await client.get(f"/v1/skills/{sid}", headers=OPS))
     body = {"baseVersion": held["version"], "note": "", **fields}
-    ok(await client.put(f"/v1/skills/{sid}/draft", json=body, headers=OPS))
+    ok(await save_skill_draft(client, sid, body, headers=OPS))
 
 
 async def publish_skill(client: AsyncClient, sid: str) -> int:

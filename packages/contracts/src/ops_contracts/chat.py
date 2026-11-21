@@ -12,6 +12,8 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 from pydantic.alias_generators import to_camel
 
+from .skill_run import SkillRunState
+
 
 class WireModel(BaseModel):
     """camelCase on the wire, snake_case in Python, unknown fields refused so a renamed console field fails loudly."""
@@ -280,7 +282,8 @@ class LoadedSkill(WireModel):
     part: str | None = None
     # How it entered the reply: picked from the / menu, carried from the reply before, loaded by the model on a
     # match, or always on. Absent on replies written before picks existed.
-    how: Literal["picked", "carried", "loaded", "always"] | None = None
+    # started: a skill with steps began running; it is never carried as text, the running-skill record carries it.
+    how: Literal["picked", "carried", "loaded", "always", "started"] | None = None
     # The inputs a picked part was filled with, kept so the next reply carries the same text.
     inputs: dict[str, str] | None = None
 
@@ -471,6 +474,9 @@ class ChatMessage(WireModel):
     # Up to three next asks the turn offers as chips, filled from its data (an open record, a field's picklist); a click
     # sends one as the person's next message.
     follow_ups: list[Annotated[str, Field(min_length=1, max_length=120)]] | None = Field(default=None, max_length=3)
+    # The skill running step by step after this reply, and the newest that ended; absent when the turn had none.
+    # The next reply goes on from it.
+    skill_run: SkillRunState | None = None
 
 
 class ChatThreadBase(WireModel):

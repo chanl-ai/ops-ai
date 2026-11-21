@@ -10,6 +10,7 @@ from typing import Any
 
 from ops_agents.activities.tool_directory import OperationRef
 
+from ..saves import save_agent
 from .test_agent_limits import _app, _data  # pyright: ignore[reportPrivateUsage]
 
 
@@ -57,7 +58,7 @@ class Apps:
 
 async def granted(c: Any, tool: str) -> dict[str, Any]:
     made = _data(await c.post("/v1/agents", json={"name": "Case desk", "role": "Reads cases"}), 201)
-    return _data(await c.patch(f"/v1/agents/{made['id']}", json={"toolIds": [tool]}))
+    return _data(await save_agent(c, made["id"], {"toolIds": [tool]}))
 
 
 async def test_each_tool_has_its_app_kind_status_and_users(tmp_path: Path) -> None:

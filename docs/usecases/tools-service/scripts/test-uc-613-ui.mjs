@@ -9,6 +9,7 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { AGENTS_PORT, FILES_PORT, PLATFORM_PORT, ROOT, check, chromium, evidenceDir, finish, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
+import { saveAgent } from '../../lib/agent_save.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const files = `http://127.0.0.1:${FILES_PORT}`;
@@ -44,7 +45,7 @@ await withUiStack(
     const fileId = await upload(J);
     const agent = await data(await fetch(`${agents}/v1/agents/${AGENT}`, { headers: J }), 'agent');
     const toolIds = [...new Set([...(agent.toolIds ?? []), 'read_file', 'read_document'])];
-    const saved = await data(await fetch(`${agents}/v1/agents/${AGENT}`, { method: 'PATCH', headers: J, body: JSON.stringify({ toolIds }) }), 'grant');
+    const saved = await data(await saveAgent(agents, J, AGENT, { toolIds }), 'grant');
     // The save opens a publish review (or one is open already); another person of the team, Priya, approves it.
     const pub = await fetch(`${agents}/v1/agents/${AGENT}/publish-requests`, { method: 'POST', headers: J, body: JSON.stringify({ version: saved.version, note: 'uc-613 file tools' }) });
     const asked = await pub.json().catch(() => ({}));

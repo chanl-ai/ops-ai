@@ -30,24 +30,26 @@ import type { Lookups } from '@/lib/api';
 import { plural, relativeTime } from '@/lib/format';
 import type { ToolOptionsPage } from '@/lib/types/query';
 import type { WidgetPin, WidgetSettings } from '@/lib/types/widgets';
-import type { Agent, AgentControls, AgentGuardrails, AgentLimits, AgentPublicKeyOverride, AgentRun, AgentVersion, Channel, GrantableTool, MemorySettings, ModelAlias, SkillMenu } from '@/lib/types/domain';
+import type { Agent, AgentControls, AgentGuardrails, AgentLimits, AgentPatterns, AgentPublicKeyOverride, AgentRun, AgentVersion, Channel, GrantableTool, MemorySettings, ModelAlias, SkillMenu } from '@/lib/types/domain';
 
 import { modelHint, ModelSelect } from './model-select';
 import { teamLabel } from '@/components/shared/team-name';
 import { useTeam } from '@/hooks/use-team';
+import { listChange } from '@/lib/agent-tools';
 import { appPageHref } from '@/lib/app-links';
 
-/** Everything one save of the agent page can change. */
+/**
+ * Everything one save of the agent page can change. The tool list is not here: a grant, an @ insert and a skill
+ * attach each change it on the stored agent, so a page's copy of it is never written back over them.
+ */
 export interface AgentDraft {
   name: string;
   role: string;
   model: string;
   channels: Channel[];
   instructions: string;
-  toolIds: string[];
   /** The account each app's calls use (app id to account name); an app it does not name uses its default. */
   accounts: Record<string, string>;
-  collections: string[];
   guardrails: AgentGuardrails;
   guardrailPins: { guardrailId: string; version: number; enabled: boolean }[];
   limits: AgentLimits;
@@ -56,6 +58,8 @@ export interface AgentDraft {
   widgets: WidgetSettings;
   memory: MemorySettings;
   skillMenu: SkillMenu;
+  /** How the model works through a turn; saved with the version. */
+  patterns: AgentPatterns;
 }
 
 export const draftOf = (a: Agent): AgentDraft => ({
@@ -64,9 +68,7 @@ export const draftOf = (a: Agent): AgentDraft => ({
   model: a.model,
   channels: a.channels,
   instructions: a.instructions,
-  toolIds: a.toolIds,
   accounts: a.accounts ?? {},
-  collections: a.collections,
   guardrails: a.guardrails,
   guardrailPins: (a.guardrailPins ?? []).map((p) => ({ guardrailId: p.guardrailId, version: p.version, enabled: p.enabled ?? true })),
   limits: a.limits,
@@ -74,20 +76,21 @@ export const draftOf = (a: Agent): AgentDraft => ({
   widgets: a.widgets ?? { compose: false, perTurn: null },
   memory: a.memory ?? { enabled: true, kinds: ['fact', 'preference', 'episode'] },
   skillMenu: a.skillMenu ?? 'team',
+  patterns: a.patterns ?? { thinking: 'default', parallelReads: true },
 });
 
 /**
  * Keeps the limits in step with the version they are saved on, as agents-service requires: the agent's model is the
  * default and allowed, its knowledge bases are allowed, and only granted tools may be switched off.
  */
-export function followLimits(d: AgentDraft): AgentDraft {
+export function followLimits(d: AgentDraft, toolIds: string[], collections: string[]): AgentDraft {
   const l = d.limits;
   const limits: AgentLimits = {
     ...l,
     defaultModel: d.model,
     allowedModels: l.allowedModels.includes(d.model) ? l.allowedModels : [d.model, ...l.allowedModels.filter((m) => m !== l.defaultModel)],
-    allowedKnowledgeBaseIds: [...new Set([...d.collections, ...l.allowedKnowledgeBaseIds])],
-    switchableToolIds: l.switchableToolIds.filter((t) => d.toolIds.includes(t)),
+    allowedKnowledgeBaseIds: [...new Set([...collections, ...l.allowedKnowledgeBaseIds])],
+    switchableToolIds: l.switchableToolIds.filter((t) => toolIds.includes(t)),
     ...(l.switchableWidgetIds ? { switchableWidgetIds: l.switchableWidgetIds.filter((w) => d.widgetPins.some((p) => p.widgetId === w)) } : {}),
   };
   return JSON.stringify(limits) === JSON.stringify(l) ? d : { ...d, limits };
@@ -99,9 +102,7 @@ const SECTION: Record<keyof AgentDraft, string> = {
   model: 'Identity',
   channels: 'Identity',
   instructions: 'Instructions',
-  toolIds: 'Tools',
   accounts: 'Tools',
-  collections: 'Knowledge',
   guardrails: 'Guardrails',
   guardrailPins: 'Guardrails',
   limits: 'Caller limits',
@@ -109,6 +110,7 @@ const SECTION: Record<keyof AgentDraft, string> = {
   widgets: 'Widgets',
   memory: 'Memory',
   skillMenu: 'Skills',
+  patterns: 'Model and limits',
 };
 
 /** Section names whose values differ between the saved agent and the draft. */
@@ -130,7 +132,7 @@ type Set = <K extends keyof AgentDraft>(k: K, v: AgentDraft[K]) => void;
 
 /** `models` are the aliases publish accepts; an agent saved on any other alias still shows it, marked, so it can be changed. */
 /** `channels` are the ones the runtime serves (`Agent.controls`); no other is offered. */
-export function IdentitySection({ draft, set, teamId, models, errors, channels, agentId }: { draft: AgentDraft; set: Set; teamId: string | null; models: ModelAlias[]; errors: Partial<Record<'name' | 'role', string>>; channels: Channel[]; /** Shown to copy for the API and the CLI; absent before the agent is saved. */ agentId?: string }) {
+export function IdentitySection({ draft, set, teamId, models, errors, channels, agentId, showJob = true, showModel = true }: { draft: AgentDraft; set: Set; teamId: string | null; models: ModelAlias[]; errors: Partial<Record<'name' | 'role', string>>; channels: Channel[]; /** Shown to copy for the API and the CLI; absent before the agent is saved. */ agentId?: string; /** False while the prompt is written as a brief: its Purpose is the job. */ showJob?: boolean; /** False where the model is chosen under Model and limits. */ showModel?: boolean }) {
   const { teams } = useTeam();
   return (
     <SettingsSection title="Identity" description="Reviewers see the name and job on every run this agent pauses.">
@@ -146,12 +148,16 @@ export function IdentitySection({ draft, set, teamId, models, errors, channels, 
             <CopyField id="ag-id" value={agentId} label="agent ID" />
           </FormField>
         )}
-        <FormField id="ag-role" label="Job" error={errors.role} className="md:col-span-2">
-          <Input id="ag-role" value={draft.role} onChange={(e) => set('role', e.target.value)} className="bg-card" aria-invalid={!!errors.role} />
-        </FormField>
-        <FormField id="ag-model" label="Model" hint={modelHint(models, draft.model)}>
-          <ModelSelect id="ag-model" value={draft.model} onValueChange={(v) => set('model', v)} aliases={models} className="bg-card" />
-        </FormField>
+        {showJob && (
+          <FormField id="ag-role" label="Job" error={errors.role} className="md:col-span-2">
+            <Input id="ag-role" value={draft.role} onChange={(e) => set('role', e.target.value)} className="bg-card" aria-invalid={!!errors.role} />
+          </FormField>
+        )}
+        {showModel && (
+          <FormField id="ag-model" label="Model" hint={modelHint(models, draft.model)}>
+            <ModelSelect id="ag-model" value={draft.model} onValueChange={(v) => set('model', v)} aliases={models} className="bg-card" />
+          </FormField>
+        )}
         <FormField id="ag-channels" label="Can talk on" hint="Where the agent is reachable is set by the deployments of the workflows that use it.">
           <ToggleGroup id="ag-channels" type="multiple" variant="outline" value={draft.channels.filter((c) => channels.includes(c))} onValueChange={(v) => v.length && set('channels', v as Channel[])} className="w-full bg-card">
             {channels.map((c) => {
@@ -213,17 +219,19 @@ function ToolsNotAddedNote({ apps }: { apps: NonNullable<ToolOptionsPage['notAdd
  * Grants the registry no longer offers (unpublished, hidden or removed from their module) are listed apart with
  * Remove, rather than as a chip the picker cannot label.
  */
-export function ToolsSection({ draft, set, stale = [] }: { draft: AgentDraft; set: Set; stale?: string[] }) {
-  const gone = stale.filter((id) => draft.toolIds.includes(id));
-  const offered = draft.toolIds.filter((id) => !gone.includes(id));
+export function ToolsSection({ draft, set, toolIds, onChange, stale = [] }: { draft: AgentDraft; set: Set; toolIds: string[]; onChange: (change: { add?: string[]; remove?: string[] }) => void; stale?: string[] }) {
+  const gone = stale.filter((id) => toolIds.includes(id));
+  const offered = toolIds.filter((id) => !gone.includes(id));
+  // The picker answers the whole list it shows; what is sent is only what the person added or took away.
+  const pick = (ids: string[]) => onChange({ add: ids.filter((id) => !offered.includes(id)), remove: offered.filter((id) => !ids.includes(id)) });
   return (
-    <SettingsSection title={`Tools · ${draft.toolIds.length}`} description="The only systems this agent may call. Tools marked review pause every call for a person.">
+    <SettingsSection title={`Tools · ${toolIds.length}`} description="The only systems this agent may call. Tools marked review pause every call for a person.">
       <div className="flex flex-col gap-3">
-        {draft.toolIds.length === 0 && <p className="text-sm text-muted-foreground">No tools. The agent can only answer from knowledge.</p>}
+        {toolIds.length === 0 && <p className="text-sm text-muted-foreground">No tools. The agent can only answer from knowledge.</p>}
         <FormField id="agent-accounts" label="Account" hint="Which account of an app this agent’s calls use. A workflow step that names its own account wins.">
           <AccountSelect id="agent-accounts" value={draft.accounts} onChange={(v) => set('accounts', v)} />
         </FormField>
-        <EntityPicker source={toolOptions} value={offered} onChange={(ids) => set('toolIds', [...ids, ...gone])} addLabel="Grant tools" searchPlaceholder="Search tools by name or system…" emptyText="No tool matches." icon={Wrench} testId="agent-tools-picker" note={(first) => <ToolsNotAddedNote apps={first.notAdded ?? []} />} />
+        <EntityPicker source={toolOptions} value={offered} onChange={pick} addLabel="Grant tools" searchPlaceholder="Search tools by name or system…" emptyText="No tool matches." icon={Wrench} testId="agent-tools-picker" note={(first) => <ToolsNotAddedNote apps={first.notAdded ?? []} />} />
         {gone.length > 0 && (
           <div className="flex flex-col gap-1" data-testid="stale-grants">
             <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">No longer offered</p>
@@ -232,9 +240,9 @@ export function ToolsSection({ draft, set, stale = [] }: { draft: AgentDraft; se
                 <Row
                   key={id}
                   title={<code className="font-mono text-sm">{id}</code>}
-                  description="Unpublished, hidden or removed from its module. Saving drops it."
+                  description="Unpublished, hidden or removed from its module."
                   trailing={
-                    <Button type="button" variant="outline" size="sm" onClick={() => set('toolIds', draft.toolIds.filter((x) => x !== id))} aria-label={`Remove ${id}`}>
+                    <Button type="button" variant="outline" size="sm" onClick={() => onChange({ remove: [id] })} aria-label={`Remove ${id}`}>
                       Remove
                     </Button>
                   }
@@ -248,25 +256,28 @@ export function ToolsSection({ draft, set, stale = [] }: { draft: AgentDraft; se
   );
 }
 
-/** The knowledge bases the agent may search and cite, stored by id and picked through the options route. */
-export function KnowledgeSection({ draft, set }: { draft: AgentDraft; set: Set }) {
+/**
+ * The knowledge bases the agent may search and cite, picked through the options route. The list is the stored agent's:
+ * a pick is its own save (`onChange`), never part of the draft the page autosaves.
+ */
+export function KnowledgeSection({ collections, onChange }: { collections: string[]; onChange: (change: { add: string[]; remove: string[] }) => void }) {
   return (
-    <SettingsSection title={`Knowledge · ${draft.collections.length}`} description="Knowledge bases the agent may search and cite.">
-      {draft.collections.length === 0 && <p className="mb-2 text-sm text-muted-foreground">No knowledge bases. The agent cannot cite policy or product documents.</p>}
-      <EntityPicker source={knowledgeBaseOptions} value={draft.collections} onChange={(ids) => set('collections', ids)} addLabel="Choose knowledge bases" searchPlaceholder="Search knowledge bases…" emptyText="No knowledge base matches." icon={BookOpen} testId="agent-knowledge-picker" />
+    <SettingsSection title={`Knowledge · ${collections.length}`} description="Knowledge bases the agent may search and cite.">
+      {collections.length === 0 && <p className="mb-2 text-sm text-muted-foreground">No knowledge bases. The agent cannot cite policy or product documents.</p>}
+      <EntityPicker source={knowledgeBaseOptions} value={collections} onChange={(ids) => onChange(listChange(collections, ids))} addLabel="Choose knowledge bases" searchPlaceholder="Search knowledge bases…" emptyText="No knowledge base matches." icon={BookOpen} testId="agent-knowledge-picker" />
     </SettingsSection>
   );
 }
 
 /** Widgets the agent may show in chat: pinned templates by version, composition and a per-answer cap. */
-export function WidgetsSection({ draft, set }: { draft: AgentDraft; set: Set }) {
+export function WidgetsSection({ draft, set, toolIds }: { draft: AgentDraft; set: Set; toolIds: string[] }) {
   // A new pin takes the published version on save (version 0 is sent as none); a held pin keeps its version.
   const choose = (ids: string[]) => set('widgetPins', ids.map((id) => draft.widgetPins.find((p) => p.widgetId === id) ?? { widgetId: id, version: 0, name: id }));
   return (
     <SettingsSection title={`Widgets · ${draft.widgetPins.length}`} description="Widgets the agent may fill in a chat answer, and whether it may lay out its own from the approved building blocks.">
       <div className="flex flex-col gap-4">
         {draft.widgetPins.length === 0 && <p className="text-sm text-muted-foreground">No widgets. The agent answers with text, tables and charts only.</p>}
-        <EntityPicker source={widgetOptionsFor(draft.toolIds)} value={draft.widgetPins.map((p) => p.widgetId)} onChange={choose} addLabel="Choose widgets" searchPlaceholder="Search widgets…" emptyText="No published widget matches." icon={LayoutTemplate} testId="agent-widget-pins" />
+        <EntityPicker source={widgetOptionsFor(toolIds)} value={draft.widgetPins.map((p) => p.widgetId)} onChange={choose} addLabel="Choose widgets" searchPlaceholder="Search widgets…" emptyText="No published widget matches." icon={LayoutTemplate} testId="agent-widget-pins" />
         <div className="flex items-center justify-between gap-4 rounded-md border bg-card px-3 py-2.5">
           <div>
             <Label htmlFor="widgets-compose">Lay out its own widgets</Label>
@@ -299,18 +310,27 @@ const UNSURE: Record<AgentGuardrails['whenUnsure'], string> = {
 /** A cap as a number field: empty is no cap, so a real agent is not held to a small menu of choices. */
 function CapField({ id, label, value, onChange, hint, placeholder, decimal }: { id: string; label: string; value: number | null; onChange: (v: number | null) => void; hint: string; placeholder: string; decimal?: boolean }) {
   // A cost cap takes cents; a count cap is a whole number of at least one.
-  const parse = (raw: string) => (decimal ? Math.max(0.01, Math.round(Number(raw) * 100) / 100) : Math.max(1, Math.floor(Number(raw))));
+  const least = decimal ? 0.01 : 1;
+  const parse = (raw: string) => (decimal ? Math.round(Number(raw) * 100) / 100 : Math.floor(Number(raw)));
+  // What is typed while it is not a cap the agent can hold (zero, a negative): shown with its error, and not saved.
+  const [refused, setRefused] = React.useState<string | null>(null);
   return (
-    <FormField id={id} label={label} hint={hint}>
+    <FormField id={id} label={label} hint={hint} error={refused === null ? undefined : `Enter ${least} or more, or leave it empty for no cap.`}>
       <Input
         id={id}
         type="number"
-        min={decimal ? 0.01 : 1}
-        step={decimal ? 0.01 : 1}
+        min={least}
+        step={least}
         inputMode={decimal ? 'decimal' : 'numeric'}
         placeholder={placeholder}
-        value={value ?? ''}
-        onChange={(e) => onChange(e.target.value.trim() === '' ? null : parse(e.target.value))}
+        value={refused ?? value ?? ''}
+        aria-invalid={refused !== null}
+        onChange={(e) => {
+          const raw = e.target.value.trim();
+          if (raw !== '' && !(parse(raw) >= least)) return setRefused(e.target.value);
+          setRefused(null);
+          onChange(raw === '' ? null : parse(raw));
+        }}
         className="bg-card"
       />
     </FormField>
@@ -440,12 +460,12 @@ const num = (v: string) => (v.trim() === '' ? Number.NaN : Number(v));
  * What callers may change when they use this agent: a banker in chat, a service through the API, a widget on a public
  * key. Saved with the version and approved in its publish review; anything outside these is refused, never adjusted.
  */
-export function LimitsSection({ draft, set, models, tools }: { draft: AgentDraft; set: Set; models: ModelAlias[]; tools: GrantableTool[] }) {
+export function LimitsSection({ draft, set, models, tools, toolIds, collections }: { draft: AgentDraft; set: Set; models: ModelAlias[]; tools: GrantableTool[]; toolIds: string[]; collections: string[] }) {
   const l = draft.limits;
   const put = (patch: Partial<AgentLimits>) => set('limits', { ...l, ...patch });
   const toggle = <T,>(list: T[], x: T, on: boolean) => (on ? [...list, x] : list.filter((y) => y !== x));
   const modelNames = [...new Set([draft.model, ...models.map((m) => m.name), ...l.allowedModels])].filter(Boolean);
-  const granted = tools.filter((t) => draft.toolIds.includes(t.id));
+  const granted = tools.filter((t) => toolIds.includes(t.id));
   const t = l.temperature;
   const b = l.budget;
   return (
@@ -498,7 +518,7 @@ export function LimitsSection({ draft, set, models, tools }: { draft: AgentDraft
         </div>
         <FormField id="lim-kb" label="Knowledge callers may choose from" hint="The agent's own knowledge is always allowed.">
           {/* The agent's own bases stay allowed: followLimits adds them back whatever is removed here. */}
-          <EntityPicker source={knowledgeBaseOptions} value={l.allowedKnowledgeBaseIds} onChange={(ids) => put({ allowedKnowledgeBaseIds: [...new Set([...draft.collections, ...ids])] })} addLabel="Allow knowledge bases" searchPlaceholder="Search knowledge bases…" emptyText="No knowledge base matches." icon={BookOpen} testId="agent-limits-knowledge-picker" />
+          <EntityPicker source={knowledgeBaseOptions} value={l.allowedKnowledgeBaseIds} onChange={(ids) => put({ allowedKnowledgeBaseIds: [...new Set([...collections, ...ids])] })} addLabel="Allow knowledge bases" searchPlaceholder="Search knowledge bases…" emptyText="No knowledge base matches." icon={BookOpen} testId="agent-limits-knowledge-picker" />
         </FormField>
         <FormField id="lim-tools" label="Tools callers may switch off" hint="Callers never add a tool.">
           {granted.length === 0 ? (

@@ -17,6 +17,7 @@ from httpx import AsyncClient
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, ToolCallPart, UserPromptPart
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
+from ..saves import save_agent
 from .test_agent_registry import _app, _ok  # pyright: ignore[reportPrivateUsage]
 
 LEE = {"X-Dev-User": "lee@harborpine.example"}
@@ -31,7 +32,7 @@ async def _published(c: AsyncClient) -> dict[str, Any]:
 
 
 async def _pin(c: AsyncClient, gid: str, version: int) -> Any:
-    return await c.patch(f"/v1/agents/{ADVISOR}", json={"guardrailPins": [{"guardrailId": gid, "version": version}]})
+    return await save_agent(c, ADVISOR, {"guardrailPins": [{"guardrailId": gid, "version": version}]})
 
 
 async def test_only_a_published_version_pins_and_the_pin_keeps_its_version(tmp_path: Path) -> None:
@@ -101,9 +102,8 @@ async def test_deprecated_takes_no_new_pin_but_keeps_existing_ones(tmp_path: Pat
         _ok(await c.post(f"/v1/guardrails/{g['id']}/status", json={"status": "deprecated"}))
         # A save that keeps the pin goes through.
         _ok(
-            await c.patch(
-                f"/v1/agents/{ADVISOR}",
-                json={"role": "Answers bankers", "guardrailPins": [{"guardrailId": g["id"], "version": 1}]},
+            await save_agent(
+                c, ADVISOR, {"role": "Answers bankers", "guardrailPins": [{"guardrailId": g["id"], "version": 1}]}
             )
         )
         other = _ok(await c.post("/v1/guardrails", json={**RULE, "name": "Other"}), 201)
@@ -119,7 +119,7 @@ async def test_a_pinned_guardrail_cannot_be_deleted(tmp_path: Path) -> None:
         _ok(await _pin(c, g["id"], 1))
         r = await c.delete(f"/v1/guardrails/{g['id']}")
         assert (r.status_code, r.json()["error"]["code"]) == (409, "guardrail_pinned")
-        agent = _ok(await c.patch(f"/v1/agents/{ADVISOR}", json={"guardrailPins": []}))
+        agent = _ok(await save_agent(c, ADVISOR, {"guardrailPins": []}))
         _ok(await c.post(f"/v1/agents/{ADVISOR}/publish-requests", json={"version": agent["version"]}), 201)
         assert (await c.delete(f"/v1/guardrails/{g['id']}")).status_code == 204
 
@@ -160,7 +160,7 @@ async def test_hold_until_checked_is_versioned_and_reaches_the_served_definition
         for g in (held, plain):
             _ok(await c.post(f"/v1/guardrails/{g['id']}/publish-requests", json={"version": 1}), 201)
         pins = [{"guardrailId": g["id"], "version": 1} for g in (held, plain)]
-        agent = _ok(await c.patch(f"/v1/agents/{ADVISOR}", json={"guardrailPins": pins}))
+        agent = _ok(await save_agent(c, ADVISOR, {"guardrailPins": pins}))
         _ok(await c.post(f"/v1/agents/{ADVISOR}/publish-requests", json={"version": agent["version"]}), 201)
         served = cast(Any, c)._transport.app.state.runtime.catalog.agent(ADVISOR)
         assert sorted((r.guardrail_id == held["id"], r.hold) for r in served.guardrails) == [

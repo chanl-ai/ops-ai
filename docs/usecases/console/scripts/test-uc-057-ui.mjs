@@ -2,6 +2,7 @@
 // docs/usecases/console/chat-holds-in-reviews.md. Scripted model only; signed in through platform-service. James
 // asks an agent for a write in chat; Maya approves it from Reviews; the call reaches the fake bank.
 import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, approveToolReview, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { saveAgent } from '../../lib/agent_save.mjs';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
 const agentsUrl = `http://127.0.0.1:${AGENTS_PORT}`;
@@ -34,7 +35,7 @@ await withUiStack(
     await approveToolReview(mid, N, J);
     await new Promise((r) => setTimeout(r, 31_000)); // agents-service keeps each tenant's tool list for 30 seconds
     const agent = await json(await fetch(`${agentsUrl}/v1/agents`, { method: 'POST', headers: J, body: JSON.stringify({ name: `Holds desk ${TAG}`, role: 'Places holds' }) }));
-    const granted = await fetch(`${agentsUrl}/v1/agents/${agent.id}`, { method: 'PATCH', headers: J, body: JSON.stringify({ toolIds: [WRITE] }) });
+    const granted = await saveAgent(agentsUrl, J, agent.id, { toolIds: [WRITE] });
     if (!granted.ok) throw new Error(`setup: granting ${WRITE} answered ${granted.status}: ${await granted.text()}`);
     // A chat runs the agent's published version; the ui harness approves publish requests on its own.
     const version = (await granted.json()).data.version;

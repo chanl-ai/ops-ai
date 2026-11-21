@@ -1,6 +1,6 @@
 """What a builder can mention with @ in an agent's brief or a skill's steps: tools, knowledge bases, skills, agents
 and workflows, grouped by kind. One search feeds the picker; the same reply resolves the ids a saved text already
-names to their labels.
+names to their labels. An insert on an agent grants the reference and whatever it needs to work (`grants`).
 
 It is handed what the team offers (`Candidate`) and what the agent or skill already holds (`Context`), and decides
 nothing about access: the route passes only the kinds the caller may view.
@@ -125,3 +125,59 @@ def named(
         if items:
             groups.append({"kind": k, "label": LABELS[k], "items": items, "nextCursor": None})
     return groups
+
+
+@dataclass(frozen=True)
+class SkillNeeds:
+    """What attaching a published skill version asks of an agent: the tools (as granted) and knowledge bases it
+    names, and the skills its steps run."""
+
+    tools: Sequence[str] = ()
+    bases: Sequence[str] = ()
+    runs: Sequence[str] = ()
+
+
+def _tool_ref(granted: str) -> tuple[RefKind, str]:
+    """A granted tool id as the reference that names it: `agent:<id>` and `workflow:<id>` are their own kinds."""
+    kind, sep, ref_id = granted.partition(":")
+    if sep and kind == "agent":
+        return "agent", ref_id
+    if sep and kind == "workflow":
+        return "workflow", ref_id
+    return "tool", granted
+
+
+def grants(
+    kind: RefKind, ref_id: str, held: Mapping[RefKind, frozenset[str]], needs: Mapping[str, SkillNeeds]
+) -> list[tuple[RefKind, str]]:
+    """What inserting `kind:ref_id` adds to an agent that holds `held`: the reference first, then what it brings: a
+    skill's tools and knowledge bases, and the skills its steps run with theirs. Empty when the agent holds it.
+    `needs` has the skill and each skill it runs."""
+    if ref_id in held.get(kind, frozenset()):
+        return []
+    out: list[tuple[RefKind, str]] = [(kind, ref_id)]
+    if kind != "skill":
+        return out
+    for skill_id in (ref_id, *needs[ref_id].runs):
+        need = needs[skill_id]
+        wanted: list[tuple[RefKind, str]] = [
+            ("skill", skill_id),
+            *(_tool_ref(t) for t in need.tools),
+            *(("knowledge", b) for b in need.bases),
+        ]
+        out.extend(w for w in wanted if w[1] not in held.get(w[0], frozenset()) and w not in out)
+    return out
+
+
+def granted(c: Candidate) -> Item:
+    """One thing an insert gave the agent, as the picker lists what it now holds."""
+    return {
+        "kind": c.kind,
+        "id": c.id,
+        "label": c.label,
+        "hint": c.hint,
+        "held": True,
+        "adds": None,
+        "needsApproval": c.needs_approval,
+        "disabled": None,
+    }

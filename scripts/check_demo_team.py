@@ -23,7 +23,7 @@ from typing import Any
 import httpx
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from sample_team import Session, items, service_urls, sign_in
+from sample_team import Session, items, save_agent, service_urls, sign_in
 
 FAILED: list[str] = []
 
@@ -82,13 +82,11 @@ def main() -> int:
         agent = (body(r) or {}).get("id", "")
         if agent:
             made.append((admin, "agents", "DELETE", f"/v1/agents/{agent}"))
-        r = admin("agents").patch(f"/v1/agents/{agent}", json={"role": "Checks the demo logins, edited by the admin"})
+        r = save_agent(admin("agents"), agent, {"role": "Checks the demo logins, edited by the admin"})
         check(r.status_code == 200, "admin edits the agent", r.text)
-        r = builder("agents").patch(
-            f"/v1/agents/{agent}", json={"role": "Checks the demo logins, edited by the builder"}
-        )
+        r = save_agent(builder("agents"), agent, {"role": "Checks the demo logins, edited by the builder"})
         check(r.status_code == 200, "builder edits the agent", r.text)
-        r = viewer("agents").patch(f"/v1/agents/{agent}", json={"role": "A viewer's edit"})
+        r = save_agent(viewer("agents"), agent, {"role": "A viewer's edit"})
         check(r.status_code == 403, "viewer is refused an edit (403)", f"{r.status_code} {r.text}")
         wid = f"login_check_{tag}"
         r = admin("agents").post("/v1/workflows/definitions", json={"yaml": workflow_yaml(wid, f"Login check {tag}")})

@@ -30,6 +30,12 @@ An agent follows the same path: publish compiles a one-node plan (`ag_x@7`), and
 | Old versions stay alive | A version stays compiled in each process while any thread pins it. Retiring it means waiting until no thread pins it, or migrating those threads |
 | Stable names | Node names and state keys are part of the contract between versions: keep node names stable and add state keys rather than renaming |
 
+A pinned skill is copied onto the agent version with everything a turn needs: its text, guardrail lines, the inputs
+it asks for and, for a skill with steps, the steps, exits, results, not-when line and success checks
+(`services/agents-service/src/ops_agents/api/skills.py`, `snapshot`). A pin saved before steps existed has none of
+those keys and loads as text, as it did. An agent version also stores its `brief`, `promptMode` and `patterns` when it
+has them; a version without them is served from `instructions` unchanged.
+
 ## Template copies
 
 A team's agent, skill, workflow, case type or task type made from a plugin's template is an ordinary record with its

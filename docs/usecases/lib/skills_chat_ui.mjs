@@ -45,7 +45,8 @@ export async function seedChat() {
   const made = await call('POST', '/v1/skills', { ownerTeam: 'team_ops', name: 'Salesforce', useWhen: "Use for anything about a client's Salesforce record.", instructions: 'Work only from Salesforce. Say what you read.', parts: [PREPARE, UPDATE] });
   await call('POST', `/v1/skills/${made.id}/publish-requests`, { note: 'use case' });
   const agent = await call('POST', '/v1/agents', { name: 'Desk', role: 'Answers the team' });
-  const draft = await call('PATCH', `/v1/agents/${agent.id}`, { toolIds: [] });
+  // The create reply is the copy the save names.
+  const draft = await call('PATCH', `/v1/agents/${agent.id}`, { toolIds: [], baseVersion: agent.version, baseDigest: agent.digest });
   await call('POST', `/v1/agents/${agent.id}/publish-requests`, { version: draft.version });
   return { skill: made.id, newThread: async () => (await call('POST', '/chat/threads', { agentId: agent.id, kbIds: [] })).id };
 }
