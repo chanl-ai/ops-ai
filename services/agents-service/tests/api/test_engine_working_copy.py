@@ -153,6 +153,19 @@ async def test_a_document_type_that_cannot_be_pinned_is_listed_and_refused_befor
     assert after["workingCopy"] is not None and after["saveBase"] == base
 
 
+async def test_a_tool_step_the_team_lacks_is_listed_with_its_step_and_refused(client: AsyncClient) -> None:
+    view = await _published(client)
+    named = basic()
+    lookup = next(n for n in named["nodes"] if n["id"] == "lookup")
+    lookup["parameters"]["operation"] = "wire_offshore_funds"
+    base = (await _save(client, named, view["saveBase"])).json()["data"]["saveBase"]
+    preview = (await client.get(f"{WF}/publish-preview")).json()["data"]
+    missing = [b for b in preview["blockers"] if b["code"] == "tool_not_available"]
+    assert [(b["node"], b["field"], b["level"]) for b in missing] == [("lookup", "operation", "error")], preview
+    refused = await _publish(client, base)
+    assert refused.status_code == 422 and refused.json()["error"]["code"] == "tool_not_available", refused.text
+
+
 @pytest.fixture
 async def reviewed(graph_models: FakeGraphModels, database_url: str) -> AsyncIterator[AsyncClient]:
     """The app with the dev auto-approve off, so a publish waits in Reviews."""

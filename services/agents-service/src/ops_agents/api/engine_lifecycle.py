@@ -37,6 +37,7 @@ from .deps import Runtime
 from .email_trigger import EMAIL_TRIGGER, require_binding
 from .publish_policy import decide, team_document
 from .review_sla import sla_hours
+from .routers.tool_catalog import known_tools
 
 KIND = "engine"
 REGISTRY = default_registry()
@@ -133,6 +134,40 @@ def _on_trigger(definition: Json) -> str | None:
     return None
 
 
+async def _missing_tools(rt: Runtime, definition: Json) -> list[Blocker]:
+    """A tool step whose operation the team's tool list does not offer, read as a skill save reads it
+    (`known_tools`, asked again fresh before refusing), so a workflow never publishes a step that cannot run."""
+    steps = [
+        (nid, str(cast(Json, n.get("parameters") or {}).get("operation") or ""))
+        for nid, n in nodes_of(definition).items()
+        if n.get("type") == "ops.action.tool"
+    ]
+    if not steps:
+        return []
+
+    offered = {t["id"] for t in await known_tools(rt)}
+    if any(op not in offered for _, op in steps):
+        offered = {t["id"] for t in await known_tools(rt, fresh=True)}
+    out: list[Blocker] = []
+    for nid, op in steps:
+        if op and op not in offered:
+            message = f"Step {nid} calls {op}, which this team does not have; add the tool or change the step."
+            err = Unprocessable(message, code="tool_not_available", details={"node": nid})
+            out.append(
+                Blocker(
+                    {
+                        "node": nid,
+                        "level": "error",
+                        "code": "tool_not_available",
+                        "message": message,
+                        "field": "operation",
+                    },
+                    err,
+                )
+            )
+    return out
+
+
 async def blockers(
     rt: Runtime, me: Principal, row: DefinitionRow, definition: Json, *, digest: str | None = None
 ) -> list[Blocker]:
@@ -177,6 +212,7 @@ async def blockers(
             details={"checks": cast(JsonValue, checks)},
         )
         out += [Blocker(c, failing) for c in checks]
+    out += await _missing_tools(rt, definition)
     team = current_team() or (row.team_id or "")
     # The owning team's policy, as a version is stored under (`_store_version`): a workflow no team owns runs none.
     if (uses := ai_steps_gate.ai_nodes(d, REGISTRY)) and not await ai_steps_gate.allowed(rt, row.team_id):
