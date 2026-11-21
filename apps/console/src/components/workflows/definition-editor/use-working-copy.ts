@@ -4,6 +4,7 @@ import * as React from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { useSaveWorkingCopy } from '@/hooks/engine-queries';
+import { useReloadToRead } from '@/hooks/use-reload-to-read';
 import { baseOf, staleNote, staleSave } from '@/lib/save-base';
 import type { DefinitionCheck, DefinitionView, EngineDefinition } from '@/lib/types/engine';
 
@@ -29,15 +30,26 @@ export function useWorkingCopy(view: DefinitionView, enabled: boolean, replacing
   const [edited, setEdited] = React.useState<EngineDefinition | null>(null);
   const [failed, setFailed] = React.useState<{ sent: string; message: string } | null>(null);
   const [stale, setStale] = React.useState<string | null>(null);
-  const [reading, setReading] = React.useState(false);
   const [checks, setChecks] = React.useState<DefinitionCheck[] | null>(view.workingCopy?.checks ?? null);
   const [savedAt, setSavedAt] = React.useState<string | null>(view.workingCopy?.updatedAt ?? null);
   // The editor is mounted again on a reload, so it opens on the copy just read.
   const [revision, setRevision] = React.useState(0);
   const editing = edited ? JSON.stringify(edited) : null;
 
-  // The digest of the newest copy a Reload read; the page starts over only once `view` holds it.
-  const [awaiting, setAwaiting] = React.useState<string | null>(null);
+  // Reload shows the newest copy: `reading` pauses autosave until `view` carries the digest that was read, then the
+  // editor is mounted again on it. A failed read throws, so the refused save's notice stays and nothing is dropped.
+  const readNewest = React.useCallback(async () => {
+    const key = ['engine', 'definition', view.workflowId, 'latest'];
+    await qc.refetchQueries({ queryKey: key }, { throwOnError: true });
+    return qc.getQueriesData<DefinitionView>({ queryKey: key }).find(([, v]) => v)?.[1]?.saveBase.digest;
+  }, [qc, view.workflowId]);
+  const { reload, reading } = useReloadToRead(view.saveBase.digest, readNewest, () => {
+    setEdited(null);
+    setStale(null);
+    setFailed(null);
+    setChecks(null);
+    setRevision((r) => r + 1);
+  });
 
   const saveNow = () => {
     if (!edited || !editing) return;
@@ -68,27 +80,6 @@ export function useWorkingCopy(view: DefinitionView, enabled: boolean, replacing
     // Saves on a change, once the last save has settled and once a newer base has been read.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editing, enabled, save.isPending, reading, stale, failed, view.saveBase.digest]);
-
-  // The refetch resolves before the cache has told this page's props about the new copy, so starting over on the
-  // resolved promise would remount the editor on the copy read before. `reading` (which pauses autosave) therefore
-  // lasts until `view` itself carries the digest that was read.
-  const reload = async () => {
-    setReading(true);
-    await qc.refetchQueries({ queryKey: ['engine', 'definition', view.workflowId, 'latest'] });
-    const read = qc.getQueriesData<DefinitionView>({ queryKey: ['engine', 'definition', view.workflowId, 'latest'] }).find(([, v]) => v)?.[1];
-    setAwaiting(read?.saveBase.digest ?? view.saveBase.digest);
-  };
-
-  React.useEffect(() => {
-    if (awaiting === null || view.saveBase.digest !== awaiting) return;
-    setAwaiting(null);
-    setEdited(null);
-    setStale(null);
-    setFailed(null);
-    setChecks(null);
-    setRevision((r) => r + 1);
-    setReading(false);
-  }, [awaiting, view.saveBase.digest]);
 
   const state: SaveState = stale ? 'stale' : save.isPending ? 'saving' : failed && failed.sent === editing ? 'failed' : editing ? 'unsaved' : 'saved';
   return {

@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { PageLayout } from '@/components/page-layout';
 import { useCollapsedSidebar } from '@/components/shared/collapsed-sidebar';
 import { LeaveGuard } from '@/components/shared/leave-guard';
+import { NewerCopyNotice } from '@/components/shared/newer-copy-notice';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { QueryError } from '@/components/shared/query-states';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -125,22 +126,23 @@ function CanvasTab({ view, types }: { view: DefinitionView; types: EngineNodeTyp
         frame={({ actions, canvas }) => (
           <PageLayout {...header} actions={actions}>
             {outdated && (
-              <Alert data-testid="definition-outdated-copy">
-                <AlertTitle>A newer version was saved outside the editor</AlertTitle>
-                <AlertDescription>
-                  <p>
-                    {outdatedNote(outdated, theirs)} Reload to start from it, or copy {theirs ? 'their' : 'your'} changes first. {mine ? `You are looking at ${theirs ? 'their' : 'your'} copy; it cannot be edited.` : `You are looking at version ${outdated.newerVersion}.`}
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <Button variant="outline" size="sm" onClick={() => setShowingMine((v) => !v)} data-testid="definition-outdated-open">
-                      {mine ? `Show version ${outdated.newerVersion}` : theirs ? 'Open their copy' : 'Open my copy'}
-                    </Button>
-                    <Button size="sm" onClick={() => (setShowingMine(false), setStartedFresh(true))} data-testid="definition-outdated-reload">
-                      {theirs ? `Replace their copy with version ${outdated.newerVersion}` : `Reload to start from version ${outdated.newerVersion}`}
-                    </Button>
-                  </div>
-                </AlertDescription>
-              </Alert>
+              <NewerCopyNotice
+                testId="definition-outdated-copy"
+                title="A newer version was saved outside the editor"
+                copyOpen={!!mine}
+                onToggleCopy={() => setShowingMine((v) => !v)}
+                openLabel={theirs ? 'Open their copy' : 'Open my copy'}
+                closeLabel={`Show version ${outdated.newerVersion}`}
+                actions={
+                  <Button size="sm" onClick={() => (setShowingMine(false), setStartedFresh(true))} data-testid="definition-outdated-reload">
+                    {theirs ? `Replace their copy with version ${outdated.newerVersion}` : `Reload to start from version ${outdated.newerVersion}`}
+                  </Button>
+                }
+              >
+                <p>
+                  {outdatedNote(outdated, theirs)} Reload to start from it, or copy {theirs ? 'their' : 'your'} changes first. {mine ? `You are looking at ${theirs ? 'their' : 'your'} copy; it cannot be edited.` : `You are looking at version ${outdated.newerVersion}.`}
+                </p>
+              </NewerCopyNotice>
             )}
             {copy.stale && (
               <Alert data-testid="definition-stale">
