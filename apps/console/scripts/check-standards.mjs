@@ -290,9 +290,9 @@ const REUSE = {
     hit: (text) => text.search(/from ['"]@\/components\/ui\/command['"]/),
   },
   listFilter: {
-    what: 'a list searched in the browser (search on the server: an /options source through hooks/options-queries.ts)',
-    owns: (rel) => rel.startsWith('src/lib/api/') || rel === 'src/hooks/options-queries.ts',
-    hit: (text) => text.search(/\.filter\([^;]*?\.toLowerCase\(\)\.includes\(/),
+    what: 'a list searched in the browser (search on the server: useServerList in hooks/server-list.ts, or an /options source through hooks/options-queries.ts)',
+    owns: (rel) => rel.startsWith('src/lib/api/') || rel === 'src/hooks/options-queries.ts' || rel === 'src/hooks/server-list.ts',
+    hit: (text) => listFilterHit(text),
   },
   dialogColumns: {
     what: 'a form laid out in columns inside a dialog (dialog forms are one column)',
@@ -300,6 +300,19 @@ const REUSE = {
     hit: (text) => (text.includes('<DialogShell') ? text.search(/(?:sm:|md:|lg:|xl:)?grid-cols-[2-9]/) : -1),
   },
 };
+// A search typed in the browser run over rows already fetched: a `.filter` that lower-cases and tests `includes`, a
+// `.filter` testing `includes` of the search box's value, or a predicate that compares a lower-cased search with
+// lower-cased fields (a `match(q, row)` helper the filter calls).
+function listFilterHit(text) {
+  const SEARCH = String.raw`(?:q|query|search|term|needle|\w+Query|\w+Search)`;
+  const forms = [
+    /\.filter\([^;]*?\.toLowerCase\(\)\.includes\(/,
+    new RegExp(String.raw`\.filter\([^;]*?\.includes\(${SEARCH}(?:\.trim\(\))?\)`),
+    new RegExp(String.raw`=>[^;]*?\.toLowerCase\(\)\.includes\(${SEARCH}\.toLowerCase\(\)\)`),
+  ];
+  const at = forms.map((re) => text.search(re)).filter((i) => i >= 0);
+  return at.length ? Math.min(...at) : -1;
+}
 const reusePath = join(root, 'scripts/reuse-baseline.json');
 const reuseBaseline = readJson(reusePath);
 const reuseNow = Object.fromEntries(Object.keys(REUSE).map((k) => [k, []]));
@@ -448,6 +461,11 @@ if (process.argv.includes('--self-test')) {
     ['header: raw actions on a record page', headerHits('src/app/build/agents/[id]/page.tsx', '<PageLayout title="a" actions={<Button>Go</Button>}>'), 1],
     ['header: RecordActions', headerHits('src/app/build/agents/[id]/page.tsx', '<PageLayout title="a" actions={<RecordActions />}>'), 0],
     ['save: Saving soon', saveWordHits('<span>Saving soon…</span>'), 1],
+    ['list: filter lower-casing each row', listFilterHit('const shown = rows.filter((r) => r.name.toLowerCase().includes(q));') < 0 ? [] : [1], 1],
+    ['list: filter on the search box', listFilterHit('const shown = data.filter((r) => r.title.includes(search));') < 0 ? [] : [1], 1],
+    ['list: a match helper', listFilterHit('const match = (q, r) => !q || r.title.toLowerCase().includes(q.toLowerCase());') < 0 ? [] : [1], 1],
+    ['list: server rows from useServerList', listFilterHit('const { rows } = useServerList(key, fetchPage, { search });') < 0 ? [] : [1], 0],
+    ['list: a filter by id, not a search', listFilterHit('const kept = rows.filter((r) => wanted.includes(r.id));') < 0 ? [] : [1], 0],
   ];
   const badRules = rules.filter(([, hits, want]) => hits.length !== want);
   for (const [name, hits, want] of badRules) console.error(`self-test: ${name} gave ${hits.length}, want ${want}`);
