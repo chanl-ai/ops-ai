@@ -1513,6 +1513,7 @@
           "kb_support"
         ],
         "limits": {
+          "instructionsMaxChars": 24000,
           "maxAttached": 12,
           "maxPerTurn": 2,
           "tokenBudget": 6000,

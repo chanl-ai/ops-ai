@@ -687,7 +687,7 @@ export interface paths {
         };
         /**
          * People Names
-         * @description Every person's display name in the workspace by email, so a list naming who did something shows a name
+         * @description The display names of the people `emails` names, so a list naming who did something shows a name
          *     rather than an address. A person needs access.view where the request acts (no console screen calls it, a Chat
          *     user's none); a service token needs the `settings:view` scope.
          */
@@ -1474,7 +1474,7 @@ export interface paths {
         };
         /**
          * Team Names
-         * @description Every team's display name in the workspace, so a page showing another team's record names its team. A
+         * @description The display names of the teams `ids` names, so a page showing another team's record names its team. A
          *     person needs access.view where the request acts (no console screen calls it, a Chat user's none); a service
          *     token needs the `settings:view` scope and reads its own tenant's.
          */
@@ -7204,7 +7204,9 @@ export interface operations {
     };
     people_people_names: {
         parameters: {
-            query?: never;
+            query: {
+                emails: string[];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -12103,7 +12105,9 @@ export interface operations {
     };
     teams_team_names: {
         parameters: {
-            query?: never;
+            query: {
+                ids: string[];
+            };
             header?: never;
             path?: never;
             cookie?: never;

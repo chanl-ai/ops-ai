@@ -16,6 +16,7 @@ import { relativeTime } from '@/lib/format';
 import type { Deployment, DeploymentPatch } from '@/lib/types/domain';
 
 import { CHANNELS, DeploymentSetup, DeploymentStatusBadge, EnvironmentBadge, VersionCell } from './deployment-meta';
+import { nameError } from '@/lib/validation/names';
 
 /** One deployment: how to connect it, which version it serves, and the actions that change what customers get. */
 export function DeploymentSheet({
@@ -197,7 +198,8 @@ export function DeploymentSheet({
               loadingText="Promoting…"
               onClick={async () => {
                 const domains = promoteDomains.split(',').map((x) => x.trim()).filter(Boolean);
-                if (!promoteName.trim()) return setPromoteError('Name the production deployment.');
+                const nameIssue = nameError(promoteName, 'Name the production deployment.');
+                if (nameIssue) return setPromoteError(nameIssue);
                 const twin = productionTwins.find((t) => t.name.toLowerCase() === promoteName.trim().toLowerCase());
                 if (twin) return setPromoteError(`${twin.name} is already in production. Open it and move it to v${d?.version} instead.`);
                 if (d?.channel === 'widget' && !domains.length) return setPromoteError('Add the production domains the widget may load on.');

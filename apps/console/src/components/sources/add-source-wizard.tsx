@@ -32,6 +32,7 @@ import { appPageHref } from '@/lib/app-links';
 import { count, plural } from '@/lib/format';
 import type { Schedule, Source, SourceKindOption, SourceKindPreview } from '@/lib/types/knowledge';
 import { cn } from '@/lib/utils';
+import { slugify } from '@/lib/validation/names';
 
 const STEPS = ['Source', 'What to include', 'Review'] as const;
 const PREVIEW_DEBOUNCE_MS = 600;
@@ -40,7 +41,7 @@ const PREVIEW_ROWS = 50;
 const kindKey = (k: SourceKindOption) => (k.type === 'tool' ? `${k.plugin}/${k.source}` : k.type);
 /** What each built-in kind takes in, under its title in step 1. */
 const BUILT_IN_HINT: Record<string, string> = { file: 'Upload or pick from Files', text: 'Write or paste', push: 'Sent by your systems through the API' };
-const slug = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'page';
+const slug = (t: string) => slugify(t, { width: 200, fallback: 'page' });
 
 /** How a new source's AI steps were approved once it exists: by its creator as owner, refused, or not asked for. */
 export type AiApproval = { state: 'approved' } | { state: 'waiting'; reason: string } | { state: 'none' };

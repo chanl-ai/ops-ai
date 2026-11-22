@@ -20,6 +20,7 @@ import httpx
 from pydantic import TypeAdapter
 
 from ops_service_kit.http import Json, JsonList, JsonValue
+from ops_service_kit.names import slugify
 from ops_service_kit.narrow import Malformed, a_list, an_object, json_list, json_object
 from ops_service_kit.scripted_vectors import SCRIPTED_WIDTH, scripted_vector
 
@@ -352,7 +353,7 @@ _AZURE_ANNOTATIONS = ("prompt_filter_results", "content_filter_results", "conten
 
 def region_key(region: str) -> str:
     """A region as both spellings compare: `Sweden Central` (Azure's header) and `swedencentral` (its id)."""
-    return re.sub(r"[^a-z0-9]", "", region.lower())
+    return slugify(region, width=200, sep="")
 
 
 def region_mismatch(observed: str | None, expected: str | None) -> str | None:
