@@ -253,7 +253,7 @@ export async function openHeldChatWrite(page, consoleUrl, thread) {
  * copy equals a stored version).
  */
 export async function versionFromEditor(page, workflowId, headers) {
-  const state = page.getByTestId('definition-save-state');
+  const state = page.getByTestId('save-state');
   await state.getByText(/Saved/).waitFor({ timeout: 60_000 }).catch(async (e) => {
     throw new Error(`the working copy did not save: the header reads "${await state.innerText().catch(() => 'nothing')}" (${e.message.split('\n')[0]})`);
   });

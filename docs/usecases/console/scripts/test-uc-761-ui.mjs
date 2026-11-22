@@ -45,7 +45,7 @@ await withUiStack(
       const page = await consoleSignIn(browser, consoleUrl, JAMES, PASSWORD, errors);
       const saves = [];
       page.on('request', (r) => r.url().includes('/working-copy') && r.method() === 'PUT' && saves.push(r.url()));
-      const state = () => page.getByTestId('definition-save-state');
+      const state = () => page.getByTestId('save-state');
       const open = async () => {
         await page.goto(`${consoleUrl}/build/workflows/definitions/${ID}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await page.locator('[data-testid="definition-node"]').first().waitFor({ timeout: 120_000 });
@@ -59,10 +59,11 @@ await withUiStack(
       const saved = () => state().getByText(/Saved/).waitFor({ timeout: 30_000 });
       await open();
 
-      await step('1 no Save button; nothing saved yet; no problems', async () => {
+      await step('1 Save is disabled; nothing saved yet; no problems', async () => {
         const text = (await state().innerText()).trim();
         const chip = (await page.getByTestId('definition-problems').innerText()).trim();
-        check('1 no Save button; nothing saved yet; no problems', (await page.getByTestId('definition-save').count()) === 0 && text === 'No changes yet' && chip === 'No problems', { text, chip });
+        const saveButton = page.getByTestId('definition-save');
+        check('1 Save is disabled; nothing saved yet; no problems', (await saveButton.isDisabled()) && saves.length === 0 && text === 'Saved' && chip === 'No problems', { text, chip, saves: saves.length });
       });
 
       await step('2 a change saves itself and makes no version', async () => {
@@ -70,7 +71,7 @@ await withUiStack(
         await state().getByText('Saving').waitFor({ timeout: 10_000 }).catch(() => undefined);
         await saved();
         const v = await view(J);
-        check('2 a change saves itself and makes no version', saves.length >= 1 && v.versions.length === 1 && !!v.workingCopy && (await state().innerText()).includes('Saved just now'), { saves: saves.length, versions: v.versions.length });
+        check('2 a change saves itself and makes no version', saves.length >= 1 && v.versions.length === 1 && !!v.workingCopy && (await state().getAttribute('data-state')) === 'saved', { saves: saves.length, versions: v.versions.length });
       });
 
       await step('3 a broken step shows in the problems chip and still saves', async () => {
@@ -172,7 +173,7 @@ await withUiStack(
         const ravi = await consoleSignIn(browser, consoleUrl, RAVI, PASSWORD, errors);
         await ravi.goto(`${consoleUrl}/build/workflows/definitions/${ID}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await ravi.locator('[data-testid="definition-node"]').first().waitFor({ timeout: 120_000 });
-        const seen = { save: await ravi.getByTestId('definition-save-state').count(), publish: await ravi.getByTestId('definition-publish').count(), viewOnly: await ravi.getByTestId('definition-view-only').count() };
+        const seen = { save: await ravi.getByTestId('save-state').count(), publish: await ravi.getByTestId('definition-publish').count(), viewOnly: await ravi.getByTestId('definition-view-only').count() };
         await shootBothWidths(ravi, 'console', 'uc-761-viewer', async () => ravi.waitForTimeout(300));
         check('11 a viewer sees the canvas with no save state and no Publish', seen.save === 0 && seen.publish === 0 && seen.viewOnly === 1, seen);
       });
