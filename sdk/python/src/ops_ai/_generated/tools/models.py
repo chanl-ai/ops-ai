@@ -1204,6 +1204,13 @@ class ToolTeamStateChanged(TypedDict, closed=True):
     waits: NotRequired[list[str]]
 
 
+class ToolTryIn(TypedDict, closed=True):
+    accounts: NotRequired[dict[str, str]]
+    input: NotRequired[dict[str, JsonValue]]
+    planId: NotRequired[str | None]
+    tool: str
+
+
 class ToolUser(TypedDict, closed=True):
     id: str
     name: str
@@ -1211,6 +1218,12 @@ class ToolUser(TypedDict, closed=True):
 
 class ToolsAddIn(TypedDict, closed=True):
     tools: list[str]
+
+
+class TryPlanRequest(TypedDict, closed=True):
+    body: NotRequired[str | None]
+    method: str
+    url: str
 
 
 class ValidationError(TypedDict):
@@ -2014,6 +2027,16 @@ class ToolUsedBy(TypedDict, closed=True):
     workflows: list[ToolUser]
 
 
+class TryPlan(TypedDict, closed=True):
+    access: str
+    connectionId: NotRequired[str | None]
+    input: JsonValue
+    request: NotRequired[TryPlanRequest | None]
+    system: NotRequired[str | None]
+    testAccount: NotRequired[bool]
+    tool: str
+
+
 class AbandonResult(TypedDict, closed=True):
     abandoned: bool
     call: AbandonedCall | None
@@ -2362,6 +2385,23 @@ class SystemCardList(TypedDict, closed=True):
     viewCounts: AppViewCounts
 
 
+class ToolTryResult(TypedDict, closed=True):
+    access: Literal["read", "write"]
+    account: NotRequired[str | None]
+    callId: str
+    kind: Literal["ran", "planned", "sent", "refused"]
+    live: bool
+    log: NotRequired[list[TestLogLine]]
+    ok: NotRequired[bool | None]
+    output: NotRequired[JsonValue]
+    plan: NotRequired[TryPlan | None]
+    planId: NotRequired[str | None]
+    reasons: NotRequired[list[str]]
+    replayOf: NotRequired[str | None]
+    request: NotRequired[TestRequestOut | None]
+    status: NotRequired[int | None]
+
+
 class AppPage(TypedDict, closed=True):
     accounts: NotRequired[list[AppAccount]]
     authConfigs: NotRequired[list[AuthConfig]]
@@ -2401,4 +2441,9 @@ class EnvelopeSystemCardList(TypedDict, closed=True):
 
 class EnvelopeSystemCard(TypedDict, closed=True):
     data: SystemCard
+    success: Literal[True]
+
+
+class EnvelopeToolTryResult(TypedDict, closed=True):
+    data: ToolTryResult
     success: Literal[True]

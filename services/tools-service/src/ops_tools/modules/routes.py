@@ -48,8 +48,11 @@ from .schemas import (
     ToolModuleDetail,
     ToolRunIn,
     ToolRunResult,
+    ToolTryIn,
+    ToolTryResult,
 )
 from .service import Caller, ModuleService, TestRun, test_run
+from .tries import try_tool
 
 ERRORS = error_responses({501: "Not available on this service yet", 502: "The source could not be reached"})
 
@@ -285,6 +288,13 @@ def modules_router(service: ModuleService, directory: Directory) -> APIRouter:
     ) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Off the request transaction: a real run calls the system, and a mock waits its delay."""
         return ok(await service.test(who, module_id, test_run(body)))
+
+    @r.post("/tries", response_model=Envelope[ToolTryResult])
+    async def try_one_tool(body: ToolTryIn, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """Off the request transaction: one tool of a skill path or a workflow step, tried by a person. A read runs; a
+        write answers its plan and is sent only when the same values come back with `planId`. Nothing is stored as a
+        version or a run."""
+        return ok(await try_tool(service, who, body))
 
     @r.post("/{module_id}/operations/{operation}/run", response_model=Envelope[ToolRunResult])
     async def run_tool(  # pyright: ignore[reportUnusedFunction]
