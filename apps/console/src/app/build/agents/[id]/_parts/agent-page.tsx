@@ -31,6 +31,7 @@ import { ModelSelect } from '@/components/agents/model-select';
 import { AgentModelLimitsSection } from '@/components/agents/agent-model-limits-section';
 import { AgentCompareView } from '@/components/agents/test-compare';
 import { AgentUsesLink } from '@/components/agents/agent-uses-line';
+import { AgentVersionsView } from '@/components/agents/agent-versions-view';
 import { ViewPromptDialog } from '@/components/agents/view-prompt-dialog';
 import { EditableTitle } from '@/components/shared/editable-title';
 import { PromptModeDialogs } from '@/components/agents/prompt-mode-dialogs';
@@ -64,7 +65,6 @@ import { DeleteDialog } from '@/components/shared/delete-dialog';
 import { EmptyState } from '@/components/shared/empty-state';
 import { QueryError } from '@/components/shared/query-states';
 import { RecordSkeleton } from '@/components/shared/record-skeleton';
-import { VersionHistory } from '@/components/shared/version-history';
 import { LockedReason } from '@/components/shared/locked-reason';
 import { announcePublish } from '@/components/shared/publish-result';
 import { AgentAvailabilityBadge, AgentVersionBadge } from '@/components/status-badges';
@@ -414,21 +414,16 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
           ) : compare ? (
             <AgentCompareView agentId={agent.id} agentName={agent.name} newest={agent.version} versions={versions.data ?? []} />
           ) : tab === 'versions' ? (
-            <div className="flex flex-col gap-4" data-testid="agent-versions">
-              <div className="flex justify-end">
-                <Button variant="outline" asChild data-testid="agent-compare-link">
-                  <Link href={`/build/agents/${agent.id}/versions/compare`}>Compare versions</Link>
-                </Button>
-              </div>
-              <VersionHistory
-                noun="agent"
-                currentLabel="Current"
-                restoreConsequence="Workflows keep the version they were published with until they are republished."
+            <div data-testid="agent-versions">
+              <AgentVersionsView
+                agentId={agent.id}
+                newest={agent.version}
                 versions={versions.data}
                 isPending={versions.isPending}
                 isError={versions.isError}
                 onRetry={() => versions.refetch()}
                 restoring={restore.isPending}
+                onPublish={agent.canPublish !== false ? () => (purposeMissing ? goTo('brief.purpose') : setPublishOpen(true)) : undefined}
                 onRestore={async (v) => {
                   try {
                     const a = await restore.mutateAsync(v);

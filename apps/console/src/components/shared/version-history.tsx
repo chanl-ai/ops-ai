@@ -143,35 +143,58 @@ export function VersionHistory({
           </VersionTimelineItem>
         ))}
       </VersionTimeline>
-      <DialogShell
-        open={!!target}
-        onOpenChange={(o) => !o && setTarget(null)}
-        size="sm"
-        title={`Restore v${target?.version}?`}
-        description={`Saves a new version, v${newest + 1}, with the ${noun} exactly as it was in v${target?.version}. ${restoreConsequence ?? 'New runs use it immediately.'}`}
-        footer={
-          <div className="flex w-full justify-end gap-2">
-            <Button variant="outline" onClick={() => setTarget(null)} disabled={restoring}>
-              Cancel
-            </Button>
-            <LoadingButton
-              isLoading={restoring}
-              loadingText="Restoring…"
-              onClick={async () => {
-                if (!target) return;
-                await onRestore(target.version);
-                setTarget(null);
-              }}
-            >
-              Restore v{target?.version}
-            </LoadingButton>
-          </div>
-        }
-      >
-        <p className="text-sm text-muted-foreground">
-          v{target?.version}: {target?.note}
-        </p>
-      </DialogShell>
+      <RestoreVersionDialog target={target} newest={newest} noun={noun} restoring={restoring} restoreConsequence={restoreConsequence} onClose={() => setTarget(null)} onRestore={onRestore} />
     </>
+  );
+}
+
+/** Asks before a restore, which saves a new version that copies the old one. */
+export function RestoreVersionDialog({
+  target,
+  newest,
+  noun,
+  restoring,
+  restoreConsequence,
+  onClose,
+  onRestore,
+}: {
+  target: VersionEntry | null;
+  newest: number;
+  noun: string;
+  restoring: boolean;
+  restoreConsequence?: string;
+  onClose: () => void;
+  onRestore: (version: number) => Promise<unknown>;
+}) {
+  return (
+    <DialogShell
+      open={!!target}
+      onOpenChange={(o) => !o && onClose()}
+      size="sm"
+      title={`Restore v${target?.version}?`}
+      description={`Saves a new version, v${newest + 1}, with the ${noun} exactly as it was in v${target?.version}. ${restoreConsequence ?? 'New runs use it immediately.'}`}
+      footer={
+        <div className="flex w-full justify-end gap-2">
+          <Button variant="outline" onClick={onClose} disabled={restoring}>
+            Cancel
+          </Button>
+          <LoadingButton
+            isLoading={restoring}
+            loadingText="Restoring…"
+            onClick={async () => {
+              if (!target) return;
+              await onRestore(target.version);
+              onClose();
+            }}
+          >
+            Restore v{target?.version}
+          </LoadingButton>
+        </div>
+      }
+    >
+      <p className="text-sm text-muted-foreground">
+        v{target?.version}: {target?.note}
+      </p>
+    </DialogShell>
   );
 }
