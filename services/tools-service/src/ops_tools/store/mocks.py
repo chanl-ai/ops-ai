@@ -102,7 +102,7 @@ class MockStore(Store):
         m = operation_mocks.c
         q = sa.select(*operation_mocks.c).where(*self._of(tenant_id, module_id, operation, environment))
         async with self.tx() as c:
-            return await list_page(c, q, params, search=[m.name], default_sort=m.position)
+            return await list_page(c, q, params, search=[m.name], sortable={"name": m.name}, default_sort=m.position)
 
     async def get(self, tenant_id: str, mock_id: str) -> MockRow | None:
         q = operation_mocks.select().where(operation_mocks.c.tenant_id == tenant_id, operation_mocks.c.id == mock_id)
