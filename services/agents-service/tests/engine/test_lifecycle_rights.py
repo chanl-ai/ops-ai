@@ -7,6 +7,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
+from fastapi.routing import APIRoute
 from httpx import ASGITransport, AsyncClient
 from langgraph.checkpoint.memory import InMemorySaver
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
@@ -14,6 +15,7 @@ from sqlalchemy.pool import StaticPool
 
 from ops_access import AREAS, BUILTIN_GRIDS, encode_grid
 from ops_agents.api.app import create_app
+from ops_agents.api.routers.engine import router as engine_router
 from ops_agents.store.base import metadata
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.tenancy import tenant_scope
@@ -63,8 +65,14 @@ BUILDER = person("james", "team_ops", "builder")
 # A builder whose role an admin took every manage cell off: edits definitions, never a system record.
 NO_MANAGE = tuple((area, "manage") for area in AREAS)
 BUILDER_WITHOUT_MANAGE = person("jo", "team_ops", "builder", unticked=NO_MANAGE)
+# A builder whose role an admin took the workflows publish cell off: saves changes, never publishes them.
+BUILDER_WITHOUT_PUBLISH = person("bo", "team_ops", "builder", unticked=(("workflows", "publish"),))
 ADMIN = person("priya", "team_ops", "admin")
 VIEWER = person("vera", "team_ops", "viewer")
+# A viewer whose role an admin took the workflows view cell off.
+NOT_A_WORKFLOW_READER = person("wes", "team_ops", "viewer", unticked=(("workflows", "view"),))
+# A member who only chats: no workflows cell at all.
+CHAT_USER = person("cora", "team_ops", "chat_user")
 
 
 async def jwks() -> dict[str, Any]:
@@ -130,5 +138,60 @@ async def test_a_team_workflow_is_published_by_its_builders_and_admins_only(
     assert saved.status_code == 201, saved.text
     refused = await c.post("/v1/workflows/definitions/ops_refunds/publish-requests", json={}, headers=VIEWER)
     assert refused.status_code == 403, refused.text
-    asked = await c.post("/v1/workflows/definitions/ops_refunds/publish-requests", json={}, headers=BUILDER)
+    # The one-call publish of a working copy asks the publish right before it makes the version.
+    wf = "/v1/workflows/definitions/ops_refunds"
+    base = (await c.get(wf, headers=BUILDER)).json()["data"]["saveBase"]
+    body = {"definition": definition("ops_refunds") | {"name": "Unpublished"}}
+    body |= {"baseVersion": base["version"], "baseDigest": base["digest"]}
+    copy_base = (await c.put(f"{wf}/working-copy", json=body, headers=BUILDER)).json()["data"]["saveBase"]
+    one_call = {"baseVersion": copy_base["version"], "baseDigest": copy_base["digest"]}
+    refused = await c.post(f"{wf}/publish-requests", json=one_call, headers=BUILDER_WITHOUT_PUBLISH)
+    assert refused.status_code == 403, refused.text
+    after = (await c.get(wf, headers=BUILDER)).json()["data"]
+    assert [v["version"] for v in after["versions"]] == [1] and after["workingCopy"] is not None, after
+    asked = await c.post(f"{wf}/publish-requests", json=one_call, headers=BUILDER)
     assert asked.status_code == 201, asked.text
+
+
+async def test_a_member_without_the_workflows_view_cell_reads_no_workflow_definition(
+    stack: tuple[AsyncClient, AsyncEngine],
+) -> None:
+    # Every GET under /v1/workflows/definitions, taken from the router: a route added without the view check fails here.
+    c, _ = stack
+    wf = "/v1/workflows/definitions/ops_refunds"
+    saved = await c.post("/v1/workflows/definitions", json={"definition": definition("ops_refunds")}, headers=BUILDER)
+    assert saved.status_code == 201, saved.text
+    base = (await c.get(wf, headers=BUILDER)).json()["data"]["saveBase"]
+    body = {"definition": definition("ops_refunds") | {"name": "Unpublished"}}
+    body |= {"baseVersion": base["version"], "baseDigest": base["digest"]}
+    assert (await c.put(f"{wf}/working-copy", json=body, headers=BUILDER)).status_code == 200
+    reads = {
+        "/v1/workflows/definitions": {},
+        "/v1/workflows/definitions/account-uses": {"app": "gmail", "name": "ops"},
+        wf: {},
+        f"{wf}/versions/{base['version']}/shapes": {},
+        f"{wf}/diff": {"from": "1", "to": "working-copy"},
+        f"{wf}/publish-preview": {},
+    }
+    gets = {r.path for r in engine_router.routes if isinstance(r, APIRoute) and "GET" in (r.methods or set())}
+    templates = {
+        p.replace("ops_refunds", "{workflow_id}").replace(f"/{base['version']}/", "/{version}/") for p in reads
+    }
+    assert {g for g in gets if g.startswith("/v1/workflows/definitions")} == templates
+    for path, params in reads.items():
+        for who in (NOT_A_WORKFLOW_READER, CHAT_USER):
+            refused = await c.get(path, params=params, headers=who)
+            assert refused.status_code == 403, f"{path}: {refused.status_code} {refused.text}"
+        # Publish preview also needs the publish cell, which a viewer does not hold.
+        reader = BUILDER if path.endswith("publish-preview") else VIEWER
+        read = await c.get(path, params=params, headers=reader)
+        assert read.status_code == 200, f"{path}: {read.status_code} {read.text}"
+    assert (await c.get(wf, headers=VIEWER)).json()["data"]["workingCopy"]["definition"]["name"] == "Unpublished"
+    # A step form's picker lists the area's records only to a caller its own list would answer.
+    picker = "/v1/workflows/option-sources"
+    for source in ("workflows", "agents", "tools"):
+        refused = await c.get(picker, params={"source": source}, headers=CHAT_USER)
+        assert refused.status_code == 403, f"{source}: {refused.status_code} {refused.text}"
+    assert (await c.get(picker, params={"source": "workflows"}, headers=NOT_A_WORKFLOW_READER)).status_code == 403
+    assert (await c.get(picker, params={"source": "agents"}, headers=NOT_A_WORKFLOW_READER)).status_code == 200
+    assert (await c.get(picker, params={"source": "workflows"}, headers=VIEWER)).status_code == 200

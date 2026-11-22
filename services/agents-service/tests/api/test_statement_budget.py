@@ -17,6 +17,7 @@ from httpx import AsyncClient, Response
 from ops_agents.api.agent_registry import SEED_TEAM
 from ops_agents.store.api_key_copies import ApiKeyCopies, KeySummary, listed_event
 from ops_agents.store.batches import Batches
+from ops_agents.store.evals import EvalStore
 from ops_agents.store.mailboxes import MailboxRow, MailboxStore
 from ops_agents.store.tenancy import tenant_scope
 from ops_agents.store.widget_deployments import WidgetDeployments
@@ -26,6 +27,7 @@ from ops_service_kit.testing import Seeded, SeedTeam, StatementBudget, budget_ch
 from ops_store.database import open_database
 
 from ..conftest import SEED, emptied, started
+from ..saves import save_agent
 from .test_case_record_route_pins import DISPUTE
 from .test_forms import INPUTS, flow
 from .test_guardrails_route_pins import RULE
@@ -147,12 +149,24 @@ async def _channels(app: FastAPI, tag: str, agent: str) -> None:
         await ApiKeyCopies(db).apply([listed_event(KeySummary.model_validate(summary), tenant_id=DEV_TENANT)])
 
 
+async def _eval_runs(app: FastAPI, n: int, agent: str) -> None:
+    """`n` kept runs of `agent`, written to the store as a run of its saved case writes them, so its runs list grows."""
+    draft: dict[str, Any] = {"status": "pass", "reply": "Hello", "checks": [], "latencyMs": 3}
+    row: dict[str, Any] = {"team_id": SEED_TEAM, "kind": "agent", "asset_id": agent, "version": 1, "trigger": "manual"}
+    row |= {"passed": 1, "total": 1, "regressions": 0, "duration_ms": 3, "started_by": "b"}
+    row["results"] = [{"caseName": "Case", "draft": draft, "live": None, "regression": False}]
+    with tenant_scope(DEV_TENANT):
+        for i in range(n):
+            ran = {"id": f"evr_budget{n}x{i:02d}", "ran_at": f"2026-10-01T00:00:{i % 60:02d}.000Z"}
+            await EvalStore(app.state.runtime.db).add_run(row | ran)
+
+
 @pytest.fixture
 def seed_team(served: tuple[FastAPI, AsyncClient], swaps: dict[str, str]) -> SeedTeam:
     """`n` more agents (each holding a tool, an account and a saved eval case, so the Evals suites grow), skills,
     guardrails, widgets, cases, workflows of each engine and runs of the registry workflow (each waiting at its review),
-    queued engine runs and channels of each type on the dev caller's team, beside the seed folder's records; the path
-    ids name the first of each, and the seeded fraud agent and its records otherwise."""
+    queued engine runs, channels of each type and kept eval runs of the first agent on the dev caller's team, beside the
+    seed folder's records; the path ids name the first of each, and the seeded fraud agent and its records otherwise."""
     client = served[1]
     ids: dict[str, str] = dict.fromkeys(PATH_IDS, "missing")
     ids.update(
@@ -206,7 +220,7 @@ def seed_team(served: tuple[FastAPI, AsyncClient], swaps: dict[str, str]) -> See
             tag = f"{n}-{i:02d}"
             agent = _id(await client.post("/v1/agents", json={"name": f"Agent {tag}", "role": "Answers"}, headers=DEV))
             # A tool and an account on each agent, so the lists of who uses one grow with the agents.
-            held = await client.patch(f"/v1/agents/{agent}", json=HOLDS, headers=DEV)
+            held = await save_agent(client, agent, HOLDS, headers=DEV)
             assert held.status_code == 200, held.text
             case_set: dict[str, Any] = {"cases": [{"name": f"Case {tag}", "input": "Hello", "checks": []}]}
             saved = await client.put(f"/v1/agents/{agent}/eval-cases", json=case_set, headers=DEV)
@@ -252,6 +266,9 @@ def seed_team(served: tuple[FastAPI, AsyncClient], swaps: dict[str, str]) -> See
                 rows=[{"customerId": f"C-{n}-{i:02d}", "amount": 250} for i in range(n)],
             )
         ids["batch_id"] = batch.id
+        await _eval_runs(served[0], n, ids["agent_id"])
+        # `{run_id}` names a queued engine run; the eval-run read reads the first kept run instead.
+        swaps[f"/v1/eval-runs/{ids['run_id']}"] = "/v1/eval-runs/evr_budget5x00"
         return Seeded(headers=DEV, ids=ids)
 
     return seed

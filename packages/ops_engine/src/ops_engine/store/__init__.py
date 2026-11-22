@@ -1,6 +1,14 @@
 """The engine's tables and repositories; the only part of ops_engine that talks to the database."""
 
-from .definitions import DefinitionRow, DefinitionStore, DefinitionSummary, DefinitionVersion, WorkflowOwnedError
+from .definitions import (
+    DefinitionRow,
+    DefinitionStore,
+    DefinitionSummary,
+    DefinitionVersion,
+    StaleWorkingCopy,
+    WorkflowOwnedError,
+    WorkingCopy,
+)
 from .runs import (
     CHILD_PREFIX,
     REDRIVABLE,
@@ -34,9 +42,11 @@ __all__ = [
     "RunStep",
     "RunStore",
     "SqlJournal",
+    "StaleWorkingCopy",
     "Transactions",
     "Work",
     "WorkQueue",
     "WorkflowOwnedError",
+    "WorkingCopy",
     "metadata",
 ]

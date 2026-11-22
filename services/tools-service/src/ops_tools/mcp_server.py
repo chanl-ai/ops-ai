@@ -32,6 +32,7 @@ from starlette.types import Receive, Scope, Send
 
 from ops_access import can
 from ops_agent_kernel.ports import ToolOutcome
+from ops_contracts.skill_run import WORKFLOW_TOOL_PREFIX
 from ops_identity import ActingForTokens, Auth, Principal, ServiceClient, service_signer
 from ops_service_kit.errors import ApiError, NotFound, ServiceUnavailable, Unauthorized
 from ops_service_kit.http import Json, error_body
@@ -50,7 +51,7 @@ from .store.mcp_links import McpLink, McpLinks
 _PATH = re.compile(r"^(?:/mcp)?/(?P<team>[^/]+)(?:/(?P<link>[^/]+))?/?$")
 _CLIENT_INFO = "io.modelcontextprotocol/clientInfo"
 # A published workflow picked on a link is listed as `workflow__<id>`, the name agents call one by.
-WORKFLOW_PREFIX = "workflow__"
+WORKFLOW_PREFIX = WORKFLOW_TOOL_PREFIX
 # Starting a picked workflow's live version: it makes a run, and the workflow's own review steps are its gate, as
 # agents-service decides for a workflow an agent calls (tool_catalog.py, requiresApproval False), so it does not wait
 # as other MCP writes do.

@@ -118,6 +118,7 @@ export default function EngineRunPage() {
               isLoading={redrive.isPending}
               loadingText="Redriving…"
               data-testid="run-redrive"
+              title="Go on from the failed step"
               onClick={async () => {
                 setRetryError(undefined);
                 try {
@@ -127,7 +128,7 @@ export default function EngineRunPage() {
                 }
               }}
             >
-              <RotateCcw /> Redrive from failed step
+              <RotateCcw /> Redrive
             </LoadingButton>
           )}
         </>

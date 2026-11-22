@@ -27,6 +27,8 @@ export interface Agent {
   canPublish?: boolean;
   /** The owning team's name, for a person outside it who cannot look it up in their own teams. */
   teamName?: string | null;
+  /** With `version`, the copy a save names as its base (`baseOf`); on the detail response only. */
+  digest?: string | null;
   id: string;
   name: string;
   slug: string;
@@ -64,7 +66,7 @@ export interface Agent {
   wrapperWorkflowId?: string;
   /** Workflows that use this agent, with the agent version each one was published with. */
   /** Where the agent runs. `own` is its one-step workflow, which publishes with it: never behind, never republished. */
-  usedIn: { workflowId: string; workflowName: string; pinnedVersion: number; status: LifecycleStatus; own?: boolean }[];
+  usedIn: { workflowId: string; workflowName: string; pinnedVersion: number; status: LifecycleStatus; own?: boolean; channel?: 'email' }[];
   limits: AgentLimits;
   /** Widget templates the agent may fill in chat, by version; absent in the mock's seeded agents. */
   widgetPins?: WidgetPin[];
@@ -74,6 +76,42 @@ export interface Agent {
   /** Which skills a person may pick with / in a chat with it (`team` when absent). */
   skillMenu?: SkillMenu;
   controls: AgentControls;
+  /** The prompt as four headings and two lists; null for an agent written as plain text, which keeps its role and instructions. */
+  brief?: AgentBrief | null;
+  /** Null for an agent that has never had a brief. `full`: the builder's text is the prompt and only Never is kept from the brief. */
+  promptMode?: PromptMode | null;
+  patterns?: AgentPatterns;
+  /** What the agent holds, counted by the service. */
+  uses?: AgentUses;
+}
+
+export type PromptMode = 'brief' | 'full';
+
+export interface AgentBrief {
+  purpose: string;
+  goal: string;
+  howToAnswer: string;
+  /** When the agent passes the conversation to a person; written into the prompt after How to answer. */
+  handOff: string[];
+  examples: string;
+  never: string[];
+  /** Kept readable on older versions; the brief no longer shows or writes them (they seed eval cases). */
+  success: string[];
+}
+
+export type Thinking = 'default' | 'low' | 'medium' | 'high';
+
+export interface AgentPatterns {
+  thinking: Thinking;
+  parallelReads: boolean;
+}
+
+export interface AgentUses {
+  tools: number;
+  knowledgeBases: number;
+  skills: number;
+  agents: number;
+  workflows: number;
 }
 
 export interface GuardrailPin {
@@ -145,7 +183,10 @@ export interface AgentGuardrails {
   blockedTopics: string[];
 }
 
-/** One save of the agent page; every save becomes a new agent version. */
+/**
+ * The fields one save of an agent's draft can change. The tool list is changed only by a grant, an @ insert and a
+ * skill attach or detach, each read from the stored list (`changeAgentTools`); the page's autosave never sends it.
+ */
 export type AgentPatch = Partial<AgentInput> & {
   toolIds?: string[];
   collections?: string[];
@@ -158,6 +199,10 @@ export type AgentPatch = Partial<AgentInput> & {
   memory?: MemorySettings;
   /** Which skills a person may pick with / in a chat with it (`team` when absent). */
   skillMenu?: SkillMenu;
+  /** Sent only after the builder edits a brief field; the service then writes `role` and `instructions` itself. */
+  brief?: AgentBrief;
+  promptMode?: PromptMode;
+  patterns?: AgentPatterns;
   note?: string;
 };
 

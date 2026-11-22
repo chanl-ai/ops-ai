@@ -53,6 +53,7 @@ from ops_contracts.chat import (
     WidgetEvent,
     WidgetPart,
 )
+from ops_contracts.skill_run import SkillRunState
 from ops_service_kit.errors import Forbidden
 from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.ids import now_iso
@@ -281,6 +282,10 @@ class AssistantBuilder:
                 return []
             case "skill_loaded":
                 m.skills = [*(m.skills or []), LoadedSkill.model_validate(json_object(data))]
+                return []
+            case "skill_run":
+                # The last one of the reply is the record the next reply goes on from.
+                m.skill_run = SkillRunState.model_validate(json_object(data))
                 return []
             case "guardrail_withheld" | "guardrail_retracted":
                 if not self.audit:

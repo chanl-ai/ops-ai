@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, StringConstraints,
 from ops_access.catalogue import INVITE_ROLES
 from ops_service_kit.flags import FlagName
 from ops_service_kit.http import In, ListResult, Out
+from ops_service_kit.names import Name, Name80
 
 
 class SignIn(In):
@@ -235,7 +236,7 @@ class TransferIn(In):
 class WorkspaceCloseIn(In):
     """The workspace's name, typed by its owner to confirm the delete."""
 
-    name: str = Field(min_length=1, max_length=80)
+    name: Name80
 
 
 class TeamDeleteCheckOut(Out):
@@ -329,7 +330,7 @@ class RoleCellsIn(In):
 
 
 class RoleCreateIn(In):
-    name: str = Field(min_length=1, max_length=80)
+    name: Name80
     description: str = Field(default="", max_length=500)
     # Start from another role's cells (less those a custom role may not hold), or from `permissions`, or from none.
     copy_of: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,64}$")
@@ -337,7 +338,7 @@ class RoleCreateIn(In):
 
 
 class RolePatchIn(In):
-    name: str = Field(min_length=1, max_length=80)
+    name: Name80
     description: str | None = Field(default=None, max_length=500)
 
 
@@ -379,7 +380,7 @@ class InvitePreview(Out):
 
 
 class AcceptIn(In):
-    name: str = Field(min_length=1, max_length=200)
+    name: Name
     # Set for a new person in a workspace that signs in by password; stored as a hash.
     password: str | None = Field(default=None, max_length=200)
 
@@ -421,7 +422,7 @@ class KeyTargetIn(In):
 
 
 class ApiKeyIn(In):
-    name: str = Field(min_length=1, max_length=200)
+    name: Name
     scopes: list[Literal["read", "write"]] = Field(min_length=1, max_length=2)
     expires_in_days: int | None = Field(default=None, ge=1, le=730)
     # The one agent or workflow the key may start; left out, any live workflow of the team.
@@ -519,7 +520,7 @@ class RoleGrantOut(Out):
 
 
 class RoleHolderOut(Out):
-    kind: Literal["person", "team"]
+    kind: Literal["person", "team", "group"]
     id: str
     team_id: str
     name: str
@@ -529,7 +530,7 @@ class RoleHolderOut(Out):
 class GrantingRole(Out):
     id: str
     name: str
-    via: Literal["person", "team"]
+    via: Literal["person", "team", "group"]
 
 
 class EffectivePermission(Out):
@@ -725,7 +726,7 @@ class GroupSettings(In):
 
 class ProviderIn(In):
     kind: Literal["password", "oidc", "saml"]
-    label: str = Field(min_length=1, max_length=200)
+    label: Name
     enabled: bool = True
     domains: list[Annotated[str, StringConstraints(to_lower=True, max_length=253, pattern=DOMAIN)]] = Field(
         default_factory=list[str], max_length=50
@@ -888,8 +889,9 @@ class PolicyOut(Out):
     changed_by: str
     effect: str
     kind: Literal[
-        "bool", "floor", "days", "hours", "publish_modes", "names", "choice", "app_changes", "app_changes_by_app"
-    ]
+        "bool", "floor", "days", "hours", "publish_modes", "names", "choice", "app_changes", "app_changes_by_app",
+        "by_area", "floor_rules",
+    ]  # fmt: skip
     title: str
     # A "choice" policy's options, in order.
     choices: list[PolicyChoice] | None = None

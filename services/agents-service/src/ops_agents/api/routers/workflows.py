@@ -26,6 +26,7 @@ from ops_service_kit.errors import Conflict, NotFound, ServiceUnavailable, Unpro
 from ops_service_kit.http import Envelope, In, Json, JsonList, ListResult, pagination
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.listing import ListParams
+from ops_service_kit.names import Name
 from ops_store import isolation
 from ops_store.listing import ListPage
 
@@ -89,7 +90,7 @@ MAX_TEST_PAUSES = 5
 
 
 class WorkflowInput(In):
-    name: str = Field(min_length=1, max_length=200)
+    name: Name
     trigger: str = "Manual"
     template: Literal["blank", "approval", "triage", "chat"] = "blank"
     agent_slug: str | None = None
@@ -112,7 +113,7 @@ class PublishInput(In):
 
 
 class SettingsInput(In):
-    name: str | None = Field(default=None, min_length=1, max_length=200)
+    name: Name | None = None
     description: str | None = None
     trigger: str | None = None
 

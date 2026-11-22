@@ -4,6 +4,7 @@ import type { ListParams } from '@/lib/types/query';
 import type { ChatApi } from './chat-contract';
 import { createChatSettingsHttp } from './chat-settings-http';
 import { ApiError, SOMEONE_ELSES } from './contract';
+import { optionsQs } from './options';
 import { createMemoriesHttp } from './memories-http';
 import { fetchWithIdentity } from './request-identity';
 import { readSse } from './sse';
@@ -15,6 +16,7 @@ type Send = <T>(method: string, path: string, body?: unknown) => Promise<T>;
 export function createChatHttp(get: Get, send: Send, qs: (p: ListParams) => string, baseUrl: string): ChatApi {
   return {
     agents: () => get('/chat/agents'),
+    agentOptions: (p) => get(`/chat/agents/options?${optionsQs(p)}`),
     defaultAgent: {
       get: () => get('/chat/default-agent'),
       set: (agentId) => send('PUT', '/chat/default-agent', { agentId }),

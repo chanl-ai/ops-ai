@@ -389,4 +389,6 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-754 | tools-service | Approval fails closed: when the approval rules cannot be read, a write that needs approval is refused and never runs | api | works |
 | uc-755 | tools-service | A team holding only a workflow grant on another team's tool module uses it through the workflow and cannot edit, publish, run, revoke or delete it | api, ui | works |
 | uc-756 | agents-service | A shared form filled in signed out starts a workflow with knowledge and a tool, a person approves a step, and the run finishes with a record | api, ui | works |
-| uc-757 | agents-service | A run outlives a killed worker and redrives from its failed step | api | works |
+| uc-757 | agents-service | A builder writes a skill with steps and an agent brief, and a chat follows the steps | api, sdk, cli, ui | draft |
+| uc-761 | console | A builder edits a workflow that saves itself, publishes it past its problems and compares its versions | ui | current |
+| uc-762 | agents-service | A run outlives a killed worker and redrives from its failed step | api | works |

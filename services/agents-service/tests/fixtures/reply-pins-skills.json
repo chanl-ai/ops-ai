@@ -171,6 +171,7 @@
           "tools": [],
           "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship."
         },
+        "digest": "<hex>",
         "draftVersion": 1,
         "id": "<sk>",
         "inputs": [
@@ -199,13 +200,15 @@
           "blockers": [],
           "canRequest": true,
           "editClass": "re_test",
-          "problems": []
+          "problems": [],
+          "warnings": []
         },
         "publishedVersion": null,
         "runs": [],
         "slug": "hardship-request-triage",
         "status": "draft",
         "tests": [],
+        "text": "Steps: confirm the customer, record the reason as {reason}, offer the hardship form.",
         "tokens": 21,
         "toolCount": 0,
         "updatedAt": "<timeZ>",
@@ -383,6 +386,7 @@
           "tools": [],
           "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship."
         },
+        "digest": "<hex>",
         "draftVersion": null,
         "id": "<sk>",
         "inputs": [
@@ -409,7 +413,13 @@
         "publishCheck": {
           "approversNeeded": 1,
           "blockers": [
-            "The skill is deprecated."
+            {
+              "code": "deprecated",
+              "field": null,
+              "level": "error",
+              "message": "The skill is deprecated.",
+              "node": null
+            }
           ],
           "canRequest": false,
           "editClass": "re_test",
@@ -420,13 +430,15 @@
               "message": "The skill is deprecated.",
               "position": null
             }
-          ]
+          ],
+          "warnings": []
         },
         "publishedVersion": 1,
         "runs": [],
         "slug": "hardship-request-triage",
         "status": "deprecated",
         "tests": [],
+        "text": "Steps: confirm, record {reason}, offer the form.",
         "tokens": 12,
         "toolCount": 0,
         "updatedAt": "<timeZ>",
@@ -437,6 +449,7 @@
         "version": 1,
         "versions": [
           {
+            "approvedBy": null,
             "changes": [
               "Changed instructions"
             ],
@@ -463,6 +476,7 @@
             "note": "",
             "publishedAt": "<timeZ>",
             "publishedBy": "auto-approve (dev)",
+            "requestedBy": "usr_b@harborpine.example",
             "reviewId": "<SKP>",
             "savedAt": "<timeZ>",
             "savedBy": "usr_b@harborpine.example",
@@ -588,6 +602,7 @@
           "tools": [],
           "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship."
         },
+        "digest": "<hex>",
         "draftVersion": 1,
         "id": "<sk>",
         "inputs": [
@@ -616,13 +631,15 @@
           "blockers": [],
           "canRequest": true,
           "editClass": "re_test",
-          "problems": []
+          "problems": [],
+          "warnings": []
         },
         "publishedVersion": null,
         "runs": [],
         "slug": "hardship-request-triage",
         "status": "draft",
         "tests": [],
+        "text": "Steps: confirm, record {reason}, offer the form.",
         "tokens": 12,
         "toolCount": 0,
         "updatedAt": "<timeZ>",
@@ -702,8 +719,13 @@
     "body": {
       "error": {
         "code": "stale_base",
+        "details": {
+          "savedAt": "<timeZ>",
+          "savedBy": "usr_b@harborpine.example",
+          "version": 1
+        },
         "kind": "input",
-        "message": "v1 was saved after v9; reload and edit again.",
+        "message": "The draft was saved after it was read; reload and try again.",
         "requestId": "<req>",
         "retryable": false,
         "status": 409
@@ -1741,6 +1763,7 @@
           "tools": [],
           "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship."
         },
+        "digest": "<hex>",
         "draftVersion": null,
         "id": "<sk>",
         "inputs": [
@@ -1767,7 +1790,13 @@
         "publishCheck": {
           "approversNeeded": 1,
           "blockers": [
-            "v1 is already published; save a change to open a draft."
+            {
+              "code": "already_published",
+              "field": null,
+              "level": "error",
+              "message": "v1 is already published; save a change to open a draft.",
+              "node": null
+            }
           ],
           "canRequest": false,
           "editClass": "re_test",
@@ -1778,13 +1807,15 @@
               "message": "v1 is already published; save a change to open a draft.",
               "position": null
             }
-          ]
+          ],
+          "warnings": []
         },
         "publishedVersion": 1,
         "runs": [],
         "slug": "hardship-request-triage",
         "status": "published",
         "tests": [],
+        "text": "Steps: confirm, record {reason}, offer the form.",
         "tokens": 12,
         "toolCount": 0,
         "updatedAt": "<timeZ>",
@@ -1795,6 +1826,7 @@
         "version": 1,
         "versions": [
           {
+            "approvedBy": null,
             "changes": [
               "Changed instructions"
             ],
@@ -1821,6 +1853,7 @@
             "note": "",
             "publishedAt": "<timeZ>",
             "publishedBy": "auto-approve (dev)",
+            "requestedBy": "usr_b@harborpine.example",
             "reviewId": "<SKP>",
             "savedAt": "<timeZ>",
             "savedBy": "usr_b@harborpine.example",
@@ -1914,6 +1947,7 @@
           "tools": [],
           "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship."
         },
+        "digest": "<hex>",
         "draftVersion": 1,
         "id": "<sk>",
         "inputs": [
@@ -1942,13 +1976,15 @@
           "blockers": [],
           "canRequest": true,
           "editClass": "re_test",
-          "problems": []
+          "problems": [],
+          "warnings": []
         },
         "publishedVersion": null,
         "runs": [],
         "slug": "hardship-request-triage",
         "status": "draft",
         "tests": [],
+        "text": "Steps: confirm the customer, record the reason as {reason}, offer the hardship form.",
         "tokens": 21,
         "toolCount": 0,
         "updatedAt": "<timeZ>",

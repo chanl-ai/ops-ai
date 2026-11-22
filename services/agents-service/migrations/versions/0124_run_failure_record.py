@@ -1,7 +1,7 @@
 """engine_runs.failure: the run's error in the one error model
 
 Revision ID: 0124_run_failure_record
-Revises: 0119_unattributed_side_tables
+Revises: 0123_eval_run_digest
 
 A failed or Stuck run kept only a sentence in `error`, so the run view could not say which kind of failure it was or
 whether a retry helps. `failure` holds ops_contracts.errors.RunError beside it. Nullable with no default, so adding it
@@ -14,7 +14,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0124_run_failure_record"
-down_revision = "0119_unattributed_side_tables"
+down_revision = "0123_eval_run_digest"
 branch_labels = None
 depends_on = None
 

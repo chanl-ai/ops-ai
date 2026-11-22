@@ -660,6 +660,7 @@
             "anyOf": [
               {
                 "maxLength": 200,
+                "minLength": 1,
                 "type": "string"
               },
               {
@@ -2552,10 +2553,14 @@
             "title": "Description"
           },
           "displayName": {
+            "maxLength": 200,
+            "minLength": 1,
             "title": "Displayname",
             "type": "string"
           },
           "name": {
+            "maxLength": 120,
+            "minLength": 1,
             "title": "Name",
             "type": "string"
           },
@@ -4253,6 +4258,8 @@
             "title": "Method"
           },
           "name": {
+            "maxLength": 120,
+            "minLength": 1,
             "title": "Name",
             "type": "string"
           },
@@ -6107,6 +6114,8 @@
             "type": "string"
           },
           "name": {
+            "maxLength": 120,
+            "minLength": 1,
             "title": "Name",
             "type": "string"
           },
@@ -7430,6 +7439,8 @@
           "displayName": {
             "anyOf": [
               {
+                "maxLength": 200,
+                "minLength": 1,
                 "type": "string"
               },
               {
@@ -7502,6 +7513,8 @@
             "title": "Connectionid"
           },
           "displayName": {
+            "maxLength": 200,
+            "minLength": 1,
             "title": "Displayname",
             "type": "string"
           },
@@ -7531,6 +7544,8 @@
             ]
           },
           "name": {
+            "maxLength": 120,
+            "minLength": 1,
             "title": "Name",
             "type": "string"
           },

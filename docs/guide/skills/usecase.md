@@ -3,7 +3,7 @@
 Status: current. Proven by `make skills-proof`.
 
 skill: usecase
-description: List, add, update and run end-to-end use cases (docs/usecases) as plain user stories at the api, sdk or cli layer. Use when someone asks to prove a change end to end, says which stories work, or types /usecase list|add|update|run.
+description: List, add, update and run end-to-end use cases (docs/usecases) as plain user stories at the api, sdk or cli layer. Use to prove a change end to end or when someone types /usecase.
 targets: make usecase-list, make usecase-add, make usecase-update, make usecase-run, make usecase-index
 
 ## What a use case is

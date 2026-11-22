@@ -20,9 +20,12 @@ from ops_contracts.skill_run import (
     HISTORY_MAX,
     REF_TOKEN,
     RESULT_MAX,
+    Branch,
     EndedSkill,
+    EndedWhy,
     Hold,
     IfNot,
+    Jump,
     Ref,
     ReturnField,
     RunningSkill,
@@ -32,6 +35,7 @@ from ops_contracts.skill_run import (
     StepCheck,
     StepResult,
     SubRun,
+    hands_to_agent,
 )
 from ops_pii import holds_placeholder
 from ops_service_kit.http import Json
@@ -44,8 +48,11 @@ from .types import Skill
 __all__ = [
     "BUILT_IN_EXITS",
     "REF_TOKEN",
+    "Branch",
     "EndedSkill",
     "IfNot",
+    "Judging",
+    "Jump",
     "Ref",
     "ReturnField",
     "RunningSkill",
@@ -56,7 +63,12 @@ __all__ = [
     "StepProblem",
     "StepResult",
     "SubRun",
+    "barred",
+    "changes",
+    "decided",
     "denied",
+    "ending",
+    "final",
     "halted",
     "held",
     "judged",
@@ -64,13 +76,15 @@ __all__ = [
     "missing_inputs",
     "now",
     "on_result",
+    "owned",
     "problems",
     "said",
     "shown",
     "start",
     "step_done",
     "target",
-    "withheld",
+    "to_judge",
+    "trim",
 ]
 
 
@@ -100,15 +114,35 @@ def problems(program: SkillProgram, *, has_parts: bool = False, always_on: bool 
             StepProblem("steps_always_on", None, "A skill with steps is started when needed; it cannot be always on.")
         )
     for n, step in enumerate(program.steps, start=1):
+        if step.check is not None and step.branch is not None:
+            found.append(StepProblem("check_and_branch", n, f"Step {n} has a check or a path, not both."))
+        jumps = [j for j in (step.next, step.branch.otherwise if step.branch is not None else None) if j is not None]
+        for j in jumps:
+            if j.step is not None and not n < j.step <= count:
+                found.append(StepProblem("bad_jump", n, f"Step {n} goes to step {j.step}; a path goes forward only."))
+            if j.exit is not None and j.exit not in program.exits():
+                found.append(
+                    StepProblem("unknown_exit", n, f"Step {n} ends with {j.exit}, which this skill does not list.")
+                )
         if step.use is not None and step.use.kind == "knowledge":
             found.append(
                 StepProblem(
                     "bad_use", n, "A step runs a tool, a skill, an agent or a workflow; mention knowledge in its text."
                 )
             )
-        if step.check is not None:
+        test = step.check or (step.branch.test if step.branch is not None else None)
+        if test is not None:
             try:
-                expr.kind_of(step.check.text)
+                rule = expr.kind_of(test.text) == "rule"
+                if rule and step.use is None and expr.reads_result(test.text):
+                    found.append(
+                        StepProblem(
+                            "check_needs_tool",
+                            n,
+                            f"Step {n}'s check reads a result, and the step runs no tool to get it from. Pick the "
+                            "tool it runs with @, or mark the one its sentence names as this step's tool.",
+                        )
+                    )
             except expr.CheckError as e:
                 found.append(
                     StepProblem("bad_check", n, f"Step {n}'s check reads as a rule but is not a valid one. {e}")
@@ -125,14 +159,22 @@ def problems(program: SkillProgram, *, has_parts: bool = False, always_on: bool 
 
 
 def judged(program: SkillProgram) -> SkillProgram:
-    """`program` with each check marked by who judges it: a valid rule runs in code, a sentence is confirmed by the
-    model. A value a client sent for `by` is replaced. Call `problems` first: a mistyped rule raises here."""
-    steps = [
-        s.model_copy(update={"check": s.check.model_copy(update={"by": expr.kind_of(s.check.text)})})
-        if s.check is not None
-        else s
-        for s in program.steps
-    ]
+    """`program` with each check marked by who judges it: a valid rule runs in code, a sentence is decided by the
+    judge model. A value a client sent for `by` is replaced. Call `problems` first: a mistyped rule raises here."""
+
+    def by(c: StepCheck) -> StepCheck:
+        return c.model_copy(update={"by": expr.kind_of(c.text)})
+
+    steps: list[SkillStep] = []
+    for step in program.steps:
+        marked = step
+        if marked.check is not None:
+            marked = marked.model_copy(update={"check": by(marked.check)})
+        if marked.branch is not None:
+            marked = marked.model_copy(
+                update={"branch": marked.branch.model_copy(update={"test": by(marked.branch.test)})}
+            )
+        steps.append(marked)
     return program.model_copy(update={"steps": steps})
 
 
@@ -170,7 +212,10 @@ def _required(program: SkillProgram) -> tuple[str, ...]:
 
 
 def _owes(f: RunningSkill | SubRun) -> bool:
-    """Every step has passed and the skill still has results to hand back: it waits for exit."""
+    """The skill has reached done and still has results to hand back: it waits for exit. Done is reached after the
+    last step passes, or by a path that ends early (`owing`)."""
+    if f.owing:
+        return True
     last = f.results.get(str(len(f.program.steps)))
     return f.step == len(f.program.steps) and last is not None and last.passed is True
 
@@ -191,8 +236,13 @@ def _is_rule(check: StepCheck) -> bool:
     try:
         return expr.kind_of(check.text) == "rule"
     except expr.CheckError:
-        # A text that reads as a rule and is not one is never the model's to confirm: it fails as a rule.
+        # A text that reads as a rule and is not one is never the judge's to decide: it fails as a rule.
         return True
+
+
+def _test(step: SkillStep) -> StepCheck | None:
+    """What decides the step: its branch test, else its check."""
+    return step.branch.test if step.branch is not None else step.check
 
 
 def _hidden(check: StepCheck, f: RunningSkill | SubRun) -> list[str]:
@@ -225,6 +275,9 @@ def _holds(check: StepCheck, value: Any, f: RunningSkill | SubRun, told: list[st
 
 # Endings after which a skill's step tools are free again: it finished, or another skill took its place.
 RELEASES = ("done", "switched")
+# The reasons for an ending the kernel made. Such an ending is final for the reply it happened in: the model cannot
+# start the skill again until the person's next message. An exit the model called itself is not among them.
+FINAL: tuple[EndedWhy, ...] = ("check", "denied", "error", "held", "stop")
 
 
 def _tools(r: RunningSkill, skills: Sequence[Skill]) -> set[str]:
@@ -240,6 +293,13 @@ def _tools(r: RunningSkill, skills: Sequence[Skill]) -> set[str]:
     return out
 
 
+def trim(run: SkillRunState) -> None:
+    """Keeps the newest `HISTORY_MAX` endings, and every ending made in this reply however many came after it: that
+    one is what keeps its skill from starting again (`final`), so it is forgotten only once the reply is over."""
+    cut = len(run.history) - HISTORY_MAX
+    run.history = [h for i, h in enumerate(run.history) if i >= cut or h.in_reply]
+
+
 def _end(
     run: SkillRunState,
     name: str,
@@ -247,13 +307,18 @@ def _end(
     returns: dict[str, JsonValue] | None = None,
     *,
     holds: bool = True,
+    why: EndedWhy | None = None,
+    check: str | None = None,
 ) -> None:
-    """Ends the running skill. Its step tools are kept from the rest of the reply unless it ended as done or
-    switched, or `holds` is off: a skill stopped because another skill holds its tool keeps nothing. What lasts
-    beyond the reply is taken where a check fails or a call is denied (`_hold`), not here."""
+    """Ends the running skill, and records how: the exit, the step, and for any ending but done or switched the
+    reason (`why`, with the text of the check that did not pass) and what the author wrote the exit means. Its step
+    tools are kept from the rest of the reply unless it ended as done or switched, or `holds` is off: a skill
+    stopped because another skill holds its tool keeps nothing. What lasts beyond the reply is taken where a check
+    fails or a call is denied (`_hold`), not here."""
     r = run.running
     assert r is not None
     tools = _tools(r, skills) if holds else set[str]()
+    stopped = name not in RELEASES
     run.history.append(
         EndedSkill(
             skill_id=r.skill_id,
@@ -261,11 +326,15 @@ def _end(
             name=r.name,
             ended=name,
             at_step=r.step,
-            tools=[] if name in RELEASES else sorted(tools),
+            tools=sorted(tools) if stopped else [],
             returns=returns or {},
+            in_reply=True,
+            why=why if stopped else None,
+            check=check if stopped and why == "check" else None,
+            meaning=r.program.exit.get(name),
         )
     )
-    del run.history[:-HISTORY_MAX]
+    trim(run)
     run.running = None
 
 
@@ -313,10 +382,10 @@ def _enter(run: SkillRunState, n: int, skills: Sequence[Skill], told: list[str])
     sub = next((s for s in skills if s.skill_id == step.use.id and s.program is not None), None)
     program = sub.program if sub is not None else None
     if sub is None or program is None or not program.steps or sub.skill_id == r.skill_id:
-        _failed(run, skills, told)
+        _failed(run, skills, told, "error")
         return
     if any(x.use is not None and x.use.kind == "skill" for x in program.steps):
-        _failed(run, skills, told)
+        _failed(run, skills, told, "error")
         return
     inputs, masked = _handed(r, n, sub)
     if missing := missing_inputs(sub, inputs):
@@ -326,7 +395,7 @@ def _enter(run: SkillRunState, n: int, skills: Sequence[Skill], told: list[str])
         )
         if why not in told:
             told.append(why)
-        _failed(run, skills, told)
+        _failed(run, skills, told, "error")
         return
     r.sub = SubRun(
         skill_id=sub.skill_id,
@@ -344,8 +413,11 @@ def _enter(run: SkillRunState, n: int, skills: Sequence[Skill], told: list[str])
     )
 
 
-def _failed(run: SkillRunState, skills: Sequence[Skill], told: list[str]) -> None:
-    """The current step did not pass: its "if not" decides. With none, it is tried once more."""
+def _failed(
+    run: SkillRunState, skills: Sequence[Skill], told: list[str], why: EndedWhy, check: str | None = None
+) -> None:
+    """The current step did not pass: its "if not" decides. With none, it is tried once more. `why`, and the text
+    of the `check` that did not pass, go on the record when this ends the skill."""
     r = run.running
     assert r is not None
     f = _frame(r)
@@ -364,7 +436,7 @@ def _failed(run: SkillRunState, skills: Sequence[Skill], told: list[str]) -> Non
             f.step, f.step_text = goto, f.program.steps[goto - 1].do
             f.results.pop(str(goto), None)
             return
-        _sub_ended(run, skills, ends, {}, told)
+        _sub_ended(run, skills, ends, {}, told, why=why, check=check)
         return
     if again:
         if (use := _step(r).use) is not None and use.kind == "skill":
@@ -373,7 +445,7 @@ def _failed(run: SkillRunState, skills: Sequence[Skill], told: list[str]) -> Non
     if goto is not None:
         _enter(run, goto, skills, told)
         return
-    _end(run, ends, skills)
+    _end(run, ends, skills, why=why, check=check)
 
 
 # --- holds: what a failed check or a denied call keeps from every other skill ---
@@ -391,6 +463,8 @@ def _failed(run: SkillRunState, skills: Sequence[Skill], told: list[str]) -> Non
 #    earlier hold, and once the earlier step passes nothing holds the later step's write. Taking the later hold as
 #    well would let two skills lock each other for good.
 # 6. A tool that answers with an error, a skill a step could not start, and an exit the model calls take none.
+#    A `stop` reached from a path takes one when a rule or the judge chose that path on the step's tool result, on
+#    either side of the `if` (`_guards`); a path on a step with no tool takes none.
 # 7. A step that runs a skill passes only when that skill ends as done, unless the step has a rule of its own
 #    (`_sub_ended`). An exit therefore never carries the step past a check that failed inside the skill.
 #
@@ -472,17 +546,27 @@ def _stop_if_held(run: SkillRunState, skills: Sequence[Skill], told: list[str]) 
     if (hold := _held_for(run)) is None:
         return
     why = f"a person denied a call of {hold.slug}" if hold.denied else f"{hold.slug} failed its check"
-    told.append(f"{target(run)} is held because {why}; start {hold.slug} again.")
-    _end(run, "failed", skills, holds=False)
+    told.append(f"{target(run)} is held because {why}; {_again(run, hold.skill_id, hold.slug)}")
+    _end(run, "failed", skills, holds=False, why="held")
+
+
+def _release(run: SkillRunState) -> None:
+    """The holder got past its step (rule 4): its hold from that step ends."""
+    r = run.running
+    assert r is not None
+    key = _key(r)
+    run.holds = [h for h in run.holds if not (h.skill_id == r.skill_id and h.step == key)]
 
 
 def _passed(run: SkillRunState, skills: Sequence[Skill], value: Any, told: list[str]) -> None:
     r = run.running
     assert r is not None
     f = _frame(r)
-    key = _key(r)
-    run.holds = [h for h in run.holds if not (h.skill_id == r.skill_id and h.step == key)]
+    _release(run)
     f.results[str(f.step)] = _kept(value, True)
+    if (to := _step(f).next) is not None:
+        _jump(run, skills, to, told)
+        return
     if f.step < len(f.program.steps):
         if isinstance(f, SubRun):
             f.step += 1
@@ -499,12 +583,126 @@ def _passed(run: SkillRunState, skills: Sequence[Skill], value: Any, told: list[
         _end(run, "done", skills)
 
 
+def _jump(run: SkillRunState, skills: Sequence[Skill], to: Jump, told: list[str]) -> None:
+    """Moves the current skill along a path its author wrote: to a step further on, or out by an exit. An exit other
+    than done that a path reaches is the author's `stop`, which ends the skill for the rest of the reply."""
+    r = run.running
+    assert r is not None
+    f = _frame(r)
+    if to.step is not None:
+        if isinstance(f, SubRun):
+            f.step, f.step_text = to.step, f.program.steps[to.step - 1].do
+            f.results.pop(str(to.step), None)
+        else:
+            _enter(run, to.step, skills, told)
+        return
+    name = to.exit or "done"
+    if name == "done" and _required(f.program):
+        # Done reached early owes the same results as the last step does.
+        f.owing = True
+        return
+    if isinstance(f, SubRun):
+        _sub_ended(run, skills, name, {}, told, why=None if name == "done" else "stop")
+    else:
+        _end(run, name, skills, why="stop")
+
+
+def _otherwise(run: SkillRunState, skills: Sequence[Skill], value: Any, told: list[str]) -> None:
+    """The current step's branch test did not hold: the skill takes the other path. A path a rule chose that ends the
+    skill with an exit other than done is a guard (`if not ...: stop "..."`, `_guards`) and is a failed check: it
+    takes the hold and ends the skill for the reply. Any other path counts no attempt and holds nothing."""
+    r = run.running
+    assert r is not None
+    f = _frame(r)
+    branch = _step(f).branch
+    assert branch is not None
+    f.results[str(f.step)] = _kept(value, False)
+    to = branch.otherwise
+    if _guards(f, to):
+        assert to.exit is not None
+        _hold(run, skills)
+        if isinstance(f, SubRun):
+            _sub_ended(run, skills, to.exit, {}, told, why="check", check=branch.test.text)
+        else:
+            _end(run, to.exit, skills, why="check", check=branch.test.text)
+        return
+    # A path that is not a guard gets past the step as much as passing does.
+    _release(run)
+    _jump(run, skills, to, told)
+
+
+def _guards(f: RunningSkill | SubRun, to: Jump | None) -> bool:
+    """Whether the path `to` of the current step is a guard: an exit other than done reached from a branch on the
+    step's tool result, decided by a rule or by the judge. Which side of the `if` the stop is written on does not
+    matter."""
+    step = _step(f)
+    return step.branch is not None and step.use is not None and to is not None and to.exit not in (None, "done")
+
+
+def _decide(run: SkillRunState, skills: Sequence[Skill], value: Any, holds: bool, told: list[str]) -> None:
+    """The current step is done and its branch test came out as `holds`."""
+    r = run.running
+    assert r is not None
+    f = _frame(r)
+    branch = _step(f).branch
+    assert branch is not None
+    if holds and _guards(f, to := _step(f).next):
+        assert to is not None and to.exit is not None
+        f.results[str(f.step)] = _kept(value, True)
+        _hold(run, skills)
+        if isinstance(f, SubRun):
+            _sub_ended(run, skills, to.exit, {}, told, why="check", check=branch.test.text)
+        else:
+            _end(run, to.exit, skills, why="check", check=branch.test.text)
+        return
+    if holds:
+        _passed(run, skills, value, told)
+    else:
+        _otherwise(run, skills, value, told)
+
+
+def _verdict(
+    run: SkillRunState,
+    skills: Sequence[Skill],
+    value: Any,
+    passed: bool | None,
+    told: list[str],
+    *,
+    by: Literal["rule", "judge"],
+    reason: str | None = None,
+) -> None:
+    """Every verdict on the current step's check or branch test, from a rule or the judge, goes through here. Yes
+    moves on as the step's path says. No on a check, and no verdict on either, is a failed check: the step's "if
+    not", the hold and the ending. No on a branch takes the other path, which is a failed check when it is a guard.
+    The result keeps who decided and the judge's reason."""
+    r = run.running
+    assert r is not None
+    f = _frame(r)
+    step = _step(f)
+    test = _test(step)
+    assert test is not None
+    key = str(f.step)
+    if passed is not None and step.branch is not None:
+        _decide(run, skills, value, passed, told)
+    elif passed:
+        _passed(run, skills, value, told)
+    else:
+        f.results[key] = _kept(value, False)
+        _hold(run, skills)
+        _failed(run, skills, told, "check", test.text)
+    if (res := f.results.get(key)) is not None:
+        f.results[key] = res.model_copy(update={"judged_by": by, "reason": reason})
+
+
 def _sub_ended(
     run: SkillRunState,
     skills: Sequence[Skill],
     name: str,
     returns: dict[str, JsonValue],
     told: list[str],
+    *,
+    why: EndedWhy | None = None,
+    check: str | None = None,
 ) -> None:
     """A sub-skill ended: the step that started it gets its exit and results as that step's result. The step passes
     only when the sub-skill ended as done, unless the step has a rule of its own, which then decides: an author who
@@ -518,28 +716,74 @@ def _sub_ended(
     names the results itself at any step, so a rule such as `result.ok` would pass on its word; they are left out.
     And after any exit but done the rule has to depend on the exit: it must hold for this exit and not hold for
     `failed`, the one ending no skill lists and no step passes on. A rule that reads something else (an input, a
-    result that is not there) says nothing about this ending, so it does not carry the step on."""
+    result that is not there) says nothing about this ending, so it does not carry the step on.
+
+    `why` and `check` say what ended the sub-skill when it did not finish (a check inside it, the model's exit), and
+    go on the record if the step's failure ends the skill."""
     r = run.running
     assert r is not None
     r.sub = None
     value: dict[str, JsonValue] = {"exit": name, **(returns if name == "done" else {})}
-    check = _step(r).check
-    ruled = check is not None and _is_rule(check)
+    own = _step(r).check
+    ruled = own is not None and _is_rule(own)
     if name == "failed" or (not ruled and name != "done"):
         r.results[str(r.step)] = _kept(value, False)
-        _failed(run, skills, told)
+        _failed(run, skills, told, why or "error", check)
         return
-    names_exit = name == "done" or (check is not None and not _holds(check, {"exit": "failed"}, r, []))
-    if check is not None and ruled and not (_holds(check, value, r, told) and names_exit):
+    if own is not None and not ruled:
+        # A sentence check on the step: the judge decides it on what the sub-skill handed back (`to_judge`).
+        r.results[str(r.step)] = _kept(value, None)
+        return
+    names_exit = name == "done" or (own is not None and not _holds(own, {"exit": "failed"}, r, []))
+    if own is not None and ruled and not (_holds(own, value, r, told) and names_exit):
         r.results[str(r.step)] = _kept(value, False)
         # Only a done ending takes a hold here: every tool of the sub-skill was then free, so the check can be run
         # again. An exit can be called before the sub-skill reaches a tool another skill holds, and a hold taken
         # then could lock the two skills for good.
         if name == "done":
             _hold(run, skills)
-        _failed(run, skills, told)
+        _failed(run, skills, told, why or "check", check if why else own.text)
         return
     _passed(run, skills, value, told)
+
+
+_BECAUSE: dict[EndedWhy, str] = {
+    "denied": " because a person rejected its action",
+    "error": " because the step could not be done",
+    "held": " because another skill holds the step's tool",
+}
+
+
+def ending(ended: EndedSkill) -> str:
+    """What the model is told about a skill that ended any way but done: the exit, the step, the reason the record
+    holds, and whether it may start again in this reply."""
+    because = (
+        f" because its check did not pass ({ended.check})" if ended.check else _BECAUSE.get(ended.why or "exit", "")
+    )
+    means = f" {ended.ended} means: {ended.meaning}" if ended.meaning else ""
+    closed = (
+        " It cannot start again in this reply; it can after the person's next message."
+        if ended.in_reply and ended.why in FINAL
+        else ""
+    )
+    return (
+        f"{ended.name} ended as {ended.ended} on step {ended.at_step}{because}.{means}{closed} Do not say its action "
+        "was done or will be done. Tell the person what was not done, and why."
+    )
+
+
+def final(run: SkillRunState, skill_id: str) -> EndedSkill | None:
+    """The ending that keeps the skill from starting again in this reply: one the kernel made in it (`FINAL`). The
+    person's next message, or their pick from the menu, starts it as usual."""
+    return next((h for h in reversed(run.history) if h.skill_id == skill_id and h.in_reply and h.why in FINAL), None)
+
+
+def _again(run: SkillRunState, skill_id: str, slug: str) -> str:
+    """How a held tool comes back: its holder starts again and passes the step, which a reply the kernel ended the
+    holder in does not allow."""
+    if final(run, skill_id) is not None:
+        return f"{slug} cannot start again in this reply, so tell the person; it can after their next message."
+    return f"start {slug} again."
 
 
 def said(before: SkillRunState, after: SkillRunState) -> str:
@@ -550,7 +794,7 @@ def said(before: SkillRunState, after: SkillRunState) -> str:
         ended = after.history[-1]
         if ended.ended == "done":
             return f"{ended.name} is done."
-        return f"{ended.name} ended as {ended.ended} on step {ended.at_step}. Tell the person what was not done."
+        return ending(ended)
     f = _frame(now_)
     step = _step(f)
     at = (f.skill_id, f.step)
@@ -560,8 +804,8 @@ def said(before: SkillRunState, after: SkillRunState) -> str:
                 f"Every step of {f.name} is done. Call exit with the name done and: {', '.join(_required(f.program))}."
             )
         res = f.results.get(str(f.step))
-        if res is not None and res.passed is None and step.check is not None:
-            return f"Now confirm: {step.check.text} Call step_done once it holds."
+        if res is not None and res.passed is None:
+            return f"The judge decides step {f.step} of {f.name}; do not decide it yourself."
         rule = step.if_not or IfNot()
         left = max(rule.retries - f.attempts.get(str(f.step), 0), 0) if rule.action == "retry" else 0
         return (
@@ -615,51 +859,140 @@ def target(run: SkillRunState) -> str | None:
     return use.tool_name if use is not None else None
 
 
-def withheld(run: SkillRunState, skills: Sequence[Skill]) -> set[str]:
-    """Tools not offered now: every tool a step of the running skill (or of a skill its steps run) calls, except the
-    current step's, so a later step's write cannot be called before its own step; and the tools another skill
-    holds. A held tool stays out even as the current step's tool, so its write cannot run through a skill that
-    skips the check that failed."""
-    r = run.running
-    out: set[str] = set() if r is None else _tools(r, skills) - {target(run)}
-    for hold in run.holds:
-        if r is None or r.skill_id != hold.skill_id:
-            out |= set(hold.tools)
+def changes(name: str, access: str | None) -> bool:
+    """Whether a step's tool is one that changes something: any tool that is not a read (a write, a workflow), and
+    any other agent a step hands to, whatever its access says. A tool whose access is not known is taken as one. The
+    one test behind the tools a skill owns (`owned`) and the steps a save asks a rule check of."""
+    return hands_to_agent(name) or (access or "write") != "read"
+
+
+def owned(skills: Sequence[Skill], access: Mapping[str, str]) -> dict[str, list[str]]:
+    """The tools reachable only through a step, each with the slugs of the skills whose steps run it: every tool a
+    step of an attached skill runs that changes something (`changes`), and every read a builder locked to its step.
+    `access` is each granted tool's access by name."""
+    out: dict[str, list[str]] = {}
+    for s in skills:
+        locked = s.program.locked() if s.program is not None else set[str]()
+        for name in sorted(s.program.targets()) if s.program is not None else ():
+            if name in locked or changes(name, access.get(name)):
+                out.setdefault(name, []).append(s.slug)
     return out
 
 
+def barred(
+    run: SkillRunState,
+    skills: Sequence[Skill],
+    tool: str,
+    *,
+    owned: Mapping[str, Sequence[str]],
+    stopped: Mapping[str, Sequence[str]],
+    always: Sequence[str] = (),
+) -> str | None:
+    """Why `tool` may not be used now, in words for the model; None when it may. The one answer to "may this tool be
+    called", asked when the tools are offered, when they are searched and again when one is called, so a call sent in
+    the same model step as the one that starts or leaves a skill gets the answer for where the record then stands.
+
+    In order: a tool a skill stopped in this reply keeps (`stopped`, by skill id) and a tool another skill holds stay
+    out even as the current step's tool, so a write cannot run through a skill that skips the check that failed.
+    The current step's tool may be called. A tool of another step of the running skill waits for its step. A tool a
+    skill owns (`owned`) runs only as that skill's step, so its checks cannot be skipped by not starting it. And
+    while a step names its tool, that tool and those in `always` are the only ones."""
+    r = run.running
+    if (sid := next((k for k, tools in stopped.items() if tool in tools), None)) is not None:
+        last = next((h for h in reversed(run.history) if h.skill_id == sid), None)
+        how = f"{last.name} ended as {last.ended}" if last is not None else "a skill that calls it was stopped"
+        return f"{tool} is not available for the rest of this reply: {how}."
+    for hold in run.holds:
+        if tool in hold.tools and (r is None or r.skill_id != hold.skill_id):
+            why = f"a person denied a call of {hold.slug}" if hold.denied else f"{hold.slug} failed its check"
+            return f"{tool} is held because {why}; {_again(run, hold.skill_id, hold.slug)}"
+    current = target(run)
+    if tool == current:
+        return None
+    if r is not None and tool in _tools(r, skills):
+        return f"{tool} belongs to another step of {r.name}. Do the current step first."
+    if tool in owned:
+        slugs = " or ".join(owned[tool])
+        return (
+            f"{tool} runs only as a step of {slugs}. Start that skill with switch_skill; it reaches {tool} at its step."
+        )
+    if current is not None and tool not in always:
+        return f"The current step calls {current}. Do only this step."
+    return None
+
+
 def on_result(run: SkillRunState, skills: Sequence[Skill], output: Any, ok: bool) -> Moved:
-    """The current step's tool answered. A rule check runs here, once, on the result as it arrived; a step with no
-    check passes when its tool ran; a sentence check waits for the model's step_done."""
+    """The current step's tool answered. A rule runs here, once, on the result as it arrived; a step with no check
+    passes when its tool ran; a sentence waits for the judge, which the kernel asks next (`to_judge`, `decided`)."""
     before = run
     run = run.model_copy(deep=True)
     r = run.running
     assert r is not None
     f = _frame(r)
-    step = _step(f)
-    key = str(f.step)
+    test = _test(_step(f))
     told: list[str] = []
     if not ok:
-        f.results[key] = _kept(output, False)
-        _failed(run, skills, told)
-    elif step.check is None:
+        f.results[str(f.step)] = _kept(output, False)
+        _failed(run, skills, told, "error")
+    elif test is None:
         _passed(run, skills, output, told)
-    elif _is_rule(step.check):
-        if _holds(step.check, output, f, told):
-            _passed(run, skills, output, told)
-        else:
-            f.results[key] = _kept(output, False)
-            _hold(run, skills)
-            _failed(run, skills, told)
+    elif _is_rule(test):
+        _verdict(run, skills, output, _holds(test, output, f, told), told, by="rule")
     else:
-        f.results[key] = _kept(output, None)
+        f.results[str(f.step)] = _kept(output, None)
     _stop_if_held(run, skills, told)
     return Moved(run, " ".join([*told, said(before, run)]))
 
 
-def step_done(run: SkillRunState, skills: Sequence[Skill]) -> Moved:
-    """The model says the current step is done. Refused while the step's tool has not run, and for a rule check on a
-    tool result, which is never the model's to confirm."""
+@dataclass(frozen=True)
+class Judging:
+    """A sentence the judge must decide now, for the current step. `value` is the step's result as kept (what its
+    tool, or the skill it ran, returned); `from_reply` is True for a step with no tool, whose evidence is what the
+    person wrote and the tools returned in this reply."""
+
+    check: str
+    value: Any
+    inputs: dict[str, str]
+    from_reply: bool
+
+
+def to_judge(run: SkillRunState) -> Judging | None:
+    """The current step's sentence when it waits for the judge's verdict; None for a rule, a step with no check and
+    a step already decided."""
+    r = run.running
+    if r is None:
+        return None
+    f = _frame(r)
+    if _owes(f):
+        return None
+    step = _step(f)
+    test = _test(step)
+    res = f.results.get(str(f.step))
+    if test is None or _is_rule(test) or res is None or res.passed is not None:
+        return None
+    return Judging(test.text, res.value, dict(f.inputs), step.use is None)
+
+
+def decided(run: SkillRunState, skills: Sequence[Skill], passed: bool | None, reason: str) -> Moved:
+    """The judge's verdict on the current step (`to_judge`): None when it did not answer, which fails the step. What
+    the model is told is the outcome and the judge's reason; the verdict is not the model's to change."""
+    r = run.running
+    if r is None or (j := to_judge(run)) is None:
+        return Moved(run, "No step waits for the judge.", ok=False)
+    before = run
+    run = run.model_copy(deep=True)
+    told: list[str] = []
+    _verdict(run, skills, j.value, passed, told, by="judge", reason=reason)
+    _stop_if_held(run, skills, told)
+    outcome = {True: "yes", False: "no", None: "no verdict, so the step did not pass"}[passed]
+    found = f'The judge\'s verdict on "{j.check}": {outcome}. {reason}'
+    return Moved(run, " ".join([found, *told, said(before, run)]))
+
+
+def step_done(run: SkillRunState, skills: Sequence[Skill], holds: bool | None = None) -> Moved:
+    """The model says the current step is done. Refused while the step's tool has not run, for a rule check on a
+    tool result, and with `holds` on a step the judge decides: the model never gives the verdict. On a judged step
+    with no tool the call is a claim: the step waits for the judge (`to_judge`)."""
     r = run.running
     if r is None:
         return Moved(run, "No skill is running.", ok=False)
@@ -672,19 +1005,32 @@ def step_done(run: SkillRunState, skills: Sequence[Skill]) -> Moved:
     use = step.use.tool_name if step.use is not None else None
     if use is not None and res is None:
         return Moved(run, f"Call {use} first: step {f.step} is done when it has run.", ok=False)
-    rule = step.check is not None and _is_rule(step.check)
+    test = _test(step)
+    rule = test is not None and _is_rule(test)
     if rule and use is not None:
         return Moved(run, "The check for this step runs on the tool result; it is not yours to confirm.", ok=False)
+    if test is not None and not rule:
+        if holds is not None:
+            return Moved(run, "The judge decides this step. Call step_done without holds.", ok=False)
+        if use is not None and not (res is not None and res.passed is None):
+            return Moved(
+                run, f"The judge decides this step on what {use} returns; it is not yours to confirm.", ok=False
+            )
+        # A claim: the step waits for the judge (`to_judge`), which the kernel asks next.
+        run = run.model_copy(deep=True)
+        assert run.running is not None
+        frame = _frame(run.running)
+        frame.results[str(frame.step)] = _kept(res.value if res is not None else None, None)
+        return Moved(run, f"The judge decides step {frame.step} of {frame.name}.")
     before = run
     run = run.model_copy(deep=True)
     assert run.running is not None
     told: list[str] = []
-    if rule and step.check is not None and not _holds(step.check, None, _frame(run.running), told):
-        _frame(run.running).results[str(f.step)] = _kept(None, False)
-        _hold(run, skills)
-        _failed(run, skills, told)
+    value = res.value if res is not None else None
+    if test is not None:
+        _verdict(run, skills, value, _holds(test, value, _frame(run.running), told), told, by="rule")
     else:
-        _passed(run, skills, res.value if res is not None else None, told)
+        _passed(run, skills, value, told)
     _stop_if_held(run, skills, told)
     return Moved(run, " ".join([*told, said(before, run)]))
 
@@ -729,8 +1075,12 @@ def leave(run: SkillRunState, skills: Sequence[Skill], name: str, returns: Json)
     res = f.results.get(str(f.step))
     if name == "done":
         ran = step.use is None or res is not None
-        rule = step.check is not None and _is_rule(step.check)
-        if f.step != len(program.steps) or not ran or (rule and not (res is not None and res.passed is True)):
+        # Any check, a rule's or the judge's, must have passed: a check with no verdict never ends a skill as done.
+        checked = _test(step) is not None
+        early = _owes(f)
+        if not early and (
+            f.step != len(program.steps) or not ran or (checked and not (res is not None and res.passed is True))
+        ):
             return Moved(
                 run,
                 f"{f.name} is on step {f.step} of {len(program.steps)}: {step.do} It ends as done only after its "
@@ -745,9 +1095,9 @@ def leave(run: SkillRunState, skills: Sequence[Skill], name: str, returns: Json)
     assert run.running is not None
     told: list[str] = []
     if run.running.sub is not None:
-        _sub_ended(run, skills, name, clean, told)
+        _sub_ended(run, skills, name, clean, told, why=None if name == "done" else "exit")
     else:
-        _end(run, name, skills, clean)
+        _end(run, name, skills, clean, why="exit")
     _stop_if_held(run, skills, told)
     return Moved(run, " ".join([*told, said(before, run)]))
 
@@ -759,7 +1109,7 @@ def denied(run: SkillRunState, skills: Sequence[Skill]) -> SkillRunState:
         return run
     run = run.model_copy(deep=True)
     _hold(run, skills, denied=True)
-    _end(run, "failed", skills)
+    _end(run, "failed", skills, why="denied")
     return run
 
 
@@ -794,8 +1144,8 @@ def halted(run: SkillRunState, skills: Sequence[Skill], reply_holds: Mapping[str
     run = run.model_copy(deep=True)
     slug = next((s.slug for s in skills if s.skill_id == holder), holder)
     how = next((h.ended for h in reversed(run.history) if h.skill_id == holder), "stopped")
-    why = f"{tool} is held for the rest of this reply because {slug} ended as {how}; start {slug} again."
-    _end(run, "failed", skills, holds=False)
+    why = f"{tool} is held for the rest of this reply because {slug} ended as {how}; {_again(run, holder, slug)}"
+    _end(run, "failed", skills, holds=False, why="held")
     return Moved(run, f"{why} {said(before, run)}")
 
 
@@ -817,6 +1167,10 @@ def now(run: SkillRunState, names: Mapping[str, str]) -> Now | None:
     check = step.check
     if check is not None and check.by is None:
         check = check.model_copy(update={"by": "rule" if _is_rule(check) else "model"})
+    branch = step.branch
+    if branch is not None and branch.test.by is None:
+        test = branch.test.model_copy(update={"by": "rule" if _is_rule(branch.test) else "model"})
+        branch = branch.model_copy(update={"test": test})
     return Now(
         skill=f.name,
         step=f.step,
@@ -825,6 +1179,7 @@ def now(run: SkillRunState, names: Mapping[str, str]) -> Now | None:
         use=use,
         check=check,
         if_not=step.if_not,
+        branch=branch,
         inside=r.name if r.sub is not None else None,
         rules=f.rules,
         owes=_required(f.program) if _owes(f) else None,

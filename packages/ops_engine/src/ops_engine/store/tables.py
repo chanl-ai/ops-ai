@@ -45,8 +45,9 @@ engine_definitions = sa.Table(
     # The mailbox its Email received trigger names (`definitions.watched_mailbox`), so the Channels list joins a
     # mailbox to the live workflows that read it in SQL (agents 0118).
     sa.Column("mailbox", sa.String(320)),
-    # One version per definition: publishing the same definition again returns its version.
-    sa.UniqueConstraint("tenant_id", "workflow_id", "digest", name="uq_engine_definitions_digest"),
+    # Publishing a definition stored before finds its version here. Not unique: a restored version published again is
+    # a new version with an older one's definition (agents 0122).
+    sa.Index("ix_engine_definitions_digest", "tenant_id", "workflow_id", "digest"),
     # The v2 workflows list, one team's page by name or update time (agents 0112).
     sa.Index("ix_engine_definitions_team_name", "tenant_id", "team_id", "name"),
     sa.Index("ix_engine_definitions_team_created", "tenant_id", "team_id", "created_at"),
@@ -63,6 +64,28 @@ sa.Index(
     engine_definitions.c.workflow_id,
     postgresql_where=LIVE,
     mssql_where=LIVE,
+)
+
+# The one working copy of a workflow: what its editor saves after each change, in whatever state it is, checks and all.
+# It is never run and never a version; publishing makes the next version from it and removes it (agents 0121).
+engine_working_copies = sa.Table(
+    "engine_working_copies",
+    metadata,
+    sa.Column("tenant_id", sa.String(64), primary_key=True),
+    sa.Column("workflow_id", sa.String(64), primary_key=True),
+    # The workflow's owning team, as on engine_definitions; null for a workflow no team owns.
+    sa.Column("team_id", sa.String(64)),
+    sa.Column("definition", sa.JSON, nullable=False),
+    # The hash of `definition` as stored. With `base_version` it names this copy: a save names the copy it was made
+    # on, and one made on any other is refused, so two people's saves never overwrite each other.
+    sa.Column("digest", sa.String(64), nullable=False),
+    # The newest version when the copy was first saved.
+    sa.Column("base_version", sa.Integer, nullable=False),
+    # The checks of the last save: a working copy may fail them, and publishing refuses while one is an error.
+    sa.Column("checks", sa.JSON, nullable=False),
+    sa.Column("updated_at", sa.String(32), nullable=False),
+    sa.Column("updated_by", sa.String(200), nullable=False),
+    info=TENANT_SCOPED,
 )
 
 # One row per run. The id is also the run's thread id (lease, checkpoints, events) and carries RUN_PREFIX, so the v1

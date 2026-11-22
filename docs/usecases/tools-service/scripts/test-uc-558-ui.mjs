@@ -12,6 +12,7 @@ import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 
 import { AGENTS_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack, required } from '@ops-ai/usecase-runner/harness';
+import { agentBase } from '../../lib/agent_save.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
@@ -121,10 +122,10 @@ try {
       const published = (await call(tools, 'GET', `/v1/tool-modules/${mod.id}`, priya)).data;
       const agent = required(await call(agents, 'POST', '/v1/agents', priya, { name: 'Claims desk', role: 'Moves claim cases in Salesforce' }), 'create the agent');
       // agents-service keeps the grantable tools for 30 s, so the new module's operation is offered within that.
-      let patched = await call(agents, 'PATCH', `/v1/agents/${agent.id}`, priya, { toolIds: ['uc558_update_case'] });
+      let patched = await call(agents, 'PATCH', `/v1/agents/${agent.id}`, priya, { toolIds: ['uc558_update_case'], ...(await agentBase(agents, priya, agent.id)) });
       for (let i = 0; i < 40 && patched.status === 400; i++) {
         await new Promise((r) => setTimeout(r, 1000));
-        patched = await call(agents, 'PATCH', `/v1/agents/${agent.id}`, priya, { toolIds: ['uc558_update_case'] });
+        patched = await call(agents, 'PATCH', `/v1/agents/${agent.id}`, priya, { toolIds: ['uc558_update_case'], ...(await agentBase(agents, priya, agent.id)) });
       }
       const saved = required(patched, 'give the agent its tool');
       const asked = await call(agents, 'POST', `/v1/agents/${agent.id}/publish-requests`, priya, { version: saved.version, note: 'uc-558' });

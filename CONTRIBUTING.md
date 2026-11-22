@@ -136,6 +136,7 @@ Conventional commits: `type(scope): subject`.
 | Subject | Imperative, lowercase after the colon, no trailing period, under 72 characters; describes the change |
 | Body | What was wrong before and why, then how the change was verified (the command run and its result). At most three lines and 320 characters (`scripts/commit-message-check.mjs`); no headings, tables or code blocks |
 | Changelog | A feat that changes `apps/` or `services/` names its What's new entry (a fix may) in a `Changelog: <topic>` trailer, for `changelog/<topic>.json` staged in the same commit |
+| Siblings | A `fix` that changes `services/`, `apps/`, `packages/` or `sdk/` ends with `Siblings: <N> fixed via <owner>` or `Siblings: none, searched <pattern>`, after the sweep in `docs/guide/skills/ops-fix-the-class.md`; docs-only, test-only and `fix(qa)` commits are exempt |
 
 ## Everything here is public
 

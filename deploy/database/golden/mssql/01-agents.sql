@@ -19,9 +19,10 @@ CREATE TABLE engine_definitions (
 	startable BIT NOT NULL, 
 	takes_files BIT NOT NULL, 
 	mailbox VARCHAR(320) NULL, 
-	CONSTRAINT engine_definitions_pkey PRIMARY KEY (tenant_id, workflow_id, version), 
-	CONSTRAINT uq_engine_definitions_digest UNIQUE (tenant_id, workflow_id, digest)
+	CONSTRAINT engine_definitions_pkey PRIMARY KEY (tenant_id, workflow_id, version)
 );
+GO
+CREATE INDEX ix_engine_definitions_digest ON engine_definitions (tenant_id, workflow_id, digest);
 GO
 CREATE INDEX ix_engine_definitions_live ON engine_definitions (tenant_id, workflow_id) WHERE stage = 'live';
 GO
@@ -30,6 +31,19 @@ GO
 CREATE INDEX ix_engine_definitions_team_created ON engine_definitions (tenant_id, team_id, created_at);
 GO
 CREATE INDEX ix_engine_definitions_team_name ON engine_definitions (tenant_id, team_id, name);
+GO
+CREATE TABLE engine_working_copies (
+	tenant_id VARCHAR(64) NOT NULL, 
+	workflow_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NULL, 
+	definition NVARCHAR(max) NOT NULL, 
+	digest VARCHAR(64) NOT NULL, 
+	base_version INTEGER NOT NULL, 
+	checks NVARCHAR(max) NOT NULL, 
+	updated_at VARCHAR(32) NOT NULL, 
+	updated_by VARCHAR(200) NOT NULL, 
+	CONSTRAINT engine_working_copies_pkey PRIMARY KEY (tenant_id, workflow_id)
+);
 GO
 CREATE TABLE engine_runs (
 	id VARCHAR(64) NOT NULL, 
@@ -543,10 +557,13 @@ CREATE TABLE eval_runs (
 	results NVARCHAR(max) NOT NULL, 
 	started_by VARCHAR(320) NOT NULL, 
 	ran_at VARCHAR(32) NOT NULL, 
+	digest VARCHAR(64) NULL, 
 	CONSTRAINT eval_runs_pkey PRIMARY KEY (id)
 );
 GO
 CREATE INDEX ix_eval_runs_asset ON eval_runs (tenant_id, team_id, kind, asset_id, ran_at);
+GO
+CREATE INDEX ix_eval_runs_trigger ON eval_runs (tenant_id, team_id, [trigger]);
 GO
 CREATE TABLE registry_skills (
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -1253,6 +1270,12 @@ CREATE SECURITY POLICY ops_security.engine_definitions_tenant
     ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.engine_definitions,
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.engine_definitions AFTER INSERT,
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.engine_definitions AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.engine_working_copies_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.engine_working_copies,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.engine_working_copies AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.engine_working_copies AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
 CREATE SECURITY POLICY ops_security.engine_runs_isolation

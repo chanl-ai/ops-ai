@@ -10,6 +10,7 @@ from typing import Annotated, Literal
 from pydantic import Field
 
 from ops_service_kit.http import In, JsonValue, ListResult, Out
+from ops_service_kit.names import Name, Name120
 
 from ..environments import ModuleEnvironment, RunKind
 
@@ -426,7 +427,7 @@ class SubjectBindingIn(In):
 
 
 class DiscoveredOperationIn(In):
-    name: str
+    name: Name120
     description: str
     access: Access
     method: Method | None = None
@@ -441,7 +442,7 @@ class HeaderIn(In):
 
 
 class HttpOperationIn(In):
-    name: str
+    name: Name120
     description: str
     access: Access
     method: Method
@@ -481,8 +482,8 @@ class CodeOperationIn(In):
 
 
 class ModuleIn(In):
-    name: str
-    display_name: str
+    name: Name120
+    display_name: Name
     system: str = ""
     # Optional: the kind follows its operations (http, a source's kind, or code for a function).
     type: ModuleType | None = None
@@ -506,8 +507,8 @@ class ModuleIn(In):
 
 
 class BlankModuleIn(In):
-    display_name: str
-    name: str
+    display_name: Name
+    name: Name120
     # Optional: the kind follows the operations added; http until then.
     type: ModuleType | None = None
     description: str | None = None
@@ -519,7 +520,7 @@ class BlankModuleIn(In):
 
 
 class ModuleDetailsPatchIn(In):
-    display_name: str | None = None
+    display_name: Name | None = None
     description: str | None = None
     sign_in: ModuleSignInIn | None = None
     # Set only by the provisioner: the template slot this record fills and what a person may change of it.

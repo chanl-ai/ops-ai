@@ -23,7 +23,7 @@ from typing import Any, cast
 
 import httpx
 
-from ._agents import Agents, AsyncAgents
+from ._agents import Agents, AsyncAgents, based
 from ._chat import AsyncChat, Chat
 from ._config import Config, Session
 from ._generated.agents.operations import AsyncOperations as AsyncAgentsOps
@@ -225,12 +225,13 @@ def _reference_query(search: str, **query: Any) -> dict[str, Any]:
 
 
 class Skills(Resource):
-    def save_draft(self, id: str, fields: dict[str, Any], *, note: str = "", base_version: int | None = None) -> Any:
-        """Saves `fields` (any of SKILL_KEYS) as the skill's draft. `base_version` is the version the change was made
-        on; left out, it is the newest, read first."""
-        base = base_version if base_version is not None else self.get(id)["version"]
+    def save_draft(self, id: str, fields: dict[str, Any], *, note: str = "", base: dict[str, Any] | None = None) -> Any:
+        """Saves `fields` (any of SKILL_KEYS) as the skill's draft. `base` is the skill as last read, naming the copy
+        the change was made on; left out, the skill is read first. A save from an older copy is refused with
+        `stale_base`."""
+        read = base if base and base.get("digest") else self.get(id)
         body = {k: fields[k] for k in SKILL_KEYS if k in fields}
-        return self._raw.agents.agents_save_skill_draft(id, {**body, "note": note, "baseVersion": base})
+        return self._raw.agents.agents_save_skill_draft(id, based({**body, "note": note}, read))
 
     def publish(self, id: str, *, note: str = "") -> Any:
         """Asks to publish the newest draft. A skill that cannot be published is refused with `cannot_request`, and
@@ -245,11 +246,11 @@ class Skills(Resource):
 
 class AsyncSkills(AsyncResource):
     async def save_draft(
-        self, id: str, fields: dict[str, Any], *, note: str = "", base_version: int | None = None
+        self, id: str, fields: dict[str, Any], *, note: str = "", base: dict[str, Any] | None = None
     ) -> Any:
-        base = base_version if base_version is not None else (await self.get(id))["version"]
+        read = base if base and base.get("digest") else await self.get(id)
         body = {k: fields[k] for k in SKILL_KEYS if k in fields}
-        return await self._raw.agents.agents_save_skill_draft(id, {**body, "note": note, "baseVersion": base})
+        return await self._raw.agents.agents_save_skill_draft(id, based({**body, "note": note}, read))
 
     async def publish(self, id: str, *, note: str = "") -> Any:
         return await self._raw.agents.agents_request_skill_publish(id, {"note": note})

@@ -5,33 +5,24 @@ import { AlertTriangle, CheckCircle2, CircleDashed, Info, XCircle } from 'lucide
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { shortId } from '@/lib/format';
-import type { EvalCheck, EvalCheckType, EvalSuiteKind, EvalVersionSummary } from '@/lib/types/evals';
+import type { EvalCheck, EvalCheckType, EvalVersionSummary } from '@/lib/types/evals';
+import type { SkillCheck } from '@/lib/types/skills';
 import { cn } from '@/lib/utils';
 
-export const SUITE_LABEL: Record<EvalSuiteKind, string> = {
-  agent: 'Agent test set',
-  injection: 'Prompt injection',
-  leakage: 'Data leakage',
-  refusals: 'Refusals and policy topics',
-};
-
-export const SOURCE_LABEL: Record<string, string> = { manual: 'Manual', csv: 'CSV', test_turn: 'Test panel', platform: 'Platform' };
+export const SOURCE_LABEL: Record<string, string> = { manual: 'Added by hand', csv: 'CSV', test_turn: 'Test panel', review: 'Review' };
 
 export const CHECK_TYPES: { value: EvalCheckType; label: string; hint: string }[] = [
-  { value: 'calls_tool', label: 'Calls tool', hint: 'The agent must call this tool, with these arguments when given.' },
-  { value: 'not_calls_tool', label: 'Does not call tool', hint: 'Fails if the agent calls this tool.' },
-  { value: 'cites', label: 'Cites document', hint: 'The reply must cite this knowledge base, and the section when given.' },
+  { value: 'calls_tool', label: 'Calls tool', hint: 'The agent must call this tool.' },
   { value: 'reply_contains', label: 'Reply contains', hint: 'Case-insensitive text the reply must include.' },
-  { value: 'reply_not_contains', label: 'Reply must not contain', hint: 'Fails if the reply includes this text.' },
   { value: 'refuses', label: 'Refuses (out of scope)', hint: 'The agent must decline or hand off. Name the topic.' },
-  { value: 'extracts', label: 'Extracts field', hint: 'The extracted field must equal this value.' },
-  { value: 'rubric', label: 'Rubric (advisory)', hint: 'Advisory: not scored until judge agreement is measured.' },
+  { value: 'judge', label: 'Judge', hint: 'A model grades the reply against this rubric. Its cost is part of the run’s.' },
 ];
 
-export function checkText(c: EvalCheck): string {
+/** What a check says in a chip; agent evals and skill tests both draw them, and skill tests carry more types. */
+export function checkText(c: EvalCheck | SkillCheck): string {
   switch (c.type) {
     case 'calls_tool':
-      return `Calls ${c.tool}${c.args?.length ? ` with ${c.args.map((a) => `${a.path} ${a.equals}`).join(', ')}` : ''}`;
+      return `Calls ${c.tool}${'args' in c && c.args?.length ? ` with ${c.args.map((a) => `${a.path} ${a.equals}`).join(', ')}` : ''}`;
     case 'not_calls_tool':
       return `Never calls ${c.tool}`;
     case 'cites':
@@ -46,10 +37,12 @@ export function checkText(c: EvalCheck): string {
       return `Extracts ${c.field} as ${c.value}`;
     case 'rubric':
       return `Rubric: ${c.text}`;
+    case 'judge':
+      return `Judge: ${c.rubric}`;
   }
 }
 
-export function CheckChips({ checks, max = 3 }: { checks: EvalCheck[]; max?: number }) {
+export function CheckChips({ checks, max = 3 }: { checks: (EvalCheck | SkillCheck)[]; max?: number }) {
   return (
     <div className="flex flex-wrap gap-1">
       {checks.slice(0, max).map((c, i) => (

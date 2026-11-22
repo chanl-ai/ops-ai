@@ -1,5 +1,4 @@
 import type { LifecycleStatus, ToolAccess } from './domain';
-import type { EvalCheck, EvalCheckResult } from './evals';
 
 /**
  * Skills: versioned, reusable procedures an agent loads when a task matches its "use when" line. A skill adds
@@ -9,7 +8,7 @@ import type { EvalCheck, EvalCheckResult } from './evals';
  */
 
 import type { StepValue } from '@/components/shared/instruction-document/document-model';
-import type { PublishBlocker } from './references';
+import type { Blocker, PublishBlocker, PublishWarning } from './references';
 
 export type SkillStatus = 'draft' | 'in_review' | 'published' | 'deprecated';
 export type SkillVersionState = 'draft' | 'in_review' | 'published' | 'superseded' | 'deprecated' | 'rejected';
@@ -81,6 +80,8 @@ export interface SkillContent {
   inputs?: SkillInputField[];
   /** When not to use the skill. */
   notWhen?: string;
+  /** The skill as written in the text editor; absent on a skill saved as a list of steps. */
+  source?: string;
   /** Numbered steps the agent follows in order; a skill has steps or parts, never both. */
   steps?: StepValue[];
   /** The ways the skill may end beside done and failed: a name and what it means. */
@@ -133,7 +134,12 @@ export interface SkillVersion {
   tokens: number;
   reviewId?: string;
   publishedAt?: string;
+  /** Who made it live. */
   publishedBy?: string;
+  /** Who asked for the publish; null for a version no request published. */
+  requestedBy?: string | null;
+  /** Who approved it; null when the team's publish policy let it go live without a review. */
+  approvedBy?: string | null;
   testRun: SkillTestRunSummary | null;
 }
 
@@ -189,12 +195,39 @@ export interface ChatMenuSkill extends Skill {
   needs?: string[];
 }
 
+export type SkillCheckType = 'calls_tool' | 'not_calls_tool' | 'cites' | 'reply_contains' | 'reply_not_contains' | 'refuses' | 'extracts' | 'rubric';
+
+/** One argument a skill test's tool call must carry. */
+export interface SkillArgMatcher {
+  path: string;
+  equals: string;
+}
+
+/** One expectation on a skill test; only the fields its `type` needs are set. */
+export interface SkillCheck {
+  type: SkillCheckType;
+  tool?: string;
+  args?: SkillArgMatcher[];
+  source?: string;
+  section?: string;
+  text?: string;
+  field?: string;
+  value?: string;
+}
+
+/** Result of one skill test check; `advisory` is a rubric check, recorded and never pass or fail. */
+export interface SkillCheckResult {
+  label: string;
+  status: 'pass' | 'fail' | 'advisory';
+  detail?: string;
+}
+
 export interface SkillTestCase {
   id: string;
   name: string;
   input: string;
-  /** Reuses the agent eval checks: expected tool calls, must cite, must not say. */
-  checks: EvalCheck[];
+  /** Expected tool calls, must cite, must not say. */
+  checks: SkillCheck[];
   source: 'generated' | 'manual' | 'case' | 'document' | 'imported';
   /** The case, run or document the input came from. */
   sourceRef?: string;
@@ -209,7 +242,7 @@ export interface SkillTestResult {
   caseId: string;
   caseName: string;
   status: 'pass' | 'fail';
-  checks: EvalCheckResult[];
+  checks: SkillCheckResult[];
   failure?: string;
   reply: string;
   /** False when the runtime did not choose the skill for this input: the use-when line missed. */
@@ -271,15 +304,21 @@ export interface SkillActivity {
 /** What publishing the newest version needs, computed by the server. */
 export interface SkillPublishCheck {
   canRequest: boolean;
-  blockers: string[];
+  blockers: Blocker[];
   /** Each blocker with where it is: a step's number when it is on a step. */
   problems?: PublishBlocker[];
+  /** What the check noticed and does not block on, placed like a problem; absent on an older service. */
+  warnings?: PublishWarning[];
   editClass: SkillEditClass;
   approversNeeded: number;
 }
 
 export interface SkillDetail extends Skill {
   content: SkillContent;
+  /** The text the editor shows: `content.source`, or a skill's stored steps written as text by the service. */
+  text: string;
+  /** With `version`, the copy a draft save names as its base (`baseOf`). */
+  digest: string;
   /** Newest first. */
   versions: SkillVersion[];
   tests: SkillTestCase[];
@@ -334,6 +373,8 @@ export interface SkillDraftPatch {
   notWhen?: string;
   /** Numbered steps the agent follows in order; a skill has steps or parts, never both. */
   steps?: StepValue[];
+  /** The skill written as text: the service reads its steps from it and sets `instructions` to it. */
+  source?: string;
   /** The ways the skill may end beside done and failed: a name and what it means. */
   exit?: Record<string, string>;
   /** What the skill hands back when it ends. */
@@ -341,8 +382,9 @@ export interface SkillDraftPatch {
   /** Lines that say the skill went well. */
   success?: string[];
   note?: string;
-  /** The version the edit was made against; a newer one returns 409. */
+  /** The copy the edit was made on (`baseOf` the skill as read); a save from an older copy returns 409 `stale_base`. */
   baseVersion: number;
+  baseDigest: string;
 }
 
 // ── Generation ──────────────────────────────────────────────────────────────
@@ -489,6 +531,12 @@ export interface SkillPublishRequest {
   guardrails: string[];
   agents: { name: string; pinnedVersion: number | null }[];
   approvalsNeeded: number;
+  /** The published text this request replaces ('' for a first version) and the text it publishes, kept as they were
+   * when the request opened. Absent on a request opened before they were kept. */
+  textBefore?: string;
+  textAfter?: string;
+  /** The hints on the new text's lines; none of them blocks the publish. */
+  hints: { line: number; message: string }[];
 }
 
 export interface AgentSkillPin {
@@ -555,4 +603,41 @@ export interface SkillOptions {
   tools: SkillToolRef[];
   knowledgeBases: string[];
   limits: SkillRuntimeLimits;
+}
+
+// ── Text editor ─────────────────────────────────────────────────────────────
+
+/** A hint or an error on a line (from 1) of a skill's text. */
+export interface SkillTextNote {
+  line: number;
+  message: string;
+}
+
+/** One line of a skill's text as the service reads it. */
+export interface SkillTextLine {
+  line: number;
+  kind: 'text' | 'step' | 'if' | 'else' | 'stop' | 'blank';
+  /** The step (from 1) the line is part of. */
+  step: number | null;
+  /** An `if` line: checked on the tool's result, or decided by the agent from the conversation. */
+  how: 'checked' | 'agent' | null;
+  /** The line runs this tool (`@tool:id`). */
+  tool: string | null;
+  /** How many path levels in the line is, as the service's reader counts its indent. */
+  depth?: number;
+  /** The keyword the line is written with and where it sits after the indent, past any list marker; set even when
+   * the line reads as text (an `if …:` with nothing indented under it yet). */
+  keyword?: { word: 'if' | 'else' | 'stop'; start: number; end: number } | null;
+}
+
+/** POST /v1/skills/{id}/text: how a text reads, as a save will read it. Hints never block; errors block a publish. */
+export interface SkillTextReading {
+  hints: SkillTextNote[];
+  errors: (SkillTextNote & { id: string })[];
+  uses: { tools: number; knowledge: number; skills: number; agents: number; workflows: number };
+  lines: SkillTextLine[];
+  /** What to offer after `if ` for each mentioned tool, from what it returns. */
+  phrases: Record<string, string[]>;
+  steps: number;
+  stepLines: number[];
 }

@@ -2431,7 +2431,8 @@
           "via": {
             "enum": [
               "person",
-              "team"
+              "team",
+              "group"
             ],
             "title": "Via",
             "type": "string"
@@ -4077,7 +4078,9 @@
               "names",
               "choice",
               "app_changes",
-              "app_changes_by_app"
+              "app_changes_by_app",
+              "by_area",
+              "floor_rules"
             ],
             "title": "Kind",
             "type": "string"
@@ -4764,7 +4767,8 @@
           "kind": {
             "enum": [
               "person",
-              "team"
+              "team",
+              "group"
             ],
             "title": "Kind",
             "type": "string"
@@ -13284,7 +13288,7 @@
         "x-ops-public": "sdk"
       },
       "get": {
-        "description": "One role and its grid: every area and action in the catalogue, with the scope it grants or null, and\nwhether the caller may change it (`canEdit`: a workspace admin, for any role but Admin).",
+        "description": "One role and its grid: every area and action in the catalogue, with the scope it grants or null, and\nwhether the caller may change it (`canEdit`: a workspace admin, for any role but Admin, Owner and Security\nadmin).",
         "operationId": "roles_read_role",
         "parameters": [
           {
@@ -13825,7 +13829,7 @@
     },
     "/v1/roles/{role_id}/permissions": {
       "put": {
-        "description": "Sets a role's cells, built-in or custom; every service decides from them once the holders' tokens refresh.\nA workspace admin's (access.manage in every team): roles apply in every team. Audited; 409\n`admin_holds_every_cell` for Admin, 400 `unknown_cell` for a cell outside the catalogue.",
+        "description": "Sets a role's cells, built-in or custom; every service decides from them once the holders' tokens refresh.\nA workspace admin's (access.manage in every team): roles apply in every team. Audited; 409\n`admin_holds_every_cell` for Admin, 409 `role_set_by_rule` for Owner and Security admin, 400 `owner_only` for\nworkspace.manage on another built-in role, 400 `builtin_role_empty` for an empty list on a built-in role (reset\nit instead), 400 `unknown_cell` for a cell outside the catalogue.",
         "operationId": "roles_edit_role",
         "parameters": [
           {

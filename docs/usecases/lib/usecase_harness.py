@@ -27,8 +27,8 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
-
 from deployed_guard import STAGING_HOST_VAR, host_refusal, script_refusal
+
 from ops_service_kit.opa_server import opa_server
 from ops_signin.fake_idp import self_signed
 
@@ -988,6 +988,19 @@ def approve_tool_review(gw: httpx.Client, module_id: str, headers: dict[str, str
 def data(res: httpx.Response) -> Any:
     body = res.json()
     return body.get("data") if isinstance(body, dict) else None
+
+
+def save_agent(
+    client: httpx.Client, agent_id: Any, fields: dict[str, Any], *, headers: Any = None, read_headers: Any = None
+) -> httpx.Response:
+    """PATCH an agent as `headers`, naming the copy it just read (baseVersion, baseDigest) as the API requires.
+
+    The copy is read as `read_headers` (default `headers`), so a caller who may not read the agent can still reach
+    the refusal under test; returns the PATCH response."""
+    path = f"/v1/agents/{agent_id}"
+    seen: dict[str, Any] = data(client.get(path, headers=read_headers if read_headers is not None else headers)) or {}
+    body = {**fields, "baseVersion": seen.get("version"), "baseDigest": seen.get("digest")}
+    return client.patch(path, json=body, headers=headers)
 
 
 def every_page(client: httpx.Client, path: str, *, headers: Any = None, **params: Any) -> list[dict[str, Any]]:

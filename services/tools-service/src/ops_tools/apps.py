@@ -31,6 +31,7 @@ from ops_plugin_sdk.versions import tools_of
 from ops_service_kit.errors import Conflict, Forbidden, NotFound, ServiceUnavailable, ValidationFailed
 from ops_service_kit.http import Envelope, In, Json, JsonValue, ListResult, Out, ok
 from ops_service_kit.listing import ListParams, ListQuery
+from ops_service_kit.names import Name
 from ops_service_kit.narrow import an_object
 from ops_store import isolation
 from ops_store.listing import ListPage
@@ -400,7 +401,7 @@ class AppCredentialPatchIn(In):
     """An edit of the team's own app credential: any of its name, client id, permissions and settings. Its secret is
     replaced on its own route."""
 
-    name: str | None = Field(default=None, min_length=1, max_length=200)
+    name: Name | None = None
     client_id: str | None = Field(default=None, min_length=1, max_length=500)
     scopes: list[Annotated[str, Field(min_length=1, max_length=200)]] | None = Field(default=None, max_length=100)
     # One of `fields` each; an empty or null value removes it.
@@ -416,7 +417,7 @@ class AppCredentialIn(In):
     # The app as the Apps page names it: `plugin:<id>` for an app from a plugin, the account's id for a custom app.
     app: str = Field(min_length=1, max_length=200)
     # What the auth configs list it as; left out, "<team> app", so it never reads as one of the app's accounts.
-    name: str | None = Field(default=None, min_length=1, max_length=200)
+    name: Name | None = None
     client_id: str = Field(min_length=1, max_length=500)
     # Left out for a public client, or one that proves itself with a signed assertion (each account's signing pair).
     client_secret: str | None = Field(default=None, min_length=1, max_length=2000)

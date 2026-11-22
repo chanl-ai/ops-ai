@@ -12,8 +12,8 @@ ask models-service for the aliases, and the test, eval and job routes run the mo
 
 from __future__ import annotations
 
-import time
-from typing import Annotated, Any, Literal, TypeAlias, cast
+from dataclasses import replace
+from typing import Annotated, Literal, TypeAlias, cast
 
 from fastapi import APIRouter, Body, Depends, Query
 from fastapi.responses import JSONResponse, Response
@@ -21,23 +21,28 @@ from pydantic import Field
 
 from ops_access import can, require_provisioner
 from ops_agent_kernel.layout import required_tools
+from ops_agent_kernel.prompt_writer import Brief, Patterns
 from ops_agents.activities.agent_limits import AgentLimits, check_limits, limits_of
 from ops_agents.activities.agent_limits import wire as wire_limits
 from ops_agents.activities.tool_directory import ToolsUnavailable
+from ops_agents.app import agent_brief
+from ops_agents.app.brief_draft import draft_brief
 from ops_agents.app.evals import parse_cases, run_eval
-from ops_agents.domain.evals import TRIGGER_MANUAL
+from ops_agents.domain.evals import TRIGGER_CLI, TRIGGER_MANUAL
 from ops_identity.fastapi import Tx
 from ops_service_kit import narrow
-from ops_service_kit.errors import Conflict, NotFound, Unprocessable, ValidationFailed
+from ops_service_kit.errors import Conflict, NotFound, ServiceUnavailable, Unprocessable, ValidationFailed
 from ops_service_kit.http import Envelope, In, Json, JsonList, ListResult, Out
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.listing import ListQuery
+from ops_service_kit.names import Name
 from ops_store import isolation
 
-from ...store.agent_registry import AgentRow
-from ...store.evals import EvalStore
+from ...app.skill_content import Problem, blocker_of
+from ...store.agent_registry import AgentRow, digest_of, refuse_stale
 from ...store.graphs import StoredThread
 from ...store.template_copies import TemplateCopies
+from .. import eval_gate, publish_reviews
 from ..account_names import require_team_accounts
 from ..agent_registry import (
     GUARDRAILS,
@@ -57,10 +62,12 @@ from ..agent_registry import (
     version_state,
 )
 from ..agent_test import one_test_turn
-from ..auth import Principal, caller, caller_in, caller_of, principal, reader_of, require_builder, started_by
+from ..auth import Principal, caller, caller_in, caller_of, principal, reader_of, require_builder
 from ..child_runs import engine_workflows, refusal, team_workflows
 from ..deps import Runtime, runtime
+from ..engine_agents import KernelModels
 from ..envelope import ok
+from ..eval_runs import judge_for, prices_of, run_saved, version_turn
 from ..guardrails import resolve_pins
 from ..model_aliases import chat_aliases
 from ..publish_policy import Decision, decide, team_document
@@ -70,15 +77,20 @@ from ..runs import graph_store
 from ..schemas import (
     Agent,
     AgentEvalRun,
+    AgentPrompt,
+    AgentPublishCheck,
     AgentRun,
     AgentTestTurn,
     AgentVersion,
+    BriefDraft,
+    EvalRunRecord,
     MemorySettings,
     PublishDecisionFields,
     PublishReview,
     WidgetSettings,
 )
 from ..skills import check_pins_hold
+from ..skills import pin_problems as skill_pin_problems
 from ..team_names import team_name
 from ..timers import arm_job
 from ..widgets import published as published_widget
@@ -110,7 +122,7 @@ class Guardrails(In):
 
 
 class AgentInput(In):
-    name: str = Field(min_length=1, max_length=200)
+    name: Name
     role: str = Field(min_length=1, max_length=400)
     # A models-service alias; empty runs the agent on the runtime's alias.
     model: str = ""
@@ -135,7 +147,11 @@ class WidgetPinInput(In):
 
 
 class AgentPatch(In):
-    name: str | None = Field(default=None, min_length=1, max_length=200)
+    # The copy the change was made on: the agent's `version` and `digest` as last read. A save from an older copy is
+    # refused (409 `stale_base`), so it never writes over a grant or an edit saved in between.
+    base_version: int
+    base_digest: str
+    name: Name | None = None
     role: str | None = Field(default=None, min_length=1, max_length=400)
     model: str | None = None
     channels: list[Channel] | None = None
@@ -164,6 +180,11 @@ class AgentPatch(In):
     widgets: WidgetSettings | None = None
     # On or off, and which kinds.
     memory: MemorySettings | None = None
+    # The agent as a brief. A save that carries it writes `role` and `instructions` from it (promptMode brief unless
+    # the save says full); one that carries neither leaves an agent saved before the brief exactly as it was.
+    brief: Brief | None = None
+    prompt_mode: Literal["brief", "full"] | None = None
+    patterns: Patterns | None = None
     note: str | None = None
     # Set by the provisioning service only.
     template_id: str | None = Field(default=None, min_length=1, max_length=120)
@@ -173,10 +194,17 @@ class AgentPatch(In):
 class PublishRequestInput(In):
     version: int
     note: str = ""
+    # A withdrawn request of this agent that this one sends again.
+    follows: str | None = None
 
 
 class PausedInput(In):
     paused: bool
+
+
+class BriefDraftInput(In):
+    # What the agent is for, in the builder's words, or a procedure pasted in.
+    description: str = Field(min_length=1, max_length=8000)
 
 
 class TestInput(In):
@@ -189,6 +217,8 @@ class EvalCheckInput(In):
     type: str
     tool: str | None = None
     text: str | None = None
+    # What a `judge` check asks of the reply, in words; required for that type (422 rubric_required).
+    rubric: str | None = None
 
 
 class EvalCaseContextInput(In):
@@ -196,7 +226,7 @@ class EvalCaseContextInput(In):
 
 
 class EvalCaseInput(In):
-    name: str
+    name: Name
     input: str
     context: EvalCaseContextInput | None = None
     checks: list[EvalCheckInput] = Field(default_factory=list[EvalCheckInput])
@@ -206,6 +236,8 @@ class EvalRunInput(In):
     # Empty is 422 from the use case, not Pydantic 400.
     # Omitted: run the cases saved on the agent and keep the run. Given: score these and keep nothing.
     cases: list[EvalCaseInput] | None = None
+    # What started a kept run: manual (the default) or cli. Anything else is 422 from the route, not Pydantic's 400.
+    trigger: str | None = None
 
 
 class JobInput(In):
@@ -279,12 +311,20 @@ async def used_in_all(rt: Runtime) -> dict[str, list[WorkflowUse]]:
             }
             out.setdefault(r.id, []).append(use)
 
-    def add(agent_id: str, workflow_id: str, name: str, version: int | None, status: str) -> None:
+    def add(
+        agent_id: str, workflow_id: str, name: str, version: int | None, status: str, *, channel: str | None = None
+    ) -> None:
         if version is None or any(u["workflowId"] == workflow_id for u in out.get(agent_id, [])):
             return
-        out.setdefault(agent_id, []).append(
-            {"workflowId": workflow_id, "workflowName": name, "pinnedVersion": int(version), "status": status}
-        )
+        use: WorkflowUse = {
+            "workflowId": workflow_id,
+            "workflowName": name,
+            "pinnedVersion": int(version),
+            "status": status,
+        }
+        if channel:
+            use["channel"] = channel
+        out.setdefault(agent_id, []).append(use)
 
     assert rt.graph_store is not None
     for w in await workflow_registry(rt).rows():
@@ -302,10 +342,12 @@ async def used_in_all(rt: Runtime) -> dict[str, list[WorkflowUse]]:
                 add(row.id, w.id, w.name, published.get(row.id), "draft" if status == "draft" else status)
     for d in await engine_workflows(rt):
         definition = cast(Json, d["definition"] or {})
-        for node in cast(list[Json], definition.get("nodes") or []):
+        nodes = cast(list[Json], definition.get("nodes") or [])
+        channel = "email" if any(n.get("type") == "ops.trigger.email" for n in nodes) else None
+        for node in nodes:
             params = cast(Json, node.get("parameters") or {})
             if node.get("type") == "ops.ai.agent" and (aid := str(params.get("agent") or "")):
-                add(aid, d["workflow_id"], d["name"], published.get(aid), "live")
+                add(aid, d["workflow_id"], d["name"], published.get(aid), "live", channel=channel)
     return out
 
 
@@ -320,7 +362,10 @@ async def _view(rt: Runtime, agent_id: str, *, directory: ToolRows | Literal["as
     tasks = (await tasks_24h(rt)).get(agent_id, 0)
     # The reply is built from the same keys a listed page row carries (`_decorated` reads both).
     listed = {**row.model_dump(), "spec": spec, "tasks_24h": tasks}
-    return _decorated(listed, await _offered(rt, directory), (await used_in_all(rt)).get(agent_id, []))
+    view = _decorated(listed, await _offered(rt, directory), (await used_in_all(rt)).get(agent_id, []))
+    # What a save names with `version` as the copy it was made on; computed as the registry compares it.
+    view["digest"] = digest_of(spec)
+    return view
 
 
 def _decorated(row: Json, offered: set[str] | None, uses: list[WorkflowUse]) -> AgentView:
@@ -455,16 +500,26 @@ async def get_agent(rt: Rt, me: Reader, agent_id: str) -> JSONResponse:
 
 @router.patch("/{agent_id}", response_model=Envelope[Agent])
 async def update_agent(rt: Rt, me: Cl, agent_id: str, body: AgentPatch) -> JSONResponse:
-    """Saves the patched spec as a new draft version; what is live does not change until it is published."""
+    """Saves the patched spec as the agent's draft; what is live does not change until it is published.
+
+    409 `stale_base` when `baseVersion` and `baseDigest` are not the newest copy (its details name who saved it and
+    when): read the agent again and repeat the change."""
     reg = registry(rt)
     row = await changeable(rt, me, agent_id, "edit")
     if body.template_id is not None or body.protection is not None:
         require_provisioner(caller_of(me), "agents")
+    newest = await reg.version(agent_id, row.version)
     # The draft as the patch below edits it, key by key.
-    spec: Json = dict((await reg.version(agent_id, row.version)).spec)
+    spec: Json = dict(newest.spec)
+    # The copy the patch is applied to. The save below names it, so a save landing while tools-service or kb-service
+    # is asked is refused too.
+    read = (row.version, digest_of(spec))
+    refuse_stale((body.base_version, body.base_digest), *read, saved_by=newest.saved_by, saved_at=newest.saved_at)
     patch = body.model_dump(
         exclude_none=True,
         exclude={
+            "base_version",
+            "base_digest",
             "note",
             "guardrails",
             "guardrail_pins",
@@ -472,6 +527,9 @@ async def update_agent(rt: Rt, me: Cl, agent_id: str, body: AgentPatch) -> JSONR
             "widget_pins",
             "widgets",
             "memory",
+            "brief",
+            "prompt_mode",
+            "patterns",
             "template_id",
             "protection",
         },
@@ -499,11 +557,18 @@ async def update_agent(rt: Rt, me: Cl, agent_id: str, body: AgentPatch) -> JSONR
         spec["widgets"] = body.widgets.model_dump(by_alias=True)
     if body.memory is not None:
         spec["memory"] = body.memory.model_dump(by_alias=True)
+    spec = agent_brief.patched(
+        spec,
+        brief=body.brief,
+        mode=body.prompt_mode,
+        patterns=body.patterns,
+        writes_prompt=body.instructions is not None or body.role is not None,
+    )
     # Saved limits must still agree with the version: a changed model or a dropped tool without new limits is refused,
     # naming the limit, rather than leaving callers a choice the agent no longer has.
     if "limits" in spec:
         check_limits(limits_of(spec), spec)
-    await reg.save(agent_id, spec, by=me.email, note=body.note or "")
+    await reg.save(agent_id, spec, by=me.email, note=body.note or "", base=read)
     await reg.set_template(agent_id, template_id=body.template_id, protection=body.protection)
     return ok(await _view(rt, agent_id))
 
@@ -700,6 +765,64 @@ async def publish_preview(rt: Rt, me: Me, agent_id: str, version: Annotated[int,
     return ok(decision.record())
 
 
+@router.post("/{agent_id}/brief-draft", response_model=Envelope[BriefDraft])
+async def draft_agent_brief(rt: Rt, me: Me, agent_id: str, body: BriefDraftInput) -> JSONResponse:
+    """A proposed text per brief heading from a description, written by the deployment's model and naming only the
+    tools and knowledge the newest version holds. Nothing is saved; 503 `model_unavailable` with no model."""
+    row = await changeable(rt, me, agent_id, "edit")
+    if rt.ports is None:
+        raise ServiceUnavailable(rt.model_error or "No model is configured.", code="model_unavailable")
+    spec = (await registry(rt).version(agent_id, row.version)).spec
+    proposal = await draft_brief(
+        KernelModels(rt.ports, rt.settings.model_alias),
+        body.description,
+        name=str(spec.get("name") or row.slug),
+        tools=[str(t) for t in cast(list[object], spec.get("toolIds") or [])],
+        knowledge=[str(k) for k in cast(list[object], spec.get("collections") or [])],
+        key=f"brief-draft:{agent_id}:{new_id('draft')}",
+    )
+    return ok(proposal)
+
+
+# The one eval problem that holds a publish request for a reviewer instead of refusing it.
+HELD = "eval_setting_unread"
+
+
+async def _publish_problems(rt: Runtime, row: AgentRow, version: int, spec: Json) -> list[Json]:
+    """What stops a version's publish: what its brief names and the agent lacks, what in the skills it pins must not
+    run as stored, and its evals (`eval_gate`). The check and the publish both read this list."""
+    brief = cast(list[Json], agent_brief.publish_problems(spec))
+    pins = cast(list[Json], await skill_pin_problems(rt, spec))
+    return [*brief, *pins, *await eval_gate.problems(rt, row, version)]
+
+
+@router.get("/{agent_id}/prompt", response_model=Envelope[AgentPrompt])
+async def agent_prompt(
+    rt: Rt, _: Reader, __: Tx, agent_id: str, version: Annotated[int | None, Query()] = None
+) -> JSONResponse:
+    """The prompt a version gives the model (the newest when none is named), with each mention as the name the model
+    knows it under and the never rules last. Nothing is changed."""
+    reg = registry(rt)
+    n = version if version is not None else (await reg.row(agent_id)).version
+    return ok({"version": n, "text": agent_brief.prompt_view((await reg.version(agent_id, n)).spec)})
+
+
+@router.get("/{agent_id}/publish-check", response_model=Envelope[AgentPublishCheck])
+async def publish_check(rt: Rt, me: Me, _: Tx, agent_id: str, version: Annotated[int, Query()]) -> JSONResponse:
+    """What stops the newest draft from being published, each with the field it is in (`position`): a reference the
+    brief names that the agent does not hold. Nothing is opened or changed; the publish refuses the same list
+    (422 `cannot_publish`). 422 `not_newest_draft` for any other version."""
+    row = await changeable(rt, me, agent_id, "publish")
+    require_newest_draft(row, version)
+    problems = await _publish_problems(rt, row, version, (await registry(rt).version(agent_id, version)).spec)
+    # An unread eval setting is listed but does not stop the request: it holds it for a reviewer (request_publish).
+    blockers = [blocker_of(cast(Problem, p)) for p in problems]
+    for b in blockers:
+        if b["code"] == HELD:
+            b["level"] = "warning"
+    return ok({"canRequest": all(p["kind"] == HELD for p in problems), "problems": problems, "blockers": blockers})
+
+
 @router.post("/{agent_id}/publish-requests", response_model=Envelope[PublishReview], status_code=201)
 async def request_publish(rt: Rt, me: Me, agent_id: str, body: PublishRequestInput) -> JSONResponse:
     """Opens an `agent_publish` review for the newest draft, or publishes it at once when the team's publish policy
@@ -709,15 +832,29 @@ async def request_publish(rt: Rt, me: Me, agent_id: str, body: PublishRequestInp
     require_newest_draft(row, body.version)
     v = await reg.version(agent_id, body.version)
     spec = v.spec
+    problems = await _publish_problems(rt, row, body.version, spec)
+    # An unread eval setting holds the request for a reviewer, as an unread publishReview does; the approval reads the
+    # setting again and refuses while it is still unread (publish_reviews.decide), so nothing publishes unchecked.
+    unread = any(p["kind"] == HELD for p in problems)
+    problems = [p for p in problems if p["kind"] != HELD]
+    if problems:
+        raise Unprocessable(
+            "This version cannot be published yet: " + " ".join(str(p["message"]) for p in problems),
+            code="cannot_publish",
+            details={"problems": cast(JsonList, problems)},
+        )
     for alias in limits_of(spec).allowed_models:
         await require_known_alias(rt, alias)
     named = cast(dict[str, str], spec.get("accounts") or {})
     await require_team_accounts(rt, str(row.team_id or ""), [("The agent", a, n) for a, n in named.items()])
     decision = await _publish_decision(rt, agent_id, row, body.version)
+    if unread:
+        decision = replace(decision, review_required=True, reason="policy_unread")
     approved = not decision.review_required
     review_body = {
         **agent_review_body(agent_id, spec, row, v, note=body.note, by=me.email),
         **decision.record(),
+        **await publish_reviews.follows(rt, "agent", agent_id, body.follows),
     }
     # Asking for the newest draft replaces a request still waiting on an older version (a seed change, a colleague's),
     # so the version that goes live is the one holding the newest grants.
@@ -768,66 +905,23 @@ async def test_agent(rt: Rt, me: Me, agent_id: str, body: TestInput) -> JSONResp
     return ok(await one_test_turn(rt, agent_id, body.message, row=row))
 
 
-@router.post("/{agent_id}/eval-runs", response_model=Envelope[AgentEvalRun])
+@router.post("/{agent_id}/eval-runs", response_model=Envelope[EvalRunRecord | AgentEvalRun])
 async def create_eval_run(
     rt: Rt, me: Me, agent_id: str, body: Annotated[EvalRunInput, Body(default_factory=EvalRunInput)]
 ) -> JSONResponse:
     """Scores cases on the newest version through the same one-turn test path. With no cases in the body it runs the
-    agent's saved cases, also on the live version when that is another one, and keeps the run, so repeating it makes a
-    second run. With cases in the body it scores them and keeps nothing. Empty cases and an unknown check type are
-    422."""
+    agent's saved cases, also on the live version when that is another one, and keeps the run (`EvalRunRecord`), so
+    repeating it makes a second run. With cases in the body it scores them and keeps nothing (`AgentEvalRun`). Empty
+    cases and an unknown check type are 422."""
+    if body.trigger not in (None, TRIGGER_MANUAL, TRIGGER_CLI):
+        raise Unprocessable(f"{body.trigger!r} is not a run trigger: use manual or cli.", code="bad_trigger")
     row = await registry(rt).row(agent_id)
     can(caller_of(me), "evals", "run", team=row.team_id, what=f"agent {row.slug}")
-    saved = body.cases is None
-    raw = (
-        [x["body"] for x in await EvalStore(rt.db).cases("agent", agent_id) if x["status"] == "active"]
-        if saved
-        else [item.model_dump(by_alias=True) for item in cast(list[EvalCaseInput], body.cases)]
-    )
-    cases = parse_cases(raw)
-
-    def turn_on(version: int) -> Any:
-        async def turn(message: str, collections: tuple[str, ...]) -> Json:
-            return await one_test_turn(
-                rt, agent_id, message, row=row.model_copy(update={"version": version}), collections=collections or None
-            )
-
-        return turn
-
-    published = row.published_version
-    live = int(published) if published is not None else None
-    compare = saved and live is not None and live != int(row.version)
-    started = time.perf_counter()
-    run = await run_eval(
-        agent_id, cases, turn_on(int(row.version)), turn_on(live) if compare and live is not None else None
-    )
-    if saved:
-        # The run's own JSON (app.evals.run_eval), read as it was written there.
-        results = cast(JsonList, run["results"])
-        summary = cast(Json, run["summary"])
-        await EvalStore(rt.db).add_run(
-            {
-                "id": run["id"],
-                "team_id": row.team_id,
-                "kind": "agent",
-                "asset_id": agent_id,
-                "version": int(row.version),
-                "live_version": live if compare else None,
-                "trigger": TRIGGER_MANUAL,
-                "passed": summary["passed"],
-                "total": summary["total"],
-                "live_passed": sum(1 for r in results if cast(Json, cast(Json, r)["live"])["status"] == "pass")
-                if compare
-                else None,
-                "regressions": summary["regressions"],
-                "duration_ms": round((time.perf_counter() - started) * 1000),
-                "cost_usd": 0.0,
-                "results": results,
-                "started_by": started_by(me),
-                "ran_at": now_iso(),
-            }
-        )
-    return ok(run)
+    if body.cases is None:
+        return ok(await run_saved(rt, me, row, trigger=body.trigger or TRIGGER_MANUAL))
+    cases = parse_cases([item.model_dump(by_alias=True) for item in body.cases])
+    turn = version_turn(rt, row, int(row.version))
+    return ok(await run_eval(agent_id, cases, turn, judge=judge_for(rt), prices=prices_of(rt)))
 
 
 @router.post("/{agent_id}/jobs", response_model=Envelope[JobArmed], response_model_exclude_none=True)

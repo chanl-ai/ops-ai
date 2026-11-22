@@ -6,13 +6,18 @@
 // flags override a row. Read-only on the stack: it signs in and opens pages, nothing else.
 //
 //   node scripts/agents/ui_walk.mjs --routes /knowledge /tools [--as admin,member] [--widths 1440,390]
-//        [--states] [--origin http://localhost:3016] [--out .logs/agents/ui-walk]
+//        [--states] [--origin http://localhost:3016] [--out .logs/agents/ui-walk] [--roles-env FILE] [--no-seed]
+// A deployed origin has none of the profile's dev people (they exist only in dev mode), so there the roles come from
+// --roles-env, default ~/.config/ops-ai/staging-roles.env (deploy/fly/role_accounts.py): admin, builder, approver,
+// viewer (also named member) and chat_user.
 //   node scripts/agents/ui_walk.mjs --self-test     a local page with a known error, a failed request and overflow
 //
 // Output: <out>/<route>-<role>-<width>[-<state>].png and <out>/report.md (plus report.json); one line per page on
 // stdout: OK or FAIL with what was found. Exit 1 when any page failed, 2 on a usage error.
+import { spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { loadProfile, plain } from './project_profile.mjs';
@@ -31,15 +36,30 @@ const list = (name, fallback) => {
   return values.filter(Boolean);
 };
 
+/** The role accounts of a deployed install, from a staging-roles.env file; a missing file or role names its fix. */
+export function deployedRoles(file) {
+  if (!existsSync(file)) throw new Error(`${file} not found: a deployed origin needs its own role accounts. Copy deploy/fly/staging-roles.env.example there, or run make seed-roles ENV=staging`);
+  const kept = Object.fromEntries(readFileSync(file, 'utf8').split('\n').filter((l) => l.includes('=') && !l.startsWith('#')).map((l) => [l.slice(0, l.indexOf('=')).trim(), l.slice(l.indexOf('=') + 1).trim()]));
+  const names = ['admin', 'builder', 'approver', 'viewer', 'chat_user'];
+  const roles = names.map((role) => ({ role, email: kept[`STG_ROLE_${role.toUpperCase()}_EMAIL`], password: kept[`STG_ROLE_${role.toUpperCase()}_PASSWORD`] })).filter((r) => r.email && r.password);
+  const viewer = roles.find((r) => r.role === 'viewer');
+  return viewer ? [...roles, { ...viewer, role: 'member' }] : roles;
+}
+
 /** Facts the walk needs, read from the profile with the flags on top. */
 function settings(profile) {
   const console_ = profile.table('Console', 'Setting');
   const value = (key) => plain(console_.find((r) => plain(r.Setting).toLowerCase() === key)?.Value ?? '');
-  const roles = profile.table('Console', 'Role for walks').map((r) => ({ role: plain(r['Role for walks']), email: plain(r.Email), password: plain(r.Password) }));
+  const origin = flag('origin') ?? process.env.OPS_CONSOLE_ORIGIN ?? value('console origin').split(/\s/)[0];
+  const local = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(origin);
+  const rolesEnv = typeof flag('roles-env') === 'string' ? flag('roles-env') : local ? undefined : join(process.env.OPS_STAGING_CONFIG ?? join(homedir(), '.config', 'ops-ai'), 'staging-roles.env');
+  const roles = rolesEnv
+    ? deployedRoles(rolesEnv)
+    : profile.table('Console', 'Role for walks').map((r) => ({ role: plain(r['Role for walks']), email: plain(r.Email), password: plain(r.Password) }));
   const signIn = value('sign-in page');
   const states = value('loading, error and empty states');
   return {
-    origin: flag('origin') ?? process.env.OPS_CONSOLE_ORIGIN ?? value('console origin').split(/\s/)[0],
+    origin,
     loginPath: (signIn.match(/^(\/[\w/-]*)/) ?? [, '/login'])[1],
     emailLabel: (signIn.match(/labelled (\w+) and (\w+)/) ?? [, 'Email', 'Password'])[1],
     passwordLabel: (signIn.match(/labelled (\w+) and (\w+)/) ?? [, 'Email', 'Password'])[2],
@@ -48,6 +68,7 @@ function settings(profile) {
     states: [...states.matchAll(/\?mock=(\w+)/g)].map((m) => m[1]).filter((s) => s !== 'off'),
     roles: list('as', ['admin', 'member']).map((name) => {
       const r = roles.find((x) => x.role === name);
+      if (!r && rolesEnv) throw new Error(`no account for role "${name}" in ${rolesEnv} (has ${roles.map((x) => x.role).join(', ') || 'none'}); run make seed-roles ENV=staging`);
       if (!r) throw new Error(`no role "${name}" in the profile's "Role for walks" table (${roles.map((x) => x.role).join(', ')})`);
       return r;
     }),
@@ -150,6 +171,15 @@ async function walk() {
   }
   const profile = loadProfile(flag('profile'));
   const s = settings(profile);
+  // Setup on a deployed origin: the role accounts it lacks are made and each signs in before a page is opened
+  // (make seed-roles ENV=staging; safe to run again). A local stack got its people from make up. --no-seed skips it.
+  if (!flag('no-seed') && !/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(s.origin)) {
+    const seeded = spawnSync('make', ['-s', 'seed-roles', 'ENV=staging'], { cwd: new URL('../..', import.meta.url).pathname, encoding: 'utf8' });
+    if (seeded.status !== 0) {
+      console.error(`role accounts are not ready on ${s.origin}:\n${seeded.stdout}${seeded.stderr}`);
+      process.exit(2);
+    }
+  }
   const out = flag('out') ?? join(profile.root, '.logs', 'agents', 'ui-walk');
   mkdirSync(out, { recursive: true });
   const { chromium } = await import('@ops-ai/usecase-runner/harness');

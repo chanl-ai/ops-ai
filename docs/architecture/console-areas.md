@@ -17,7 +17,7 @@ the pages their permission cells open, and an area with no such page is left out
 | Area switcher with ⌘1 to ⌘4 and the last area and page remembered per person in the browser | built behind the `area_tabs` flag | `apps/console/src/components/shared/area-switcher.tsx` (key `ops.sidebar.area`) |
 | Team switcher with ⌘1–⌘9 | built | `apps/console/src/components/team-switcher.tsx` |
 | Cell checks in pages | built | `useCan`, `useCanCheck` in `apps/console/src/hooks/me-queries.ts` |
-| Old flat routes answer one 307 to their page | built | `redirects()` in `apps/console/next.config.ts` |
+| Old flat routes (the ones in `MOVED`, such as agents, cases and tools) answer one 307 to their page, query kept | built | `proxy.ts`, `MOVED` in `apps/console/src/lib/routes/moved.ts` |
 | Chat controls offered by cells, links from a tool call to its tool, call and app | partial | Below |
 
 ## Rules
@@ -88,7 +88,7 @@ person rather than an area.
 | In a chat | Offered when the person holds | Otherwise |
 |---|---|---|
 | "Add knowledge" chip in the thread header | `knowledge.view` | Hidden |
-| Agent chip as a link to `/agents/{id}` | `agents.view` | Plain text |
+| Agent chip as a link to `/build/agents/{id}` | `agents.view` | Plain text |
 | Details switch in the thread menu (raw parameters and results) | `agents.edit` | Absent |
 | "Save as a workflow" after a repeated plan | `workflows.edit` | Absent |
 | Raise on the budget card | `chat.manage` | Continue only |
@@ -98,17 +98,17 @@ person rather than an area.
 
 | From | To | Route | Status |
 |---|---|---|---|
-| Thread header agent chip | The agent's page | `/agents/{id}` | Built (`chat-workspace.tsx:324`) |
-| An open step | The tool's page | `/tools/{id}` | Page built; link not built |
-| An open step | The call's row in Activity › Tool calls | `/tools/calls?call={callId}` | List built; filter not built |
-| A widget footer's app name | The app's page | `/integrations/{app}` | Page built; link not built |
-| A citation's "How it was found" | The knowledge base playground | `/knowledge/{id}?tab=playground` | Built |
-| A workflow run card | The run | `/workflows/runs/{id}` | Built |
-| Thread menu, Test in the agent | The agent's test panel seeded with the thread's last ask | `/agents/{id}?tab=test&from={threadId}` | Panel built; `from` seed not built |
+| Thread header agent chip | The agent's page | `/build/agents/{id}` | Built (`chat-workspace.tsx:323`) |
+| An open step | The tool's page | `/data/tools/{id}` | Page built; link not built |
+| An open step | The call's row in Activity › Tool calls | `/govern/activity/tool-calls?call={callId}` | List built; filter not built |
+| A widget footer's app name | The app's page | `/data/connectors/{app}` | Page built; link not built |
+| A citation's "How it was found" | The knowledge base playground | `/data/knowledge/{id}?tab=playground` | Built |
+| A workflow run card | The run | `/build/runs/{id}` | Built |
+| Thread menu, Test in the agent | The agent's test panel seeded with the thread's last ask | `/build/agents/{id}?tab=test&from={threadId}` | Panel built; `from` seed not built |
 
 ## Redirects
 
-Old flat routes answer one 307 to their tree page before any page renders (`redirects()` in `apps/console/next.config.ts`).
+Old flat routes answer one 307 to their tree page before any page renders: `proxy.ts` looks each path up in `MOVED` (`apps/console/src/lib/routes/moved.ts`, longest prefix first) and keeps the rest of the path and the query. Four more (`/logs/tool-calls`, `/settings/policies`, `/account`, `/account/security`) are in `redirects()` in `apps/console/next.config.ts`. Every route in the tables on this page is checked against the console's pages by `scripts/check-doc-routes.mjs`.
 
 ## Components
 

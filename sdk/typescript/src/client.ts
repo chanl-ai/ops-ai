@@ -22,7 +22,7 @@ import { platformOperations } from './generated/platform-operations.js';
 import type { operations as ToolsOps } from './generated/tools.js';
 import { toolsOperations } from './generated/tools-operations.js';
 import { type CallArgs, type Config, eachPage, type Operation, pageItems, result, type Service, Transport } from './transport.js';
-import { Agents } from './agents.js';
+import { Agents, based } from './agents.js';
 import { Chat } from './chat.js';
 import { savedOptions } from './profile.js';
 import { Templates } from './templates.js';
@@ -156,11 +156,11 @@ export class Skills extends Resource {
     super(t, NOUNS.skills);
   }
 
-  /** Saves `fields` (any of SKILL_KEYS) as the skill's draft. `baseVersion` is the version the change was made on; left out, it is the newest, read first. */
-  async saveDraft(id: string, fields: Record<string, unknown>, { note = '', baseVersion }: { note?: string; baseVersion?: number } = {}) {
-    baseVersion ??= (await this.get(id)).version;
+  /** Saves `fields` (any of SKILL_KEYS) as the skill's draft. `base` is the skill as last read, naming the copy the change was made on; left out, the skill is read first. A save from an older copy is refused with `stale_base`. */
+  async saveDraft(id: string, fields: Record<string, unknown>, { note = '', base }: { note?: string; base?: { version: number; digest?: string | null } } = {}) {
+    const read = base?.digest ? base : await this.get(id);
     const body = Object.fromEntries(SKILL_KEYS.filter((k) => k in fields).map((k) => [k, fields[k]]));
-    return this.raw.agents.agents_save_skill_draft({ path: { skill_id: id }, body: { ...body, note, baseVersion } as never });
+    return this.raw.agents.agents_save_skill_draft({ path: { skill_id: id }, body: based({ ...body, note }, read) as never });
   }
 
   /** Asks to publish the newest draft. A skill that cannot be published is refused with `cannot_request`, and the error's details name each problem and the step it is on. */

@@ -3,7 +3,8 @@
 AS= is a role in services/platform-service/seed/dev-roles.json, a seeded person's name, first name or email name
 from people.json, or an email (local only); the call acts in the team the sign-in names as the person's default
 (TEAM= overrides). The person signs in through the real password sign-in, POST /v1/auth/sign-in, with the dev demo
-password from Settings (local) or the staging admin file (ENV=staging, admin). The session is kept in
+password from Settings (local); on staging (ENV=staging) admin is the first admin from the staging admin file and
+team-admin, builder, approver, viewer and chat_user are the role accounts in staging-roles.env. The session is kept in
 .run/api-tokens/<env>-<role or email>.json (mode 600) until it expires; a 401 drops it and signs in once more. No
 password is printed or cached.
 
@@ -85,7 +86,8 @@ def email_for(who: str) -> str:
 
 def cache_name(env: str, who: str) -> str:
     """The session file's name: the role as before, else the email with anything but [a-z0-9._-] dropped."""
-    key = who if who in roles() else email_for(who)
+    # A staging role names an account in staging-roles.env, not a seeded person.
+    key = who if env == "staging" or who in roles() else email_for(who)
     return f"{env}-{re.sub(r'[^a-z0-9._-]', '_', key.lower())}.json"
 
 
@@ -115,10 +117,20 @@ def addresses(env: str) -> dict[str, str]:
 def credentials(env: str, role: str) -> tuple[str, str]:
     """The role's email and password; the password goes only into the sign-in body."""
     if env == "staging":
-        if role != "admin":
-            raise Refused(f"api: only the staging admin's sign-in is on this machine; AS={role} works only locally")
-        admin = _staging_file("staging-admin.env")
-        return admin["OPS_BOOTSTRAP_ADMIN_EMAIL"], admin["OPS_BOOTSTRAP_ADMIN_PASSWORD"]
+        if role == "admin":
+            admin = _staging_file("staging-admin.env")
+            return admin["OPS_BOOTSTRAP_ADMIN_EMAIL"], admin["OPS_BOOTSTRAP_ADMIN_PASSWORD"]
+        # Staging runs outside dev mode, so the seeded dev people do not exist there; each member role has its own
+        # account in staging-roles.env (deploy/fly/role_accounts.py). AS=team-admin is that file's admin.
+        key = "ADMIN" if role == "team-admin" else role.upper().replace("-", "_")
+        kept = _staging_file("staging-roles.env")
+        email, password = kept.get(f"STG_ROLE_{key}_EMAIL"), kept.get(f"STG_ROLE_{key}_PASSWORD")
+        if not email or not password:
+            raise Refused(
+                f"api: AS={role} has no account in staging-roles.env; use admin, team-admin, builder, approver, "
+                "viewer or chat_user, and run make seed-roles ENV=staging for one that is missing"
+            )
+        return email, password
     # Seeded people sign in with the dev demo password; any other email is tried with it too.
     return email_for(role), Settings().platform_demo_password.get_secret_value()
 

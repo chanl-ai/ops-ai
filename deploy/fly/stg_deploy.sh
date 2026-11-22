@@ -7,8 +7,12 @@
 #             the migrations just added reaches its service's runtime login
 #   4 health  every process the host runs (ops_host.py --check on the machine), then OCR (check_ocr.py)
 #   5 signed in  the first admin signs in and lists agents through the public origin (platform issues, agents verifies)
+#   5b roles    role_accounts.py invites the member-role accounts the install lacks (staging-roles.env), then each
+#             signs in and must hold its role
 #   6 walk    docs/usecases/lib/stg_click_walk.mjs signs in and opens every console page and the first row of each list;
 #             SKIP_WALK=1 leaves it out
+#   7 smoke   deploy/fly/smoke.mjs makes, publishes and runs things through the public origin in OPS_SMOKE_TEAM (default
+#             team_security) and removes them; SKIP_SMOKE=1 leaves it out
 # STG_ROLLBACK=1 (make stg-rollback) is a different run: REF's image is already pushed, so it only replaces the machine
 # with it (step 2, `fly machine update`, so the release command does not run) and waits for every process (step 4). No grants, OCR, plugin, sign-in or walk step: migrations only
 # add, so the older image runs on the newer schema, and grants for an older ref are already applied.
@@ -155,6 +159,13 @@ assert isinstance(agents.get("data"), list), agents
 print("ok signed in to", team, "and listed", len(agents["data"]), "agents")
 PY
 step "signed-in request"
+# One account per member role (staging-roles.env): the accounts this install lacks are invited, then each signs in
+# through the public origin and must hold its role, so a role walk can run on every deploy. Before the SKIP_WALK exit.
+platform="$origin/api/platform"
+uv run --quiet --project "$root" python "$root/deploy/fly/role_accounts.py" seed --platform "$platform" \
+  --admin-env "$conf/staging-admin.env" \
+  || { echo "stg-deploy: role accounts are not ready (fix lines above; docs/deploy/fly-staging.md, Role accounts)"; exit 1; }
+step "role accounts seeded and signed in"
 
 if [ "${SKIP_WALK:-0}" = 1 ]; then
   echo "stg-deploy: click walk skipped (SKIP_WALK=1)"
@@ -172,5 +183,16 @@ fi
 ok=$(grep -c '^OK' "$work/walk.txt" || true)
 fail=$(grep -c '^FAIL' "$work/walk.txt" || true)
 step "click walk ($ok OK, $fail FAIL)"
+smoke_ok=0
+if [ "${SKIP_SMOKE:-0}" = 1 ]; then
+  echo "stg-deploy: smoke skipped (SKIP_SMOKE=1)"
+  smoke_ok=1
+else
+  # The smoke walk renews its session through the SDK's transport, which runs from its build.
+  pnpm -C "$root/sdk/typescript" build >"$work/sdk-build.log" 2>&1 || { tail -20 "$work/sdk-build.log"; exit 1; }
+  if OPS_SMOKE_EMAIL=$(pair OPS_BOOTSTRAP_ADMIN_EMAIL) OPS_SMOKE_PASSWORD=$(pair OPS_BOOTSTRAP_ADMIN_PASSWORD) \
+    OPS_SMOKE_TEAM="${OPS_SMOKE_TEAM:-team_security}" node "$root/deploy/fly/smoke.mjs" "$origin"; then smoke_ok=1; else echo "FAIL smoke exited $?"; fi
+  step "smoke"
+fi
 echo "stg-deploy: $app at $sha in $(( $(date +%s) - begin ))s; $origin"
-[ "$fail" = 0 ] && [ "$ok" -gt 0 ]
+[ "$fail" = 0 ] && [ "$ok" -gt 0 ] && [ "$smoke_ok" = 1 ]

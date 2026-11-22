@@ -110,6 +110,14 @@ def data(r: httpx.Response) -> Any:
     return body.get("data") if isinstance(body, dict) and "data" in body else body
 
 
+def save_agent(api: httpx.Client, agent_id: Any, fields: dict[str, Any]) -> httpx.Response:
+    """PATCH an agent, naming the copy it just read (baseVersion, baseDigest) as the API requires; returns the PATCH."""
+    path = f"/v1/agents/{agent_id}"
+    seen = api.get(path)
+    copy = (seen.json().get("data") or {}) if seen.status_code == 200 else {}
+    return api.patch(path, json={**fields, "baseVersion": copy.get("version"), "baseDigest": copy.get("digest")})
+
+
 def read_env(path: Path) -> dict[str, str]:
     values: dict[str, str] = {}
     for raw in path.read_text().splitlines():
@@ -284,7 +292,8 @@ def ensure_members(admin: Session, team: str, members: list[tuple[str, str]], pa
     """`--member email:role`: people outside team.json (the logins a person demonstrates with) join the team with their
     role, each accepting the invitation as themselves; one already active in it is left as it is."""
     on_team = Session(admin.urls, admin.token, admin.email, team)
-    known = {m["email"].lower(): m for m in items(data(on_team("platform").get("/v1/settings/members")))}
+    # Every page: a team with more members than one page holds would get a second invitation for a person on page two.
+    known = {m["email"].lower(): m for m in every_row(on_team("platform"), "/v1/settings/members")}
     for email, role in members:
         member = known.get(email.lower())
         if member and member["status"] == "active":
@@ -465,7 +474,7 @@ class Models:
             detail = data(api.get(f"/v1/agents/{agent_id}"))
             if detail.get("model") == alias:
                 continue
-            patched = data(api.patch(f"/v1/agents/{agent_id}", json={"model": alias, "note": why}))
+            patched = data(save_agent(api, agent_id, {"model": alias, "note": why}))
             review = data(
                 api.post(f"/v1/agents/{agent_id}/publish-requests", json={"version": patched["version"], "note": why})
             )
@@ -610,7 +619,7 @@ def ensure_agents(
         body = {k: v for k, v in wanted.items() if k != "guardrailPins"}
         body["guardrailPins"] = [{"guardrailId": g} for g in wanted["guardrailPins"]]
         note = agent.get("note", "Instructions, tools, knowledge, skills and guardrails for the team.")
-        data(api.patch(f"/v1/agents/{found['id']}", json={**body, "note": note}))
+        data(save_agent(api, found["id"], {**body, "note": note}))
         for sid in skill_ids:
             if sid not in held:
                 data(api.put(f"/v1/agents/{found['id']}/skills/{sid}", json={}))

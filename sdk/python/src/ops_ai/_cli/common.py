@@ -232,9 +232,10 @@ def emit(ns: argparse.Namespace, data: Any, *, text: str | None = None) -> int:
     return 0
 
 
-def refuse(exc: BaseException) -> int:
+def refuse(exc: BaseException, *, refused: int | None = None) -> int:
     """One line on stderr and an exit status per error kind (ops_ai.errors.EXIT_CODES), so a script can tell a
-    refused call from a failed app without reading the text."""
+    refused call from a failed app without reading the text. `refused` overrides what an answer from the service
+    (OpsError) exits with, for a verb whose exit 1 means something else (`agents eval`: blocked passes 2)."""
     if isinstance(exc, RunFailed):
         sys.stderr.write(exc.line() + "\n")
         return EXIT_CODES[exc.kind]
@@ -242,7 +243,7 @@ def refuse(exc: BaseException) -> int:
         path = exc.details.get("path") if isinstance(exc.details, dict) else None
         where = path[0] if isinstance(path, list) and path else path
         sys.stderr.write(f"{exc.code}: {where}: {exc.message}\n" if where else f"{exc.code}: {exc.message}\n")
-        return EXIT_CODES[exc.kind]
+        return EXIT_CODES[exc.kind] if refused is None else refused
     if isinstance(exc, NotImplementedError):
         sys.stderr.write(f"{exc}\n")
         return 2

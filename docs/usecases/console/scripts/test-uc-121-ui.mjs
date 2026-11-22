@@ -80,7 +80,7 @@ await withUiStack(
       // 1. The canvas fills the page: sidebar collapsed, no side columns, actions in the header.
       await step('1 the sidebar collapses and the canvas takes the width, actions in the header', async () => {
         const box = await canvas.boundingBox();
-        const header = await page.getByTestId('page-header').getByTestId('definition-save').count();
+        const header = await page.getByTestId('page-header').getByTestId('definition-problems').count();
         const inspector = await page.getByTestId('definition-inspector').count();
         check('1 the sidebar collapses and the canvas takes the width, actions in the header', sidebarBefore === 'expanded' && (await sidebar()) === 'collapsed' && box.width > 1200 && header === 1 && inspector === 0, { sidebarBefore, box, header, inspector });
       });
@@ -121,9 +121,9 @@ await withUiStack(
         await canvas.locator('[data-node-id="hold"]').dblclick();
         await page.getByTestId('definition-node-all-settings').click();
         await page.getByTestId('definition-node-parameters').fill(JSON.stringify({ input: { wire_id: '$.input.wire_id' }, approvedBy: 'review' }));
-        await page.getByTestId('definition-checks-count').getByText('1 error').waitFor({ timeout: 30_000 });
+        await page.getByTestId('definition-problems').getByText('1 problem').waitFor({ timeout: 30_000 });
         const marked = await canvas.locator('[data-node-id="hold"]').getAttribute('data-error');
-        await page.getByTestId('definition-checks-count').click();
+        await page.getByTestId('definition-problems').click();
         const listed = await page.getByTestId('definition-check').filter({ hasText: 'operation' }).count();
         check('4 a refused step is marked and counted', marked === 'true' && listed === 1, { marked, listed });
         await page.keyboard.press('Escape');
@@ -147,8 +147,8 @@ await withUiStack(
         const savedFork = await fetch(`${agents}/v1/workflows/definitions`, { method: 'POST', headers: J, body: JSON.stringify({ definition: FORK }) });
         const said = await savedFork.json().catch(() => ({}));
         await page.goto(`${consoleUrl}/workflows/${FORK.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-        await page.getByTestId('definition-checks-count').getByText(/1 warning|\d+ warnings/).waitFor({ timeout: 60_000 });
-        const counter = (await page.getByTestId('definition-checks-count').innerText()).trim();
+        await page.getByTestId('definition-problems').getByText(/\d+ warnings?/).waitFor({ timeout: 60_000 });
+        const counter = (await page.getByTestId('definition-problems').innerText()).trim();
         const marked = await page.locator('[data-node-id="done"] [data-testid="node-warning"]').count();
         check(
           '4b a warning marks its step and is counted, and the workflow saves with it',

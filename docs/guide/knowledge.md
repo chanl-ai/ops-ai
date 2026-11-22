@@ -64,7 +64,7 @@ all at once.
 - Per-item visibility (who may see one document) is stored but not enforced: anyone who may search the base sees every
   item in it. Planned.
 - Draft then publish for knowledge content, a query log and an unanswered-questions list are planned.
-- Search runs on PostgreSQL. Search on SQL Server is planned.
+- Search runs on PostgreSQL only. On SQL Server a search returns no passages and says both kinds of search were skipped; it is not built there yet.
 - Pages that need a browser to render (heavy JavaScript) are not read yet. Planned.
 
 ## Next

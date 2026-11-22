@@ -2754,7 +2754,9 @@ class ModuleService:
         if asker and asker.casefold() in {str(d).casefold() for d in (*deciders, by or "")}:
             # Separation of duties through can(requested_by=), with requesterMayDecide read now rather than from a
             # token: the asker decides their own request only while it is on.
-            may_decide = self.requester_policy is not None and await self.requester_policy.allowed(tenant_id)
+            may_decide = self.requester_policy is not None and await self.requester_policy.allowed(
+                tenant_id, a.get("decider_team") or team_id
+            )
             refused = own_request_refusal(
                 Access(),
                 tenant_id,

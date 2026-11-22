@@ -17,6 +17,7 @@ from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 from tests.conftest import sse_events, structured
 from tests.engine.test_lifecycle_rights import ADMIN, person
 
+from ..saves import save_agent
 from .role_app import ok, role_app
 
 ADVISOR = "ag_branch"
@@ -61,7 +62,7 @@ async def _guarded(c: AsyncClient) -> None:
     g = ok(await c.post("/v1/guardrails", json=RULE, headers=ADMIN), 201)
     ok(await c.post(f"/v1/guardrails/{g['id']}/publish-requests", json={"version": 1}, headers=ADMIN), 201)
     pin = {"guardrailPins": [{"guardrailId": g["id"], "version": 1}]}
-    agent = ok(await c.patch(f"/v1/agents/{ADVISOR}", json=pin, headers=ADMIN))
+    agent = ok(await save_agent(c, ADVISOR, pin, headers=ADMIN))
     ok(await c.post(f"/v1/agents/{ADVISOR}/publish-requests", json={"version": agent["version"]}, headers=ADMIN), 201)
 
 

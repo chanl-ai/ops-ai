@@ -16,7 +16,7 @@ an install guide. Nothing in it needs the source repository.
 
 | Inside the folder | What it holds |
 |---|---|
-| `INSTALL.md` | The install and operate guide |
+| `INSTALL.md` | The install steps that work from this folder alone, then how to operate it |
 | `compose/` | The Compose files: the app, DBA mode, and a trial with a database and test model |
 | `ops-ai.env.example` | The settings template with the image names filled in |
 | `db/postgres/` | The PostgreSQL scripts for your DBA ([Database](database.md)) |
@@ -60,7 +60,7 @@ under `dist/`.
 ## Limits
 
 - Images are linux/amd64 only in the package; the registry images also come for linux/arm64.
-- The install script is not in the package; from the package, install with Compose.
+- The install script is not in the package; INSTALL.md installs with Compose and your DBA's scripts. `deploy/release/proof.sh` runs those steps, and `deploy/release/package.sh` fails when `docs/deploy/package-install.md` is missing.
 - Some console screens still name a sample bank; taking the name from a setting is planned.
 - Installing against a real Azure Database for PostgreSQL server is not yet recorded; the proof uses a server whose
   admin has the same rights.

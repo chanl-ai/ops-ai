@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Prints what ci.yml runs for the changes since <base sha>, as key=value lines; the suites come from verify-changed.sh's
-# plan so CI and a local run pick the same ones. Keys: full, services, packages (JSON lists), console, docs, scripts,
+# plan so CI and a local run pick the same ones. Keys: full, services, packages (JSON lists), console, docs, scripts, code, mssql,
 # service_jobs (the service matrix: one job per service, or per test shard and its checks for the long suites), release.
 # A push to release/* or hotfix/* (GITHUB_REF) is always a full plan with release=true: the impact plan once skipped
 # jobs on such a push and let a failure reach develop untested. ci.yml then also runs `checks` and release-proof.
@@ -16,7 +16,10 @@ json() { if [ "$#" -eq 0 ]; then echo '[]'; else printf '"%s",' "$@" | sed 's/,$
 
 release=false
 case "${GITHUB_REF:-}" in refs/heads/release/* | refs/heads/hotfix/*) release=true ;; esac
-if [ "$release" = true ]; then plan="plan: full"; else plan=$(VERIFY_CHANGED_PLAN=jobs scripts/verify-changed.sh "$base"); fi
+# CI_FULL=true (ci.yml sets it for a pull request titled with [ci full] or labelled ci:full) runs every job.
+if [ "$release" = true ] || [ "${CI_FULL:-}" = true ]; then plan="plan: full"; else
+  plan=$(VERIFY_CHANGED_PLAN=jobs scripts/verify-changed.sh "$base")
+fi
 if grep -qx 'plan: full' <<<"$plan"; then
   full=true; packages=(); rest=()
   read -r -a pool <<<"$(make -s -f make/python.mk -f /dev/stdin <<<'print-pool: ; @echo $(VERIFY_POOL)' print-pool 2>/dev/null)"
@@ -54,8 +57,18 @@ echo "services=$(json ${services[@]+"${services[@]}"})"
 echo "packages=$(json ${packages[@]+"${packages[@]}"})"
 # make verify runs the console and docs gates whatever changed, so a full plan does too.
 if [ "$full" = true ]; then echo "console=true"; echo "docs=true"; else
-  echo "console=$(flag '^apps/')"
+  # The console builds on the generated SDK, so an SDK change runs it too.
+  echo "console=$(flag '^(apps/|sdk/)')"
   echo "docs=$(flag '(\.md$|^docs/)')"
 fi
 echo "scripts=$(flag '^scripts/')"
+# code=false for a change of documents only (markdown or docs/): the checks job then has nothing to check, and the
+# leak scan and docs job still run.
+if [ "$full" = true ] || grep -vqE '(\.md$|^docs/)' <<<"$changed"; then echo "code=true"; else echo "code=false"; fi
+# The SQL Server job runs the store, kit and identity suites and, per service, route tests that reach the database too
+# (platform-service's policies and reply pins among them), so any service, package or database script change runs it;
+# documents, the console, the SDK and scripts alone do not.
+if [ "$full" = true ]; then echo "mssql=true"; else
+  echo "mssql=$(flag '^(services/|packages/|deploy/database/)')"
+fi
 if [ "${#jobs_json[@]}" -eq 0 ]; then echo "service_jobs=[]"; else echo "service_jobs=[$(IFS=,; echo "${jobs_json[*]}")]"; fi

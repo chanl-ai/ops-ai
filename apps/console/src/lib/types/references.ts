@@ -60,9 +60,57 @@ export interface PublishBlocker {
     | 'review_open'
     | 'already_published'
     | 'deprecated'
-    | 'too_long';
+    | 'too_long'
+    | 'eval_failed'
+    | 'eval_not_run'
+    | 'eval_no_cases'
+    | 'eval_setting_unread';
+  /** An eval problem carries the gate's steps, worded by the service. */
+  details?: { steps: import('./assurance').GateStep[] } | null;
   /** For a reference blocker, `<kind>:<id>`. */
   id: string | null;
   position: BlockerPosition | null;
+  message: string;
+}
+
+/** A problem the publish check reports but does not block on: the same shape as a blocker, with the service's own kind. */
+export type PublishWarning = Omit<PublishBlocker, 'kind'> & { kind: string };
+
+/** The answer of `POST /v1/agents/{id}/references`: what was granted and the version it was saved as. */
+export interface AddedReferences {
+  added: ReferenceItem[];
+  agentVersion: number;
+}
+
+/** `GET /v1/agents/{id}/prompt`: the prompt a version gives the model, read only, with Never last. */
+export interface AgentPrompt {
+  version: number;
+  text: string;
+}
+
+/** `POST /v1/agents/{id}/brief-draft`: a proposed text per brief heading; nothing is saved until one is accepted. */
+export interface BriefDraft {
+  job: string;
+  howToAnswer: string;
+  handOff: string[];
+  examples: string;
+  never: string[];
+}
+
+/** `GET /v1/agents/{id}/publish-check`: whether the newest draft can be sent for publish, and what stops it. */
+export interface AgentPublishCheck {
+  canRequest: boolean;
+  problems: PublishBlocker[];
+  /** The same problems in the one shape every publish check returns, in the same order. */
+  blockers: Blocker[];
+}
+
+/** One reason a publish is refused, in the one shape the agent, skill and workflow publish checks return: the workflow
+ * step (`node`) or the field it is in, its level and code, and the sentence the publish dialog shows. */
+export interface Blocker {
+  node: string | null;
+  field: string | null;
+  level: 'error' | 'warning';
+  code: string;
   message: string;
 }

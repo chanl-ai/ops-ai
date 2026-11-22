@@ -56,6 +56,12 @@ def run(item: str, timeout: int, cmd: list[str] | None = None) -> tuple[str, int
     return item, code, started - began, end - started, log
 
 
+def shown(log: Path) -> str:
+    """The log path as printed: relative to the checkout when inside it, absolute otherwise (OPS_EVIDENCE_DIR can point
+    a worktree's logs into the main checkout)."""
+    return str(log.relative_to(ROOT)) if log.is_relative_to(ROOT) else str(log)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--slots", type=int, default=3)
@@ -75,7 +81,7 @@ def main() -> int:
             word = "PASS" if code == 0 else ("TIMEOUT" if code == 124 else "FAIL")
             failed += code != 0
             split = f"  (waited {waited:.0f}s, ran {ran:.0f}s)" if code == 124 else ""
-            print(f"{word:7} {item:16} {waited + ran:6.0f}s  {log.relative_to(ROOT)}{split}", flush=True)
+            print(f"{word:7} {item:16} {waited + ran:6.0f}s  {shown(log)}{split}", flush=True)
     print(f"{len(items) - failed} passed, {failed} failed")
     return 1 if failed else 0
 

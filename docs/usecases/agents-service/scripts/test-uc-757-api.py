@@ -1,280 +1,477 @@
-# The use case runner puts docs/usecases/lib (usecase_harness) on the path; pyright alone cannot see it.
-# pyright: basic, reportMissingImports=false
-"""uc-757 a run outlives a killed worker and redrives from its failed step, api layer:
-docs/usecases/agents-service/a-run-outlives-a-killed-worker.md.
-
-Own services, no real model: platform-service for the team's aiSteps setting, models-service on the fake OpenAI with
-the AI step rules (agents-service tests/fixtures/ai-steps-fake-openai), tools-service as the gateway with the core bank
-fake behind it, agents-service, and workflow workers this script starts and kills. The bank holds a note write open
-while its author reads `slow:<seconds>:`, so the kill lands while the write is in flight.
-
-Step 3 is the non-vacuous check: with the engine's settling of a dangling write by its key removed
-(packages/ops_engine/src/ops_engine/compiler.py, the `last.status in ("running", "error")` branch), the replacement
-worker sends the held write again under a new key and the bank gets a third note."""
+"""uc-757, api layer: docs/usecases/agents-service/a-builder-writes-a-skill-with.md, steps 1 to 6. A builder leaves
+an agent saved before the brief as it is, writes another as a brief, adds what the brief mentions, attaches a skill
+with steps, and a chat follows the steps from reply to reply. Platform sign-in (lib/main_chains.py bank_stack), the
+scripted model."""
 
 from __future__ import annotations
 
-import os
-import signal
-import subprocess
-import uuid
-from collections.abc import Callable
-from contextlib import ExitStack
+import json
+import time
 from typing import Any
 
-import httpx
-from ai_steps_stack import RULES
-from usecase_harness import (
-    AGENTS_PORT,
-    TOOLS_PORT,
-    agents,
-    approve_tool_review,
-    bearer,
-    check,
-    core_bank,
-    data,
-    engine_worker,
-    every_page,
-    fake_openai,
-    finish,
-    models,
-    platform,
-    service_headers,
-    signed_in,
-    tools,
-    until,
-)
+from brief_steps import CONFIRMS, brief, confirm_skill, freeze_skill, hold_skill
+from main_chains import ACCOUNT, bank_stack, holds, publish_bank_module
+from usecase_harness import agents, check, data, finish, save_agent, sse
 
-OPS = {"X-Team-Id": "team_ops"}
-SECURITY = {"X-Dev-User": "Nadia Petrov", "X-Team-Id": "team_security"}
-MODELS_ADMIN = service_headers("models")
-RUN = uuid.uuid4().hex[:6]
-WID = f"uc757_note_{RUN}"
-HOLD_S = 3
-BODY = "UC259-NOTE Priya Natarajan called: please close savings account 4471 by 30 November 2026."
+RUN = int(time.time())
+STREAM = {"Accept": "text/event-stream"}
 
 
-def note(nid: str, text: str, author: str) -> dict[str, Any]:
-    args = {"customer_id": "$.input.customerId", "text": text, "author": author}
-    params = {"operation": "add_customer_note", "input": args}
-    return {"id": nid, "type": "ops.action.tool", "typeVersion": 1, "name": nid, "parameters": params}
+def code_of(res: Any) -> tuple[int, str]:
+    try:
+        return res.status_code, str(res.json().get("error", {}).get("code", ""))
+    except ValueError:
+        return res.status_code, ""
 
 
-# Note the call, summarise it (one model call), then write the summary on the customer's record, held open.
-SUMMARY = {
-    "id": "summary",
-    "type": "ops.ai.summarise",
-    "typeVersion": 1,
-    "name": "Summarise",
-    "parameters": {"text": "$.input.body"},
-}
-NODES = [
-    {"id": "start", "type": "ops.trigger.request", "typeVersion": 1, "name": "Request"},
-    note("logged", "$.input.body", "uc-757"),
-    SUMMARY,
-    note("filed", "$.nodes.summary.out.summary", f"slow:{HOLD_S}:uc-757"),
-    {"id": "done", "type": "ops.flow.end", "typeVersion": 1, "name": "Done", "parameters": {"outcome": "filed"}},
-    {"id": "failed", "type": "ops.flow.end", "typeVersion": 1, "name": "Failed", "parameters": {"outcome": "failed"}},
-]
-WIRES = [("start", "payload", "logged"), ("logged", "ok", "summary"), ("summary", "ok", "filed"), ("filed", "ok", "done")]
-WIRES += [(n, p, "failed") for n in ("logged", "filed") for p in ("refused", "error")]
-WIRES += [("summary", "error", "failed")]
-DEFINITION = {
-    "schemaVersion": 2,
-    "id": WID,
-    "name": "Note a call (uc-757)",
-    "nodes": NODES,
-    "connections": [{"from": {"node": f, "port": p}, "to": {"node": t, "port": "in"}} for f, p, t in WIRES],
-}
+def made(res: Any) -> dict[str, Any]:
+    """The created record; a refused create stops the script as setup."""
+    if res.status_code not in (200, 201):
+        raise SystemExit(f"FAIL setup: {res.status_code} {res.text[:400]}")
+    return data(res)
 
 
-def bank_module(gw: httpx.Client, host: str) -> None:
-    """The core bank as a published module whose note write runs without an approval."""
-    source = {"kind": "openapi", "specUrl": f"https://{host}/openapi.json"}
-    found = data(gw.post("/v1/tool-modules/discover", json=source))
-    ops = [
-        {**o, "access": "read" if (o.get("method") or "GET").upper() == "GET" else "write"} for o in found["operations"]
+with bank_stack() as s:
+    me = s.who["builder"]
+    _, read, write = publish_bank_module(s.gw, RUN, approval=True, team=me, security=s.who["security"])
+    time.sleep(31)  # agents-service keeps each tenant's tool list for 30 seconds
+
+    # 1. An agent saved before the brief keeps its prompt when something else is saved.
+    old = data(s.api.post("/v1/agents", json={"name": f"Old desk {RUN}", "role": "Answers the team"}, headers=me))
+    saved = data(save_agent(s.api, old["id"], {"toolIds": [read]}, headers=me))
+    check(
+        "1 an agent saved before the brief keeps its instructions and gets no brief",
+        (saved.get("brief"), saved.get("promptMode"), saved["instructions"]) == (None, None, old["instructions"]),
+        {k: saved.get(k) for k in ("brief", "promptMode", "instructions")},
+    )
+
+    # 2. A brief writes the prompt, a rename rewrites it, and the instructions cannot be edited beside it.
+    agent = data(s.api.post("/v1/agents", json={"name": f"Freeze desk {RUN}", "role": "Freezes accounts"}, headers=me))
+    aid = agent["id"]
+    patterns = {"thinking": "low", "parallelReads": False}
+    written = data(save_agent(s.api, aid, {"brief": brief(read), "patterns": patterns}, headers=me))
+    renamed = data(save_agent(s.api, aid, {"name": f"Account freeze desk {RUN}"}, headers=me))
+    by_hand = save_agent(s.api, aid, {"instructions": "Do anything."}, headers=me)
+    check(
+        "2 a brief writes the prompt, a rename rewrites it, and editing the instructions beside it is refused",
+        written["promptMode"] == "brief"
+        and written["instructions"].startswith(f"# Who you are\nYou are Freeze desk {RUN}.")
+        and f"You are Account freeze desk {RUN}." in renamed["instructions"]
+        and renamed["patterns"] == patterns
+        and code_of(by_hand) == (422, "brief_owns_prompt"),
+        (written.get("promptMode"), renamed["instructions"][:80], renamed.get("patterns"), code_of(by_hand)),
+    )
+
+    # 3. The brief mentions a tool the agent lacks: the publish is refused naming the field, and the insert fixes it.
+    version = renamed["version"]
+    blocked = data(s.api.get(f"/v1/agents/{aid}/publish-check", params={"version": version}, headers=me))
+    refused = s.api.post(f"/v1/agents/{aid}/publish-requests", json={"version": version}, headers=me)
+    problem = (blocked.get("problems") or [{}])[0]
+    added = data(s.api.post(f"/v1/agents/{aid}/references", json={"kind": "tool", "id": read}, headers=me))
+    again = data(s.api.post(f"/v1/agents/{aid}/references", json={"kind": "tool", "id": read}, headers=me))
+    check(
+        "3 a brief that mentions a tool the agent lacks cannot publish, and adding the tool once fixes it",
+        blocked["canRequest"] is False
+        and (problem.get("kind"), problem.get("id"), (problem.get("position") or {}).get("field"))
+        == ("missing_reference", f"tool:{read}", "brief.howToAnswer")
+        and code_of(refused) == (422, "cannot_publish")
+        and [(i["kind"], i["id"]) for i in added["added"]] == [("tool", read)]
+        and again["added"] == []
+        and again["agentVersion"] == added["agentVersion"],
+        (blocked, code_of(refused), added, again),
+    )
+
+    # 20. Two sessions hold the same agent draft: the second save is refused and loses nothing the first saved.
+    opened = data(s.api.get(f"/v1/agents/{aid}", headers=me))
+    copy = {"baseVersion": opened["version"], "baseDigest": opened["digest"]}
+    first = data(s.api.patch(f"/v1/agents/{aid}", json={"skillMenu": "attached", **copy}, headers=me))
+    late = s.api.patch(f"/v1/agents/{aid}", json={"skillMenu": "off", **copy}, headers=me)
+    unnamed = s.api.patch(f"/v1/agents/{aid}", json={"skillMenu": "off"}, headers=me)
+    kept = data(s.api.get(f"/v1/agents/{aid}", headers=me))
+    reread = data(save_agent(s.api, aid, {"skillMenu": "team"}, headers=me))
+    told = (late.json().get("error") or {}).get("details") or {}
+    check(
+        "20 an agent save made from a copy another session has since saved is refused, and one naming no copy too",
+        first["version"] == opened["version"]
+        and first["digest"] != opened["digest"]
+        and code_of(late) == (409, "stale_base")
+        and bool(told.get("savedBy") and told.get("savedAt"))
+        and unnamed.status_code == 400
+        and kept["skillMenu"] == "attached"
+        and kept["toolIds"] == [read]
+        and reread["skillMenu"] == "team",
+        (code_of(late), told, unnamed.status_code, kept.get("skillMenu"), kept.get("toolIds")),
+    )
+
+    # 21. Two sessions hold the same skill draft, which keeps its number when saved: the second save is refused.
+    shared = made(s.api.post("/v1/skills", json=confirm_skill(RUN, "api-shared"), headers=me))
+    sid = shared["id"]
+    copy = {"baseVersion": shared["version"], "baseDigest": shared["digest"]}
+    one = made(s.api.put(f"/v1/skills/{sid}/draft", json={"useWhen": "The first session's wording.", **copy}, headers=me))
+    two = s.api.put(f"/v1/skills/{sid}/draft", json={"useWhen": "The second session's wording.", **copy}, headers=me)
+    told = (two.json().get("error") or {}).get("details") or {}
+    stored = data(s.api.get(f"/v1/skills/{sid}", headers=me))
+    check(
+        "21 a skill draft save made from a copy another session has since saved is refused under the same number",
+        one["version"] == shared["version"]
+        and code_of(two) == (409, "stale_base")
+        and bool(told.get("savedBy"))
+        and stored["content"]["useWhen"] == "The first session's wording.",
+        (one.get("version"), code_of(two), told, stored["content"].get("useWhen")),
+    )
+
+    # 22. The same race through the text editor's save: two texts sent from one copy, the second refused, the first kept.
+    base = {"baseVersion": stored["version"], "baseDigest": stored["digest"]}
+    first_text = stored["text"].rstrip() + "\n\nSay the first session's closing line."
+    wrote = made(s.api.put(f"/v1/skills/{sid}/draft", json={"source": first_text, **base}, headers=me))
+    late = s.api.put(f"/v1/skills/{sid}/draft", json={"source": stored["text"] + "\n\nSay another line.", **base}, headers=me)
+    error = late.json().get("error") or {}
+    after = data(s.api.get(f"/v1/skills/{sid}", headers=me))
+    check(
+        "22 a text save made from a copy another text save has replaced is refused, and the first text is kept",
+        wrote["version"] == stored["version"]
+        and code_of(late) == (409, "stale_base")
+        and bool(error.get("message") and (error.get("details") or {}).get("savedBy"))
+        and "first session's closing line" in after["text"]
+        and "another line" not in after["text"],
+        (code_of(late), error, after["text"][-120:]),
+    )
+
+    # 4. A skill with steps is saved, published and added to the agent with the skill and the tool it needs.
+    confirm = made(s.api.post("/v1/skills", json=confirm_skill(RUN, "api"), headers=me))
+    made(s.api.post(f"/v1/skills/{confirm['id']}/publish-requests", json={"note": "use case"}, headers=me))
+    freeze = made(s.api.post("/v1/skills", json=freeze_skill(RUN, "api", read, write, confirm["id"]), headers=me))
+    made(s.api.post(f"/v1/skills/{freeze['id']}/publish-requests", json={"note": "use case"}, headers=me))
+    checks = [(st.get("check") or {}).get("by") for st in freeze["content"]["steps"]]
+    brought = data(s.api.post(f"/v1/agents/{aid}/references", json={"kind": "skill", "id": freeze["id"]}, headers=me))
+    got = sorted((i["kind"], i["id"]) for i in brought["added"])
+    check(
+        "4 a skill with steps is published and adding it brings the skill it runs and the tool it needs",
+        checks == ["rule", None, "rule"]
+        and got == sorted([("skill", freeze["id"]), ("skill", confirm["id"]), ("tool", write)]),
+        (checks, got),
+    )
+    # A step that changes something is refused without a rule check, and a tool a sentence only names is not the
+    # step's tool: the publish check blocks on it.
+    body = hold_skill(RUN, "api", read, write)
+    bare = {**body, "name": f"Bare hold api {RUN}", "steps": [body["steps"][0], {"do": "Place it.", "use": body["steps"][1]["use"]}]}
+    unruled = s.api.post("/v1/skills", json=bare, headers=me)
+    named = {**body, "name": f"Named hold api {RUN}", "steps": [{"do": body["steps"][0]["do"]}]}
+    only_named = made(s.api.post("/v1/skills", json=named, headers=me))
+    stops = [(p["kind"], p["id"]) for p in only_named["publishCheck"]["problems"]]
+    check(
+        "4 a write step with no rule check is refused, and a tool a sentence only names blocks the publish",
+        code_of(unruled) == (400, "write_needs_rule")
+        and only_named["content"]["steps"][0].get("use") is None
+        and stops == [("bad_step", f"tool:{read}")],
+        (code_of(unruled), only_named["content"]["steps"], stops),
+    )
+    # A second skill, saved the way the console saves one: each step's tool is picked inside its sentence.
+    hold = made(s.api.post("/v1/skills", json=hold_skill(RUN, "api", read, write), headers=me))
+    made(s.api.post(f"/v1/skills/{hold['id']}/publish-requests", json={"note": "use case"}, headers=me))
+    made(s.api.post(f"/v1/agents/{aid}/references", json={"kind": "skill", "id": hold["id"]}, headers=me))
+    now = data(s.api.get(f"/v1/agents/{aid}", headers=me))
+    clear = data(s.api.get(f"/v1/agents/{aid}/publish-check", params={"version": now["version"]}, headers=me))
+    sent = s.api.post(f"/v1/agents/{aid}/publish-requests", json={"version": now["version"]}, headers=me)
+    review = data(sent) or {}
+    if review.get("status") == "pending":
+        # A brief's never rules are reviewed by a second person before they go live.
+        decided = s.api.post(
+            f"/v1/publish-requests/{review['id']}/decision", json={"decision": "approved"}, headers=s.who["approver"]
+        )
+        check("setup: the approver approves the agent's publish", decided.status_code == 200, decided.text[:300])
+    live = data(s.api.get(f"/v1/agents/{aid}", headers=me))
+    check(
+        "5 the agent publishes once nothing is missing, and says what it uses",
+        clear == {"canRequest": True, "problems": []}
+        and sent.status_code == 201
+        and live["publishedVersion"] == now["version"]
+        and live["uses"] == {"tools": 2, "knowledgeBases": 0, "skills": 3, "agents": 0, "workflows": 0},
+        (clear, sent.status_code, sent.text[:200], live.get("uses")),
+    )
+
+    # 6. A chat starts the skill and each reply goes on from the step the last one reached.
+    thread = data(s.api.post("/chat/threads", json={"agentId": aid, "kbIds": []}, headers=me))["id"]
+    # Before any skill is started, the write its steps own is refused: no person is asked and nothing reaches the bank.
+    early = s.api.post(
+        f"/chat/threads/{thread}/messages",
+        json={"content": "call " + write + " " + json.dumps({"accountId": ACCOUNT})},
+        headers={**me, **STREAM},
+        timeout=120,
+    )
+    asked_early = [e for e in sse(early.text) if e.get("type") == "widget" and e["widget"].get("kind") == "approval"]
+    check(
+        "6 a write its skill owns is refused before the skill is started",
+        early.status_code == 200 and not asked_early and not holds(s.bank),
+        (early.status_code, len(asked_early), len(holds(s.bank))),
+    )
+    thread = data(s.api.post("/chat/threads", json={"agentId": aid, "kbIds": []}, headers=me))["id"]
+
+    used: list[list[Any]] = []
+    sent: list[dict[str, Any]] = []
+
+    def say(text: str) -> dict[str, Any]:
+        res = s.api.post(
+            f"/chat/threads/{thread}/messages", json={"content": text}, headers={**me, **STREAM}, timeout=120
+        )
+        if res.status_code != 200:
+            raise SystemExit(f"FAIL chat: {res.status_code} {res.text[:300]}")
+        sent[:] = sse(res.text)
+        reply = last_reply()
+        used.append([k.get("skillId") for k in reply.get("skills") or []])
+        return (reply.get("skillRun") or {}).get("running") or {}
+
+    def last_reply() -> dict[str, Any]:
+        messages = data(s.api.get(f"/chat/threads/{thread}", headers=me))["messages"]
+        return [m for m in messages if m.get("role") == "assistant"][-1]
+
+    def decide(action: dict[str, Any]) -> dict[str, Any]:
+        """A second person decides the write the last reply stopped on; the reply's running-skill record after it."""
+        card = next(e["widget"] for e in sent if e["type"] == "widget" and e["widget"]["kind"] == "approval")
+        url = f"/chat/threads/{thread}/messages/{sent[0]['messageId']}/widgets/{card['id']}/actions"
+        approver = s.who["approver"]
+        if action["type"] == "approve":
+            step_up = s.accounts.post("/v1/auth/step-up", json={"password": "northfield-demo"}, headers=approver)
+            action = {**action, "stepUpToken": data(step_up)["token"]}
+        res = s.api.post(url, json=action, headers=approver)
+        if res.status_code != 200:
+            raise SystemExit(f"FAIL decision: {res.status_code} {res.text[:300]}")
+        return last_reply().get("skillRun") or {}
+
+    account = json.dumps({"accountId": ACCOUNT})
+    slug = json.dumps({"slug": freeze["slug"]})
+    started = say(f"call switch_skill {slug}")
+    read_done = say(f"call {read} {account}")
+    idle = say("What does a freeze do?")
+    confirmed = say(CONFIRMS)
+    paused = say(f"call {write} {account}")
+    trail = [
+        (started.get("step"), bool(started.get("sub"))),
+        (read_done.get("step"), (read_done.get("sub") or {}).get("step")),
+        (idle.get("step"), (idle.get("sub") or {}).get("step")),
+        (confirmed.get("step"), bool(confirmed.get("sub"))),
+        (paused.get("step"), bool(paused.get("sub"))),
     ]
-    body = {
-        "name": f"uc757-bank-{RUN}",
-        "displayName": "Core Banking (uc-757)",
-        "system": found["system"],
-        "type": "openapi",
-        "endpoint": found["endpoint"],
-        "operations": ops,
-        "source": source,
-    }
-    made = data(gw.post("/v1/tool-modules", json=body))
-    op = next(o for o in made["operations"] if o["name"] == "add_customer_note")
-    data(gw.patch(f"/v1/tool-modules/{made['id']}/operations/{op['id']}", json={"requiresApproval": False}))
-    data(gw.post(f"/v1/tool-modules/{made['id']}/reviews", json={"note": "uc-757"}))
-    approve_tool_review(gw, made["id"], SECURITY)
+    # The reply that starts the skill lists it among its skills, which the test panel counts.
+    listed = freeze["id"] in used[0]
+    # Non-vacuous: the third reply calls nothing, and the fourth still finds the skill inside step 2. With the record
+    # not carried between replies, every reply starts with no skill running and the trail is empty.
+    check(
+        "6 each reply goes on from the step the last one reached, and the write waits for a person on step 3",
+        trail == [(1, False), (2, 1), (2, 1), (3, False), (3, False)] and not holds(s.bank) and listed,
+        (trail, len(holds(s.bank)), used[0]),
+    )
 
+    # The write is approved: the same reply goes on from step 3, the freeze reaches the bank and the skill ends done.
+    after = decide({"type": "approve"})
+    ends = [h.get("ended") for h in after.get("history") or []]
+    check(
+        "6 an approved write goes on from the step it waited on, and the skill ends as done",
+        after.get("running") is None and ends[-1:] == ["done"] and len(holds(s.bank)) == 1,
+        (after.get("running"), ends, len(holds(s.bank))),
+    )
 
-def run_of(api: httpx.Client, run_id: str) -> dict[str, Any]:
-    return data(api.get(f"/v1/runs/{run_id}", headers=OPS)) or {}
+    # A model that reaches for load_skill starts the same steps: a second chat, started that way, goes on from step 1.
+    thread = data(s.api.post("/chat/threads", json={"agentId": aid, "kbIds": []}, headers=me))["id"]
+    loaded = say(f"call load_skill {slug}")
+    went_on = say(f"call {read} {account}")
+    check(
+        "6 loading the skill starts it at step 1, and the next reply goes on to step 2",
+        (loaded.get("step"), went_on.get("step")) == (1, 2) and freeze["id"] in used[-2],
+        (loaded, went_on.get("step"), used[-2]),
+    )
 
+    # In that chat the write is rejected: the skill ends as failed and nothing more reaches the bank.
+    say(CONFIRMS)
+    waits = say(f"call {write} {account}")
+    refused = decide({"type": "reject", "reason": "Not this account."})
+    ends = [(h.get("ended"), h.get("why"), h.get("inReply")) for h in refused.get("history") or []]
+    check(
+        "6 a rejected write ends the skill as failed, and the record says a person denied it in this reply",
+        waits.get("step") == 3
+        and refused.get("running") is None
+        and ends[-1:] == [("failed", "denied", True)]
+        and len(holds(s.bank)) == 1,
+        (waits.get("step"), refused.get("running"), ends, len(holds(s.bank))),
+    )
 
-def step(run: dict[str, Any], node: str) -> list[dict[str, Any]]:
-    return [s for s in run.get("steps", []) if s.get("nodeId") == node]
+    # A skill whose steps name their tools inside the sentence, on the agent page's test chat. On an account that
+    # owes money the rule ends the skill as blocked in the reply that read it, and the write stays out of reach in
+    # the reply after; on an account with money the same read goes on to step 2.
+    def test_chat() -> str:
+        return str(data(s.api.post("/chat/threads", json={"agentId": aid, "kbIds": [], "test": True}, headers=me))["id"])
 
+    owing = json.dumps({"accountId": "VISA-5521"})
+    hold_slug = json.dumps({"slug": hold["slug"]})
+    thread = test_chat()
+    on_one = say(f"call switch_skill {hold_slug}")
+    say(f"call {read} {owing}")
+    blocked_run = last_reply().get("skillRun") or {}
+    ends = [h.get("ended") for h in blocked_run.get("history") or []]
+    last = (blocked_run.get("history") or [{}])[-1]
+    why = (last.get("why"), last.get("check"), last.get("meaning"), last.get("atStep"), last.get("inReply"))
+    # The ending is final for the reply it happened in: the skill is not started again there.
+    again = s.api.post(
+        f"/chat/threads/{thread}/messages", json={"content": f"call switch_skill {hold_slug}"}, headers={**me, **STREAM}, timeout=120
+    )
+    restarted = (last_reply().get("skillRun") or {}).get("running")
+    after = s.api.post(
+        f"/chat/threads/{thread}/messages", json={"content": f"call {write} {owing}"}, headers={**me, **STREAM}, timeout=120
+    )
+    reached = [r for r in s.bank.received if r["method"] == "POST" and r["path"] == "/v1/accounts/VISA-5521/holds"]
+    asked = [e for e in sse(after.text) if e.get("type") == "widget" and e["widget"].get("kind") == "approval"]
+    check(
+        "6 a rule on an account that owes money ends the skill as blocked, and the write is not asked for after it",
+        on_one.get("step") == 1
+        and blocked_run.get("running") is None
+        and ends[-1:] == ["blocked"]
+        and why == ("check", "result.balance > 0", "The account has nothing to hold.", 1, True)
+        and not reached
+        and not asked,
+        (on_one.get("step"), blocked_run.get("running"), ends, why, len(reached), len(asked)),
+    )
+    # A new reply may start the skill again: the ending held for its own reply only.
+    check("6 the next reply can start the blocked skill again", again.status_code == 200 and (restarted or {}).get("step") == 1, restarted)
+    thread = test_chat()
+    say(f"call switch_skill {hold_slug}")
+    funded = say(f"call {read} {account}")
+    check("6 the same read on an account with money goes on to step 2", funded.get("step") == 2, funded)
 
-def writes(gw: httpx.Client, run_id: str) -> list[dict[str, Any]]:
-    return [r for r in every_page(gw, "/v1/executions", thread=run_id) if r["target"] == "add_customer_note"]
+    # The write that test chat then waits on is a task a reviewer can find and open.
+    say(f"call {write} {account}")
+    approver = s.who["approver"]
+    listed = s.api.get("/reviews", headers=approver)
+    opened = s.api.get(f"/reviews/{thread}", headers=approver)
+    mine = s.api.get("/reviews", headers=me)
+    check(
+        "6 the write a test chat waits on is in Human Tasks for the reviewer and the asker, and opens",
+        listed.status_code == 200 and thread in listed.text and opened.status_code == 200 and thread in mine.text,
+        (listed.status_code, thread in listed.text, opened.status_code, mine.status_code, thread in mine.text),
+    )
 
-
-def fresh(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """The writes that reached the system: a key the gateway answered again from its record is not one."""
-    return [r for r in rows if r.get("status") != "replayed" and not r.get("replayOf")]
-
-
-def model_calls(admin: httpx.Client, run_id: str) -> list[dict[str, Any]]:
-    calls = every_page(admin, "/v1/models/calls", headers=MODELS_ADMIN)
-    return [c for c in calls if str(c.get("runId") or "").startswith(run_id)]
-
-
-def kill_worker(proc: subprocess.Popen[bytes]) -> bool:
-    """SIGKILL to the worker itself (the Python process under `uv run`), then to uv; True once the worker is gone."""
-    found = subprocess.run(["pgrep", "-P", str(proc.pid)], capture_output=True, text=True, check=False).stdout.split()
-    for pid in [*found, str(proc.pid)]:
-        try:
-            os.kill(int(pid), signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-    proc.wait(timeout=10)
-
-    def gone() -> bool:
-        # A killed child stays a zombie until init reaps it; `ps -o stat=` reads Z (or nothing) for one that is dead.
-        stats = [subprocess.run(["ps", "-o", "stat=", "-p", p], capture_output=True, text=True).stdout for p in found]
-        return all(not st.strip() or st.strip().startswith("Z") for st in stats)
-
-    return bool(found) and bool(until(gone, 10))
-
-
-def ended(api: httpx.Client, run_id: str, *wanted: str) -> Callable[[], dict[str, Any] | None]:
-    def probe() -> dict[str, Any] | None:
-        r = run_of(api, run_id)
-        return r if r.get("status") in (wanted or ("succeeded", "failed", "cancelled")) else None
-
-    return probe
-
-
-def in_flight(api: httpx.Client, run_id: str) -> Callable[[], dict[str, Any] | None]:
-    def probe() -> dict[str, Any] | None:
-        return next((s for s in step(run_of(api, run_id), "filed") if s["status"] == "running"), None)
-
-    return probe
-
-
-def main() -> None:
-    with ExitStack() as stack:
-        people, _inner = stack.enter_context(platform())
-        fake = stack.enter_context(fake_openai(RULES))
-        model_stack = stack.enter_context(ExitStack())
-        models_url = model_stack.enter_context(models({"OPS_MODELS_FAKE_OPENAI_URL": fake}))
-        bank = stack.enter_context(core_bank())
-        platform_url = str(people.base_url).rstrip("/")
-        gateway = f"http://127.0.0.1:{TOOLS_PORT}"
-        agents_url = f"http://127.0.0.1:{AGENTS_PORT}"
-        gw = stack.enter_context(tools(bank["settings"] | {"OPS_AGENTS_URL": agents_url}, approval_rules=True))
-        api = stack.enter_context(
-            agents(
-                gateway_url=gateway,
-                models_url=models_url,
-                models_key="mk_dev_agents",
-                env={"OPS_PLATFORM_URL": platform_url},
-            )
-        )
-        admin = stack.enter_context(httpx.Client(base_url=models_url, timeout=30))
-        gw.post("/v1/egress/hosts", json={"value": bank["host"], "note": "uc-757"})
-        gw.post("/v1/egress/ranges", json={"value": bank["range"], "note": "uc-757"})
-        gw.post("/v1/secrets", json={"name": "BANK_API_KEY", "value": "dev-bank-key"}, headers=OPS)
-        bank_module(gw, bank["host"])
-        priya = bearer(signed_in(people, "p.shah@harborpine.example"), "team_ops")
-        people.put("/v1/policies/aiSteps", json={"value": True}, headers=priya)
-        saved = api.post("/v1/workflows/definitions", json={"definition": DEFINITION}, headers=OPS)
-        live = data(api.post(f"/v1/workflows/definitions/{WID}/publish-requests", json={}, headers=OPS)) or {}
-        check("setup the workflow goes live", live.get("status") == "approved", saved.text[:300])
-        env = {
-            "OPS_GATEWAY_URL": gateway,
-            "OPS_MODELS_URL": models_url,
-            "OPS_MODELS_KEY": "mk_dev_agents",
-            "OPS_PLATFORM_URL": platform_url,
-            "OPS_LEASE_TTL_SECONDS": "3",
-        }
-        start = {"workflowId": WID, "mode": "live", "input": {"customerId": "CUS-1001", "body": BODY}}
-
-        # 1. A run starts; its worker is killed while the summary's write is held open at the bank.
-        first = str(data(api.post("/v1/runs", json=start, headers=OPS))["runId"])
-        with engine_worker(f"uc757-a-{RUN}", env) as doomed:
-            mid = until(in_flight(api, first), 90)
-            gone = kill_worker(doomed) if mid else False
-        killed = run_of(api, first)
-        filed = step(killed, "filed")
-        check(
-            "1 the worker is killed by SIGKILL mid-step: its write is in flight and the run has not moved on",
-            bool(mid) and gone and killed.get("status") == "running" and bool(filed) and filed[-1]["status"] == "running",
-            {"status": killed.get("status"), "filed": [s.get("status") for s in filed], "gone": gone},
-        )
-
-        # 2. A replacement worker takes the run over and finishes it; the run page shows it filed.
-        with engine_worker(f"uc757-b-{RUN}", env):
-            until(ended(api, first), 120 + HOLD_S)
-            page = run_of(api, first)
-            check(
-                "2 the replacement worker finishes the run and its page shows the summary filed",
-                page.get("status") == "succeeded"
-                and page.get("outcome") == "filed"
-                and [s.get("port") for s in step(page, "filed")][-1:] == ["ok"],
-                {"status": page.get("status"), "outcome": page.get("outcome"), "error": page.get("error")},
-            )
-            # 3. Across the kill the model answered the summary once and the gateway ran each write once.
-            sent, asked = fresh(writes(gw, first)), model_calls(admin, first)
-            check(
-                "3 the model saw the summary call once and the gateway each of the two writes once",
-                len(asked) == 1 and len(sent) == 2,
-                {"model calls": len(asked), "writes": [(w.get("step"), w.get("status")) for w in sent]},
-            )
-
-        # 4. A second run whose worker dies on the summary every time: after seven workers the reconciler marks it
-        # Stuck, with its first note written once.
-        second = str(data(api.post("/v1/runs", json=start, headers=OPS))["runId"])
-        dying = {"OPS_ENGINE_FAULT_KILL_AFTER_NODE": "summary", "OPS_ENGINE_FAULT_IGNORE_RECORDED": "1"}
-        for i in range(7):
-            with engine_worker(f"uc757-dying-{i}-{RUN}", env | dying) as doomed:
-                until(doomed.poll, 90)
-        with engine_worker(f"uc757-marking-{RUN}", env | {"OPS_ENGINE_RECONCILE_SECONDS": "2"}):
-            stuck = until(ended(api, second, "stuck", "failed"), 90) or {}
-        check(
-            "4 a run whose worker keeps dying on its summary stops as Stuck, offering Redrive, its first note written once",
-            stuck.get("status") == "stuck" and stuck.get("canRedrive") is True and len(fresh(writes(gw, second))) == 1,
-            {"status": stuck.get("status"), "canRedrive": stuck.get("canRedrive"), "error": stuck.get("error")},
-        )
-
-        # 5. Redrive with a healthy worker goes on from the summary and runs no finished step again.
-        with engine_worker(f"uc757-c-{RUN}", env):
-            redriven = api.post(f"/v1/runs/{second}/redrive", headers=OPS)
-            finished = until(ended(api, second), 120 + HOLD_S) or {}
-        page = run_of(api, second)
-        tries = {n: sum(len(s.get("attempts") or [s]) for s in step(page, n)) for n in ("logged", "filed")}
-        sent2, asked2 = fresh(writes(gw, second)), model_calls(admin, second)
-        check(
-            "5 Redrive finishes the run from its failed step; no note is written twice and the model is asked once",
-            redriven.status_code == 200
-            and finished.get("outcome") == "filed"
-            and tries == {"logged": 1, "filed": 1}
-            and len(sent2) == 2
-            and len(asked2) == 1,
-            {
-                "redrive": redriven.status_code,
-                "outcome": finished.get("outcome"),
-                "attempts": tries,
-                "writes": [(w.get("step"), w.get("status")) for w in writes(gw, second)],
-                "model calls": len(asked2),
+    # 4, written as text. The guard is a sentence in the skill's text, read into a rule on the read's result: on an
+    # account that owes money the run stops at it and holds the write after it. Without the `if not` lines the same
+    # run goes on to step 2 and holds nothing.
+    guarded = (
+        f"Look up the account with @tool:{read}\n"
+        "if not result.balance > 0:\n"
+        '    stop "The account has nothing to hold."\n'
+        f"Place a hold on the account with @tool:{write}"
+    )
+    texted = made(
+        s.api.post(
+            "/v1/skills",
+            json={
+                "name": f"Hold as text api {RUN}",
+                "ownerTeam": "team_ops",
+                "useWhen": "The caller asks for a hold on an account.",
+                "instructions": "",
+                "source": guarded,
             },
+            headers=me,
         )
-    finish()
+    )
+    made(s.api.post(f"/v1/skills/{texted['id']}/publish-requests", json={"note": "use case"}, headers=me))
+    made(s.api.post(f"/v1/agents/{aid}/references", json={"kind": "skill", "id": texted["id"]}, headers=me))
+    thread = test_chat()
+    say("call switch_skill " + json.dumps({"slug": texted["slug"]}))
+    say(f"call {read} {owing}")
+    stopped = last_reply().get("skillRun") or {}
+    held = [(h.get("skillId"), h.get("tools")) for h in stopped.get("holds") or []]
+    check(
+        "4 a guard written in a skill's text stops the run on the read's result and holds the write after it",
+        stopped.get("running") is None and held == [(texted["id"], [write])],
+        (stopped.get("running"), held, [h.get("ended") for h in stopped.get("history") or []]),
+    )
 
+# 6, continued. A step that asks another agent, on the dev stack, where the team's default agent may ask a specialist.
+# The hand-off is one more tool a skill owns: refused before the skill starts, and run as its step.
+DEV = {"X-Team-Id": "team_ops", "X-Dev-User": "m.okafor@harborpine.example"}
+with agents() as api:
+    asks = {
+        "name": f"Ask the dispute desk {RUN}",
+        "ownerTeam": "team_ops",
+        "useWhen": "The caller asks whether a card charge can be disputed.",
+        "instructions": "",
+        "steps": [
+            {
+                "do": "Ask the dispute desk with @agent:ag_dispute.",
+                "use": {"kind": "agent", "id": "ag_dispute"},
+                "check": {"text": 'result.status == "answered"'},
+                "ifNot": {"action": "exit", "exit": "failed"},
+            }
+        ],
+    }
+    unruled = api.post("/v1/skills", json={**asks, "steps": [{k: v for k, v in asks["steps"][0].items() if k in ("do", "use")}]}, headers=DEV)
+    skill = made(api.post("/v1/skills", json=asks, headers=DEV))
+    made(api.post(f"/v1/skills/{skill['id']}/publish-requests", json={"note": "use case"}, headers=DEV))
+    made(api.post("/v1/agents/ag_branch/references", json={"kind": "skill", "id": skill["id"]}, headers=DEV))
+    held = data(api.get("/v1/agents/ag_branch", headers=DEV))
+    made(api.post("/v1/agents/ag_branch/publish-requests", json={"version": held["version"], "note": "go"}, headers=DEV))
+    api.put("/v1/chat/default-agent", json={"agentId": "ag_branch"}, headers=DEV)
+    chat = data(api.post("/chat/threads", json={"agentId": "ag_branch", "kbIds": []}, headers=DEV))["id"]
 
-if __name__ == "__main__":
-    main()
+    def said(text: str) -> list[tuple[str, Any]]:
+        res = api.post(f"/chat/threads/{chat}/messages", json={"content": text}, headers={**DEV, **STREAM}, timeout=120)
+        if res.status_code != 200:
+            raise SystemExit(f"FAIL chat: {res.status_code} {res.text[:300]}")
+        ended = [e["call"] for e in sse(res.text) if e.get("type") == "tool_end"]
+        return [(c["name"], (c.get("output") or {}).get("status")) for c in ended]
+
+    question = 'call agent__ag_dispute {"question": "Can I dispute a card charge?"}'
+    early = said(question)
+    said("call switch_skill " + json.dumps({"slug": skill["slug"]}))
+    as_step = said(question)
+    record = [m for m in data(api.get(f"/chat/threads/{chat}", headers=DEV))["messages"] if m.get("role") == "assistant"][-1]
+    ends = [h.get("ended") for h in (record.get("skillRun") or {}).get("history") or []]
+    check(
+        "6 a step that asks another agent needs a rule, is refused before its skill starts, and runs as its step",
+        code_of(unruled) == (400, "write_needs_rule")
+        and "agent:ag_dispute" in held["toolIds"]
+        and ("agent__ag_dispute", "answered") not in early
+        and ("agent__ag_dispute", "answered") in as_step
+        and ends[-1:] == ["done"],
+        (code_of(unruled), held["toolIds"], early, as_step, ends),
+    )
+
+    # The same for a workflow a step starts: Card Dispute Resolver holds the dispute email workflow as a tool.
+    starts = {
+        "name": f"Start the dispute email {RUN}",
+        "ownerTeam": "team_ops",
+        "useWhen": "The caller wants a charge reversed by email.",
+        "instructions": "",
+        "steps": [
+            {
+                "do": "Start it with @workflow:dispute_email.",
+                "use": {"kind": "workflow", "id": "dispute_email"},
+                "check": {"text": 'result.status == "waiting_review"'},
+                "ifNot": {"action": "exit", "exit": "failed"},
+            },
+            {"do": "Tell the caller a person will review it."},
+        ],
+    }
+    bare = [{k: v for k, v in starts["steps"][0].items() if k in ("do", "use")}, starts["steps"][1]]
+    unruled = api.post("/v1/skills", json={**starts, "steps": bare}, headers=DEV)
+    skill = made(api.post("/v1/skills", json=starts, headers=DEV))
+    made(api.post(f"/v1/skills/{skill['id']}/publish-requests", json={"note": "use case"}, headers=DEV))
+    made(api.post("/v1/agents/ag_dispute/references", json={"kind": "skill", "id": skill["id"]}, headers=DEV))
+    held = data(api.get("/v1/agents/ag_dispute", headers=DEV))
+    made(api.post("/v1/agents/ag_dispute/publish-requests", json={"version": held["version"], "note": "go"}, headers=DEV))
+    chat = data(api.post("/chat/threads", json={"agentId": "ag_dispute", "kbIds": []}, headers=DEV))["id"]
+    email = {"sender": "r.osei@example.test", "subject": "Charged twice", "body": "I was charged twice for order 4411."}
+    start = "call workflow__dispute_email " + json.dumps(email)
+    early = said(start)
+    said("call switch_skill " + json.dumps({"slug": skill["slug"]}))
+    as_step = said(start)
+    record = [m for m in data(api.get(f"/chat/threads/{chat}", headers=DEV))["messages"] if m.get("role") == "assistant"][-1]
+    on = ((record.get("skillRun") or {}).get("running") or {}).get("step")
+    check(
+        "6 a step that starts a workflow needs a rule, is refused before its skill starts, and runs as its step",
+        code_of(unruled) == (400, "write_needs_rule")
+        and "workflow:dispute_email" in held["toolIds"]
+        and ("workflow__dispute_email", "waiting_review") not in early
+        and ("workflow__dispute_email", "waiting_review") in as_step
+        and on == 2,
+        (code_of(unruled), held["toolIds"], early, as_step, on),
+    )
+finish()

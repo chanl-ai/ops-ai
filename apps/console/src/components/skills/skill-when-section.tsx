@@ -75,16 +75,16 @@ export function SkillWhenSection({
   if (!needsUseWhen && !showNotWhen) return null;
   const used = watch('useWhen')?.length ?? 0;
   return (
-    <SettingsSection title="When to use it" description="The agent reads these lines to decide whether a request is this skill’s. Keep them specific.">
+    <SettingsSection title="Use when">
       <fieldset disabled={disabled} className="flex flex-col gap-4" data-testid="skill-when-section">
         {needsUseWhen && (
           <FormField id="sk-usewhen" label="Use this skill when" error={errors.useWhen?.message} hint={`The kind of request it handles. ${used.toLocaleString('en-CA')} of ${useWhenMax.toLocaleString('en-CA')} characters.`}>
-            <Textarea id="sk-usewhen" rows={2} className="min-h-16 bg-card" placeholder="e.g. The customer disputes a card charge" aria-invalid={!!errors.useWhen} data-testid="skill-use-when" {...register('useWhen')} />
+            <Textarea id="sk-usewhen" rows={2} className="min-h-16 bg-card" placeholder="The request this skill handles. e.g. a customer says their power is out or asks when it will be back." aria-invalid={!!errors.useWhen} data-testid="skill-use-when" {...register('useWhen')} />
           </FormField>
         )}
         {showNotWhen && (
           <FormField id="sk-notwhen" label="Not when" optional hint="When the agent should leave this skill alone." error={errors.notWhen?.message ?? notWhenProblem}>
-            <Textarea id="sk-notwhen" rows={2} className="bg-card" placeholder="e.g. The card was reported stolen" aria-invalid={!!errors.notWhen || !!notWhenProblem} data-testid="skill-not-when" {...register('notWhen')} />
+            <Textarea id="sk-notwhen" rows={2} className="bg-card" placeholder="When to leave this skill alone. e.g. the customer is reporting a gas smell." aria-invalid={!!errors.notWhen || !!notWhenProblem} data-testid="skill-not-when" {...register('notWhen')} />
           </FormField>
         )}
       </fieldset>

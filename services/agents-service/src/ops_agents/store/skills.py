@@ -20,6 +20,7 @@ from ops_service_kit import narrow
 from ops_service_kit.errors import Conflict
 from ops_service_kit.http import Json, JsonList, Out
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.names import cap_slug
 from ops_store import Guarantee
 from ops_store.dialect import json_text
 from ops_store.listing import LISTED
@@ -28,7 +29,7 @@ from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, team_owned_via
 from ops_store.search import contains
 from ops_store.team_scope import any_team, team_visible
 
-from .agent_registry import digest_of
+from .agent_registry import digest_of, refuse_stale
 from .base import metadata
 from .tenancy import OWNER, current_tenant
 from .versioned import VersionedRegistry
@@ -87,7 +88,7 @@ registry_skill_versions = sa.Table(
 
 
 def slug_of(name: str) -> str:
-    return (re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "skill")[:64].rstrip("-")
+    return cap_slug(re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-"), 64) or "skill"
 
 
 LABELS = {
@@ -324,13 +325,25 @@ class SkillRegistry(VersionedRegistry[SkillRow, SkillVersionRow]):
             )
         return sid
 
-    async def save_draft(self, skill_id: str, content: Json, *, by: str, note: str) -> int:
+    async def save_draft(
+        self, skill_id: str, content: Json, *, by: str, note: str, base: tuple[int, str] | None = None
+    ) -> int:
         """Edits the newest version while it is an unpublished draft, or opens the next version on top of a published
-        one. Published versions never change."""
+        one. Published versions never change.
+
+        `base` is the version and stored digest `content` was built from. A save that names it is refused when the
+        newest version is no longer that one, so another builder's save to the same draft is never written over.
+
+        Raises:
+            Conflict: `stale_base` when `base` is given and another save landed after it was read.
+        """
         at = now_iso()
         async with self.tx() as c:
-            n = (await self.row(skill_id, c)).version
+            # Locked so two saves at once take turns: unlocked, both read the same newest version and both pass.
+            n = (await self.row(skill_id, c, lock=True)).version
             newest = await self.newest(c, skill_id, n)
+            if base is not None:
+                refuse_stale(base, n, newest.digest, saved_by=newest.saved_by, saved_at=newest.saved_at)
             values = {
                 "content": content,
                 "digest": digest_of(content),

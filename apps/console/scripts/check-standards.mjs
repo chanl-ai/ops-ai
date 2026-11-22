@@ -239,7 +239,17 @@ for (const f of files.filter((x) => /^src\/(app|components)\//.test(x.rel) && !m
   const hit = /['"`]\/channels\/mcp['"`]|MCP URL/.exec(f.text);
   if (hit && !f.text.includes("'mcp_gateway'")) report(f, hit.index, 'links to the MCP address without reading the mcp_gateway flag');
 }
-for (const f of files.filter((x) => /^src\/app\/.*page\.tsx$/.test(x.rel) && !redirectOnly(x.text) && !authShell(x.rel))) {
+// A tab's page that draws nothing (`return null`) is laid out by the layout.tsx above it, which is where a record page keeps
+// state across its tabs; that layout has to reach the layout itself.
+const laidOutByLayout = (f) => {
+  if (!/return null;/.test(f.text) || /<\/|\/>/.test(f.text)) return false;
+  for (let dir = join(f.abs, '..'); dir.startsWith(join(src, 'app')) && dir !== join(src, 'app'); dir = join(dir, '..')) {
+    const text = readOrNull(join(dir, 'layout.tsx'));
+    if (text !== null) return reachesLayout({ abs: join(dir, 'layout.tsx'), text });
+  }
+  return false;
+};
+for (const f of files.filter((x) => /^src\/app\/.*page\.tsx$/.test(x.rel) && !redirectOnly(x.text) && !authShell(x.rel) && !laidOutByLayout(x))) {
   if (!reachesLayout(f)) report(f, 0, 'page that never reaches PageLayout or RecordLayout (in the page or up to three components down)');
 }
 
@@ -269,6 +279,20 @@ const REUSE = {
     what: 'an app page link built by hand (use appPageHref from lib/app-links)',
     owns: (rel) => rel === 'src/lib/app-links.ts',
     hit: (text) => text.search(/`\/integrations\/(?:apps\/)?\$\{/),
+  },
+  // A list someone picks from is searched on the server and pages as it scrolls, so a team with thousands of items can
+  // find any of them: EntityPicker or SearchSelect over an /options source (hooks/options-queries.ts), or CaretMenu
+  // for a list opened at the caret. A picker built on Command elsewhere, or a list filtered in the browser, finds only
+  // what the browser happened to load.
+  picker: {
+    what: 'a picker built on Command outside the shared ones (use EntityPicker or SearchSelect over an /options source, or CaretMenu at the caret)',
+    owns: (rel) => rel.startsWith('src/components/ui/') || ['src/components/shared/entity-picker.tsx', 'src/components/shared/search-select.tsx', 'src/components/shared/caret-menu.tsx'].includes(rel),
+    hit: (text) => text.search(/from ['"]@\/components\/ui\/command['"]/),
+  },
+  listFilter: {
+    what: 'a list searched in the browser (search on the server: an /options source through hooks/options-queries.ts)',
+    owns: (rel) => rel.startsWith('src/lib/api/') || rel === 'src/hooks/options-queries.ts',
+    hit: (text) => text.search(/\.filter\([^;]*?\.toLowerCase\(\)\.includes\(/),
   },
   dialogColumns: {
     what: 'a form laid out in columns inside a dialog (dialog forms are one column)',
@@ -337,6 +361,70 @@ const DATA = {
     hits: (text) => [...text.matchAll(/(?<![\w.$])fetch\s*\(/g)],
   },
 };
+
+// 24-28. Record-page header order, button labels, control sizes and save wording (docs/console/standards.md).
+// Counts for labels and sizes that predate the rules sit in rules-baseline.json; a file may lower its count, never raise it.
+/** Every `<Tag ...>` opening of the named components, with its attribute text and the text up to its closing tag. */
+function openings(text, tags) {
+  const out = [];
+  const re = new RegExp(`<(${tags.join('|')})(?=[\\s/>])`, 'g');
+  for (const m of text.matchAll(re)) {
+    let i = m.index + m[0].length;
+    let depth = 0;
+    let quote = null;
+    for (; i < text.length; i++) {
+      const c = text[i];
+      if (quote) {
+        if (c === quote) quote = null;
+      } else if (depth === 0 && (c === '"' || c === "'")) quote = c;
+      else if (c === '{') depth++;
+      else if (c === '}') depth--;
+      else if (c === '>' && depth === 0 && text[i - 1] !== '=') break;
+    }
+    const attrs = text.slice(m.index + m[0].length, i);
+    const selfClosed = attrs.trimEnd().endsWith('/');
+    let inner = '';
+    if (!selfClosed) {
+      const end = text.indexOf(`</${m[1]}>`, i);
+      inner = end < 0 ? '' : text.slice(i + 1, end);
+    }
+    out.push({ index: m.index, tag: m[1], attrs, inner });
+  }
+  return out;
+}
+const LABEL_TAGS = ['Button', 'LoadingButton', 'DropdownMenuItem', 'AlertDialogAction'];
+/** Rule 25: literal label text of three or more words. */
+function labelHits(text) {
+  const hits = [];
+  for (const o of openings(text, LABEL_TAGS)) {
+    const literal = o.inner.replace(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g, ' ').replace(/<[^>]*>/g, ' ').replace(/[·…]/g, ' ').trim();
+    if (literal.split(/\s+/).filter(Boolean).length >= 3) hits.push({ index: o.index });
+  }
+  for (const m of text.matchAll(/\b(?:addLabel|actionLabel)="([^"]+)"/g)) if (m[1].trim().split(/\s+/).length >= 3) hits.push({ index: m.index });
+  return hits;
+}
+const SIZE_TAGS = ['Button', 'Input', 'SelectTrigger', 'Switch', 'Checkbox', 'ToggleGroupItem'];
+/** Rule 26: a size class on a control, or a link button with its padding removed. */
+function sizeHits(text) {
+  const hits = [];
+  for (const o of openings(text, SIZE_TAGS)) {
+    const cls = /className=(?:"([^"]*)"|\{`([^`]*)`\}|\{'([^']*)'\})/.exec(o.attrs);
+    const c = cls ? cls[1] ?? cls[2] ?? cls[3] ?? '' : '';
+    if (/(^|\s)(?:h|size|px|py)-\S+|(^|\s)text-xs(\s|$)/.test(c)) hits.push({ index: o.index });
+    else if (o.tag === 'Button' && /variant="link"/.test(o.attrs) && /(^|\s)p-0(\s|$)/.test(c)) hits.push({ index: o.index });
+  }
+  return hits;
+}
+const RECORD_PAGE = /^src\/app\/build\/(agents|skills|workflows\/definitions)\/\[id\]\/page\.tsx$/;
+/** Rule 24: a record page gives its header actions through RecordActions (fixed order: state, Save, Test, primary, menu). */
+function headerHits(rel, text) {
+  if (!RECORD_PAGE.test(rel) || /<RecordActions\b/.test(text)) return [];
+  return openings(text, ['PageLayout']).filter((o) => /(?<![\w?])actions=\{(?!\s*\w+\s*\})/.test(o.attrs)).map((o) => ({ index: o.index }));
+}
+/** Rule 28: one save wording, from SaveState. */
+function saveWordHits(text) {
+  return [...text.matchAll(/Saving soon|Draft v[^`'"\n]*saved/g)].map((m) => ({ index: m.index }));
+}
 if (process.argv.includes('--self-test')) {
   // Each plant is one way a page size above 50 gets past a digits-only reading; the last three must stay clean.
   const plants = [
@@ -350,9 +438,23 @@ if (process.argv.includes('--self-test')) {
     ['let size = 500;\nuseRows({ pageSize: size })', 1],
     ['const rows: number = 4 * 5;\nuseRows({ pageSize: rows })', 0],
   ];
+  const rules = [
+    ['label: three words', labelHits('<Button onClick={() => go()}>Generate with the builder</Button>'), 1],
+    ['label: two words with an icon and a count', labelHits('<Button><Plus /> Add skill {n}</Button>'), 0],
+    ['label: addLabel of three words', labelHits('<Picker addLabel="Choose a workflow" />'), 1],
+    ['size: h-7 on a button', sizeHits('<Button size="sm" className="h-7">Go</Button>'), 1],
+    ['size: link with p-0', sizeHits('<Button variant="link" className="p-0">Go</Button>'), 1],
+    ['size: the size prop alone', sizeHits('<Button size="sm" className="w-full">Go</Button>'), 0],
+    ['header: raw actions on a record page', headerHits('src/app/build/agents/[id]/page.tsx', '<PageLayout title="a" actions={<Button>Go</Button>}>'), 1],
+    ['header: RecordActions', headerHits('src/app/build/agents/[id]/page.tsx', '<PageLayout title="a" actions={<RecordActions />}>'), 0],
+    ['save: Saving soon', saveWordHits('<span>Saving soon…</span>'), 1],
+  ];
+  const badRules = rules.filter(([, hits, want]) => hits.length !== want);
+  for (const [name, hits, want] of badRules) console.error(`self-test: ${name} gave ${hits.length}, want ${want}`);
   const failed = plants.filter(([text, want]) => pageSizeHits(text).length !== want);
+  failed.push(...badRules.map(([name, , want]) => [name, want]));
   for (const [text, want] of failed) console.error(`self-test: ${JSON.stringify(text)} should give ${want} hit(s)`);
-  console.log(failed.length ? 'check-standards self-test: FAILED' : `check-standards self-test: ${plants.length} plants behave`);
+  console.log(failed.length ? 'check-standards self-test: FAILED' : `check-standards self-test: ${plants.length + rules.length} plants behave`);
   process.exit(failed.length ? 1 : 0);
 }
 const dataPath = join(root, 'scripts/data-baseline.json');
@@ -392,6 +494,27 @@ for (const [key, listed] of Object.entries(reuseBaseline))
 if (reuseWrite) {
   const kept = Object.fromEntries(Object.keys(REUSE).map((k) => [k, (reuseBaseline[k] ?? []).filter((rel) => reuseNow[k].includes(rel)).sort()]));
   writeFileSync(reusePath, JSON.stringify(kept, null, 2) + '\n');
+}
+
+// Rules 24-28 over the files.
+const rulesPath = join(root, 'scripts/rules-baseline.json');
+const rulesBaseline = readJson(rulesPath);
+const rulesNow = { labels: {}, sizes: {} };
+for (const f of files) {
+  if (!/^src\/(app|components)\/.*\.tsx$/.test(f.rel) || /^src\/components\/(ui|shared)\//.test(f.rel) || /\.test\./.test(f.rel)) continue;
+  for (const h of headerHits(f.rel, f.text)) report(f, h.index, 'rule 24: a record page gives its header actions through RecordActions (save state, Save, Test, primary, menu)');
+  for (const h of saveWordHits(f.text)) report(f, h.index, 'rule 28: save wording comes from SaveState (Saved, Unsaved, Saving…, Not saved)');
+  for (const [key, hitsOf] of [['labels', labelHits], ['sizes', sizeHits]]) {
+    const hits = hitsOf(f.text);
+    if (hits.length) rulesNow[key][f.rel] = hits.length;
+    const allowed = rulesBaseline[key]?.[f.rel] ?? 0;
+    if (hits.length > allowed && !process.argv.includes('--write-baseline'))
+      report(f, hits[allowed].index, key === 'labels' ? 'rule 25: a button label is one or two words, verb first (put detail in a tooltip)' : 'rule 26: size comes from the size prop, not h-*, size-*, px-*, py-*, text-xs or a link button with p-0');
+  }
+}
+if (process.argv.includes('--write-baseline')) {
+  const kept = Object.fromEntries(Object.keys(rulesNow).map((k) => [k, Object.fromEntries(Object.entries(rulesNow[k]).map(([rel, n]) => [rel, Math.min(n, rulesBaseline[k]?.[rel] ?? n)]).sort())]));
+  writeFileSync(rulesPath, JSON.stringify(kept, null, 2) + '\n');
 }
 
 if (process.argv.includes('--write-baseline')) {

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-21",
+  "title": "Draft an agent's brief from a description",
+  "description": "Draft on the brief card takes a short description of the agent's job and proposes text for each heading: Job, How to answer, Hand off when, Examples and Never. Each heading shows as a change you accept or skip; nothing is saved until you accept.",
+  "tag": "new"
+}

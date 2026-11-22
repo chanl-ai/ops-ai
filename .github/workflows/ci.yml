@@ -4,6 +4,12 @@ name: ci
 
 on:
   pull_request:
+    # labeled: adding ci:full starts a run of every job without a new push.
+    types: [opened, synchronize, reopened, labeled]
+  # The merge queue on develop: the queue's temporary branch (develop plus the queued pull requests) runs the same jobs
+  # as a pull request, planned from the queue's base, so ci-ok reports on it and the queue merges only on green.
+  merge_group:
+    types: [checks_requested]
   # develop and main run the same checks after a merge; the staging job at the end deploys develop, and a release or
   # hotfix branch (docs/deploy/release.md) so the release is tested on staging.
   push:
@@ -13,9 +19,10 @@ permissions:
   contents: read
 
 # A newer push to a pull request cancels its older run. A push to develop or main never cancels one: that run may be
-# deploying staging, and a deploy stopped halfway leaves the machine between two releases.
+# deploying staging, and a deploy stopped halfway leaves the machine between two releases. Its group holds the commit,
+# because a group with one slot also drops a queued run when a newer one queues, even with cancel-in-progress off.
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -27,14 +34,18 @@ env:
   OPS_SMTP_HOST: 127.0.0.1
   OPS_GREENMAIL_HOST: 127.0.0.1
   OPS_MAILPIT_HOST: 127.0.0.1
-  # What the changed-files plan compares against: the pull request's base, or the branch tip before a push. A branch's
-  # first push has no tip before it (an all-zero sha), so the whole difference from main is checked.
-  BASE_SHA: ${{ github.event.pull_request.base.sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || 'origin/main' }}
+  # What the changed-files plan compares against: the pull request's or merge group's base, or the branch tip before a push. A branch's
+  # first push has no tip before it (an all-zero sha), so the whole difference from main is checked. The plan step
+  # replaces it for develop and main (below).
+  BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || 'origin/main' }}
 
 jobs:
   plan:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
     outputs:
       full: ${{ steps.plan.outputs.full }}
       release: ${{ steps.plan.outputs.release }}
@@ -45,20 +56,35 @@ jobs:
       scripts: ${{ steps.plan.outputs.scripts }}
       service_jobs: ${{ steps.plan.outputs.service_jobs }}
       repo_pool: ${{ steps.plan.outputs.repo_pool }}
+      code: ${{ steps.plan.outputs.code }}
+      mssql: ${{ steps.plan.outputs.mssql }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup
       - id: plan
+        name: Plan the jobs
+        env:
+          # [ci full] in the pull request's title, or its ci:full label, runs every job whatever changed.
+          CI_FULL: ${{ contains(github.event.pull_request.title, '[ci full]') || contains(github.event.pull_request.labels.*.name, 'ci:full') }}
+          GH_TOKEN: ${{ github.token }}
         run: |
+          # A push to develop or main is planned from the last commit whose run passed ci-ok, so a merge whose run was
+          # lost or failed is checked with the next one. With no such commit the plan is a full run.
+          if [ "$GITHUB_EVENT_NAME" = push ] && { [ "$GITHUB_REF" = refs/heads/develop ] || [ "$GITHUB_REF" = refs/heads/main ]; }; then
+            green=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=${GITHUB_REF#refs/heads/}&event=push&status=success&per_page=50" \
+              | scripts/ci-last-green.sh "$GITHUB_SHA" || true)
+            if [ -n "$green" ]; then BASE_SHA=$green; else export CI_FULL=true; fi
+          fi
           base=$(git merge-base "$BASE_SHA" HEAD)
           scripts/ci-plan.sh "$base" | tee -a "$GITHUB_OUTPUT"
 
   checks:
     # The one list of checks (make/checks.mk), the same one `make verify`, verify-changed.sh and pre-commit run.
     needs: plan
-    if: needs.plan.outputs.full != 'true' || needs.plan.outputs.release == 'true'
+    # A change of documents only has nothing for these checks; the docs job and the leak scan check it.
+    if: (needs.plan.outputs.full != 'true' && needs.plan.outputs.code == 'true') || needs.plan.outputs.release == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
@@ -219,6 +245,7 @@ jobs:
     # SQL Server unless OPS_MSSQL_SERVER and MSSQL_SA_PASSWORD are set (packages/ops_store/CLAUDE.md), so a run that
     # skips any of them fails here. The image is the pinned one deploy/fly/mssql/Dockerfile builds on.
     needs: plan
+    if: needs.plan.outputs.mssql == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     services:
@@ -264,12 +291,12 @@ jobs:
           # (ops_store.testing.sql_server_schema). The files that exercise stores, isolation and migrations only; the
           # provider, storage and route tests stay in the service job, on PostgreSQL.
           declare -A files=(
-            [agents-service]="tests/store/test_registry_policies.py tests/store/test_registry_policies_migration.py tests/store/test_registry_tenant_migration.py tests/store/test_registry_tenant_keys_migration.py tests/store/test_skill_list.py tests/store/test_threads_list.py"
+            [agents-service]="tests/store/test_registry_policies.py tests/store/test_registry_policies_migration.py tests/store/test_registry_tenant_migration.py tests/store/test_registry_tenant_keys_migration.py tests/store/test_skill_list.py tests/store/test_threads_list.py tests/store/test_skill_step_tools_migration.py tests/store/test_stale_saves.py"
             [models-service]="tests/test_call_log_isolation_migration.py tests/test_call_log_rows_isolated.py tests/test_model_key_share_rows_isolated.py tests/test_provider_key_rows_isolated.py tests/test_alias_current_index.py tests/test_spend_caps.py tests/test_key_spend_race.py tests/test_spend_retention.py"
             [documents-service]="tests/test_isolation.py tests/test_template_copies.py"
             [files-service]="tests/test_isolation.py tests/test_store.py"
             [kb-service]="tests/test_kb_isolation.py tests/test_kb_changed.py tests/test_team_isolation.py tests/test_background_tenants.py tests/test_system_user_predicates.py tests/test_lookup_indexes.py tests/test_list_routes.py tests/test_statement_budget.py"
-            [platform-service]="tests/test_store_both_databases.py tests/test_lookup_exposure.py tests/test_migrations.py tests/test_rls.py tests/test_policies.py tests/test_access_check.py tests/test_acting_for.py tests/test_api_key_target.py tests/test_audit_events.py tests/test_bootstrap.py tests/test_boundary.py tests/test_cors.py tests/test_custom_roles.py tests/test_dev_sign_in.py tests/test_flags.py tests/test_identity_seam.py tests/test_introspect.py tests/test_member_options.py tests/test_reply_pins.py tests/test_saml_security.py tests/test_seed.py tests/test_team_names.py tests/test_tenancy_mode.py tests/test_workspace_admin.py tests/test_body_name_pins.py tests/test_signin_lockout.py tests/test_signin_password.py tests/test_auth.py tests/test_holders.py tests/test_signin_secrets.py tests/test_api_keys.py tests/test_step_up.py"
+            [platform-service]="tests/test_store_both_databases.py tests/test_lookup_exposure.py tests/test_migrations.py tests/test_rls.py tests/test_policies.py tests/test_access_check.py tests/test_acting_for.py tests/test_api_key_target.py tests/test_audit_events.py tests/test_bootstrap.py tests/test_boundary.py tests/test_cors.py tests/test_custom_roles.py tests/test_dev_sign_in.py tests/test_flags.py tests/test_identity_seam.py tests/test_introspect.py tests/test_member_options.py tests/test_reply_pins.py tests/test_saml_security.py tests/test_seed.py tests/test_team_names.py tests/test_tenancy_mode.py tests/test_workspace_admin.py tests/test_body_name_pins.py tests/test_signin_lockout.py tests/test_signin_password.py tests/test_auth.py tests/test_holders.py tests/test_signin_secrets.py tests/test_api_keys.py tests/test_step_up.py tests/test_role_assignments.py"
             [tools-service]="tests/test_policed_tables.py tests/test_module_tenant_policy.py tests/test_mcp_link_rows_isolated.py tests/test_secret_rows_isolated.py tests/test_sign_in_rows_isolated.py tests/test_registry_store.py tests/test_background_two_tenants.py tests/test_gateway_fences.py tests/test_statement_budget.py"
           )
           failed=0

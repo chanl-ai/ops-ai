@@ -23,6 +23,7 @@ import type {
   SkillTestCase,
   SkillTestCaseInput,
   SkillTestRun,
+  SkillTextReading,
   SkillView,
   SkillViewCounts,
 } from '@/lib/types/skills';
@@ -35,7 +36,7 @@ import type {
 export interface SkillsApi {
   get(id: string): Promise<SkillDetail>;
   create(input: SkillCreateInput): Promise<Skill>;
-  /** Edits the newest draft, or opens one on top of the published version. 409 when `baseVersion` is stale. */
+  /** Edits the newest draft, or opens one on top of the published version. 409 `stale_base` when the base is not the newest copy. */
   saveDraft(id: string, patch: SkillDraftPatch): Promise<SkillDetail>;
   /** Copies a version into a new draft; nothing is published. */
   restore(id: string, version: number): Promise<SkillDetail>;
@@ -50,6 +51,8 @@ export interface SkillsApi {
   bulkRemove(ids: string[]): Promise<BulkResult>;
   /** One zip of SKILL.md folders, stored through the Files API. */
   exportSkills(ids: string[], version?: number): Promise<FileRecord>;
+  /** How a skill's text reads as steps, without saving it: the same reader a save runs. */
+  readText(id: string, input: { text: string; loading?: SkillLoading; hasParts?: boolean; exit?: Record<string, string> }): Promise<SkillTextReading>;
 
   tests: {
     add(id: string, input: SkillTestCaseInput): Promise<SkillTestCase>;

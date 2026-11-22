@@ -140,3 +140,10 @@ async def get_publish_request(rt: Rt, request_id: str) -> JSONResponse:
 @router.post("/{request_id}/decision", response_model=Envelope[PublishReview])
 async def decide_publish_request(rt: Rt, me: Me, request_id: str, body: DecisionInput) -> JSONResponse:
     return ok(await publish_reviews.decide(rt, me, request_id, decision=body.decision, reason=body.reason))
+
+
+@router.post("/{request_id}/withdraw", response_model=Envelope[PublishReview])
+async def withdraw_publish_request(rt: Rt, me: Me, request_id: str) -> JSONResponse:
+    """The requester takes back their waiting request, so the version can be changed and sent again (a new request
+    with `follows` naming this one). 403 `not_requester` for anyone else; 409 `already_decided` once decided."""
+    return ok(await publish_reviews.withdraw(rt, me, request_id))

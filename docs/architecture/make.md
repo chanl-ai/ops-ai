@@ -26,7 +26,7 @@ beside it.
 |---|---|
 | `make up` | Runs the stack from this checkout: migrates, then restarts each service whose process runs another checkout's code or another commit's (`.run/<svc>.rev` records both at start), and starts what is down |
 | `make review BRANCH=<name>` | Fetches the branch, checks it out detached in the review worktree beside the main checkout (`<main checkout>-review`, made on first use, its `.env` copied from the main checkout), installs, then runs `make up` there. Your own checkout and branch stay as they are; it refuses when the review worktree has uncommitted changes. `make up` in your checkout moves the stack back |
-| `make wt BRANCH=<name>` | A preview: a worktree under `../ops-ai-worktrees/<name>` and its own stack on port offset 51000, 52000 or 53000 (console :54016, :55016, :56016), installed from the user-wide pnpm and uv caches. At most three run; a fourth is refused naming them. `make down` in another checkout never touches it |
+| `make wt BRANCH=<name>` | A preview: a worktree under `../ops-ai-worktrees/<name>` and its own stack on port offset 36000, 37000 or 38000 (console :39016, :40016, :41016; every port stays below 49152, where macOS hands out ports to servers bound to port 0), installed from the user-wide pnpm and uv caches. At most three run; a fourth is refused naming them. `make down` in another checkout never touches it |
 | `make wt-list` | Each preview's branch, console URL and age; rewrites a page listing them, `.run/previews.html` by default (`PREVIEW_PAGE=` another path) |
 | `make wt-stop BRANCH=<name>` | Stops that preview by its pids and compose project; its data and worktree stay |
 | `make review-main` | Checks the review worktree out at the latest `origin/main` and restarts the :3016 stack from it (`AUTH=platform OPS_CONSOLE_PORT=3016 make restart`). Restart only: no reset, the database stays. Refuses when the review worktree has uncommitted changes |
@@ -51,7 +51,7 @@ into it before reviewing it.
 | `make/docs.mk` | `docs-verify`, `docs-guides-check` | `scripts/check-docs.mjs`, `scripts/check-guides.mjs` |
 | `make/sdk.mk` | `sdk`, `sdk-verify`, `sdk-check` | The SDKs in `sdk/`: regenerate, the drift check and both test suites (in `verify`), and the install smoke plus the examples on `make up` |
 | `make/usecase.mk` | `usecase-test`, `usecase-list`, `usecase-show`, `usecase-coverage`, `usecase-new`, `usecase-runner-test` | Calls `scripts/usecase.mjs` (`packages/usecase-runner`); use-case ports and database `OPS_USECASE_*`. Registry and rules: `docs/usecases/README.md` |
-| `make/git.mk` | `commit`, `commit-hunks`, `review` | Committing named files through the hooks, and the review worktree |
+| `make/git.mk` | `commit`, `commit-hunks`, `review`, `builder-watch` | Committing named files through the hooks, and the review worktree |
 | `make/plugins.mk` | `plugins-sync`, `plugins-bump` | Putting the plugins `deploy/plugins.json` pins into `OPS_PLUGINS_DIR`, and moving the pins |
 | `make/agents.mk` | `agent-review-context`, `agent-test-audit`, `agent-ui-walk`, `agent-canary`, `agent-canary-score`, `agent-scripts-test` | The agent scripts in `scripts/agents/` (`CONTRIBUTING.md` "Agents and their scripts"); every path they use comes from `.claude/project-profile.md` |
 | `make/experiments.mk` | `experiment` | Runs `services/agents-service/experiments/e<n>_*.py` on the scripted model |
@@ -197,7 +197,7 @@ data volume.
 | Is it up | `make health` |
 | Watch one service | `make logs SVC=agents` |
 | Restart after a settings change | `make restart SVC=agents` |
-| New migration, then apply | `make migration NAME="add cases"` then `make migrate` |
+| New migration, then apply | `make migration NAME="add cases"` (`SVC=kb` for another service; the id is `20261122_1405_add_cases`, a UTC timestamp, so two branches never take one number) then `make migrate` |
 | Before committing | `make verify` |
 | One package's or service's tests | `make test PKG=packages/ops_access` or `make test PKG=services/agents-service` |
 | Tests of what changed since `origin/main` | `make test` |
@@ -258,4 +258,17 @@ only against a local stack. A chat that saves really writes to the org, so use a
 
 ## Running CI's steps locally
 
-`make ci-local` runs the local twin of each `run:` step in `.github/workflows/ci.yml`, in workflow order, one at a time, and lists every failure at the end (`JOB=<job>` for one job, `PLAN=1` to print the commands only). The twins live in `scripts/ci_steps.json` beside a `no_local_twin` reason for each step that cannot run on a laptop (SQL Server container, release proof, the maintainer's review, the job summary). `scripts/ci_steps.py --check`, in `make checks`, fails when ci.yml and the list disagree.
+| Target | What it does | Variables |
+|---|---|---|
+| `make ci-local` | Runs the jobs CI would run for this change, side by side. `scripts/ci-plan.sh` prints the plan, each job's `if:` in `.github/workflows/ci.yml` is evaluated against it, a matrix job (`service`, `package`) takes its entries from the plan's JSON and runs the step's own `run:` text, and every other job runs its twins from `scripts/ci_steps.json`. Each job has its own test database (the stack's `OPS_TEST_DATABASE_URL` plus a job suffix) and its own service ports (the stack's plus 100 per job). One table at the end: job, result, seconds, log (`.run/ci-local/<time>/<job>.log`); the last lines of each failed log follow it; exit 1 on any failure. Jobs with no local twin (`store-mssql`, `release-proof`, `maintainer-review`) are listed as skipped with the reason. The plan reads committed changes: commit first | `BASE` (default `origin/develop`), `JOBS` (default half the cores), `JOB=<ci.yml job>`, `FULL=1` (every job, as `[ci full]`), `PLAN=1` (print the jobs and commands only) |
+| `make merge-ready PR=N` | Runs `make ci-local BASE=origin/develop` on the head of pull request N in a temporary worktree (`ops-ai-worktrees/merge-ready-N`, removed after) and, when every job is green and develop has a merge queue rule, runs `gh pr merge N --merge`, which enqueues it. Without the rule it stops after the green run and merges nothing. CI runs the same jobs on the queue's `merge_group` event, planned from the queue's base, so `ci-ok` reports there | `BASE` |
+| `make builder-watch` | One row per worktree under `ops-ai-worktrees`: branch, minutes since the last commit, uncommitted files, processes whose working directory is in it, and a state: `running`, `dirty`, `ok` or `stalled` (uncommitted changes, no commit for `STALL_MIN` minutes, default 30, and no process). Exit 1 when any is stalled | `WATCH=<seconds>` prints only the rows whose processes, uncommitted count or state changed; `WORKTREES=<dir>` another folder |
+| `make migration` | A new Alembic revision whose id starts with the UTC minute (`20261122_1405_add_cases`), in the chain of `SVC` (default `agents`). Revisions already in the chains keep their ids; `scripts/check_migration_heads.py` still refuses a chain with two heads | `NAME`, `SVC` |
+
+`scripts/ci_steps.py --check`, in `make checks`, fails when ci.yml and the twin list disagree; `scripts/ci_local.py --self-test` plants a failing job and sees it reported red.
+
+### Test databases
+
+`scripts/test_db.py` (called by every service's `make test` and the verify pools) makes each throwaway database with `CREATE DATABASE ... TEMPLATE` from a template that holds the service's chains migrated once: `ops_tpl_<kb|files|documents|base>_<hash>`. The four chains every suite needs share one database with their roles and functions, so a template is per service where the service adds a chain of its own, and `base` for the rest. The hash covers the chains' migrations and `alembic.ini`, their `store` code, and `ops_store`, `ops_service_kit` and `ops_engine`; it changes when any of them does, the template is then built again, and templates with an older hash are dropped. The PostgreSQL is the one `make db-up` starts for the stack (one per checkout's port offset, shared by every run on it). `OPS_TEST_TEMPLATE=0` migrates each database as before. A single test file on a warm template: kb-service 11.7s before, 4.0s after; platform-service 10.4s before, 3.8s after.
+
+SQL Server: `deploy/database/mssql_local.sh` already starts one long-lived container (`--restart unless-stopped`) and CI's per-run container is the job's own service, so nothing changed there.

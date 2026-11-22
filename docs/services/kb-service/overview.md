@@ -1,6 +1,6 @@
 # Knowledge service
 
-Status: current, checked against the code on 2026-11-18. Built: bases, four source kinds, sync, keyword and meaning search, rerank and rewrite. Partial: search on SQL Server. Not built: per-item access from a connector.
+Status: current, checked against the code on 2026-11-18. Built: bases, four source kinds, sync, keyword and meaning search, rerank and rewrite. Not built: search on SQL Server, per-item access from a connector.
 
 The knowledge service holds a team's knowledge bases. A department adds files, typed pages or a connected app's pages
 as sources; the service reads them, splits them into passages, indexes each passage for keyword and meaning search,
@@ -93,7 +93,7 @@ a kb-service per run and fill it with the agents fixtures' knowledge through thi
 | Designed in the [knowledge base](../../architecture/knowledge-base.md) page | State |
 |---|---|
 | Connectors against a real tenant | partial: the website, SharePoint and Confluence plugins sync; none has run against a real tenant; per-item access from `allowed` is stored and not enforced |
-| Search on SQL Server | partial (decision D17): `ops_store.dialect` holds the vector SQL's SQL Server form, but kb-service makes no vector table or full-text index there yet, so a search returns no passages and names both lanes skipped (`no_vector_store`, `no_full_text`) instead of failing (`test_off_postgresql_the_keyword_lane_says_it_was_skipped`) |
+| Search on SQL Server | not built (decision D17): `ops_store.dialect` holds the vector SQL's SQL Server form, but kb-service makes no vector table or full-text index there yet, so a search returns no passages and names both lanes skipped (`no_vector_store`, `no_full_text`) instead of failing (`test_off_postgresql_the_keyword_lane_says_it_was_skipped`) |
 | Filters from conversation details, freshness and trust, rewrite templates with variables | not built; rerank and rewrite with an instruction are built |
 | Curation queue, golden sets, evaluations, metadata profiles, precedence across knowledge bases | not built |
 | Answer writing in K12 | not built: the Playground answer is the top passage quoted; no model writes an answer here |
