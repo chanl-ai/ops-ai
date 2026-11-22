@@ -517,7 +517,7 @@ export function GenerateSkillDialog({
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">{SECTION_TITLE[k]}</span>
                     <Button variant="ghost" size="sm" className="h-7 text-xs" disabled={gen.phase !== 'done'} onClick={() => setRewriting(open ? null : { section: k, instruction: '' })} data-testid={`gen-rewrite-${k}`}>
-                      <Wand2 className="size-3.5" /> Rewrite with instruction
+                      <Wand2 className="size-3.5" /> Rewrite
                     </Button>
                   </div>
                   {open && (
@@ -547,10 +547,10 @@ export function GenerateSkillDialog({
                     </span>
                     <span className="flex gap-1">
                       <Button variant="outline" size="sm" className="h-6 px-2 text-xs" onClick={() => setToolIds([...toolIds, t])}>
-                        Add to scope
+                        Add
                       </Button>
                       <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setDraft({ ...draft, toolIds: draft.toolIds.filter((x) => x !== t) })}>
-                        Remove from skill
+                        Remove
                       </Button>
                     </span>
                   </div>
@@ -560,10 +560,10 @@ export function GenerateSkillDialog({
                     <span>Cites {k}, which is not in scope.</span>
                     <span className="flex gap-1">
                       <Button variant="outline" size="sm" className="h-6 px-2 text-xs" onClick={() => setKbs([...kbs, k])}>
-                        Add to scope
+                        Add
                       </Button>
                       <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setDraft({ ...draft, knowledgeBases: draft.knowledgeBases.filter((x) => x !== k) })}>
-                        Remove from skill
+                        Remove
                       </Button>
                     </span>
                   </div>
@@ -759,7 +759,7 @@ export function GenerateSkillDialog({
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium">Tests</span>
             <LoadingButton variant="outline" size="sm" isLoading={dryRun.isPending} onClick={() => dryRun.mutate({ draft: checkDraft, tests: tests ?? [] }, { onSuccess: setRun, onError: (e) => toast.error('Couldn’t run the tests', { description: e.message }) })} data-testid="gen-run-tests">
-              <Play className="size-3.5" /> Run tests now
+              <Play className="size-3.5" /> Run tests
             </LoadingButton>
           </div>
           {run ? (
@@ -784,7 +784,7 @@ export function GenerateSkillDialog({
           )}
         </section>
 
-        <FormField id="gen-review-note" label="Note for the reviewer" optional hint="Sent with Save and request review.">
+        <FormField id="gen-review-note" label="Note for the reviewer" optional hint="Sent with Send.">
           <Textarea id="gen-review-note" value={reviewNote} onChange={(e) => setReviewNote(e.target.value)} className="min-h-16" placeholder="e.g. Drafted from twenty resolved cases; replaces the manual checklist." />
         </FormField>
       </div>
@@ -822,10 +822,10 @@ export function GenerateSkillDialog({
             ) : (
               <>
                 <LoadingButton variant="outline" isLoading={create.isPending && !create.variables?.requestReview} disabled={create.isPending} onClick={() => save(false)} data-testid="gen-save-draft">
-                  Save as draft
+                  Save
                 </LoadingButton>
                 <LoadingButton isLoading={create.isPending && !!create.variables?.requestReview} disabled={create.isPending} onClick={() => save(true)} data-testid="gen-save-review">
-                  Save and request review
+                  Send
                 </LoadingButton>
               </>
             )}

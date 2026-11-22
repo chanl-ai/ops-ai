@@ -12,7 +12,7 @@ from typing import Literal, TypedDict
 
 from pydantic import ValidationError
 
-from ops_agent_kernel.prompt_writer import Brief, Patterns, head
+from ops_agent_kernel.prompt_writer import Brief, Patterns, head, tail
 from ops_contracts.skill_run import REF_TOKEN, Ref
 from ops_service_kit.errors import Unprocessable, ValidationFailed
 from ops_service_kit.http import Json
@@ -58,6 +58,17 @@ def never_of(spec: Json) -> list[str]:
     """The never rules a turn is given last, in both prompt modes; none on a version without a brief."""
     brief = brief_of(spec) if mode_of(spec) is not None else None
     return list(brief.never) if brief is not None else []
+
+
+def prompt_view(spec: Json) -> str:
+    """The agent's own prompt as the model reads it, with each mention as the name the model knows it under: the
+    stored instructions, then the never rules last. The platform rules, the skill lists and a running step are placed
+    by the turn and are not part of it."""
+    text = str(spec.get("instructions") or "") or f"You are {spec.get('name')}. {spec.get('role') or ''}".strip()
+    if mode_of(spec) is None:
+        return text
+    never = [rendered(rule, spec) for rule in never_of(spec)]
+    return "\n\n".join(p for p in (rendered(text, spec), tail(None, never)) if p)
 
 
 def patterns_of(spec: Json) -> Patterns:
@@ -169,6 +180,8 @@ def publish_problems(spec: Json) -> list[Problem]:
         ({"field": "brief.purpose", "step": None, "index": None}, brief.purpose),
         ({"field": "brief.goal", "step": None, "index": None}, brief.goal),
         ({"field": "brief.howToAnswer", "step": None, "index": None}, brief.how_to_answer),
+        *(({"field": "brief.handOff", "step": None, "index": i}, rule) for i, rule in enumerate(brief.hand_off)),
+        ({"field": "brief.examples", "step": None, "index": None}, brief.examples),
         *(({"field": "brief.never", "step": None, "index": i}, rule) for i, rule in enumerate(brief.never)),
     ]
     problems: list[Problem] = []

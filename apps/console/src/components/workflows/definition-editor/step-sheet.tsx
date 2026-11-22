@@ -182,7 +182,7 @@ function EmailTriggerDetails({ parameters, readOnly, onConnected }: { parameters
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <span>The mailbox isn’t listed?</span>
           <Button type="button" variant="outline" size="sm" onClick={() => setConnecting(true)} data-testid="trigger-connect-mailbox">
-            <Plus className="size-4" /> Connect a mailbox
+            <Plus className="size-4" /> Connect
           </Button>
           <ConnectMailbox shell="dialog" open={connecting} onOpenChange={setConnecting} onConnected={(m) => onConnected(m.address)} />
         </div>

@@ -1,15 +1,10 @@
 'use client';
 
-import * as React from 'react';
-
 import { EvalSummaryLine } from '@/components/evals/eval-meta';
-import { DialogShell } from '@/components/shared/dialog-shell';
-import { FormField } from '@/components/shared/form-field';
-import { LoadingButton } from '@/components/shared/loading-button';
+import { PublishDialog } from '@/components/shared/publish-dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { PublishProblems } from '@/components/agents/publish-problems';
 import { useAgentPublishCheck, useAgentPublishPreview } from '@/hooks/queries';
+import { HEADING } from '@/components/agents/brief-headings';
 import type { Ref } from '@/lib/types/references';
 import type { EvalVersionSummary } from '@/lib/types/evals';
 import type { PublishPreview } from '@/lib/types/publish-preview';
@@ -68,19 +63,12 @@ export function RequestAgentPublishDialog({
   const blocked = check.data ? !check.data.canRequest : false;
   const p = preview.data;
   const live = p ? !p.reviewRequired : false;
-  const [note, setNote] = React.useState('');
-  const [error, setError] = React.useState<string | null>(null);
-  React.useEffect(() => {
-    if (open) {
-      setNote('');
-      setError(null);
-    }
-  }, [open]);
 
   return (
-    <DialogShell
+    <PublishDialog
       open={open}
       onOpenChange={onOpenChange}
+      testId="publish"
       size="sm"
       title={live ? `Publish v${version}` : `Request publish of v${version}`}
       description={
@@ -90,54 +78,44 @@ export function RequestAgentPublishDialog({
             ? 'Nothing is published yet. Once approved, workflows can pin this version.'
             : `Workflows keep pinning v${publishedVersion} until this is approved and they are republished.`
       }
-      footer={
-        <div className="flex w-full justify-end gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
-            Cancel
+      blockers={check.data?.blockers ?? []}
+      where={(b) => (b.field ? (HEADING[b.field] ?? b.field) : null)}
+      onJump={(b) => b.field && (onOpenChange(false), onGoTo(b.field))}
+      rowAction={(_, i) => {
+        // A reference the team still offers but the agent lost can be put back from the row.
+        const q = problems[i];
+        const at = q?.kind === 'missing_reference' && q.id ? q.id.indexOf(':') : -1;
+        return at > 0 && q.id ? (
+          <Button type="button" variant="outline" size="sm" disabled={adding} onClick={() => onAddBack({ kind: q.id!.slice(0, at) as Ref['kind'], id: q.id!.slice(at + 1) })} data-testid="publish-problem-add-back">
+            Add back
           </Button>
-          <LoadingButton
-            disabled={blocked}
-            isLoading={isPending || preview.isPending}
-            loadingText={preview.isPending ? 'Checking…' : live ? 'Publishing…' : 'Sending…'}
-            data-testid="confirm-agent-publish"
-            onClick={async () => {
-              if (note.trim().length < 4) return setError(live ? 'Describe the change in a few words; it is kept with the version.' : 'Describe the change in a few words; the reviewer reads it first.');
-              try {
-                await onSubmit(note.trim());
-                onOpenChange(false);
-              } catch (e) {
-                setError((e as Error).message);
-              }
-            }}
-          >
-            {live ? 'Publish' : 'Request publish'}
-          </LoadingButton>
-        </div>
-      }
+        ) : null;
+      }}
+      loadError={check.isError ? <p className="text-sm text-destructive-text">Couldn’t check the brief just now. Close this and try again.</p> : undefined}
+      note={{ label: 'What changed', placeholder: 'e.g. Require a callback before any release', required: true, minLength: 4, missing: live ? 'Describe the change in a few words; it is kept with the version.' : 'Describe the change in a few words; the reviewer reads it first.' }}
+      submitLabel={live ? 'Publish' : 'Request publish'}
+      submittingLabel={preview.isPending ? 'Checking…' : live ? 'Publishing…' : 'Sending…'}
+      submitTestId="confirm-agent-publish"
+      disabled={blocked}
+      pending={isPending || preview.isPending}
+      onSubmit={onSubmit}
     >
-      <div className="flex flex-col gap-4">
-        <FormField id="agent-publish-note" label="What changed" error={error ?? undefined}>
-          <Input id="agent-publish-note" autoFocus value={note} onChange={(e) => (setNote(e.target.value), setError(null))} placeholder="e.g. Require a callback before any release" aria-invalid={!!error} />
-        </FormField>
-        <div className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">Evals on v{version}</span>
-          {evalSummary ? (
-            <EvalSummaryLine summary={evalSummary} />
-          ) : (
-            <span className="text-muted-foreground">{live ? 'No completed run yet; publishing does not wait for one.' : 'No completed run yet. The request waits for it, and approving is blocked until it finishes.'}</span>
-          )}
-        </div>
-        {check.isError && <p className="text-sm text-destructive-text">Couldn’t check the brief just now. Close this and try again.</p>}
-        <PublishProblems problems={problems} onGoTo={(f) => (onOpenChange(false), onGoTo(f))} onAddBack={onAddBack} adding={adding} />
-        {p && !live && (
-          <div className="flex flex-col gap-1 text-sm" data-testid="publish-review-reason">
-            <span className="font-medium">Who approves</span>
-            <span className="text-muted-foreground">
-              {reviewed(p, owner)} Another publisher in {owner} who neither requested nor saved v{version} approves it. At high and critical tier a second reviewer from the second line also approves.
-            </span>
-          </div>
+      <div className="flex flex-col gap-1 text-sm">
+        <span className="font-medium">Evals on v{version}</span>
+        {evalSummary ? (
+          <EvalSummaryLine summary={evalSummary} />
+        ) : (
+          <span className="text-muted-foreground">{live ? 'No completed run yet; publishing does not wait for one.' : 'No completed run yet. The request waits for it, and approving is blocked until it finishes.'}</span>
         )}
       </div>
-    </DialogShell>
+      {p && !live && (
+        <div className="flex flex-col gap-1 text-sm" data-testid="publish-review-reason">
+          <span className="font-medium">Who approves</span>
+          <span className="text-muted-foreground">
+            {reviewed(p, owner)} Another publisher in {owner} who neither requested nor saved v{version} approves it. At high and critical tier a second reviewer from the second line also approves.
+          </span>
+        </div>
+      )}
+    </PublishDialog>
   );
 }

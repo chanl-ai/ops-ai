@@ -115,14 +115,17 @@ export function EvalCaseDialog({
   options,
   onSubmit,
   isPending,
+  seed,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   options?: EvalCaseOptions;
   onSubmit: (i: EvalCaseInput) => Promise<unknown>;
   isPending: boolean;
+  /** What a new case starts from, such as a success check offered as its rubric. */
+  seed?: Partial<EvalCaseInput>;
 }) {
-  const blank = (): EvalCaseInput => ({ name: '', input: '', context: { collections: [] }, checks: [{ type: 'calls_tool' }] });
+  const blank = (): EvalCaseInput => ({ name: '', input: '', context: { collections: [] }, checks: [{ type: 'calls_tool' }], ...seed });
   const [v, setV] = React.useState<EvalCaseInput>(blank);
   const [errors, setErrors] = React.useState<{ name?: string; input?: string; checks?: string; submit?: string }>({});
   React.useEffect(() => {

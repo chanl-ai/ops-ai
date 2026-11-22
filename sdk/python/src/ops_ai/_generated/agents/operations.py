@@ -28,6 +28,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "agents_agent_prompt": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/agents/{agent_id}/prompt",
+        "pathParams": ["agent_id"],
+        "query": ["version"],
+        "stream": False,
+    },
     "agents_agent_skill_options": {
         "body": None,
         "headers": [],
@@ -151,6 +160,15 @@ OPERATIONS: dict[str, Operation] = {
         "method": "DELETE",
         "path": "/v1/agents/{agent_id}/skills/{skill_id}",
         "pathParams": ["agent_id", "skill_id"],
+        "query": [],
+        "stream": False,
+    },
+    "agents_draft_agent_brief": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/agents/{agent_id}/brief-draft",
+        "pathParams": ["agent_id"],
         "query": [],
         "stream": False,
     },
@@ -1333,6 +1351,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "reviews_withdraw_publish_request": {
+        "body": None,
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/publish-requests/{request_id}/withdraw",
+        "pathParams": ["request_id"],
+        "query": [],
+        "stream": False,
+    },
     "templates_list_templates": {
         "body": None,
         "headers": [],
@@ -2110,6 +2137,10 @@ class Operations:
         "Delete Agent"
         return self._t.call(SERVICE, OPERATIONS["agents_delete_agent"], {"agent_id": agent_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def agents_draft_agent_brief(self, agent_id: str, body: BriefDraftInput) -> BriefDraft:
+        "Draft Agent Brief"
+        return self._t.call(SERVICE, OPERATIONS["agents_draft_agent_brief"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
+
     def assurance_agent_cases(self, agent_id: str) -> SavedCases:
         "Agent Cases"
         return self._t.call(SERVICE, OPERATIONS["assurance_agent_cases"], {"agent_id": agent_id}, {}, {}, None)  # type: ignore[no-any-return]
@@ -2133,6 +2164,12 @@ class Operations:
     def agents_set_paused(self, agent_id: str, body: PausedInput) -> Agent:
         "Set Paused"
         return self._t.call(SERVICE, OPERATIONS["agents_set_paused"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def agents_agent_prompt(self, agent_id: str, *, version: int | None = None) -> AgentPrompt:
+        "Agent Prompt"
+        return self._t.call(
+            SERVICE, OPERATIONS["agents_agent_prompt"], {"agent_id": agent_id}, {"version": version}, {}, None
+        )  # type: ignore[no-any-return]
 
     def agents_publish_check(self, agent_id: str, *, version: int | None = None) -> AgentPublishCheck:
         "Publish Check"
@@ -2701,6 +2738,12 @@ class Operations:
         "Decide Publish Request"
         return self._t.call(
             SERVICE, OPERATIONS["reviews_decide_publish_request"], {"request_id": request_id}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
+    def reviews_withdraw_publish_request(self, request_id: str) -> PublishReview:
+        "Withdraw Publish Request"
+        return self._t.call(
+            SERVICE, OPERATIONS["reviews_withdraw_publish_request"], {"request_id": request_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
     def agents_references_search(
@@ -3705,6 +3748,10 @@ class AsyncOperations:
         "Delete Agent"
         return await self._t.call(SERVICE, OPERATIONS["agents_delete_agent"], {"agent_id": agent_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    async def agents_draft_agent_brief(self, agent_id: str, body: BriefDraftInput) -> BriefDraft:
+        "Draft Agent Brief"
+        return await self._t.call(SERVICE, OPERATIONS["agents_draft_agent_brief"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
+
     async def assurance_agent_cases(self, agent_id: str) -> SavedCases:
         "Agent Cases"
         return await self._t.call(SERVICE, OPERATIONS["assurance_agent_cases"], {"agent_id": agent_id}, {}, {}, None)  # type: ignore[no-any-return]
@@ -3730,6 +3777,12 @@ class AsyncOperations:
     async def agents_set_paused(self, agent_id: str, body: PausedInput) -> Agent:
         "Set Paused"
         return await self._t.call(SERVICE, OPERATIONS["agents_set_paused"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def agents_agent_prompt(self, agent_id: str, *, version: int | None = None) -> AgentPrompt:
+        "Agent Prompt"
+        return await self._t.call(
+            SERVICE, OPERATIONS["agents_agent_prompt"], {"agent_id": agent_id}, {"version": version}, {}, None
+        )  # type: ignore[no-any-return]
 
     async def agents_publish_check(self, agent_id: str, *, version: int | None = None) -> AgentPublishCheck:
         "Publish Check"
@@ -4314,6 +4367,12 @@ class AsyncOperations:
         "Decide Publish Request"
         return await self._t.call(
             SERVICE, OPERATIONS["reviews_decide_publish_request"], {"request_id": request_id}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
+    async def reviews_withdraw_publish_request(self, request_id: str) -> PublishReview:
+        "Withdraw Publish Request"
+        return await self._t.call(
+            SERVICE, OPERATIONS["reviews_withdraw_publish_request"], {"request_id": request_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
     async def agents_references_search(

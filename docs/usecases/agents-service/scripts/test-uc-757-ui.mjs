@@ -109,10 +109,11 @@ await withUiStack(
       const drawn = await page.getByTestId('sop-editor').getByTestId('sop-mention').count();
       // The Tools field lists what the text mentions, read-only, once the text holds the mention.
       const picked = (await lineOf('Look the charge up').getByTestId('sop-mention').innerText()).trim();
-      const toolRow = page.getByTestId('skill-tool-row').filter({ hasText: 'in the text' });
+      const rows = page.getByTestId('skill-tools-rows').locator(':scope > *');
+      const toolRow = rows.filter({ hasText: 'In the steps' });
       await toolRow.first().waitFor({ timeout: 30_000 }).catch(() => undefined);
-      const toolRows = await page.getByTestId('skill-tool-row').allInnerTexts();
-      check('10 the Tools field lists the tool the text mentions, read-only', (await toolRow.count()) === 1 && (await toolRow.getByRole('button').count()) === 0 && (await page.getByTestId('skill-tools-from-text').count()) === 1, { picked, toolRows });
+      const toolRows = await rows.allInnerTexts();
+      check('10 the Tools list shows the tool the text mentions, with no Remove', (await toolRow.count()) === 1 && (await toolRow.getByRole('button').count()) === 0, { picked, toolRows });
       const stored = armed(page.waitForResponse((r) => r.request().method() === 'PUT' && r.url() === `${agents}/v1/skills/${skill.id}/draft`, { timeout: 60_000 }));
       await page.getByTestId('save-skill-draft').click();
       await page.getByTestId('save-skill-draft-confirm').click();
@@ -292,12 +293,12 @@ await withUiStack(
 
       // 20. Priya saves the agent while James has it open: his next change is not saved over hers, and the page says so.
       const agentSave = (r) => r.request().method() === 'PATCH' && r.url().endsWith(`/v1/agents/${agent.id}`);
-      // She changes the brief's Goal; he then changes its Purpose. The brief is saved whole, so his save must carry her Goal.
+      // She changes the brief's Goal; he then changes its Job. The brief is saved whole, so his save must carry her Goal.
       const opened = (await (await fetch(`${agents}/v1/agents/${agent.id}`, { headers: J })).json()).data;
       const herGoal = 'Every dispute ends with a dated next step.';
       const hers = await saveAgent(agents, as(await tokenFor(PRIYA)), agent.id, { skillMenu: 'attached', brief: { ...opened.brief, goal: herGoal }, patterns: { ...opened.patterns, parallelReads: false } });
       const refused = page.waitForResponse(agentSave, { timeout: 60_000 });
-      await brief.getByRole('group', { name: 'Purpose' }).click();
+      await brief.getByRole('group', { name: 'Job' }).click();
       await page.keyboard.press('End');
       await page.keyboard.insertText(' By phone or chat.');
       // Thinking sits in the same group of settings as the parallel reads she switched off.

@@ -316,7 +316,7 @@ export function StartWorkflowRunDialog({ open, onOpenChange, file, source, fileS
                 setPicked(ids);
                 setChosen(ids[0] ?? null);
               }}
-              addLabel="Choose a workflow"
+              addLabel="Choose"
               searchPlaceholder="Search workflows"
               testId="start-run-workflow"
             />

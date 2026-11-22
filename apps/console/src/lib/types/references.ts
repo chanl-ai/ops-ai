@@ -76,8 +76,35 @@ export interface AddedReferences {
   agentVersion: number;
 }
 
+/** `GET /v1/agents/{id}/prompt`: the prompt a version gives the model, read only, with Never last. */
+export interface AgentPrompt {
+  version: number;
+  text: string;
+}
+
+/** `POST /v1/agents/{id}/brief-draft`: a proposed text per brief heading; nothing is saved until one is accepted. */
+export interface BriefDraft {
+  job: string;
+  howToAnswer: string;
+  handOff: string[];
+  examples: string;
+  never: string[];
+}
+
 /** `GET /v1/agents/{id}/publish-check`: whether the newest draft can be sent for publish, and what stops it. */
 export interface AgentPublishCheck {
   canRequest: boolean;
   problems: PublishBlocker[];
+  /** The same problems in the one shape every publish check returns, in the same order. */
+  blockers: Blocker[];
+}
+
+/** One reason a publish is refused, in the one shape the agent, skill and workflow publish checks return: the workflow
+ * step (`node`) or the field it is in, its level and code, and the sentence the publish dialog shows. */
+export interface Blocker {
+  node: string | null;
+  field: string | null;
+  level: 'error' | 'warning';
+  code: string;
+  message: string;
 }

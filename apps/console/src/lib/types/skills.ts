@@ -9,7 +9,7 @@ import type { EvalCheck, EvalCheckResult } from './evals';
  */
 
 import type { StepValue } from '@/components/shared/instruction-document/document-model';
-import type { PublishBlocker, PublishWarning } from './references';
+import type { Blocker, PublishBlocker, PublishWarning } from './references';
 
 export type SkillStatus = 'draft' | 'in_review' | 'published' | 'deprecated';
 export type SkillVersionState = 'draft' | 'in_review' | 'published' | 'superseded' | 'deprecated' | 'rejected';
@@ -278,7 +278,7 @@ export interface SkillActivity {
 /** What publishing the newest version needs, computed by the server. */
 export interface SkillPublishCheck {
   canRequest: boolean;
-  blockers: string[];
+  blockers: Blocker[];
   /** Each blocker with where it is: a step's number when it is on a step. */
   problems?: PublishBlocker[];
   /** What the check noticed and does not block on, placed like a problem; absent on an older service. */

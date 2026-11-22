@@ -1178,10 +1178,37 @@
         "title": "AgentPatch",
         "type": "object"
       },
+      "AgentPrompt": {
+        "additionalProperties": false,
+        "description": "The prompt one version of an agent gives the model, read only: its instructions, then the never rules last.",
+        "properties": {
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "text"
+        ],
+        "title": "AgentPrompt",
+        "type": "object"
+      },
       "AgentPublishCheck": {
         "additionalProperties": false,
         "description": "Whether the newest draft can be published, and each thing that stops it with the field it is in.",
         "properties": {
+          "blockers": {
+            "items": {
+              "$ref": "#/components/schemas/Blocker"
+            },
+            "title": "Blockers",
+            "type": "array"
+          },
           "canRequest": {
             "title": "Canrequest",
             "type": "boolean"
@@ -2947,6 +2974,57 @@
         "title": "BlockedBy",
         "type": "object"
       },
+      "Blocker": {
+        "additionalProperties": false,
+        "description": "One reason a publish is refused, in the one shape the agent, skill and workflow publish checks return: the\nworkflow step (`node`) or the field it is in, its level and code, and the sentence the publish dialog shows.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field"
+          },
+          "level": {
+            "default": "error",
+            "enum": [
+              "error",
+              "warning"
+            ],
+            "title": "Level",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "node": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "Blocker",
+        "type": "object"
+      },
       "BlockerPosition": {
         "additionalProperties": false,
         "description": "Where a publish problem is: the field (`steps`, `notWhen`, `useWhen`, `brief.never`, `source`), and the step\n(from 1) or list index when it has one; for `source`, `index` is the line (from 1).",
@@ -3046,13 +3124,29 @@
       },
       "Brief": {
         "additionalProperties": false,
-        "description": "What a builder writes instead of one block of instructions. Persona, tone and glossary are text inside\n`how_to_answer`. `success` is kept for grading and is never sent to the model.",
+        "description": "What a builder writes instead of one block of instructions. Persona, tone and glossary are text inside\n`how_to_answer`. `purpose` is the Job; `goal` is kept on agents that already have one and is not asked for on\nnew ones. `success` is kept readable on old versions and is never sent to the model. `hand_off` and `examples`\ndefault to empty, so a version stored before them reads and runs as it did.",
         "properties": {
+          "examples": {
+            "default": "",
+            "maxLength": 4000,
+            "title": "Examples",
+            "type": "string"
+          },
           "goal": {
             "default": "",
             "maxLength": 600,
             "title": "Goal",
             "type": "string"
+          },
+          "handOff": {
+            "items": {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 10,
+            "title": "Handoff",
+            "type": "array"
           },
           "howToAnswer": {
             "default": "",
@@ -3093,14 +3187,83 @@
         "title": "Brief",
         "type": "object"
       },
+      "BriefDraft": {
+        "additionalProperties": false,
+        "description": "A proposed text per brief heading, drafted from a description. Nothing is saved: each heading is accepted or\nskipped in the console, and an accepted one saves as an ordinary edit of the brief.",
+        "properties": {
+          "examples": {
+            "title": "Examples",
+            "type": "string"
+          },
+          "handOff": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Handoff",
+            "type": "array"
+          },
+          "howToAnswer": {
+            "title": "Howtoanswer",
+            "type": "string"
+          },
+          "job": {
+            "title": "Job",
+            "type": "string"
+          },
+          "never": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Never",
+            "type": "array"
+          }
+        },
+        "required": [
+          "job",
+          "howToAnswer",
+          "handOff",
+          "examples",
+          "never"
+        ],
+        "title": "BriefDraft",
+        "type": "object"
+      },
+      "BriefDraftInput": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "title": "BriefDraftInput",
+        "type": "object"
+      },
       "BriefView": {
         "additionalProperties": false,
         "description": "An agent's brief as replied (`ops_agent_kernel.prompt_writer.Brief` is the request form).",
         "properties": {
+          "examples": {
+            "default": "",
+            "title": "Examples",
+            "type": "string"
+          },
           "goal": {
             "default": "",
             "title": "Goal",
             "type": "string"
+          },
+          "handOff": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Handoff",
+            "type": "array"
           },
           "howToAnswer": {
             "default": "",
@@ -7305,6 +7468,25 @@
         "title": "Envelope[AgentEvalRun]",
         "type": "object"
       },
+      "Envelope_AgentPrompt_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AgentPrompt"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[AgentPrompt]",
+        "type": "object"
+      },
       "Envelope_AgentPublishCheck_": {
         "additionalProperties": false,
         "properties": {
@@ -7474,6 +7656,25 @@
           "data"
         ],
         "title": "Envelope[BatchView]",
+        "type": "object"
+      },
+      "Envelope_BriefDraft_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/BriefDraft"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[BriefDraft]",
         "type": "object"
       },
       "Envelope_BulkResult_": {
@@ -15383,6 +15584,17 @@
       "PublishRequestInput": {
         "additionalProperties": false,
         "properties": {
+          "follows": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Follows"
+          },
           "note": {
             "default": "",
             "title": "Note",
@@ -15527,6 +15739,17 @@
             "title": "Evidence",
             "type": "array"
           },
+          "follows": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Follows"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -15602,7 +15825,8 @@
               "in_review",
               "approved",
               "rejected",
-              "returned"
+              "returned",
+              "withdrawn"
             ],
             "title": "Status",
             "type": "string"
@@ -19810,7 +20034,7 @@
           },
           "blockers": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/Blocker"
             },
             "title": "Blockers",
             "type": "array"
@@ -23502,7 +23726,8 @@
               "in_review",
               "approved",
               "rejected",
-              "returned"
+              "returned",
+              "withdrawn"
             ],
             "title": "Status",
             "type": "string"
@@ -24737,6 +24962,18 @@
       "UsedIn": {
         "additionalProperties": false,
         "properties": {
+          "channel": {
+            "anyOf": [
+              {
+                "const": "email",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel"
+          },
           "own": {
             "anyOf": [
               {
@@ -30735,6 +30972,204 @@
         "x-ops-public": "sdk"
       }
     },
+    "/v1/agents/{agent_id}/brief-draft": {
+      "post": {
+        "description": "A proposed text per brief heading from a description, written by the deployment's model and naming only the\ntools and knowledge the newest version holds. Nothing is saved; 503 `model_unavailable` with no model.",
+        "operationId": "agents_draft_agent_brief",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BriefDraftInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_BriefDraft_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Draft Agent Brief",
+        "tags": [
+          "Agents"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
     "/v1/agents/{agent_id}/eval-cases": {
       "get": {
         "description": "The agent's saved cases: the active ones its runs use, and drafts proposed from reviews.",
@@ -31894,6 +32329,210 @@
           }
         },
         "summary": "Set Paused",
+        "tags": [
+          "Agents"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/agents/{agent_id}/prompt": {
+      "get": {
+        "description": "The prompt a version gives the model (the newest when none is named), with each mention as the name the model\nknows it under and the never rules last. Nothing is changed.",
+        "operationId": "agents_agent_prompt",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_AgentPrompt_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Agent Prompt",
         "tags": [
           "Agents"
         ],
@@ -48546,6 +49185,194 @@
           }
         },
         "summary": "Decide Publish Request",
+        "tags": [
+          "Reviews"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/publish-requests/{request_id}/withdraw": {
+      "post": {
+        "description": "The requester takes back their waiting request, so the version can be changed and sent again (a new request\nwith `follows` naming this one). 403 `not_requester` for anyone else; 409 `already_decided` once decided.",
+        "operationId": "reviews_withdraw_publish_request",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_PublishReview_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Withdraw Publish Request",
         "tags": [
           "Reviews"
         ],

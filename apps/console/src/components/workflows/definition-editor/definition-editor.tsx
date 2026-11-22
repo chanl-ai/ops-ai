@@ -39,6 +39,7 @@ import { applyLayout, layoutDefinition } from '../layout/definition-layout';
 import { LifecycleActions, ViewOnlyLine, type Lifecycle } from './lifecycle';
 import type { StepRef, StepRefs } from './node-form';
 import { ProblemsChip } from './problems-chip';
+import { RecordActions } from '@/components/shared/record-actions';
 import { PublishDefinitionDialog } from './publish-dialog';
 import { type RunMode, StartDefinitionRunDialog } from '@/components/workflows/start-run-dialog';
 import { StepList } from './step-list';
@@ -56,6 +57,8 @@ export interface DefinitionEditorProps {
   onChange?: (definition: EngineDefinition) => void;
   /** Where the working copy's save stands, shown beside the problems in the header. */
   saveState?: React.ReactNode;
+  /** Save now, for the header's Save button and Cmd/Ctrl+S; the copy still saves itself after a pause. */
+  save?: { onSave: () => void; disabled?: boolean; saving?: boolean };
   /** True while the working copy differs from the newest version, so there is something to publish. */
   changed?: boolean;
   /** True while a change on screen is not saved yet: Publish waits, so the version is made from what is on screen. */
@@ -145,7 +148,7 @@ function EditorInner(props: DefinitionEditorProps) {
   return <EditorBody {...props} definition={placed} />;
 }
 
-function EditorBody({ definition: initial, types, validation, validateError = null, onChange, saveState, changed = false, saving = false, startRun, startByHand, lifecycle, requestPublish, setPaused, pausing, readOnly = false, readOnlyNote, canPublish, frame }: DefinitionEditorProps) {
+function EditorBody({ definition: initial, types, validation, validateError = null, onChange, saveState, save, changed = false, saving = false, startRun, startByHand, lifecycle, requestPublish, setPaused, pausing, readOnly = false, readOnlyNote, canPublish, frame }: DefinitionEditorProps) {
   const [def, setDef] = React.useState<EngineDefinition>(initial);
   const [dirty, setDirty] = React.useState(false);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
@@ -376,19 +379,31 @@ function EditorBody({ definition: initial, types, validation, validateError = nu
 
   const actions = (
     <div className="flex flex-wrap items-center justify-end gap-2">
-      {saveState}
-      <ProblemsChip validation={validation} checking={checking} failed={validateError} nodeName={nodeName} onSelectNode={(id) => { selectNode(id); setSheetId(id); }} />
-      {!readOnly && <LifecycleActions lifecycle={lifecycle} changed={changed} saving={saving} onPublish={() => setPublishOpen(true)} onSetPaused={setPaused} pausing={pausing} canPublish={canPublish !== false} />}
-      {readOnly && <ViewOnlyLine lifecycle={lifecycle} note={readOnlyNote} />}
-      {/* Someone who may only read a draft still sees that it waits on a publish, and why they cannot start it. */}
-      {readOnly && canPublish === false && lifecycle.stage === 'draft' && !lifecycle.review && <LockedReason area="workflows" action="publish" label="Publish…" />}
-      {/* Starting any run is a builder's or admin's step (runs/start); the server refuses the rest, so the
-          button shows only to them. */}
-      {!readOnly && (
-        <Button type="button" variant="outline" onClick={() => setRunOpen(true)} data-testid="definition-start-run">
-          <Play /> {lifecycle.liveVersion !== null && !lifecycle.paused ? 'Start run' : 'Test run'}
-        </Button>
-      )}
+      <RecordActions
+        status={
+          <>
+            {saveState}
+            <ProblemsChip validation={validation} checking={checking} failed={validateError} nodeName={nodeName} onSelectNode={(id) => { selectNode(id); setSheetId(id); }} />
+          </>
+        }
+        save={readOnly ? undefined : save && { ...save, testId: 'definition-save' }}
+        // Starting any run is a builder's or admin's step (runs/start); the server refuses the rest, so the button shows only to them.
+        test={
+          !readOnly && (
+            <Button type="button" variant="outline" onClick={() => setRunOpen(true)} data-testid="definition-start-run">
+              <Play /> {lifecycle.liveVersion !== null && !lifecycle.paused ? 'Start run' : 'Test run'}
+            </Button>
+          )
+        }
+        primary={
+          <>
+            {!readOnly && <LifecycleActions lifecycle={lifecycle} changed={changed} saving={saving} onPublish={() => setPublishOpen(true)} onSetPaused={setPaused} pausing={pausing} canPublish={canPublish !== false} />}
+            {readOnly && <ViewOnlyLine lifecycle={lifecycle} note={readOnlyNote} />}
+            {/* Someone who may only read a draft still sees that it waits on a publish, and why they cannot start it. */}
+            {readOnly && canPublish === false && lifecycle.stage === 'draft' && !lifecycle.review && <LockedReason area="workflows" action="publish" label="Publish" />}
+          </>
+        }
+      />
     </div>
   );
 
@@ -443,7 +458,7 @@ function EditorBody({ definition: initial, types, validation, validateError = nu
           <div className="flex items-center gap-2">
             <Popover>
               <PopoverTrigger asChild>
-                <Button type="button" variant="outline" size="icon" className="size-9 bg-card max-sm:hidden" aria-label="Keyboard shortcuts" title="Keyboard shortcuts">
+                <Button type="button" variant="outline" size="icon" className="bg-card max-sm:hidden" aria-label="Keyboard shortcuts" title="Keyboard shortcuts">
                   <Keyboard />
                 </Button>
               </PopoverTrigger>

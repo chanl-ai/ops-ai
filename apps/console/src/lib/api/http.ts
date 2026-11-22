@@ -95,6 +95,7 @@ function createReviewsHttp(get: Get, send: Send): OpsApi['reviews'] {
     place: (id, opts) => get(`/reviews/${encodeURIComponent(id)}/place${opts ? `?${new URLSearchParams(Object.entries(opts).filter(([, v]) => v) as [string, string][]).toString()}` : ''}`),
     decide: (id, i) => send('POST', `/reviews/${encodeURIComponent(id)}/decision`, i),
     assign: (ids, assignee) => send('POST', '/reviews/assign', { ids, assignee }),
+    withdraw: (id) => send('POST', `/publish-requests/${encodeURIComponent(id)}/withdraw`),
     bulkDecide: (ids, decision, reason, opts) => send('POST', '/reviews/bulk-decision', { ids, decision, reason, stepUpToken: opts?.stepUpToken }),
   };
 }
@@ -256,9 +257,11 @@ export function createHttpApi(baseUrl: string): OpsApi {
       versions: (id) => get(`/agents/${id}/versions`),
       runs: (id) => get(`/agents/${id}/runs`),
       restore: (id, version) => send('POST', `/agents/${id}/versions/${version}/restore`),
-      requestPublish: (id, version, note) => send('POST', `/agents/${id}/publish-requests`, { version, note }),
+      requestPublish: (id, version, note, follows) => send('POST', `/agents/${id}/publish-requests`, { version, note, follows }),
       publishPreview: (id, version) => get(`/agents/${id}/publish-preview?version=${version}`),
       publishCheck: (id, version) => get(`/agents/${id}/publish-check?version=${version}`),
+      promptView: (id, version) => get(`/agents/${id}/prompt${version === undefined ? '' : `?version=${version}`}`),
+      draftBrief: (id, description) => send('POST', `/agents/${id}/brief-draft`, { description }),
       setPaused: (id, paused) => send('POST', `/agents/${id}/paused`, { paused }),
       // GET /tools answers one page of the Tools page's rows (each a grantable tool with its app and users): the agent
       // page reads the largest page the route serves.
@@ -321,7 +324,7 @@ export function createHttpApi(baseUrl: string): OpsApi {
     engine: createEngineHttp(get, send),
     channels: createChannelsHttp(get, send),
     templates: createTemplatesHttp(get, send, qs),
-    prompts: createPromptsHttp(get, send, qs, baseUrl),
+    prompts: createPromptsHttp(get),
     skills: createSkillsHttp(get, send, qs, baseUrl),
     widgets: createWidgetsHttp(get, send, qs),
     widgetDeployments: createWidgetDeploymentsHttp(get, send, baseUrl),

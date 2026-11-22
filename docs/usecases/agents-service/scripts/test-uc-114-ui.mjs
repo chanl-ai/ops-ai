@@ -54,8 +54,16 @@ await withUiStack(
     const rows = Array.isArray(listed) ? listed : listed?.data ?? listed?.items ?? [];
     const agent = rows.find((a) => a.publishedVersion != null && !a.paused) ?? rows[0];
     if (!agent) throw new Error(`setup: no agent in team_ops: ${JSON.stringify(listed).slice(0, 300)}`);
+    // An agent written as a brief refuses a bare role or instructions edit (brief_owns_prompt): its Job is the role
+    // and How to answer the instructions, so the same change is sent through the brief.
+    const asBrief = async (patch) => {
+      const now = (await call('GET', `/v1/agents/${agent.id}`, J)).body?.data;
+      if (!now?.brief) return patch;
+      const { role, instructions, ...rest } = patch;
+      return { ...rest, brief: { ...now.brief, ...(role ? { purpose: role } : {}), ...(instructions ? { howToAnswer: instructions } : {}) } };
+    };
     const publish = async (patch) => {
-      const saved = await call('PATCH', `/v1/agents/${agent.id}`, J, { ...patch, ...(await agentBase(agents, J, agent.id)) });
+      const saved = await call('PATCH', `/v1/agents/${agent.id}`, J, { ...(await asBrief(patch)), ...(await agentBase(agents, J, agent.id)) });
       const req = await call('POST', `/v1/agents/${agent.id}/publish-requests`, J, { version: saved.body?.data?.version, note: 'uc-114' });
       const d = req.body?.data;
       return { id: d?.id, status: req.status, review: d?.status, record: d?.agentPublish && { reviewRequired: d.agentPublish.reviewRequired, policy: d.agentPublish.policy, majorChange: d.agentPublish.majorChange }, saved: saved.status };
@@ -63,7 +71,7 @@ await withUiStack(
 
     // A new draft, published from the agent page; returns the message the page showed.
     const publishFromPage = async (page, patch) => {
-      const saved = (await call('PATCH', `/v1/agents/${agent.id}`, J, { ...patch, ...(await agentBase(agents, J, agent.id)) })).body?.data;
+      const saved = (await call('PATCH', `/v1/agents/${agent.id}`, J, { ...(await asBrief(patch)), ...(await agentBase(agents, J, agent.id)) })).body?.data;
       await page.goto(`${consoleUrl}/agents/${agent.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await page.getByTestId('request-agent-publish').click();
       await page.locator('#agent-publish-note').fill('uc-114 from the page');

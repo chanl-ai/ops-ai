@@ -30,6 +30,19 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "agents_agent_prompt": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/agents/{agent_id}/prompt",
+    "pathParams": [
+      "agent_id"
+    ],
+    "query": [
+      "version"
+    ],
+    "stream": false
+  },
   "agents_agent_skill_options": {
     "body": null,
     "headers": [],
@@ -181,6 +194,17 @@ export const agentsOperations = {
     "pathParams": [
       "agent_id",
       "skill_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "agents_draft_agent_brief": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/agents/{agent_id}/brief-draft",
+    "pathParams": [
+      "agent_id"
     ],
     "query": [],
     "stream": false
@@ -1680,6 +1704,17 @@ export const agentsOperations = {
     "path": "/v1/task-types/{type_id}/draft",
     "pathParams": [
       "type_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "reviews_withdraw_publish_request": {
+    "body": null,
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/publish-requests/{request_id}/withdraw",
+    "pathParams": [
+      "request_id"
     ],
     "query": [],
     "stream": false

@@ -87,6 +87,23 @@ class Problem(TypedDict):
     message: str
 
 
+class BlockerWire(TypedDict):
+    """A publish problem in the one shape the agent, skill and workflow publish checks return (`schemas.Blocker`)."""
+
+    node: str | None
+    field: str | None
+    level: Literal["error", "warning"]
+    code: str
+    message: str
+
+
+def blocker_of(problem: Problem) -> BlockerWire:
+    """A publish problem as a `Blocker`: the field it is in, and no step id, which only a workflow has."""
+    position = problem["position"]
+    field = position["field"] if position else None
+    return {"node": None, "field": field, "level": "error", "code": problem["kind"], "message": problem["message"]}
+
+
 def runs_of(content: Json) -> frozenset[str]:
     """The ids of the skills a stored version's steps run."""
     program = program_of(content)

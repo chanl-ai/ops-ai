@@ -26,21 +26,24 @@ from ops_agents.activities.agent_limits import AgentLimits, check_limits, limits
 from ops_agents.activities.agent_limits import wire as wire_limits
 from ops_agents.activities.tool_directory import ToolsUnavailable
 from ops_agents.app import agent_brief
+from ops_agents.app.brief_draft import draft_brief
 from ops_agents.app.evals import parse_cases, run_eval
 from ops_agents.domain.evals import TRIGGER_MANUAL
 from ops_identity.fastapi import Tx
 from ops_service_kit import narrow
-from ops_service_kit.errors import Conflict, NotFound, Unprocessable, ValidationFailed
+from ops_service_kit.errors import Conflict, NotFound, ServiceUnavailable, Unprocessable, ValidationFailed
 from ops_service_kit.http import Envelope, In, Json, JsonList, ListResult, Out
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.listing import ListQuery
 from ops_service_kit.names import Name
 from ops_store import isolation
 
+from ...app.skill_content import Problem, blocker_of
 from ...store.agent_registry import AgentRow, digest_of, refuse_stale
 from ...store.evals import EvalStore
 from ...store.graphs import StoredThread
 from ...store.template_copies import TemplateCopies
+from .. import publish_reviews
 from ..account_names import require_team_accounts
 from ..agent_registry import (
     GUARDRAILS,
@@ -63,6 +66,7 @@ from ..agent_test import one_test_turn
 from ..auth import Principal, caller, caller_in, caller_of, principal, reader_of, require_builder, started_by
 from ..child_runs import engine_workflows, refusal, team_workflows
 from ..deps import Runtime, runtime
+from ..engine_agents import KernelModels
 from ..envelope import ok
 from ..guardrails import resolve_pins
 from ..model_aliases import chat_aliases
@@ -73,10 +77,12 @@ from ..runs import graph_store
 from ..schemas import (
     Agent,
     AgentEvalRun,
+    AgentPrompt,
     AgentPublishCheck,
     AgentRun,
     AgentTestTurn,
     AgentVersion,
+    BriefDraft,
     MemorySettings,
     PublishDecisionFields,
     PublishReview,
@@ -187,10 +193,17 @@ class AgentPatch(In):
 class PublishRequestInput(In):
     version: int
     note: str = ""
+    # A withdrawn request of this agent that this one sends again.
+    follows: str | None = None
 
 
 class PausedInput(In):
     paused: bool
+
+
+class BriefDraftInput(In):
+    # What the agent is for, in the builder's words, or a procedure pasted in.
+    description: str = Field(min_length=1, max_length=8000)
 
 
 class TestInput(In):
@@ -293,12 +306,20 @@ async def used_in_all(rt: Runtime) -> dict[str, list[WorkflowUse]]:
             }
             out.setdefault(r.id, []).append(use)
 
-    def add(agent_id: str, workflow_id: str, name: str, version: int | None, status: str) -> None:
+    def add(
+        agent_id: str, workflow_id: str, name: str, version: int | None, status: str, *, channel: str | None = None
+    ) -> None:
         if version is None or any(u["workflowId"] == workflow_id for u in out.get(agent_id, [])):
             return
-        out.setdefault(agent_id, []).append(
-            {"workflowId": workflow_id, "workflowName": name, "pinnedVersion": int(version), "status": status}
-        )
+        use: WorkflowUse = {
+            "workflowId": workflow_id,
+            "workflowName": name,
+            "pinnedVersion": int(version),
+            "status": status,
+        }
+        if channel:
+            use["channel"] = channel
+        out.setdefault(agent_id, []).append(use)
 
     assert rt.graph_store is not None
     for w in await workflow_registry(rt).rows():
@@ -316,10 +337,12 @@ async def used_in_all(rt: Runtime) -> dict[str, list[WorkflowUse]]:
                 add(row.id, w.id, w.name, published.get(row.id), "draft" if status == "draft" else status)
     for d in await engine_workflows(rt):
         definition = cast(Json, d["definition"] or {})
-        for node in cast(list[Json], definition.get("nodes") or []):
+        nodes = cast(list[Json], definition.get("nodes") or [])
+        channel = "email" if any(n.get("type") == "ops.trigger.email" for n in nodes) else None
+        for node in nodes:
             params = cast(Json, node.get("parameters") or {})
             if node.get("type") == "ops.ai.agent" and (aid := str(params.get("agent") or "")):
-                add(aid, d["workflow_id"], d["name"], published.get(aid), "live")
+                add(aid, d["workflow_id"], d["name"], published.get(aid), "live", channel=channel)
     return out
 
 
@@ -737,11 +760,41 @@ async def publish_preview(rt: Rt, me: Me, agent_id: str, version: Annotated[int,
     return ok(decision.record())
 
 
+@router.post("/{agent_id}/brief-draft", response_model=Envelope[BriefDraft])
+async def draft_agent_brief(rt: Rt, me: Me, agent_id: str, body: BriefDraftInput) -> JSONResponse:
+    """A proposed text per brief heading from a description, written by the deployment's model and naming only the
+    tools and knowledge the newest version holds. Nothing is saved; 503 `model_unavailable` with no model."""
+    row = await changeable(rt, me, agent_id, "edit")
+    if rt.ports is None:
+        raise ServiceUnavailable(rt.model_error or "No model is configured.", code="model_unavailable")
+    spec = (await registry(rt).version(agent_id, row.version)).spec
+    proposal = await draft_brief(
+        KernelModels(rt.ports, rt.settings.model_alias),
+        body.description,
+        name=str(spec.get("name") or row.slug),
+        tools=[str(t) for t in cast(list[object], spec.get("toolIds") or [])],
+        knowledge=[str(k) for k in cast(list[object], spec.get("collections") or [])],
+        key=f"brief-draft:{agent_id}:{new_id('draft')}",
+    )
+    return ok(proposal)
+
+
 async def _publish_problems(rt: Runtime, spec: Json) -> list[Json]:
     """What stops a version's publish: what its brief names and the agent lacks, and what in the skills it pins must
     not run as stored. The check and the publish both read this list."""
     brief = cast(list[Json], agent_brief.publish_problems(spec))
     return [*brief, *cast(list[Json], await skill_pin_problems(rt, spec))]
+
+
+@router.get("/{agent_id}/prompt", response_model=Envelope[AgentPrompt])
+async def agent_prompt(
+    rt: Rt, _: Reader, __: Tx, agent_id: str, version: Annotated[int | None, Query()] = None
+) -> JSONResponse:
+    """The prompt a version gives the model (the newest when none is named), with each mention as the name the model
+    knows it under and the never rules last. Nothing is changed."""
+    reg = registry(rt)
+    n = version if version is not None else (await reg.row(agent_id)).version
+    return ok({"version": n, "text": agent_brief.prompt_view((await reg.version(agent_id, n)).spec)})
 
 
 @router.get("/{agent_id}/publish-check", response_model=Envelope[AgentPublishCheck])
@@ -752,7 +805,9 @@ async def publish_check(rt: Rt, me: Me, _: Tx, agent_id: str, version: Annotated
     row = await changeable(rt, me, agent_id, "publish")
     require_newest_draft(row, version)
     problems = await _publish_problems(rt, (await registry(rt).version(agent_id, version)).spec)
-    return ok({"canRequest": not problems, "problems": problems})
+    return ok(
+        {"canRequest": not problems, "problems": problems, "blockers": [blocker_of(cast(Problem, p)) for p in problems]}
+    )
 
 
 @router.post("/{agent_id}/publish-requests", response_model=Envelope[PublishReview], status_code=201)
@@ -779,6 +834,7 @@ async def request_publish(rt: Rt, me: Me, agent_id: str, body: PublishRequestInp
     review_body = {
         **agent_review_body(agent_id, spec, row, v, note=body.note, by=me.email),
         **decision.record(),
+        **await publish_reviews.follows(rt, "agent", agent_id, body.follows),
     }
     # Asking for the newest draft replaces a request still waiting on an older version (a seed change, a colleague's),
     # so the version that goes live is the one holding the newest grants.

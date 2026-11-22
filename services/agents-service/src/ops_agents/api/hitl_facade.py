@@ -941,7 +941,7 @@ REVIEW_VIEWS: dict[str, Callable[[Listed], bool]] = {
     "open": lambda r: r["status"] in ("pending", "in_review"),
     # A review whose step set no SLA (slaMinutes None) is never overdue.
     "overdue": lambda r: r["status"] in ("pending", "in_review") and cast(float, r.get("slaMinutes") or 0) < 0,
-    "resolved": lambda r: r["status"] in ("approved", "rejected", "returned"),
+    "resolved": lambda r: r["status"] in ("approved", "rejected", "returned", "withdrawn"),
     "all": lambda r: True,
 }
 

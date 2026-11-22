@@ -90,6 +90,9 @@ query = { version = "1" }
 ["GET /v1/agents/{agent_id}/runs"]
 queries = 3
 
+["GET /v1/agents/{agent_id}/prompt"]
+queries = 2
+
 ["GET /v1/agents/{agent_id}/publish-check"]
 queries = 3
 query = { version = "1" }

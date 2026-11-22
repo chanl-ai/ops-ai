@@ -59,7 +59,7 @@ export function ChecksPanel({
               return (
                 <div key={`${c.code}-${node ?? ''}-${i}`} data-testid="definition-check" data-level={c.level} data-node={node ?? undefined} className="min-w-0">
                   {node ? (
-                    <Button type="button" variant="ghost" onClick={() => onSelectNode(node)} className="h-auto w-full items-start justify-start gap-2 rounded-none px-4 py-2.5 font-normal whitespace-normal">
+                    <Button type="button" variant="ghost" onClick={() => onSelectNode(node)} className="w-full items-start justify-start gap-2 rounded-none font-normal whitespace-normal">
                       <CheckLine check={c} nodeName={nodeName} />
                     </Button>
                   ) : (

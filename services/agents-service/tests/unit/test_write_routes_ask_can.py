@@ -29,6 +29,9 @@ EXEMPT = {
     ("ops_agents.api.routers.forms", "submit_member"): (
         "membership of the form's team is the check: a members-only form is the team's own start form (E47)"
     ),
+    ("ops_agents.api.routers.publish_requests", "withdraw_publish_request"): (
+        "the asker rule: only the person who asked takes their request back, so no role grants it (require_asker)"
+    ),
     ("ops_agents.api.routers.service_events", "emit_event"): (
         "a service token's events:emit scope, capped per service by Settings.service_scopes; no person calls it"
     ),

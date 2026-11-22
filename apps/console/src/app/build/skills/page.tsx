@@ -250,7 +250,7 @@ export default function SkillsPage() {
             <Upload className="size-4" /> Import
           </Button>
           <Button variant="outline" onClick={() => openCreate('1')} data-testid="new-skill-button">
-            <FilePlus2 className="size-4" /> New blank skill
+            <FilePlus2 className="size-4" /> New skill
           </Button>
           <Button onClick={() => openCreate('generate')} data-testid="generate-skill-button">
             <Sparkles className="size-4" /> Generate skill

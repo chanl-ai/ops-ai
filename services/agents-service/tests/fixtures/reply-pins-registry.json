@@ -1688,7 +1688,13 @@
         "publishCheck": {
           "approversNeeded": 1,
           "blockers": [
-            "v1 is already published; save a change to open a draft."
+            {
+              "code": "already_published",
+              "field": null,
+              "level": "error",
+              "message": "v1 is already published; save a change to open a draft.",
+              "node": null
+            }
           ],
           "canRequest": false,
           "editClass": "re_test",

@@ -312,6 +312,11 @@ async def test_a_published_skill_that_would_no_longer_save_is_not_attached_and_b
         found = [(p["kind"], p["id"], p["position"]) for p in check["problems"]]
         assert found == [("bad_check", f"skill:{sid}", {"field": "skills", "step": 1, "index": None})], check
         assert check["canRequest"] is False
+        # The agent's and the skill's checks return the shape the workflow publish preview lists.
+        shape = {"node", "field", "level", "code", "message"}
+        assert [(set(b), b["code"], b["field"]) for b in check["blockers"]] == [(shape, "bad_check", "skills")], check
+        skill_check = _ok(await c.get(f"/v1/skills/{sid}"))["publishCheck"]
+        assert [(set(b), b["code"]) for b in skill_check["blockers"]] == [(shape, "already_published")], skill_check
         refused = _error(await c.post(f"/v1/agents/{BRANCH}/publish-requests", json={**at, "note": ""}), 422)
         assert refused["code"] == "cannot_publish", refused
         other = _error(await c.post("/v1/agents/ag_dispute/references", json={"kind": "skill", "id": sid}), 422)

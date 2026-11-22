@@ -9,7 +9,9 @@ from typing import Any, cast
 from uuid import uuid4
 
 import httpx
+import pytest
 
+from ops_agents.activities.tool_directory import OperationRef
 from ops_engine.worker import Worker
 from ops_identity import dev_service_signer, mint_service_token
 
@@ -120,9 +122,21 @@ async def test_a_rejection_reaches_the_module_with_its_reason(
     assert (applied["decision"], applied["reason"]) == ("rejected", "Use the read-only module"), applied
 
 
+class _Offering:
+    """The team's tool directory with apply_tool_access added, as a list no tools-service would answer."""
+
+    def __init__(self, inner: Any) -> None:
+        self.inner = inner
+
+    async def operations(self) -> list[OperationRef]:
+        grant = OperationRef("apply_tool_access", "Apply a decision", "write", {}, True, None, "Platform")
+        return [*await self.inner.operations(), grant]
+
+
 async def test_a_team_workflow_built_like_the_handler_grants_nothing(
     stack: tuple[httpx.AsyncClient, Worker],  # noqa: F811
     gateway: Gateway,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from ops_agents.api.event_workflows import EVENT_WORKFLOWS  # noqa: PLC0415 - the definition copied
 
@@ -138,7 +152,15 @@ async def test_a_team_workflow_built_like_the_handler_grants_nothing(
     # Saved in a team, as every workflow is: its typed steps are checked against that team's task types.
     saved = await client.post("/v1/workflows/definitions", json={"definition": copy}, headers=TEAM)
     assert saved.status_code in (200, 201), saved.text
-    asked = await client.post(f"/v1/workflows/definitions/{copy['id']}/publish-requests", json={}, headers=TEAM)
+    url = f"/v1/workflows/definitions/{copy['id']}/publish-requests"
+    # apply_tool_access is no team's operation, so the copy is refused at publish first.
+    refused = await client.post(url, json={}, headers=TEAM)
+    assert refused.json()["error"]["code"] == "tool_not_available", refused.text
+    # A team list that offers it anyway: the gateway still refuses the call, since no system token was minted.
+    runtime = cast(Any, cast(httpx.ASGITransport, client._transport).app).state.runtime  # pyright: ignore[reportPrivateUsage]
+    offering = _Offering(runtime.directory())
+    monkeypatch.setattr(runtime, "directory", lambda: offering)
+    asked = await client.post(url, json={}, headers=TEAM)
     assert asked.status_code == 201, asked.text
     start = {"workflowId": copy["id"], "input": payload("apr_forged")}
     run_id = str((await client.post("/v1/runs", json=start, headers=STARTER)).json()["data"]["runId"])
