@@ -19,7 +19,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { AgentListSection, type AgentListRow } from '@/components/agents/agent-list-section';
+import { ListSection, type ListRow } from '@/components/shared/list-section';
 import { guardrailOptions, knowledgeBaseOptions, toolOptions, useOptionLabels, widgetOptionsFor } from '@/hooks/options-queries';
 import { useGuardrailsByIds, type Guardrail } from '@/hooks/guardrail-queries';
 import type { Lookups } from '@/lib/api';
@@ -182,7 +182,7 @@ export function ToolsSection({ draft, set, toolIds, onChange, stale = [], granta
   const pick = (ids: string[]) => onChange({ add: ids.filter((id) => !offered.includes(id)), remove: offered.filter((id) => !ids.includes(id)) });
   const labels = new Map((useOptionLabels(toolOptions, offered).data?.data ?? []).map((o) => [o.id, o]));
   const held = new Map(grantable.map((t) => [t.id, t]));
-  const rows: AgentListRow[] = [
+  const rows: ListRow[] = [
     ...offered.map((id) => {
       const o = labels.get(id);
       const t = held.get(id);
@@ -203,7 +203,7 @@ export function ToolsSection({ draft, set, toolIds, onChange, stale = [], granta
     })),
   ];
   return (
-    <AgentListSection
+    <ListSection
       id="agent-tools"
       icon={Wrench}
       title="Tools"
@@ -218,7 +218,7 @@ export function ToolsSection({ draft, set, toolIds, onChange, stale = [], granta
           <AccountSelect id="agent-accounts" value={draft.accounts} onChange={(v) => set('accounts', v)} />
         </FormField>
       </div>
-    </AgentListSection>
+    </ListSection>
   );
 }
 
@@ -229,7 +229,7 @@ export function ToolsSection({ draft, set, toolIds, onChange, stale = [], granta
 export function KnowledgeSection({ collections, onChange }: { collections: string[]; onChange: (change: { add: string[]; remove: string[] }) => void }) {
   const labels = new Map((useOptionLabels(knowledgeBaseOptions, collections).data?.data ?? []).map((o) => [o.id, o]));
   return (
-    <AgentListSection
+    <ListSection
       id="agent-knowledge"
       icon={BookOpen}
       title="Knowledge"

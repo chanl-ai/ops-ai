@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { X } from 'lucide-react';
 
-export interface AgentListRow {
+export interface ListRow {
   id: string;
   title: React.ReactNode;
   description?: React.ReactNode;
@@ -20,10 +20,10 @@ export interface AgentListRow {
 }
 
 /**
- * What an agent holds, as one always-open section: the name with its count and Add in the header, then a row per item.
- * Tools, knowledge and skills all use it, so the three read alike and a fix lands in all of them.
+ * What an agent or skill holds, as one always-open section: the name with its count and Add in the header, then a row per item.
+ * The agent and skill pages use it for tools, knowledge and skills, so they read alike and a fix lands in all of them.
  */
-export function AgentListSection({
+export function ListSection({
   id,
   icon: Icon,
   title,
@@ -43,7 +43,7 @@ export function AgentListSection({
   description?: React.ReactNode;
   /** The picker that adds an item, drawn as the button in the header. */
   add?: React.ReactNode;
-  rows: AgentListRow[];
+  rows: ListRow[];
   empty: string;
   loading?: boolean;
   error?: { what: string; onRetry: () => void };
