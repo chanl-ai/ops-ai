@@ -15,6 +15,7 @@ import type { EvalCaseInput, EvalCaseOptions, EvalCheck, EvalCheckType } from '@
 import { cn } from '@/lib/utils';
 
 import { CHECK_TYPES } from './eval-meta';
+import { nameError } from '@/lib/validation/names';
 
 
 /** Whether a check has the values its type needs. */
@@ -137,7 +138,7 @@ export function EvalCaseDialog({
 
   const submit = async () => {
     const e = {
-      name: v.name.trim() ? undefined : 'Name the case so a failure is recognisable.',
+      name: nameError(v.name, 'Name the case so a failure is recognisable.'),
       input: v.input.trim() ? undefined : 'Add the message this case sends.',
       checks: !v.checks.length ? 'Add at least one check.' : v.checks.some((c) => !checkComplete(c)) ? 'Fill in every check, or remove the empty ones.' : undefined,
     };

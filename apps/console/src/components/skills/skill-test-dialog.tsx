@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import type { SkillTestCaseInput } from '@/lib/types/skills';
+import { nameError } from '@/lib/validation/names';
 
 /**
  * Add or edit one skill test case: the input and the checks, which are the agent eval checks (expected tool calls,
@@ -48,7 +49,7 @@ export function SkillTestDialog({
 
   const submit = async () => {
     const e = {
-      name: v.name.trim() ? undefined : 'Name the case so a failure is recognisable.',
+      name: nameError(v.name, 'Name the case so a failure is recognisable.'),
       input: v.input.trim() ? undefined : 'Add the message this case sends.',
       checks: !v.checks.length ? 'Add at least one check.' : v.checks.some((c) => !checkComplete(c)) ? 'Fill in every check, or remove the empty ones.' : undefined,
     };

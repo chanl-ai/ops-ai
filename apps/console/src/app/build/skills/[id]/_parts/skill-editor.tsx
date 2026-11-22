@@ -41,6 +41,7 @@ import type { SkillDetail, SkillInputField, SkillLoading, SkillPartContent } fro
 
 import { PartsList } from './parts-section';
 import { skillBody } from './skill-body';
+import { nameError } from '@/lib/validation/names';
 
 /** What the page's header shows and does for the editor's autosave. */
 export interface SkillSaveState {
@@ -157,7 +158,7 @@ export function SkillEditor({ skill: sk, tab = 'instructions', hidden, rail, can
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
   const limit = options.data?.limits.useWhenMaxChars ?? 1024;
-  const errors = { name: form.name.trim() ? undefined : 'Name the skill.' };
+  const errors = { name: nameError(form.name, 'Name the skill.') };
   const found = React.useMemo(() => (newest.state === 'draft' ? inText(sk.publishCheck.problems ?? NONE) : NONE), [newest.state, sk.publishCheck.problems]);
   const problems = React.useMemo(() => (refused ? [...found, refused] : found), [found, refused]);
   // A missing list from an older service is none.
