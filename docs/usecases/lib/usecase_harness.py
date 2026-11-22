@@ -1071,15 +1071,41 @@ def core_bank() -> Generator[dict[str, Any]]:
         _stop(proc)
 
 
+def discovered_operations(gw: httpx.Client, discovery_id: str) -> list[dict[str, Any]]:
+    """Every operation of a stored discovery, a page at a time (GET /v1/tool-modules/discoveries/{id}/operations)."""
+    ops: list[dict[str, Any]] = []
+    page = 1
+    while True:
+        listed = data(
+            gw.get(f"/v1/tool-modules/discoveries/{discovery_id}/operations", params={"page": page, "pageSize": 50})
+        )
+        ops += listed["data"]
+        if not listed["pagination"]["hasNext"]:
+            return ops
+        page += 1
+
+
+def discovered(gw: httpx.Client, source: dict[str, Any]) -> dict[str, Any]:
+    """POST /v1/tool-modules/discover, with the stored discovery's operations read back as `operations`."""
+    found: dict[str, Any] = data(gw.post("/v1/tool-modules/discover", json=source))
+    return {**found, "operations": discovered_operations(gw, found["id"])}
+
+
+def picks(found: dict[str, Any]) -> list[dict[str, str]]:
+    """Every discovered operation picked by name, a read for GET and a write otherwise, as an import body takes them."""
+    return [
+        {"name": o["name"], "access": "read" if (o.get("method") or "GET").upper() == "GET" else "write"}
+        for o in found["operations"]
+    ]
+
+
 def publish_bank_module(gw: httpx.Client, host: str) -> str:
     """The core bank's document imported as a published module, as reimport_bank_module.py leaves it, decided under
     dev auth: every operation, reads from GET, place_hold approved by one person of team_ops with a step-up."""
     security = {"X-Dev-User": "Nadia Petrov", "X-Team-Id": "team_security"}
     source = {"kind": "openapi", "specUrl": f"https://{host}/openapi.json"}
-    found = data(gw.post("/v1/tool-modules/discover", json=source))
-    ops = [
-        {**o, "access": "read" if (o.get("method") or "GET").upper() == "GET" else "write"} for o in found["operations"]
-    ]
+    found = discovered(gw, source)
+    ops = picks(found)
     made = data(
         gw.post(
             "/v1/tool-modules",

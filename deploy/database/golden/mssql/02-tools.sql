@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- tools-service, stamped at tools_0088_app_card_account
+-- tools-service, stamped at 20261122_2022_discoveries
 CREATE TABLE gateway_calls (
 	id VARCHAR(64) NOT NULL, 
 	tool VARCHAR(64) NOT NULL, 
@@ -260,6 +260,21 @@ CREATE TABLE connection_audit (
 );
 GO
 CREATE INDEX ix_connection_audit_connection ON connection_audit (tenant_id, connection_id);
+GO
+CREATE TABLE tool_discoveries (
+	tenant_id VARCHAR(64) NOT NULL, 
+	id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	person VARCHAR(128) NOT NULL, 
+	module_id VARCHAR(64) NULL, 
+	meta NVARCHAR(max) NOT NULL, 
+	operation_total INTEGER NOT NULL, 
+	created_at DATETIMEOFFSET NOT NULL, 
+	expires_at DATETIMEOFFSET NOT NULL, 
+	CONSTRAINT tool_discoveries_pkey PRIMARY KEY (tenant_id, id)
+);
+GO
+CREATE INDEX ix_tool_discoveries_expires ON tool_discoveries (tenant_id, team_id, expires_at);
 GO
 CREATE TABLE egress_hosts (
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -549,6 +564,28 @@ CREATE TABLE connect_links (
 GO
 CREATE INDEX ix_connect_links_connection ON connect_links (tenant_id, connection_id);
 GO
+CREATE TABLE tool_discovery_operations (
+	tenant_id VARCHAR(64) NOT NULL, 
+	discovery_id VARCHAR(64) NOT NULL, 
+	position INTEGER NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	name VARCHAR(120) NOT NULL, 
+	description VARCHAR(max) NOT NULL, 
+	access VARCHAR(16) NOT NULL, 
+	method VARCHAR(8) NULL, 
+	path VARCHAR(max) NULL, 
+	op_group VARCHAR(200) NOT NULL, 
+	input NVARCHAR(max) NOT NULL, 
+	CONSTRAINT tool_discovery_operations_pkey PRIMARY KEY (tenant_id, discovery_id, position), 
+	CONSTRAINT tool_discovery_operations_tenant_id_discovery_id_fkey FOREIGN KEY(tenant_id, discovery_id) REFERENCES tool_discoveries (tenant_id, id) ON DELETE CASCADE
+);
+GO
+CREATE INDEX ix_tool_discovery_operations_access ON tool_discovery_operations (tenant_id, team_id, access, discovery_id);
+GO
+CREATE INDEX ix_tool_discovery_operations_group ON tool_discovery_operations (tenant_id, team_id, op_group, discovery_id);
+GO
+CREATE INDEX ix_tool_discovery_operations_name ON tool_discovery_operations (tenant_id, discovery_id, name);
+GO
 IF SCHEMA_ID(N'ops_security') IS NULL EXEC (N'CREATE SCHEMA ops_security AUTHORIZATION dbo');
 GO
 CREATE FUNCTION ops_security.tools_tenant_read (@tenant_id VARCHAR(64))
@@ -625,6 +662,12 @@ CREATE SECURITY POLICY ops_security.connection_audit_isolation
     ADD FILTER PREDICATE ops_security.tools_team_read(tenant_id, team_id) ON dbo.connection_audit,
     ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.connection_audit AFTER INSERT,
     ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.connection_audit AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.tool_discoveries_isolation
+    ADD FILTER PREDICATE ops_security.tools_team_read(tenant_id, team_id) ON dbo.tool_discoveries,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.tool_discoveries AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.tool_discoveries AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
 CREATE SECURITY POLICY ops_security.egress_hosts_tenant
@@ -723,10 +766,16 @@ CREATE SECURITY POLICY ops_security.connect_links_isolation
     ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.connect_links AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.tool_discovery_operations_isolation
+    ADD FILTER PREDICATE ops_security.tools_team_read(tenant_id, team_id) ON dbo.tool_discovery_operations,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.tool_discovery_operations AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.tool_discovery_operations AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE TABLE alembic_version_tools (
     version_num VARCHAR(32) NOT NULL, 
     CONSTRAINT alembic_version_tools_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0088_app_card_account');
+INSERT INTO alembic_version_tools (version_num) VALUES ('20261122_2022_discoveries');
 GO

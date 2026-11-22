@@ -308,6 +308,37 @@ class DecisionIn(TypedDict, closed=True):
     reason: NotRequired[str | None]
 
 
+class DiscoverIn(TypedDict, closed=True):
+    connectionId: NotRequired[str | None]
+    fileId: NotRequired[str | None]
+    fileName: NotRequired[str | None]
+    kind: Literal["mcp", "openapi"]
+    moduleId: NotRequired[str | None]
+    specUrl: NotRequired[str | None]
+    url: NotRequired[str | None]
+
+
+class DiscoveredName(TypedDict, closed=True):
+    access: Literal["read", "write"]
+    name: str
+
+
+class DiscoveredNames(TypedDict, closed=True):
+    data: list[DiscoveredName]
+
+
+class DiscoveryResult(TypedDict, closed=True):
+    endpoint: str
+    id: str
+    noAuth: NotRequired[bool]
+    operationTotal: int
+    suggestedName: str
+    system: str
+    type: Literal["mcp", "openapi", "http", "code"]
+    version: str
+    warnings: list[str]
+
+
 class EntryIn(TypedDict, closed=True):
     note: NotRequired[str]
     protection: NotRequired[Literal["system", "managed"] | None]
@@ -332,6 +363,16 @@ class EnvelopeAppUsers(TypedDict, closed=True):
 
 class EnvelopeCredentialDeleted(TypedDict, closed=True):
     data: CredentialDeleted
+    success: Literal[True]
+
+
+class EnvelopeDiscoveredNames(TypedDict, closed=True):
+    data: DiscoveredNames
+    success: Literal[True]
+
+
+class EnvelopeDiscoveryResult(TypedDict, closed=True):
+    data: DiscoveryResult
     success: Literal[True]
 
 
@@ -1451,35 +1492,25 @@ class CredentialField(TypedDict, closed=True):
     required: NotRequired[bool]
 
 
-class DiscoveredOperation(TypedDict, closed=True):
+class DiscoveredOperationIn(TypedDict, closed=True):
     access: Literal["read", "write"]
+    description: NotRequired[str]
+    group: NotRequired[str]
+    input: NotRequired[list[SchemaFieldIn]]
+    method: NotRequired[Literal["GET", "POST", "PUT", "PATCH", "DELETE"] | None]
+    name: str
+    path: NotRequired[str | None]
+
+
+class DiscoveredOperationRow(TypedDict, closed=True):
+    access: Literal["read", "write"]
+    added: bool
     description: str
     group: str
     input: list[SchemaField]
     method: NotRequired[Literal["GET", "POST", "PUT", "PATCH", "DELETE"] | None]
     name: str
     path: NotRequired[str | None]
-
-
-class DiscoveredOperationIn(TypedDict, closed=True):
-    access: Literal["read", "write"]
-    description: str
-    group: str
-    input: list[SchemaFieldIn]
-    method: NotRequired[Literal["GET", "POST", "PUT", "PATCH", "DELETE"] | None]
-    name: str
-    path: NotRequired[str | None]
-
-
-class DiscoveryResult(TypedDict, closed=True):
-    endpoint: str
-    noAuth: NotRequired[bool]
-    operations: list[DiscoveredOperation]
-    suggestedName: str
-    system: str
-    type: Literal["mcp", "openapi", "http", "code"]
-    version: str
-    warnings: list[str]
 
 
 class EnvelopeBulkResult(TypedDict, closed=True):
@@ -1499,11 +1530,6 @@ class EnvelopeCatalogPage(TypedDict, closed=True):
 
 class EnvelopeConnectionKinds(TypedDict, closed=True):
     data: ConnectionKinds
-    success: Literal[True]
-
-
-class EnvelopeDiscoveryResult(TypedDict, closed=True):
-    data: DiscoveryResult
     success: Literal[True]
 
 
@@ -2179,6 +2205,13 @@ class Change(TypedDict, closed=True):
     value: str
 
 
+class DiscoveredOperationList(TypedDict, closed=True):
+    addedTotal: int
+    data: list[DiscoveredOperationRow]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
 class EnvelopeAbandonResult(TypedDict, closed=True):
     data: AbandonResult
     success: Literal[True]
@@ -2211,6 +2244,11 @@ class EnvelopeAppTool(TypedDict, closed=True):
 
 class EnvelopeChange(TypedDict, closed=True):
     data: Change
+    success: Literal[True]
+
+
+class EnvelopeDiscoveredOperationList(TypedDict, closed=True):
+    data: DiscoveredOperationList
     success: Literal[True]
 
 
