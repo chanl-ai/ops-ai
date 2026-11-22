@@ -40,6 +40,7 @@ from ops_service_kit.errors import (
 from ops_service_kit.http import Json
 from ops_service_kit.ids import new_id
 from ops_service_kit.listing import ListParams
+from ops_service_kit.names import slugify
 from ops_store import isolation
 from ops_store.listing import ListPage
 
@@ -698,7 +699,7 @@ def _code_operation(f: CodeOperationIn) -> DiscoveredOperation:
 
 
 def _kebab(s: str) -> str:
-    return re.sub(r"^-|-$", "", re.sub(r"[^a-z0-9]+", "-", s.lower()))
+    return slugify(s, width=200)
 
 
 def _not_allowed(host: str) -> Unprocessable:

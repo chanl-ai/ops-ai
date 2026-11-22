@@ -1,11 +1,11 @@
 # Step-by-step skills
 
-Status: upcoming. Skills with numbered steps are in review and not yet in a release. The examples on this page were
-run against the code under review.
+Status: upcoming (merged, in the next release). Skills with numbered steps are merged to develop and run on staging;
+they are not in the current release (v1.0.0). The examples on this page were run against the merged code.
 
 > [!NOTE]
-> **Upcoming.** Everything on this page is in review and is not in the current release. Names and fields may change
-> before it ships. For what works today, see [Skill examples](skills.md).
+> **Upcoming.** Everything on this page is merged and is not in the current release (v1.0.0). For what works today,
+> see [Skill examples](skills.md).
 
 A skill today is a block of instructions the agent reads and follows as it sees fit. A step-by-step skill is a
 numbered procedure. The agent works on one step at a time, a check decides whether the step is done, and the skill

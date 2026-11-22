@@ -57,14 +57,17 @@ echo "services=$(json ${services[@]+"${services[@]}"})"
 echo "packages=$(json ${packages[@]+"${packages[@]}"})"
 # make verify runs the console and docs gates whatever changed, so a full plan does too.
 if [ "$full" = true ]; then echo "console=true"; echo "docs=true"; else
-  # The console builds on the generated SDK, so an SDK change runs it too.
-  echo "console=$(flag '^(apps/|sdk/)')"
+  # The console builds on the generated SDK, so an SDK change runs it too; the use-case runner is TypeScript every UI
+  # use case imports, so the console job type-checks it.
+  echo "console=$(flag '^(apps/|sdk/|packages/usecase-runner/)')"
   echo "docs=$(flag '(\.md$|^docs/)')"
 fi
 echo "scripts=$(flag '^scripts/')"
 # code=false for a change of documents only (markdown or docs/): the checks job then has nothing to check, and the
-# leak scan and docs job still run.
-if [ "$full" = true ] || grep -vqE '(\.md$|^docs/)' <<<"$changed"; then echo "code=true"; else echo "code=false"; fi
+# leak scan and docs job still run. A use-case script or the harness under docs/usecases is code: the checks job lints
+# it and runs make checks' usecase-outputs rule, which the docs job does not.
+if [ "$full" = true ] || grep -vqE '(\.md$|^docs/)' <<<"$changed" \
+  || grep -qE '^docs/usecases/.*\.(py|mjs|js|ts|sh)$' <<<"$changed"; then echo "code=true"; else echo "code=false"; fi
 # The SQL Server job runs the store, kit and identity suites and, per service, route tests that reach the database too
 # (platform-service's policies and reply pins among them), so any service, package or database script change runs it;
 # documents, the console, the SDK and scripts alone do not.

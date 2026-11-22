@@ -8,6 +8,7 @@ import { LoadingButton } from '@/components/shared/loading-button';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import type { WorkspaceTeam, WorkspaceTeamInput } from '@/lib/types/team';
+import { nameError } from '@/lib/validation/names';
 
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
@@ -40,7 +41,7 @@ export function TeamDialog({
 
   const submit = async () => {
     const found = {
-      name: name.trim() ? undefined : 'Name the team.',
+      name: nameError(name, 'Name the team.'),
       admin: team || EMAIL.test(admin.trim()) ? undefined : 'Enter the work email of the person who leads the team.',
     };
     setErrors(found);
