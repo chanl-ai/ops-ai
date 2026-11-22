@@ -1,6 +1,7 @@
-"""Govern > Evals on stored data, by failure mode: another team's suites, a repeated run overwriting the first, the
-runs list leaving out workflows, counts that differ from the rows, tabs with nothing behind them, a failing publish
-check that does not block, and who may save cases."""
+"""Govern > Evals and an agent's Evals tab on stored data, by failure mode: another team's suites, runs or cases read
+or deleted, a repeated run overwriting the first, two people adding a case at once and one case lost, the runs list
+leaving out workflows, counts that differ from the rows, tabs with nothing behind them, a failing publish check that
+does not block, and who may save cases."""
 
 # ruff: noqa: F811 - the dev_platform fixture is imported, then named as a parameter
 from __future__ import annotations
@@ -9,10 +10,13 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
 
+import pytest
 from httpx import AsyncClient
 
+from ops_agents.api.platform_policies import PolicyUnread
 from ops_identity.testing import TEST_TOKEN_TTL_S
 from ops_policy import mint
+from tests.saves import save_agent
 
 from .test_agent_registry import _ok  # pyright: ignore[reportPrivateUsage]
 from .test_write_approval_policy import (
@@ -69,16 +73,21 @@ async def _tab(c: AsyncClient, tab: str, headers: dict[str, str], **params: Any)
     return _ok(await c.get(f"/v1/assurance/{tab}", params=params, headers=headers))
 
 
-async def test_another_teams_suites_runs_and_counts_are_never_shown(dev_platform: AsyncClient) -> None:
+async def test_another_teams_suites_runs_cases_and_counts_are_never_shown_or_deleted(dev_platform: AsyncClient) -> None:
     async with _same(dev_platform) as c:
         theirs = await _agent(c, LENDING)
-        _ok(await _save(c, theirs, [PASSING], LENDING))
-        _ok(await c.post(f"/v1/agents/{theirs}/eval-runs", headers=LENDING))
+        (case,) = _ok(await _save(c, theirs, [PASSING], LENDING))["cases"]
+        run = _ok(await c.post(f"/v1/agents/{theirs}/eval-runs", headers=LENDING))
         mine = await _tab(c, "suites", OPS)
         assert mine["data"] == [] and mine["tabCounts"]["suites"] == 0 and mine["tabCounts"]["runs"] == 0
         assert mine["stats"]["notRun"] == 0 and mine["stats"]["failingSuites"] == 0
         assert (await _save(c, theirs, [PASSING], OPS)).status_code == 404
         assert (await c.post(f"/v1/agents/{theirs}/eval-runs", headers=OPS)).status_code == 404
+        assert (await c.get(f"/v1/eval-runs/{run['id']}", headers=OPS)).status_code == 404
+        assert (await c.delete(f"/v1/eval-cases/{case['id']}", headers=OPS)).status_code == 404
+        kept = _ok(await c.get(f"/v1/agents/{theirs}/eval-cases", headers=LENDING))
+        assert [x["id"] for x in kept["cases"]] == [case["id"]], "the other team's delete removed nothing"
+        assert _ok(await c.get(f"/v1/eval-runs/{run['id']}", headers=LENDING))["id"] == run["id"]
 
 
 async def test_running_saved_cases_twice_stores_two_runs_newest_first(dev_platform: AsyncClient) -> None:
@@ -88,13 +97,36 @@ async def test_running_saved_cases_twice_stores_two_runs_newest_first(dev_platfo
         first = _ok(await c.post(f"/v1/agents/{aid}/eval-runs", headers=OPS))
         second = _ok(await c.post(f"/v1/agents/{aid}/eval-runs", headers=OPS))
         assert first["id"] != second["id"] and second["summary"] == {"passed": 1, "total": 2, "regressions": 0}
-        runs = (await _tab(c, "runs", OPS))["data"]
-        assert [r["id"] for r in runs] == [second["id"], first["id"]]
-        assert runs[0]["asset"] == {"kind": "agent", "id": aid, "name": "Payee Checker", "href": f"/build/agents/{aid}"}
-        assert (runs[0]["passed"], runs[0]["total"], runs[0]["trigger"]) == (1, 2, "manual")
+        assert (second["version"], second["trigger"], second["startedBy"]) == (
+            1,
+            "manual",
+            "usr_ops@harborpine.example",
+        )
+        runs = f"/v1/agents/{aid}/eval-runs"
+        newest = _ok(await c.get(runs, params={"pageSize": 1}, headers=OPS))
+        older = _ok(await c.get(runs, params={"pageSize": 1, "page": 2}, headers=OPS))
+        made = [{k: v for k, v in run.items() if k not in ("gate", "results")} for run in (second, first)]
+        assert [*newest["data"], *older["data"]] == made, "each row is the run as it was stored, without its results"
+        assert newest["pagination"]["total"] == 2 and newest["pagination"]["hasNext"] is True
+        assert _ok(await c.get(f"/v1/eval-runs/{first['id']}", headers=OPS)) == {
+            k: v for k, v in first.items() if k != "gate"
+        }
         suite = (await _tab(c, "suites", OPS))["data"][0]
         assert suite["passRate"] == 0.5 and suite["failing"] is True and suite["cases"] == 2
         assert [r["name"] for r in suite["results"]] == ["greets", "calls lookup"]
+
+
+async def test_two_people_adding_a_case_each_keep_theirs(dev_platform: AsyncClient) -> None:
+    async with _same(dev_platform) as c:
+        aid, builder = await _agent(c, OPS), who("usr_b", "builder")
+        cases = f"/v1/agents/{aid}/eval-cases"
+        added = [await c.post(cases, json={"cases": [x]}, headers=h) for x, h in ((PASSING, OPS), (FAILING, builder))]
+        assert [r.status_code for r in added] == [201, 201], [r.text for r in added]
+        kept = _ok(await c.get(cases, headers=OPS))["cases"]
+        assert [(x["name"], x["createdBy"]) for x in kept] == [
+            ("greets", "usr_ops@harborpine.example"),
+            ("calls lookup", "usr_b@harborpine.example"),
+        ]
 
 
 async def test_a_workflow_test_run_is_listed_with_agent_runs(dev_platform: AsyncClient) -> None:
@@ -143,22 +175,123 @@ async def test_evidence_and_judges_are_not_offered_until_something_backs_them(de
             assert (await c.get(f"/v1/assurance/{tab}", headers=OPS)).status_code == 404
 
 
-async def test_a_publish_request_with_a_failing_pass_rate_is_blocked_and_names_the_step(
-    dev_platform: AsyncClient,
-) -> None:
+REVIEWER = person("usr_rev", "admin")
+
+
+def _runtime(c: AsyncClient) -> Any:
+    return c._transport.app.state.runtime  # type: ignore[attr-defined]  # pyright: ignore
+
+
+def _kinds(reply: Any) -> list[str]:
+    return [p["kind"] for p in reply.json()["error"]["details"]["problems"]]
+
+
+async def test_a_failed_blocking_step_stops_the_request_and_the_approval(dev_platform: AsyncClient) -> None:
     async with _same(dev_platform) as c:
+        _runtime(c).policies = _EveryChangeWaits()
         aid = await _agent(c, OPS)
+        _ok(await _save(c, aid, [PASSING], OPS))
+        _ok(await c.post(f"/v1/agents/{aid}/eval-runs", headers=OPS))
+        first = _ok(
+            await c.post(f"/v1/agents/{aid}/publish-requests", json={"version": 1, "note": "go"}, headers=OPS), 201
+        )
+        decided = {"decision": "approved"}
+        _ok(await c.post(f"/v1/publish-requests/{first['id']}/decision", json=decided, headers=REVIEWER))
+        assert _ok(await save_agent(c, aid, {"role": "Checks payees and dates"}, headers=OPS))["version"] == 2
         _ok(await _save(c, aid, [PASSING, FAILING], OPS))
         _ok(await c.post(f"/v1/agents/{aid}/eval-runs", headers=OPS))
-        runtime = dev_platform._transport.app.state.runtime  # type: ignore[attr-defined]  # pyright: ignore
-        runtime.policies = _EveryChangeWaits()
+        refused = await c.post(f"/v1/agents/{aid}/publish-requests", json={"version": 2, "note": "go"}, headers=OPS)
+        assert refused.status_code == 422 and refused.json()["error"]["code"] == "cannot_publish", refused.text
+        assert _kinds(refused) == ["eval_failed"], "the pass on version 1 lifted the failure on version 2"
+        assert [g["toVersion"] for g in (await _tab(c, "gates", OPS))["data"]] == [1], "a refused publish opened one"
+
+        other = await _agent(c, OPS, "Date Checker")
+        _ok(await _save(c, other, [PASSING], OPS))
+        _ok(await c.post(f"/v1/agents/{other}/eval-runs", headers=OPS))
+        rid = _ok(
+            await c.post(f"/v1/agents/{other}/publish-requests", json={"version": 1, "note": "go"}, headers=OPS), 201
+        )["id"]
+        _ok(await _save(c, other, [PASSING, FAILING], OPS))
+        _ok(await c.post(f"/v1/agents/{other}/eval-runs", headers=OPS))
+        approved = await c.post(f"/v1/publish-requests/{rid}/decision", json={"decision": "approved"}, headers=REVIEWER)
+        assert approved.status_code == 422 and approved.json()["error"]["code"] == "cannot_publish", approved.text
+        assert _kinds(approved) == ["eval_failed"]
+        gate = next(g for g in (await _tab(c, "gates", OPS))["data"] if g["reviewId"] == rid)
+        assert (gate["reviewStatus"], gate["blocked"]) == ("pending", True)
+
+
+async def test_a_pass_stops_counting_once_the_draft_changes_under_the_same_version(dev_platform: AsyncClient) -> None:
+    async with _same(dev_platform) as c:
+        _runtime(c).policies = _EveryChangeWaits()
+        aid = await _agent(c, OPS)
+        _ok(await _save(c, aid, [PASSING], OPS))
+        _ok(await c.post(f"/v1/agents/{aid}/eval-runs", headers=OPS))
+        assert _ok(await save_agent(c, aid, {"role": "Checks payees, no tools"}, headers=OPS))["version"] == 1
+        check = _ok(await c.get(f"/v1/agents/{aid}/publish-check", params={"version": 1}, headers=OPS))
+        assert not check["canRequest"], "a pass on an earlier copy of version 1 opened the check"
+        assert [p["kind"] for p in check["problems"]] == ["eval_not_run"], check
+        asked = await c.post(f"/v1/agents/{aid}/publish-requests", json={"version": 1, "note": "go"}, headers=OPS)
+        assert asked.status_code == 422 and _kinds(asked) == ["eval_not_run"], asked.text
+        _ok(await c.post(f"/v1/agents/{aid}/eval-runs", headers=OPS))
+        assert _ok(await c.get(f"/v1/agents/{aid}/publish-check", params={"version": 1}, headers=OPS))["canRequest"]
+
+
+class _Required:
+    """evalsRequired as platform-service answers it: on or off for team_ops, or unreadable; no publish review."""
+
+    def __init__(self, setting: str) -> None:
+        self.setting = setting
+
+    async def value(self, key: str) -> Any:
+        if key != "evalsRequired":
+            return None
+        if self.setting == "unread":
+            raise PolicyUnread("platform-service did not answer")
+        return {"team_ops": self.setting == "on"}
+
+
+@pytest.mark.parametrize(
+    ("setting", "refused"),
+    [("off", None), ("on", "eval_no_cases"), ("unread", "held"), ("no platform", None)],
+)
+async def test_the_team_setting_decides_whether_an_agent_with_no_cases_publishes(
+    dev_platform: AsyncClient, setting: str, refused: str | None
+) -> None:
+    async with _same(dev_platform) as c:
+        _runtime(c).policies = None if setting == "no platform" else _Required(setting)
+        aid = await _agent(c, OPS)
+        asked = await c.post(f"/v1/agents/{aid}/publish-requests", json={"version": 1, "note": "go"}, headers=OPS)
+        if refused is None:
+            assert asked.status_code == 201, asked.text
+        elif refused == "held":
+            # Unread, like an unread publishReview, holds the request for a reviewer instead of publishing.
+            body = asked.json()["data"]
+            assert asked.status_code == 201 and body["status"] == "pending", asked.text
+            assert body["agentPublish"]["reviewReason"] == "policy_unread", asked.text
+        else:
+            assert asked.status_code == 422 and _kinds(asked) == [refused], asked.text
+
+
+@pytest.mark.parametrize(
+    ("cases", "runs", "blocked"),
+    [([PASSING], True, False), ([PASSING, FAILING], True, True), ([PASSING], False, False)],
+)
+async def test_the_evals_page_and_the_publish_check_agree(
+    dev_platform: AsyncClient, cases: list[dict[str, Any]], runs: bool, blocked: bool
+) -> None:
+    async with _same(dev_platform) as c:
+        _runtime(c).policies = _EveryChangeWaits()
+        aid = await _agent(c, OPS)
+        _ok(await _save(c, aid, cases, OPS))
         _ok(await c.post(f"/v1/agents/{aid}/publish-requests", json={"version": 1, "note": "go"}, headers=OPS), 201)
-        gates = await _tab(c, "gates", OPS)
-        (gate,) = gates["data"]
-        step = next(s for s in gate["steps"] if s["step"] == "pass_rate")
-        assert (gate["blocked"], step["result"], step["mode"]) == (True, "fail", "blocking")
-        assert "1 of 2" in step["detail"] and gate["toVersion"] == 1 and gate["reviewStatus"] == "pending"
-        assert gates["stats"]["gatesBlocked"] == 1 and gates["tabCounts"]["gates"] == 1
+        if runs:
+            _ok(await c.post(f"/v1/agents/{aid}/eval-runs", headers=OPS))
+        (gate,) = (await _tab(c, "gates", OPS))["data"]
+        check = _ok(await c.get(f"/v1/agents/{aid}/publish-check", params={"version": 1}, headers=OPS))
+        evals = [p for p in check["problems"] if p["kind"].startswith("eval_")]
+        assert gate["blocked"] == bool(evals) == blocked, (gate, check)
+        if evals:
+            assert evals[0]["details"]["steps"] == gate["steps"], "the check and the page word the steps apart"
 
 
 async def test_only_builders_save_and_run_cases_while_viewers_read_and_chat_users_do_not(

@@ -51,7 +51,7 @@ no password. `make help` prints each target's arguments.
 | `TEAM`, `JSON` | The team to act in (default: the person's own team); `JSON=1` prints the answer as JSON (`opsai` targets) |
 | `SVC`, `Q`, `BODY` (`api` only) | The service (default: the one whose `openapi.json` holds the path; name it for `/v1/chat/*`, which no document holds), the query string (`Q='pageSize=5'`, since make reads any word holding `=` as a variable) and a JSON body |
 | `AGENT`, `THREAD`, `TEST`, `KB`, `CONNECTED` (`chat`) | The agent by id, slug or name (default: the team's default agent); an existing thread; `TEST=1` uses the agent page's Test panel, whose thread nothing remembers and the chat list leaves out; a knowledge base; `CONNECTED=<app>` sends the follow-up a Connect card sends once the person has signed in |
-| `ENV=staging` (`api`, `sdk-call`) | Calls the staging app named by `STG_APP`; only the staging admin's sign-in is kept on a machine, so only `AS=admin` works there ([docs/deploy/fly-staging.md](../docs/deploy/fly-staging.md)) |
+| `ENV=staging` (`api`, `sdk-call`) | Calls the staging app named by `STG_APP`; `AS=admin` is the first admin; `team-admin`, `builder`, `approver`, `viewer` and `chat_user` are the role accounts in `~/.config/ops-ai/staging-roles.env` (`make seed-roles ENV=staging` makes a missing one; [docs/deploy/fly-staging.md](../docs/deploy/fly-staging.md)) |
 
 A chat script is YAML or JSON: `agent`, `test`, `kb` and `turns`, each turn `say: …` or `connected: true` with an
 `expect` holding any of `tool` (a tool name called), `noTool`, `card` (true or false), `says` (texts the reply holds)

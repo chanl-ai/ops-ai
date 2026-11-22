@@ -13,6 +13,7 @@ export const TRIGGER_LABEL: Record<AssuranceRunTrigger, string> = {
   manual: 'Manual',
   knowledge_change: 'Knowledge change',
   version_saved: 'Version saved',
+  cli: 'Command line',
 };
 
 export const TIER_OPTIONS = (['critical', 'high', 'medium', 'low'] as const).map((v) => ({ value: v, label: v[0].toUpperCase() + v.slice(1) }));

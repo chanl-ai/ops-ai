@@ -63,7 +63,7 @@ export interface AssuranceSuite {
   drafts: SuiteDraftCase[];
 }
 
-export type AssuranceRunTrigger = 'publish_request' | 'model_update' | 'manual' | 'knowledge_change' | 'version_saved';
+export type AssuranceRunTrigger = 'publish_request' | 'model_update' | 'manual' | 'knowledge_change' | 'version_saved' | 'cli';
 
 export interface AssuranceRun {
   id: string;

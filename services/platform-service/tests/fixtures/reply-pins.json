@@ -5284,6 +5284,7 @@
       "checkBeforeSend": {},
       "companySignInRequired": false,
       "egressNewHosts": "ask_security",
+      "evalsRequired": {},
       "extractionFloor": 0.8,
       "mcpConnectionHours": 8,
       "memoryRetentionDays": null,

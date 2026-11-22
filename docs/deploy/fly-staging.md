@@ -82,6 +82,27 @@ The env file names the first admin (`OPS_BOOTSTRAP_ADMIN_*`), `OPS_DEMO_PASSWORD
 (`scripts/sample-team/admin.env.example`). `scripts/check_demo_team.py` proves each login's role in the team and that
 a test team's record is absent from it. `--tool-access` grants the team's workflows the Security team's bank module; the platform tools need no grant, since no team owns them.
 
+### Role accounts
+
+Staging runs with `OPS_ENVIRONMENT = "production"` (`deploy/fly/fly.toml`), so platform-service seeds no people and
+accepts no shared password: the dev people of `services/platform-service/seed/dev-roles.json` do not exist here and
+answer 401. Staging has its own account for each member role (admin, builder, approver, viewer, chat_user) in one team,
+kept in `~/.config/ops-ai/staging-roles.env` (template `deploy/fly/staging-roles.env.example`; the GitHub secret
+`STAGING_ROLES_ENV` on a runner). Emails and passwords are never printed.
+
+| To | Do |
+|---|---|
+| Make the accounts the install lacks and sign in as each | `make seed-roles ENV=staging` (safe to run again; `make stg-deploy` runs the same seed and check after the signed-in request, and fails the deploy on any FAIL line) |
+| Only check, changing nothing | `make roles-check ENV=staging` |
+| Call the API as a role | `make api GET /v1/me ENV=staging AS=builder` (`team-admin`, `builder`, `approver`, `viewer`, `chat_user`; `admin` stays the first admin) |
+| Walk the console as roles | `node scripts/agents/ui_walk.mjs --origin https://<your-app>.fly.dev --as admin,builder,viewer,chat_user --routes /agents` (runs the seed first; `member` names the viewer) |
+| Change an account's password | Reset it in the console, put the new one in the file, then update the `STAGING_ROLES_ENV` secret with the file's contents |
+
+A deploy never invents an account: a role with no lines in the file fails the deploy before the walk, naming
+`make seed-roles ENV=staging`, which on a person's machine makes the address and password and appends them. After that,
+copy the file into the `STAGING_ROLES_ENV` secret. The same targets with no `ENV` check a local or preview stack, whose
+people platform-service seeds at boot; `make up` runs it.
+
 Records with no delete route stay in the test teams (cases, chats, runs, reviews, document types).
 
 ## Deploy
@@ -110,6 +131,7 @@ non-zero on any failure:
 | OCR | `deploy/fly/check_ocr.py` on the machine: fails unless Tesseract has English data and documents-service's `/health` does not report OCR missing | not measured |
 | Plugins | `deploy/images/bake_plugins.py --check` against the app's `OPS_PLUGINS_DIR`: fails unless the plugins match `deploy/plugins.json` by id and version | not measured |
 | Signed in | The first admin signs in through the origin and lists agents: platform issues the session, agents-service verifies it | not measured |
+| Role accounts | `deploy/fly/role_accounts.py seed`: invites the member-role accounts the install lacks, then signs in as each and checks the role it holds | 4 of 5 signed in on the first read-only check; the chat user is made by the first deploy |
 | Walk | `docs/usecases/lib/stg_click_walk.mjs` with the first admin from `<private-dir>/staging-admin.env`; `SKIP_WALK=1` leaves it out | 136 s, 41 OK |
 
 The image installs Tesseract with English data (`tesseract-ocr`, `tesseract-ocr-eng`), and `fly.toml` sets
@@ -163,6 +185,7 @@ the files `stg_deploy.sh` reads and never printed:
 | `FLY_API_TOKEN` | Two deploy tokens joined by a comma: `<your-app>` (build, deploy, ssh, releases) and `<app-prefix>-db` (the grants proxy) |
 | `STAGING_DB_URL` | The contents of `<private-dir>/staging-db-url.txt` |
 | `STAGING_ADMIN_ENV` | The contents of `<private-dir>/staging-admin.env` |
+| `STAGING_ROLES_ENV` | The contents of `<private-dir>/staging-roles.env` (one account per member role) |
 
 The runner installs Chromium (`playwright install --with-deps chromium`) for the click walk.
 

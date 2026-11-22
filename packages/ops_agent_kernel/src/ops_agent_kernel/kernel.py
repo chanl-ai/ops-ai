@@ -8,6 +8,7 @@ one. The agent object is built per turn and holds no state between turns.
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field, replace
@@ -50,7 +51,7 @@ from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.ids import action_id, input_hash
 from ops_service_kit.narrow import json_object
 
-from . import answer_check, guard, pii, present, prompt_writer, search, step_tools, steps, tool_cache
+from . import answer_check, guard, judge, pii, present, prompt_writer, search, step_tools, steps, tool_cache
 from . import plan as planner
 from . import skills as skillset
 from .context import UnknownVariableError, assemble, cited_numbers
@@ -204,6 +205,10 @@ class _TurnState:
     owned: dict[str, list[str]] = field(default_factory=dict[str, list[str]])
     # What the model is told when a skill picked from the menu did not start for want of an input it requires.
     unstarted: str = ""
+    # The model that decides a step's sentence check (judge.model_for), and the tokens its calls spent this turn,
+    # added to the turn's usage where it finishes.
+    judge_model: Any = None
+    judge_spent: TokenUsage = field(default_factory=TokenUsage)
 
     def drop_carried(self) -> None:
         """A skill loaded or started in this reply takes the place of the ones carried from earlier replies: one
@@ -261,14 +266,51 @@ class _TurnState:
             return None
         return (r.sub.skill_id, r.sub.step) if r.sub is not None else (r.skill_id, r.step)
 
-    def step_result(self, run_step: int, at: tuple[str, int] | None, output: JsonValue, ok: bool) -> str | None:
+    async def step_result(self, run_step: int, at: tuple[str, int] | None, output: JsonValue, ok: bool) -> str | None:
         """Checks a result of the current step's tool and moves the record; what the model is told, or None when
-        the call was not that step's (`at` is where the record stood when the call started)."""
+        the call was not that step's (`at` is where the record stood when the call started). A sentence check is
+        decided by the judge on the result as the tool returned it."""
         if at is None or self.position() != at or run_step in self.judged:
             return None
         self.judged.add(run_step)
         moved = steps.on_result(self.run, self.stepped, output, ok)
+        said = self.moved(moved.run) or moved.said
+        return await self.judge(output) or said
+
+    async def judge(self, raw: JsonValue | None = None) -> str | None:
+        """Asks the judge when the current step's sentence waits for a verdict (steps.to_judge) and moves the record
+        on it; what the model is told, or None when no step waits. The judge is given the sentence and the evidence
+        only: the step's result (`raw`, as the tool returned it, when given) and the skill's inputs, or for a step
+        with no tool what the person wrote and the tools returned in this reply. Never the agent's instructions."""
+        waiting = steps.to_judge(self.run)
+        if waiting is None:
+            return None
+        at = self.position()
+        verdict = await judge.verdict(self.judge_model, waiting.check, self._evidence(waiting, raw))
+        u = self.judge_spent
+        self.judge_spent = TokenUsage(
+            u.input_tokens + verdict.usage.input_tokens,
+            u.output_tokens + verdict.usage.output_tokens,
+            u.requests + verdict.usage.requests,
+        )
+        if self.position() != at or steps.to_judge(self.run) != waiting:
+            # Another call of the same model step moved the record while the judge answered.
+            return None
+        moved = steps.decided(self.run, self.stepped, verdict.passed, verdict.reason)
         return self.moved(moved.run) or moved.said
+
+    def _evidence(self, waiting: steps.Judging, raw: JsonValue | None) -> str:
+        inputs = f"\n\nThe skill's inputs: {json.dumps(waiting.inputs)}" if waiting.inputs else ""
+        if not waiting.from_reply:
+            value = raw if raw is not None else waiting.value
+            return f"The step's result: {json.dumps(value, default=str)}{inputs}"
+        returned = [
+            f"- {r.tool}: {json.dumps(r.output, default=str)}"
+            for r in (self.records[i] for i in self.order)
+            if r.status == "ok" and r.tool not in step_tools.NAMES
+        ]
+        tools = "\n\nThe tools returned in this reply:\n" + "\n".join(returned) if returned else ""
+        return f"The person wrote: {self.req.user_turn or ''}{tools}{inputs}"
 
     def last_step(self, step: int) -> bool:
         """The last step of a turn with more than one offers no tool, so the turn always keeps a step to answer in."""
@@ -613,6 +655,8 @@ def _step_tool(state: _TurnState, grant: ToolGrant) -> Tool[None]:
             rec.status, rec.output = "error", {"error": moved.said}
             return {"error": moved.said}
         said = state.moved(moved.run) or moved.said
+        # A claim on a step with no tool, or a sub-skill's ending on a step with a sentence check: the judge decides.
+        said = await state.judge() or said
         rec.status, rec.output = "ok", {"now": said}
         return {"now": said}
 
@@ -706,7 +750,7 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: 
             rec = state.record(tool_call_id, grant.name, arguments)
             # Its card names the call it repeats, which already shows the result, so nothing is drawn twice.
             rec.status, rec.output = same.status, {"repeatOf": same.tool_call_id}
-            note = state.step_result(ctx.run_step, at, same.output, same.status == "ok")
+            note = await state.step_result(ctx.run_step, at, same.output, same.status == "ok")
             return _noted({"note": REPEATED_CALL, "result": same.output}, note)
         # A read this conversation already made answers from what it kept (tool_cache.py): it reaches no system and
         # spends none of the tool budget.
@@ -716,7 +760,7 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: 
             rec.status, rec.output, rec.cached = "ok", kept.output, True
             state.read_steps.add(state.step)
             said = kept.for_model if kept.for_model is not None else _numbered(state, kept.output)
-            note = state.step_result(ctx.run_step, at, kept.output, True)
+            note = await state.step_result(ctx.run_step, at, kept.output, True)
             return _noted({"note": tool_cache.EARLIER, "result": said}, note)
         # The agent's tool-call budget counts the calls that reach a system; the built-in present tool reaches none
         # and is bounded by the step limit instead, so an agent with no tool calls can still answer with a widget.
@@ -771,7 +815,7 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: 
                 if len(state.passages) > before:
                     state.passage_calls.add(rec.tool_call_id)
             # A rule check reads the result as the system returned it, before anything is masked.
-            note = state.step_result(ctx.run_step, at, outcome.output, outcome.ok)
+            note = await state.step_result(ctx.run_step, at, outcome.output, outcome.ok)
             if outcome.ok and (outcome.view or {}).get("part"):
                 # Drawn for the person already (a table or a record): told so, the model answers in text instead of
                 # presenting the same rows a second time.
@@ -1262,7 +1306,11 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
                 citations=cited,
                 context_digest=digest,
                 model_name=answered,
-                usage=usage,
+                usage=TokenUsage(
+                    usage.input_tokens + state.judge_spent.input_tokens,
+                    usage.output_tokens + state.judge_spent.output_tokens,
+                    usage.requests + state.judge_spent.requests,
+                ),
                 skills=list(state.loads),
                 withheld=state.withheld or None,
                 retracted=state.retracted or None,
@@ -1292,6 +1340,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
     checked.extend(rules)
     model = ports.models.model_for(req.settings.model_alias) if ports.models is not None else ports.model
     guard_model = guard.model_for(ports.models, model)
+    state.judge_model = judge.model_for(ports.models, model)
     if rules and req.user_turn and not req.resume:
         # A question about a blocked topic gets the guardrail's message; the answering model is never called.
         try:

@@ -7,6 +7,8 @@
 #             the migrations just added reaches its service's runtime login
 #   4 health  every process the host runs (ops_host.py --check on the machine), then OCR (check_ocr.py)
 #   5 signed in  the first admin signs in and lists agents through the public origin (platform issues, agents verifies)
+#   5b roles    role_accounts.py invites the member-role accounts the install lacks (staging-roles.env), then each
+#             signs in and must hold its role
 #   6 walk    docs/usecases/lib/stg_click_walk.mjs signs in and opens every console page and the first row of each list;
 #             SKIP_WALK=1 leaves it out
 #   7 smoke   deploy/fly/smoke.mjs makes, publishes and runs things through the public origin in OPS_SMOKE_TEAM (default
@@ -157,6 +159,13 @@ assert isinstance(agents.get("data"), list), agents
 print("ok signed in to", team, "and listed", len(agents["data"]), "agents")
 PY
 step "signed-in request"
+# One account per member role (staging-roles.env): the accounts this install lacks are invited, then each signs in
+# through the public origin and must hold its role, so a role walk can run on every deploy. Before the SKIP_WALK exit.
+platform="$origin/api/platform"
+uv run --quiet --project "$root" python "$root/deploy/fly/role_accounts.py" seed --platform "$platform" \
+  --admin-env "$conf/staging-admin.env" \
+  || { echo "stg-deploy: role accounts are not ready (fix lines above; docs/deploy/fly-staging.md, Role accounts)"; exit 1; }
+step "role accounts seeded and signed in"
 
 if [ "${SKIP_WALK:-0}" = 1 ]; then
   echo "stg-deploy: click walk skipped (SKIP_WALK=1)"

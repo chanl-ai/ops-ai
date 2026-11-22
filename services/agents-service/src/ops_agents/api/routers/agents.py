@@ -12,8 +12,8 @@ ask models-service for the aliases, and the test, eval and job routes run the mo
 
 from __future__ import annotations
 
-import time
-from typing import Annotated, Any, Literal, TypeAlias, cast
+from dataclasses import replace
+from typing import Annotated, Literal, TypeAlias, cast
 
 from fastapi import APIRouter, Body, Depends, Query
 from fastapi.responses import JSONResponse, Response
@@ -28,7 +28,7 @@ from ops_agents.activities.tool_directory import ToolsUnavailable
 from ops_agents.app import agent_brief
 from ops_agents.app.brief_draft import draft_brief
 from ops_agents.app.evals import parse_cases, run_eval
-from ops_agents.domain.evals import TRIGGER_MANUAL
+from ops_agents.domain.evals import TRIGGER_CLI, TRIGGER_MANUAL
 from ops_identity.fastapi import Tx
 from ops_service_kit import narrow
 from ops_service_kit.errors import Conflict, NotFound, ServiceUnavailable, Unprocessable, ValidationFailed
@@ -40,10 +40,9 @@ from ops_store import isolation
 
 from ...app.skill_content import Problem, blocker_of
 from ...store.agent_registry import AgentRow, digest_of, refuse_stale
-from ...store.evals import EvalStore
 from ...store.graphs import StoredThread
 from ...store.template_copies import TemplateCopies
-from .. import publish_reviews
+from .. import eval_gate, publish_reviews
 from ..account_names import require_team_accounts
 from ..agent_registry import (
     GUARDRAILS,
@@ -63,11 +62,12 @@ from ..agent_registry import (
     version_state,
 )
 from ..agent_test import one_test_turn
-from ..auth import Principal, caller, caller_in, caller_of, principal, reader_of, require_builder, started_by
+from ..auth import Principal, caller, caller_in, caller_of, principal, reader_of, require_builder
 from ..child_runs import engine_workflows, refusal, team_workflows
 from ..deps import Runtime, runtime
 from ..engine_agents import KernelModels
 from ..envelope import ok
+from ..eval_runs import judge_for, prices_of, run_saved, version_turn
 from ..guardrails import resolve_pins
 from ..model_aliases import chat_aliases
 from ..publish_policy import Decision, decide, team_document
@@ -83,6 +83,7 @@ from ..schemas import (
     AgentTestTurn,
     AgentVersion,
     BriefDraft,
+    EvalRunRecord,
     MemorySettings,
     PublishDecisionFields,
     PublishReview,
@@ -216,6 +217,8 @@ class EvalCheckInput(In):
     type: str
     tool: str | None = None
     text: str | None = None
+    # What a `judge` check asks of the reply, in words; required for that type (422 rubric_required).
+    rubric: str | None = None
 
 
 class EvalCaseContextInput(In):
@@ -233,6 +236,8 @@ class EvalRunInput(In):
     # Empty is 422 from the use case, not Pydantic 400.
     # Omitted: run the cases saved on the agent and keep the run. Given: score these and keep nothing.
     cases: list[EvalCaseInput] | None = None
+    # What started a kept run: manual (the default) or cli. Anything else is 422 from the route, not Pydantic's 400.
+    trigger: str | None = None
 
 
 class JobInput(In):
@@ -779,11 +784,16 @@ async def draft_agent_brief(rt: Rt, me: Me, agent_id: str, body: BriefDraftInput
     return ok(proposal)
 
 
-async def _publish_problems(rt: Runtime, spec: Json) -> list[Json]:
-    """What stops a version's publish: what its brief names and the agent lacks, and what in the skills it pins must
-    not run as stored. The check and the publish both read this list."""
+# The one eval problem that holds a publish request for a reviewer instead of refusing it.
+HELD = "eval_setting_unread"
+
+
+async def _publish_problems(rt: Runtime, row: AgentRow, version: int, spec: Json) -> list[Json]:
+    """What stops a version's publish: what its brief names and the agent lacks, what in the skills it pins must not
+    run as stored, and its evals (`eval_gate`). The check and the publish both read this list."""
     brief = cast(list[Json], agent_brief.publish_problems(spec))
-    return [*brief, *cast(list[Json], await skill_pin_problems(rt, spec))]
+    pins = cast(list[Json], await skill_pin_problems(rt, spec))
+    return [*brief, *pins, *await eval_gate.problems(rt, row, version)]
 
 
 @router.get("/{agent_id}/prompt", response_model=Envelope[AgentPrompt])
@@ -804,10 +814,13 @@ async def publish_check(rt: Rt, me: Me, _: Tx, agent_id: str, version: Annotated
     (422 `cannot_publish`). 422 `not_newest_draft` for any other version."""
     row = await changeable(rt, me, agent_id, "publish")
     require_newest_draft(row, version)
-    problems = await _publish_problems(rt, (await registry(rt).version(agent_id, version)).spec)
-    return ok(
-        {"canRequest": not problems, "problems": problems, "blockers": [blocker_of(cast(Problem, p)) for p in problems]}
-    )
+    problems = await _publish_problems(rt, row, version, (await registry(rt).version(agent_id, version)).spec)
+    # An unread eval setting is listed but does not stop the request: it holds it for a reviewer (request_publish).
+    blockers = [blocker_of(cast(Problem, p)) for p in problems]
+    for b in blockers:
+        if b["code"] == HELD:
+            b["level"] = "warning"
+    return ok({"canRequest": all(p["kind"] == HELD for p in problems), "problems": problems, "blockers": blockers})
 
 
 @router.post("/{agent_id}/publish-requests", response_model=Envelope[PublishReview], status_code=201)
@@ -819,7 +832,12 @@ async def request_publish(rt: Rt, me: Me, agent_id: str, body: PublishRequestInp
     require_newest_draft(row, body.version)
     v = await reg.version(agent_id, body.version)
     spec = v.spec
-    if problems := await _publish_problems(rt, spec):
+    problems = await _publish_problems(rt, row, body.version, spec)
+    # An unread eval setting holds the request for a reviewer, as an unread publishReview does; the approval reads the
+    # setting again and refuses while it is still unread (publish_reviews.decide), so nothing publishes unchecked.
+    unread = any(p["kind"] == HELD for p in problems)
+    problems = [p for p in problems if p["kind"] != HELD]
+    if problems:
         raise Unprocessable(
             "This version cannot be published yet: " + " ".join(str(p["message"]) for p in problems),
             code="cannot_publish",
@@ -830,6 +848,8 @@ async def request_publish(rt: Rt, me: Me, agent_id: str, body: PublishRequestInp
     named = cast(dict[str, str], spec.get("accounts") or {})
     await require_team_accounts(rt, str(row.team_id or ""), [("The agent", a, n) for a, n in named.items()])
     decision = await _publish_decision(rt, agent_id, row, body.version)
+    if unread:
+        decision = replace(decision, review_required=True, reason="policy_unread")
     approved = not decision.review_required
     review_body = {
         **agent_review_body(agent_id, spec, row, v, note=body.note, by=me.email),
@@ -885,66 +905,23 @@ async def test_agent(rt: Rt, me: Me, agent_id: str, body: TestInput) -> JSONResp
     return ok(await one_test_turn(rt, agent_id, body.message, row=row))
 
 
-@router.post("/{agent_id}/eval-runs", response_model=Envelope[AgentEvalRun])
+@router.post("/{agent_id}/eval-runs", response_model=Envelope[EvalRunRecord | AgentEvalRun])
 async def create_eval_run(
     rt: Rt, me: Me, agent_id: str, body: Annotated[EvalRunInput, Body(default_factory=EvalRunInput)]
 ) -> JSONResponse:
     """Scores cases on the newest version through the same one-turn test path. With no cases in the body it runs the
-    agent's saved cases, also on the live version when that is another one, and keeps the run, so repeating it makes a
-    second run. With cases in the body it scores them and keeps nothing. Empty cases and an unknown check type are
-    422."""
+    agent's saved cases, also on the live version when that is another one, and keeps the run (`EvalRunRecord`), so
+    repeating it makes a second run. With cases in the body it scores them and keeps nothing (`AgentEvalRun`). Empty
+    cases and an unknown check type are 422."""
+    if body.trigger not in (None, TRIGGER_MANUAL, TRIGGER_CLI):
+        raise Unprocessable(f"{body.trigger!r} is not a run trigger: use manual or cli.", code="bad_trigger")
     row = await registry(rt).row(agent_id)
     can(caller_of(me), "evals", "run", team=row.team_id, what=f"agent {row.slug}")
-    saved = body.cases is None
-    raw = (
-        [x["body"] for x in await EvalStore(rt.db).cases("agent", agent_id) if x["status"] == "active"]
-        if saved
-        else [item.model_dump(by_alias=True) for item in cast(list[EvalCaseInput], body.cases)]
-    )
-    cases = parse_cases(raw)
-
-    def turn_on(version: int) -> Any:
-        async def turn(message: str, collections: tuple[str, ...]) -> Json:
-            return await one_test_turn(
-                rt, agent_id, message, row=row.model_copy(update={"version": version}), collections=collections or None
-            )
-
-        return turn
-
-    published = row.published_version
-    live = int(published) if published is not None else None
-    compare = saved and live is not None and live != int(row.version)
-    started = time.perf_counter()
-    run = await run_eval(
-        agent_id, cases, turn_on(int(row.version)), turn_on(live) if compare and live is not None else None
-    )
-    if saved:
-        # The run's own JSON (app.evals.run_eval), read as it was written there.
-        results = cast(JsonList, run["results"])
-        summary = cast(Json, run["summary"])
-        await EvalStore(rt.db).add_run(
-            {
-                "id": run["id"],
-                "team_id": row.team_id,
-                "kind": "agent",
-                "asset_id": agent_id,
-                "version": int(row.version),
-                "live_version": live if compare else None,
-                "trigger": TRIGGER_MANUAL,
-                "passed": summary["passed"],
-                "total": summary["total"],
-                "live_passed": sum(1 for r in results if cast(Json, cast(Json, r)["live"])["status"] == "pass")
-                if compare
-                else None,
-                "regressions": summary["regressions"],
-                "duration_ms": round((time.perf_counter() - started) * 1000),
-                "cost_usd": 0.0,
-                "results": results,
-                "started_by": started_by(me),
-                "ran_at": now_iso(),
-            }
-        )
-    return ok(run)
+    if body.cases is None:
+        return ok(await run_saved(rt, me, row, trigger=body.trigger or TRIGGER_MANUAL))
+    cases = parse_cases([item.model_dump(by_alias=True) for item in body.cases])
+    turn = version_turn(rt, row, int(row.version))
+    return ok(await run_eval(agent_id, cases, turn, judge=judge_for(rt), prices=prices_of(rt)))
 
 
 @router.post("/{agent_id}/jobs", response_model=Envelope[JobArmed], response_model_exclude_none=True)

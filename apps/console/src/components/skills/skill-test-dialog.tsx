@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { Plus } from 'lucide-react';
 
-import { CheckRow, checkComplete } from '@/components/evals/eval-case-dialog';
+import { SkillCheckRow, checkComplete } from '@/components/skills/skill-check-row';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
@@ -97,11 +97,11 @@ export function SkillTestDialog({
             </Button>
           </div>
           {v.checks.map((c, i) => (
-            <CheckRow
+            <SkillCheckRow
               key={i}
               index={i}
               check={c}
-              options={{ tools, collections: knowledgeBases, documents: [] }}
+              options={{ tools, collections: knowledgeBases }}
               onChange={(next) => (setV({ ...v, checks: v.checks.map((x, j) => (j === i ? next : x)) }), setErrors({ ...errors, checks: undefined }))}
               onRemove={() => setV({ ...v, checks: v.checks.filter((_, j) => j !== i) })}
             />

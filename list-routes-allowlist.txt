@@ -7,6 +7,7 @@ agents-service GET /v1/agents/{agent_id}/runs  # bounded: an agent's most recent
 agents-service GET /v1/agents/{agent_id}/versions  # bounded: one agent's versions
 agents-service GET /v1/batches/{batch_id}  # bounded: one batch and its items
 agents-service GET /v1/channels/mailboxes  # owed: every mailbox of the team; takes search but no page
+agents-service GET /v1/eval-runs/{run_id}  # bounded: one kept eval run and its cases' results
 agents-service GET /v1/graphs  # owed: every graph name, read by the workflow editor
 agents-service GET /v1/graphs/{name}/versions  # bounded: one graph's versions
 agents-service GET /v1/knowledge-usage  # owed: every agent using a knowledge base

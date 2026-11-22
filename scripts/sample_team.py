@@ -292,7 +292,8 @@ def ensure_members(admin: Session, team: str, members: list[tuple[str, str]], pa
     """`--member email:role`: people outside team.json (the logins a person demonstrates with) join the team with their
     role, each accepting the invitation as themselves; one already active in it is left as it is."""
     on_team = Session(admin.urls, admin.token, admin.email, team)
-    known = {m["email"].lower(): m for m in items(data(on_team("platform").get("/v1/settings/members")))}
+    # Every page: a team with more members than one page holds would get a second invitation for a person on page two.
+    known = {m["email"].lower(): m for m in every_row(on_team("platform"), "/v1/settings/members")}
     for email, role in members:
         member = known.get(email.lower())
         if member and member["status"] == "active":

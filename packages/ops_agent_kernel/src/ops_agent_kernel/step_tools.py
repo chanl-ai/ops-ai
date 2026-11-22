@@ -81,14 +81,13 @@ def grants(skills: Sequence[Skill]) -> list[ToolGrant]:
             STEP_DONE,
             "platform",
             "Says the current step of the running skill is done. Refused while the step's tool has not run, and "
-            "for a step whose check runs on the tool result. On a step that asks you to decide which way a path "
-            "goes, say it with holds: true when the condition holds, false when it does not.",
+            "for a step whose check runs on the tool result. A judge decides a step's condition; never send holds.",
             "read",
             {
                 "type": "object",
                 "properties": {
                     "summary": {"type": "string", "maxLength": 300},
-                    "holds": {"type": "boolean", "description": "Whether the step's condition holds"},
+                    "holds": {"type": "boolean", "description": "Refused: a judge decides the step's condition"},
                 },
             },
         ),

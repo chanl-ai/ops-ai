@@ -1,165 +1,99 @@
-import type { AgentTestTurn, Risk } from './domain';
+import type { Risk } from './domain';
 
 /**
- * Agent evals: a test set per agent plus the platform's standard sets, run on the agent's newest version
- * against the version live workflows use. Scoring is deterministic; `rubric` checks are recorded but never
- * scored until judge agreement with people is measured (spec 04, 5.3.5).
+ * Agent evals as agents-service keeps them: saved cases, and kept runs that happen when someone presses Run evals or
+ * runs `opsai agents eval`. A check is one of the four the service scores; a judge check asks a model to grade the
+ * reply against its rubric, and the run's cost includes that grading.
  */
 
-export type EvalCheckType = 'calls_tool' | 'not_calls_tool' | 'cites' | 'reply_contains' | 'reply_not_contains' | 'refuses' | 'extracts' | 'rubric';
+export type EvalCheckType = 'calls_tool' | 'reply_contains' | 'refuses' | 'judge';
 
-/** One argument the tool call must carry, e.g. `amount` equals `1240.18`. */
-export interface ArgMatcher {
-  path: string;
-  equals: string;
-}
-
-/** One expectation on a case. Only the fields its `type` needs are set. */
+/** One expectation on a case. Only the field its `type` needs is set. */
 export interface EvalCheck {
   type: EvalCheckType;
-  /** calls_tool, not_calls_tool */
-  tool?: string;
   /** calls_tool */
-  args?: ArgMatcher[];
-  /** cites: knowledge base, and the document section when it matters. */
-  source?: string;
-  section?: string;
-  /** reply_contains, reply_not_contains, refuses (the out-of-scope topic), rubric (the criterion). */
+  tool?: string;
+  /** reply_contains; refuses (the out-of-scope topic) */
   text?: string;
-  /** extracts */
-  field?: string;
-  value?: string;
+  /** judge: what a good reply does. */
+  rubric?: string;
 }
-
-/** `agent` is the owner's own test set; the rest are platform sets attached to every agent. */
-export type EvalSuiteKind = 'agent' | 'injection' | 'leakage' | 'refusals';
-
-export interface EvalCaseContext {
-  /** Staff member or role the case runs as (run-as principal id); unset runs with the agent's own access. */
-  runAsId?: string;
-  runAsName?: string;
-  /** Knowledge bases attached for this case. */
-  collections: string[];
-}
-
-export type EvalCaseSource = 'manual' | 'csv' | 'test_turn' | 'platform';
-export type EvalOutcome = 'pass' | 'fail';
 
 export interface EvalCase {
   id: string;
-  agentId: string;
-  suite: EvalSuiteKind;
   name: string;
   input: string;
-  context: EvalCaseContext;
   checks: EvalCheck[];
-  source: EvalCaseSource;
-  /** Platform cases cannot be edited or deleted by the agent's owner. */
-  readOnly: boolean;
+  /** Knowledge bases attached for this case. */
+  collections: string[];
+  /** `active` cases run; `draft` ones were proposed from a review and wait for a person. */
+  status: string;
+  source: string;
   createdAt: string;
   createdBy: string;
-  /** Outcome on the newest version in the latest completed run; null when not run since it was added. */
-  lastOutcome: EvalOutcome | null;
 }
 
 export interface EvalCaseInput {
   name: string;
   input: string;
-  context: { runAsId?: string; collections: string[] };
+  collections: string[];
   checks: EvalCheck[];
 }
 
-export type EvalCaseFilters = { suite?: string[]; source?: string[]; lastOutcome?: string[] };
-
-export interface EvalSuite {
-  kind: EvalSuiteKind;
-  name: string;
-  description: string;
-  ownedBy: 'agent_owner' | 'platform';
-  caseCount: number;
-  /** On the newest version in the latest completed run. */
-  passed: number | null;
-  total: number | null;
-  regressions: number | null;
-}
-
-/** Result of one check. `advisory` is a rubric check: recorded, never pass or fail. */
+/** Result of one check; a judge check also carries the judge's reason and confidence. */
 export interface EvalCheckResult {
   label: string;
-  status: EvalOutcome | 'advisory';
-  detail?: string;
+  status: 'pass' | 'fail';
+  reason?: string | null;
+  confidence?: number | null;
 }
 
 export interface EvalCaseOutcome {
-  status: EvalOutcome;
+  status: 'pass' | 'fail';
   checks: EvalCheckResult[];
-  failure?: string;
   reply: string;
   latencyMs: number;
 }
 
 export interface EvalCaseResult {
-  caseId: string;
   caseName: string;
-  suite: EvalSuiteKind;
   draft: EvalCaseOutcome;
   live: EvalCaseOutcome | null;
-  /** Passed on the compared version and fails on the newest one. */
+  /** Passed on the live version and fails on the newest one. */
   regression: boolean;
-}
-
-export interface EvalVersionStats {
-  version: number;
-  passed: number;
-  total: number;
-  costUsd: number;
-  p95Ms: number;
-}
-
-export interface EvalSuiteSummary {
-  kind: EvalSuiteKind;
-  name: string;
-  passed: number;
-  total: number;
-  regressions: number;
+  /** A model this case's turns or judge used has no price, so its cost is a lower bound. */
+  unpriced: boolean;
+  /** The judge's model has no price; false on a case with no judge check. */
+  judgeUnpriced: boolean;
 }
 
 export interface EvalSummary {
   passed: number;
   total: number;
   regressions: number;
-  /** Rubric checks recorded but not scored. */
-  advisoryChecks: number;
-  costUsd: number;
-  p95Ms: number;
-  draft: EvalVersionStats;
-  live: EvalVersionStats | null;
-  suites: EvalSuiteSummary[];
 }
 
-export type EvalRunStatus = 'running' | 'complete';
-export type EvalRunTrigger = 'manual' | 'save' | 'restore';
-
+/** A kept run: the newest version, and the live one it was compared with when that is another. */
 export interface EvalRun {
   id: string;
   agentId: string;
-  agentName: string;
-  /** Newest saved version, the one being tested. */
-  draftVersion: number;
-  /** What it is compared with: the version live workflows use, or the previous one when the newest is already live. */
-  compared: { version: number; label: 'live' | 'previous' } | null;
-  trigger: EvalRunTrigger;
-  status: EvalRunStatus;
-  startedAt: string;
-  finishedAt?: string;
-  requestedBy: string;
-  /** Null while running. */
-  summary: EvalSummary | null;
+  version: number;
+  liveVersion: number | null;
+  /** `manual` (the Run button), `cli` (the command line), or `publish_request` when a publish check started it. */
+  trigger: string;
+  /** The service runs synchronously: a kept run is always complete. */
+  status: 'complete';
+  summary: EvalSummary;
   results: EvalCaseResult[];
+  costUsd: number;
+  /** A model in the run has no price: the cost is a lower bound. */
+  unpriced: boolean;
+  startedBy: string;
+  ranAt: string;
 }
 
+/** A row of the runs list: a kept run without its case results, which the single read carries. */
 export type EvalRunRow = Omit<EvalRun, 'results'>;
-export type EvalRunFilters = { status?: string[]; trigger?: string[] };
 
 /** Eval result shown against one agent version (version history, publish requests). */
 export interface EvalVersionSummary {
@@ -169,13 +103,6 @@ export interface EvalVersionSummary {
   total: number;
   regressions: number;
   injection: { passed: number; total: number; regressions: number };
-}
-
-/** Everything the case dialog offers: tools, knowledge bases and the documents they can cite. */
-export interface EvalCaseOptions {
-  tools: string[];
-  collections: string[];
-  documents: { collection: string; title: string; sections: string[] }[];
 }
 
 /** One agent pinned by a publish request, with the eval result for the version being pinned. */
@@ -201,10 +128,4 @@ export interface EvalGate {
   advisory: string[];
   /** Approving needs a written reason because advisory failures exist. */
   reasonRequired: boolean;
-}
-
-export interface SaveTurnInput {
-  message: string;
-  turn: AgentTestTurn;
-  runAsId?: string;
 }

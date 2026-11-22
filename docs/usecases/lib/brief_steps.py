@@ -10,8 +10,15 @@ from typing import Any
 PLACED: dict[str, Any] = {"check": {"text": 'result.hold == "placed"'}, "ifNot": {"action": "exit", "exit": "failed"}}
 
 
+# The date of birth on the fake bank's record, which a caller gives to pass the confirm step.
+DATE_OF_BIRTH = "1984-03-02"
+# What a person says to pass that step: the date, then the scripted model's call of step_done.
+CONFIRMS = f"My date of birth is {DATE_OF_BIRTH}. call step_done {{}}"
+
+
 def confirm_skill(run: int, layer: str) -> dict[str, Any]:
-    """A one-step skill another skill runs as a step; its check is a sentence, so the agent confirms it."""
+    """A one-step skill another skill runs as a step; its check is a sentence, so the judge decides it from what the
+    person wrote in that reply. The scripted judge passes a check whose quoted words the evidence holds."""
     return {
         "name": f"Confirm the caller {layer} {run}",
         "ownerTeam": "team_ops",
@@ -21,7 +28,7 @@ def confirm_skill(run: int, layer: str) -> dict[str, Any]:
         "steps": [
             {
                 "do": "Ask the caller for their date of birth and compare it with the record.",
-                "check": {"text": "The date of birth matches the record."},
+                "check": {"text": f'The caller gave the date of birth on the record, "{DATE_OF_BIRTH}".'},
             }
         ],
     }

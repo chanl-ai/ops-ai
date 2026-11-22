@@ -750,13 +750,16 @@ class EvalCaseContextInput(TypedDict, closed=True):
 
 
 class EvalCheckInput(TypedDict, closed=True):
+    rubric: NotRequired[str | None]
     text: NotRequired[str | None]
     tool: NotRequired[str | None]
     type: str
 
 
 class EvalCheckResult(TypedDict, closed=True):
+    confidence: NotRequired[float | None]
     label: str
+    reason: NotRequired[str | None]
     status: Literal["pass", "fail"]
 
 
@@ -1386,28 +1389,6 @@ class PromptVariable(TypedDict, closed=True):
     source: str
 
 
-class PublishBlocker(TypedDict, closed=True):
-    id: NotRequired[str | None]
-    kind: Literal[
-        "missing_field",
-        "missing_reference",
-        "unavailable_reference",
-        "bad_step",
-        "bad_check",
-        "bad_exit",
-        "sub_skill_not_held",
-        "prompt_rule_in_text",
-        "review_open",
-        "already_published",
-        "deprecated",
-        "too_long",
-        "mention",
-        "hint",
-    ]
-    message: str
-    position: NotRequired[BlockerPosition | None]
-
-
 class PublishDecisionFields(TypedDict, closed=True):
     majorChange: NotRequired[bool | None]
     policy: NotRequired[Literal["always", "major", "never"] | None]
@@ -1745,6 +1726,7 @@ class SaveBase(TypedDict, closed=True):
 
 
 class SavedCaseCheck(TypedDict, closed=True):
+    rubric: NotRequired[str | None]
     text: NotRequired[str | None]
     tool: NotRequired[str | None]
     type: str
@@ -1848,15 +1830,6 @@ class SkillProvenance(TypedDict, closed=True):
 class SkillPublishAgent(TypedDict, closed=True):
     name: str
     pinnedVersion: int | None
-
-
-class SkillPublishCheck(TypedDict, closed=True):
-    approversNeeded: int
-    blockers: list[Blocker]
-    canRequest: bool
-    editClass: Literal["free", "re_test", "re_approval"]
-    problems: NotRequired[list[PublishBlocker]]
-    warnings: NotRequired[list[PublishBlocker]]
 
 
 class SkillRenderInput(TypedDict, closed=True):
@@ -2363,6 +2336,12 @@ class ToolsNotAdded(TypedDict, closed=True):
     name: str
 
 
+class TurnUsage(TypedDict, closed=True):
+    inputTokens: int
+    model: str
+    outputTokens: int
+
+
 class TypeRef(TypedDict, closed=True):
     id: str
     version: NotRequired[int | None]
@@ -2731,12 +2710,6 @@ class AgentPatch(TypedDict, closed=True):
     widgets: NotRequired[WidgetSettings | None]
 
 
-class AgentPublishCheck(TypedDict, closed=True):
-    blockers: NotRequired[list[Blocker]]
-    canRequest: bool
-    problems: NotRequired[list[PublishBlocker]]
-
-
 class AgentPublishRequest(TypedDict, closed=True):
     agentId: str
     agentName: str
@@ -2790,6 +2763,7 @@ class AgentTestTurn(TypedDict, closed=True):
     tookMs: int
     toolCalls: list[ToolCallView]
     tools: NotRequired[list[HeldTool]]
+    usage: TurnUsage
     wouldPause: NotRequired[WouldPause | None]
 
 
@@ -3071,11 +3045,6 @@ class EngineRunStep(TypedDict, closed=True):
     output: JsonValue
     port: str | None
     status: str
-
-
-class EnvelopeAgentPublishCheck(TypedDict, closed=True):
-    data: AgentPublishCheck
-    success: Literal[True]
 
 
 class EnvelopeAgentSkills(TypedDict, closed=True):
@@ -3385,16 +3354,58 @@ class EvalCaseOutcome(TypedDict, closed=True):
 class EvalCaseResult(TypedDict, closed=True):
     caseName: str
     draft: EvalCaseOutcome
+    judgeUnpriced: NotRequired[bool]
     live: NotRequired[EvalCaseOutcome | None]
     regression: NotRequired[bool]
+    unpriced: NotRequired[bool]
 
 
 class EvalCasesInput(TypedDict, closed=True):
     cases: NotRequired[list[EvalCaseInput]]
 
 
+class EvalGate(TypedDict, closed=True):
+    blocked: bool
+    steps: list[GateStep]
+
+
+class EvalGateDetails(TypedDict, closed=True):
+    steps: list[GateStep]
+
+
 class EvalRunInput(TypedDict, closed=True):
     cases: NotRequired[list[EvalCaseInput] | None]
+    trigger: NotRequired[str | None]
+
+
+class EvalRunRecord(TypedDict, closed=True):
+    agentId: str
+    costUsd: float
+    gate: NotRequired[EvalGate | None]
+    id: str
+    liveVersion: int | None
+    ranAt: str
+    results: list[EvalCaseResult]
+    startedBy: str
+    status: Literal["complete"]
+    summary: EvalSummary
+    trigger: str
+    unpriced: bool
+    version: int
+
+
+class EvalRunRow(TypedDict, closed=True):
+    agentId: str
+    costUsd: float
+    id: str
+    liveVersion: int | None
+    ranAt: str
+    startedBy: str
+    status: Literal["complete"]
+    summary: EvalSummary
+    trigger: str
+    unpriced: bool
+    version: int
 
 
 class FieldChangeView(TypedDict, closed=True):
@@ -3495,6 +3506,12 @@ class ListResultCaseTypeView(TypedDict, closed=True):
 
 class ListResultDefinitionRow(TypedDict, closed=True):
     data: list[DefinitionRow]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
+class ListResultEvalRunRow(TypedDict, closed=True):
+    data: list[EvalRunRow]
     facets: dict[str, dict[str, int]]
     pagination: Pagination
 
@@ -3605,6 +3622,33 @@ class PublicForm(TypedDict, closed=True):
     description: str
     form: FormFields
     title: str
+
+
+class PublishBlocker(TypedDict, closed=True):
+    details: NotRequired[EvalGateDetails | None]
+    id: NotRequired[str | None]
+    kind: Literal[
+        "missing_field",
+        "missing_reference",
+        "unavailable_reference",
+        "bad_step",
+        "bad_check",
+        "bad_exit",
+        "sub_skill_not_held",
+        "prompt_rule_in_text",
+        "review_open",
+        "already_published",
+        "deprecated",
+        "too_long",
+        "mention",
+        "hint",
+        "eval_failed",
+        "eval_not_run",
+        "eval_no_cases",
+        "eval_setting_unread",
+    ]
+    message: str
+    position: NotRequired[BlockerPosition | None]
 
 
 class PublishRequestInfo(TypedDict, closed=True):
@@ -3758,6 +3802,15 @@ class SkillOptions(TypedDict, closed=True):
     limits: dict[str, int]
     teams: list[str]
     tools: list[SkillToolRef]
+
+
+class SkillPublishCheck(TypedDict, closed=True):
+    approversNeeded: int
+    blockers: list[Blocker]
+    canRequest: bool
+    editClass: Literal["free", "re_test", "re_approval"]
+    problems: NotRequired[list[PublishBlocker]]
+    warnings: NotRequired[list[PublishBlocker]]
 
 
 class SkillPublishInfo(TypedDict, closed=True):
@@ -4074,10 +4127,18 @@ class Agent(TypedDict, closed=True):
 
 class AgentEvalRun(TypedDict, closed=True):
     agentId: str
+    costUsd: float
     id: str
     results: list[EvalCaseResult]
     status: Literal["complete"]
     summary: EvalSummary
+    unpriced: bool
+
+
+class AgentPublishCheck(TypedDict, closed=True):
+    blockers: NotRequired[list[Blocker]]
+    canRequest: bool
+    problems: NotRequired[list[PublishBlocker]]
 
 
 class CaseDetail(TypedDict, closed=True):
@@ -4185,8 +4246,8 @@ class DocumentRead(TypedDict, closed=True):
     sources: NotRequired[list[str]]
 
 
-class EnvelopeAgentEvalRun(TypedDict, closed=True):
-    data: AgentEvalRun
+class EnvelopeAgentPublishCheck(TypedDict, closed=True):
+    data: AgentPublishCheck
     success: Literal[True]
 
 
@@ -4220,6 +4281,11 @@ class EnvelopeDefinitionDiffView(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeEvalRunRecord(TypedDict, closed=True):
+    data: EvalRunRecord
+    success: Literal[True]
+
+
 class EnvelopeGateList(TypedDict, closed=True):
     data: GateList
     success: Literal[True]
@@ -4247,6 +4313,11 @@ class EnvelopeListResultCaseTypeView(TypedDict, closed=True):
 
 class EnvelopeListResultDefinitionRow(TypedDict, closed=True):
     data: ListResultDefinitionRow
+    success: Literal[True]
+
+
+class EnvelopeListResultEvalRunRow(TypedDict, closed=True):
+    data: ListResultEvalRunRow
     success: Literal[True]
 
 
@@ -4357,6 +4428,11 @@ class EnvelopeThreadState(TypedDict, closed=True):
 
 class EnvelopeToolOptionsPage(TypedDict, closed=True):
     data: ToolOptionsPage
+    success: Literal[True]
+
+
+class EnvelopeUnionEvalRunRecordAgentEvalRun(TypedDict, closed=True):
+    data: EvalRunRecord | AgentEvalRun
     success: Literal[True]
 
 
