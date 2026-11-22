@@ -1,6 +1,6 @@
 # A builder tries one path of a skill, and no write runs until they confirm
 
-Status: current. Id: `uc-762`. Service: `agents-service`. Layers: api.
+Status: current. Id: `uc-762`. Service: `agents-service`. Layers: api, ui.
 
 A builder on a skill page (or a workflow step's sheet) opens Try, picks one path of the skill's `if`s and the account
 to try it on, and runs it. Each tool step on the path comes with the values it would send and a sample result: the
@@ -34,3 +34,4 @@ a run. Paths and samples come from `GET /v1/try-targets` (agents-service); each 
 | Layer | Script | State |
 |---|---|---|
 | api | `agents-service/scripts/test-uc-762-api.py` | `make usecase-test UC=uc-762 LAYER=api` |
+| ui | `agents-service/scripts/test-uc-762-ui.mjs` | `make usecase-test UC=uc-762 LAYER=ui` |
