@@ -88,7 +88,7 @@ async def test_a_memory_follows_its_person_in_the_team(stack: Stack) -> None:  #
 
 
 async def test_the_memory_list_searches_filters_and_pages_on_the_server(stack: Stack) -> None:  # noqa: F811
-    c, _ = stack
+    c, rt = stack
     await say(c, await chat(c, VIEWER), "Remember that my timezone is Eastern.", VIEWER)
     await say(c, await chat(c, VIEWER), "Remember that my preferred account is CHQ-2219.", VIEWER)
 
@@ -104,6 +104,9 @@ async def test_the_memory_list_searches_filters_and_pages_on_the_server(stack: S
     assert first["pagination"]["total"] == 2 and first["pagination"]["hasNext"], first["pagination"]
     second = await page(pageSize=1, page=2)
     assert {first["data"][0]["id"], second["data"][0]["id"]} == {m["id"] for m in await mine(c, VIEWER)}
+    other = await keep(rt, "branch", "Leeds Central", agent="ag_dispute")
+    assert other in {m["id"] for m in await mine(c, VIEWER)}, "unfiltered, every agent's memory is listed"
+    assert other not in {m["id"] for m in await mine(c, VIEWER, "ag_branch")}, "agentId keeps what that agent may use"
 
 
 async def test_only_the_persons_own_words_are_read_for_memory(stack: Stack) -> None:  # noqa: F811

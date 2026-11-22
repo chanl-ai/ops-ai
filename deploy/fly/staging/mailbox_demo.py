@@ -418,7 +418,9 @@ class Demo:
     def connected_elsewhere(self, address: str) -> str | None:
         """The other team `address` is connected in, if any. A workspace connects an address once, and a mailbox can be
         neither removed nor moved to another team yet, so the demo runs in that team instead."""
-        teams = data(httpx.get(self.url("platform", "/v1/teams"), headers=self.as_admin(), timeout=30))
+        teams = data(
+            httpx.get(self.url("platform", "/v1/teams"), params={"pageSize": 50}, headers=self.as_admin(), timeout=30)
+        )["data"]
         for team in teams:
             if team["id"] == self.ops:
                 continue

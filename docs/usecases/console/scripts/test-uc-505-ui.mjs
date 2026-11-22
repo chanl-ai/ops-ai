@@ -31,7 +31,7 @@ await withUiStack(
     if (made.status >= 300) throw new Error(`setup: opening a case answered ${made.status} ${(await made.text()).slice(0, 200)}`);
     const caseId = (await made.json()).data.id;
     // The switch lists James's other teams, so it shows only when he holds more than one.
-    const teams = (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/teams`, { headers: james })).json()).data.length;
+    const teams = (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/teams?pageSize=50`, { headers: james })).json()).data.data.length;
     const browser = await chromium.launch();
     const errors = [];
     const logAll = [];
