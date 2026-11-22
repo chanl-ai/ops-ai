@@ -10,6 +10,8 @@ import pytest
 from httpx import AsyncClient
 from pydantic_ai.models.test import TestModel
 
+from ops_service_kit.names import LINE_BREAK
+
 from ..engine.test_lifecycle_rights import person
 from .role_app import ok, role_app
 
@@ -39,7 +41,7 @@ async def test_a_long_guardrail_name_makes_a_slug_that_fits_the_column(client: A
     assert too_long.status_code == 400, too_long.text
 
 
-@pytest.mark.parametrize("bad", ["", "   ", "Wire\x00review", "\t", "\r\n"])
+@pytest.mark.parametrize("bad", ["", "   ", "Wire\x00review", "\t", "\r\n", "\u200b", "\u200b\u202e "])
 async def test_a_blank_or_control_character_name_is_refused_with_400_by_every_route(
     client: AsyncClient, bad: str
 ) -> None:
@@ -58,8 +60,29 @@ async def test_two_guardrail_names_equal_in_their_first_120_letters_say_so(clien
     assert again.status_code == 409 and "first 120 letters" in again.json()["error"]["message"], again.text
 
 
-async def test_a_name_with_a_line_break_or_tab_is_saved_on_one_line(client: AsyncClient) -> None:
-    made = ok(
-        await client.post("/v1/agents", json={"name": "  Wire\r\n\treview   desk ", "role": "r"}, headers=OPS), 201
-    )
+async def test_a_name_with_a_line_break_is_refused_with_one_message_and_a_tab_is_a_space(client: AsyncClient) -> None:
+    messages: set[str] = set()
+    for path, body in {
+        "/v1/agents": {"name": "Wire\r\nreview", "role": "r"},
+        "/v1/guardrails": {"name": "Wire\nreview", **GUARDRAIL},
+        "/v1/skills": {
+            "name": "Wire\nreview",
+            "useWhen": "a wire needs review",
+            "instructions": "Review it.",
+            "ownerTeam": "team_ops",
+        },
+    }.items():
+        r = await client.post(path, json=body, headers=OPS)
+        assert r.status_code == 400, (path, r.text)
+        messages.add(str(r.json()["error"]["message"]))
+    assert all(m.endswith(LINE_BREAK[1]) for m in messages), messages
+    made = ok(await client.post("/v1/agents", json={"name": "  Wire\treview   desk ", "role": "r"}, headers=OPS), 201)
     assert made["name"] == "Wire review desk"
+
+
+async def test_names_that_differ_only_in_non_latin_letters_get_distinct_slugs(client: AsyncClient) -> None:
+    one = ok(await client.post("/v1/guardrails", json={"name": "QA 高风险交易审查", **GUARDRAIL}, headers=OPS), 201)
+    two = ok(await client.post("/v1/guardrails", json={"name": "QA 客户投诉处理", **GUARDRAIL}, headers=OPS), 201)
+    agent = ok(await client.post("/v1/agents", json={"name": "Проверка переводов", "role": "r"}, headers=OPS), 201)
+    assert one["slug"] != two["slug"] and one["slug"].startswith("qa-"), (one["slug"], two["slug"])
+    assert agent["slug"] not in ("", "agent"), agent["slug"]

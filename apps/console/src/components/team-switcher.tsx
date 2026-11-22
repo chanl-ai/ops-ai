@@ -24,6 +24,7 @@ import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from '@/c
 import { Skeleton } from '@/components/ui/skeleton';
 import { initials, plural } from '@/lib/format';
 import type { Team, TeamIcon, TeamInput } from '@/lib/types/team';
+import { nameError } from '@/lib/validation/names';
 
 export const TEAM_ICONS: Record<TeamIcon, LucideIcon> = {
   platform: Layers,
@@ -187,7 +188,7 @@ function AddTeamDialog({
   }, [open]);
 
   const submit = async () => {
-    const e = { name: values.name.trim() ? undefined : 'Name the team.', ownerGroup: values.ownerGroup ? undefined : 'Pick the owner group this team works on.' };
+    const e = { name: nameError(values.name, 'Name the team.'), ownerGroup: values.ownerGroup ? undefined : 'Pick the owner group this team works on.' };
     setErrors(e);
     if (e.name || e.ownerGroup) return;
     try {

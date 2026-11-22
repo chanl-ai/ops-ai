@@ -47,7 +47,7 @@ from ops_service_kit.errors import (
 )
 from ops_service_kit.http import Envelope, In, Json, JsonValue, ListResult, Out
 from ops_service_kit.listing import ListQuery
-from ops_service_kit.names import Name, cap_slug
+from ops_service_kit.names import Name, slugify
 from ops_store import isolation
 
 from ...store.engine import EngineTransactions
@@ -195,7 +195,7 @@ def _token(tenant: str, team: str, form_id: str) -> tuple[str, str]:
 
 
 def _slug(title: str) -> str:
-    words = cap_slug(re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-"), 60) or "form"
+    words = slugify(title, width=60, fallback="form")
     return f"{words}-{secrets.token_hex(3)}"
 
 

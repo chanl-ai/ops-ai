@@ -3,6 +3,7 @@ import type { McpLink, McpLinkTool } from '@/lib/types/mcp-links';
 import { ApiError } from '../contract';
 import type { McpLinksApi } from '../mcp-links-contract';
 import { id, notFound, respond } from './runtime';
+import { slugify } from '@/lib/validation/names';
 
 const BASE = 'https://tools.ops.example/mcp';
 const HOUR = 3_600_000;
@@ -40,7 +41,7 @@ export function createMcpLinksMock(): McpLinksApi {
     get: (lid) => respond(() => find(lid)),
     create: (input) =>
       respond(() => {
-        const slug = input.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'link';
+        const slug = slugify(input.name, { width: 64, fallback: 'link' });
         if (all().some((l) => l.slug === slug)) throw new ApiError(`This team already has a link named ${input.name}.`, 422);
         const tools = input.tools.map((t) => (t.id.startsWith('workflow:') ? tool(`workflow__${t.id.slice(9)}`, t.label, 'workflow') : tool(t.id, t.label)));
         const made: McpLink = { id: id('mcl'), name: input.name, slug, teamId: 'team_ops', environment: 'test', url: `${BASE}/team_ops/${slug}`, tools, toolCount: tools.length, paused: false, createdBy: 'You', createdAt: new Date().toISOString(), lastCall: null };

@@ -6,7 +6,6 @@ that made them.
 
 from __future__ import annotations
 
-import re
 from typing import NotRequired, TypedDict, cast
 
 from ops_agent_kernel import layout
@@ -15,6 +14,7 @@ from ops_agents.store.widget_picker import WidgetPicker
 from ops_agents.store.widgets import ListedWidget, WidgetContent, WidgetRegistry
 from ops_service_kit.errors import Unprocessable
 from ops_service_kit.http import Json, JsonValue
+from ops_service_kit.names import slugify
 
 from ..store.agent_registry import PublishRequestRow
 from .agent_registry import registry
@@ -50,7 +50,7 @@ def picker(rt: Runtime) -> WidgetPicker:
 
 
 def widget_id_of(name: str) -> str:
-    return (re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "widget")[:MAX_WIDGET_ID].rstrip("-")
+    return slugify(name, width=MAX_WIDGET_ID, fallback="widget")
 
 
 def _binds(node: JsonValue) -> list[str]:

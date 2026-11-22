@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { ApiKeyInput, SettingsLookups } from '@/lib/types/settings';
+import { nameError } from '@/lib/validation/names';
 
 const EXPIRY = [
   { value: '30', label: '30 days' },
@@ -102,7 +103,8 @@ export function ApiKeyDialog({
             <LoadingButton
               isLoading={isPending}
               onClick={async () => {
-                if (!name.trim()) return setError('Name the key.');
+                const nameIssue = nameError(name, 'Name the key.');
+                if (nameIssue) return setError(nameIssue);
                 if (!picked.length) return setError('Pick at least one scope.');
                 try {
                   const res = await onSubmit({ name, scopes: picked, expiresInDays: expiry === 'never' ? null : Number(expiry), ...(teams ? { teamId } : {}) });

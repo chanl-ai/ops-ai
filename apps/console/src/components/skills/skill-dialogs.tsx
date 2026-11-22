@@ -18,6 +18,7 @@ import type { SkillCreateInput, SkillDetail, SkillImportPreview, SkillLoading, S
 
 import { DiffView, EDIT_CLASS, EditClassBadge, UNWRITTEN_SECTIONS, WORKED_EXAMPLE } from './skill-meta';
 import { SkillLoadingField } from './skill-loading';
+import { nameError } from '@/lib/validation/names';
 
 function TeamSelect({ id, teams, value, onChange, error }: { id: string; teams: string[]; value: string; onChange: (v: string) => void; error?: string }) {
   return (
@@ -60,7 +61,7 @@ export function NewSkillDialog({ open, onOpenChange, teams, defaultTeam, maxUseW
   }, [open, team, teams, defaultTeam]);
 
   const submit = async () => {
-    const e = { name: name.trim() ? undefined : 'Name the skill.', useWhen: !useWhen.trim() && loading === 'on_match' ? 'Say when an agent should use it.' : useWhen.length > maxUseWhen ? `Keep it under ${maxUseWhen} characters.` : undefined, team: team ? undefined : 'Choose the owner team.' };
+    const e = { name: nameError(name, 'Name the skill.'), useWhen: !useWhen.trim() && loading === 'on_match' ? 'Say when an agent should use it.' : useWhen.length > maxUseWhen ? `Keep it under ${maxUseWhen} characters.` : undefined, team: team ? undefined : 'Choose the owner team.' };
     setErrors(e);
     if (e.name || e.useWhen || e.team) return;
     try {
