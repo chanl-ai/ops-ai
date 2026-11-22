@@ -86,6 +86,12 @@ class KeyStore(TenantDb):
                 q,
                 params,
                 search=[api_keys.c.name],
+                sortable={
+                    "name": api_keys.c.name,
+                    "createdAt": api_keys.c.created_at,
+                    "lastUsedAt": api_keys.c.last_used_at,
+                    "expiresAt": api_keys.c.expires_at,
+                },
                 default_sort=api_keys.c.created_at.desc(),
                 filters=by,
             )

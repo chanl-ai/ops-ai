@@ -172,14 +172,23 @@ class RoleStore(TenantDb):
                 "builtin": sa.case((roles.c.builtin == sa.true(), "true"), else_="false"),
                 "canDecideReviews": sa.case((decides, "true"), else_="false"),
             }
+            assigned = sa.func.coalesce(held.c.n, 0)
             q = sa.select(
                 roles.c.id,
                 roles.c.name,
                 roles.c.builtin,
                 roles.c.description,
-                sa.func.coalesce(held.c.n, 0).label("assignment_count"),
+                assigned.label("assignment_count"),
             ).select_from(roles.outerjoin(held, held.c.role_id == roles.c.id))
-            page = await list_page(c, q, params, search=[roles.c.name], default_sort=place.asc(), filters=flags)
+            page = await list_page(
+                c,
+                q,
+                params,
+                search=[roles.c.name],
+                sortable={"name": roles.c.name, "assignmentCount": assigned},
+                default_sort=place.asc(),
+                filters=flags,
+            )
         page["data"] = [
             RoleSummary.model_validate({**r, "permission_count": len(grids.get(str(r["id"]), []))}).model_dump(
                 by_alias=True
@@ -397,7 +406,9 @@ class RoleStore(TenantDb):
             q = q.where(role_assignments.c.subject_id.in_(params.ids))
             params = params.model_copy(update={"ids": None, "search": None})
         async with self.tenant_tx(tenant_id) as c:
-            page = await list_page(c, q, params, search=[users.c.name, users.c.email], default_sort=name.asc())
+            page = await list_page(
+                c, q, params, search=[users.c.name, users.c.email], sortable={"name": name}, default_sort=name.asc()
+            )
         page["data"] = [RoleHolderRow.model_validate(r).model_dump(by_alias=True) for r in page["data"]]
         return page
 
@@ -471,7 +482,14 @@ class RoleStore(TenantDb):
             )
         )
         async with self.tenant_tx(tenant_id) as c:
-            page = await list_page(c, q, params, search=[roles.c.name], default_sort=roles.c.name.asc())
+            page = await list_page(
+                c,
+                q,
+                params,
+                search=[roles.c.name],
+                sortable={"roleName": roles.c.name},
+                default_sort=roles.c.name.asc(),
+            )
         page["data"] = [RoleGrantRow.model_validate(r).model_dump(by_alias=True) for r in page["data"]]
         return page
 
