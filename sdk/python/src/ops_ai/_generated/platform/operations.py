@@ -492,6 +492,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "roles_give_role_to_holder": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/roles/{role_id}/holders",
+        "pathParams": ["role_id"],
+        "query": [],
+        "stream": False,
+    },
     "roles_list_roles": {
         "body": None,
         "headers": [],
@@ -526,6 +535,15 @@ OPERATIONS: dict[str, Operation] = {
         "path": "/v1/roles/{role_id}/reset",
         "pathParams": ["role_id"],
         "query": [],
+        "stream": False,
+    },
+    "roles_role_holder_options": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/roles/{role_id}/holder-options",
+        "pathParams": ["role_id"],
+        "query": ["search", "cursor", "limit", "ids"],
         "stream": False,
     },
     "roles_role_holders": {
@@ -1153,6 +1171,25 @@ class Operations:
             SERVICE, OPERATIONS["roles_delete_role"], {"role_id": role_id}, {"moveTo": move_to}, {}, None
         )  # type: ignore[no-any-return]
 
+    def roles_role_holder_options(
+        self,
+        role_id: str,
+        *,
+        search: str | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
+        ids: list[str] | None = None,
+    ) -> OptionsPage:
+        "Role Holder Options"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["roles_role_holder_options"],
+            {"role_id": role_id},
+            {"search": search, "cursor": cursor, "limit": limit, "ids": ids},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
     def roles_role_holders(
         self,
         role_id: str,
@@ -1180,6 +1217,10 @@ class Operations:
             {},
             None,
         )  # type: ignore[no-any-return]
+
+    def roles_give_role_to_holder(self, role_id: str, body: RoleHolderIn) -> RoleHolderOut:
+        "Give Role To Holder"
+        return self._t.call(SERVICE, OPERATIONS["roles_give_role_to_holder"], {"role_id": role_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     def roles_edit_role(self, role_id: str, body: RoleCellsIn) -> RoleDetail:
         "Edit Role"
@@ -1772,6 +1813,25 @@ class AsyncOperations:
             SERVICE, OPERATIONS["roles_delete_role"], {"role_id": role_id}, {"moveTo": move_to}, {}, None
         )  # type: ignore[no-any-return]
 
+    async def roles_role_holder_options(
+        self,
+        role_id: str,
+        *,
+        search: str | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
+        ids: list[str] | None = None,
+    ) -> OptionsPage:
+        "Role Holder Options"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["roles_role_holder_options"],
+            {"role_id": role_id},
+            {"search": search, "cursor": cursor, "limit": limit, "ids": ids},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
     async def roles_role_holders(
         self,
         role_id: str,
@@ -1799,6 +1859,10 @@ class AsyncOperations:
             {},
             None,
         )  # type: ignore[no-any-return]
+
+    async def roles_give_role_to_holder(self, role_id: str, body: RoleHolderIn) -> RoleHolderOut:
+        "Give Role To Holder"
+        return await self._t.call(SERVICE, OPERATIONS["roles_give_role_to_holder"], {"role_id": role_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def roles_edit_role(self, role_id: str, body: RoleCellsIn) -> RoleDetail:
         "Edit Role"

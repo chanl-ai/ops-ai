@@ -555,6 +555,17 @@ export const platformOperations = {
     "query": [],
     "stream": false
   },
+  "roles_give_role_to_holder": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/roles/{role_id}/holders",
+    "pathParams": [
+      "role_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "roles_list_roles": {
     "body": null,
     "headers": [],
@@ -604,6 +615,22 @@ export const platformOperations = {
       "role_id"
     ],
     "query": [],
+    "stream": false
+  },
+  "roles_role_holder_options": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/roles/{role_id}/holder-options",
+    "pathParams": [
+      "role_id"
+    ],
+    "query": [
+      "search",
+      "cursor",
+      "limit",
+      "ids"
+    ],
     "stream": false
   },
   "roles_role_holders": {

@@ -510,6 +510,11 @@ class RoleGrantOut(TypedDict, closed=True):
     teamId: str
 
 
+class RoleHolderIn(TypedDict, closed=True):
+    id: str
+    kind: Literal["person", "group"]
+
+
 class RoleHolderOut(TypedDict, closed=True):
     email: NotRequired[str | None]
     id: str
@@ -896,6 +901,11 @@ class EnvelopeRoleDetail(TypedDict, closed=True):
 
 class EnvelopeRoleGrantOut(TypedDict, closed=True):
     data: RoleGrantOut
+    success: Literal[True]
+
+
+class EnvelopeRoleHolderOut(TypedDict, closed=True):
+    data: RoleHolderOut
     success: Literal[True]
 
 
