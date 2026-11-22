@@ -6,6 +6,10 @@ on:
   pull_request:
     # labeled: adding ci:full starts a run of every job without a new push.
     types: [opened, synchronize, reopened, labeled]
+  # The merge queue on develop: the queue's temporary branch (develop plus the queued pull requests) runs the same jobs
+  # as a pull request, planned from the queue's base, so ci-ok reports on it and the queue merges only on green.
+  merge_group:
+    types: [checks_requested]
   # develop and main run the same checks after a merge; the staging job at the end deploys develop, and a release or
   # hotfix branch (docs/deploy/release.md) so the release is tested on staging.
   push:
@@ -30,10 +34,10 @@ env:
   OPS_SMTP_HOST: 127.0.0.1
   OPS_GREENMAIL_HOST: 127.0.0.1
   OPS_MAILPIT_HOST: 127.0.0.1
-  # What the changed-files plan compares against: the pull request's base, or the branch tip before a push. A branch's
+  # What the changed-files plan compares against: the pull request's or merge group's base, or the branch tip before a push. A branch's
   # first push has no tip before it (an all-zero sha), so the whole difference from main is checked. The plan step
   # replaces it for develop and main (below).
-  BASE_SHA: ${{ github.event.pull_request.base.sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || 'origin/main' }}
+  BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || 'origin/main' }}
 
 jobs:
   plan:
