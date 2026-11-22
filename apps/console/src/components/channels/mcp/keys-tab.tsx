@@ -23,6 +23,7 @@ import { useListParams } from '@/hooks/use-list-params';
 import { useApiKeys, useCreateApiKey, useRevokeApiKey } from '@/hooks/settings-queries';
 import { relativeTime } from '@/lib/format';
 import type { ApiKey } from '@/lib/types/settings';
+import { nameError } from '@/lib/validation/names';
 
 const EXPIRY = [
   { value: '30', label: '30 days' },
@@ -150,7 +151,8 @@ function NewKeyDialog({ open, onOpenChange, linkId, onMade }: { open: boolean; o
     setError(null);
   }, [open]);
   const submit = () => {
-    if (!name.trim()) return setError('Name the key after the system that will use it.');
+    const nameIssue = nameError(name, 'Name the key after the system that will use it.');
+    if (nameIssue) return setError(nameIssue);
     create.mutate(
       { name: name.trim(), scopes: ['read'], expiresInDays: Number(expiry), target: { kind: 'mcp_link', id: linkId } },
       { onSuccess: (r) => {

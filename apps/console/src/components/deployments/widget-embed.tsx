@@ -29,6 +29,7 @@ import type { WidgetDeployment } from '@/lib/types/widget-deployments';
 import { KEY_VARIABLE, SESSION_PATH, snippetFor, STEPS_DOC } from '@/lib/widget-snippet';
 
 import { WidgetMintKeysDialog } from './widget-mint-keys';
+import { nameError } from '@/lib/validation/names';
 
 // A page origin as the browser sends it: scheme and host, a port when it has one, nothing after.
 const ORIGIN = /^https?:\/\/[a-z0-9.-]+(:\d{1,5})?$/i;
@@ -94,7 +95,7 @@ export function EmbedDialog({ agentId, scriptUrl, open, onOpenChange }: { agentI
   const submit = async () => {
     const found = {
       agent: chosen ? undefined : 'Choose the agent to embed.',
-      name: name.trim() ? undefined : 'Name it so the team can tell embeds apart.',
+      name: nameError(name, 'Name it so the team can tell embeds apart.'),
       origins: !origins.length
         ? 'Add the page origin, like https://intranet.bank.example.'
         : origins.some((o) => !ORIGIN.test(o))

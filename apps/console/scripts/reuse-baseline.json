@@ -50,6 +50,15 @@
     "src/components/shared/chat-blocks.tsx"
   ],
   "appLink": [],
+  "dialogColumns": [
+    "src/app/build/runs/[runId]/page.tsx",
+    "src/app/settings/account/security/page.tsx",
+    "src/app/settings/workspace/storage/page.tsx",
+    "src/components/chat/widgets.tsx",
+    "src/components/deployments/deployment-sheet.tsx",
+    "src/components/document-types/tests-panel.tsx",
+    "src/components/skills/generate-skill-dialog.tsx"
+  ],
   "picker": [
     "src/app/dev/chat-default-agent/page.tsx",
     "src/app/dev/workflow-canvas/large-canvas.tsx",
@@ -71,13 +80,16 @@
     "src/components/skills/generate-skill-dialog.tsx",
     "src/components/tools/operation-picker.tsx"
   ],
-  "dialogColumns": [
-    "src/app/build/runs/[runId]/page.tsx",
-    "src/app/settings/account/security/page.tsx",
-    "src/app/settings/workspace/storage/page.tsx",
-    "src/components/chat/widgets.tsx",
-    "src/components/deployments/deployment-sheet.tsx",
-    "src/components/document-types/tests-panel.tsx",
-    "src/components/skills/generate-skill-dialog.tsx"
+  "nameRule": [
+    "src/lib/api/mock/auth/index.ts",
+    "src/lib/api/mock/files/index.ts",
+    "src/lib/api/mock/governance/catalog.ts",
+    "src/lib/api/mock/index.ts",
+    "src/lib/api/mock/knowledge/index.ts",
+    "src/lib/api/mock/knowledge/ingest.ts",
+    "src/lib/api/mock/skills/index.ts",
+    "src/lib/api/mock/templates/index.ts",
+    "src/lib/api/mock/tool-modules/index.ts",
+    "src/lib/api/mock/widgets/index.ts"
   ]
 }

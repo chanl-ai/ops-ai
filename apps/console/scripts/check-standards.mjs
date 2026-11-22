@@ -259,6 +259,9 @@ for (const f of files.filter((x) => /^src\/app\/.*page\.tsx$/.test(x.rel) && !re
 //     The files that broke this when the rule came in are listed per rule in reuse-baseline.json. The list may only
 //     shrink: a file not listed fails, and a listed file that no longer breaks the rule fails until it is taken off
 //     (`--write-baseline` takes it off and never adds one).
+function nameRuleAt(text) {
+  return text.search(/\[\^a-z0-9\]|!?[\w.]+\.trim\(\)\s*\?\s*undefined\s*:\s*['"`]Name |if \(!\s*[\w.]*[nN]ame\.trim\(\)\)/);
+}
 const REUSE = {
   rawTable: {
     what: 'a raw <Table> outside the data table (use data-table-with-views, or DataTable for a fixed list)',
@@ -293,6 +296,13 @@ const REUSE = {
     what: 'a list searched in the browser (search on the server: useServerList in hooks/server-list.ts, or an /options source through hooks/options-queries.ts)',
     owns: (rel) => rel.startsWith('src/lib/api/') || rel === 'src/hooks/options-queries.ts' || rel === 'src/hooks/server-list.ts',
     hit: (text) => listFilterHit(text),
+  },
+  // A name or title a person types is checked by lib/validation/names (the kit's rules: one line, not invisible, the
+  // server's sentence) and a slug is made by its slugify, which keeps non-Latin names distinct.
+  nameRule: {
+    what: 'a slug or name check written by hand (use slugify or nameError from lib/validation/names)',
+    owns: (rel) => rel === 'src/lib/validation/names.ts',
+    hit: nameRuleAt,
   },
   dialogColumns: {
     what: 'a form laid out in columns inside a dialog (dialog forms are one column)',
@@ -466,6 +476,9 @@ if (process.argv.includes('--self-test')) {
     ['list: a match helper', listFilterHit('const match = (q, r) => !q || r.title.toLowerCase().includes(q.toLowerCase());') < 0 ? [] : [1], 1],
     ['list: server rows from useServerList', listFilterHit('const { rows } = useServerList(key, fetchPage, { search });') < 0 ? [] : [1], 0],
     ['list: a filter by id, not a search', listFilterHit('const kept = rows.filter((r) => wanted.includes(r.id));') < 0 ? [] : [1], 0],
+    ['name: a slug regex by hand', [nameRuleAt("const s = n.toLowerCase().replace(/[^a-z0-9]+/g, '-');")].filter((i) => i >= 0), 1],
+    ['name: a blank check by hand', [nameRuleAt("const e = { name: name.trim() ? undefined : 'Name the role.' };")].filter((i) => i >= 0), 1],
+    ['name: nameError', [nameRuleAt("const e = { name: nameError(name, 'Name the role.') };")].filter((i) => i >= 0), 0],
   ];
   const badRules = rules.filter(([, hits, want]) => hits.length !== want);
   for (const [name, hits, want] of badRules) console.error(`self-test: ${name} gave ${hits.length}, want ${want}`);

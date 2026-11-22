@@ -17,6 +17,7 @@ import { useTestMailbox } from '@/hooks/channels-queries';
 import { SearchSelect } from '@/components/shared/search-select';
 import { secretOptions } from '@/hooks/options-queries';
 import type { MailProvider, Mailbox, MailboxInput, MailboxTest, ReplySender } from '@/lib/types/channels';
+import { nameError } from '@/lib/validation/names';
 
 /** The connect form's providers. */
 export const PROVIDERS: { value: MailProvider; title: string; description: string; disabled?: boolean }[] = [
@@ -64,7 +65,8 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /** The checks Connect and Save run before anything is sent; the server checks again. */
 export function checkMailbox(v: MailboxForm): MailboxErrors {
   const e: MailboxErrors = {};
-  if (!v.name.trim()) e.name = 'Name it so the team can tell mailboxes apart.';
+  const nameIssue = nameError(v.name, 'Name it so the team can tell mailboxes apart.');
+  if (nameIssue) e.name = nameIssue;
   if (!EMAIL.test(v.address.trim())) e.address = 'Enter the mailbox’s address.';
   if (v.provider === 'imap' && !v.host.trim()) e.host = 'Enter the IMAP server.';
   if (v.provider === 'graph' && !/^[A-Za-z0-9.-]+$/.test(v.graphTenantId.trim())) e.graphTenantId = 'Enter the Microsoft tenant id, e.g. bank.onmicrosoft.com.';
