@@ -98,6 +98,15 @@ caller = "service"
 ["GET /v1/tool-modules"]
 queries = 14
 
+# The discovery's own row, then one count, one page and one GROUP BY per facet (group, access), and the count of
+# matching operations the module already has.
+["GET /v1/tool-modules/discoveries/{discovery_id}/operations"]
+queries = 6
+
+# The discovery's own row and every matching name: select-all, bounded by the discovery's size.
+["GET /v1/tool-modules/discoveries/{discovery_id}/names"]
+queries = 2
+
 ["GET /v1/tool-modules/grants"]
 queries = 3
 

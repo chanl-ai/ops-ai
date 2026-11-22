@@ -148,6 +148,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.app_credentials TO ops_tools_runtime
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.oauth_states TO ops_tools_runtime;
 REVOKE UPDATE, DELETE ON dbo.connection_audit FROM ops_tools_runtime;
 GRANT SELECT, INSERT ON dbo.connection_audit TO ops_tools_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.tool_discoveries TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.egress_hosts TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.egress_ranges TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.egress_audit TO ops_tools_runtime;
@@ -165,6 +166,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.module_approvals TO ops_tools_runtim
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.module_egress_hosts TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.connection_tokens TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.connect_links TO ops_tools_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.tool_discovery_operations TO ops_tools_runtime;
 GRANT SELECT ON dbo.alembic_version_tools TO ops_tools_runtime;
 GO
 IF USER_ID(N'ops_tools_system') IS NULL CREATE USER ops_tools_system WITHOUT LOGIN;

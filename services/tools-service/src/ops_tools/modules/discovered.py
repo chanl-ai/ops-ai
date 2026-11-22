@@ -75,3 +75,18 @@ class PublicDiscovered(TypedDict):
     endpoint: str
     operations: list[PublicOperation]
     warnings: list[str]
+
+
+class DiscoverySummary(TypedDict):
+    """What POST /v1/tool-modules/discover answers: the stored discovery's id, the source's meta and how many
+    operations it lists; the operations are read a page at a time."""
+
+    id: str
+    type: str
+    system: str
+    suggestedName: str
+    version: str
+    endpoint: str
+    warnings: list[str]
+    noAuth: bool
+    operationTotal: int

@@ -5,7 +5,7 @@ column had no index leading with it after the tenant (and the team, where the ta
 the whole table. The downgrade drops them.
 
 Revision ID: 20261122_2038_list_sort_indexes
-Revises: tools_0088_app_card_account
+Revises: 20261122_2022_discoveries
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from __future__ import annotations
 from alembic import op
 
 revision = "20261122_2038_list_sort_indexes"
-down_revision = "tools_0088_app_card_account"
+down_revision = "20261122_2022_discoveries"
 branch_labels = None
 depends_on = None
 

@@ -432,11 +432,11 @@ export default function ModulePage() {
           />
           <AddModuleDialog
             mode="append"
-            existingNames={m.operations.map((o) => o.name)}
+            moduleId={m.id}
             open={importOpen}
             onOpenChange={setImportOpen}
             moduleName={m.displayName}
-            onDiscover={(source) => discover.mutateAsync(source)}
+            onDiscover={(source, moduleId) => discover.mutateAsync({ source, moduleId })}
             discovering={discover.isPending}
             creating={importOps.isPending}
             onCreate={async () => undefined}
