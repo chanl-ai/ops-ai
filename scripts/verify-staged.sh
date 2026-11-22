@@ -82,9 +82,10 @@ mapfile -t present < <(GIT_INDEX_FILE="$index" git -C "$root" diff --cached --na
 touches() { [ "${#staged[@]}" -gt 0 ] && grep -qE "$1" <<<"$(printf '%s\n' "${staged[@]}")"; }
 # The console's typecheck, standards and tests (apps/console/CLAUDE.md), and the embed app's typecheck, which draws the
 # console's chat components.
-# Heavy checks (console typecheck, standards, unit tests, make checks) run only with OPS_FULL_HOOK=1; CI's merge
-# queue runs them once per group, so a commit takes seconds instead of up to 15 minutes.
-if [ -n "${OPS_FULL_HOOK:-}" ] && touches '^apps/(console|embed)/|^package\.json$|^pnpm-lock\.yaml$'; then
+# Static checks run on every commit (ruff, pyright on the staged Python, incremental console typecheck, the console
+# standards); the slow ones (console unit tests, the standards self-test, make checks) run only with OPS_FULL_HOOK=1,
+# because CI's merge queue runs them once per group of pull requests.
+if touches '^apps/(console|embed)/|^package\.json$|^pnpm-lock\.yaml$'; then
   # The same steps as `pnpm --filter @ops-ai/console verify` (apps/console/package.json), with two differences that do not
   # change what is judged. The type checks are incremental: their state lives next to the persistent export, so only the
   # files that changed since the last commit check, and their dependents, are checked again, with the same errors.
@@ -100,8 +101,9 @@ if [ -n "${OPS_FULL_HOOK:-}" ] && touches '^apps/(console|embed)/|^package\.json
     "$tsc" --noEmit --incremental --tsBuildInfoFile "$tsc_state/console.tsbuildinfo"
     "$tsc" --noEmit -p ../embed --incremental --tsBuildInfoFile "$tsc_state/embed.tsbuildinfo"
     GIT_DIR="$git_dir" GIT_WORK_TREE="$tmp" GIT_INDEX_FILE="$index" node scripts/check-standards.mjs
-    GIT_DIR="$git_dir" GIT_WORK_TREE="$tmp" GIT_INDEX_FILE="$index" node scripts/check-standards.mjs --self-test
+    if [ -n "${OPS_FULL_HOOK:-}" ]; then GIT_DIR="$git_dir" GIT_WORK_TREE="$tmp" GIT_INDEX_FILE="$index" node scripts/check-standards.mjs --self-test; fi
   )
+  [ -n "${OPS_FULL_HOOK:-}" ] || tests_skip=1
   tests=(); sources=0
   for f in "${staged[@]}"; do
     case "$f" in
@@ -112,7 +114,8 @@ if [ -n "${OPS_FULL_HOOK:-}" ] && touches '^apps/(console|embed)/|^package\.json
         case "$f" in *.ts|*.tsx) sib="${f%.*}.test.ts"; if [ -f "$tmp/$sib" ]; then tests+=("$tmp/$sib"); fi ;; esac ;;
     esac
   done
-  if [ "${#tests[@]}" -gt 0 ]; then
+  if [ -n "${tests_skip:-}" ]; then :
+  elif [ "${#tests[@]}" -gt 0 ]; then
     mapfile -t tests < <(printf '%s\n' "${tests[@]}" | sort -u)
     (cd "$tmp/apps/console" && node --test "${tests[@]}")
   elif [ "$sources" = 1 ]; then
@@ -157,6 +160,12 @@ if [ "${#py[@]}" -gt 0 ]; then
   if [ "${#fix_skipped[@]}" -gt 0 ]; then fixhint="$fixhint (not fixed here because the working copy differs from the staged copy: ${fix_skipped[*]})"; fi
   "$root/.venv/bin/ruff" check "${py[@]}" || { echo "$fixhint"; exit 1; }
   "$root/.venv/bin/ruff" format --check "${py[@]}" || { echo "$fixhint"; exit 1; }
+  # Types on the staged Python files only (the project config decides strictness), from the checkout's environment.
+  if [ -x "$root/.venv/bin/pyright" ]; then
+    (cd "$root" && "$root/.venv/bin/pyright" "${py[@]}") || { echo "verify-staged: pyright refused the staged files above"; exit 1; }
+  else
+    echo "verify-staged: WARNING pyright is not installed in $root/.venv, so the staged Python was not type-checked; run uv sync"
+  fi
 fi
 # Slower checks that build each service (OpenAPI documents, the generated SDKs, import directions, strict types, the
 # SQL Server DDL and store tests) run in CI on every pull request and in `make verify`, not on each commit. After a route
