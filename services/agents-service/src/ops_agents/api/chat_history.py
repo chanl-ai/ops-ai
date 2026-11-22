@@ -13,7 +13,9 @@ from ops_contracts.chat import ChatMessage
 from ops_service_kit.http import Json, JsonList
 
 # The kernel's own tools: presenting, loading a skill and searching are not reads of a system.
-KERNEL_TOOLS = frozenset({"present", "load_skill", "search_tools", "search_knowledge", "plan"})
+KERNEL_TOOLS = frozenset(
+    {"present", "load_skill", "search_tools", "search_knowledge", "plan", "step_done", "exit", "switch_skill"}
+)
 # The id of a reply's plan part (chat_threads.PLAN_PART).
 PLAN_PART = "wp_plan"
 # A read's line is cut here: enough for the ids and names a follow-up needs, never a whole result set.
@@ -52,6 +54,8 @@ def history_entry(m: ChatMessage) -> Json:
     if drawn is not None and (left := plan_from_part(drawn.wire())) is not None:
         # A plan is a TypedDict of JSON values, stored on the history as it is.
         entry["plan"] = cast(Json, left)
+    if m.skill_run is not None:
+        entry["skillRun"] = m.skill_run.model_dump(mode="json", by_alias=True)
     return entry
 
 

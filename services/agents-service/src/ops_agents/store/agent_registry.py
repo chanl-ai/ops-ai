@@ -150,6 +150,9 @@ SPEC_FIELDS = (
     "limits",
     "widgetPins",
     "widgets",
+    "brief",
+    "promptMode",
+    "patterns",
 )
 
 
@@ -189,6 +192,8 @@ def changes_between(old: Json | None, new: Json) -> list[str]:
         "limits": "caller limits",
         "widgetPins": "widgets",
         "widgets": "widget settings",
+        "promptMode": "prompt mode",
+        "patterns": "thinking and parallel reads",
     }
     out = [f"Changed {labels.get(k, k)}" for k in SPEC_FIELDS if old.get(k) != new.get(k)]
     # A guardrail switched off or on names itself, so the review says what stopped (or started) being checked.
@@ -601,10 +606,19 @@ class AgentRegistry(VersionedRegistry[AgentRow, AgentVersionRow]):
         await hold_pins(c, aid, team_id, spec.get("skillPins"))
         return aid
 
-    async def save(self, agent_id: str, spec: Json, *, by: str, note: str = "") -> int:
+    async def save(
+        self, agent_id: str, spec: Json, *, by: str, note: str = "", base: tuple[int, str] | None = None
+    ) -> int:
         """Saves `spec` as the agent's one draft: it rewrites the newest version while that version is
         unpublished and no publish request has named it; otherwise it opens the next version as the draft, so neither
-        what runs nor what a reviewer saw ever changes. The published pointer does not move."""
+        what runs nor what a reviewer saw ever changes. The published pointer does not move.
+
+        `base` is the version and digest `spec` was built from. A save that names it is refused when the newest
+        version is no longer that one, so a change saved in between is never written over.
+
+        Raises:
+            Conflict: `stale_base` when `base` is given and another save landed after it was read.
+        """
         at = now_iso()
         v = registry_agent_versions
         async with self.tx() as c:
@@ -613,6 +627,8 @@ class AgentRegistry(VersionedRegistry[AgentRow, AgentVersionRow]):
             row = await self.row(agent_id, c, lock=True)
             n = row.version
             newest = await self.newest(c, agent_id, n)
+            if base is not None and base != (n, digest_of(newest.spec)):
+                raise Conflict("The draft was saved after it was read; reload and try again.", code="stale_base")
             asked = await publish_requested(c, "agent", agent_id, n)
             if newest.published_at is None and not asked:
                 # The draft keeps every change made to it, so its history entry reads as one change set.

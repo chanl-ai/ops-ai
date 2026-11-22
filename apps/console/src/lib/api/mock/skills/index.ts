@@ -35,7 +35,7 @@ import type {
   SkillWarning,
   SkillLoading,
 } from '@/lib/types/skills';
-import type { PublishBlocker } from '@/lib/types/references';
+import type { PublishBlocker, PublishWarning } from '@/lib/types/references';
 import type { SearchHit } from '@/lib/types/search';
 
 import { plural } from '@/lib/format';
@@ -327,8 +327,19 @@ export function createSkillsMock(deps: SkillsDeps) {
     }
     const problems = stepProblems(n.content);
     blockers.push(...problems.map((p) => p.message));
-    return { canRequest: !blockers.length, blockers, problems, editClass: ec, approversNeeded: ec === 're_approval' ? 2 : 1 };
+    return { canRequest: !blockers.length, blockers, problems, warnings: stepWarnings(n.content), editClass: ec, approversNeeded: ec === 're_approval' ? 2 : 1 };
   };
+
+  /** A step that runs one tool and mentions another, which the service tells the builder about without blocking. */
+  function stepWarnings(c: StoredContent): PublishWarning[] {
+    return (c.steps ?? []).flatMap((step, i) => {
+      if (!step.use) return [];
+      const run = `${step.use.kind}:${step.use.id}`;
+      return [...new Set([...step.do.matchAll(/@(tool:[\w.-]+)/g)].map((m) => m[1]))]
+        .filter((token) => token !== run)
+        .map((token): PublishWarning => ({ kind: 'step_mentions_tool', id: token, position: { field: 'steps', step: i + 1, index: null }, message: `Step ${i + 1} mentions ${token.slice(token.indexOf(':') + 1)}, which this step does not run.` }));
+    });
+  }
 
   /** A step that names something the team no longer offers, as the service's publish check places it. */
   function stepProblems(c: StoredContent): PublishBlocker[] {

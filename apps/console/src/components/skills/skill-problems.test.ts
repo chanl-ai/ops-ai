@@ -14,6 +14,8 @@ test('problems are written under the step they name, joined when a step has two'
     on(4, 'bad_check', 'The check reads a value no step returns.'),
     on(2, 'sub_skill_not_held', 'Verify identity is not published.'),
     on(4, 'bad_exit', 'needs_revew is not one of the endings.'),
+    // A warning has the service's own kind and is written under its step the same way.
+    { ...on(2, 'bad_step', 'Step 2 mentions get_account, which this step does not run.'), kind: 'step_mentions_tool' },
     // The editor draws these with a fix row, so they are not written a second time.
     on(4, 'missing_reference', 'Step 4 names refund_card.'),
     on(null, 'bad_step', 'Not when names a tool.', 'notWhen'),
@@ -21,7 +23,7 @@ test('problems are written under the step they name, joined when a step has two'
   ]);
   assert.deepEqual(placed, [
     { field: 'steps', step: 4, message: 'The check reads a value no step returns. needs_revew is not one of the endings.' },
-    { field: 'steps', step: 2, message: 'Verify identity is not published.' },
+    { field: 'steps', step: 2, message: 'Verify identity is not published. Step 2 mentions get_account, which this step does not run.' },
   ]);
 });
 

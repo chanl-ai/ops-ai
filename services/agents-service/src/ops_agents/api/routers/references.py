@@ -7,29 +7,43 @@ transaction that checks the caller against the agent or skill and the one that r
 from __future__ import annotations
 
 import contextlib
-from typing import Annotated, TypeAlias
+from typing import Annotated, TypeAlias, cast
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 
 from ops_access import can
 from ops_contracts.skill_run import RefKind
-from ops_service_kit.errors import Forbidden, ValidationFailed
-from ops_service_kit.http import Envelope, options_page, options_window
+from ops_service_kit.errors import Forbidden, NotFound, Unprocessable, ValidationFailed
+from ops_service_kit.http import Envelope, In, Json, JsonList, options_page, options_window
+from ops_service_kit.ids import now_iso
+from ops_service_kit.logging import get_logger
 from ops_service_kit.narrow import json_list, json_object
 from ops_store import isolation
 
 from ...activities.knowledge import KnowledgeUnavailable
 from ...activities.tool_directory import ToolsUnavailable
 from ...app import references
-from ...app.references import Candidate, Context
+from ...app.references import Candidate, Context, SkillNeeds
+from ...app.skill_content import runs_of
+from ...store.agent_registry import digest_of
+from ..agent_registry import AgentSpec
 from ..agent_registry import registry as agent_registry
 from ..auth import Principal, caller_of, principal
 from ..deps import Runtime, runtime
 from ..envelope import ok
-from ..schemas import ReferenceSearch
-from ..skills import skills
+from ..schemas import ReferenceAdded, ReferenceSearch
+from ..skills import content_of, pin, skills, tool_ids
+from .agents import (
+    _check_knowledge as check_knowledge,  # pyright: ignore[reportPrivateUsage]
+)
+from .agents import (
+    _checked_tools as checked_tools,  # pyright: ignore[reportPrivateUsage]
+)
+from .agents import changeable
 from .tool_catalog import directory_tools, known_tools
+
+log = get_logger("ops_agents.references")
 
 router = APIRouter()
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
@@ -59,21 +73,25 @@ def _viewable(me: Principal, team: str | None) -> set[RefKind]:
     return seen
 
 
+def _held(spec: Json) -> dict[RefKind, frozenset[str]]:
+    """What an agent version holds, by kind."""
+    granted = [str(t) for t in json_list(spec.get("toolIds"))]
+    return {
+        "tool": frozenset(t for t in granted if not t.startswith(("agent:", "workflow:"))),
+        "agent": frozenset(t.removeprefix("agent:") for t in granted if t.startswith("agent:")),
+        "workflow": frozenset(t.removeprefix("workflow:") for t in granted if t.startswith("workflow:")),
+        "knowledge": frozenset(str(k) for k in json_list(spec.get("collections"))),
+        "skill": frozenset(str(json_object(p).get("skillId")) for p in json_list(spec.get("skillPins"))),
+    }
+
+
 async def _context(rt: Runtime, for_agent: str | None, for_skill: str | None) -> tuple[Context, str | None]:
     """The agent or skill being edited with what it holds, and the team that owns it."""
     if for_agent is not None:
         agents = agent_registry(rt)
         row = await agents.row(for_agent)
         spec = (await agents.version(for_agent, row.version)).spec
-        granted = [str(t) for t in json_list(spec.get("toolIds"))]
-        held: dict[RefKind, frozenset[str]] = {
-            "tool": frozenset(t for t in granted if not t.startswith(("agent:", "workflow:"))),
-            "agent": frozenset(t.removeprefix("agent:") for t in granted if t.startswith("agent:")),
-            "workflow": frozenset(t.removeprefix("workflow:") for t in granted if t.startswith("workflow:")),
-            "knowledge": frozenset(str(k) for k in json_list(spec.get("collections"))),
-            "skill": frozenset(str(json_object(p).get("skillId")) for p in json_list(spec.get("skillPins"))),
-        }
-        return Context("agent", for_agent, str(spec.get("name") or row.slug), held), row.team_id
+        return Context("agent", for_agent, str(spec.get("name") or row.slug), _held(spec)), row.team_id
     assert for_skill is not None
     reg = skills(rt)
     found = await reg.row(for_skill)
@@ -163,3 +181,89 @@ async def references_search(  # noqa: PLR0917 - FastAPI reads each query paramet
         page = options_page(rest, offset, limit)
         pages[k] = (page["data"], page["nextCursor"])
     return ok({"groups": references.grouped(pages, ctx)})
+
+
+class AddReference(In):
+    kind: RefKind
+    id: str
+
+
+async def _skill_needs(rt: Runtime, skill_id: str, team: str | None) -> tuple[SkillNeeds, int, str]:
+    """What attaching the team's published skill asks of an agent, with the version and the name it is attached
+    under. 422 `unknown_reference` for a skill that is not this team's, 422 `not_published` for one not live."""
+    row = await skills(rt).find(skill_id)
+    if row is None or row.team_id != team:
+        raise Unprocessable(f"{skill_id} is not a skill of this team.", code="unknown_reference")
+    if row.published_version is None or row.deprecated_reason:
+        raise Unprocessable(f"{row.slug} is not published, so it cannot be added.", code="not_published")
+    v = await skills(rt).version(skill_id, row.published_version)
+    assert v is not None
+    content = content_of(v.content)
+    needs = SkillNeeds(tool_ids(content), list(content["knowledgeBases"]), sorted(runs_of(v.content)))
+    return needs, row.published_version, str(content["name"])
+
+
+@router.post("/v1/agents/{agent_id}/references", response_model=Envelope[ReferenceAdded])
+async def add_reference(rt: Rt, me: Me, agent_id: str, body: AddReference) -> JSONResponse:
+    """Grants the agent what its brief mentions, as one new draft version: a tool, an agent or a workflow joins its
+    tools, a knowledge base its knowledge, a skill its skills. A skill brings the tools and knowledge bases it names
+    and the skills its steps run. `added` lists everything granted; repeating the call answers `added: []` and saves
+    nothing.
+
+    403 `forbidden` without agents: edit in the agent's team or the view right of the reference's area; 422
+    `unknown_reference` for something the team does not offer; 422 `not_published` for a skill, agent or workflow
+    that is not live; 409 `stale_base` when the draft was saved while this ran (read the agent again and repeat)."""
+    async with isolation.request_transaction():
+        row = await changeable(rt, me, agent_id, "edit")
+        team = row.team_id or me.team_id or None
+        area = AREAS[body.kind]
+        can(caller_of(me), area, "view", team=team, what=f"the team's {area}", code="forbidden")
+        reg = agent_registry(rt)
+        spec: Json = dict((await reg.version(agent_id, row.version)).spec)
+        # What the grant is added to. A brief autosave landing before the save below would be written over, so the
+        # save names this and is refused (409 `stale_base`) when the draft has moved on.
+        base = (row.version, digest_of(spec))
+        held = _held(spec)
+        needs: dict[str, SkillNeeds] = {}
+        versions: dict[str, int] = {}
+        labels: dict[tuple[RefKind, str], str] = {}
+        if body.kind == "skill" and body.id not in held["skill"]:
+            needs[body.id], versions[body.id], labels["skill", body.id] = await _skill_needs(rt, body.id, team)
+            for sub in needs[body.id].runs:
+                needs[sub], versions[sub], labels["skill", sub] = await _skill_needs(rt, sub, team)
+        adding = references.grants(body.kind, body.id, held, needs)
+        if not adding:
+            return ok({"added": [], "agentVersion": row.version})
+    # tools-service and kb-service are asked with nothing open.
+    tools = [f"{k}:{i}" if k in ("agent", "workflow") else i for k, i in adding if k in ("tool", "agent", "workflow")]
+    bases = [i for k, i in adding if k == "knowledge"]
+    async with isolation.request_transaction():
+        granted = [str(t) for t in json_list(spec.get("toolIds"))]
+        if tools:
+            try:
+                spec["toolIds"] = [*await checked_tools(rt, [*granted, *tools], granted)]
+            except ValidationFailed as exc:
+                code = "not_published" if exc.code == "not_published" else "unknown_reference"
+                raise Unprocessable(str(exc), code=code) from exc
+            for t in await known_tools(rt):
+                labels["tool", str(t["id"])] = str(t.get("title") or t["name"])
+    if bases:
+        try:
+            await check_knowledge(rt, [*held["knowledge"], *bases], list(held["knowledge"]))
+        except (Unprocessable, KnowledgeUnavailable) as exc:
+            raise Unprocessable(str(exc), code="unknown_reference") from exc
+        spec["collections"] = [*json_list(spec.get("collections")), *bases]
+        labels.update({("knowledge", b.id): b.name for b in await rt.kbs().bases()})
+    async with isolation.request_transaction():
+        # A skill a step runs is attached before the skill that runs it, which is refused without it.
+        for skill_id in reversed([i for k, i in adding if k == "skill"]):
+            try:
+                pins = await pin(rt, cast(AgentSpec, spec), skill_id, versions[skill_id], by=me.email, at=now_iso())
+            except NotFound as exc:
+                raise Unprocessable(str(exc), code="unknown_reference") from exc
+            spec["skillPins"] = cast(JsonList, [*pins])
+        label = labels.get((body.kind, body.id), body.id)
+        version = await reg.save(agent_id, spec, by=me.email, note=f"Added {label}", base=base)
+    log.info("agent_reference_added", agent=agent_id, kind=body.kind, id=body.id, by=me.email)
+    added = [references.granted(Candidate(k, i, labels.get((k, i), i))) for k, i in adding]
+    return ok({"added": added, "agentVersion": version})

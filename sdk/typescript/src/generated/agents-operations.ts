@@ -19,6 +19,17 @@ export const agentsOperations = {
     ],
     "stream": false
   },
+  "agents_add_reference": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/agents/{agent_id}/references",
+    "pathParams": [
+      "agent_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "agents_agent_skill_options": {
     "body": null,
     "headers": [],
@@ -398,6 +409,19 @@ export const agentsOperations = {
       "sortBy",
       "sortOrder",
       "ids"
+    ],
+    "stream": false
+  },
+  "agents_publish_check": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/agents/{agent_id}/publish-check",
+    "pathParams": [
+      "agent_id"
+    ],
+    "query": [
+      "version"
     ],
     "stream": false
   },

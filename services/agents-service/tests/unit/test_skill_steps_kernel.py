@@ -17,6 +17,7 @@ from collections.abc import AsyncIterator, Callable
 from dataclasses import replace
 from typing import Any
 
+import pytest
 from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
@@ -376,6 +377,33 @@ async def test_one_skill_runs_at_a_time_and_a_sub_skill_returns_to_its_step() ->
     )
     assert ended(run) == [("sk_open", "switched", 1)]
 
+    # The model loads an on-match skill that has steps: it starts at step 1 as a menu pick does, and its text is
+    # never handed over whole. The next reply goes on from the record.
+    refund = TurnRequest(
+        "t1",
+        "th4",
+        agent([refund_a_charge(), FEES], max_tool_calls=None),
+        [LOOKUP, REFUND, NOTE],
+        user_turn="Refund it.",
+    )
+    model = Script(("load_skill", {"slug": "refund-a-charge", "matched": "refund"}), "Which charge?")
+    begun, events = await reply(refund, model)
+    index = model.instructions[0]
+    assert "is available only as that step" in index, "the index states the rule the kernel keeps"
+    assert "before calling any tool" not in index, "the order of calls is not left to the model"
+    assert "Its steps call: lookup_charge, refund_charge." in index, index
+    assert "step 1 of 3" in json.dumps(model.returned[0]), model.returned
+    assert "# Now: Refund a charge, step 1 of 3" in model.instructions[1], model.instructions[1]
+    assert "lookup_charge" in model.offered[1] and "refund_charge" not in model.offered[1], model.offered[1]
+    assert (run_of(begun).running.skill_id, run_of(begun).running.step) == ("sk_refund", 1)
+    assert [e.run.running.step for e in events if type(e).__name__ == "SkillRunChanged"][:1] == [1], "the tracker"
+    assert [(e.skill_id, e.how) for e in events if type(e).__name__ == "SkillLoaded"] == [("sk_refund", "started")]
+    later = Script("Which charge is it?")
+    await reply(replace(carrying(refund, run_of(begun)), turn_id="t2", user_turn="The big one."), later)
+    assert "# Now: Refund a charge, step 1 of 3" in later.instructions[0], later.instructions[0]
+    assert "lookup_charge" in later.offered[0] and "refund_charge" not in later.offered[0], later.offered[0]
+    assert "load_skill" not in later.offered[0], "the step's tool is the only way on"
+
     close = TurnRequest("t1", "th3", agent(close_an_account()), [], user_turn="Close my account.")
     start: Call = ("switch_skill", {"slug": "close-an-account"})
     model = Script(start, ("exit", {"name": "done", "returns": {"verified": True}}), "Closing it now.")
@@ -392,6 +420,27 @@ async def test_one_skill_runs_at_a_time_and_a_sub_skill_returns_to_its_step() ->
     failed, _ = await reply(close, Script(start, ("exit", {"name": "failed", "reason": "No date of birth."}), "Sorry."))
     assert run_of(failed).running is None
     assert ("sk_close", "escalate", 1) in ended(run_of(failed)), run_of(failed)
+
+
+async def test_a_check_the_model_judges_is_given_the_result_as_the_tool_returned_it() -> None:
+    """The model is shown a result as it is drawn for the person; judging a sentence on that, a real model passed
+    "the amount is under 500" on a charge of 900."""
+    steps = program(
+        {
+            "do": "Look up the charge.",
+            "use": {"kind": "tool", "id": "lookup_charge"},
+            "check": {"text": "The amount is under 500.", "by": "model"},
+        },
+        {"do": "Tell the person."},
+    )
+    skill = stepped("sk_judged", 1, "Judge a charge", "judge-a-charge", steps)
+    ask = TurnRequest("t1", "th9", agent([skill], max_tool_calls=None), [LOOKUP], user_turn="Check CH-1.")
+    model = Script(("switch_skill", {"slug": "judge-a-charge"}), ("lookup_charge", {"chargeId": "CH-1"}), "It is 900.")
+    done, _ = await reply(ask, model, Systems(lookup_charge=_amount))
+    told = json.dumps(model.returned[1])
+    assert "Now confirm: The amount is under 500." in told and '\\"amount\\": 900' in told, told
+    assert "only if that holds for this result" in told, told
+    assert run_of(done).running.step == 1, "the step waits for the model's own step_done"
 
 
 # --- approval, personal data, and a republished pin ---
@@ -478,3 +527,160 @@ async def test_a_pause_keeps_the_step_a_denial_ends_the_skill_and_the_record_hol
     assert SSN not in run_of(found).model_dump_json()
     changes = [e for e in events if type(e).__name__ == "SkillRunChanged"]
     assert changes and all(SSN not in repr(e) for e in changes), changes
+
+
+# --- a skill's write is reached only through its step, and an ending the kernel made is final for the reply ---
+
+PAYMENTS = tool("agent__ag_payments")
+GATED_REFUND = tool("refund_charge", "write", approval=True)
+
+
+def refund_after_a_check() -> Skill:
+    """A lookup whose rule ends the skill as blocked, then the write, then a hand-off to another agent."""
+    steps = program(
+        {
+            "do": "Look up the charge.",
+            "use": {"kind": "tool", "id": "lookup_charge"},
+            "check": {"text": "result.amount <= 500", "by": "rule"},
+            "ifNot": {"action": "exit", "exit": "blocked"},
+        },
+        {"do": "Refund the charge.", "use": {"kind": "tool", "id": "refund_charge"}},
+        {"do": "Tell payments.", "use": {"kind": "agent", "id": "ag_payments"}},
+        exit={"blocked": "The charge is over the refund limit."},
+    )
+    return stepped("sk_refund", 1, "Refund a charge", "refund-a-charge", steps)
+
+
+START: Call = ("switch_skill", {"slug": "refund-a-charge"})
+PASSES: Call = ("lookup_charge", {"chargeId": "CH-2"})
+WRITE: Call = ("refund_charge", {"chargeId": "CH-2"})
+
+# One row per way a model reaches for the write without its step: what it does, and the tools granted.
+REACHES: dict[str, tuple[list[Action], list[ToolGrant]]] = {
+    "with no skill running": ([WRITE], [LOOKUP, REFUND, NOTE, PAYMENTS]),
+    "another agent, with no skill running": ([("agent__ag_payments", {})], [LOOKUP, REFUND, NOTE, PAYMENTS]),
+    "in the model step that starts the skill": ([[START, WRITE]], [LOOKUP, REFUND, NOTE, PAYMENTS]),
+    "in the model step that leaves the skill": (
+        [START, PASSES, [("exit", {"name": "failed"}), WRITE]],
+        [LOOKUP, REFUND, NOTE, PAYMENTS],
+    ),
+    "a write that waits for approval, in the model step that leaves the skill": (
+        [START, PASSES, [("exit", {"name": "failed"}), WRITE]],
+        [LOOKUP, GATED_REFUND, NOTE, PAYMENTS],
+    ),
+}
+
+
+@pytest.mark.parametrize("reach", REACHES, ids=str)
+async def test_a_skills_write_runs_only_as_its_step(reach: str) -> None:
+    actions, tools = REACHES[reach]
+    systems = Systems(lookup_charge=_amount, refund_charge={"refunded": True}, **{"agent__ag_payments": {"ok": True}})
+    settings = agent([refund_after_a_check()], max_tool_calls=None, max_steps=12)
+    model = Script(*actions, ("search_tools", {"query": "refund"}), "I could not refund it.")
+    ask = TurnRequest("t1", "th1", settings, tools, user_turn="Refund CH-2.")
+    result, _ = await reply(ask, model, systems)
+    assert result.status == "completed", f"a refused call must not wait for a person: {result.status}"
+    assert [c for c, _ in systems.calls if c != "lookup_charge"] == [], systems.calls
+    first = set(model.offered[0])
+    assert not first & {"refund_charge", "agent__ag_payments"}, "a skill's write is not offered before its step"
+    assert {"lookup_charge", "add_note"} <= first, "a read, and a write no step runs, stay free"
+    assert "refund_charge" not in json.dumps(model.returned[-1]), "search names no tool that waits for its step"
+
+
+async def test_a_check_that_ends_a_skill_is_final_for_the_reply_and_the_record_says_why() -> None:
+    settings = agent([refund_after_a_check()], max_tool_calls=None, max_steps=12)
+    systems = Systems(lookup_charge=_amount, refund_charge={"refunded": True})
+    ask = TurnRequest("t1", "th1", settings, [LOOKUP, REFUND], user_turn="Refund CH-1.")
+    over: Call = ("lookup_charge", {"chargeId": "CH-1"})
+    model = Script(START, over, START, ("lookup_charge", {"chargeId": "CH-3"}), "CH-1 is over the limit.")
+    one, _ = await reply(ask, model, systems)
+    assert ended(run_of(one)) == [("sk_refund", "blocked", 1)], "the skill ended once, as its if-not says"
+    assert systems.calls == [over], "the ended skill's tools wait for the next reply, its lookup included"
+    told, again = json.dumps(model.returned[1]), json.dumps(model.returned[2])
+    assert "result.amount <= 500" in told and "The charge is over the refund limit." in told, told
+    assert "cannot start again in this reply" in again, again
+    last = run_of(one).history[-1]
+    assert (last.why, last.check, last.meaning, last.in_reply) == (
+        "check",
+        "result.amount <= 500",
+        "The charge is over the refund limit.",
+        True,
+    ), last
+
+    # The next reply may start it again, and the record no longer marks the ending as this reply's.
+    second = Script(START, PASSES, "Shall I refund CH-2?")
+    two, _ = await reply(replace(carrying(ask, run_of(one)), turn_id="t2", user_turn="CH-2 then."), second, systems)
+    assert run_of(two).running.step == 2, run_of(two)
+    assert [h.in_reply for h in run_of(two).history] == [False]
+
+
+async def test_an_ending_stays_final_however_many_skills_end_after_it_in_the_reply() -> None:
+    """The record keeps a few past endings. One made in this reply is what keeps its skill from starting again, so
+    it stays on the record until the reply is over, whatever ends after it."""
+    chat = stepped("sk_chat", 1, "Small talk", "small-talk", program({"do": "Say hello."}, {"do": "Say goodbye."}))
+    settings = agent([refund_after_a_check(), chat], max_tool_calls=None, max_steps=40)
+    systems = Systems(lookup_charge=_amount)
+    ask = TurnRequest("t1", "th1", settings, [LOOKUP, REFUND], user_turn="Refund CH-1.")
+    over: Call = ("lookup_charge", {"chargeId": "CH-1"})
+    aside: list[Action] = [("switch_skill", {"slug": "small-talk"}), ("exit", {"name": "failed"})] * 6
+    model = Script(START, over, *aside, START, over, "CH-1 is over the limit.")
+    one, _ = await reply(ask, model, systems)
+    # A forgotten ending lets the skill start a second time, and its second ending then reads the same on the
+    # record. What tells the two apart is how often the model was put on the skill's first step.
+    told = json.dumps(model.returned)
+    assert told.count("Now on Refund a charge, step 1") == 1, model.returned[-3:]
+    assert "cannot start again in this reply" in told, model.returned[-3:]
+    assert ("sk_refund", "blocked", 1) in ended(run_of(one)) and len(ended(run_of(one))) == 7, ended(run_of(one))
+
+    # The next reply starts with the usual few, none marked as this reply's.
+    later, _ = await reply(replace(carrying(ask, run_of(one)), turn_id="t2", user_turn="Thanks."), Script("Ok."))
+    kept = run_of(later).history
+    assert len(kept) == 5 and not any(h.in_reply for h in kept), kept
+
+
+async def test_a_read_a_builder_locked_to_its_step_runs_only_as_that_step() -> None:
+    """A read is free of its skill unless the builder locks it: a look-up that shows a person's record may be one
+    the agent should only make inside the procedure that checks who is asking."""
+    steps = program(
+        {"do": "Look up the charge.", "use": {"kind": "tool", "id": "lookup_charge"}, "locked": True},
+        {"do": "Say what it shows."},
+    )
+    skill = stepped("sk_look", 1, "Look up a charge", "look-up-a-charge", steps)
+    systems = Systems(lookup_charge=_amount)
+    ask = TurnRequest("t1", "th1", agent([skill], max_steps=12), [LOOKUP, NOTE], user_turn="What is CH-2?")
+    look: Call = ("lookup_charge", {"chargeId": "CH-2"})
+    # A repeat of a refused call is answered from the reply's record, so the free try names another charge.
+    free: Call = ("lookup_charge", {"chargeId": "CH-1"})
+    model = Script(free, ("switch_skill", {"slug": "look-up-a-charge"}), look, "It is 200.")
+    result, _ = await reply(ask, model, systems)
+    assert "lookup_charge" not in model.offered[0] and "add_note" in model.offered[0], model.offered[0]
+    assert systems.calls == [look], f"refused with no skill running, run once as the step: {model.returned}"
+    assert run_of(result).running.step == 2
+    # Stored only when on: a step saved without it reads as before.
+    assert "locked" not in program({"do": "Look up.", "use": {"kind": "tool", "id": "x"}}).steps[0].model_dump(
+        exclude_none=True
+    )
+
+
+async def test_a_workflow_a_step_runs_is_refused_outside_the_skill_and_runs_as_its_step() -> None:
+    """A step names a workflow by its id; the service grants it under another spelling. Matched by the wrong one,
+    the workflow is free to start with no skill running, and its step never sees it run."""
+    steps = program(
+        {
+            "do": "Close the case.",
+            "use": {"kind": "workflow", "id": "wf_close"},
+            "check": {"text": 'result.status == "closed"', "by": "rule"},
+        },
+        {"do": "Say it is closed."},
+    )
+    skill = stepped("sk_close", 1, "Close a case", "close-a-case", steps)
+    close = tool("workflow__wf_close", "workflow")
+    systems = Systems(**{"workflow__wf_close": {"status": "closed"}})
+    ask = TurnRequest("t1", "th1", agent([skill], max_steps=12), [LOOKUP, close], user_turn="Close case 7.")
+    free: Call = ("workflow__wf_close", {"case": "1"})
+    start: Call = ("workflow__wf_close", {"case": "7"})
+    model = Script(free, ("switch_skill", {"slug": "close-a-case"}), start, "It is closed.")
+    result, _ = await reply(ask, model, systems)
+    assert "workflow__wf_close" not in model.offered[0], model.offered[0]
+    assert systems.calls == [start], f"refused with no skill running, run once as the step: {model.returned}"
+    assert run_of(result).running.step == 2, "the step saw its workflow's result and passed its rule"

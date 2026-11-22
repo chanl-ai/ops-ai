@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-19",
+  "title": "A skill's actions run only through its steps",
+  "description": "An agent can no longer use a skill's write action without the skill: the action is reached only at its step, and a check that fails ends the skill for that reply with the reason. A step that changes something needs a check written as a rule, and the publish check points at a step that names a tool without running it.",
+  "tag": "improved"
+}

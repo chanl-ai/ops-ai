@@ -443,6 +443,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/agents/{agent_id}/publish-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Publish Check
+         * @description What stops the newest draft from being published, each with the field it is in (`position`): a reference the
+         *     brief names that the agent does not hold. Nothing is opened or changed; the publish refuses the same list
+         *     (422 `cannot_publish`). 422 `not_newest_draft` for any other version.
+         */
+        get: operations["agents_publish_check"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/agents/{agent_id}/publish-preview": {
         parameters: {
             query?: never;
@@ -478,6 +500,33 @@ export interface paths {
          *     needs no review (`publish_preview` says which beforehand): its definition goes live and its graph compiles.
          */
         post: operations["agents_request_publish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agents/{agent_id}/references": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Reference
+         * @description Grants the agent what its brief mentions, as one new draft version: a tool, an agent or a workflow joins its
+         *     tools, a knowledge base its knowledge, a skill its skills. A skill brings the tools and knowledge bases it names
+         *     and the skills its steps run. `added` lists everything granted; repeating the call answers `added: []` and saves
+         *     nothing.
+         *
+         *     403 `forbidden` without agents: edit in the agent's team or the view right of the reference's area; 422
+         *     `unknown_reference` for something the team does not offer; 422 `not_published` for a skill, agent or workflow
+         *     that is not live; 409 `stale_base` when the draft was saved while this ran (read the agent again and repeat).
+         */
+        post: operations["agents_add_reference"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3679,6 +3728,16 @@ export interface components {
             /** Area */
             area: string;
         };
+        /** AddReference */
+        AddReference: {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "tool" | "knowledge" | "skill" | "agent" | "workflow";
+        };
         /** Agent */
         Agent: {
             /** Accounts */
@@ -3697,6 +3756,7 @@ export interface components {
              * @enum {string}
              */
             availability: "published" | "not_published" | "paused";
+            brief?: components["schemas"]["BriefView"] | null;
             /** Candelete */
             canDelete?: boolean | null;
             /** Canedit */
@@ -3721,8 +3781,11 @@ export interface components {
             model: string;
             /** Name */
             name: string;
+            patterns?: components["schemas"]["PatternsView"];
             /** Paused */
             paused: boolean;
+            /** Promptmode */
+            promptMode?: ("brief" | "full") | null;
             /** Protection */
             protection?: ("system" | "managed") | null;
             /** Publishedversion */
@@ -3753,6 +3816,7 @@ export interface components {
             updatedAt: string;
             /** Usedin */
             usedIn: components["schemas"]["UsedIn"][];
+            uses?: components["schemas"]["AgentUses"];
             /** Version */
             version: number;
             /** Widgetpins */
@@ -3840,6 +3904,7 @@ export interface components {
             } | null;
             /** Allteamknowledgebases */
             allTeamKnowledgeBases?: boolean | null;
+            brief?: components["schemas"]["Brief"] | null;
             /** Channels */
             channels?: ("voice" | "chat" | "email" | "api")[] | null;
             /** Collections */
@@ -3857,6 +3922,9 @@ export interface components {
             name?: string | null;
             /** Note */
             note?: string | null;
+            patterns?: components["schemas"]["Patterns"] | null;
+            /** Promptmode */
+            promptMode?: ("brief" | "full") | null;
             /** Protection */
             protection?: ("system" | "managed") | null;
             /** Role */
@@ -3870,6 +3938,16 @@ export interface components {
             /** Widgetpins */
             widgetPins?: components["schemas"]["WidgetPinInput"][] | null;
             widgets?: components["schemas"]["WidgetSettings"] | null;
+        };
+        /**
+         * AgentPublishCheck
+         * @description Whether the newest draft can be published, and each thing that stops it with the field it is in.
+         */
+        AgentPublishCheck: {
+            /** Canrequest */
+            canRequest: boolean;
+            /** Problems */
+            problems?: components["schemas"]["PublishBlocker"][];
         };
         /** AgentPublishRequest */
         AgentPublishRequest: {
@@ -4027,6 +4105,37 @@ export interface components {
             /** Tools */
             tools?: components["schemas"]["HeldTool"][];
             wouldPause?: components["schemas"]["WouldPause"] | null;
+        };
+        /**
+         * AgentUses
+         * @description How many of each kind the agent holds, for the page's one-line summary.
+         */
+        AgentUses: {
+            /**
+             * Agents
+             * @default 0
+             */
+            agents: number;
+            /**
+             * Knowledgebases
+             * @default 0
+             */
+            knowledgeBases: number;
+            /**
+             * Skills
+             * @default 0
+             */
+            skills: number;
+            /**
+             * Tools
+             * @default 0
+             */
+            tools: number;
+            /**
+             * Workflows
+             * @default 0
+             */
+            workflows: number;
         };
         /** AgentUsing */
         AgentUsing: {
@@ -4440,6 +4549,51 @@ export interface components {
             name: string;
             /** Version */
             version: number;
+        };
+        /**
+         * Brief
+         * @description What a builder writes instead of one block of instructions. Persona, tone and glossary are text inside
+         *     `how_to_answer`. `success` is kept for grading and is never sent to the model.
+         */
+        Brief: {
+            /**
+             * Goal
+             * @default
+             */
+            goal: string;
+            /**
+             * Howtoanswer
+             * @default
+             */
+            howToAnswer: string;
+            /** Never */
+            never?: string[];
+            /** Purpose */
+            purpose: string;
+            /** Success */
+            success?: string[];
+        };
+        /**
+         * BriefView
+         * @description An agent's brief as replied (`ops_agent_kernel.prompt_writer.Brief` is the request form).
+         */
+        BriefView: {
+            /**
+             * Goal
+             * @default
+             */
+            goal: string;
+            /**
+             * Howtoanswer
+             * @default
+             */
+            howToAnswer: string;
+            /** Never */
+            never?: string[];
+            /** Purpose */
+            purpose: string;
+            /** Success */
+            success?: string[];
         };
         /** BudgetCaps */
         BudgetCaps: {
@@ -5669,6 +5823,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[AgentPublishCheck] */
+        Envelope_AgentPublishCheck_: {
+            data: components["schemas"]["AgentPublishCheck"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[AgentSkills] */
         Envelope_AgentSkills_: {
             data: components["schemas"]["AgentSkills"];
@@ -6222,6 +6385,15 @@ export interface components {
         /** Envelope[Received] */
         Envelope_Received_: {
             data: components["schemas"]["Received"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[ReferenceAdded] */
+        Envelope_ReferenceAdded_: {
+            data: components["schemas"]["ReferenceAdded"];
             /**
              * Success
              * @constant
@@ -8324,6 +8496,40 @@ export interface components {
             /** Totalpages */
             totalPages: number;
         };
+        /**
+         * Patterns
+         * @description How the agent's turn runs: how hard the model thinks, and whether reads may run side by side.
+         */
+        Patterns: {
+            /**
+             * Parallelreads
+             * @default true
+             */
+            parallelReads: boolean;
+            /**
+             * Thinking
+             * @default default
+             * @enum {string}
+             */
+            thinking: "default" | "low" | "medium" | "high";
+        };
+        /**
+         * PatternsView
+         * @description How the agent's turn runs, as replied (`Patterns` is the request form).
+         */
+        PatternsView: {
+            /**
+             * Parallelreads
+             * @default true
+             */
+            parallelReads: boolean;
+            /**
+             * Thinking
+             * @default default
+             * @enum {string}
+             */
+            thinking: "default" | "low" | "medium" | "high";
+        };
         /** PauseInput */
         PauseInput: {
             /** Paused */
@@ -8474,7 +8680,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "missing_field" | "missing_reference" | "unavailable_reference" | "bad_step" | "bad_check" | "bad_exit" | "sub_skill_not_held" | "prompt_rule_in_text" | "review_open" | "already_published" | "deprecated" | "too_long";
+            kind: "missing_field" | "missing_reference" | "unavailable_reference" | "bad_step" | "bad_check" | "bad_exit" | "sub_skill_not_held" | "prompt_rule_in_text" | "review_open" | "already_published" | "deprecated" | "too_long" | "mention";
             /** Message */
             message: string;
             position?: components["schemas"]["BlockerPosition"] | null;
@@ -8693,7 +8899,7 @@ export interface components {
         /**
          * Ref
          * @description Something a text or a step names: a tool, a knowledge base, a skill, an agent or a workflow, by its id. An
-         *     agent or a workflow is named by its bare id; a grant stores them as `agent:<id>` and `workflow:<id>`.
+         *     agent or a workflow is named by its bare id; `grant` and `tool_name` are its two other spellings.
          */
         "Ref-Input": {
             /** Id */
@@ -8723,6 +8929,17 @@ export interface components {
              * @enum {string}
              */
             kind: "tool" | "knowledge" | "skill" | "agent" | "workflow";
+        };
+        /**
+         * ReferenceAdded
+         * @description What an insert granted the agent: the reference and anything it brought with it (a skill's tools, knowledge
+         *     bases and the skills its steps run). Empty when the agent already held it; `agent_version` is then unchanged.
+         */
+        ReferenceAdded: {
+            /** Added */
+            added: components["schemas"]["ReferenceItem"][];
+            /** Agentversion */
+            agentVersion: number;
         };
         /** ReferenceGroup */
         ReferenceGroup: {
@@ -9954,6 +10171,8 @@ export interface components {
             editClass: "free" | "re_test" | "re_approval";
             /** Problems */
             problems?: components["schemas"]["PublishBlocker"][];
+            /** Warnings */
+            warnings?: components["schemas"]["PublishBlocker"][];
         };
         /** SkillRenderInput */
         SkillRenderInput: {
@@ -10019,6 +10238,8 @@ export interface components {
             /** Do */
             do: string;
             ifNot?: components["schemas"]["IfNot"] | null;
+            /** Locked */
+            locked?: boolean | null;
             use?: components["schemas"]["Ref-Input"] | null;
         };
         /**
@@ -10030,6 +10251,11 @@ export interface components {
             /** Do */
             do: string;
             ifNot?: components["schemas"]["IfNotOut"] | null;
+            /**
+             * Locked
+             * @description True when the builder locked the step's tool to this step: the agent reaches it only as the step, even when it is a read. Absent otherwise; a tool that changes something is kept to its step either way.
+             */
+            locked?: boolean | null;
             use?: components["schemas"]["RefOut"] | null;
         };
         /** SkillToolRef */
@@ -14625,6 +14851,111 @@ export interface operations {
             };
         };
     };
+    agents_publish_check: {
+        parameters: {
+            query: {
+                version: number;
+            };
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_AgentPublishCheck_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     agents_publish_preview: {
         parameters: {
             query: {
@@ -14752,6 +15083,113 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_PublishReview_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    agents_add_reference: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddReference"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ReferenceAdded_"];
                 };
             };
             /** @description Invalid request */

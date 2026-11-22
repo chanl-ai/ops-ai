@@ -18,7 +18,7 @@ from ops_agent_kernel.types import Skill as KernelSkill
 from ops_contracts.chat import SkillPick
 from ops_service_kit import narrow
 from ops_service_kit.errors import Conflict, NotFound, Unprocessable, ValidationFailed
-from ops_service_kit.http import Json, JsonValue
+from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.logging import get_logger
 from ops_service_kit.names import has_control, tidy
 
@@ -133,6 +133,7 @@ async def check_content(rt: Runtime, fields: Json, *, skill_id: str | None = Non
         offered = {t["id"]: t for t in await known_tools(rt, fresh=True)}
     if unknown := [t for t in tool_ids if t not in offered]:
         raise ValidationFailed(f"Unknown tools: {', '.join(unknown)}.", code="unknown_tool")
+    skill_content.refuse_unruled(program, {t: str(offered[t]["access"]) for t in tool_ids})
     slug = str(fields.get("slug") or slug_of(name))
     parts = _parts(fields.get("parts"), tool_ids, loading)
     if parts:
@@ -638,6 +639,8 @@ class PublishCheck(TypedDict):
     # Each problem's sentence; `problems` is the same list with where each one is.
     blockers: list[str]
     problems: list[Problem]
+    # What the builder should look at and may publish with: a tool a step's sentence names and does not run.
+    warnings: list[Problem]
     editClass: str
     approversNeeded: int
 
@@ -656,10 +659,10 @@ class SkillDetailView(SkillListRow):
     publishCheck: PublishCheck
 
 
-async def _offered_tools(rt: Runtime, *, fresh: bool) -> set[str] | None:
-    """The ids the tools directory offers; None when it cannot answer."""
+async def _offered_tools(rt: Runtime, *, fresh: bool) -> dict[str, str] | None:
+    """The access of each tool the tools directory offers, by id; None when it cannot answer."""
     try:
-        return {str(t["id"]) for t in await known_tools(rt, fresh=fresh)}
+        return {str(t["id"]): str(t["access"]) for t in await known_tools(rt, fresh=fresh)}
     except ToolsUnavailable:
         return None
 
@@ -699,11 +702,13 @@ async def detail(rt: Runtime, skill_id: str, *, fresh: bool = False) -> SkillDet
         block("review_open", f"{pending.id} is already open for v{pending.version}.")
     if too_long := over_budget(newest):
         block("too_long", too_long)
+    warnings: list[Problem] = []
     if newest.content.get("steps") and newest.published_at is None:
         offered = await _offered_tools(rt, fresh=fresh)
-        problems += await skill_content.publish_problems(
+        blocking, warnings = await skill_content.publish_problems(
             newest.content, offered, team_id=row.team_id, skills=_TeamSkills(rt)
         )
+        problems += blocking
     blockers = [p["message"] for p in problems]
     latest = row.published_version
     published = next((v for v in versions if v.version == latest), None)
@@ -787,6 +792,7 @@ async def detail(rt: Runtime, skill_id: str, *, fresh: bool = False) -> SkillDet
                 "canRequest": not blockers,
                 "blockers": blockers,
                 "problems": problems,
+                "warnings": warnings,
                 "editClass": "re_test",
                 "approversNeeded": 1,
             },
@@ -816,6 +822,8 @@ def snapshot(skill_id: str, version: int, content: SkillContent, tokens: int, *,
             "knowledgeBases": content["knowledgeBases"],
             "tokens": tokens,
             **({"parts": content.get("parts")} if content.get("parts") else {}),
+            # What it needs to start, so a turn refuses to start it while a required input is missing.
+            **({"inputs": content.get("inputs")} if content.get("inputs") else {}),
             # A skill with steps is pinned with them, so the runtime serves the program with no lookup.
             **{k: v for k in skill_content.KEYS if (v := cast(Json, content).get(k))},
             "attachedBy": by,
@@ -824,7 +832,9 @@ def snapshot(skill_id: str, version: int, content: SkillContent, tokens: int, *,
     )
 
 
-async def pin(rt: Runtime, agent_spec: AgentSpec, skill_id: str, version: int, *, by: str, at: str) -> list[SkillPin]:
+async def pin(
+    rt: Runtime, agent_spec: AgentSpec, skill_id: str, version: int, *, by: str, at: str, fresh: bool = True
+) -> list[SkillPin]:
     """The agent's pins with `skill_id` attached at `version`, or moved to it. Refused (422) unless the version is
     published, the skill is not deprecated, the agent holds every tool and knowledge base it names, and the agent
     stays within 12 skills."""
@@ -839,6 +849,19 @@ async def pin(rt: Runtime, agent_spec: AgentSpec, skill_id: str, version: int, *
         )
     if row.deprecated_reason:
         raise Unprocessable(f"{v.content['name']} is deprecated and takes no new attaches.", code="skill_deprecated")
+    # A version published before a check existed, or whose tool has since become one that changes something, is held
+    # to the checks a save makes now.
+    program = skill_content.program_of(v.content)
+    runs = program is not None and bool(program.targets())
+    # An unreachable tools directory fails the attach as it fails a save, rather than reading every tool as a write.
+    access = {str(t["id"]): str(t["access"]) for t in await known_tools(rt, fresh=fresh)} if runs else {}
+    if program is not None and (broken := skill_content.unrunnable(program, access)[0]):
+        raise Unprocessable(
+            f"{v.content['name']} v{version} cannot be attached as it is: {broken[0]['message']} Fix the skill and "
+            "publish it again.",
+            code="skill_needs_fix",
+            details={"problems": cast(JsonList, broken)},
+        )
     if missing := missing_for(content_of(v.content), agent_spec):
         raise Unprocessable(
             f"The agent does not hold {', '.join(missing)}, which {v.content['name']} v{version} names.",
@@ -866,6 +889,15 @@ async def pin(rt: Runtime, agent_spec: AgentSpec, skill_id: str, version: int, *
                 code="always_budget",
             )
     return [*pins, snapshot(skill_id, version, content_of(v.content), v.tokens, by=by, at=at)]
+
+
+async def pin_problems(rt: Runtime, agent_spec: Json) -> list[Problem]:
+    """What in an agent version's pinned skills stops its publish (`skill_content.pin_problems`), read against the
+    tools directory as it is now."""
+    pins = cast(list[Json], agent_spec.get("skillPins") or [])
+    if not any(p.get("steps") for p in pins):
+        return []
+    return skill_content.pin_problems(pins, await _offered_tools(rt, fresh=True))
 
 
 def check_pins_hold(agent_spec: AgentSpec) -> None:
@@ -1005,7 +1037,9 @@ async def load_seed(rt: Runtime, path: Path) -> None:
         for aid in cast(list[str], s.get("pinnedBy") or []):
 
             async def attach(spec: Json, sid: str = cast(str, s["id"]), at: str = v.saved_at) -> Json:
-                spec["skillPins"] = cast(JsonValue, await pin(rt, cast(AgentSpec, spec), sid, 1, by=SEED_BY, at=at))
+                spec["skillPins"] = cast(
+                    JsonValue, await pin(rt, cast(AgentSpec, spec), sid, 1, by=SEED_BY, at=at, fresh=False)
+                )
                 return spec
 
             try:
@@ -1154,7 +1188,13 @@ async def skill_turn(
         return None
     seen: set[tuple[str, str]] = set()
     unique = [s for s in extra if (s.skill_id, s.part) not in seen and not seen.add((s.skill_id, s.part))]
-    return {"skills": [asdict(s) for s in unique], "carried": carried}
+    return {"skills": [_wired(s) for s in unique], "carried": carried}
+
+
+def _wired(skill: KernelSkill) -> dict[str, JsonValue]:
+    """A kernel skill as JSON for the graph's state; `agent_wrapper` reads the program back into its model."""
+    program = skill.program.model_dump(mode="json", by_alias=True) if skill.program is not None else None
+    return {**asdict(replace(skill, program=None)), "program": program}
 
 
 class SkillTurn(TypedDict):

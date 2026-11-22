@@ -193,7 +193,8 @@
           "blockers": [],
           "canRequest": true,
           "editClass": "re_test",
-          "problems": []
+          "problems": [],
+          "warnings": []
         },
         "publishedVersion": null,
         "runs": [],
@@ -404,7 +405,8 @@
               "message": "The skill is deprecated.",
               "position": null
             }
-          ]
+          ],
+          "warnings": []
         },
         "publishedVersion": 1,
         "runs": [],
@@ -594,7 +596,8 @@
           "blockers": [],
           "canRequest": true,
           "editClass": "re_test",
-          "problems": []
+          "problems": [],
+          "warnings": []
         },
         "publishedVersion": null,
         "runs": [],
@@ -1748,7 +1751,8 @@
               "message": "v1 is already published; save a change to open a draft.",
               "position": null
             }
-          ]
+          ],
+          "warnings": []
         },
         "publishedVersion": 1,
         "runs": [],
@@ -1908,7 +1912,8 @@
           "blockers": [],
           "canRequest": true,
           "editClass": "re_test",
-          "problems": []
+          "problems": [],
+          "warnings": []
         },
         "publishedVersion": null,
         "runs": [],

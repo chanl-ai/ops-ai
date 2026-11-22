@@ -54,7 +54,7 @@ export function SkillInputsSection({ value, onChange, onValidity, disabled }: { 
   }, [watch, onChange, onValidity]);
 
   return (
-    <SettingsSection title="Inputs" description="The values this skill takes when it starts. They are saved with the draft. Agents do not check them yet: a skill still starts when a required input is missing.">
+    <SettingsSection title="Inputs" description="The values this skill takes when it starts. They are saved with the draft. A skill with steps does not start until every required input is given: the agent asks the person for a missing one. A step's rule can read an input as inputs.name.">
       <fieldset disabled={disabled} className="flex flex-col gap-2" data-testid="skill-inputs-section">
         {inputs.fields.length === 0 && <p className="text-sm text-muted-foreground">No inputs. The skill uses what the agent already knows. Add an input only when the caller must pass something in.</p>}
         {inputs.fields.map((f, i) => (

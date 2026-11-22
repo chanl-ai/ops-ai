@@ -8,6 +8,8 @@ loaded, guardrails; it never adds a tool.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from ops_service_kit.http import Json, JsonList
 
 from .events import SkillLoaded
@@ -23,17 +25,24 @@ MATCHED_MAX = 200
 ALWAYS = "Always on"
 
 
-def grant(skills: list[Skill]) -> ToolGrant | None:
-    """The built-in, offered only when the agent pins an on-match skill without steps; its slug argument is one of
-    theirs. A skill with steps is started with switch_skill (step_tools.py), never loaded as text."""
+def grant(skills: list[Skill], stepped: Sequence[Skill] = ()) -> ToolGrant | None:
+    """The built-in, offered when the agent pins an on-match skill without steps or holds a skill with steps
+    (`stepped`); its slug argument is one of theirs. A skill with steps is never loaded as text: loading it starts it
+    at its first step, as switch_skill does (step_tools.py)."""
     slugs: JsonList = [s.slug for s in skills if s.loading == "on_match" and s.program is None]
+    slugs += [s.slug for s in stepped if s.slug not in slugs]
     if not slugs:
         return None
+    does = (
+        "Loads one of your skills by its slug when the task matches its use-when line. Follow the steps and rules "
+        "it returns for the rest of this reply."
+    )
+    if stepped:
+        does += " A skill that runs step by step starts at its first step instead."
     return ToolGrant(
         NAME,
         "platform",
-        "Loads one of your skills by its slug when the task matches its use-when line. Follow the steps and rules "
-        "it returns for the rest of this reply.",
+        does,
         "read",
         {
             "type": "object",
@@ -58,14 +67,17 @@ def prompt(skills: list[Skill]) -> str:
             "answering, then follow what it returns.\n" + "\n".join(index)
         )
     started = [
-        f"- {s.slug}: {s.use_when}" + (f" Not when: {s.program.not_when}" if s.program.not_when else "")
+        f"- {s.slug}: {s.use_when}"
+        + (f" Not when: {s.program.not_when}" if s.program.not_when else "")
+        + (f" Its steps call: {', '.join(sorted(tools))}." if (tools := s.program.targets()) else "")
         for s in skills
         if s.program is not None
     ]
     if started:
         parts.append(
-            "## Skills you can start\n\nThese run one step at a time. When a request matches one, call switch_skill "
-            "with its slug before answering; you are then given its current step.\n" + "\n".join(started)
+            "## Skills you can start\n\nThese run one step at a time. Call switch_skill with a skill's slug to start "
+            "it; you are then given its current step. A tool its steps call that changes something, or hands to "
+            "another agent, is available only as that step.\n" + "\n".join(started)
         )
     return "\n\n".join(parts)
 

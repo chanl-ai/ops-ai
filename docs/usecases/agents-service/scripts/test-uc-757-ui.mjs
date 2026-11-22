@@ -1,0 +1,279 @@
+// uc-757 ui layer: docs/usecases/agents-service/a-builder-writes-a-skill-with.md, steps 10 and up. A builder opens a skill
+// page and an agent page, types @ in the brief, adds a tool the agent lacks from the menu, sees what it adds, the save
+// lands, and the test panel shows the step tracker; a reviewer reads both pages read-only. Platform sign-in (James
+// builds, Maya reviews), the demo stack's fake model. A tool picked in the middle of a step's sentence is saved as the
+// step's tool, and the chat view shows a skill a reviewer's rejection ended. The tracker line draws what the Runtime reports on a reply
+// (`skillRun`); the model here does not run a skill, so the thread read is given that field at the network edge and the
+// server side of it is proved by the api script.
+import { AGENTS_PORT, PLATFORM_PORT, check, chromium, evidenceDir, finish, shootBothWidths, withUiStack } from '@ops-ai/usecase-runner/harness';
+
+const agents = `http://127.0.0.1:${AGENTS_PORT}`;
+const PASSWORD = 'northfield-demo';
+const JAMES = 'j.richardson@harborpine.example';
+const MAYA = 'm.okafor@harborpine.example';
+const RUN = Math.random().toString(36).slice(2, 6);
+const AREA = 'agents-service';
+const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: PASSWORD }) })).json()).data.token;
+const as = (token) => ({ Authorization: `Bearer ${token}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' });
+const armed = (p) => (p.catch(() => undefined), p);
+
+await withUiStack(
+  async (consoleUrl) => {
+    const J = as(await tokenFor(JAMES));
+    const made = async (path, body, method = 'POST') => {
+      const res = await fetch(`${agents}${path}`, { method, headers: J, body: JSON.stringify(body) });
+      const json = await res.json();
+      if (!json.data) throw new Error(`setup ${path}: ${res.status} ${JSON.stringify(json).slice(0, 300)}`);
+      return json.data;
+    };
+    const skill = await made('/v1/skills', {
+      name: `Card dispute walk ${RUN}`,
+      ownerTeam: 'team_ops',
+      useWhen: 'The cardholder disputes a charge.',
+      instructions: 'Say what each step found before moving on.',
+      steps: [{ do: 'Ask which charge is disputed.' }, { do: 'Look the charge up and say what it shows.' }, { do: 'Tell the cardholder what happens next.' }],
+    });
+    const agent = await made('/v1/agents', { name: `Dispute desk ${RUN}`, role: 'Helps cardholders with disputes' });
+    await made(`/v1/agents/${agent.id}`, { brief: { purpose: 'Help cardholders dispute a charge.', goal: 'Every dispute ends with a clear next step.', howToAnswer: 'Keep answers short.', never: ['Promise a refund before the review'], success: ['The cardholder knows what happens next'] } }, 'PATCH');
+
+    const browser = await chromium.launch();
+    const errors = [];
+    const failed = [];
+    const watch = (page, who) => {
+      page.on('pageerror', (e) => errors.push(`${who}: ${e.message}`));
+      page.on('console', (m) => m.type() === 'error' && !/Failed to load resource/.test(m.text()) && errors.push(`${who}: ${m.text()}`));
+      // A reply's stream is closed by the browser when the page is resized or left after the reply ended; that is not a failure.
+      // So is a link's prefetch (`_rsc`) the browser drops when the page is left before it answers.
+      const dropped = (r) => (r.method() === 'POST' && /\/chat\/threads\/[^/]+\/messages$/.test(r.url())) || (/[?&]_rsc=/.test(r.url()) && r.failure()?.errorText === 'net::ERR_ABORTED');
+      page.on('requestfailed', (r) => !dropped(r) && failed.push(`${who}: ${r.method()} ${r.url()} ${r.failure()?.errorText}`));
+      // The save refused because someone else saved first (409) is the step under test.
+      page.on('response', (r) => r.status() >= 400 && !(r.status() === 409 && r.request().method() === 'PUT' && /\/v1\/skills\/[^/]+\/draft$/.test(r.url())) && failed.push(`${who}: ${r.status()} ${r.request().method()} ${r.url()}`));
+    };
+    const signIn = async (email) => {
+      const page = await (await browser.newContext({ viewport: { width: 1440, height: 1000 } })).newPage();
+      watch(page, email.split('@')[0]);
+      await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await page.getByLabel('Email').fill(email);
+      await page.getByLabel('Password').fill(PASSWORD);
+      await page.getByRole('button', { name: /^Sign in/ }).first().click();
+      await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
+      return page;
+    };
+    try {
+      const page = await signIn(JAMES);
+
+      // 10. The skill page: the steps are one document, and the endings hint reads.
+      await page.goto(`${consoleUrl}/build/skills/${skill.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await page.getByTestId('skill-document').waitFor({ timeout: 120_000 });
+      await page.getByTestId('skill-document').getByRole('group', { name: 'Step 3' }).waitFor({ timeout: 60_000 });
+      check('10 the skill page draws its steps as one document', (await page.getByTestId('skill-document').getByRole('group', { name: /^Step \d/ }).count()) === 3, await page.getByTestId('skill-document').innerText());
+      const notes = await page.getByTestId('skill-document').innerText();
+      // A skill made by the New skill dialog holds only section headings; the notes block shows those as empty.
+      const blank = await made('/v1/skills', { name: `Blank walk ${RUN}`, ownerTeam: 'team_ops', useWhen: 'Never, it is blank.', instructions: '## Steps\n1.\n\n## Rules\n-\n\n## Examples\n\n\n## Output format\n' });
+      await page.goto(`${consoleUrl}/build/skills/${blank.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await page.getByTestId('skill-document').waitFor({ timeout: 120_000 });
+      const empty = await page.getByTestId('skill-document').innerText();
+      check('10 written notes show as saved and a blank skill\'s notes start empty', /Say what each step found/.test(notes) && !/## Steps|## Rules/.test(empty), { notes, empty });
+      // A check the model judges that states a comparison says to write it as a rule; a sentence that compares nothing does not.
+      const judged = await made('/v1/skills', { name: `Judged walk ${RUN}`, ownerTeam: 'team_ops', useWhen: 'A balance is checked.', instructions: '', steps: [{ do: 'Read the balance aloud.', check: { text: 'The balance is above zero.' } }, { do: 'Say goodbye.', check: { text: 'The caller said goodbye.' } }] });
+      await page.goto(`${consoleUrl}/build/skills/${judged.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await page.getByTestId('skill-document').getByRole('group', { name: 'Step 2' }).waitFor({ timeout: 60_000 });
+      const hinted = page.getByTestId('check-rule-hint');
+      await hinted.first().waitFor({ timeout: 30_000 }).catch(() => undefined);
+      check('10 a judged check that compares a value says to write a rule, and only that one', (await hinted.count()) === 1 && /result\.balance > 0/.test(await hinted.first().innerText()), await page.getByTestId('skill-document').innerText());
+      await page.goto(`${consoleUrl}/build/skills/${skill.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await page.getByTestId('skill-document').getByRole('group', { name: 'Step 3' }).waitFor({ timeout: 60_000 });
+      const endings = page.getByTestId('skill-results-section');
+      await endings.scrollIntoViewIfNeeded();
+      check('10 the endings section says when another skill\'s step passes', /passes only if this skill ends as done/.test(await endings.innerText()), await endings.innerText());
+      // A tool picked in the middle of a step's sentence becomes the tool the step runs, drawn once with a "runs" mark.
+      const two = page.getByTestId('skill-document').getByRole('group', { name: 'Step 2' });
+      await two.click();
+      await page.keyboard.press('End');
+      await page.keyboard.type(' with @');
+      const picker = page.getByTestId('caret-menu');
+      await picker.getByRole('option').first().waitFor({ timeout: 60_000 });
+      await page.keyboard.press('Enter');
+      await two.getByTestId('runs-mark').waitFor({ timeout: 30_000 }).catch(() => undefined);
+      // The builder keeps the tool to this step, whatever kind of tool it is.
+      await two.getByTestId('lock-step-tool').click();
+      const lockOn = await two.getByTestId('lock-step-tool').getAttribute('aria-pressed');
+      const drawn = { chips: await two.getByTestId('reference-chip').count(), marks: await two.getByTestId('runs-mark').count() };
+      const stored = armed(page.waitForResponse((r) => r.request().method() === 'PUT' && r.url() === `${agents}/v1/skills/${skill.id}/draft`, { timeout: 60_000 }));
+      await page.getByTestId('save-skill-draft').click();
+      await page.getByTestId('save-skill-draft-confirm').click();
+      const kept = (await (await stored).json()).data?.content?.steps?.[1] ?? {};
+      check(
+        '10 a tool picked mid-sentence is saved as the step\'s tool and drawn once',
+        drawn.chips === 1 && drawn.marks === 1 && ['tool', 'agent', 'workflow'].includes(kept.use?.kind) && kept.do?.includes(`@${kept.use.kind}:${kept.use.id}`) && /^Look the charge up/.test(kept.do),
+        { drawn, kept },
+      );
+      check('10 a tool the builder locks to its step is saved locked', lockOn === 'true' && kept.locked === true, { lockOn, locked: kept.locked });
+      // Someone else saves first: James's save is refused, and Reload keeps what he typed on top of their version.
+      // The form is drawn again from the version just saved; typing starts once it has.
+      // The button is also off while the save is in flight, so the saved toast is waited for first.
+      await page.getByText(/Saved draft v1/).first().waitFor({ timeout: 60_000 });
+      await page.waitForFunction(() => document.querySelector('[data-testid="save-skill-draft"]')?.disabled === true, null, { timeout: 60_000 });
+      await page.waitForTimeout(800);
+      // Enter just before the tool: the tool, and its lock, go with it to the new step, and the first half runs none.
+      // The caret is put by a click in the space just left of the chip, as a person would.
+      const chip = await page.getByTestId('skill-document').getByRole('group', { name: 'Step 2' }).getByTestId('reference-chip').boundingBox();
+      await page.mouse.click(chip.x - 2, chip.y + chip.height / 2);
+      await page.keyboard.press('Enter');
+      const stepGroups = page.getByTestId('skill-document').getByRole('group', { name: /^Step \d/ });
+      await stepGroups.nth(3).waitFor({ timeout: 60_000 });
+      const spoken = await stepGroups.evaluateAll((els) => els.map((el) => el.getAttribute('aria-label')));
+      check('10 after a step is added above, each step is announced by its new number', spoken.join() === 'Step 1,Step 2,Step 3,Step 4', spoken);
+      await stepGroups.nth(3).click();
+      await page.keyboard.press('End');
+      // One insert, as a paste is: the check is about what Reload keeps, not about key-by-key typing.
+      await page.keyboard.insertText(' Then thank them.');
+      await made(`/v1/skills/${skill.id}/publish-requests`, { note: 'use case' });
+      await made(`/v1/skills/${skill.id}/draft`, { name: `Card dispute renamed ${RUN}`, baseVersion: 1 }, 'PUT');
+      await page.getByTestId('save-skill-draft').click();
+      await page.getByTestId('save-skill-draft-confirm').click();
+      const staleAlert = page.getByTestId('skill-stale-base');
+      const refusedStale = await staleAlert.waitFor({ timeout: 60_000 }).then(() => true, () => false);
+      await page.getByTestId('skill-stale-reload').click();
+      await staleAlert.waitFor({ state: 'detached', timeout: 60_000 }).catch(() => undefined);
+      await page.getByTestId('skill-document').getByRole('group', { name: 'Step 3' }).waitFor({ timeout: 60_000 });
+      const afterReload = await page.getByTestId('skill-document').innerText();
+      const fields = await page.locator('input').evaluateAll((els) => els.map((el) => el.value));
+      check(
+        '10 after someone else saves first, Reload shows their version and keeps the unsaved text',
+        refusedStale && /Then thank them\./.test(afterReload) && fields.includes(`Card dispute renamed ${RUN}`),
+        { refusedStale, afterReload, fields },
+      );
+      const onTop = armed(page.waitForResponse((r) => r.request().method() === 'PUT' && r.url() === `${agents}/v1/skills/${skill.id}/draft`, { timeout: 60_000 }));
+      await page.getByTestId('save-skill-draft').click();
+      await page.getByTestId('save-skill-draft-confirm').click();
+      const top = (await (await onTop).json()).data ?? {};
+      check('10 the kept text then saves on top of their version', top.name === `Card dispute renamed ${RUN}` && /Then thank them\./.test(top.content?.steps?.[3]?.do ?? ''), { name: top.name, step: top.content?.steps?.[3] });
+      const [, first, second] = top.content?.steps ?? [];
+      check(
+        '10 Enter before a step\'s tool leaves the tool, and its lock, on the step that holds it',
+        first?.use == null && !/@/.test(first?.do ?? '@') && second?.use?.id === kept.use?.id && second?.locked === true && (second?.do ?? '').includes(`@${kept.use?.kind}:${kept.use?.id}`),
+        { first, second },
+      );
+      await shootBothWidths(page, AREA, 'uc-757-skill-admin', async () => {
+        await page.waitForTimeout(600);
+        await page.getByTestId('skill-results-section').scrollIntoViewIfNeeded().catch(() => undefined);
+      });
+
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      // 11. The agent page: @ in the brief lists a tool the agent lacks, with what picking it adds; the save lands.
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.goto(`${consoleUrl}/build/agents/${agent.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      const brief = page.getByTestId('agent-brief');
+      await brief.waitFor({ timeout: 120_000 });
+      await page.getByTestId('agent-uses-link').waitFor({ timeout: 60_000 });
+      check('11 the brief has its headings and the uses line is a link', (await brief.getByRole('group').count()) >= 5 && /^Uses /.test(await page.getByTestId('agent-uses-link').innerText()), await page.getByTestId('agent-uses-link').innerText());
+      // An empty block's hint takes its own height at phone width, so a wrapped hint never runs under the next line.
+      const bare = await made('/v1/agents', { name: `Bare desk ${RUN}`, role: 'Has an empty brief' });
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto(`${consoleUrl}/build/agents/${bare.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await brief.locator('.is-empty').first().waitFor({ timeout: 120_000 });
+      const hints = await brief.locator('.is-empty').evaluateAll((els) => els.map((el) => ({ hint: parseFloat(getComputedStyle(el, '::before').height), box: el.getBoundingClientRect().height })));
+      check('11 at 390 wide an empty block is as tall as its hint', hints.length > 0 && hints.every((h) => h.box >= h.hint - 1) && hints.some((h) => h.hint > 30), hints);
+      await page.screenshot({ path: evidenceDir('media', AREA, 'uc-757-empty-brief-admin-390.png'), fullPage: true });
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.goto(`${consoleUrl}/build/agents/${agent.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await page.getByTestId('agent-uses-link').waitFor({ timeout: 60_000 });
+      const how = brief.getByRole('group', { name: 'How to answer' });
+      await how.click();
+      await page.keyboard.press('End');
+      await page.keyboard.type(' Start with @');
+      const menu = page.getByTestId('caret-menu');
+      await menu.getByRole('option').first().waitFor({ timeout: 60_000 });
+      // The note under the list belongs to the highlighted row: step down until it is one the agent lacks.
+      const adds = /Adds .* to this agent/;
+      for (let i = 0; i < 12 && !adds.test(await menu.innerText()); i++) await page.keyboard.press('ArrowDown');
+      check("12 the brief's @ menu lists a tool the agent lacks, with what picking it adds", adds.test(await menu.innerText()), await menu.innerText());
+      // The open menu is drawn at 1440 only: a resize remounts the layout and closes it.
+      await page.screenshot({ path: evidenceDir('media', AREA, 'uc-757-agent-menu-admin-1440.png') });
+      const added = armed(page.waitForResponse((r) => r.request().method() === 'POST' && r.url() === `${agents}/v1/agents/${agent.id}/references`, { timeout: 60_000 }));
+      await page.keyboard.press('Enter');
+      check('13 picking it adds it to the agent', (await added).ok());
+      const saved = armed(page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url() === `${agents}/v1/agents/${agent.id}`, { timeout: 60_000 }));
+      check('14 the brief saves on its own and the status says it', (await saved).ok() && (await page.getByTestId('agent-save-status').filter({ hasText: /saved/i }).waitFor({ timeout: 30_000 }).then(() => true, () => false)), await page.getByTestId('agent-save-status').innerText());
+      const after = (await (await fetch(`${agents}/v1/agents/${agent.id}`, { headers: J })).json()).data;
+      check('15 the agent now holds the tool and its brief mentions it', after.toolIds.length === 1 && /@tool:/.test(after.brief.howToAnswer), { toolIds: after.toolIds, how: after.brief?.howToAnswer });
+
+      // 16. The model and limits form stays closed until opened; the leave guard holds unsaved text.
+      await page.getByTestId('agent-model-limits-toggle').click();
+      check('16 model and limits opens to the model, thinking and the rules and limits', (await page.getByTestId('agent-model-limits').isVisible()) && (await page.getByTestId('agent-rules-and-limits').isVisible()));
+      // This agent has no model chosen, as every agent made from the SDK or the command line: how it thinks still saves.
+      const thought = page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().endsWith(`/v1/agents/${agent.id}`), { timeout: 60_000 });
+      await page.locator('#ag-thinking').click();
+      await page.getByRole('option', { name: 'High' }).click();
+      const saidHigh = (await (await thought).json()).data?.patterns?.thinking;
+      check('16 with no model chosen, a change to Thinking still saves', saidHigh === 'high', saidHigh);
+
+      // 17. The test panel shows the step tracker after a reply.
+      // A live agent of the demo: the agent written above is a draft, and only a test chat reaches a draft.
+      const plain = await made('/chat/threads', { agentId: 'ag_advisor', kbIds: [] });
+      await (await fetch(`${agents}/chat/threads/${plain.id}/messages`, { method: 'POST', headers: { ...J, Accept: 'text/event-stream' }, body: JSON.stringify({ content: 'Freeze my account.' }) })).text();
+      await page.route(/\/chat\/threads\/[^/?]+$/, async (route) => {
+        if (route.request().method() !== 'GET') return route.continue();
+        const res = await route.fetch();
+        const body = await res.json();
+        const t = body.data ?? body;
+        const last = [...(t.messages ?? [])].reverse().find((m) => m.role === 'assistant');
+        // An ordinary chat's reply carries a skill a reviewer's rejection ended in that reply, as the api script reads it.
+        const rejected = { skillId: 'sk_freeze', version: 1, name: 'Freeze an account', ended: 'failed', atStep: 3, returns: {}, inReply: true, why: 'denied', check: null, meaning: null };
+        const running = { skillId: skill.id, version: 1, name: skill.name, step: 2, stepsTotal: 4, stepText: 'Look the charge up', sub: null };
+        if (last) last.skillRun = route.request().url().endsWith(`/${plain.id}`) ? { running: null, history: [rejected], holds: [] } : { running, history: [], holds: [] };
+        return route.fulfill({ response: res, json: body.data ? { ...body, data: t } : t });
+      });
+      await page.getByTestId('test-agent-button').click();
+      const box = page.getByRole('textbox', { name: 'Message' });
+      await box.waitFor({ timeout: 60_000 });
+      await box.fill('I do not recognise a charge on my card.');
+      await page.getByRole('button', { name: 'Send', exact: true }).click();
+      await page.getByTestId('skill-tracker').waitFor({ timeout: 120_000 });
+      check('17 the test panel shows which step the skill is on', /step 2 of 4/.test(await page.getByTestId('skill-tracker').innerText()), await page.getByTestId('skill-tracker').innerText());
+      await shootBothWidths(page, AREA, 'uc-757-agent-admin', async () => {
+        await page.waitForTimeout(800);
+        await page.getByTestId('agent-test-panel').scrollIntoViewIfNeeded().catch(() => undefined);
+      });
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      // The chat view draws the same record: under the reply, the skill a reviewer's rejection ended reads as stopped.
+      await page.goto(`${consoleUrl}/chat/${plain.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      const ended = page.getByTestId('skill-ended');
+      await ended.first().waitFor({ timeout: 120_000 }).catch(() => undefined);
+      const line = (await ended.count()) ? await ended.first().innerText() : '';
+      check(
+        '17 the chat view shows a rejected write as the skill stopping, once',
+        (await ended.count()) === 1 && (await ended.first().getAttribute('data-ended')) === 'failed' && /stopped at step 3: a reviewer rejected the action/.test(line) && (await page.getByTestId('skill-tracker').count()) === 0,
+        line,
+      );
+      await shootBothWidths(page, AREA, 'uc-757-chat-ended-admin', async () => {});
+      await page.setViewportSize({ width: 1440, height: 1000 });
+
+      // 18. A reviewer reads both pages and cannot edit.
+      const maya = await signIn(MAYA);
+      await maya.goto(`${consoleUrl}/build/agents/${agent.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await maya.getByTestId('agent-brief').waitFor({ timeout: 120_000 });
+      await maya.getByTestId('read-only-notice').waitFor({ timeout: 60_000 });
+      check('18 a reviewer sees the agent page as view only, with no Edit as plain text link', (await maya.getByTestId('agent-prompt-mode').count()) === 0);
+      await maya.getByTestId('agent-uses-link').click();
+      const sheet = await maya.getByTestId('agent-uses-sheet').waitFor({ timeout: 15_000 }).then(() => true, () => false);
+      await maya.keyboard.press('Escape');
+      await maya.getByTestId('agent-model-limits-toggle').click();
+      const limits = await maya.getByTestId('agent-model-limits').waitFor({ timeout: 15_000 }).then(() => true, () => false);
+      check('18 a reviewer can open what the agent uses and its model and limits, with the fields off', sheet && limits && (await maya.locator('#ag-thinking').isDisabled()), { sheet, limits });
+      await shootBothWidths(maya, AREA, 'uc-757-agent-member', async () => {});
+      await maya.goto(`${consoleUrl}/build/skills/${skill.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await maya.getByTestId('skill-document').waitFor({ timeout: 120_000 });
+      await shootBothWidths(maya, AREA, 'uc-757-skill-member', async () => {});
+
+      check('19 no page errors and no failed requests', errors.length === 0 && failed.length === 0, { errors, failed });
+      console.log(`walk: ${errors.length} console errors, ${failed.length} failed requests`, errors, failed);
+    } finally {
+      await browser.close();
+    }
+  },
+  { platform: true, demo: true },
+);
+
+finish();

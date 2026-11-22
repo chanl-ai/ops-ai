@@ -35,6 +35,9 @@ UPDATE_KEYS = (
     "limits",
     "guardrails",
     "memory",
+    "brief",
+    "promptMode",
+    "patterns",
 )
 
 
@@ -125,6 +128,16 @@ class Agents:
         `ids` (`kind:id` each) answers the labels of what a saved text names."""
         asked = {k: v for k, v in {"search": search or None, **query}.items() if v is not None}
         return self._raw.agents.agents_references_search(for_agent=for_agent, **asked)
+
+    def add_reference(self, id: str, kind: str, ref_id: str) -> Any:
+        """Grants the agent a tool, knowledge base, skill, agent or workflow its brief mentions, as a new draft. A
+        skill brings the tools and knowledge bases it names. `added` is empty when the agent already held it."""
+        return self._raw.agents.agents_add_reference(id, {"kind": kind, "id": ref_id})
+
+    def publish_check(self, id: str, *, version: int | None = None) -> Any:
+        """What stops the agent's newest draft from being published, each problem with the field it is in."""
+        pin = version if version is not None else self.get(id).get("version")
+        return self._raw.agents.agents_publish_check(id, version=pin)
 
     def pause(self, id: str) -> Any:
         return self._raw.agents.agents_set_paused(id, {"paused": True})
@@ -269,6 +282,13 @@ class AsyncAgents:
     async def references(self, search: str = "", *, for_agent: str, **query: Any) -> Any:
         asked = {k: v for k, v in {"search": search or None, **query}.items() if v is not None}
         return await self._raw.agents.agents_references_search(for_agent=for_agent, **asked)
+
+    async def add_reference(self, id: str, kind: str, ref_id: str) -> Any:
+        return await self._raw.agents.agents_add_reference(id, {"kind": kind, "id": ref_id})
+
+    async def publish_check(self, id: str, *, version: int | None = None) -> Any:
+        pin = version if version is not None else (await self.get(id)).get("version")
+        return await self._raw.agents.agents_publish_check(id, version=pin)
 
     async def pause(self, id: str) -> Any:
         return await self._raw.agents.agents_set_paused(id, {"paused": True})

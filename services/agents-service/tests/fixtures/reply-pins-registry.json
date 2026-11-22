@@ -6,6 +6,7 @@
         "allTeamKnowledgeBases": false,
         "autoResolvedRate": 0,
         "availability": "not_published",
+        "brief": null,
         "channels": [
           "chat"
         ],
@@ -62,7 +63,12 @@
         },
         "model": "",
         "name": "Branch Desk",
+        "patterns": {
+          "parallelReads": true,
+          "thinking": "default"
+        },
         "paused": false,
+        "promptMode": null,
         "protection": null,
         "publishedVersion": null,
         "role": "Answers branch questions",
@@ -75,6 +81,13 @@
         "toolIds": [],
         "updatedAt": "<timeZ>",
         "usedIn": [],
+        "uses": {
+          "agents": 0,
+          "knowledgeBases": 0,
+          "skills": 0,
+          "tools": 0,
+          "workflows": 0
+        },
         "version": 1,
         "widgetPins": [],
         "widgets": {
@@ -117,6 +130,7 @@
             "allTeamKnowledgeBases": false,
             "autoResolvedRate": 0,
             "availability": "published",
+            "brief": null,
             "channels": [
               "chat"
             ],
@@ -180,7 +194,12 @@
             },
             "model": "default",
             "name": "Branch Concierge",
+            "patterns": {
+              "parallelReads": true,
+              "thinking": "default"
+            },
             "paused": false,
+            "promptMode": null,
             "protection": null,
             "publishedVersion": 3,
             "role": "Books appointments and answers product questions",
@@ -204,6 +223,13 @@
                 "workflowName": "Its own one-step workflow"
               }
             ],
+            "uses": {
+              "agents": 0,
+              "knowledgeBases": 1,
+              "skills": 0,
+              "tools": 2,
+              "workflows": 0
+            },
             "version": 3,
             "widgetPins": [],
             "widgets": {
@@ -218,6 +244,7 @@
             "allTeamKnowledgeBases": false,
             "autoResolvedRate": 0,
             "availability": "published",
+            "brief": null,
             "channels": [
               "chat"
             ],
@@ -282,7 +309,12 @@
             },
             "model": "default",
             "name": "Card Dispute Resolver",
+            "patterns": {
+              "parallelReads": true,
+              "thinking": "default"
+            },
             "paused": false,
+            "promptMode": null,
             "protection": null,
             "publishedVersion": 4,
             "role": "Investigates and drafts card dispute outcomes",
@@ -307,6 +339,13 @@
                 "workflowName": "Its own one-step workflow"
               }
             ],
+            "uses": {
+              "agents": 0,
+              "knowledgeBases": 1,
+              "skills": 0,
+              "tools": 2,
+              "workflows": 1
+            },
             "version": 4,
             "widgetPins": [],
             "widgets": {
@@ -321,6 +360,7 @@
             "allTeamKnowledgeBases": false,
             "autoResolvedRate": 0,
             "availability": "published",
+            "brief": null,
             "channels": [
               "chat"
             ],
@@ -386,7 +426,12 @@
             },
             "model": "default",
             "name": "Wire Fraud Sentinel",
+            "patterns": {
+              "parallelReads": true,
+              "thinking": "default"
+            },
             "paused": false,
+            "promptMode": null,
             "protection": null,
             "publishedVersion": 7,
             "role": "Scores outbound wires and places holds",
@@ -416,6 +461,13 @@
                 "workflowName": "Wire hold review"
               }
             ],
+            "uses": {
+              "agents": 0,
+              "knowledgeBases": 2,
+              "skills": 0,
+              "tools": 2,
+              "workflows": 0
+            },
             "version": 7,
             "widgetPins": [],
             "widgets": {
@@ -576,6 +628,7 @@
         "allTeamKnowledgeBases": false,
         "autoResolvedRate": 0,
         "availability": "published",
+        "brief": null,
         "canDelete": true,
         "canEdit": true,
         "canPublish": true,
@@ -644,7 +697,12 @@
         },
         "model": "default",
         "name": "Wire Fraud Sentinel",
+        "patterns": {
+          "parallelReads": true,
+          "thinking": "default"
+        },
         "paused": false,
+        "promptMode": null,
         "protection": null,
         "publishedVersion": 7,
         "role": "Scores outbound wires and places holds",
@@ -675,6 +733,13 @@
             "workflowName": "Wire hold review"
           }
         ],
+        "uses": {
+          "agents": 0,
+          "knowledgeBases": 2,
+          "skills": 0,
+          "tools": 2,
+          "workflows": 0
+        },
         "version": 7,
         "widgetPins": [],
         "widgets": {
@@ -697,6 +762,7 @@
         "allTeamKnowledgeBases": false,
         "autoResolvedRate": 0,
         "availability": "published",
+        "brief": null,
         "canDelete": true,
         "canEdit": true,
         "canPublish": true,
@@ -756,7 +822,12 @@
         },
         "model": "",
         "name": "Branch Desk",
+        "patterns": {
+          "parallelReads": true,
+          "thinking": "default"
+        },
         "paused": false,
+        "promptMode": null,
         "protection": null,
         "publishedVersion": 1,
         "role": "Answers branch hours",
@@ -778,6 +849,13 @@
             "workflowName": "Its own one-step workflow"
           }
         ],
+        "uses": {
+          "agents": 0,
+          "knowledgeBases": 0,
+          "skills": 0,
+          "tools": 0,
+          "workflows": 0
+        },
         "version": 1,
         "widgetPins": [],
         "widgets": {
@@ -798,6 +876,7 @@
         "allTeamKnowledgeBases": false,
         "autoResolvedRate": 0,
         "availability": "not_published",
+        "brief": null,
         "channels": [
           "chat"
         ],
@@ -854,7 +933,12 @@
         },
         "model": "",
         "name": "Branch Desk",
+        "patterns": {
+          "parallelReads": true,
+          "thinking": "default"
+        },
         "paused": false,
+        "promptMode": null,
         "protection": null,
         "publishedVersion": null,
         "role": "Answers branch hours",
@@ -867,6 +951,13 @@
         "toolIds": [],
         "updatedAt": "<timeZ>",
         "usedIn": [],
+        "uses": {
+          "agents": 0,
+          "knowledgeBases": 0,
+          "skills": 0,
+          "tools": 0,
+          "workflows": 0
+        },
         "version": 1,
         "widgetPins": [],
         "widgets": {
@@ -1259,7 +1350,8 @@
           "blockers": [],
           "canRequest": true,
           "editClass": "re_test",
-          "problems": []
+          "problems": [],
+          "warnings": []
         },
         "publishedVersion": null,
         "runs": [],
@@ -1600,7 +1692,8 @@
               "message": "v1 is already published; save a change to open a draft.",
               "position": null
             }
-          ]
+          ],
+          "warnings": []
         },
         "publishedVersion": 1,
         "runs": [],
@@ -1715,7 +1808,8 @@
           "blockers": [],
           "canRequest": true,
           "editClass": "re_test",
-          "problems": []
+          "problems": [],
+          "warnings": []
         },
         "publishedVersion": null,
         "runs": [],

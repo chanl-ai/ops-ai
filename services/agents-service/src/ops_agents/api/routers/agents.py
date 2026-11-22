@@ -21,9 +21,11 @@ from pydantic import Field
 
 from ops_access import can, require_provisioner
 from ops_agent_kernel.layout import required_tools
+from ops_agent_kernel.prompt_writer import Brief, Patterns
 from ops_agents.activities.agent_limits import AgentLimits, check_limits, limits_of
 from ops_agents.activities.agent_limits import wire as wire_limits
 from ops_agents.activities.tool_directory import ToolsUnavailable
+from ops_agents.app import agent_brief
 from ops_agents.app.evals import parse_cases, run_eval
 from ops_agents.domain.evals import TRIGGER_MANUAL
 from ops_identity.fastapi import Tx
@@ -71,6 +73,7 @@ from ..runs import graph_store
 from ..schemas import (
     Agent,
     AgentEvalRun,
+    AgentPublishCheck,
     AgentRun,
     AgentTestTurn,
     AgentVersion,
@@ -80,6 +83,7 @@ from ..schemas import (
     WidgetSettings,
 )
 from ..skills import check_pins_hold
+from ..skills import pin_problems as skill_pin_problems
 from ..team_names import team_name
 from ..timers import arm_job
 from ..widgets import published as published_widget
@@ -165,6 +169,11 @@ class AgentPatch(In):
     widgets: WidgetSettings | None = None
     # On or off, and which kinds.
     memory: MemorySettings | None = None
+    # The agent as a brief. A save that carries it writes `role` and `instructions` from it (promptMode brief unless
+    # the save says full); one that carries neither leaves an agent saved before the brief exactly as it was.
+    brief: Brief | None = None
+    prompt_mode: Literal["brief", "full"] | None = None
+    patterns: Patterns | None = None
     note: str | None = None
     # Set by the provisioning service only.
     template_id: str | None = Field(default=None, min_length=1, max_length=120)
@@ -473,6 +482,9 @@ async def update_agent(rt: Rt, me: Cl, agent_id: str, body: AgentPatch) -> JSONR
             "widget_pins",
             "widgets",
             "memory",
+            "brief",
+            "prompt_mode",
+            "patterns",
             "template_id",
             "protection",
         },
@@ -500,6 +512,13 @@ async def update_agent(rt: Rt, me: Cl, agent_id: str, body: AgentPatch) -> JSONR
         spec["widgets"] = body.widgets.model_dump(by_alias=True)
     if body.memory is not None:
         spec["memory"] = body.memory.model_dump(by_alias=True)
+    spec = agent_brief.patched(
+        spec,
+        brief=body.brief,
+        mode=body.prompt_mode,
+        patterns=body.patterns,
+        writes_prompt=body.instructions is not None or body.role is not None,
+    )
     # Saved limits must still agree with the version: a changed model or a dropped tool without new limits is refused,
     # naming the limit, rather than leaving callers a choice the agent no longer has.
     if "limits" in spec:
@@ -701,6 +720,24 @@ async def publish_preview(rt: Rt, me: Me, agent_id: str, version: Annotated[int,
     return ok(decision.record())
 
 
+async def _publish_problems(rt: Runtime, spec: Json) -> list[Json]:
+    """What stops a version's publish: what its brief names and the agent lacks, and what in the skills it pins must
+    not run as stored. The check and the publish both read this list."""
+    brief = cast(list[Json], agent_brief.publish_problems(spec))
+    return [*brief, *cast(list[Json], await skill_pin_problems(rt, spec))]
+
+
+@router.get("/{agent_id}/publish-check", response_model=Envelope[AgentPublishCheck])
+async def publish_check(rt: Rt, me: Me, _: Tx, agent_id: str, version: Annotated[int, Query()]) -> JSONResponse:
+    """What stops the newest draft from being published, each with the field it is in (`position`): a reference the
+    brief names that the agent does not hold. Nothing is opened or changed; the publish refuses the same list
+    (422 `cannot_publish`). 422 `not_newest_draft` for any other version."""
+    row = await changeable(rt, me, agent_id, "publish")
+    require_newest_draft(row, version)
+    problems = await _publish_problems(rt, (await registry(rt).version(agent_id, version)).spec)
+    return ok({"canRequest": not problems, "problems": problems})
+
+
 @router.post("/{agent_id}/publish-requests", response_model=Envelope[PublishReview], status_code=201)
 async def request_publish(rt: Rt, me: Me, agent_id: str, body: PublishRequestInput) -> JSONResponse:
     """Opens an `agent_publish` review for the newest draft, or publishes it at once when the team's publish policy
@@ -710,6 +747,12 @@ async def request_publish(rt: Rt, me: Me, agent_id: str, body: PublishRequestInp
     require_newest_draft(row, body.version)
     v = await reg.version(agent_id, body.version)
     spec = v.spec
+    if problems := await _publish_problems(rt, spec):
+        raise Unprocessable(
+            "This version cannot be published yet: " + " ".join(str(p["message"]) for p in problems),
+            code="cannot_publish",
+            details={"problems": cast(JsonList, problems)},
+        )
     for alias in limits_of(spec).allowed_models:
         await require_known_alias(rt, alias)
     named = cast(dict[str, str], spec.get("accounts") or {})

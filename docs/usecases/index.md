@@ -300,3 +300,4 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-754 | tools-service | Approval fails closed: when the approval rules cannot be read, a write that needs approval is refused and never runs | api | `tools-service/approval-fails-closed-when-the-approval.md` |
 | uc-755 | tools-service | A team holding only a workflow grant on another team's tool module uses it through the workflow and cannot edit, publish, run, revoke or delete it | api, ui | `tools-service/a-team-holding-only-a-workflow.md` |
 | uc-756 | agents-service | A shared form filled in signed out starts a workflow with knowledge and a tool, a person approves a step, and the run finishes with a record | api, ui | `agents-service/a-shared-form-filled-in-signed.md` |
+| uc-757 | agents-service | A builder writes a skill with steps and an agent brief, and a chat follows the steps | api, sdk, cli, ui | `agents-service/a-builder-writes-a-skill-with.md` |

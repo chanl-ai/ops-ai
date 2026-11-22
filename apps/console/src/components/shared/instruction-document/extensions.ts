@@ -12,7 +12,9 @@ import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { ReactNodeViewRenderer } from '@tiptap/react';
 import { Suggestion, type SuggestionProps, findSuggestionMatch } from '@tiptap/suggestion';
 
-import { type DocNode, parseText, refToken } from './document-model';
+import type { Ref } from '@/lib/types/references';
+
+import { type DocNode, parseText, pickSetsUse, refToken, refsInNode, runsIndex, splitOwner } from './document-model';
 import { BlockView, CheckView, IfNotView, ReferenceView, StepView, VariableView } from './node-views';
 
 export type Trigger = '@' | '{{' | '/';
@@ -22,7 +24,7 @@ export type MenuPick = (editor: Editor, range: Range) => void;
 
 /** How the typed triggers reach the menu the component draws. */
 export interface MenuBridge {
-  show(trigger: Trigger, props: { query: string; rect: (() => DOMRect | null) | null; pick: (run: MenuPick) => void; inStepStart: boolean }): void;
+  show(trigger: Trigger, props: { query: string; rect: (() => DOMRect | null) | null; pick: (run: MenuPick) => void }): void;
   hide(trigger: Trigger): void;
   /** True when the menu took the key (arrows, Enter, Tab). */
   key(event: KeyboardEvent): boolean;
@@ -60,7 +62,7 @@ const Steps = Node.create({
 const Step = Node.create({
   name: 'step',
   content: 'line check? ifNot?',
-  addAttributes: () => attr('use'),
+  addAttributes: () => ({ ...attr('use'), locked: { default: false } }),
   renderHTML: () => ['div', 0],
   addNodeView: () => ReactNodeViewRenderer(StepView),
 });
@@ -85,7 +87,8 @@ const Reference = Node.create({
   renderText: ({ node }) => refToken({ kind: node.attrs.kind, id: node.attrs.id }),
   parseHTML: () => [{ tag: 'span[data-reference]', getAttrs: (el) => ({ kind: el.getAttribute('data-kind'), id: el.getAttribute('data-id') }) }],
   renderHTML: ({ node }) => ['span', { 'data-reference': '', 'data-kind': node.attrs.kind, 'data-id': node.attrs.id }, refToken({ kind: node.attrs.kind, id: node.attrs.id })],
-  addNodeView: () => ReactNodeViewRenderer(ReferenceView, { as: 'span' }),
+  // The chip's "runs" mark comes from a decoration (Runs), which moves without the node changing.
+  addNodeView: () => ReactNodeViewRenderer(ReferenceView, { as: 'span', update: ({ oldNode, newNode, updateProps }) => (newNode.type === oldNode.type ? (updateProps(), true) : false) }),
 });
 const Variable = Node.create({
   name: 'variable',
@@ -158,8 +161,16 @@ function enter(editor: Editor): boolean {
   }
   if (name === 'line' && $from.parentOffset < $from.parent.content.size) {
     const { step, line } = state.schema.nodes;
-    // The text after the caret becomes the next step; what the step uses stays with the first half.
-    view.dispatch(state.tr.split($from.pos, 2, [{ type: step, attrs: { use: null } }, { type: line }]).scrollIntoView());
+    // The text after the caret becomes the next step. `use` (and `locked` with it) goes to the half that holds the
+    // reference marked "runs", so the tool is not left on a step whose sentence no longer names it.
+    const d = stepDepth($from);
+    const stepAt = $from.before(d);
+    const { use, locked } = $from.node(d).attrs;
+    const owner = splitOwner(use, refsInNode($from.parent.cut(0, $from.parentOffset)), refsInNode($from.parent.cut($from.parentOffset)));
+    const second = owner === 'second' ? { use, locked } : { use: null, locked: false };
+    const tr = state.tr.split($from.pos, 2, [{ type: step, attrs: second }, { type: line }]);
+    if (owner === 'second') tr.setNodeMarkup(stepAt, undefined, { ...$from.node(d).attrs, use: null, locked: false });
+    view.dispatch(tr.scrollIntoView());
     return true;
   }
   return name === 'line' || name === 'check' ? addStep(editor) : false;
@@ -329,8 +340,7 @@ const Menus = Extension.create<{ bridge: () => MenuBridge | null }>({
     const { editor, options } = this;
     const menu = (trigger: Trigger, allowedPrefixes: string[] | null, allow: () => boolean = () => true) => {
       const show = (p: SuggestionProps<never, MenuPick>) => {
-        const $start = p.editor.state.doc.resolve(p.range.from);
-        options.bridge()?.show(trigger, { query: p.query, rect: p.clientRect ?? null, pick: p.command, inStepStart: $start.parent.type.name === 'line' && $start.parentOffset === 0 });
+        options.bridge()?.show(trigger, { query: p.query, rect: p.clientRect ?? null, pick: p.command });
       };
       return Suggestion<never, MenuPick>({
         editor,
@@ -355,13 +365,101 @@ const Menus = Extension.create<{ bridge: () => MenuBridge | null }>({
   },
 });
 
-/** Puts what a step uses in front of it, when `@` was typed as the first thing on the step's line. */
-export function setStepUse(editor: Editor, range: Range, use: { kind: string; id: string }) {
-  const { state, view } = editor;
+/**
+ * Writes a picked reference where it was typed. The first tool, skill, agent or workflow picked in a step's sentence
+ * also becomes what the step runs (`use`); the same token stays in the sentence, so the stored text reads as written.
+ */
+export function pickReference(editor: Editor, range: Range, ref: Ref) {
+  const { state } = editor;
   const $at = state.doc.resolve(range.from);
   const d = stepDepth($at);
-  view.dispatch(state.tr.delete(range.from, range.to).setNodeAttribute($at.before(d), 'use', use));
+  const sets = d > 0 && pickSetsUse(ref, { in: $at.parent.type.name, use: $at.node(d).attrs.use });
+  // A space follows the chip unless punctuation or a space already does.
+  const after = state.doc.resolve(range.to).nodeAfter?.text?.[0];
+  const chip = { type: 'reference', attrs: ref };
+  const chain = editor.chain().focus().insertContentAt(range, !after || /\w/.test(after) ? [chip, { type: 'text', text: ' ' }] : chip);
+  // The step starts before the typed text, so inserting there does not move it.
+  if (sets) chain.command(({ tr }) => (tr.setNodeAttribute($at.before(d), 'use', ref), true));
+  chain.run();
 }
+
+/** True for a reference standing in a step's sentence, which the builder can mark as what the step runs. */
+export function canMarkRuns(editor: Editor, pos: number): boolean {
+  const $at = editor.state.doc.resolve(pos);
+  return $at.parent.type.name === 'line' && stepDepth($at) > 0;
+}
+
+/** Makes the reference at `pos` what its step runs, or with null stops the step running anything. */
+export function setStepRuns(editor: Editor, pos: number, ref: Ref | null) {
+  const $at = editor.state.doc.resolve(pos);
+  const d = stepDepth($at);
+  if (!d) return;
+  const tr = editor.state.tr.setNodeAttribute($at.before(d), 'use', ref);
+  // A lock belongs to the tool it was set on.
+  editor.view.dispatch(tr.setNodeAttribute($at.before(d), 'locked', false));
+}
+
+/** Locks the step's tool to this step, or releases it. */
+export function setStepLocked(editor: Editor, pos: number, locked: boolean) {
+  const d = stepDepth(editor.state.doc.resolve(pos));
+  if (d) editor.view.dispatch(editor.state.tr.setNodeAttribute(editor.state.doc.resolve(pos).before(d), 'locked', locked));
+}
+
+const sameRef = (a: Ref | null | undefined, b: Ref) => !!a && a.kind === b.kind && a.id === b.id;
+
+/**
+ * What a step runs when it is also named in the step's sentence: that reference carries the "runs" mark instead of a
+ * chip in front. Deleting it from the sentence stops the step running it; a step whose tool was never in its sentence
+ * (saved by the SDK, the CLI or an earlier editor) keeps its chip in front.
+ */
+const Runs = Extension.create({
+  name: 'instructionRuns',
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey('instructionRuns'),
+        props: {
+          decorations: (state) => {
+            const found: Decoration[] = [];
+            state.doc.descendants((step, pos) => {
+              if (step.type.name !== 'step') return true;
+              const line = step.firstChild;
+              const at = runsIndex(step.attrs.use, refsInNode(line));
+              if (!line || at < 0) return false;
+              let n = 0;
+              line.descendants((child, offset) => {
+                if (child.type.name !== 'reference' || !sameRef(step.attrs.use, child.attrs as Ref) || n++ !== 0) return;
+                // The step opens at `pos`, its line one further, and the line's own text one further again.
+                found.push(Decoration.node(pos + 2 + offset, pos + 2 + offset + child.nodeSize, {}, { runs: true, locked: !!step.attrs.locked }));
+              });
+              return false;
+            });
+            return DecorationSet.create(state.doc, found);
+          },
+        },
+        appendTransaction: (trs, oldState, newState) => {
+          if (!trs.some((t) => t.docChanged) || trs.some((t) => t.getMeta(LOADS_DOCUMENT))) return null;
+          const mapping = new Mapping();
+          for (const t of trs) mapping.appendMapping(t.mapping);
+          const tr = newState.tr;
+          oldState.doc.descendants((step, pos) => {
+            if (step.type.name !== 'step') return true;
+            const use = step.attrs.use as Ref | null;
+            if (runsIndex(use, refsInNode(step.firstChild)) < 0) return false;
+            const to = mapping.mapResult(pos, 1);
+            const now = to.deleted ? null : newState.doc.nodeAt(to.pos);
+            if (now?.type.name === 'step' && sameRef(now.attrs.use, use!) && runsIndex(use, refsInNode(now.firstChild)) < 0) {
+              tr.setNodeAttribute(to.pos, 'use', null);
+              tr.setNodeAttribute(to.pos, 'locked', false);
+            }
+            return false;
+          });
+          return tr.docChanged ? tr : null;
+        },
+      }),
+    ];
+  },
+});
 
 /** A heading, list or set of steps with nothing written under it says what goes there, on its one blank line. */
 const Placeholders = Extension.create({
@@ -410,4 +508,5 @@ export const instructionExtensions = (bridge: () => MenuBridge | null) => [
   Structure,
   Menus.configure({ bridge }),
   Placeholders,
+  Runs,
 ];
