@@ -21,6 +21,8 @@ from .tx import Transactions
 from .work import WorkQueue
 
 TERMINAL = ("succeeded", "failed", "cancelled")
+# The statuses Redrive takes a run back from.
+REDRIVABLE = ("failed", "stuck")
 # A run that another run's step started names that run in created_by: `run:<parent id>`.
 CHILD_PREFIX = "run:"
 
@@ -514,11 +516,12 @@ class RunStore:
                 )
         return await self.row(run_id), changed
 
-    async def retry(self, run_id: str) -> tuple[RunRow | None, bool]:
+    async def retry(self, run_id: str, *, statuses: tuple[str, ...] = ("stuck",)) -> tuple[RunRow | None, bool]:
         """Queues a Stuck run again: its set-aside work rows are closed and one new row goes on under the
         current engine build. A run paused at a step is resumed at that step, which reads its state again; any other
         continues from its last checkpoint, where recorded steps return their record and a write reconciles by its
-        last attempt's key, so nothing is sent twice. Returns (run, changed); changed is False for a run not Stuck."""
+        last attempt's key, so nothing is sent twice. Returns (run, changed); changed is False for a run whose status
+        is not in `statuses`."""
         at = now_iso()
         r, w = engine_runs, engine_work
         async with self.tx.tenant_tx() as c:
@@ -526,9 +529,13 @@ class RunStore:
             found = (await c.execute(locked(sa.select(r).where(mine), r))).first()
             if found is None:
                 return None, False
-            if found.status != "stuck":
+            if found.status not in statuses:
                 return await self.row(run_id), False
-            await c.execute(r.update().where(mine).values(status="queued", error=None, failure=None, updated_at=at))
+            await c.execute(
+                r.update()
+                .where(mine)
+                .values(status="queued", error=None, failure=None, outcome=None, finished_at=None, updated_at=at)
+            )
             await c.execute(
                 w.update()
                 .where(w.c.run_id == run_id, w.c.tenant_id == self.tx.tenant(), w.c.status.in_(("stuck", "queued")))
@@ -542,6 +549,13 @@ class RunStore:
         else:
             await queue.enqueue(run_id, "retry", f"retry:{run_id}:{at}")
         return await self.row(run_id), True
+
+    async def redrive(self, run_id: str) -> tuple[RunRow | None, bool]:
+        """Queues a Failed or Stuck run again from its failed step, on the version it pinned (the run row keeps it;
+        a later publish is never read). A failed run's checkpoints are gone, so its pass starts the graph over:
+        every step the journal recorded returns its record instead of running, the failed step takes its next
+        attempt, and a write whose outcome was unknown reconciles by its last key before any second send."""
+        return await self.retry(run_id, statuses=REDRIVABLE)
 
     async def step_rows(self, run_id: str) -> list[RunStep]:
         """Every attempt of every node, in the order they started."""
