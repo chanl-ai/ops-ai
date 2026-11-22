@@ -5,6 +5,7 @@
 #   STG_APP, STG_DB_APP the one-machine staging app and its Postgres app (variables); STG_APP_PREFIX optional
 #   STAGING_DB_URL      the attach's superuser URL, contents of staging-db-url.txt (grants are applied with it)
 #   STAGING_ADMIN_ENV   the bootstrap admin's lines, contents of staging-admin.env (the click walk signs in with it)
+#   STAGING_ROLES_ENV   one account per member role, contents of staging-roles.env (the deploy signs in as each)
 # Without any of them the job fails, naming what is missing. Nothing here prints a secret.
 name: stg-deploy
 description: Deploy one commit to the staging Fly app
@@ -26,6 +27,7 @@ runs:
         [ -n "$STG_DB_APP" ] || missing="$missing vars.STG_DB_APP"
         [ -n "$STAGING_DB_URL" ] || missing="$missing STAGING_DB_URL"
         [ -n "$STAGING_ADMIN_ENV" ] || missing="$missing STAGING_ADMIN_ENV"
+        [ -n "$STAGING_ROLES_ENV" ] || missing="$missing STAGING_ROLES_ENV"
         if [ -n "$missing" ]; then
           echo "::error title=Staging not deployed::Secrets or variables missing in the staging environment:$missing. Staging keeps what it runs; $SHA is not deployed. See .github/actions/stg-deploy/action.yml."
           exit 1
@@ -58,6 +60,7 @@ runs:
         mkdir -p "$OPS_STAGING_CONFIG"
         printf '%s\n' "$STAGING_DB_URL" > "$OPS_STAGING_CONFIG/staging-db-url.txt"
         printf '%s\n' "$STAGING_ADMIN_ENV" > "$OPS_STAGING_CONFIG/staging-admin.env"
+        printf '%s\n' "$STAGING_ROLES_ENV" > "$OPS_STAGING_CONFIG/staging-roles.env"
         # App names, not secrets.
         printf 'STG_APP=%s\nSTG_DB_APP=%s\n' "$STG_APP" "$STG_DB_APP" > "$OPS_STAGING_CONFIG/staging.env"
         [ -z "$STG_APP_PREFIX" ] || printf 'STG_APP_PREFIX=%s\n' "$STG_APP_PREFIX" >> "$OPS_STAGING_CONFIG/staging.env"
