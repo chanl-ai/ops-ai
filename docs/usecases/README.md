@@ -394,7 +394,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-762 | agents-service | A builder tries one path of a skill: reads run, a write is planned and sent once only when confirmed, and nothing is stored | api, ui | current |
 | uc-763 | agents-service | A run outlives a killed worker and redrives from its failed step | api | works |
 | uc-764 | console | An agent page shows its save state, its model, knowledge, tools and skills on the main page, and a channels tab | ui | draft |
-| uc-765 | console | A builder asks two versions of an agent one question and reads the replies side by side | ui | failing |
+| uc-765 | console | A builder asks two versions of an agent one question and reads the replies side by side | ui | passing |
 | uc-766 | console | A role given to a group, and the approvals cell on the role's page | ui | draft |
 | uc-767 | console | A person who only chats sees My apps in the sidebar and can chat | ui | draft |
 | uc-768 | console | One create form holds a name to the same rule the server keeps | ui | draft |
