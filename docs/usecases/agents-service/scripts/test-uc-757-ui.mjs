@@ -292,12 +292,12 @@ await withUiStack(
 
       // 20. Priya saves the agent while James has it open: his next change is not saved over hers, and the page says so.
       const agentSave = (r) => r.request().method() === 'PATCH' && r.url().endsWith(`/v1/agents/${agent.id}`);
-      // She changes the brief's Goal; he then changes its Purpose. The brief is saved whole, so his save must carry her Goal.
+      // She changes the brief's Goal; he then changes its Job. The brief is saved whole, so his save must carry her Goal.
       const opened = (await (await fetch(`${agents}/v1/agents/${agent.id}`, { headers: J })).json()).data;
       const herGoal = 'Every dispute ends with a dated next step.';
       const hers = await saveAgent(agents, as(await tokenFor(PRIYA)), agent.id, { skillMenu: 'attached', brief: { ...opened.brief, goal: herGoal }, patterns: { ...opened.patterns, parallelReads: false } });
       const refused = page.waitForResponse(agentSave, { timeout: 60_000 });
-      await brief.getByRole('group', { name: 'Purpose' }).click();
+      await brief.getByRole('group', { name: 'Job' }).click();
       await page.keyboard.press('End');
       await page.keyboard.insertText(' By phone or chat.');
       // Thinking sits in the same group of settings as the parallel reads she switched off.
