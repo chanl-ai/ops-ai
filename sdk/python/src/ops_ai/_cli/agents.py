@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 
 from ops_ai._agents import agent_file
+from ops_ai._io import load_data
 
 from .common import client, emit, parser, refuse, verb_options
 
@@ -62,11 +63,24 @@ def main(argv: list[str]) -> int:
     add.add_argument("ref", help="the id of the tool, knowledge base, skill, agent or workflow")
     check = sub.add_parser("publish-check", parents=common, help="what stops the newest draft from being published")
     check.add_argument("id")
+    evals = sub.add_parser(
+        "eval",
+        parents=common,
+        help="run the agent's eval cases; exit 0 passing, 1 blocked (or a case failed with --cases), 2 could not run",
+        description=(
+            "Without --cases, runs the saved cases on the newest version and keeps the run. Exit 0 when the "
+            "publish gate is open, 1 when a blocking step failed, 2 when the run could not happen (no model, "
+            "not found, not allowed). With --cases FILE, scores the cases in the file and keeps nothing: exit 0 "
+            "when every case passes, 1 when any fails."
+        ),
+    )
+    evals.add_argument("id")
+    evals.add_argument("--cases", metavar="FILE", help="score the cases in this JSON or YAML file instead")
     ns = ap.parse_args(argv)
     try:
         return _dispatch(ns)
     except Exception as exc:
-        return refuse(exc)
+        return refuse(exc, refused=2 if ns.verb == "eval" else 1)
 
 
 def _dispatch(ns: argparse.Namespace) -> int:
@@ -103,4 +117,46 @@ def _dispatch(ns: argparse.Namespace) -> int:
         return emit(ns, agents.add_reference(ns.id, ns.kind, ns.ref))
     if ns.verb == "publish-check":
         return emit(ns, agents.publish_check(ns.id))
+    if ns.verb == "eval":
+        return _eval(ns, agents)
     return 2
+
+
+def _outcome(result: dict) -> tuple[bool, str]:
+    """Whether a case passed on the draft, and the reasons of its failed checks (a judge's reason when it judged)."""
+    draft = result["draft"]
+    why = "; ".join(
+        f"{c['label']}: {c['reason']}" if c.get("reason") else c["label"]
+        for c in draft.get("checks", [])
+        if c.get("status") == "fail"
+    )
+    return draft["status"] == "pass", why
+
+
+def _eval(ns: argparse.Namespace, agents) -> int:
+    """Exit codes are the CI contract: 0 gate open, 1 gate blocked (read from the reply's `gate.blocked`, never
+    decided here), 2 the run could not happen (raised, so `refuse` answers it)."""
+    scored = ns.cases is not None
+    run = agents.eval(ns.id, load_data(ns.cases)) if scored else agents.eval(ns.id, trigger="cli")
+    results = run.get("results", [])
+    passed = [_outcome(r)[0] for r in results]
+    gate = run.get("gate") or {"blocked": False, "steps": []}
+    failed = not all(passed) if scored else bool(gate["blocked"])
+    if ns.as_json:
+        emit(ns, run)
+        return 1 if failed else 0
+    summary = run.get("summary", {})
+    lines = []
+    for r in results:
+        ok, why = _outcome(r)
+        lines.append(f"{'pass' if ok else 'fail'}  {r['caseName']}" + (f"  ({why})" if why else ""))
+    lines.append(f"pass rate: {summary.get('passed', 0)} of {summary.get('total', 0)}")
+    lines.append(f"regressions: {summary.get('regressions', 0)}")
+    lines.append(f"cost: ${run.get('costUsd', 0):.4f}" + (" (some calls unpriced)" if run.get("unpriced") else ""))
+    if not scored:
+        for step in gate["steps"]:
+            lines.append(f"gate {step['label']} [{step['mode']}] {step['result']}: {step['detail']}")
+        lines.append("gate: " + ("BLOCKED" if gate["blocked"] else "open"))
+    code = 1 if failed else 0
+    emit(ns, run, text="\n".join(lines))
+    return code

@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from typing import cast
 
+from ops_agent_kernel import judge
 from ops_agent_kernel.events import TurnFinished
 from ops_agent_kernel.kernel import run_turn
 from ops_agent_kernel.types import ToolGrant, TurnRequest, TurnResult
@@ -104,6 +105,12 @@ async def one_test_turn(
         ],
         "tookMs": round((time.perf_counter() - started) * 1000),
         "model": req.settings.model_alias,
+        # What the turn spent, on the alias it ran on, so an eval run can price it (app/evals.py).
+        "usage": {
+            "inputTokens": result.usage.input_tokens,
+            "outputTokens": result.usage.output_tokens,
+            "model": req.settings.model_alias,
+        },
         "knowledgeBases": [{"id": k, "name": kb_names.get(k, k)} for k in req.kb_ids],
         "tools": [_held(rt, g) for g in req.tools],
         # The kernel's LoadedSkill is a TypedDict of JSON values.
@@ -129,3 +136,14 @@ async def one_test_turn(
             "stepUp": await needs_step_up(rt.graph_deps, call.tool) if rt.graph_deps else False,
         }
     return out
+
+
+async def judge_call(rt: Runtime, rubric: str, evidence: str, turn_alias: str) -> tuple[judge.Verdict, str]:
+    """One judge call for an eval check (`app.evals.JudgeFn`), on the model the kernel would choose for it: `judge`
+    through models-service, else the turn's own model. Answers the verdict and the alias its tokens are priced on."""
+    if rt.ports is None:
+        raise ServiceUnavailable(rt.model_error or "No model is configured.", code="model_unavailable")
+    source = rt.ports.models
+    turn_model = source.model_for(turn_alias) if source is not None else rt.ports.model
+    found = await judge.verdict(judge.model_for(source, turn_model), rubric, evidence)
+    return found, judge.JUDGE_ALIAS if source is not None else turn_alias

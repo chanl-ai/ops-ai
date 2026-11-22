@@ -60,7 +60,13 @@ export interface PublishBlocker {
     | 'review_open'
     | 'already_published'
     | 'deprecated'
-    | 'too_long';
+    | 'too_long'
+    | 'eval_failed'
+    | 'eval_not_run'
+    | 'eval_no_cases'
+    | 'eval_setting_unread';
+  /** An eval problem carries the gate's steps, worded by the service. */
+  details?: { steps: import('./assurance').GateStep[] } | null;
   /** For a reference blocker, `<kind>:<id>`. */
   id: string | null;
   position: BlockerPosition | null;

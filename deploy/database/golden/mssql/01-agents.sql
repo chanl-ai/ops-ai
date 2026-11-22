@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- agents-service, stamped at 0122_definition_digest_index
+-- agents-service, stamped at 0123_eval_run_digest
 CREATE TABLE engine_definitions (
 	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
@@ -550,10 +550,13 @@ CREATE TABLE eval_runs (
 	results NVARCHAR(max) NOT NULL, 
 	started_by VARCHAR(320) NOT NULL, 
 	ran_at VARCHAR(32) NOT NULL, 
+	digest VARCHAR(64) NULL, 
 	CONSTRAINT eval_runs_pkey PRIMARY KEY (id)
 );
 GO
 CREATE INDEX ix_eval_runs_asset ON eval_runs (tenant_id, team_id, kind, asset_id, ran_at);
+GO
+CREATE INDEX ix_eval_runs_trigger ON eval_runs (tenant_id, team_id, [trigger]);
 GO
 CREATE TABLE registry_skills (
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -1653,5 +1656,5 @@ CREATE TABLE alembic_version (
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version (version_num) VALUES ('0122_definition_digest_index');
+INSERT INTO alembic_version (version_num) VALUES ('0123_eval_run_digest');
 GO

@@ -2,7 +2,8 @@
 different model settings; a step advancing on a failed rule check, a repeated or cached read skipping its check, a
 way past a failed check, or the position lost between replies; skills stacking, or a sub-skill not returning to its
 step; an approval pause moving the step, a denial leaving the skill running, personal data kept raw in the record, or
-a republished pin changing a skill part-way through.
+a republished pin changing a skill part-way through; a judge that cannot say no, a judge's failure passing the check,
+the answering model overriding the judge, the judge run on a rule, and the judge's tokens left out of the turn's usage.
 
 What these tests ask of the kernel beyond the names the design fixes: `Skill.program` is a
 `ops_agent_kernel.steps.SkillProgram` validated from the stored keys (`steps`, `exit`, `returns`, with `ifNot` on a
@@ -29,6 +30,7 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
+from ops_agent_kernel import judge
 from ops_agent_kernel.context import PLATFORM_RULES
 from ops_agent_kernel.events import TurnFinished
 from ops_agent_kernel.kernel import run_turn
@@ -64,17 +66,25 @@ def _last_user(messages: list[ModelMessage]) -> str:
 class Script:
     """Each answering request takes the next action: a sentence to say, one tool call, or several calls in one step.
     Records what each answering request was sent: its instructions, the tools offered, its model settings, and what
-    the calls before it returned. Classification calls answer `classify(message)`."""
+    the calls before it returned. Classification calls answer `classify(message)`; judge calls answer `judge(prompt)`
+    ("yes", "no" or "raise") and are kept in `judged`."""
 
-    def __init__(self, *actions: Action, classify: Callable[[str], str] = lambda m: "none") -> None:
-        self.actions, self.classify = list(actions), classify
+    def __init__(self, *actions: Action, classify: Callable[[str], str] = lambda m: "none", judge: str = "yes") -> None:
+        self.actions, self.classify, self.judge = list(actions), classify, judge
         self.instructions: list[str] = []
         self.offered: list[list[str]] = []
         self.settings: list[Any] = []
         self.returned: list[Any] = []
+        self.judged: list[str] = []
 
     def respond(self, messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         prompt = _last_user(messages)
+        if prompt.startswith(judge.PROMPT_HEAD):
+            self.judged.append(f"{info.instructions}\n{prompt}")
+            if self.judge == "raise":
+                raise RuntimeError("judge provider down")
+            said = {"passed": self.judge == "yes", "reason": f"The judge says {self.judge}."}
+            return ModelResponse(parts=[ToolCallPart("final_result", said)])
         if prompt.startswith("Blocked topics:"):
             return ModelResponse(
                 parts=[ToolCallPart("final_result", {"topic": self.classify(prompt.split("Message:\n", 1)[1])})]
@@ -422,27 +432,6 @@ async def test_one_skill_runs_at_a_time_and_a_sub_skill_returns_to_its_step() ->
     assert ("sk_close", "escalate", 1) in ended(run_of(failed)), run_of(failed)
 
 
-async def test_a_check_the_model_judges_is_given_the_result_as_the_tool_returned_it() -> None:
-    """The model is shown a result as it is drawn for the person; judging a sentence on that, a real model passed
-    "the amount is under 500" on a charge of 900."""
-    steps = program(
-        {
-            "do": "Look up the charge.",
-            "use": {"kind": "tool", "id": "lookup_charge"},
-            "check": {"text": "The amount is under 500.", "by": "model"},
-        },
-        {"do": "Tell the person."},
-    )
-    skill = stepped("sk_judged", 1, "Judge a charge", "judge-a-charge", steps)
-    ask = TurnRequest("t1", "th9", agent([skill], max_tool_calls=None), [LOOKUP], user_turn="Check CH-1.")
-    model = Script(("switch_skill", {"slug": "judge-a-charge"}), ("lookup_charge", {"chargeId": "CH-1"}), "It is 900.")
-    done, _ = await reply(ask, model, Systems(lookup_charge=_amount))
-    told = json.dumps(model.returned[1])
-    assert "Now confirm: The amount is under 500." in told and '\\"amount\\": 900' in told, told
-    assert "only if that holds for this result" in told, told
-    assert run_of(done).running.step == 1, "the step waits for the model's own step_done"
-
-
 # --- approval, personal data, and a republished pin ---
 
 HOLD = ToolGrant("place_hold", "bank", "Places a hold on a payment.", "write", {"type": "object", "properties": {}})
@@ -684,3 +673,144 @@ async def test_a_workflow_a_step_runs_is_refused_outside_the_skill_and_runs_as_i
     assert "workflow__wf_close" not in model.offered[0], model.offered[0]
     assert systems.calls == [start], f"refused with no skill running, run once as the step: {model.returned}"
     assert run_of(result).running.step == 2, "the step saw its workflow's result and passed its rule"
+
+
+# --- the judge ---
+
+
+def judged_refund() -> Skill:
+    """A lookup whose check is a sentence the judge decides, then the write, checked by a rule."""
+    steps = program(
+        {
+            "do": "Look up the charge.",
+            "use": {"kind": "tool", "id": "lookup_charge"},
+            "check": {"text": "The amount is under 500.", "by": "model"},
+            "ifNot": {"action": "exit", "exit": "blocked"},
+        },
+        {
+            "do": "Refund the charge.",
+            "use": {"kind": "tool", "id": "refund_charge"},
+            "check": {"text": "result.refunded is true", "by": "rule"},
+        },
+        {"do": "Tell the person."},
+        exit={"blocked": "The charge is over the refund limit."},
+    )
+    return stepped("sk_judged", 1, "Judge a charge", "judge-a-charge", steps)
+
+
+def confirm_by_word() -> Skill:
+    steps = program({"do": "Ask for the date of birth.", "check": {"text": "The caller gave a date.", "by": "model"}})
+    return stepped("sk_word", 1, "Confirm by word", "confirm-by-word", steps)
+
+
+JUDGED: Call = ("switch_skill", {"slug": "judge-a-charge"})
+BIG: Call = ("lookup_charge", {"chargeId": "CH-1"})
+SMALL: Call = ("lookup_charge", {"chargeId": "CH-2"})
+REFUND_ONE: Call = ("refund_charge", {"chargeId": "CH-1"})
+REFUND_TWO: Call = ("refund_charge", {"chargeId": "CH-2"})
+
+# skill, the model's actions, the judge's answer -> the tools that reached a system, the endings, the step the record
+# is on (None once ended), how many judge calls, and words the model is told.
+VERDICTS: dict[str, tuple[Callable[[], Skill], list[Action], str, list[str], list[Any], int | None, int, str]] = {
+    "the judge says yes: the step moves on to the write": (
+        judged_refund,
+        [JUDGED, SMALL, REFUND_TWO],
+        "yes",
+        ["lookup_charge", "refund_charge"],
+        [],
+        3,
+        1,
+        "yes.",
+    ),
+    "the judge says no: the if-not ends the skill and the write is held": (
+        judged_refund,
+        [JUDGED, BIG, REFUND_ONE],
+        "no",
+        ["lookup_charge"],
+        [("sk_judged", "blocked", 1)],
+        None,
+        1,
+        "The judge says no.",
+    ),
+    "the judge raises: no verdict fails the step": (
+        judged_refund,
+        [JUDGED, BIG, REFUND_ONE],
+        "raise",
+        ["lookup_charge"],
+        [("sk_judged", "blocked", 1)],
+        None,
+        1,
+        "no verdict",
+    ),
+    "the model sends holds true on a judged step: refused": (
+        confirm_by_word,
+        [("switch_skill", {"slug": "confirm-by-word"}), ("step_done", {"holds": True})],
+        "yes",
+        [],
+        [],
+        1,
+        0,
+        "The judge decides this step",
+    ),
+    "a rule decides: the judge is never called": (
+        refund_after_a_check,
+        [START, PASSES],
+        "yes",
+        ["lookup_charge"],
+        [],
+        2,
+        0,
+        "step 2 of 3",
+    ),
+}
+
+
+@pytest.mark.parametrize("row", VERDICTS, ids=str)
+async def test_a_judge_decides_a_sentence_check_and_its_no_or_silence_fails_the_step(row: str) -> None:
+    make, actions, says, reached, endings, on, calls, told = VERDICTS[row]
+    systems = Systems(lookup_charge=_amount, refund_charge={"refunded": True})
+    model = Script(*actions, "Done.", judge=says)
+    ask = TurnRequest(
+        "t1", "th9", agent([make()], max_tool_calls=None, max_steps=12), [LOOKUP, REFUND], user_turn="Hi."
+    )
+    done, _ = await reply(ask, model, systems)
+    run = run_of(done)
+    assert [c for c, _ in systems.calls] == reached, systems.calls
+    assert ended(run) == endings, run.history
+    assert (run.running.step if run.running else None) == on, run.running
+    assert len(model.judged) == calls, model.judged
+    assert told in json.dumps(model.returned), model.returned
+    if calls:
+        # Given the result as the tool returned it, and none of the agent's instructions.
+        assert '"amount": ' in model.judged[0] and "disputes desk" not in model.judged[0], model.judged[0]
+    if endings:
+        assert [h.tools for h in run.holds] == [["refund_charge"]], run.holds
+
+
+class Aliases:
+    """The models service by alias, recording each request under the alias it ran on, as the call ledger does."""
+
+    def __init__(self, turn: Script) -> None:
+        self.turn, self.ran = turn, list[str]()
+
+    def model_for(self, alias: str) -> Any:
+        def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+            self.ran.append(alias)
+            return self.turn.respond(messages, info)
+
+        if alias == "m":
+            return self.turn.build()
+        return FunctionModel(respond)
+
+
+async def test_a_judged_steps_tokens_are_in_the_turns_usage_under_the_judge_alias() -> None:
+    model = Script(JUDGED, SMALL, "Done.")
+    source = Aliases(model)
+    ports = KernelPorts(
+        model=model.build(), tools=Systems(lookup_charge=_amount), knowledge=NoKnowledge(), models=source
+    )
+    ask = TurnRequest("t1", "th9", agent([judged_refund()], max_tool_calls=None), [LOOKUP, REFUND], user_turn="Hi.")
+    last = [e async for e in run_turn(ask, ports)][-1]
+    assert isinstance(last, TurnFinished), last
+    assert source.ran == [judge.JUDGE_ALIAS], source.ran
+    assert last.result.usage.requests == len(model.instructions) + 1, (last.result.usage, len(model.instructions))

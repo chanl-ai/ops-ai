@@ -34,6 +34,8 @@ from ops_service_kit.http import (
     error_responses,
 )
 
+from .assurance_schemas import GateStep
+
 ERROR_RESPONSES = error_responses({503: "Degraded: no model, or the graph runtime did not start"})
 
 
@@ -338,6 +340,10 @@ class WouldPause(Out):
 class EvalCheckResult(Out):
     label: str
     status: Literal["pass", "fail"]
+    # A judge check's one-line reason, or why the judge did not answer; absent on the string checks.
+    reason: str | None = None
+    # The judge's confidence; not asked for yet, so null.
+    confidence: float | None = None
 
 
 class EvalCaseOutcome(Out):
@@ -352,6 +358,10 @@ class EvalCaseResult(Out):
     draft: EvalCaseOutcome
     live: EvalCaseOutcome | None = None
     regression: bool = False
+    # An alias this case's turns or judge spent tokens on has no price (absent on runs kept before it was recorded).
+    unpriced: bool = False
+    # The judge's alias spent tokens and has no price; false on a case with no judge check (absent on runs kept before).
+    judge_unpriced: bool = False
 
 
 class EvalSummary(Out):
@@ -360,12 +370,56 @@ class EvalSummary(Out):
     regressions: int
 
 
+class EvalGateDetails(Out):
+    steps: list[GateStep]
+
+
+class EvalGate(Out):
+    """Whether the version a run scored may publish on its evals, and each step, as a publish check reads it."""
+
+    blocked: bool
+    steps: list[GateStep]
+
+
 class AgentEvalRun(Out):
+    """Cases sent in the body, scored and not kept."""
+
     id: str
     agent_id: str
     status: Literal["complete"]
     summary: EvalSummary
     results: list[EvalCaseResult]
+    # Every turn's and judge call's tokens priced by alias (OPS_PRICES); `unpriced` when an alias that spent tokens
+    # has no price, so its tokens count as 0.
+    cost_usd: float
+    unpriced: bool
+
+
+class EvalRunRow(Out):
+    """A kept run as a row of an agent's runs list (`app.evals.stored_run`): everything but the case results, which
+    the single read (`EvalRunRecord`) carries. `version` is the newest version it ran on and `live_version` the live
+    one it was compared with, when that was another. `trigger` is manual or publish_request; `started_by` is a
+    person's email or `key:<id>`."""
+
+    id: str
+    agent_id: str
+    version: int
+    live_version: int | None
+    trigger: str
+    status: Literal["complete"]
+    summary: EvalSummary
+    cost_usd: float
+    unpriced: bool
+    started_by: str
+    ran_at: str
+
+
+class EvalRunRecord(EvalRunRow):
+    """One kept run with each case's result."""
+
+    results: list[EvalCaseResult]
+    # Only on the reply of the run that was just made (`run_saved`); the CLI exits on it.
+    gate: EvalGate | None = None
 
 
 class LoadedSkill(Out):
@@ -380,6 +434,14 @@ class LoadedSkill(Out):
     inputs: dict[str, str] | None = None
 
 
+class TurnUsage(Out):
+    """Tokens one test turn spent, on the alias it ran on."""
+
+    input_tokens: int
+    output_tokens: int
+    model: str
+
+
 class AgentTestTurn(Out):
     reply: str
     tool_calls: list[ToolCallView]
@@ -387,6 +449,7 @@ class AgentTestTurn(Out):
     took_ms: int
     # The model alias the turn ran on: the agent's, or the runtime's when the agent names none.
     model: str
+    usage: TurnUsage
     would_pause: WouldPause | None = None
     # What the reply could use and did: the bases it searched, the tools it holds, and the skills and
     # guardrails the turn loaded and checked.
@@ -1745,10 +1808,18 @@ class PublishBlocker(Out):
         # Only ever a warning: a tool a step's sentence names and the step does not run.
         "mention",
         "hint",
+        # The agent's evals (api/eval_gate.py): a blocking step failed, the team requires a run and there is none or
+        # no saved cases, or the team's evalsRequired setting could not be read.
+        "eval_failed",
+        "eval_not_run",
+        "eval_no_cases",
+        "eval_setting_unread",
     ]
     id: str | None = None
     position: BlockerPosition | None = None
     message: str
+    # An eval problem's steps, as the Evals page shows them.
+    details: EvalGateDetails | None = None
 
 
 class BriefDraft(Out):

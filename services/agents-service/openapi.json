@@ -676,10 +676,15 @@
       },
       "AgentEvalRun": {
         "additionalProperties": false,
+        "description": "Cases sent in the body, scored and not kept.",
         "properties": {
           "agentId": {
             "title": "Agentid",
             "type": "string"
+          },
+          "costUsd": {
+            "title": "Costusd",
+            "type": "number"
           },
           "id": {
             "title": "Id",
@@ -699,6 +704,10 @@
           },
           "summary": {
             "$ref": "#/components/schemas/EvalSummary"
+          },
+          "unpriced": {
+            "title": "Unpriced",
+            "type": "boolean"
           }
         },
         "required": [
@@ -706,7 +715,9 @@
           "agentId",
           "status",
           "summary",
-          "results"
+          "results",
+          "costUsd",
+          "unpriced"
         ],
         "title": "AgentEvalRun",
         "type": "object"
@@ -1711,6 +1722,9 @@
             "title": "Tools",
             "type": "array"
           },
+          "usage": {
+            "$ref": "#/components/schemas/TurnUsage"
+          },
           "wouldPause": {
             "anyOf": [
               {
@@ -1727,7 +1741,8 @@
           "toolCalls",
           "citations",
           "tookMs",
-          "model"
+          "model",
+          "usage"
         ],
         "title": "AgentTestTurn",
         "type": "object"
@@ -7449,25 +7464,6 @@
         "title": "Envelope[AccountUses]",
         "type": "object"
       },
-      "Envelope_AgentEvalRun_": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/AgentEvalRun"
-          },
-          "success": {
-            "const": true,
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "data"
-        ],
-        "title": "Envelope[AgentEvalRun]",
-        "type": "object"
-      },
       "Envelope_AgentPrompt_": {
         "additionalProperties": false,
         "properties": {
@@ -8019,6 +8015,25 @@
         "title": "Envelope[DeploymentView]",
         "type": "object"
       },
+      "Envelope_EvalRunRecord_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/EvalRunRecord"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[EvalRunRecord]",
+        "type": "object"
+      },
       "Envelope_EventOut_": {
         "additionalProperties": false,
         "properties": {
@@ -8340,6 +8355,25 @@
           "data"
         ],
         "title": "Envelope[ListResult[DefinitionRow]]",
+        "type": "object"
+      },
+      "Envelope_ListResult_EvalRunRow__": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ListResult_EvalRunRow_"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[ListResult[EvalRunRow]]",
         "type": "object"
       },
       "Envelope_ListResult_FormView__": {
@@ -9377,6 +9411,33 @@
         "title": "Envelope[Union[DryRun, BatchStarted]]",
         "type": "object"
       },
+      "Envelope_Union_EvalRunRecord__AgentEvalRun__": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EvalRunRecord"
+              },
+              {
+                "$ref": "#/components/schemas/AgentEvalRun"
+              }
+            ],
+            "title": "Data"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[Union[EvalRunRecord, AgentEvalRun]]",
+        "type": "object"
+      },
       "Envelope_Union_ThreadReview__PublishReview__": {
         "additionalProperties": false,
         "properties": {
@@ -10163,6 +10224,11 @@
           "draft": {
             "$ref": "#/components/schemas/EvalCaseOutcome"
           },
+          "judgeUnpriced": {
+            "default": false,
+            "title": "Judgeunpriced",
+            "type": "boolean"
+          },
           "live": {
             "anyOf": [
               {
@@ -10176,6 +10242,11 @@
           "regression": {
             "default": false,
             "title": "Regression",
+            "type": "boolean"
+          },
+          "unpriced": {
+            "default": false,
+            "title": "Unpriced",
             "type": "boolean"
           }
         },
@@ -10204,6 +10275,17 @@
       "EvalCheckInput": {
         "additionalProperties": false,
         "properties": {
+          "rubric": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rubric"
+          },
           "text": {
             "anyOf": [
               {
@@ -10240,9 +10322,31 @@
       "EvalCheckResult": {
         "additionalProperties": false,
         "properties": {
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
           "label": {
             "title": "Label",
             "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
           },
           "status": {
             "enum": [
@@ -10258,6 +10362,46 @@
           "status"
         ],
         "title": "EvalCheckResult",
+        "type": "object"
+      },
+      "EvalGate": {
+        "additionalProperties": false,
+        "description": "Whether the version a run scored may publish on its evals, and each step, as a publish check reads it.",
+        "properties": {
+          "blocked": {
+            "title": "Blocked",
+            "type": "boolean"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/GateStep"
+            },
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "blocked",
+          "steps"
+        ],
+        "title": "EvalGate",
+        "type": "object"
+      },
+      "EvalGateDetails": {
+        "additionalProperties": false,
+        "properties": {
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/GateStep"
+            },
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "steps"
+        ],
+        "title": "EvalGateDetails",
         "type": "object"
       },
       "EvalRunInput": {
@@ -10276,9 +10420,182 @@
               }
             ],
             "title": "Cases"
+          },
+          "trigger": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger"
           }
         },
         "title": "EvalRunInput",
+        "type": "object"
+      },
+      "EvalRunRecord": {
+        "additionalProperties": false,
+        "description": "One kept run with each case's result.",
+        "properties": {
+          "agentId": {
+            "title": "Agentid",
+            "type": "string"
+          },
+          "costUsd": {
+            "title": "Costusd",
+            "type": "number"
+          },
+          "gate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EvalGate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "liveVersion": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Liveversion"
+          },
+          "ranAt": {
+            "title": "Ranat",
+            "type": "string"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/EvalCaseResult"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "startedBy": {
+            "title": "Startedby",
+            "type": "string"
+          },
+          "status": {
+            "const": "complete",
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/EvalSummary"
+          },
+          "trigger": {
+            "title": "Trigger",
+            "type": "string"
+          },
+          "unpriced": {
+            "title": "Unpriced",
+            "type": "boolean"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "agentId",
+          "version",
+          "liveVersion",
+          "trigger",
+          "status",
+          "summary",
+          "costUsd",
+          "unpriced",
+          "startedBy",
+          "ranAt",
+          "results"
+        ],
+        "title": "EvalRunRecord",
+        "type": "object"
+      },
+      "EvalRunRow": {
+        "additionalProperties": false,
+        "description": "A kept run as a row of an agent's runs list (`app.evals.stored_run`): everything but the case results, which\nthe single read (`EvalRunRecord`) carries. `version` is the newest version it ran on and `live_version` the live\none it was compared with, when that was another. `trigger` is manual or publish_request; `started_by` is a\nperson's email or `key:<id>`.",
+        "properties": {
+          "agentId": {
+            "title": "Agentid",
+            "type": "string"
+          },
+          "costUsd": {
+            "title": "Costusd",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "liveVersion": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Liveversion"
+          },
+          "ranAt": {
+            "title": "Ranat",
+            "type": "string"
+          },
+          "startedBy": {
+            "title": "Startedby",
+            "type": "string"
+          },
+          "status": {
+            "const": "complete",
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/EvalSummary"
+          },
+          "trigger": {
+            "title": "Trigger",
+            "type": "string"
+          },
+          "unpriced": {
+            "title": "Unpriced",
+            "type": "boolean"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "agentId",
+          "version",
+          "liveVersion",
+          "trigger",
+          "status",
+          "summary",
+          "costUsd",
+          "unpriced",
+          "startedBy",
+          "ranAt"
+        ],
+        "title": "EvalRunRow",
         "type": "object"
       },
       "EvalSummary": {
@@ -12738,6 +13055,38 @@
           "facets"
         ],
         "title": "ListResult[DefinitionRow]",
+        "type": "object"
+      },
+      "ListResult_EvalRunRow_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/EvalRunRow"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "facets": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Facets",
+            "type": "object"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        },
+        "required": [
+          "data",
+          "pagination",
+          "facets"
+        ],
+        "title": "ListResult[EvalRunRow]",
         "type": "object"
       },
       "ListResult_FormView_": {
@@ -15203,6 +15552,16 @@
         "additionalProperties": false,
         "description": "One thing that blocks a publish. `id` names the reference for a reference problem, as `<kind>:<id>`.",
         "properties": {
+          "details": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EvalGateDetails"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "id": {
             "anyOf": [
               {
@@ -15229,7 +15588,11 @@
               "deprecated",
               "too_long",
               "mention",
-              "hint"
+              "hint",
+              "eval_failed",
+              "eval_not_run",
+              "eval_no_cases",
+              "eval_setting_unread"
             ],
             "title": "Kind",
             "type": "string"
@@ -18310,6 +18673,17 @@
       "SavedCaseCheck": {
         "additionalProperties": false,
         "properties": {
+          "rubric": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rubric"
+          },
           "text": {
             "anyOf": [
               {
@@ -21513,7 +21887,7 @@
       },
       "StepCheck": {
         "additionalProperties": false,
-        "description": "What must hold before a step is done. `by` is set when the skill is saved: a rule is run on the step's result\nin code, a sentence is confirmed by the model.",
+        "description": "What must hold before a step is done. `by` is set when the skill is saved: a rule is run on the step's result\nin code, a sentence is decided by the judge model (`ops_agent_kernel.judge`).",
         "properties": {
           "by": {
             "anyOf": [
@@ -24637,6 +25011,31 @@
           "count"
         ],
         "title": "ToolsNotAdded",
+        "type": "object"
+      },
+      "TurnUsage": {
+        "additionalProperties": false,
+        "description": "Tokens one test turn spent, on the alias it ran on.",
+        "properties": {
+          "inputTokens": {
+            "title": "Inputtokens",
+            "type": "integer"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "outputTokens": {
+            "title": "Outputtokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "inputTokens",
+          "outputTokens",
+          "model"
+        ],
+        "title": "TurnUsage",
         "type": "object"
       },
       "TypeRef": {
@@ -31357,6 +31756,202 @@
         ],
         "x-ops-public": "sdk"
       },
+      "post": {
+        "description": "Adds these cases after the agent's last one and leaves the others, so two people adding at once each keep\ntheirs; answers the saved set. No cases, or an unknown check type, is 422 and nothing changes.",
+        "operationId": "assurance_add_agent_cases",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvalCasesInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SavedCases_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Add Agent Cases",
+        "tags": [
+          "Assurance"
+        ],
+        "x-ops-public": "sdk"
+      },
       "put": {
         "description": "Replaces the agent's active cases with these. An unknown check type is 422 and nothing changes.",
         "operationId": "assurance_save_agent_cases",
@@ -31555,8 +32150,288 @@
       }
     },
     "/v1/agents/{agent_id}/eval-runs": {
+      "get": {
+        "description": "The agent's kept runs on the shared list contract, newest first, then by id. A row leaves out the case\nresults; `GET /v1/eval-runs/{id}` carries them.",
+        "operationId": "assurance_agent_eval_runs",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ListResult_EvalRunRow__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Agent Eval Runs",
+        "tags": [
+          "Assurance"
+        ],
+        "x-ops-public": "sdk"
+      },
       "post": {
-        "description": "Scores cases on the newest version through the same one-turn test path. With no cases in the body it runs the\nagent's saved cases, also on the live version when that is another one, and keeps the run, so repeating it makes a\nsecond run. With cases in the body it scores them and keeps nothing. Empty cases and an unknown check type are\n422.",
+        "description": "Scores cases on the newest version through the same one-turn test path. With no cases in the body it runs the\nagent's saved cases, also on the live version when that is another one, and keeps the run (`EvalRunRecord`), so\nrepeating it makes a second run. With cases in the body it scores them and keeps nothing (`AgentEvalRun`). Empty\ncases and an unknown check type are 422.",
         "operationId": "agents_create_eval_run",
         "parameters": [
           {
@@ -31647,7 +32522,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_AgentEvalRun_"
+                  "$ref": "#/components/schemas/Envelope_Union_EvalRunRecord__AgentEvalRun__"
                 }
               }
             },
@@ -42059,6 +42934,375 @@
         "summary": "List Document Type Uses",
         "tags": [
           "Workflows"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/eval-cases/{case_id}": {
+      "delete": {
+        "description": "Deletes one active case of an agent or a skill. Another team's case, a draft or one already gone is 404.",
+        "operationId": "assurance_delete_eval_case",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Delete Eval Case",
+        "tags": [
+          "Assurance"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/eval-runs/{run_id}": {
+      "get": {
+        "description": "One kept run of an agent with each case's result. Another team's run is 404.",
+        "operationId": "assurance_eval_run",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_EvalRunRecord_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Eval Run",
+        "tags": [
+          "Assurance"
         ],
         "x-ops-public": "sdk"
       }

@@ -107,7 +107,7 @@ class Ref(RunModel):
 
 class StepCheck(RunModel):
     """What must hold before a step is done. `by` is set when the skill is saved: a rule is run on the step's result
-    in code, a sentence is confirmed by the model."""
+    in code, a sentence is decided by the judge model (`ops_agent_kernel.judge`)."""
 
     text: str = Field(min_length=1, max_length=300)
     by: Literal["rule", "model"] | None = None
@@ -228,12 +228,15 @@ class SkillProgram(RunModel):
 
 
 class StepResult(RunModel):
-    """How a step came out. `passed` is None while a step's tool has run and the model has yet to confirm its
-    sentence check."""
+    """How a step came out. `passed` is None while a step's check written as a sentence waits for the judge.
+    `judged_by` says what decided the check (a rule in code, or the judge model) and `reason` is the judge's one
+    line; both are None on a step with no check, and on records written before the judge."""
 
     passed: bool | None = None
     value: JsonValue | None = None
     truncated: bool = False
+    judged_by: Literal["rule", "judge"] | None = None
+    reason: str | None = None
 
 
 class SubRun(RunModel):

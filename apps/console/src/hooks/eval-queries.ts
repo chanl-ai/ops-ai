@@ -1,59 +1,59 @@
 'use client';
 
-import * as React from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
-import type { EvalCaseFilters, EvalCaseInput, EvalRunFilters, SaveTurnInput } from '@/lib/types/evals';
+import type { BulkResult } from '@/lib/types/domain';
+import type { EvalCaseInput } from '@/lib/types/evals';
 import type { ListParams } from '@/lib/types/query';
 import { useTeamQuery } from './team-query';
 
-/** Eval keys sit under the agent's key, so saving the agent (which starts a run) refreshes them too. */
+/** Eval keys sit under the agent's key, so a write that changes the agent's evals refreshes them all at once. */
 export const ek = {
   root: (agentId: string) => ['agent', agentId, 'evals'] as const,
-  suites: (agentId: string) => ['agent', agentId, 'evals', 'suites'] as const,
-  cases: (agentId: string, p: unknown) => ['agent', agentId, 'evals', 'cases', p] as const,
+  cases: (agentId: string) => ['agent', agentId, 'evals', 'cases'] as const,
   runs: (agentId: string, p: unknown) => ['agent', agentId, 'evals', 'runs', p] as const,
-  run: (runId: string) => ['eval-run', runId] as const,
   latest: (agentId: string) => ['agent', agentId, 'evals', 'latest'] as const,
-  options: (agentId: string) => ['agent', agentId, 'evals', 'options'] as const,
+  run: (runId: string) => ['eval-run', runId] as const,
 };
 
-export const useEvalSuites = (agentId: string) => useTeamQuery({ queryKey: ek.suites(agentId), queryFn: () => api.evals.suites(agentId) });
-export const useEvalCases = (agentId: string, p: ListParams<EvalCaseFilters>) => usePagedQuery({ queryKey: ek.cases(agentId, p), queryFn: () => api.evals.cases(agentId, p) });
-export const useEvalRuns = (agentId: string, p: ListParams<EvalRunFilters>) => usePagedQuery({ queryKey: ek.runs(agentId, p), queryFn: () => api.evals.runs(agentId, p) });
-export const useEvalRun = (runId: string | null) =>
-  useTeamQuery({ queryKey: ek.run(runId ?? ''), queryFn: () => api.evals.getRun(runId!), enabled: !!runId, refetchInterval: (q) => (q.state.data?.status === 'running' ? 1000 : false) });
-export const useEvalOptions = (agentId: string) => useTeamQuery({ queryKey: ek.options(agentId), queryFn: () => api.evals.options(agentId), staleTime: 60_000 });
+export const useEvalCases = (agentId: string) => useTeamQuery({ queryKey: ek.cases(agentId), queryFn: () => api.evals.cases(agentId) });
+export const useEvalRuns = (agentId: string, p: ListParams) => usePagedQuery({ queryKey: ek.runs(agentId, p), queryFn: () => api.evals.runs(agentId, p) });
+export const useEvalRun = (runId: string | null) => useTeamQuery({ queryKey: ek.run(runId ?? ''), queryFn: () => api.evals.getRun(runId!), enabled: !!runId });
 
-/**
- * The newest run, polled while it runs. When it completes, everything else on the Evals tab (suites, case
- * outcomes, history) and the agent's version history refresh once.
- */
-export function useLatestEvalRun(agentId: string) {
-  const qc = useQueryClient();
-  const query = useTeamQuery({ queryKey: ek.latest(agentId), queryFn: () => api.evals.latest(agentId), refetchInterval: (q) => (q.state.data?.status === 'running' ? 1000 : false) });
-  const status = query.data?.status;
-  const prev = React.useRef(status);
-  React.useEffect(() => {
-    if (prev.current === 'running' && status === 'complete') {
-      qc.invalidateQueries({ queryKey: ['agent', agentId] });
-      qc.invalidateQueries({ queryKey: ['model-risk'] });
-    }
-    prev.current = status;
-  }, [status, agentId, qc]);
-  return query;
-}
+/** The newest kept run with its results: the id from page 1 of the runs list at a page size of 1, then the single read; null when none has run. */
+export const useLatestEvalRun = (agentId: string) =>
+  useTeamQuery({ queryKey: ek.latest(agentId), queryFn: async () => {
+      const newest = (await api.evals.runs(agentId, { page: 1, pageSize: 1 })).data[0];
+      return newest ? api.evals.getRun(newest.id) : null;
+    },
+  });
 
 function useEvalWrite<A, R>(agentId: string, fn: (a: A) => Promise<R>) {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: fn, onSuccess: () => qc.invalidateQueries({ queryKey: ek.root(agentId) }) });
+  return useMutation({
+    mutationFn: fn,
+    // A finished run changes the agent's version history and model risk's eval lines too.
+    onSuccess: () => Promise.all([qc.invalidateQueries({ queryKey: ek.root(agentId) }), qc.invalidateQueries({ queryKey: ['agent', agentId] }), qc.invalidateQueries({ queryKey: ['model-risk'] })]),
+  });
 }
 
-export const useCreateEvalCase = (agentId: string) => useEvalWrite(agentId, (i: EvalCaseInput) => api.evals.createCase(agentId, i));
-export const useImportEvalCases = (agentId: string) => useEvalWrite(agentId, ({ rows, fileId }: { rows: EvalCaseInput[]; fileId?: string }) => api.evals.importCases(agentId, rows, fileId));
-export const useEvalCaseFromTurn = (agentId: string) => useEvalWrite(agentId, (i: SaveTurnInput) => api.evals.caseFromTurn(agentId, i));
+export const useAddEvalCases = (agentId: string) => useEvalWrite(agentId, (cases: EvalCaseInput[]) => api.evals.addCases(agentId, cases));
 export const useDeleteEvalCase = (agentId: string) => useEvalWrite(agentId, (id: string) => api.evals.removeCase(id));
-export const useBulkDeleteEvalCases = (agentId: string) => useEvalWrite(agentId, (ids: string[]) => api.evals.bulkRemoveCases(ids));
 export const useRunEvals = (agentId: string) => useEvalWrite(agentId, () => api.evals.run(agentId));
+
+/** Deletes cases one by one; one the service refuses comes back as skipped with its reason. */
+export const useBulkDeleteEvalCases = (agentId: string) =>
+  useEvalWrite(agentId, async (ids: string[]): Promise<BulkResult> => {
+    const result: BulkResult = { updated: [], skipped: [] };
+    for (const id of ids) {
+      try {
+        await api.evals.removeCase(id);
+        result.updated.push(id);
+      } catch (e) {
+        result.skipped.push({ id, reason: e instanceof Error ? e.message : 'Not deleted' });
+      }
+    }
+    return result;
+  });

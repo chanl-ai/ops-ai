@@ -630,7 +630,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
             version={agent.version}
             publishedVersion={agent.publishedVersion}
             owner={teamName}
-            evalSummary={newest?.evalSummary}
+            onOpenEvals={() => setTab('evals')}
             isPending={requestPublish.isPending}
             onSubmit={async (note) => {
               const r = await requestPublish.mutateAsync({ version: agent.version, note });

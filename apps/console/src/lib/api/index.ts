@@ -4,7 +4,6 @@ import { DEFAULT_USER_ID, DEMO_PASSWORD, DEMO_TOTP, USERS } from './mock/auth/se
 import { createCasesOnlyHttp, createChatOnlyHttp, createHttpApi, createKnowledgeOnlyHttp, createRegistryOnlyHttp,
   createRegistryPromptVariables, createRegistryToolsDirectory, createRegistryToolsList, createToolsOnlyHttp } from './http';
 import { createMockApi } from './mock';
-import { withServedAgents } from './mock/evals';
 import { createMockAuthProvider } from './mock/auth';
 import { createNoNotifications } from './notifications-none';
 import { recordMockReads } from './sample-reads';
@@ -64,11 +63,6 @@ function createApi(): OpsApi {
   if (registryUrl) api = { ...api, ...createRegistryOnlyHttp(registryUrl), tools: { ...api.tools, list: createRegistryToolsList(registryUrl), ...createRegistryToolsDirectory(registryUrl) } };
   // The instruction placeholders a run can fill come from agents-service; generation and lint stay on the mock.
   if (registryUrl) api = { ...api, prompts: { ...api.prompts, variables: createRegistryPromptVariables(registryUrl) } };
-  // Evals stay sample data; their stand-ins for the registry's agents take each agent's name and versions from it.
-  if (registryUrl && !baseUrl) {
-    const agents = api.agents;
-    api = { ...api, evals: withServedAgents(api.evals, (aid) => agents.get(aid)) };
-  }
   // The chat loader and the iframe it opens are served by the embed app.
   if (embedUrl) api = { ...api, widgetDeployments: { ...api.widgetDeployments, scriptUrl: () => `${embedUrl.replace(/\/$/, '')}/embed/v1.js` } };
   if (toolsUrl) {
@@ -176,7 +170,7 @@ const AREAS: { prefix: string; served: boolean }[] = [
   { prefix: '/', served: Boolean(registryUrl) },
   // No service owns these yet.
   { prefix: '/deployments', served: false },
-  // Evals are agents-service's /v1/assurance; the agent page's own Evals tab is still sample data.
+  // The govern evals page reads agents-service's /v1/assurance.
   { prefix: '/govern/evals', served: Boolean(registryUrl) },
   { prefix: '/govern/models', served: false },
   { prefix: '/data/connectors', served: false },
@@ -191,8 +185,6 @@ const AREAS: { prefix: string; served: boolean }[] = [
 export const apiKeysOnService = onPlatform || Boolean(baseUrl);
 /** Workspace policies are platform-service's; without it the page draws sample ones and says so. */
 export const policiesOnService = onPlatform || Boolean(baseUrl);
-/** Agent evals have no service yet: beside real services the Evals tab draws sample cases and runs and says so. */
-export const evalsArePreview = !baseUrl && onRealService;
 /** Sources and their settings are kb-service's once its URL (or the all-HTTP URL) is set; otherwise the mock's. */
 export const knowledgeOnService = Boolean(knowledgeUrl || baseUrl);
 /** Files on files-service, which does not set retention or export evidence yet; the Files page hides those actions. */

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-21",
+  "title": "Failing evals stop an agent from publishing",
+  "description": "When a blocking eval step fails on the version you publish, the publish check names it and the publish and its approval are refused, and a draft saved after its last run needs a new run first. A team can also require that an agent's saved cases have run before it publishes.",
+  "tag": "new"
+}
