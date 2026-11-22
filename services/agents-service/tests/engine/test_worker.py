@@ -357,7 +357,7 @@ async def test_a_pass_that_fails_on_an_outage_is_tried_again_after_five_seconds_
 ) -> None:
     import time  # noqa: PLC0415
 
-    monkeypatch.setattr("ops_engine.node_types.jitter", lambda: 1.0)  # the wait at the whole of its span
+    monkeypatch.setattr("ops_store.retry.jitter", lambda: 1.0)  # the wait at the whole of its span
 
     tenant, tools = f"t-{uuid4().hex[:8]}", BlippingTools()
     run_id = await start(engine, tenant, {"customerId": "C-1", "amount": 250})

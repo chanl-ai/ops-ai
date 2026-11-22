@@ -11,12 +11,12 @@ reconciliation read, never a second send.
 
 from __future__ import annotations
 
-import random
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal, cast
 
 from ops_service_kit.http import Json, JsonValue
+from ops_store.retry import jittered
 
 from .starts import ONLY_FROM_WORKFLOWS, StartSpec, only_from_workflows, trigger_node
 from .store.definitions import ListColumns, watched_mailbox
@@ -56,15 +56,6 @@ class Port:
 
     def view(self) -> Json:
         return {"name": self.name, "connection": self.connection, "label": self.label or self.name.capitalize()}
-
-
-# Full jitter: each wait is drawn from [0, its span). Tests replace it to pin the wait to its span.
-jitter = random.random
-
-
-def jittered(span: float, floor: float | None = None) -> float:
-    """A wait drawn over `span` (full jitter), never shorter than `floor` (an error's retry-after)."""
-    return max(span * jitter(), floor or 0.0)
 
 
 @dataclass(frozen=True)

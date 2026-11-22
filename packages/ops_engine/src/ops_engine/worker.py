@@ -31,6 +31,7 @@ from ops_contracts.errors import CODES, RunError, code_of, run_error
 from ops_service_kit.http import Json
 from ops_service_kit.logging import get_logger
 from ops_store import background
+from ops_store.retry import jittered
 
 from .compiler import (
     CHANNEL,
@@ -43,7 +44,7 @@ from .compiler import (
 )
 from .definition import parse
 from .journal import RunCancelledError
-from .node_types import TypeRegistry, jittered
+from .node_types import TypeRegistry
 from .ports import EnginePorts, EventPort, LeaseBusyError, LeasePort
 from .store import TERMINAL, DefinitionStore, RunRow, RunStore, SqlJournal, Transactions, Work, WorkQueue
 from .store.clock import now_iso
@@ -52,7 +53,7 @@ log = get_logger("ops_engine.worker")
 
 MAX_PASSES = 4
 # The longest wait before a failed pass is tried again, by attempt: an outage such as a service restart is ridden
-# out. Each wait is jittered over the whole span (node_types.jittered).
+# out. Each wait is jittered over the whole span (ops_store.retry).
 PASS_WAITS = (5.0, 30.0, 120.0)
 # A write still in doubt after this many passes (backoff capped at 30 s, so about ten minutes) fails its run for a
 # person to settle: the gateway expires a stale claim to lost well before, so this is reached only when it cannot.

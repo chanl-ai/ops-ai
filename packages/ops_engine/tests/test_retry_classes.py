@@ -57,7 +57,7 @@ def waits(monkeypatch: pytest.MonkeyPatch) -> list[float]:
         seen.append(seconds)
 
     monkeypatch.setattr("ops_engine.compiler.sleep", record)
-    monkeypatch.setattr("ops_engine.node_types.jitter", lambda: 1.0)
+    monkeypatch.setattr("ops_store.retry.jitter", lambda: 1.0)
     return seen
 
 
