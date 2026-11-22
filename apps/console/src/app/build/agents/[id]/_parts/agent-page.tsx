@@ -16,7 +16,6 @@ import {
   draftOf,
   followLimits,
   GuardrailsSection,
-  HistoryCard,
   IdentitySection,
   InstructionsSection,
   KnowledgeSection,
@@ -30,6 +29,7 @@ import {
 import { AgentBriefEditor, legacyBrief, PromptModeToggle } from '@/components/agents/agent-brief-editor';
 import { ModelSelect } from '@/components/agents/model-select';
 import { AgentModelLimitsSection } from '@/components/agents/agent-model-limits-section';
+import { AgentCompareView } from '@/components/agents/test-compare';
 import { AgentUsesLink, AgentUsesSheet } from '@/components/agents/agent-uses-sheet';
 import { PromptModeDialogs } from '@/components/agents/prompt-mode-dialogs';
 import { MemorySection } from '@/components/agents/memory-section';
@@ -42,7 +42,7 @@ import { LeaveGuard } from '@/components/shared/leave-guard';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import type { AgentBrief, PromptMode } from '@/lib/types/domain';
 import type { PublishBlocker } from '@/lib/types/references';
-import { AgentTestPanel, TEST_TABS, type TestTab } from '@/components/agents/agent-test-panel';
+import { AgentTestPanel } from '@/components/agents/agent-test-panel';
 import { LivePlacesPanel } from '@/components/channels/hub/live-places';
 import { AgentChatChannel } from '@/components/agents/agent-channels';
 import { SkillMenuSection } from '@/components/agents/skill-menu-section';
@@ -212,8 +212,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
   });
 
   const [deleteOpen, setDeleteOpen] = React.useState(false);
-  // The right panel's tab; Test in the header opens it and brings it into view on a narrow screen.
-  const [testTab, setTestTab] = React.useState<TestTab>(TEST_TABS[0]);
+  // Test in the header brings the side panel into view on a narrow screen.
   const [testThreadId, setTestThreadId] = React.useState<string>();
   const chat = useSendMessage();
   // A test reply streams for this page only: leaving the page stops it rather than leaving it running unseen. The
@@ -341,7 +340,6 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
                   variant="outline"
                   onClick={() => {
                     setTab('settings');
-                    setTestTab('test');
                     requestAnimationFrame(() => panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
                   }}
                   data-testid="test-agent-button"
@@ -410,6 +408,8 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
         <PageTabPanel value={tab}>
           {tab === 'evals' && agent.controls.evals ? (
             <EvalsTab agent={agent} />
+          ) : compare ? (
+            <AgentCompareView agentId={agent.id} agentName={agent.name} newest={agent.version} versions={versions.data ?? []} />
           ) : tab === 'versions' ? (
             <div className="flex flex-col gap-4" data-testid="agent-versions">
               <div className="flex justify-end">
@@ -615,20 +615,9 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
                 agentId={agent.id}
                 agentName={agent.name}
                 held={(tools.data ?? []).filter((t) => agent.toolIds.includes(t.id)).map((t) => ({ name: t.name, approval: t.requiresApproval ? (t.approval ?? 'a review') : null }))}
-                tab={testTab}
-                onTabChange={setTestTab}
                 threadId={testThreadId}
                 onThreadIdChange={setTestThreadId}
-                versions={<HistoryCard versions={versions.data} loading={versions.isPending} onOpen={() => setTab('versions')} />}
-                newestVersion={agent.version}
-                savedVersions={versions.data ?? []}
                 canTest={canBuild}
-                usedIn={
-                  <>
-                    <UsedInCard agent={agent} />
-                    <RecentRunsCard runs={runs.data} loading={runs.isPending} />
-                  </>
-                }
               />
             </aside>
     } />

@@ -627,38 +627,3 @@ export function UsedInCard({ agent }: { agent: Agent }) {
     </Card>
   );
 }
-
-export function HistoryCard({ versions, loading, onOpen }: { versions?: AgentVersion[]; loading: boolean; onOpen: () => void }) {
-  return (
-    <Card className="gap-3">
-      <CardHeader className="px-4">
-        <CardTitle className="text-sm">History</CardTitle>
-        <CardAction>
-          <Button variant="ghost" size="sm" onClick={onOpen}>
-            All versions
-          </Button>
-        </CardAction>
-      </CardHeader>
-      <CardContent className="px-4">
-        {loading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
-        ) : (
-          <VersionTimeline compact>
-            {(versions ?? []).slice(0, 3).map((v) => (
-              <VersionTimelineItem key={v.version} compact dot={v.current ? 'current' : 'muted'}>
-                <div className="flex min-w-0 items-center gap-1.5 text-sm">
-                  <span className="font-mono text-xs font-medium">v{v.version}</span>
-                  {/* w-0 keeps the note's full width out of the rail's min-content, which would push the rail past a phone's width. */}
-                  <span className="w-0 flex-1 break-words">{v.note}</span>
-                  <AgentVersionBadge state={v.state} />
-                </div>
-                <span className="text-xs text-muted-foreground">{relativeTime(v.savedAt)}</span>
-                {v.evalSummary && <EvalSummaryLine summary={v.evalSummary} className="flex" />}
-              </VersionTimelineItem>
-            ))}
-          </VersionTimeline>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
