@@ -29,3 +29,8 @@ def test_a_run_that_overruns_after_getting_its_slot_times_out_with_the_split():
     _, code, waited, ran, _ = go(wait=0.3, run=5, timeout=1)
     assert code == 124
     assert 0.3 <= waited < 1 and 1 <= ran < 3
+
+
+def test_a_log_outside_the_checkout_prints_its_absolute_path(tmp_path):
+    assert batch.shown(tmp_path / "uc-1-api.log") == str(tmp_path / "uc-1-api.log")
+    assert batch.shown(batch.ROOT / ".logs" / "x.log") == ".logs/x.log"
