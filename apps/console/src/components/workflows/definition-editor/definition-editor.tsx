@@ -458,7 +458,7 @@ function EditorBody({ definition: initial, types, validation, validateError = nu
           <div className="flex items-center gap-2">
             <Popover>
               <PopoverTrigger asChild>
-                <Button type="button" variant="outline" size="icon" className="size-9 bg-card max-sm:hidden" aria-label="Keyboard shortcuts" title="Keyboard shortcuts">
+                <Button type="button" variant="outline" size="icon" className="bg-card max-sm:hidden" aria-label="Keyboard shortcuts" title="Keyboard shortcuts">
                   <Keyboard />
                 </Button>
               </PopoverTrigger>

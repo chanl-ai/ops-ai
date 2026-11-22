@@ -56,7 +56,7 @@ export function ResourcesTab({ skill: s }: { skill: SkillDetail }) {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="size-7"
+                       
                         disabled={!!locked || remove.isPending}
                         aria-label={`Remove ${r.name}`}
                         onClick={() =>

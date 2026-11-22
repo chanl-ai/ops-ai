@@ -264,7 +264,7 @@ export function KnowledgeSection({ collections, onChange }: { collections: strin
   return (
     <SettingsSection title={`Knowledge · ${collections.length}`} description="Knowledge bases the agent may search and cite.">
       {collections.length === 0 && <p className="mb-2 text-sm text-muted-foreground">No knowledge bases. The agent cannot cite policy or product documents.</p>}
-      <EntityPicker source={knowledgeBaseOptions} value={collections} onChange={(ids) => onChange(listChange(collections, ids))} addLabel="Choose knowledge bases" searchPlaceholder="Search knowledge bases…" emptyText="No knowledge base matches." icon={BookOpen} testId="agent-knowledge-picker" />
+      <EntityPicker source={knowledgeBaseOptions} value={collections} onChange={(ids) => onChange(listChange(collections, ids))} addLabel="Add knowledge" searchPlaceholder="Search knowledge bases…" emptyText="No knowledge base matches." icon={BookOpen} testId="agent-knowledge-picker" />
     </SettingsSection>
   );
 }
@@ -374,7 +374,7 @@ export function GuardrailsSection({ draft, set, shown }: { draft: AgentDraft; se
                         </Link>
                         {version !== undefined && published(x).length > 1 ? (
                           <Select value={String(version)} onValueChange={(v) => pinVersion(x, Number(v))}>
-                            <SelectTrigger className="h-7 w-24 text-xs" aria-label={`${x.name} version`}>
+                            <SelectTrigger className="w-24" aria-label={`${x.name} version`}>
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -634,7 +634,7 @@ export function HistoryCard({ versions, loading, onOpen }: { versions?: AgentVer
       <CardHeader className="px-4">
         <CardTitle className="text-sm">History</CardTitle>
         <CardAction>
-          <Button variant="ghost" size="sm" className="h-7" onClick={onOpen}>
+          <Button variant="ghost" size="sm" onClick={onOpen}>
             All versions
           </Button>
         </CardAction>

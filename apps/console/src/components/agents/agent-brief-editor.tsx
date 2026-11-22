@@ -116,7 +116,7 @@ export function AgentBriefEditor({
 /** The two links under the document: switching how the prompt is written. */
 export function PromptModeToggle({ mode, onChoose, disabled }: { mode: PromptMode; onChoose: (to: PromptMode) => void; disabled?: boolean }) {
   return (
-    <Button type="button" variant="link" size="sm" className="h-auto self-start p-0 text-xs" disabled={disabled} onClick={() => onChoose(mode === 'brief' ? 'full' : 'brief')} data-testid="agent-prompt-mode">
+    <Button type="button" variant="link" size="sm" className="self-start" disabled={disabled} onClick={() => onChoose(mode === 'brief' ? 'full' : 'brief')} data-testid="agent-prompt-mode">
       {mode === 'brief' ? 'Edit as plain text' : 'Back to the brief'}
     </Button>
   );

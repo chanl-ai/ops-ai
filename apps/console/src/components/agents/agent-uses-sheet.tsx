@@ -22,7 +22,7 @@ export function usesLine(u: AgentUses | undefined): string {
 /** The link under the brief that opens what the agent holds. */
 export function AgentUsesLink({ uses, onOpen }: { uses: AgentUses | undefined; onOpen: () => void }) {
   return (
-    <Button type="button" variant="link" className="h-auto self-start p-0 text-sm" onClick={onOpen} data-testid="agent-uses-link">
+    <Button type="button" variant="link" className="self-start text-sm" onClick={onOpen} data-testid="agent-uses-link">
       {usesLine(uses)}
     </Button>
   );

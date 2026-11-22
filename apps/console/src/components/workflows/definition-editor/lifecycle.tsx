@@ -40,7 +40,7 @@ function VersionDetails({ version, digest }: { version: number; digest?: string 
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button type="button" variant="link" size="sm" className="h-auto p-0 text-muted-foreground" data-testid="definition-version-details">
+        <Button type="button" variant="link" size="sm" className="text-muted-foreground" data-testid="definition-version-details">
           Version {version}
         </Button>
       </PopoverTrigger>

@@ -143,7 +143,7 @@ export function AgentSkillsSection({
                       </DisabledReason>
                     )}
                     <DisabledReason reason={blockedReason}>
-                      <Button variant="ghost" size="icon" className="size-7" disabled={!!blockedReason || busy} aria-label={`Detach ${p.name}`} onClick={() => setDetaching(p)}>
+                      <Button variant="ghost" size="icon" disabled={!!blockedReason || busy} aria-label={`Detach ${p.name}`} onClick={() => setDetaching(p)}>
                         <X className="size-3.5" />
                       </Button>
                     </DisabledReason>

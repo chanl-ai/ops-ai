@@ -281,12 +281,12 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, onSaveState, ca
               <p key={i} className="flex flex-wrap items-center gap-x-2" data-testid="skill-problem">
                 <span>{p.message}</span>
                 {p.position?.field === 'steps' && p.position.step && (
-                  <Button variant="link" size="sm" className="h-auto p-0" onClick={() => textDoc.current?.focusLine(lineOfStep(p.position!.step!))}>
+                  <Button variant="link" size="sm" onClick={() => textDoc.current?.focusLine(lineOfStep(p.position!.step!))}>
                     Step {p.position.step}
                   </Button>
                 )}
                 {p.position?.field === 'source' && p.position.index && (
-                  <Button variant="link" size="sm" className="h-auto p-0" onClick={() => textDoc.current?.focusLine(p.position!.index!)} data-testid="skill-problem-line">
+                  <Button variant="link" size="sm" onClick={() => textDoc.current?.focusLine(p.position!.index!)} data-testid="skill-problem-line">
                     Line {p.position.index}
                   </Button>
                 )}
@@ -343,7 +343,7 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, onSaveState, ca
                 {reading.reading.hints.map((h, k) => (
                   <p key={k} className="flex flex-wrap items-baseline gap-x-2 text-xs text-muted-foreground" data-testid="sop-hint">
                     <span>{h.message}</span>
-                    <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => textDoc.current?.focusLine(h.line)}>
+                    <Button variant="link" size="sm" onClick={() => textDoc.current?.focusLine(h.line)}>
                       Line {h.line}
                     </Button>
                   </p>
@@ -419,7 +419,7 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, onSaveState, ca
                       <code className="flex-1 truncate font-mono text-xs">{t?.name ?? labelOf(id) ?? id}</code>
                       <span className="text-xs text-muted-foreground">{inText ? 'in the text' : t?.module}</span>
                       {t && <AccessBadge access={t.access} />}
-                      {!inText && <Button variant="ghost" size="icon" className="size-7" disabled={readOnly} aria-label={`Remove ${t?.name ?? id}`} onClick={() => setForm({ ...form, toolIds: form.toolIds.filter((x) => x !== id) })}>
+                      {!inText && <Button variant="ghost" size="icon" disabled={readOnly} aria-label={`Remove ${t?.name ?? id}`} onClick={() => setForm({ ...form, toolIds: form.toolIds.filter((x) => x !== id) })}>
                         <X className="size-3.5" />
                       </Button>}
                     </div>

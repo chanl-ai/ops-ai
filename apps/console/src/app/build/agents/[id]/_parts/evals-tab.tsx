@@ -96,7 +96,7 @@ function caseColumns(onDelete: (c: EvalCase) => void): ColumnDef<CaseRow>[] {
       cell: ({ row }) =>
         row.original.readOnly ? null : (
           <StopRowClick>
-            <Button variant="ghost" size="icon" className="size-8" aria-label={`Delete ${row.original.name}`} onClick={() => onDelete(row.original)}>
+            <Button variant="ghost" size="icon" aria-label={`Delete ${row.original.name}`} onClick={() => onDelete(row.original)}>
               <Trash2 className="size-4" />
             </Button>
           </StopRowClick>

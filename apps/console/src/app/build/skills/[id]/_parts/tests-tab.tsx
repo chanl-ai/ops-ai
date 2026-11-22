@@ -111,10 +111,10 @@ export function TestsTab({ skill: s }: { skill: SkillDetail }) {
                     </TableCell>
                     <TableCell className="text-xs whitespace-nowrap text-muted-foreground">{SOURCE[t.source]}</TableCell>
                     <TableCell className="text-right whitespace-nowrap">
-                      <Button variant="ghost" size="icon" className="size-7" aria-label={`Edit ${t.name}`} onClick={() => setEditing(t)}>
+                      <Button variant="ghost" size="icon" aria-label={`Edit ${t.name}`} onClick={() => setEditing(t)}>
                         <Pencil className="size-3.5" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="size-7" aria-label={`Delete ${t.name}`} onClick={() => setDeleting(t)}>
+                      <Button variant="ghost" size="icon" aria-label={`Delete ${t.name}`} onClick={() => setDeleting(t)}>
                         <Trash2 className="size-3.5" />
                       </Button>
                     </TableCell>

@@ -49,7 +49,7 @@ export function useInstructionsAssist({
   const toolbar = (
     <>
       <Button variant="outline" size="sm" className="bg-card" onClick={onAttachAlways} data-testid="attach-always-skill">
-        <Pin className="size-3.5" /> Attach always-on skill
+        <Pin className="size-3.5" /> Attach skill
       </Button>
       <Button variant="outline" size="sm" className="bg-card" onClick={() => setGenOpen(true)} data-testid="generate-instructions">
         <Sparkles className="size-3.5" /> Generate instructions

@@ -60,7 +60,7 @@ export function SkillInputsSection({ value, onChange, onValidity, disabled }: { 
         {inputs.fields.map((f, i) => (
           <div key={f.id} className="flex flex-col gap-2 sm:flex-row sm:items-start">
             <FormField id={`sk-input-name-${i}`} label="Name" className="sm:w-48" error={errors?.[i]?.name?.message}>
-              <Input id={`sk-input-name-${i}`} className="bg-card font-mono text-xs" aria-invalid={!!errors?.[i]?.name} {...register(`inputs.${i}.name`)} />
+              <Input id={`sk-input-name-${i}`} className="bg-card font-mono" aria-invalid={!!errors?.[i]?.name} {...register(`inputs.${i}.name`)} />
             </FormField>
             <FormField id={`sk-input-desc-${i}`} label="Description" className="flex-1" error={errors?.[i]?.description?.message}>
               <Input id={`sk-input-desc-${i}`} className="bg-card" aria-invalid={!!errors?.[i]?.description} {...register(`inputs.${i}.description`)} />

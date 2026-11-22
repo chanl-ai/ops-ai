@@ -90,17 +90,17 @@ export function PartsSection({ parts, onChange, disabled }: { parts: SkillPartCo
                   <Badge variant="outline" className="font-normal tabular-nums">
                     {tokens.toLocaleString('en-CA')} / {(p.budget ?? TOKEN_BUDGET).toLocaleString('en-CA')} tokens
                   </Badge>
-                  <Button variant="ghost" size="icon" className="size-8" disabled={disabled || i === 0} onClick={() => move(i, -1)} aria-label={`Move ${p.name || 'part'} up`}>
+                  <Button variant="ghost" size="icon" disabled={disabled || i === 0} onClick={() => move(i, -1)} aria-label={`Move ${p.name || 'part'} up`}>
                     <ArrowUp className="size-4" />
                   </Button>
-                  <Button variant="ghost" size="icon" className="size-8" disabled={disabled || i === parts.length - 1} onClick={() => move(i, 1)} aria-label={`Move ${p.name || 'part'} down`}>
+                  <Button variant="ghost" size="icon" disabled={disabled || i === parts.length - 1} onClick={() => move(i, 1)} aria-label={`Move ${p.name || 'part'} down`}>
                     <ArrowDown className="size-4" />
                   </Button>
-                  <Button variant="ghost" size="icon" className="size-8" disabled={disabled} onClick={() => remove(i)} aria-label={`Remove ${p.name || 'part'}`}>
+                  <Button variant="ghost" size="icon" disabled={disabled} onClick={() => remove(i)} aria-label={`Remove ${p.name || 'part'}`}>
                     <Trash2 className="size-4" />
                   </Button>
                   <CollapsibleTrigger asChild>
-                    <Button variant="ghost" size="icon" className="size-8" aria-label={open === i ? 'Close' : `Edit ${p.name || 'part'}`}>
+                    <Button variant="ghost" size="icon" aria-label={open === i ? 'Close' : `Edit ${p.name || 'part'}`}>
                       <ChevronDown className={open === i ? 'size-4 rotate-180' : 'size-4'} />
                     </Button>
                   </CollapsibleTrigger>
@@ -131,13 +131,13 @@ export function PartsSection({ parts, onChange, disabled }: { parts: SkillPartCo
                     <span className="text-sm font-medium">Inputs</span>
                     {p.inputs.map((f, k) => (
                       <div key={k} className="flex flex-wrap items-center gap-2">
-                        <Input value={f.name} disabled={disabled} onChange={(e) => putInput(i, k, { name: e.target.value })} placeholder="client" aria-label="Input name" className="w-40 bg-card font-mono text-xs" />
+                        <Input value={f.name} disabled={disabled} onChange={(e) => putInput(i, k, { name: e.target.value })} placeholder="client" aria-label="Input name" className="w-40 bg-card font-mono" />
                         <Input value={f.description} disabled={disabled} onChange={(e) => putInput(i, k, { description: e.target.value })} placeholder="What to type" aria-label="Input description" className="min-w-40 flex-1 bg-card" />
                         <div className="flex items-center gap-2">
                           <Switch id={`part-${i}-in-${k}`} checked={f.required} disabled={disabled} onCheckedChange={(v) => putInput(i, k, { required: v })} />
                           <Label htmlFor={`part-${i}-in-${k}`}>Required</Label>
                         </div>
-                        <Button variant="ghost" size="icon" className="size-8" disabled={disabled} onClick={() => put(i, { inputs: p.inputs.filter((_, n) => n !== k) })} aria-label={`Remove input ${f.name}`}>
+                        <Button variant="ghost" size="icon" disabled={disabled} onClick={() => put(i, { inputs: p.inputs.filter((_, n) => n !== k) })} aria-label={`Remove input ${f.name}`}>
                           <X className="size-4" />
                         </Button>
                       </div>

@@ -77,7 +77,7 @@ export function SkillResultsSection({ value, onChange, onValidity, disabled }: {
           {exits.fields.map((f, i) => (
             <div key={f.id} className="flex flex-col gap-2 sm:flex-row sm:items-start">
               <FormField id={`sk-exit-name-${i}`} label="Name" className="sm:w-48" error={errors.exits?.[i]?.name?.message}>
-                <Input id={`sk-exit-name-${i}`} className="bg-card font-mono text-xs" aria-invalid={!!errors.exits?.[i]?.name} {...register(`exits.${i}.name`)} />
+                <Input id={`sk-exit-name-${i}`} className="bg-card font-mono" aria-invalid={!!errors.exits?.[i]?.name} {...register(`exits.${i}.name`)} />
               </FormField>
               <FormField id={`sk-exit-meaning-${i}`} label="What it means" className="flex-1" error={errors.exits?.[i]?.meaning?.message}>
                 <Input id={`sk-exit-meaning-${i}`} className="bg-card" aria-invalid={!!errors.exits?.[i]?.meaning} {...register(`exits.${i}.meaning`)} />
@@ -98,7 +98,7 @@ export function SkillResultsSection({ value, onChange, onValidity, disabled }: {
           {returns.fields.map((f, i) => (
             <div key={f.id} className="flex flex-col gap-2 sm:flex-row sm:items-start">
               <FormField id={`sk-ret-name-${i}`} label="Name" className="sm:w-48" error={errors.returns?.[i]?.name?.message}>
-                <Input id={`sk-ret-name-${i}`} className="bg-card font-mono text-xs" aria-invalid={!!errors.returns?.[i]?.name} {...register(`returns.${i}.name`)} />
+                <Input id={`sk-ret-name-${i}`} className="bg-card font-mono" aria-invalid={!!errors.returns?.[i]?.name} {...register(`returns.${i}.name`)} />
               </FormField>
               <FormField id={`sk-ret-type-${i}`} label="Type" className="sm:w-36">
                 <Controller

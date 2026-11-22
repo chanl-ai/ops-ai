@@ -120,7 +120,7 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
             <span className="text-xs text-muted-foreground">
               {s.publishedVersion ? `v${s.publishedVersion} published` : 'Not published'}
               {s.draftVersion && s.draftVersion !== s.publishedVersion ? ` · draft v${s.draftVersion}` : ''} · {s.ownerTeam} ·{' '}
-              <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => setPanel('used_by')} data-testid="skill-used-by-link">
+              <Button variant="link" size="sm" onClick={() => setPanel('used_by')} data-testid="skill-used-by-link">
                 Used by {plural(s.usedBy, 'agent')}
               </Button>
             </span>
@@ -162,7 +162,7 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
                   <Users className="size-4" /> Used by {plural(s.usedBy, 'agent')}
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setPanel('resources')} data-testid="skill-open-resources">
-                  <Paperclip className="size-4" /> Files and templates · {newest.content.resources.length}
+                  <Paperclip className="size-4" /> Files · {newest.content.resources.length}
                 </DropdownMenuItem>
                 {canBuild && (
                 <>
@@ -226,7 +226,7 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
                 <AlertDescription>
                   <span>
                     {s.usedBy === 1 ? 'It keeps the version it uses until it is moved to a newer one.' : 'They keep the version they use until each one is moved to a newer one.'}{' '}
-                    <Button variant="link" size="sm" className="h-auto p-0" onClick={() => setPanel('used_by')}>
+                    <Button variant="link" size="sm" onClick={() => setPanel('used_by')}>
                       See {s.usedBy === 1 ? 'the agent' : 'the agents'}
                     </Button>
                   </span>

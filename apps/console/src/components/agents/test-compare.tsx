@@ -99,7 +99,7 @@ export function TestCompare({ agentId, agentName, newest, versions, open }: { ag
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <span className="shrink-0">Newest v{newest} against</span>
         <Select value={against !== undefined ? String(against) : undefined} onValueChange={(v) => setAgainst(Number(v))}>
-          <SelectTrigger className="h-8 w-auto" aria-label="Version to compare with" data-testid="compare-version">
+          <SelectTrigger className="w-auto" aria-label="Version to compare with" data-testid="compare-version">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
