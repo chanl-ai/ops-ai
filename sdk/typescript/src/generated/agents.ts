@@ -446,6 +446,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/agents/{agent_id}/prompt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Agent Prompt
+         * @description The prompt a version gives the model (the newest when none is named), with each mention as the name the model
+         *     knows it under and the never rules last. Nothing is changed.
+         */
+        get: operations["agents_agent_prompt"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/agents/{agent_id}/publish-check": {
         parameters: {
             query?: never;
@@ -4065,6 +4086,16 @@ export interface components {
             widgets?: components["schemas"]["WidgetSettings"] | null;
         };
         /**
+         * AgentPrompt
+         * @description The prompt one version of an agent gives the model, read only: its instructions, then the never rules last.
+         */
+        AgentPrompt: {
+            /** Text */
+            text: string;
+            /** Version */
+            version: number;
+        };
+        /**
          * AgentPublishCheck
          * @description Whether the newest draft can be published, and each thing that stops it with the field it is in.
          */
@@ -4724,14 +4755,23 @@ export interface components {
         /**
          * Brief
          * @description What a builder writes instead of one block of instructions. Persona, tone and glossary are text inside
-         *     `how_to_answer`. `success` is kept for grading and is never sent to the model.
+         *     `how_to_answer`. `purpose` is the Job; `goal` is kept on agents that already have one and is not asked for on
+         *     new ones. `success` is kept readable on old versions and is never sent to the model. `hand_off` and `examples`
+         *     default to empty, so a version stored before them reads and runs as it did.
          */
         Brief: {
+            /**
+             * Examples
+             * @default
+             */
+            examples: string;
             /**
              * Goal
              * @default
              */
             goal: string;
+            /** Handoff */
+            handOff?: string[];
             /**
              * Howtoanswer
              * @default
@@ -4750,10 +4790,17 @@ export interface components {
          */
         BriefView: {
             /**
+             * Examples
+             * @default
+             */
+            examples: string;
+            /**
              * Goal
              * @default
              */
             goal: string;
+            /** Handoff */
+            handOff?: string[];
             /**
              * Howtoanswer
              * @default
@@ -6012,6 +6059,15 @@ export interface components {
         /** Envelope[AgentEvalRun] */
         Envelope_AgentEvalRun_: {
             data: components["schemas"]["AgentEvalRun"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[AgentPrompt] */
+        Envelope_AgentPrompt_: {
+            data: components["schemas"]["AgentPrompt"];
             /**
              * Success
              * @constant
@@ -15336,6 +15392,111 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_Agent_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    agents_agent_prompt: {
+        parameters: {
+            query?: {
+                version?: number | null;
+            };
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_AgentPrompt_"];
                 };
             };
             /** @description Invalid request */

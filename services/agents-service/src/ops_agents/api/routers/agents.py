@@ -75,6 +75,7 @@ from ..runs import graph_store
 from ..schemas import (
     Agent,
     AgentEvalRun,
+    AgentPrompt,
     AgentPublishCheck,
     AgentRun,
     AgentTestTurn,
@@ -746,6 +747,17 @@ async def _publish_problems(rt: Runtime, spec: Json) -> list[Json]:
     not run as stored. The check and the publish both read this list."""
     brief = cast(list[Json], agent_brief.publish_problems(spec))
     return [*brief, *cast(list[Json], await skill_pin_problems(rt, spec))]
+
+
+@router.get("/{agent_id}/prompt", response_model=Envelope[AgentPrompt])
+async def agent_prompt(
+    rt: Rt, _: Reader, __: Tx, agent_id: str, version: Annotated[int | None, Query()] = None
+) -> JSONResponse:
+    """The prompt a version gives the model (the newest when none is named), with each mention as the name the model
+    knows it under and the never rules last. Nothing is changed."""
+    reg = registry(rt)
+    n = version if version is not None else (await reg.row(agent_id)).version
+    return ok({"version": n, "text": agent_brief.prompt_view((await reg.version(agent_id, n)).spec)})
 
 
 @router.get("/{agent_id}/publish-check", response_model=Envelope[AgentPublishCheck])

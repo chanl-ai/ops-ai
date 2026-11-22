@@ -185,6 +185,8 @@ class BriefView(Out):
     purpose: str
     goal: str = ""
     how_to_answer: str = ""
+    hand_off: list[str] = Field(default_factory=list[str])
+    examples: str = ""
     never: list[str] = Field(default_factory=list[str])
     success: list[str] = Field(default_factory=list[str])
 
@@ -1745,6 +1747,13 @@ class PublishBlocker(Out):
     id: str | None = None
     position: BlockerPosition | None = None
     message: str
+
+
+class AgentPrompt(Out):
+    """The prompt one version of an agent gives the model, read only: its instructions, then the never rules last."""
+
+    version: int
+    text: str
 
 
 class AgentPublishCheck(Out):

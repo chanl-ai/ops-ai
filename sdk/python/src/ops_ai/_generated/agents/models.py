@@ -63,6 +63,11 @@ class AgentInput(TypedDict, closed=True):
     templateId: NotRequired[str | None]
 
 
+class AgentPrompt(TypedDict, closed=True):
+    text: str
+    version: int
+
+
 class AgentRef(TypedDict, closed=True):
     id: str
     kind: Literal["agent", "event", "start"]
@@ -274,6 +279,9 @@ class BoundWorkflow(TypedDict, closed=True):
     version: int
 
 
+HandOffItem: TypeAlias = str
+
+
 NeverItem: TypeAlias = str
 
 
@@ -281,7 +289,9 @@ Succes: TypeAlias = str
 
 
 class Brief(TypedDict, closed=True):
+    examples: NotRequired[str]
     goal: NotRequired[str]
+    handOff: NotRequired[list[HandOffItem]]
     howToAnswer: NotRequired[str]
     never: NotRequired[list[NeverItem]]
     purpose: str
@@ -289,7 +299,9 @@ class Brief(TypedDict, closed=True):
 
 
 class BriefView(TypedDict, closed=True):
+    examples: NotRequired[str]
     goal: NotRequired[str]
+    handOff: NotRequired[list[str]]
     howToAnswer: NotRequired[str]
     never: NotRequired[list[str]]
     purpose: str
@@ -645,6 +657,11 @@ class EnvelopeAccountUsers(TypedDict, closed=True):
 
 class EnvelopeAccountUses(TypedDict, closed=True):
     data: AccountUses
+    success: Literal[True]
+
+
+class EnvelopeAgentPrompt(TypedDict, closed=True):
+    data: AgentPrompt
     success: Literal[True]
 
 

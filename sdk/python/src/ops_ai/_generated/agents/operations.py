@@ -28,6 +28,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "agents_agent_prompt": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/agents/{agent_id}/prompt",
+        "pathParams": ["agent_id"],
+        "query": ["version"],
+        "stream": False,
+    },
     "agents_agent_skill_options": {
         "body": None,
         "headers": [],
@@ -2143,6 +2152,12 @@ class Operations:
         "Set Paused"
         return self._t.call(SERVICE, OPERATIONS["agents_set_paused"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
 
+    def agents_agent_prompt(self, agent_id: str, *, version: int | None = None) -> AgentPrompt:
+        "Agent Prompt"
+        return self._t.call(
+            SERVICE, OPERATIONS["agents_agent_prompt"], {"agent_id": agent_id}, {"version": version}, {}, None
+        )  # type: ignore[no-any-return]
+
     def agents_publish_check(self, agent_id: str, *, version: int | None = None) -> AgentPublishCheck:
         "Publish Check"
         return self._t.call(
@@ -3745,6 +3760,12 @@ class AsyncOperations:
     async def agents_set_paused(self, agent_id: str, body: PausedInput) -> Agent:
         "Set Paused"
         return await self._t.call(SERVICE, OPERATIONS["agents_set_paused"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def agents_agent_prompt(self, agent_id: str, *, version: int | None = None) -> AgentPrompt:
+        "Agent Prompt"
+        return await self._t.call(
+            SERVICE, OPERATIONS["agents_agent_prompt"], {"agent_id": agent_id}, {"version": version}, {}, None
+        )  # type: ignore[no-any-return]
 
     async def agents_publish_check(self, agent_id: str, *, version: int | None = None) -> AgentPublishCheck:
         "Publish Check"

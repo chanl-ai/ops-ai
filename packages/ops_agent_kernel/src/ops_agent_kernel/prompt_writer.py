@@ -19,11 +19,15 @@ Rule = Annotated[str, Field(min_length=1, max_length=300)]
 
 class Brief(In):
     """What a builder writes instead of one block of instructions. Persona, tone and glossary are text inside
-    `how_to_answer`. `success` is kept for grading and is never sent to the model."""
+    `how_to_answer`. `purpose` is the Job; `goal` is kept on agents that already have one and is not asked for on
+    new ones. `success` is kept readable on old versions and is never sent to the model. `hand_off` and `examples`
+    default to empty, so a version stored before them reads and runs as it did."""
 
     purpose: str = Field(min_length=1, max_length=400)
     goal: str = Field(default="", max_length=600)
     how_to_answer: str = Field(default="", max_length=24000)
+    hand_off: list[Rule] = Field(default_factory=list[Rule], max_length=10)
+    examples: str = Field(default="", max_length=4000)
     never: list[Rule] = Field(default_factory=list[Rule], max_length=20)
     success: list[Rule] = Field(default_factory=list[Rule], max_length=8)
 
@@ -62,6 +66,11 @@ def head(name: str, brief: Brief) -> str:
         sections.append(f"# Goal\n{brief.goal.strip()}")
     if brief.how_to_answer.strip():
         sections.append(f"# How to answer\n{brief.how_to_answer.strip()}")
+    hand_off = [r.strip() for r in brief.hand_off if r.strip()]
+    if hand_off:
+        sections.append("# Hand off when\n" + "\n".join(f"- {r}" for r in hand_off))
+    if brief.examples.strip():
+        sections.append(f"# Examples\n{brief.examples.strip()}")
     return "\n\n".join(sections)
 
 
