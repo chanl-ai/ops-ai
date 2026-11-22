@@ -137,6 +137,7 @@ from .schemas import (
     RoleDetail,
     RoleGrantIn,
     RoleGrantOut,
+    RoleHolderIn,
     RoleHolderOut,
     RoleIn,
     RoleOut,
@@ -1276,6 +1277,50 @@ def create_public_app(
         what deleting it would take from them. A workspace admin's."""
         await people.require_admin(actor, "access", "view")
         return ok(await roles.store.holders(actor.tenant_id, role_id, q))
+
+    @app.get(
+        "/v1/roles/{role_id}/holder-options", tags=["roles"], response_model=Envelope[OptionsPage], responses=ERRORS
+    )
+    async def role_holder_options(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
+        role_id: Annotated[str, Path(pattern=RECORD_ID)],
+        actor: Annotated[Actor, Depends(acting)],
+        *,
+        search: str | None = None,
+        cursor: str | None = None,
+        limit: Annotated[int, Query(ge=1, le=100)] = 20,
+        ids: Annotated[list[str] | None, Query()] = None,
+    ) -> Any:
+        """Who the role can be given to in the team the request acts in: its active people and the workspace's groups,
+        one searched list by name; each value is `person:<user id>` or `group:<group id>`. Whoever may give roles there
+        (access.manage)."""
+        await people.require_admin(actor, "access", "manage")
+        offset, window = options_window(cursor, limit)
+        rows = await roles.store.holder_options(
+            actor.tenant_id, actor.team_id, search=search, ids=ids or [], offset=offset, limit=window
+        )
+        return ok(options_page(rows, offset, limit))
+
+    @app.post(
+        "/v1/roles/{role_id}/holders",
+        tags=["roles"],
+        status_code=201,
+        response_model=Envelope[RoleHolderOut],
+        responses=ERRORS,
+    )
+    async def give_role_to_holder(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
+        role_id: Annotated[str, Path(pattern=RECORD_ID)],
+        body: RoleHolderIn,
+        actor: Annotated[Actor, Depends(acting)],
+    ) -> Any:
+        """Gives a custom role to a person or a group in the team the request acts in: an admin of that team or a
+        workspace admin (access.manage there). Audited as `role.grant`; applies on each holder's next request."""
+        await people.require_admin(actor, "access", "manage")
+        given = await roles.give(
+            actor.tenant_id, role_id, body.kind, body.id, actor.team_id, by=actor.user_id, request_id=actor.request_id
+        )
+        return ok(given, status=201)
 
     @app.get(
         "/v1/people/{person_id}/role-grants",

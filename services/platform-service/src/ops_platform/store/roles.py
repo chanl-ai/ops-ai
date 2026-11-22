@@ -42,7 +42,7 @@ from ops_store.listing import ListPage, list_page
 from ops_store.rows import one, rows
 
 from .audit import record
-from .tables import group_members, members, role_assignments, role_permissions, roles, teams, tenants, users
+from .tables import group_members, groups, members, role_assignments, role_permissions, roles, teams, tenants, users
 from .tenancy import TenantDb
 
 MEMBERSHIP = "membership"
@@ -54,6 +54,10 @@ class RoleNameTakenError(Exception):
 
 class AlreadyGrantedError(Exception):
     """The person holds that role in that team already."""
+
+
+class UnknownGroupError(Exception):
+    """No group of the workspace has that id."""
 
 
 class PrivilegedForGroupError(Exception):
@@ -384,13 +388,16 @@ class RoleStore(TenantDb):
     async def holders(self, tenant_id: str, role_id: str, params: ListParams) -> ListPage:
         """Who holds the role and in which team on the shared list contract, each person by name and address: by name
         (a team's id standing in for its name, on both databases alike), then by assignment id; searched on name and
-        email. `ids` names the row's `id`, the person's or team's, not the assignment's."""
-        name = sa.func.coalesce(users.c.name, role_assignments.c.subject_id)
+        email; a group holder is named by the group's name. `ids` names the row's `id`, the person's, group's or
+        team's, not the assignment's."""
+        name = sa.func.coalesce(users.c.name, groups.c.name, role_assignments.c.subject_id)
         q = (
             sa.select(role_assignments.c.subject_kind.label("kind"), role_assignments.c.subject_id.label("id"),
                       role_assignments.c.team_id, name.label("name"), users.c.email)
             .select_from(role_assignments.outerjoin(users, sa.and_(users.c.id == role_assignments.c.subject_id,
-                                                                   role_assignments.c.subject_kind == "person")))
+                                                                   role_assignments.c.subject_kind == "person"))
+                         .outerjoin(groups, sa.and_(groups.c.id == role_assignments.c.subject_id,
+                                                    role_assignments.c.subject_kind == "group")))
             .where(role_assignments.c.role_id == role_id)
         )  # fmt: skip
         if params.ids is not None:
@@ -400,6 +407,38 @@ class RoleStore(TenantDb):
             page = await list_page(c, q, params, search=[users.c.name, users.c.email], default_sort=name.asc())
         page["data"] = [RoleHolderRow.model_validate(r).model_dump(by_alias=True) for r in page["data"]]
         return page
+
+    async def holder_options(
+        self, tenant_id: str, team_id: str, *, search: str | None, ids: list[str], offset: int, limit: int
+    ) -> list[dict[str, str | None]]:
+        """Who a role can be given to in the team, as one picker's choices: the team's active people and the
+        workspace's groups, by name, searched on name (and a person's email) and paged here. Each value is
+        `person:<user id>` or `group:<group id>`; `ids` resolves stored values to their names."""
+        person_name = sa.func.coalesce(users.c.name, members.c.email)
+        people = (
+            sa.select(sa.literal("person").label("kind"), members.c.user_id.label("id"), person_name.label("name"),
+                      members.c.email.label("hint"))
+            .select_from(members.outerjoin(users, users.c.id == members.c.user_id))
+            .where(members.c.team_id == team_id, members.c.status == "active", members.c.user_id.is_not(None))
+        )  # fmt: skip
+        sets = sa.select(
+            sa.literal("group").label("kind"), groups.c.id, groups.c.name, sa.literal("Group").label("hint")
+        )
+        wanted = [i.split(":", 1) for i in ids if ":" in i]
+        if wanted:
+            people = people.where(members.c.user_id.in_([v for k, v in wanted if k == "person"] or [""]))
+            sets = sets.where(groups.c.id.in_([v for k, v in wanted if k == "group"] or [""]))
+        elif search:
+            like = f"%{search.strip().lower()}%"
+            people = people.where(
+                sa.or_(sa.func.lower(person_name).like(like), sa.func.lower(members.c.email).like(like))
+            )
+            sets = sets.where(sa.func.lower(groups.c.name).like(like))
+        both = sa.union_all(people, sets).subquery()
+        q = sa.select(both).order_by(both.c.name, both.c.kind, both.c.id).offset(offset).limit(limit)
+        async with self.tenant_tx(tenant_id) as c:
+            found = (await c.execute(q)).all()
+        return [{"id": f"{r.kind}:{r.id}", "label": r.name, "hint": r.hint} for r in found]
 
     async def delete(self, tenant_id: str, role_id: str, *, move_to: str | None, by: str, request_id: str) -> int:
         """Deletes a custom role. While people or teams hold it, RoleInUseError names them, unless `move_to` names the
@@ -495,11 +534,13 @@ class RoleStore(TenantDb):
         expires_at: str | None = None,
     ) -> str:
         """Gives a person or a group a role in one team or in every team (`*`), audited as `role.grant`. A group is
-        never given a role holding a privileged cell there (PrivilegedForGroupError naming the cells);
-        AlreadyGrantedError when the subject holds the role there already."""
+        never given a role holding a privileged cell there (PrivilegedForGroupError naming the cells), nor is a group
+        the workspace does not have (UnknownGroupError); AlreadyGrantedError when the subject holds the role there."""
         grant_id = new_id("ras")
         async with self.tenant_tx(tenant_id) as c:
             if subject_kind == "group":
+                if (await c.execute(sa.select(groups.c.id).where(groups.c.id == subject_id))).first() is None:
+                    raise UnknownGroupError
                 await _refuse_privileged_for_group(c, tenant_id, role_id, team_id)
             held = await c.execute(
                 sa.select(role_assignments.c.id).where(

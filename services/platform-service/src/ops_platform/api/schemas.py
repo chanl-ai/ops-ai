@@ -509,6 +509,13 @@ class RoleGrantIn(In):
     role_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,64}$")
 
 
+class RoleHolderIn(In):
+    """Who the role is given to, in the team the request acts in (X-Team-Id): a person by user id or a group."""
+
+    kind: Literal["person", "group"]
+    id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,64}$")
+
+
 class RoleGrantOut(Out):
     id: str
     role_id: str
