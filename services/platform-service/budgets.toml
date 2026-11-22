@@ -92,7 +92,7 @@ queries = 8   # the access.view decision a Chat user fails reads the caller's ro
 queries = 8   # the access.view decision a Chat user fails reads the caller's roles
 
 ["GET /v1/roles"]
-queries = 9
+queries = 10   # one more: each role's cells are read through named_grids (the one reader), not counted off the table
 
 ["GET /v1/roles/{role_id}"]
 queries = 14
