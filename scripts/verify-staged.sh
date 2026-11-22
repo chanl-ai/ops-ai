@@ -155,6 +155,14 @@ if [ -n "${OPS_FULL_HOOK:-}" ] && ! PATH="$run/.bin:$root/.venv/bin:$PATH" GIT_D
 fi
 # Python files in the commit are linted and format-checked; a second each.
 mapfile -t py < <(GIT_INDEX_FILE="$index" git -C "$root" diff --cached --name-only --diff-filter=ACMR -- '*.py' || true)
+# A merge commit is checked on what it resolves: a file staged exactly as the other side has it came in with that side,
+# so only files that differ from both parents are linted and type-checked here.
+if [ "${#py[@]}" -gt 0 ] && git -C "$root" rev-parse -q --verify MERGE_HEAD >/dev/null; then
+  mapfile -t theirs < <(GIT_INDEX_FILE="$index" git -C "$root" diff --cached --name-only --diff-filter=ACMR MERGE_HEAD -- '*.py' || true)
+  kept=()
+  for f in "${py[@]}"; do [[ " ${theirs[*]} " == *" $f "* ]] && kept+=("$f"); done
+  py=("${kept[@]}")
+fi
 if [ "${#py[@]}" -gt 0 ]; then
   fixhint="verify-staged: ruff refused the files above; run uv run ruff check --fix <file> and uv run ruff format <file>, stage the file, commit again"
   if [ "${#fix_skipped[@]}" -gt 0 ]; then fixhint="$fixhint (not fixed here because the working copy differs from the staged copy: ${fix_skipped[*]})"; fi
