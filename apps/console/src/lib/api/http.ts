@@ -260,6 +260,7 @@ export function createHttpApi(baseUrl: string): OpsApi {
       requestPublish: (id, version, note, follows) => send('POST', `/agents/${id}/publish-requests`, { version, note, follows }),
       publishPreview: (id, version) => get(`/agents/${id}/publish-preview?version=${version}`),
       publishCheck: (id, version) => get(`/agents/${id}/publish-check?version=${version}`),
+      promptView: (id, version) => get(`/agents/${id}/prompt${version === undefined ? '' : `?version=${version}`}`),
       setPaused: (id, paused) => send('POST', `/agents/${id}/paused`, { paused }),
       // GET /tools answers one page of the Tools page's rows (each a grantable tool with its app and users): the agent
       // page reads the largest page the route serves.

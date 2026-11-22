@@ -76,6 +76,12 @@ export interface AddedReferences {
   agentVersion: number;
 }
 
+/** `GET /v1/agents/{id}/prompt`: the prompt a version gives the model, read only, with Never last. */
+export interface AgentPrompt {
+  version: number;
+  text: string;
+}
+
 /** `GET /v1/agents/{id}/publish-check`: whether the newest draft can be sent for publish, and what stops it. */
 export interface AgentPublishCheck {
   canRequest: boolean;

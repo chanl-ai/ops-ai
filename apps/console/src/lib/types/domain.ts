@@ -91,7 +91,11 @@ export interface AgentBrief {
   purpose: string;
   goal: string;
   howToAnswer: string;
+  /** When the agent passes the conversation to a person; written into the prompt after How to answer. */
+  handOff: string[];
+  examples: string;
   never: string[];
+  /** Kept readable on older versions; the brief no longer shows or writes them (they seed eval cases). */
   success: string[];
 }
 

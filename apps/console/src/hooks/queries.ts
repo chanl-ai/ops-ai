@@ -174,6 +174,9 @@ export const useRequestAgentPublish = (id: string) =>
 /** Asked when the publish dialog opens, so it says whether the publish waits for review before anyone presses it. */
 export const useAgentPublishPreview = (id: string, version: number, enabled: boolean) =>
   useTeamQuery({ queryKey: ['agent', id, 'publish-preview', version], queryFn: () => api.agents.publishPreview(id, version), enabled, staleTime: 0 });
+/** The prompt the model reads for a version, for View prompt; asked only while the dialog is open. */
+export const useAgentPrompt = (id: string, version: number, enabled: boolean) =>
+  useTeamQuery({ queryKey: ['agent', id, 'prompt', version], queryFn: () => api.agents.promptView(id, version), enabled, staleTime: 0 });
 /** What stops the newest draft from publishing and where; read when the publish dialog opens and after each save. */
 export const useAgentPublishCheck = (id: string, version: number, enabled = true) =>
   useTeamQuery({ queryKey: ['agent', id, 'publish-check', version], queryFn: () => api.agents.publishCheck(id, version), enabled, staleTime: 0 });

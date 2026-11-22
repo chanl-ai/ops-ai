@@ -26,11 +26,12 @@ import {
   ToolsSection,
   UsedInCard,
 } from '@/components/agents/agent-settings';
-import { AgentBriefEditor, legacyBrief, PromptModeToggle } from '@/components/agents/agent-brief-editor';
+import { AgentBriefEditor, legacyBrief, MoveIntoBrief } from '@/components/agents/agent-brief-editor';
 import { ModelSelect } from '@/components/agents/model-select';
 import { AgentModelLimitsSection } from '@/components/agents/agent-model-limits-section';
 import { AgentCompareView } from '@/components/agents/test-compare';
 import { AgentUsesLink } from '@/components/agents/agent-uses-line';
+import { ViewPromptDialog } from '@/components/agents/view-prompt-dialog';
 import { EditableTitle } from '@/components/shared/editable-title';
 import { PromptModeDialogs } from '@/components/agents/prompt-mode-dialogs';
 import { MemorySection } from '@/components/agents/memory-section';
@@ -236,7 +237,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
   const editable = canBuild && !locked;
   const check = useAgentPublishCheck(agent.id, agent.version, canBuild && newest?.state === 'draft');
   const preview = useAgentPublishPreview(agent.id, agent.version, canBuild && newest?.state === 'draft');
-  const purposeProblem: PublishBlocker[] = purposeMissing ? [{ kind: 'missing_field', id: null, position: { field: 'brief.purpose', step: null, index: null }, message: 'Purpose is empty. Say what this agent is for.' }] : [];
+  const purposeProblem: PublishBlocker[] = purposeMissing ? [{ kind: 'missing_field', id: null, position: { field: 'brief.purpose', step: null, index: null }, message: 'Job is empty. Say what this agent is for.' }] : [];
   const problems = [...purposeProblem, ...(check.data?.problems ?? [])];
   const goTo = (field: string) => {
     setTab('settings');
@@ -270,9 +271,11 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
   // So is a knowledge base picked or removed, which an @ insert changes too.
   const setKnowledge = (change: { add: string[]; remove: string[] }) =>
     changeKnowledge.mutate(change, { onError: (e) => toast.error('Couldn’t change the knowledge bases', { description: e.message }) });
-  const switchMode = (to: PromptMode) =>
-    update.mutate(to === 'full' ? { promptMode: 'full', instructions: agent.instructions, base: agent } : { promptMode: 'brief', base: agent }, {
-      onSuccess: () => (setModeAsked(null), toast.success(to === 'full' ? 'Editing as plain text' : 'Back to the brief', { description: to === 'full' ? 'Your brief stays saved; only Never is still used from it.' : 'The next version uses the prompt written from the brief.' })),
+  // Plain text is never turned on from here (one prompt text); an agent already in it can move into the brief.
+  const switchMode = () =>
+    // The plain text goes under How to answer whole, so nothing the builder typed is dropped by the move.
+    update.mutate({ promptMode: 'brief', brief: { ...(agent.brief ?? legacyBrief(agent)), howToAnswer: agent.instructions }, base: agent }, {
+      onSuccess: () => (setModeAsked(null), toast.success('Moved into the brief', { description: 'The next version uses the prompt written from the brief.' })),
       onError: (e) => (setModeAsked(null), toast.error('Couldn’t switch', { description: e.message })),
     });
   const togglePaused = () =>
@@ -543,12 +546,17 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
                 toolbar={assist.toolbar}
                 footer={assist.footer}
                 textareaRef={assist.textareaRef}
+                cardFooter={
+                  <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-2" data-testid="agent-brief-footer">
+                    <AgentUsesLink uses={agent.uses} />
+                    <div className="flex items-center gap-1">
+                      {editable && mode === 'full' && <MoveIntoBrief onChoose={() => setModeAsked('brief')} disabled={dirty || update.isPending} />}
+                      <ViewPromptDialog agentId={agent.id} version={agent.version} name={agent.name} />
+                    </div>
+                  </div>
+                }
               />
               </BuilderFieldset>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <AgentUsesLink uses={agent.uses} />
-                {editable && <PromptModeToggle mode={mode} onChoose={setModeAsked} disabled={dirty || update.isPending} />}
-              </div>
               <BuilderFieldset canEdit={locked ? false : agent.canEdit}>
               {mode === 'full' && <AgentJobField draft={draft} set={set} error={errors.role} />}
               </BuilderFieldset>

@@ -817,6 +817,12 @@ export function createMockApi(): OpsApi {
       requestPublish: (aid, version, note, follows) => respond(() => agentPublish.requestPublish(aid, version, note, follows)),
       // The mock's requestPublish always opens a review, so its preview says so.
       publishCheck: (aid) => respond(() => publishCheckOf(agentOr404(aid))),
+      promptView: (aid) =>
+        respond(() => {
+          const a = agentOr404(aid);
+          const never = a.brief?.never.length ? `\n\n# Never\n${a.brief.never.map((r) => `- ${r}`).join('\n')}` : '';
+          return { version: a.version, text: `${a.instructions}${never}` };
+        }),
       publishPreview: () => respond(() => ({ reviewRequired: true, policy: 'major' as const, majorChange: true, reviewReason: 'major_change' as const })),
       restore: (aid, version) =>
         respond(() => {

@@ -37,7 +37,7 @@ import type { ActivityApi } from './activity-contract';
 import type { CaseRecordsApi } from './case-records-contract';
 import type { AssuranceApi } from './assurance-contract';
 import type { McpLinksApi } from './mcp-links-contract';
-import type { AgentPublishCheck } from '@/lib/types/references';
+import type { AgentPrompt, AgentPublishCheck } from '@/lib/types/references';
 import type { ReferencesApi } from './references-contract';
 import type { WikiApi } from './wiki-contract';
 import type {
@@ -123,6 +123,8 @@ export interface OpsApi {
      * author, publishes the version (spec 04 5.11).
      */
     requestPublish(id: string, version: number, note: string, follows?: string): Promise<Review>;
+    /** The prompt a version gives the model (the newest when none is named), mentions as names and Never last. */
+    promptView(id: string, version?: number): Promise<AgentPrompt>;
     /** What stops the newest draft from publishing, each with the field it is in; opens and changes nothing. */
     publishCheck(id: string, version: number): Promise<AgentPublishCheck>;
     /** Whether publishing the newest draft would wait for review, and why; opens and changes nothing. */
