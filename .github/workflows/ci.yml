@@ -6,6 +6,9 @@ on:
   pull_request:
     # labeled: adding ci:full starts a run of every job without a new push.
     types: [opened, synchronize, reopened, labeled]
+    # A pull request into a release branch runs nothing: the release's own pull request to develop runs CI once
+    # (docs/deploy/release.md).
+    branches: [develop, main]
   # The merge queue on develop: the queue's temporary branch (develop plus the queued pull requests) runs the same jobs
   # as a pull request, planned from the queue's base, so ci-ok reports on it and the queue merges only on green.
   merge_group:
@@ -13,7 +16,7 @@ on:
   # develop and main run the same checks after a merge; the staging job at the end deploys develop, and a release or
   # hotfix branch (docs/deploy/release.md) so the release is tested on staging.
   push:
-    branches: [develop, main, "release/**", "hotfix/**"]
+    branches: [develop, main, "hotfix/**"]
 
 permissions:
   contents: read
