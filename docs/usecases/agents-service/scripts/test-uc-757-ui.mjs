@@ -109,10 +109,11 @@ await withUiStack(
       const drawn = await page.getByTestId('sop-editor').getByTestId('sop-mention').count();
       // The Tools field lists what the text mentions, read-only, once the text holds the mention.
       const picked = (await lineOf('Look the charge up').getByTestId('sop-mention').innerText()).trim();
-      const toolRow = page.getByTestId('skill-tool-row').filter({ hasText: 'in the text' });
+      const rows = page.getByTestId('skill-tools-rows').locator(':scope > *');
+      const toolRow = rows.filter({ hasText: 'In the steps' });
       await toolRow.first().waitFor({ timeout: 30_000 }).catch(() => undefined);
-      const toolRows = await page.getByTestId('skill-tool-row').allInnerTexts();
-      check('10 the Tools field lists the tool the text mentions, read-only', (await toolRow.count()) === 1 && (await toolRow.getByRole('button').count()) === 0 && (await page.getByTestId('skill-tools-from-text').count()) === 1, { picked, toolRows });
+      const toolRows = await rows.allInnerTexts();
+      check('10 the Tools list shows the tool the text mentions, with no Remove', (await toolRow.count()) === 1 && (await toolRow.getByRole('button').count()) === 0, { picked, toolRows });
       const stored = armed(page.waitForResponse((r) => r.request().method() === 'PUT' && r.url() === `${agents}/v1/skills/${skill.id}/draft`, { timeout: 60_000 }));
       await page.getByTestId('save-skill-draft').click();
       await page.getByTestId('save-skill-draft-confirm').click();

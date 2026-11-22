@@ -1,29 +1,31 @@
 'use client';
 
 import * as React from 'react';
-import { AtSign, CircleAlert, Eye, GitBranch, Lock, Pencil, RefreshCw, Square, TriangleAlert, Users, X } from 'lucide-react';
+import { BookOpen, ChevronDown, CircleAlert, GitBranch, Lock, Plus, RefreshCw, Sparkles, TriangleAlert, Users, Wrench } from 'lucide-react';
 
-import { AddMenu } from '@/components/shared/add-menu';
+import { EntityPicker } from '@/components/shared/entity-picker';
 import { FormField } from '@/components/shared/form-field';
 import { LeaveGuard } from '@/components/shared/leave-guard';
+import { ListSection, type ListRow } from '@/components/shared/list-section';
 import { NewerCopyNotice } from '@/components/shared/newer-copy-notice';
+import { RecordLayout } from '@/components/shared/record-layout';
 import { SettingsSection } from '@/components/shared/settings-section';
 import { TagInput } from '@/components/shared/tag-input';
 import { parseText, refToken } from '@/components/shared/instruction-document/document-model';
 import { HOW_SAYS, SopEditor, type SopEditorHandle } from '@/components/shared/sop-editor';
 import { SkillInputsSection } from '@/components/skills/skill-inputs-section';
-import { MarkdownPreview, UNWRITTEN_SECTIONS, WORKED_EXAMPLE } from '@/components/skills/skill-meta';
+import { UNWRITTEN_SECTIONS, WORKED_EXAMPLE } from '@/components/skills/skill-meta';
 import { inText, refusedSave } from '@/components/skills/skill-problems';
 import { SkillResultsSection, type SkillEndingValue } from '@/components/skills/skill-results-section';
 import { SkillWhenSection, type SkillWhen, type SkillWhenHandle } from '@/components/skills/skill-when-section';
 import { AccessBadge } from '@/components/status-badges';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { knowledgeBaseOptions, toolOptions, useOptionLabels } from '@/hooks/options-queries';
 import { useReferenceLabels } from '@/hooks/references-queries';
 import { useReloadToRead } from '@/hooks/use-reload-to-read';
 import { useSaveSkillDraft, useSkill, useSkillOptions, useSkillTextReading } from '@/hooks/skill-queries';
@@ -37,7 +39,8 @@ import { baseOf, staleNote, staleSave } from '@/lib/save-base';
 import type { PublishBlocker } from '@/lib/types/references';
 import type { SkillDetail, SkillInputField, SkillLoading, SkillPartContent } from '@/lib/types/skills';
 
-import { PartsSection, partsError } from './parts-section';
+import { PartsList } from './parts-section';
+import { skillBody } from './skill-body';
 
 /** What the page's header shows and does for the editor's autosave. */
 export interface SkillSaveState {
@@ -74,7 +77,7 @@ const KINDS = [['tools', 'tool', 'tools'], ['knowledge', 'knowledge source', 'kn
 /** “3 tools · 2 knowledge sources”, from the counts the service read from the text. */
 const usesLine = (uses: Record<(typeof KINDS)[number][0], number> | undefined) => {
   const parts = KINDS.filter(([k]) => uses?.[k]).map(([k, one, many]) => `${uses![k]} ${uses![k] === 1 ? one : many}`);
-  return parts.length ? parts.join(' · ') : 'nothing yet';
+  return parts.length ? parts.join(' · ') : undefined;
 };
 /**
  * The person's own text, kept read-only on the page after someone else saved first and the person reloaded: the
@@ -93,7 +96,7 @@ const same = (a: string[], b: string[]) => a.length === b.length && a.every((x) 
  * publisher approves it. The unsaved bar says which edit class the change is. A person who may not change the team's
  * skills (`canEdit` false) reads the same form with every field off and no save.
  */
-export function SkillEditor({ skill: sk, canEdit, onDirtyChange, onSaveState, carried, keptText }: { skill: SkillDetail; canEdit: boolean; onDirtyChange?: (dirty: boolean) => void; onSaveState?: (s: SkillSaveState) => void; carried?: React.RefObject<Carried<Form> | null>; keptText?: React.RefObject<KeptText | null> }) {
+export function SkillEditor({ skill: sk, tab = 'instructions', hidden, rail, canEdit, onDirtyChange, onSaveState, carried, keptText }: { skill: SkillDetail; tab?: 'instructions' | 'settings'; /** Kept mounted under another tab (Tests), so unsaved edits stay. */ hidden?: boolean; rail?: React.ReactNode; canEdit: boolean; onDirtyChange?: (dirty: boolean) => void; onSaveState?: (s: SkillSaveState) => void; carried?: React.RefObject<Carried<Form> | null>; keptText?: React.RefObject<KeptText | null> }) {
   const save = useSaveSkillDraft(sk.id);
   const current = useSkill(sk.id);
   const options = useSkillOptions();
@@ -101,7 +104,6 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, onSaveState, ca
   // The page owns the unsaved edits (`carried`): the form is drawn again on a resize (the page's columns stack below
   // 1024px) and on a newer version after Reload, and each time starts from the saved version with those edits on top.
   const [form, setForm] = React.useState<Form>(() => (carried?.current ? keptEdits(carried.current.readBefore, carried.current.edited, saved) : saved));
-  const [mode, setMode] = React.useState<'edit' | 'preview'>('edit');
   const [endingValid, setEndingValid] = React.useState(true);
   const [whenValid, setWhenValid] = React.useState(true);
   const [inputsValid, setInputsValid] = React.useState(true);
@@ -124,8 +126,9 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, onSaveState, ca
   }, [keptText, mine]);
   // A save refused for one step, shown on that step until the steps change.
   const [refused, setRefused] = React.useState<PublishBlocker | null>(null);
-  // A skill has steps or parts, never both: one with parts keeps its Markdown body.
-  const stepped = form.parts.length === 0;
+  // A skill has steps or parts, never both: one with parts keeps its Markdown introduction, edited in the same editor.
+  const body = skillBody(form);
+  const stepped = body.field === 'text';
   const newest = sk.versions[0];
   const locked = newest.state === 'in_review' ? `v${newest.version} is waiting in Reviews.` : sk.status === 'deprecated' ? 'The skill is deprecated. Duplicate it to change it.' : undefined;
   // The document editor and the save bar sit outside what a disabled fieldset reaches, so they read this.
@@ -147,7 +150,7 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, onSaveState, ca
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
   const limit = options.data?.limits.useWhenMaxChars ?? 1024;
-  const errors = { name: form.name.trim() ? undefined : 'Name the skill.', parts: partsError(form.parts) };
+  const errors = { name: form.name.trim() ? undefined : 'Name the skill.' };
   const found = React.useMemo(() => (newest.state === 'draft' ? inText(sk.publishCheck.problems ?? NONE) : NONE), [newest.state, sk.publishCheck.problems]);
   const problems = React.useMemo(() => (refused ? [...found, refused] : found), [found, refused]);
   // A missing list from an older service is none.
@@ -160,7 +163,7 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, onSaveState, ca
   const toolOf = (id: string) => tools.find((t) => t.toolId === id) ?? sk.content.tools.find((t) => t.toolId === id);
 
   // Everything the form needs to be saved: a valid name, parts, when, endings and inputs.
-  const valid = !errors.name && !errors.parts && endingValid && whenValid && inputsValid;
+  const valid = !errors.name && endingValid && whenValid && inputsValid;
   const sentForm = React.useRef<Form>(form);
   const send = () => {
     sentForm.current = form;
@@ -219,8 +222,35 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, onSaveState, ca
     onSaveState?.({ status, detail: stale ?? failed ?? (dirty && !valid ? 'Fix the highlighted fields to save' : null), saveNow: auto.saveNow, retry: auto.retry, canSave: !readOnly && dirty && valid && !stale });
   });
 
+  const toolLabels = new Map((useOptionLabels(toolOptions, listedTools).data?.data ?? []).map((o) => [o.id, o]));
+  const kbLabels = new Map((useOptionLabels(knowledgeBaseOptions, form.knowledgeBases).data?.data ?? []).map((o) => [o.id, o]));
+  // A skill written as steps uses the tools its text mentions, so a pick from the list is typed into the text as a mention.
+  const pickTools = (ids: string[]) => {
+    const added = ids.filter((id) => !listedTools.includes(id));
+    const removed = listedTools.filter((id) => !ids.includes(id) && !(stepped && textTools.includes(id)));
+    if (stepped) for (const id of added) textDoc.current?.insert(`${refToken({ kind: 'tool', id })} `);
+    setForm((f) => ({ ...f, toolIds: [...f.toolIds.filter((x) => !removed.includes(x)), ...(stepped ? [] : added)] }));
+  };
+  const toolRows: ListRow[] = listedTools.map((id) => {
+    const t = toolOf(id);
+    const fromText = stepped && textTools.includes(id);
+    const name = toolLabels.get(id)?.label ?? t?.name ?? labelOf(id) ?? id;
+    return {
+      id,
+      title: name,
+      description: fromText ? 'In the steps' : (toolLabels.get(id)?.hint ?? t?.module),
+      state: t ? <AccessBadge access={t.access} /> : undefined,
+      remove: fromText || readOnly ? undefined : { label: `Remove ${name}`, onClick: () => setForm((f) => ({ ...f, toolIds: f.toolIds.filter((x) => x !== id) })) },
+    };
+  });
+  const kbRows: ListRow[] = form.knowledgeBases.map((id) => {
+    const name = kbLabels.get(id)?.label ?? id;
+    return { id, title: name, description: kbLabels.get(id)?.hint ?? undefined, remove: readOnly ? undefined : { label: `Remove ${name}`, onClick: () => setForm((f) => ({ ...f, knowledgeBases: f.knowledgeBases.filter((x) => x !== id) })) } };
+  });
+  const insert = (text: string) => textDoc.current?.insert(text);
+
   return (
-    <div className="flex flex-col gap-4" data-testid="skill-editor">
+    <div className={hidden ? 'hidden' : 'flex flex-col gap-4'} data-testid="skill-editor">
       {/* The kept copy lives only on this page, so leaving with it asks first. */}
       <LeaveGuard unsaved={(dirty && !readOnly) || !!mine} failed={!!failed} />
       {locked && <p className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">{locked} Fields are read-only.</p>}
@@ -295,40 +325,88 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, onSaveState, ca
           </AlertDescription>
         </Alert>
       )}
-      <SkillWhenSection value={saved.when} onChange={setWhen} onValidity={setWhenValid} useWhenMax={limit} needsUseWhen={form.loading === 'on_match'} showNotWhen={stepped} notWhenProblem={problems.find((p) => p.position?.field === 'notWhen')?.message} disabled={readOnly} controls={whenForm} />
-      {stepped ? (
-        <SettingsSection title="Instructions" description="Write the skill the way you would explain it to a new teammate. A line that mentions a tool may use it; an indented “if …:” block is a path, “else:” the other one, and “stop” ends the skill.">
-          <div className="flex flex-col gap-2">
-            <div className={readOnly ? 'rounded-lg border bg-muted/40' : 'rounded-lg border bg-card'} data-testid="skill-text-editor">
-              {readOnly ? (
-                <div className="flex flex-col gap-1 border-b px-3 py-2 text-xs text-muted-foreground">
-                  <p className="flex items-center gap-2" data-testid="sop-read-only">
-                    <Lock className="size-3.5" /> Read only. {locked ?? 'You can read this skill; a builder in its team can change it.'}
-                  </p>
-                  <span data-testid="sop-how-legend">
-                    {HOW_SAYS.checked} {HOW_SAYS.agent}
+      <div className={tab === 'instructions' ? undefined : 'hidden'} data-testid="skill-instructions-tab">
+        <RecordLayout
+          railRight
+          rail={
+            <>
+              <ListSection
+                id="skill-tools"
+                icon={Wrench}
+                title="Tools"
+                count={listedTools.length}
+                description="An agent must have each of these before it can use the skill."
+                add={readOnly ? undefined : <EntityPicker source={toolOptions} value={listedTools} onChange={pickTools} showChosen={false} addLabel="Add" searchPlaceholder="Search tools by name or system…" emptyText="No tool matches." testId="skill-tools-picker" />}
+                rows={toolRows}
+                empty="Mention a tool with @ in the steps and it shows here."
+              />
+              <ListSection
+                id="skill-knowledge"
+                icon={BookOpen}
+                title="Knowledge"
+                count={form.knowledgeBases.length}
+                add={readOnly ? undefined : <EntityPicker source={knowledgeBaseOptions} value={form.knowledgeBases} onChange={(ids) => setForm((f) => ({ ...f, knowledgeBases: ids }))} showChosen={false} addLabel="Add" searchPlaceholder="Search knowledge bases…" emptyText="No knowledge base matches." testId="skill-knowledge-picker" />}
+                rows={kbRows}
+                empty="No knowledge yet. Add the documents the steps cite, for example Outage handbook."
+              />
+              {rail}
+            </>
+          }
+        >
+          <div className="flex flex-col gap-4">
+            <SkillWhenSection value={form.when} onChange={setWhen} onValidity={setWhenValid} useWhenMax={limit} needsUseWhen={form.loading === 'on_match'} showNotWhen={stepped} notWhenProblem={problems.find((p) => p.position?.field === 'notWhen')?.message} disabled={readOnly} controls={whenForm} />
+            <section className="flex flex-col rounded-lg border bg-card" data-testid="skill-text-editor">
+              <header className="flex items-center gap-2 border-b px-4 py-2">
+                <h2 className="flex-1 text-sm font-semibold">{stepped ? 'Steps' : 'Introduction'}</h2>
+                {readOnly ? (
+                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="sop-read-only">
+                    <Lock className="size-3.5" /> {locked ?? 'Read only. A builder in its team can change it.'}
                   </span>
-                </div>
-              ) : (
-                // Above the text, so it stays in view on a long skill.
-                <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2" data-testid="sop-cue-bar">
-                  <Button variant="ghost" size="sm" onClick={() => textDoc.current?.insert('@')} data-testid="sop-insert-mention">
-                    <AtSign className="size-4" /> Mention
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => textDoc.current?.insert('\nif ')} data-testid="sop-add-path">
-                    <GitBranch className="size-4" /> Path
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => textDoc.current?.insert('\nstop "')} data-testid="sop-end-here">
-                    <Square className="size-4" /> End
-                  </Button>
-                  <span className="w-full text-xs text-muted-foreground sm:ml-auto sm:w-auto">Type @ to mention · click a mention to change it · Tab indents, Esc then Tab leaves</span>
-                  <span className="w-full text-xs text-muted-foreground" data-testid="sop-how-legend">
-                    {HOW_SAYS.checked} {HOW_SAYS.agent}
-                  </span>
-                </div>
-              )}
-              <SopEditor value={form.text} onChange={(text) => (setRefused(null), setForm((f) => ({ ...f, text })))} readOnly={readOnly} reading={reading.reading} readingFor={reading.forText} labels={labels.data} context={context} controls={textDoc} placeholder={EXAMPLE} />
-            </div>
+                ) : (
+                  // One menu in place of a toolbar: the editor has no formatting, and @ and if work from the keyboard too.
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" data-testid="sop-insert-menu">
+                        <Plus className="size-4" /> Insert <ChevronDown className="size-3.5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => insert('@')} data-testid="sop-insert-tool">
+                        <Wrench className="size-4" /> Tool
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => insert('@')} data-testid="sop-insert-knowledge">
+                        <BookOpen className="size-4" /> Knowledge
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => insert('@')} data-testid="sop-insert-skill">
+                        <Sparkles className="size-4" /> Skill
+                      </DropdownMenuItem>
+                      {stepped && (
+                        <DropdownMenuItem onClick={() => insert('\nif ')} title="An if / otherwise path" data-testid="sop-add-path">
+                          <GitBranch className="size-4" /> Path
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </header>
+              <SopEditor
+                value={stepped ? form.text : form.instructions}
+                onChange={(text) => (setRefused(null), setForm((f) => (stepped ? { ...f, text } : { ...f, instructions: text })))}
+                readOnly={readOnly}
+                reading={stepped ? reading.reading : undefined}
+                readingFor={stepped ? reading.forText : undefined}
+                labels={labels.data}
+                context={context}
+                controls={textDoc}
+                placeholder={stepped ? EXAMPLE : 'e.g. Ask which order it is about, then pick the part that fits.'}
+                ariaLabel={stepped ? 'Steps' : 'Introduction'}
+              />
+              {/* One row on a wide screen: what the text uses on the left, the keys on the right. */}
+              <footer className="flex flex-col gap-1 border-t px-4 py-2 text-xs text-muted-foreground tabular-nums sm:flex-row sm:items-center sm:justify-between" data-testid="skill-text-uses">
+                <span>{reading.isError ? 'Couldn’t read the text just now; it still saves.' : (usesLine(reading.reading?.uses) ?? 'Mention a tool or knowledge with @ in the steps and it shows here.')}</span>
+                <span title={`${HOW_SAYS.checked} ${HOW_SAYS.agent}`}>@ mention · Tab indents</span>
+              </footer>
+            </section>
             {mine && mineOpen && (
               <div className="rounded-lg border bg-muted/40" data-testid="skill-kept-copy-text">
                 <p className="flex items-center gap-2 border-b px-3 py-2 text-xs text-muted-foreground">
@@ -350,136 +428,49 @@ export function SkillEditor({ skill: sk, canEdit, onDirtyChange, onSaveState, ca
                 ))}
               </div>
             )}
-            <p className="text-xs text-muted-foreground tabular-nums" data-testid="skill-text-uses">
-              {reading.isError ? 'Couldn’t read the text just now; it still saves.' : `Uses ${usesLine(reading.reading?.uses)} · read from the text, nothing to set up separately`}
-            </p>
+            {body.parts.length > 0 && <PartsList parts={body.parts} />}
+          </div>
+        </RecordLayout>
+      </div>
+
+      <div className={tab === 'settings' ? 'flex flex-col gap-4' : 'hidden'} data-testid="skill-settings-tab">
+        <SettingsSection title="Name and loading" description="Loads “When a message matches” (the agent picks it from the Use when line) or “Always” (added to every reply, for wording every agent must use, such as a recorded-call notice).">
+          <div className="flex flex-col gap-4">
+            <FormField id="si-name" label="Name" error={errors.name}>
+              <Input id="si-name" value={form.name} disabled={readOnly} onChange={(e) => setForm({ ...form, name: e.target.value })} className="bg-card" />
+            </FormField>
+            <FormField id="si-loading" label="Loads">
+              <Select value={form.loading} disabled={readOnly} onValueChange={(v) => setForm({ ...form, loading: v as SkillLoading })}>
+                <SelectTrigger id="si-loading" className="w-48 bg-card" data-testid="skill-loading-select">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SKILL_LOADING_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormField>
           </div>
         </SettingsSection>
-      ) : (
-        <SettingsSection title="Instructions" description="Markdown with four sections: Steps, Rules, Examples and Output format.">
-          <div className="flex flex-col gap-2">
-            <p className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground" data-testid="skill-parts-or-steps">
-              This skill is written in parts, so its steps are hidden. A skill has parts or numbered steps, not both. Remove every part to write steps again.
-            </p>
-            <ToggleGroup type="single" value={mode} onValueChange={(v) => v && setMode(v as 'edit' | 'preview')} variant="outline" size="sm" className="self-start" aria-label="Editor mode">
-              <ToggleGroupItem value="edit" aria-label="Edit">
-                <Pencil className="size-3.5" /> Edit
-              </ToggleGroupItem>
-              <ToggleGroupItem value="preview" aria-label="Preview" data-testid="instructions-preview-toggle">
-                <Eye className="size-3.5" /> Preview
-              </ToggleGroupItem>
-            </ToggleGroup>
-            {mode === 'edit' ? (
-              <Textarea value={form.instructions} disabled={readOnly} onChange={(e) => setForm({ ...form, instructions: e.target.value })} className="min-h-96 bg-card font-mono text-xs leading-relaxed" aria-label="Instructions" data-testid="instructions-editor" />
-            ) : (
-              <div className="min-h-96 rounded-md border bg-card p-4" data-testid="instructions-preview">
-                <MarkdownPreview text={form.instructions} />
-              </div>
-            )}
+
+        <SettingsSection title="Guardrails" description="Added to the turn while the skill is loaded. They only restrict; they never widen access. Changing them needs two reviewers.">
+          <div className="flex flex-col gap-4">
+            <FormField id="si-guardrails" label="Guardrails">
+              <TagInput id="si-guardrails" value={form.guardrails} onChange={(g) => setForm({ ...form, guardrails: g })} disabled={readOnly} placeholder="e.g. Never promise a restore time the outage map does not give" className="bg-card" />
+            </FormField>
+            <FormField id="si-refusal" label="When a guardrail refuses, say" hint="What the customer reads instead.">
+              <Textarea id="si-refusal" rows={2} value={form.refusal} onChange={(e) => setForm({ ...form, refusal: e.target.value })} disabled={readOnly || !form.guardrails.length} placeholder="e.g. I can’t discuss that here. I can log the outage for you." className="bg-card" data-testid="skill-refusal" />
+            </FormField>
           </div>
         </SettingsSection>
-      )}
 
-      <PartsSection parts={form.parts} onChange={(parts) => setForm({ ...form, parts })} disabled={readOnly} />
-
-      <SettingsSection title="Name and loading" description="On match: the model loads the skill when a message fits the use-when line; keep it specific. Always on: the skill is added to every turn of every agent that pins it, after the agent’s own instructions, for shared wording such as a disclosure or tone guide.">
-        <div className="flex flex-col gap-4">
-          <FormField id="si-name" label="Name" error={errors.name}>
-            <Input id="si-name" value={form.name} disabled={readOnly} onChange={(e) => setForm({ ...form, name: e.target.value })} className="bg-card" />
-          </FormField>
-          <FormField id="si-loading" label="Loading">
-            <Select value={form.loading} disabled={readOnly} onValueChange={(v) => setForm({ ...form, loading: v as SkillLoading })}>
-              <SelectTrigger id="si-loading" className="w-48 bg-card" data-testid="skill-loading-select">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {SKILL_LOADING_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </FormField>
-        </div>
-      </SettingsSection>
-
-
-      <SettingsSection title="Tools, knowledge and guardrails" description="Changing any of these needs two reviewers. The agent must already hold each tool and knowledge base.">
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <span className="text-sm font-medium">Tools</span>
-            <div className="flex flex-col divide-y rounded-md border bg-card">
-              {listedTools.length ? (
-                listedTools.map((id) => {
-                  const t = toolOf(id);
-                  const inText = stepped && textTools.includes(id);
-                  return (
-                    <div key={id} className="flex items-center gap-2 px-3 py-1.5" data-testid="skill-tool-row">
-                      <code className="flex-1 truncate font-mono text-xs">{t?.name ?? labelOf(id) ?? id}</code>
-                      <span className="text-xs text-muted-foreground">{inText ? 'in the text' : t?.module}</span>
-                      {t && <AccessBadge access={t.access} />}
-                      {!inText && <Button variant="ghost" size="icon" disabled={readOnly} aria-label={`Remove ${t?.name ?? id}`} onClick={() => setForm({ ...form, toolIds: form.toolIds.filter((x) => x !== id) })}>
-                        <X className="size-3.5" />
-                      </Button>}
-                    </div>
-                  );
-                })
-              ) : (
-                <p className="px-3 py-2 text-sm text-muted-foreground">No tools. The skill answers from its instructions and knowledge only.</p>
-              )}
-            </div>
-            {stepped ? (
-              <p className="text-xs text-muted-foreground" data-testid="skill-tools-from-text">
-                Read from the text. Mention a tool with @ to add it.
-              </p>
-            ) : (
-            <AddMenu
-              label="Add"
-              items={tools
-                .filter((t) => !form.toolIds.includes(t.toolId))
-                .map((t) => ({
-                  value: t.toolId,
-                  label: (
-                    <>
-                      <span className="font-mono text-xs">{t.name}</span> <span className="text-xs text-muted-foreground">· {t.module}</span>
-                    </>
-                  ),
-                }))}
-              onSelect={(v) => setForm({ ...form, toolIds: [...form.toolIds, v] })}
-              disabled={readOnly}
-              className="w-72"
-            />
-            )}
-          </div>
-          <div className="flex flex-col gap-2">
-            <span className="text-sm font-medium">Knowledge bases</span>
-            <div className="flex flex-wrap gap-1.5">
-              {(options.data?.knowledgeBases ?? sk.content.knowledgeBases).map((k) => {
-                const on = form.knowledgeBases.includes(k);
-                return (
-                  <button key={k} type="button" disabled={readOnly} aria-pressed={on} onClick={() => setForm({ ...form, knowledgeBases: on ? form.knowledgeBases.filter((x) => x !== k) : [...form.knowledgeBases, k] })} className="rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-60">
-                    <Badge variant={on ? 'default' : 'outline'} className="cursor-pointer font-normal">
-                      {k}
-                    </Badge>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          <FormField id="si-guardrails" label="Guardrails" hint="Added to the turn while the skill is loaded. They only restrict; they never widen access.">
-            <TagInput id="si-guardrails" value={form.guardrails} onChange={(g) => setForm({ ...form, guardrails: g })} disabled={readOnly} placeholder="Add a guardrail and press Enter" className="bg-card" />
-          </FormField>
-          <FormField id="si-refusal" label="When a guardrail refuses, say" hint="What the person reads instead of the answer. Offer the next step the skill can take.">
-            <Textarea id="si-refusal" rows={2} value={form.refusal} onChange={(e) => setForm({ ...form, refusal: e.target.value })} disabled={readOnly || !form.guardrails.length} placeholder="e.g. I can't promise a deferral, but I can start a hardship request now." className="bg-card" data-testid="skill-refusal" />
-          </FormField>
-        </div>
-      </SettingsSection>
-
-      {/* A skill with parts takes its inputs on each part. */}
-      {stepped && <SkillInputsSection value={saved.inputs} onChange={setInputs} onValidity={setInputsValid} disabled={readOnly} />}
-      {stepped && <SkillResultsSection value={saved.ending} onChange={setEnding} onValidity={setEndingValid} disabled={readOnly} />}
-
+        {/* A skill with parts takes its inputs on each part. */}
+        {stepped && <SkillInputsSection value={saved.inputs} onChange={setInputs} onValidity={setInputsValid} disabled={readOnly} />}
+        {stepped && <SkillResultsSection value={saved.ending} onChange={setEnding} onValidity={setEndingValid} disabled={readOnly} />}
+      </div>
     </div>
   );
 }
