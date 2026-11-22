@@ -3358,11 +3358,6 @@ class EnvelopeListRunJournalEntry(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeListTemplateView(TypedDict, closed=True):
-    data: list[TemplateView]
-    success: Literal[True]
-
-
 class EnvelopeListVersion(TypedDict, closed=True):
     data: list[Version]
     success: Literal[True]
@@ -3512,6 +3507,12 @@ class ListResultFormView(TypedDict, closed=True):
 
 class ListResultTaskTypeView(TypedDict, closed=True):
     data: list[TaskTypeView]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
+class ListResultTemplateView(TypedDict, closed=True):
+    data: list[TemplateView]
     facets: dict[str, dict[str, int]]
     pagination: Pagination
 
@@ -4256,6 +4257,11 @@ class EnvelopeListResultFormView(TypedDict, closed=True):
 
 class EnvelopeListResultTaskTypeView(TypedDict, closed=True):
     data: ListResultTaskTypeView
+    success: Literal[True]
+
+
+class EnvelopeListResultTemplateView(TypedDict, closed=True):
+    data: ListResultTemplateView
     success: Literal[True]
 
 

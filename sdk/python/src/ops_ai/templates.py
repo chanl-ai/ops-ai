@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+from ._transport import every_page, every_page_async
+
 DOCUMENT_TYPE = "document_type"
 
 
@@ -28,9 +30,9 @@ class Templates:
         (`canAdd`). `kind` keeps one kind; `source` keeps one pack or app (`plugin:<id>`)."""
         out: list[dict[str, Any]] = []
         if kind != DOCUMENT_TYPE:
-            out += cast(list[dict[str, Any]], self._raw.agents.templates_list_templates(kind=kind, source=source))
+            out += every_page(self._raw.agents.templates_list_templates, kind=kind, source=source)
         if kind in (None, DOCUMENT_TYPE):
-            docs = cast(list[dict[str, Any]], self._raw.documents.templates_list_templates(kind=kind))
+            docs = every_page(self._raw.documents.templates_list_templates, kind=kind)
             out += [t for t in docs if source in (None, t.get("source"))]
         return out
 
@@ -41,7 +43,7 @@ class Templates:
         kind = kind or (None if isinstance(template, str) else str(template.get("kind") or "")) or None
         if kind is None:
             # agents-service keeps every kind but document types, so it is asked first.
-            mine = cast(list[dict[str, Any]], self._raw.agents.templates_list_templates(source=ref.rsplit(":", 1)[0]))
+            mine = every_page(self._raw.agents.templates_list_templates, source=ref.rsplit(":", 1)[0])
             kind = _kind_of(mine, ref) or DOCUMENT_TYPE
         service = self._raw.documents if kind == DOCUMENT_TYPE else self._raw.agents
         return cast(dict[str, Any], service.resources_copy_resource(ref, fields))
@@ -55,9 +57,9 @@ class AsyncTemplates:
         """As `Templates.list`."""
         out: list[dict[str, Any]] = []
         if kind != DOCUMENT_TYPE:
-            out += cast(list[dict[str, Any]], await self._raw.agents.templates_list_templates(kind=kind, source=source))
+            out += await every_page_async(self._raw.agents.templates_list_templates, kind=kind, source=source)
         if kind in (None, DOCUMENT_TYPE):
-            docs = cast(list[dict[str, Any]], await self._raw.documents.templates_list_templates(kind=kind))
+            docs = await every_page_async(self._raw.documents.templates_list_templates, kind=kind)
             out += [t for t in docs if source in (None, t.get("source"))]
         return out
 
@@ -69,7 +71,7 @@ class AsyncTemplates:
         kind = kind or (None if isinstance(template, str) else str(template.get("kind") or "")) or None
         if kind is None:
             source = ref.rsplit(":", 1)[0]
-            mine = cast(list[dict[str, Any]], await self._raw.agents.templates_list_templates(source=source))
+            mine = await every_page_async(self._raw.agents.templates_list_templates, source=source)
             kind = _kind_of(mine, ref) or DOCUMENT_TYPE
         service = self._raw.documents if kind == DOCUMENT_TYPE else self._raw.agents
         return cast(dict[str, Any], await service.resources_copy_resource(ref, fields))
