@@ -127,6 +127,17 @@ def test_a_push_run_has_its_own_concurrency_group_so_a_queued_push_is_not_droppe
     assert "pull_request" in str(conc["cancel-in-progress"]) and "push" not in str(conc["cancel-in-progress"]), conc
 
 
+def test_a_merge_queue_run_is_planned_like_a_pull_request_from_the_queue_base() -> None:
+    ci = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+    # PyYAML reads the key `on` as True.
+    assert "merge_group" in ci[True], ci[True]
+    assert "github.event.merge_group.base_sha" in ci["env"]["BASE_SHA"], ci["env"]["BASE_SHA"]
+    # The last-green plan belongs to a push only; a queue run taking it would be planned from an old commit.
+    assert 'GITHUB_EVENT_NAME" = push' in _plan_step()["run"]
+    # ci-ok runs always and waits on every job, so it reports on the queue's run.
+    assert ci["jobs"]["ci-ok"]["if"] == "always()" and "plan" in ci["jobs"]["ci-ok"]["needs"]
+
+
 def test_the_plan_of_a_develop_push_starts_from_the_last_green_commit_not_the_event_before() -> None:
     run = _plan_step()["run"]
     assert "ci-last-green.sh" in run and "CI_FULL=true" in run, run

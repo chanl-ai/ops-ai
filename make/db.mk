@@ -46,9 +46,8 @@ migrate: ## Apply every service's own migration chain to head (agents, tools, mo
 	@# Every process started before a migration landed is stale from here (stack.sh note-migrations, fb-16aa519c).
 	@$(STACK) note-migrations
 
-migration: ## New Alembic revision: make migration NAME="add case table"
-	@test -n "$(NAME)" || { echo 'usage: make migration NAME="what it changes"'; exit 2; }
-	cd $(SVC_DIR_agents) && uv run alembic revision -m "$(NAME)"
+migration: ## New Alembic revision with a UTC-timestamp id, so two branches never take the same number: make migration NAME="add case table" [SVC=agents|tools|models|kb|platform|files|documents]
+	@uv run --quiet --project $(ROOT) python $(ROOT)/scripts/new_migration.py "$(NAME)" $(or $(SVC),agents)
 
 db-move-image: ## Move the stack's database onto the compose file's PostgreSQL image: dump, a fresh volume, restore; asks first
 	@# The pgvector image is Debian (glibc) where the old one was Alpine (musl): the two sort text differently, so the

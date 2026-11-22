@@ -160,7 +160,7 @@ PAR_RUN = $(if $(PAR),$(if $(filter $(notdir $(CURDIR)),$(PAR_SUITES)),--workers
 # The pytest arguments, which a suite's test recipe puts after `pytest` (not PYTEST_ADDOPTS: a test that starts pytest
 # itself would inherit them).
 PYTEST_PAR = $(if $(PAR),-n $(PAR) --dist loadfile)
-TEST_DB = uv run --project $(ROOT) python $(ROOT)/scripts/test_db.py $(OPS_TEST_DATABASE_URL) $(PAR_RUN) && OPS_DATABASE_URL=$(OPS_TEST_DATABASE_URL)
+TEST_DB = uv run --project $(ROOT) python $(ROOT)/scripts/test_db.py $(OPS_TEST_DATABASE_URL) --service $(notdir $(CURDIR)) $(PAR_RUN) && OPS_DATABASE_URL=$(OPS_TEST_DATABASE_URL)
 export OPS_INFRA
 # AUTH=platform (the default): agents and tools verify platform-service tokens and the console signs people in through
 # it (James, Maya, Nadia from platform's dev seed); AUTH=dev runs dev auth and the mock sign-in. A stack already running
