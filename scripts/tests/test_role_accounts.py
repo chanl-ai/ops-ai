@@ -1,6 +1,8 @@
 """Role accounts on a deployed install (deploy/fly/role_accounts.py, scripts/api_as.py), by failure mode: an account
 that cannot sign in passes the deploy; a role with no account is skipped quietly; an account holding another role
-counts as that role; `make api ENV=staging AS=<role>` has no account to use or refuses without naming the fix.
+counts as that role; `make api ENV=staging AS=<role>` has no account to use or refuses without naming the fix; the
+seed invites a person who is already a member, skips one who is not, invents an account on a runner, or prints an
+address into a public deploy log.
 The install is a stub at the HTTP edge; the real one is checked by `make roles-check ENV=staging`."""
 
 from __future__ import annotations
@@ -37,6 +39,9 @@ class Install:
     def __init__(self, people: dict[str, tuple[str, str]]) -> None:
         self.people = people
         self.sign_ins: list[str] = []
+        self.members: list[dict[str, str]] = []
+        self.invited: list[tuple[str, str]] = []
+        self.accepted: list[tuple[str, str]] = []
         install = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -49,6 +54,12 @@ class Install:
 
             def do_POST(self) -> None:
                 sent = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                if self.path == "/v1/settings/members/invite":
+                    install.invited.append((sent["emails"][0], sent["role"]))
+                    return self.reply(200, {"invites": [{"token": sent["emails"][0]}]})
+                if self.path.startswith("/v1/invites/"):
+                    install.accepted.append((self.path.split("/")[3], sent["password"]))
+                    return self.reply(200, {})
                 install.sign_ins.append(sent["email"])
                 known = install.people.get(sent["email"])
                 if known and known[0] == sent["password"]:
@@ -57,6 +68,11 @@ class Install:
                     self.reply(401, None)
 
             def do_GET(self) -> None:
+                if self.path.startswith("/v1/settings/members"):
+                    # Two rows a page, so a member on a later page is found only by a caller that reads every page.
+                    page = int(self.path.split("page=")[1].split("&")[0])
+                    rows = install.members[(page - 1) * 2 : page * 2]
+                    return self.reply(200, {"data": rows, "pagination": {"hasNext": page * 2 < len(install.members)}})
                 email = self.headers["Authorization"].removeprefix("Bearer ")
                 self.reply(200, {"teams": [{"id": TEAM, "role": install.people[email][1]}]})
 
@@ -116,3 +132,27 @@ def test_api_as_on_staging_uses_the_role_account_and_names_the_fix_for_a_missing
     with pytest.raises(api_as.Refused) as refused:
         api_as.credentials("staging", "chat_user")
     assert "make seed-roles ENV=staging" in refused.value.message
+
+
+def test_seed_invites_only_the_missing_account_and_never_invents_or_prints_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    install = Install({"first@x": ("admin-pw", "admin")})
+    # admin, builder and approver are active members, approver on the second page; viewer is not a member; chat_user
+    # has no lines in the file.
+    install.members = [
+        {"id": f"m{n}", "email": f"{role}@x", "role": role, "status": "active"}
+        for n, role in enumerate(("admin", "builder", "approver"))
+    ]
+    roles_file(tmp_path, monkeypatch, dict.fromkeys(("admin", "builder", "approver", "viewer"), "file-pw"))
+    admin_env = tmp_path / "admin.env"
+    admin_env.write_text("OPS_BOOTSTRAP_ADMIN_EMAIL=first@x\nOPS_BOOTSTRAP_ADMIN_PASSWORD=admin-pw\n")
+
+    failed = role_accounts.seed(install.origin, admin_env, generate=False)
+
+    out = capsys.readouterr().out
+    assert install.invited == [("viewer@x", "viewer")]
+    assert install.accepted == [("viewer@x", "file-pw")]
+    assert failed == 1 and "FAIL role chat_user: no account" in out
+    assert "FOUND role approver" in out and "MADE role viewer" in out
+    assert "@x" not in out
