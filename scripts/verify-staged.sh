@@ -169,8 +169,12 @@ if [ "${#py[@]}" -gt 0 ]; then
   "$root/.venv/bin/ruff" check "${py[@]}" || { echo "$fixhint"; exit 1; }
   "$root/.venv/bin/ruff" format --check "${py[@]}" || { echo "$fixhint"; exit 1; }
   # Types on the staged Python files only (the project config decides strictness), from the checkout's environment.
-  if [ -x "$root/.venv/bin/pyright" ]; then
-    (cd "$root" && "$root/.venv/bin/pyright" "${py[@]}") || { echo "verify-staged: pyright refused the staged files above"; exit 1; }
+  # Only files under the root config's `include` or an execution environment's root: pyright given any other file
+  # checks it with no project settings, so a staging script or the SDK (its own project) fails on rules not its own.
+  mapfile -t typed < <(cd "$root" && "$root/.venv/bin/python" -c 'import sys, tomllib; c = tomllib.load(open("pyproject.toml", "rb"))["tool"]["pyright"]; inc = c["include"] + [e["root"] for e in c.get("executionEnvironments", [])]; [print(f) for f in sys.argv[1:] if any(f == i or f.startswith(i.rstrip("/") + "/") for i in inc)]' "${py[@]}")
+  if [ "${#typed[@]}" -eq 0 ]; then :
+  elif [ -x "$root/.venv/bin/pyright" ]; then
+    (cd "$root" && "$root/.venv/bin/pyright" "${typed[@]}") || { echo "verify-staged: pyright refused the staged files above"; exit 1; }
   else
     echo "verify-staged: WARNING pyright is not installed in $root/.venv, so the staged Python was not type-checked; run uv sync"
   fi
