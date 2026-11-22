@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { Database, Paperclip, Plus, Slash, X } from 'lucide-react';
 
-import { type PickedSkill, SkillChip, SkillInputsForm, SkillMenu, toPick } from '@/components/chat/skill-menu';
+import { missingInputs, type PickedSkill, SkillChip, SkillInputsDialog, SkillMenu, toPick } from '@/components/chat/skill-menu';
 import { KbDot } from '@/components/knowledge/knowledge-meta';
 import { CaretMenu, type MenuRow } from '@/components/shared/caret-menu';
 import { ChatPrompt } from '@/components/shared/chat-blocks';
@@ -204,20 +204,19 @@ export function Composer({
       setAdding(false);
     }
   };
-  // The skill picked for the next message; `filling` while its inputs form is open.
+  // The skill picked for the next message, shown as a chip; `filling` while the dialog asks for its missing inputs.
   const [skill, setSkill] = React.useState<PickedSkill | null>(null);
-  const [filling, setFilling] = React.useState<PickedSkill | null>(null);
+  const [filling, setFilling] = React.useState(false);
   React.useEffect(() => {
     setSkill(null);
-    setFilling(null);
+    setFilling(false);
   }, [draftKey, skillsFor?.id]);
   const tooLong = text.length > MAX;
   const canSend = !disabledReason && !streaming && (!!text.trim() || !!skill) && !tooLong && !filling;
   const slash = skillsFor && !filling ? SLASH.exec(text) : null;
   const pickSkill = (p: PickedSkill) => {
     setText(text.replace(SLASH, '$1').trimEnd());
-    if (p.fields.length) setFilling(p);
-    else setSkill(p);
+    setSkill(p);
   };
   const typed = onMention && !slash ? MENTION.exec(text) : null;
   const found = useOptionSearch(chatAgentOptions, typed?.[2] ?? '', !!typed);
@@ -260,14 +259,20 @@ export function Composer({
     else if (e.key === 'Escape') (go(undefined), setText(text.replace(MENTION, '$1')));
   };
 
-  const send = () => {
-    if (!canSend) return;
+  const sendWith = (picked: PickedSkill | null) => {
     const attachments = files;
     // A skill sent with no words of its own asks for what the skill does.
-    onSend(text.trim() || (skill ? `Use ${skill.label}.` : ''), attachments, skill ? toPick(skill) : undefined);
+    onSend(text.trim() || (picked ? `Use ${picked.label}.` : ''), attachments, picked ? toPick(picked) : undefined);
     setText('');
     setSkill(null);
+    setFilling(false);
     setFiles([]);
+  };
+  // Required inputs still empty hold the send back and ask for just those.
+  const send = () => {
+    if (!canSend) return;
+    if (skill && missingInputs(skill).length) setFilling(true);
+    else sendWith(skill);
   };
 
   if (disabledReason)
@@ -281,15 +286,8 @@ export function Composer({
       }}
     >
       {slash && skillsFor && <SkillMenu agentId={skillsFor.id} agentName={skillsFor.name} query={slash[2]} onPick={pickSkill} className={menuPlace} />}
-      {filling && (
-        <SkillInputsForm
-          picked={filling}
-          onBack={() => setFilling(null)}
-          onDone={(inputs) => {
-            setSkill({ ...filling, inputs });
-            setFilling(null);
-          }}
-        />
+      {filling && skill && (
+        <SkillInputsDialog picked={skill} onCancel={() => setFilling(false)} onDone={(inputs) => sendWith({ ...skill, inputs: { ...skill.inputs, ...inputs } })} />
       )}
       {typed && (
         <CaretMenu<MentionOption>
