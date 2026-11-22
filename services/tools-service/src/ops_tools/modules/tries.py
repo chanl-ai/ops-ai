@@ -19,7 +19,8 @@ from ops_service_kit.http import Json, JsonValue
 
 from ..environments import LIVE, TEST
 from ..executor import Trial
-from ..store.connections import name_key
+from ..store.connections import name_key, plugin_app
+from ..store.modules import Module
 from .schemas import ToolTryIn
 from .service import (
     Caller,
@@ -38,14 +39,30 @@ def plan_id(who: Caller, tool: str, args: Json, environment: str, accounts: dict
     return "plan_" + hashlib.sha256("\x1f".join(parts).encode()).hexdigest()[:32]
 
 
-async def _run_for(service: ModuleService, who: Caller, accounts: dict[str, str]) -> tuple[str, dict[str, str], str]:
+async def _app_of(service: ModuleService, module: Module) -> str | None:
+    """The app a module's calls sign in to: a plugin's by its plugin, any other by its connection's app."""
+    template = str(module.get("template_id") or "")
+    if template.startswith("plugin:"):
+        return plugin_app(template.removeprefix("plugin:"))
+    if service.auth is None or not module.get("connection_id"):
+        return None
+    conn = await service.auth.connections.get(str(module["tenant_id"]), str(module["connection_id"]))
+    return conn.app_id if conn else None
+
+
+async def _run_for(
+    service: ModuleService, who: Caller, module: Module, accounts: dict[str, str]
+) -> tuple[str, dict[str, str], str]:
     """The run and accounts a try is made with, and the account's name for the confirm: the app's test account is a
-    test run; any other named account a live run on it; none a test run."""
+    test run; any other named account a live run on it; none a test run. An account of another app is refused, since
+    the call would quietly take this app's default instead."""
     if not accounts:
         return TEST, {}, "Default"
     if service.auth is None:
         raise NotYetAvailable("This service cannot read the team's accounts.")
     app, name = next(iter(accounts.items()))
+    if app != await _app_of(service, module):
+        raise ValidationFailed("Pick an account of the app this tool belongs to.", code="account_other_app")
     found = await service.auth.connections.accounts(who.tenant_id, who.team.id, app)
     match = next((a for a in found if name_key(a.account_name or a.name) == name_key(name)), None)
     if match is None:
@@ -61,11 +78,11 @@ async def try_tool(service: ModuleService, who: Caller, body: ToolTryIn) -> Json
     found = await service.store.operation_named(who.tenant_id, body.tool, who.team.id)
     if found is None:
         raise NotFound("Tool")
-    _, op = found
+    module, op = found
     if service.real_runs is None or who.principal is None:
         raise NotYetAvailable("This service runs no tries.")
     args: Json = dict(body.input)
-    environment, accounts, account = await _run_for(service, who, dict(body.accounts))
+    environment, accounts, account = await _run_for(service, who, module, dict(body.accounts))
     expected = plan_id(who, body.tool, args, environment, accounts)
     writes = op["access"] == "write"
     if body.plan_id is not None and (not writes or body.plan_id != expected):
@@ -99,7 +116,10 @@ async def try_tool(service: ModuleService, who: Caller, body: ToolTryIn) -> Json
     if "code" in ran:
         return {**out, "kind": "refused", "status": ran["status"], "reasons": cast(JsonValue, ran["reasons"])}
     if "planned" in ran:
-        return {**out, "kind": "planned", "planId": expected, "plan": ran["planned"]}
+        plan = ran["planned"]
+        # A test run on an app with no test account signs in with a live one: the confirm says so either way.
+        on_test = isinstance(plan, dict) and plan.get("testAccount") is True
+        return {**out, "kind": "planned", "planId": expected, "plan": plan, "live": environment == LIVE or not on_test}
     if "replayOf" in ran:
         out["replayOf"] = ran["replayOf"]
     return {**out, "kind": "sent" if writes else "ran", "ok": ran["ok"], "output": ran["output"]}
