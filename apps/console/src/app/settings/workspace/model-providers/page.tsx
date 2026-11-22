@@ -182,14 +182,20 @@ function columns(onReplace: (k: ProviderKey) => void, onRemove: (k: ProviderKey)
   ];
 }
 
+/** The table's columns the server sorts by, each with its `sortBy` value. */
+const CONNECTION_SORT = { name: 'name', type: 'type' };
+
+/** The table's columns the server sorts by, each with its `sortBy` value. */
+const KEY_SORT = { name: 'name', createdAt: 'createdAt', rotatedAt: 'rotatedAt' };
+
 /**
  * The account's model provider keys (models-service `/v1/provider-keys`): account admins add, replace
  * and remove them; only the models service reads a value, and no team sees one, so a new team needs no setup.
  */
 export default function ModelProvidersPage() {
   const admin = useCan('settings', 'manage') === true;
-  const keyList = useListParams('name');
-  const connectionList = useListParams('name');
+  const keyList = useListParams('name', undefined, undefined, KEY_SORT);
+  const connectionList = useListParams('name', undefined, undefined, CONNECTION_SORT);
   const keys = useProviderKeys(keyList.params, admin);
   const connections = useProviderConnections(connectionList.params, admin);
   const connect = useCreateProviderConnection();
@@ -243,6 +249,7 @@ export default function ModelProvidersPage() {
                 created={newConnections}
                 onColumnFiltersChange={connectionList.onColumnFiltersChange}
                 serverPagination={serverPagination(connectionList, connections)}
+                serverSorting={connectionList.serverSort}
                 hideViewSwitcher
                 emptyState={<ListEmpty icon={Cpu} noun="provider connections" filtered={connectionList.isFiltered} createLabel="Connect a provider" onCreate={() => setConnecting(true)} description="Connect the endpoint your model calls go to, such as an Azure OpenAI resource." />}
               />
@@ -259,6 +266,7 @@ export default function ModelProvidersPage() {
               created={newKeys}
               onColumnFiltersChange={keyList.onColumnFiltersChange}
               serverPagination={serverPagination(keyList, keys)}
+              serverSorting={keyList.serverSort}
               hideViewSwitcher
               emptyState={<ListEmpty icon={KeyRound} noun="model provider keys" filtered={keyList.isFiltered} createLabel="Add key" onCreate={() => setEditing({ replacing: null })} description="Add the key your model provider gave you, named the way its connection refers to it." />}
             />

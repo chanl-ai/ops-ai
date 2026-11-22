@@ -6,6 +6,7 @@ import type { SignInOptions } from '@/lib/types/sign-in';
 import type { OpsApi } from './contract';
 import { createTransport } from './http';
 import { optionsQs } from './options';
+import { addSort } from './sort-query';
 
 /** One audit row as platform-service returns it (GET /v1/audit): names, summary and action word joined by the service. */
 interface PlatformAuditRow {
@@ -80,7 +81,7 @@ export function createPlatformAccessHttp(
     },
     audit: {
       list: async (p: ListParams<AuditFilters> & { view: AuditView }) => {
-        const q = new URLSearchParams({ page: String(p.page), pageSize: String(p.pageSize), view: p.view });
+        const q = addSort(new URLSearchParams({ page: String(p.page), pageSize: String(p.pageSize), view: p.view }), p);
         const kind = p.filters?.action?.[0];
         const target = p.filters?.targetType?.[0];
         if (kind) q.set('kind', kind);

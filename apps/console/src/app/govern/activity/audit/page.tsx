@@ -109,6 +109,9 @@ const VIEWS: { id: AuditView; label: string; icon?: typeof Rocket }[] = [
   { id: 'all', label: 'All' },
 ];
 
+/** The table's columns the server sorts by, each with its `sortBy` value. */
+const SORT_COLUMNS = { at: 'at' };
+
 export default function AuditPage() {
   const { team, teams } = useTeam();
   // platform-service reads the log for whoever holds audit.view in the team; anyone else is told so without a request.
@@ -116,7 +119,7 @@ export default function AuditPage() {
   const canExport = may === true;
   const showTeam = team?.scope === 'all';
   const [view, setView] = React.useState<AuditView>('changes');
-  const list = useListParams<AuditFilters>('summary', 20);
+  const list = useListParams<AuditFilters>('summary', 20, undefined, SORT_COLUMNS);
   const query = useAudit({ ...list.params, view }, may === true);
   const [activeId, setActiveId] = React.useState<string | null>(null);
 
@@ -206,6 +209,7 @@ export default function AuditPage() {
             ]}
             onColumnFiltersChange={list.onColumnFiltersChange}
             serverPagination={serverPagination(list, query)}
+            serverSorting={list.serverSort}
             emptyState={
               <ListEmpty
                 icon={FileSearch}

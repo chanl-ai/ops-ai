@@ -37,6 +37,9 @@ function origin(d: DocumentRow) {
   return d.sourceName;
 }
 
+/** The table's columns the server sorts by, each with its `sortBy` value. */
+const SORT_COLUMNS = { title: 'title', refreshed: 'processedAt' };
+
 /**
  * The base's one data sources table: every document with its type, source, status, pieces, freshness, collection and
  * last refresh, filtered by kb-service. Builders add data from the Add data source menu or by dropping files or folders
@@ -57,7 +60,7 @@ export function KbDocumentsTab({ kb, canBuild }: { kb: KnowledgeBaseDetail; canB
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
-  const list = useListParams<DocumentFilters>('title', 20);
+  const list = useListParams<DocumentFilters>('title', 20, undefined, SORT_COLUMNS);
   const query = useKbDocuments(kb.id, list.params, !!kb.indexing);
   const docId = params.get('doc');
   const setDoc = (id: string | null) => {
@@ -215,6 +218,7 @@ export function KbDocumentsTab({ kb, canBuild }: { kb: KnowledgeBaseDetail; canB
         ]}
         onColumnFiltersChange={list.onColumnFiltersChange}
         serverPagination={serverPagination(list, query)}
+        serverSorting={list.serverSort}
         emptyState={
           <ListEmpty
             icon={FileText}

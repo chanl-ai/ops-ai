@@ -15,11 +15,11 @@ export type SecretMeta = Data<'secrets_list_secrets'>['data'][number];
 
 const KEY = ['secrets'] as const;
 
-/** One page of the team's secrets (GET /v1/secrets): searched on the name, by name; an account's or auth config's secret is read only. */
+/** One page of the team's secrets (GET /v1/secrets): searched on the name, by name or by `sortBy`; an account's or auth config's secret is read only. */
 export const useSecretsPage = (p: ListParams) =>
   usePagedQuery({
-    queryKey: [...KEY, 'page', p.page, p.pageSize, p.search ?? ''],
-    queryFn: () => sdk((ops) => ops.raw.tools.secrets_list_secrets({ query: { page: p.page, pageSize: p.pageSize, search: p.search } })),
+    queryKey: [...KEY, 'page', p.page, p.pageSize, p.search ?? '', p.sortBy ?? '', p.sortOrder ?? ''],
+    queryFn: () => sdk((ops) => ops.raw.tools.secrets_list_secrets({ query: { page: p.page, pageSize: p.pageSize, search: p.search, sortBy: p.sortBy, sortOrder: p.sortOrder } })),
   });
 
 function useSecretMutation<I>(fn: (i: I) => Promise<unknown>) {

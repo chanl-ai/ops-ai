@@ -256,6 +256,8 @@ export interface EngineRunsParams {
   status?: string[];
   page?: number;
   pageSize?: number;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
 }
 
 export interface EngineRun {

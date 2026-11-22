@@ -93,10 +93,13 @@ function columns(showTeam: boolean, onRevoke: ((k: ApiKey) => void) | null): Col
   ];
 }
 
+/** The table's columns the server sorts by, each with its `sortBy` value. */
+const SORT_COLUMNS = { name: 'name', createdBy: 'createdAt', lastUsedAt: 'lastUsedAt', expiresAt: 'expiresAt' };
+
 export default function ApiKeysPage() {
   const { team, teams } = useTeam();
   const showTeam = team?.scope === 'all';
-  const list = useListParams('name');
+  const list = useListParams('name', undefined, undefined, SORT_COLUMNS);
   // platform-service lists a team's keys under access.manage, creates them under access.create and revokes them under
   // access.delete; without the first the page says so and asks nothing.
   const may = useNavAllows()(API_KEYS);
@@ -146,6 +149,7 @@ export default function ApiKeysPage() {
           searchPlaceholder="Search names, prefixes or creators…"
           onColumnFiltersChange={list.onColumnFiltersChange}
           serverPagination={serverPagination(list, query)}
+          serverSorting={list.serverSort}
           emptyState={<ListEmpty icon={KeyRound} noun="API keys" filtered={list.isFiltered} createLabel={canCreate ? 'Create key' : undefined} onCreate={canCreate ? () => setCreateOpen(true) : undefined} description="Create a key for each system that calls Ops AI, so each one can be revoked on its own." />}
         />
       )}

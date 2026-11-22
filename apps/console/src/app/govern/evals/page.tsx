@@ -49,10 +49,19 @@ const EMPTY: Record<AssuranceTab, { icon: typeof Scale; noun: string; descriptio
   judges: { icon: Gavel, noun: 'judges', description: 'Judges score rubric checks. The platform team adds and calibrates them.' },
 };
 
+/** Each tab's columns the server sorts by, each with its `sortBy` value; evidence and judges are not served from these lists. */
+const SORT_BY_TAB: Record<AssuranceTab, Record<string, string> | undefined> = {
+  suites: { name: 'name', cases: 'cases', regressions: 'regressions', lastRunAt: 'lastRunAt' },
+  runs: { name: 'name', regressions: 'regressions', durationMs: 'durationMs', costUsd: 'costUsd', ranAt: 'ranAt' },
+  gates: { name: 'name', requestedAt: 'requestedAt' },
+  evidence: undefined,
+  judges: undefined,
+};
+
 export default function AssurancePage() {
   const router = useRouter();
   const [tab, setTab] = useTabParam(TABS, 'suites');
-  const list = useListParams<AssuranceFilters>('name');
+  const list = useListParams<AssuranceFilters>('name', undefined, undefined, SORT_BY_TAB[tab]);
   const query = useAssurance({ ...list.params, tab });
   const exportBundle = useExportBundle();
   const download = useDownloadFile();
@@ -207,6 +216,7 @@ export default function AssurancePage() {
                   onPaginationChange: list.setPagination,
                   isLoading: query.isFetching && query.isPlaceholderData,
                 }}
+                serverSorting={list.serverSort}
                 emptyState={<ListEmpty icon={empty.icon} noun={empty.noun} filtered={list.isFiltered} description={empty.description} createLabel={tab === 'suites' ? 'Open agents' : undefined} onCreate={tab === 'suites' ? () => router.push('/build/agents') : undefined} />}
               />
               {tab === 'suites' && counts && (counts.suites ?? 0) > 0 && <p className="text-xs text-muted-foreground">{plural(stats?.failingSuites ?? 0, 'suite')} failing. Draft cases from rejected reviews wait for their owner before the gate runs them.</p>}
