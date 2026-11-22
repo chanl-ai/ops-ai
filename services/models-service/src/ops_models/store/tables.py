@@ -25,8 +25,9 @@ provider_connections = sa.Table(
     "provider_connections",
     metadata,
     sa.Column("id", sa.String(64), primary_key=True),
-    sa.Column("name", sa.String(120), nullable=False, unique=True),
-    sa.Column("type", sa.String(32), nullable=False),  # openai-compatible | azure-openai | anthropic | scripted
+    sa.Column("name", sa.String(120), nullable=False, unique=True, info=LISTED),
+    # openai-compatible | azure-openai | anthropic | scripted
+    sa.Column("type", sa.String(32), nullable=False, info=LISTED),
     sa.Column("base_url", sa.String(400)),
     sa.Column("key_ref", sa.String(120)),  # the provider_keys name of its credential
     # azure-openai only: `v1` or a dated version, the resource's region, and the region it last answered from.
@@ -34,6 +35,7 @@ provider_connections = sa.Table(
     sa.Column("region", sa.String(64)),
     sa.Column("observed_region", sa.String(64)),
     sa.Column("created_at", sa.String(32), nullable=False),
+    sa.Index("ix_provider_connections_type", "type"),
     info=system("an install's model connection: no tenant and no value; the provider key it names is held by tenant"),
 )
 
@@ -48,8 +50,10 @@ provider_keys = sa.Table(
     sa.Column("ciphertext", sa.Text, nullable=False),
     sa.Column("version", sa.Integer, nullable=False),
     sa.Column("created_by", sa.String(320), nullable=False),
-    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=db_now()),
-    sa.Column("rotated_at", sa.DateTime(timezone=True)),
+    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=db_now(), info=LISTED),
+    sa.Column("rotated_at", sa.DateTime(timezone=True), info=LISTED),
+    sa.Index("ix_provider_keys_created_at", "tenant_id", "created_at"),
+    sa.Index("ix_provider_keys_rotated_at", "tenant_id", "rotated_at"),
     # Held to its tenant by the database: read only by a transaction run as ROLE in that tenant.
     info=TENANT_SCOPED,
 )
@@ -67,7 +71,7 @@ model_aliases = sa.Table(
     sa.Column("input_per_million", MONEY, nullable=False),
     sa.Column("output_per_million", MONEY, nullable=False),
     sa.Column("status", sa.String(16), nullable=False),  # current | retired
-    sa.Column("created_at", sa.String(32), nullable=False),
+    sa.Column("created_at", sa.String(32), nullable=False, info=LISTED),
     # The reasoning effort this version's calls run at, sent when a request names none; null leaves the provider's.
     sa.Column("reasoning_effort", sa.String(16)),
     # Whether this version may receive page images: an image carries the whole page, so none is sent unless set.
@@ -80,6 +84,7 @@ model_aliases = sa.Table(
         postgresql_where=sa.text("status = 'current'"),
         mssql_where=sa.text("status = 'current'"),
     ),
+    sa.Index("ix_model_aliases_created_at", "created_at"),
     info=system("an install's alias versions: every tenant's calls are served by them, and none names a tenant"),
 )
 
@@ -96,13 +101,14 @@ model_keys = sa.Table(
     sa.Column("secret_hash", sa.String(64), nullable=False, unique=True),
     sa.Column("previous_secret_hash", sa.String(64), unique=True),
     sa.Column("previous_valid_until", sa.DateTime(timezone=True)),
-    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=db_now()),
+    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=db_now(), info=LISTED),
     sa.Column("rotated_at", sa.DateTime(timezone=True)),
     # Set for a key one service uses for many tenants (files-service's extractions): each tenant then spends
     # from its own row in model_key_tenants, starting at this budget, so one tenant cannot use up the others' share.
     sa.Column("tenant_budget", MONEY),
     # What the key may spend in one UTC day, from the call log (models_0011); null for no daily cap.
     sa.Column("daily_cap", MONEY),
+    sa.Index("ix_model_keys_created_at", "created_at"),
     info=system("one identity's model key, spent for many tenants; each tenant's share is held by tenant"),
 )
 

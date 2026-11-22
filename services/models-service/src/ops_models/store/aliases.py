@@ -100,7 +100,12 @@ class Aliases(Store):
         query, params = _named(SERVING, t.c.name, params)
         async with self.install_tx(ALIASES, tables=(t, p)) as c:
             page = await list_page(
-                c, query, params, search=(t.c.name, t.c.kind, t.c.model_id), default_sort=t.c.name.asc()
+                c,
+                query,
+                params,
+                search=(t.c.name, t.c.kind, t.c.model_id),
+                sortable={"name": t.c.name, "createdAt": t.c.created_at},
+                default_sort=t.c.name.asc(),
             )
         return ListResult[ServingAlias].model_validate(page)
 
@@ -110,7 +115,14 @@ class Aliases(Store):
         from one that does not exist."""
         query, params = _named(t.select().where(t.c.name == name), t.c.version, params, numbers=True)
         async with self.install_tx(ALIASES, tables=(t,)) as c:
-            page = await list_page(c, query, params, search=(t.c.model_id, t.c.status), default_sort=t.c.version.asc())
+            page = await list_page(
+                c,
+                query,
+                params,
+                search=(t.c.model_id, t.c.status),
+                sortable={"version": t.c.version, "createdAt": t.c.created_at},
+                default_sort=t.c.version.asc(),
+            )
             # Asked only when nothing matched, so a listed alias costs no statement more.
             if page["pagination"]["total"] == 0 and not await c.scalar(sa.select(t.c.name).where(t.c.name == name)):
                 return None
