@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 import uuid
 from datetime import UTC, date, datetime
 from html import escape
@@ -228,6 +229,8 @@ TRANSACTIONS = [
 ]
 DISPUTES: dict[str, Dispute] = {}
 NOTES: dict[str, list[Note]] = {}
+# The author prefix that holds a note write open for its seconds (`slow:8:uc-757`).
+SLOW = "slow:"
 
 
 @app.get(
@@ -260,6 +263,9 @@ def search_customers(query: Annotated[str, Query()]) -> list[Customer]:
 def add_customer_note(customer_id: str, body: NoteIn) -> Note:
     if customer_id not in CUSTOMERS:
         raise HTTPException(404, "no such customer")
+    if body.author and body.author.startswith(SLOW):
+        # A write held open (`slow:<seconds>:...` as its author), so a use case can kill its caller mid-call.
+        time.sleep(float(body.author.split(":")[1]))
     note = Note(id=f"NOTE-{uuid.uuid4().hex[:6]}", customerId=customer_id, text=body.text, author=body.author)
     NOTES.setdefault(customer_id, []).append(note)
     return note
