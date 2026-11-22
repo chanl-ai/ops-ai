@@ -193,7 +193,7 @@ function Outcome({ result, sample, confirming, onConfirm }: { result: TryResult 
           <AlertTitle>{result.plan.request ? `Would send ${result.plan.request.method} ${result.plan.request.url}${where}` : `Would call ${result.plan.tool}${where}`}</AlertTitle>
           <AlertDescription>
             <div className="flex w-full flex-col gap-2">
-              <span>{`With these values, on ${result.live ? `the live account ${result.account}` : `${result.account === 'Default' ? 'the app’s test account or default' : result.account}`}. Not sent yet; the sample result stands in for its answer.`}</span>
+              <span>{`With these values, on ${result.account === 'Default' ? (result.live ? 'the app’s default account, which is live' : 'the app’s test account') : result.live ? `the live account ${result.account}` : `the test account ${result.account}`}. Not sent yet; the sample result stands in for its answer.`}</span>
               <JsonBlock value={result.plan.input} maxHeight="8rem" wrap />
               {result.live && <span className="text-destructive-text">This is a live account: sending changes real records.</span>}
               <div className="flex justify-end">
