@@ -149,7 +149,8 @@ def job_env(job: Job, slot: int, base_env: dict[str, str], base_sha: str) -> dic
     env = {**base_env, **job.env, "BASE_SHA": base_sha, "CI": "true"}
     # Its own database, named as make/env.mk names a run's so the sweep (scripts/scratch_db_sweep.py) drops it later.
     if env.get("OPS_TEST_DATABASE_URL"):
-        env["OPS_TEST_DATABASE_URL"] = f"{env['OPS_TEST_DATABASE_URL']}_{slug(job.label)[:24]}"
+        # The slot keeps the name unique where the job label's first characters repeat (the shards of one suite).
+        env["OPS_TEST_DATABASE_URL"] = f"{env['OPS_TEST_DATABASE_URL']}_j{slot}_{slug(job.label)[:16]}"
     for var, value in base_env.items():
         if re.fullmatch(r"OPS_\w+_PORT", var) and not SHARED_PORTS.match(var) and value.isdigit():
             env[var] = str(int(value) + 100 * (slot + 1))
@@ -312,6 +313,13 @@ def self_test() -> int:
         by = {r.job.label: r.status for r in results}
         print(table(results, 0).splitlines()[-1], by)
         ok.append(by == {"x: green": "passed", "x: red": "failed"})
+    # The shards of one suite share a long label prefix; each still needs its own database and ports.
+    env = {"OPS_TEST_DATABASE_URL": "postgresql://x/ops_test_r1_ab", "OPS_AGENTS_PORT": "8700"}
+    one, two = (job_env(Job("service", f"service: agents-service test {i}/6"), i, env, "HEAD") for i in (1, 2))
+    ok.append(
+        one["OPS_TEST_DATABASE_URL"] != two["OPS_TEST_DATABASE_URL"]
+        and one["OPS_AGENTS_PORT"] != two["OPS_AGENTS_PORT"]
+    )
     print("ci_local self-test: " + ("ok, the red job was reported red" if all(ok) else f"FAILED {ok}"))
     return 0 if all(ok) else 1
 
