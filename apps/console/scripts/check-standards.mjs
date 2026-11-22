@@ -239,7 +239,17 @@ for (const f of files.filter((x) => /^src\/(app|components)\//.test(x.rel) && !m
   const hit = /['"`]\/channels\/mcp['"`]|MCP URL/.exec(f.text);
   if (hit && !f.text.includes("'mcp_gateway'")) report(f, hit.index, 'links to the MCP address without reading the mcp_gateway flag');
 }
-for (const f of files.filter((x) => /^src\/app\/.*page\.tsx$/.test(x.rel) && !redirectOnly(x.text) && !authShell(x.rel))) {
+// A tab's page that draws nothing (`return null`) is laid out by the layout.tsx above it, which is where a record page keeps
+// state across its tabs; that layout has to reach the layout itself.
+const laidOutByLayout = (f) => {
+  if (!/return null;/.test(f.text) || /<\/|\/>/.test(f.text)) return false;
+  for (let dir = join(f.abs, '..'); dir.startsWith(join(src, 'app')) && dir !== join(src, 'app'); dir = join(dir, '..')) {
+    const text = readOrNull(join(dir, 'layout.tsx'));
+    if (text !== null) return reachesLayout({ abs: join(dir, 'layout.tsx'), text });
+  }
+  return false;
+};
+for (const f of files.filter((x) => /^src\/app\/.*page\.tsx$/.test(x.rel) && !redirectOnly(x.text) && !authShell(x.rel) && !laidOutByLayout(x))) {
   if (!reachesLayout(f)) report(f, 0, 'page that never reaches PageLayout or RecordLayout (in the page or up to three components down)');
 }
 
