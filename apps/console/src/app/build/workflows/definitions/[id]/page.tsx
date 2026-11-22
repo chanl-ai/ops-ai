@@ -144,8 +144,9 @@ function CanvasTab({ view, types }: { view: DefinitionView; types: EngineNodeTyp
                 </p>
               </NewerCopyNotice>
             )}
+            {/* The step sheet fills a phone screen and is not modal, so the notice floats above it there to stay reachable. */}
             {copy.stale && (
-              <Alert data-testid="definition-stale">
+              <Alert data-testid="definition-stale" className="max-md:fixed max-md:inset-x-2 max-md:top-2 max-md:z-[60] max-md:w-auto max-md:shadow-lg">
                 <AlertTitle>Your change was not saved</AlertTitle>
                 <AlertDescription>
                   <p>{copy.stale} Nothing more is saved from this page until you reload. Reloading shows their copy; your unsaved change on this page is dropped.</p>
