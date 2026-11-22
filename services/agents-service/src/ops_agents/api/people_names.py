@@ -1,6 +1,6 @@
 """People's display names for lists that say who did something: startedBy on a run, actor on an Activity row.
-Runs and records keep a person's email; their name is platform-service's. Read through ServiceClient once a minute per
-tenant; an email whose name cannot be read is shown as the email."""
+Runs and records keep a person's email; their name is platform-service's, asked for by the emails a page shows and
+kept a minute per tenant; an email whose name cannot be read is shown as the email."""
 
 from __future__ import annotations
 
@@ -22,20 +22,27 @@ CACHE_SECONDS = 60.0
 class PlatformPeopleNames:
     def __init__(self, platform: ServiceClient | None, clock: Callable[[], float] = time.monotonic) -> None:
         self.platform, self.clock = platform, clock
-        self.cached: dict[str, tuple[dict[str, str], float]] = {}
+        # Per tenant: the names read, every email asked for (named or not, so an unknown address is not asked again
+        # on each page), and when the minute began.
+        self.cached: dict[str, tuple[dict[str, str], set[str], float]] = {}
 
     async def names(self, emails: set[str]) -> dict[str, str]:
-        """The display name of each email the workspace knows; one missing from the cached list re-reads it."""
+        """The display name of each email the workspace knows; emails not asked for in the last minute are read."""
         if self.platform is None or not emails:
             return {}
         tenant = current_tenant()
         hit = self.cached.get(tenant)
-        if hit is None or self.clock() - hit[1] >= CACHE_SECONDS or not emails <= set(hit[0]):
+        if hit is None or self.clock() - hit[2] >= CACHE_SECONDS:
+            hit = (dict[str, str](), set[str](), self.clock())
+            self.cached[tenant] = hit
+        known, asked, _ = hit
+        missing = sorted({e.lower() for e in emails} - asked)
+        if missing:
             try:
-                rows = cast(list[Json], await self.platform.get("/v1/people-names") or [])
+                rows = cast(list[Json], await self.platform.get("/v1/people-names", params={"emails": missing}) or [])
             except (ServiceCallError, ServiceUnreachable) as e:
                 log.warning("people's names unread; showing their emails", extra={"error": str(e)})
-                return dict(hit[0]) if hit else {}
-            hit = ({str(r["email"]).lower(): str(r["name"]) for r in rows}, self.clock())
-            self.cached[tenant] = hit
-        return {e: hit[0][e.lower()] for e in emails if e.lower() in hit[0]}
+            else:
+                known.update({str(r["email"]).lower(): str(r["name"]) for r in rows})
+                asked.update(missing)
+        return {e: known[e.lower()] for e in emails if e.lower() in known}

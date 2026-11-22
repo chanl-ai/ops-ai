@@ -37,6 +37,8 @@ follow each route.
 
 ### platform-service
 
+- `GET /v1/team-names`: required parameter `ids`. Ask by the ids the page shows. Follow (done): agents-service `PlatformTeamNames`. Old form works: no.
+- `GET /v1/people-names`: required parameter `emails`. Ask by the emails the page shows. Follow (done): agents-service `PlatformPeopleNames`. Old form works: no.
 - `GET /v1/settings/members`: paging. Follow `pagination.hasNext` in a team of more than 20 people. Follow: console `apps/console/src/lib/api/settings-http.ts:13` and `platform-access-http.ts:60` send the table's page, size, search and sort; CLI `sdk/python/src/ops_ai/_cli/people.py:41` pages with `page_items` past the first 20; `scripts/sample_team.py:223`, `:274`, `:313` and `scripts/sample_walk.py:117` read one page (their teams hold fewer than 20). Old form works: partly: a team of more than 20 answers its first 20.
 - `GET /v1/settings/members`: reply field `facets`. Nothing for an unfiltered list. Old form works: partly.
 - `GET /v1/api-keys`: reply and paging. Read the rows from `data.data` and follow `pagination.hasNext`. Follow: console `apps/console/src/lib/api/platform-http.ts:77` reads `data.data` and pages; no hand-written SDK noun or CLI verb lists keys. Old form works: no: the reply is an object, not a list.

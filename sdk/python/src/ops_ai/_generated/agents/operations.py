@@ -1726,7 +1726,18 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/workflows",
         "pathParams": [],
-        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "status", "startable", "takesFiles", "engine"],
+        "query": [
+            "page",
+            "pageSize",
+            "search",
+            "sortBy",
+            "sortOrder",
+            "status",
+            "startable",
+            "takesFiles",
+            "engine",
+            "ids",
+        ],
         "stream": False,
     },
     "workflows_move_pointer": {
@@ -3349,6 +3360,7 @@ class Operations:
         startable: bool | None = None,
         takes_files: bool | None = None,
         engine: str | None = None,
+        ids: list[str] | None = None,
     ) -> ListResultWorkflow:
         "List Workflows"
         return self._t.call(
@@ -3365,6 +3377,7 @@ class Operations:
                 "startable": startable,
                 "takesFiles": takes_files,
                 "engine": engine,
+                "ids": ids,
             },
             {},
             None,
@@ -5055,6 +5068,7 @@ class AsyncOperations:
         startable: bool | None = None,
         takes_files: bool | None = None,
         engine: str | None = None,
+        ids: list[str] | None = None,
     ) -> ListResultWorkflow:
         "List Workflows"
         return await self._t.call(
@@ -5071,6 +5085,7 @@ class AsyncOperations:
                 "startable": startable,
                 "takesFiles": takes_files,
                 "engine": engine,
+                "ids": ids,
             },
             {},
             None,

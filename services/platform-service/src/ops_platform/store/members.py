@@ -125,15 +125,19 @@ class _MemberState(Out):
 class TeamStore(TenantDb):
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.RLS, Guarantee.LOCK})
 
-    async def people_names(self, tenant_id: str) -> list[PersonName]:
-        """Every person of the workspace, suspended ones too: a record keeps naming who acted."""
+    async def people_names(self, tenant_id: str, emails: list[str]) -> list[PersonName]:
+        """The people of the workspace with these emails (any case), suspended ones too: a record keeps naming who
+        acted."""
+        wanted = sorted({e.lower() for e in emails})
+        q = sa.select(users.c.email, users.c.name).where(sa.func.lower(users.c.email).in_(wanted))
         async with self.tenant_tx(tenant_id) as c:
-            return await rows(c, sa.select(users.c.email, users.c.name).order_by(users.c.email), PersonName)
+            return await rows(c, q.order_by(users.c.email), PersonName)
 
-    async def names(self, tenant_id: str) -> list[TeamName]:
-        """Every team of the workspace, archived ones too, by name: a record keeps naming its team."""
+    async def names(self, tenant_id: str, ids: list[str]) -> list[TeamName]:
+        """The teams of the workspace with these ids, archived ones too, by name: a record keeps naming its team."""
+        q = sa.select(teams.c.id, teams.c.name).where(teams.c.id.in_(sorted(set(ids))))
         async with self.tenant_tx(tenant_id) as c:
-            return await rows(c, sa.select(teams.c.id, teams.c.name).order_by(teams.c.name, teams.c.id), TeamName)
+            return await rows(c, q.order_by(teams.c.name, teams.c.id), TeamName)
 
     async def _mirror(self, c: AsyncConnection, actor: Actor, user_id: str, role: str | None, at: str) -> None:
         await mirror_membership(
