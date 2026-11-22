@@ -12,9 +12,9 @@ import { RecordLayout } from '@/components/shared/record-layout';
 import { SettingsSection } from '@/components/shared/settings-section';
 import { TagInput } from '@/components/shared/tag-input';
 import { parseText, refToken } from '@/components/shared/instruction-document/document-model';
-import { HOW_SAYS, SopEditor, type SopEditorHandle } from '@/components/shared/sop-editor';
+import { SopEditor, type SopEditorHandle } from '@/components/shared/sop-editor';
 import { SkillInputsSection } from '@/components/skills/skill-inputs-section';
-import { UNWRITTEN_SECTIONS, WORKED_EXAMPLE } from '@/components/skills/skill-meta';
+import { UNWRITTEN_SECTIONS } from '@/components/skills/skill-meta';
 import { inText, refusedSave } from '@/components/skills/skill-problems';
 import { SkillResultsSection, type SkillEndingValue } from '@/components/skills/skill-results-section';
 import { SkillWhenSection, type SkillWhen, type SkillWhenHandle } from '@/components/skills/skill-when-section';
@@ -25,7 +25,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { knowledgeBaseOptions, toolOptions, useOptionLabels } from '@/hooks/options-queries';
+import { knowledgeBaseOptions, linkToolOptions, useOptionLabels } from '@/hooks/options-queries';
 import { useReferenceLabels } from '@/hooks/references-queries';
 import { useReloadToRead } from '@/hooks/use-reload-to-read';
 import { useSaveSkillDraft, useSkill, useSkillOptions, useSkillTextReading } from '@/hooks/skill-queries';
@@ -72,7 +72,14 @@ const squash = (t: string) => t.replace(/\s+/g, '');
 const textOf = (text: string) => (squash(text) === squash(UNWRITTEN_SECTIONS) ? '' : text);
 const formOf = (sk: SkillDetail): Form => ({ name: sk.content.name, when: { useWhen: sk.content.useWhen, notWhen: sk.content.notWhen ?? '' }, loading: sk.content.loading, instructions: sk.content.instructions, toolIds: sk.content.tools.map((t) => t.toolId), knowledgeBases: sk.content.knowledgeBases, guardrails: sk.content.guardrails, refusal: sk.content.refusal ?? '', parts: sk.content.parts ?? [], text: textOf(sk.text), ending: { exit: sk.content.exit ?? {}, returns: sk.content.returns ?? [], success: sk.content.success ?? [] }, inputs: sk.content.inputs ?? [] });
 const NONE: PublishBlocker[] = [];
-const EXAMPLE = WORKED_EXAMPLE;
+const EXAMPLE = [
+  'Write the steps the way you would explain them to a new colleague, one per line. e.g.',
+  'Ask for the postcode. Look up the outage with @Outage map.',
+  'if power is already reported:',
+  '    Give the restore time.',
+  'else:',
+  '    Log a new outage.',
+].join('\n');
 const KINDS = [['tools', 'tool', 'tools'], ['knowledge', 'knowledge source', 'knowledge sources'], ['skills', 'skill', 'skills'], ['agents', 'agent', 'agents'], ['workflows', 'workflow', 'workflows']] as const;
 /** “3 tools · 2 knowledge sources”, from the counts the service read from the text. */
 const usesLine = (uses: Record<(typeof KINDS)[number][0], number> | undefined) => {
@@ -222,7 +229,8 @@ export function SkillEditor({ skill: sk, tab = 'instructions', hidden, rail, can
     onSaveState?.({ status, detail: stale ?? failed ?? (dirty && !valid ? 'Fix the highlighted fields to save' : null), saveNow: auto.saveNow, retry: auto.retry, canSave: !readOnly && dirty && valid && !stale });
   });
 
-  const toolLabels = new Map((useOptionLabels(toolOptions, listedTools).data?.data ?? []).map((o) => [o.id, o]));
+  // Agents are left out: a pick on a skill written as steps is typed as a tool mention, which an agent is not.
+  const toolLabels = new Map((useOptionLabels(linkToolOptions, listedTools).data?.data ?? []).map((o) => [o.id, o]));
   const kbLabels = new Map((useOptionLabels(knowledgeBaseOptions, form.knowledgeBases).data?.data ?? []).map((o) => [o.id, o]));
   // A skill written as steps uses the tools its text mentions, so a pick from the list is typed into the text as a mention.
   const pickTools = (ids: string[]) => {
@@ -336,7 +344,7 @@ export function SkillEditor({ skill: sk, tab = 'instructions', hidden, rail, can
                 title="Tools"
                 count={listedTools.length}
                 description="An agent must have each of these before it can use the skill."
-                add={readOnly ? undefined : <EntityPicker source={toolOptions} value={listedTools} onChange={pickTools} showChosen={false} addLabel="Add" searchPlaceholder="Search tools by name or system…" emptyText="No tool matches." testId="skill-tools-picker" />}
+                add={readOnly ? undefined : <EntityPicker source={linkToolOptions} value={listedTools} onChange={pickTools} showChosen={false} addLabel="Add" searchPlaceholder="Search tools by name or system…" emptyText="No tool matches." testId="skill-tools-picker" />}
                 rows={toolRows}
                 empty="Mention a tool with @ in the steps and it shows here."
               />
@@ -404,7 +412,7 @@ export function SkillEditor({ skill: sk, tab = 'instructions', hidden, rail, can
               {/* One row on a wide screen: what the text uses on the left, the keys on the right. */}
               <footer className="flex flex-col gap-1 border-t px-4 py-2 text-xs text-muted-foreground tabular-nums sm:flex-row sm:items-center sm:justify-between" data-testid="skill-text-uses">
                 <span>{reading.isError ? 'Couldn’t read the text just now; it still saves.' : (usesLine(reading.reading?.uses) ?? 'Mention a tool or knowledge with @ in the steps and it shows here.')}</span>
-                <span title={`${HOW_SAYS.checked} ${HOW_SAYS.agent}`}>@ mention · Tab indents</span>
+                <span>@ mention · Tab indents</span>
               </footer>
             </section>
             {mine && mineOpen && (

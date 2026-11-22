@@ -124,7 +124,7 @@ export function TestsTab({ skill: s }: { skill: SkillDetail }) {
             </Table>
           </div>
         ) : (
-          <EmptyState icon={ListChecks} title="No test cases" description="Add inputs the skill should handle and what the reply must do. A version cannot go to review without them." action={{ label: 'Add case', onClick: () => setEditing('new') }} />
+          <EmptyState icon={ListChecks} title="No tests yet" description="Add one real message and what should happen, for example “My lights went off at 7” should log an incident." action={{ label: 'Add case', onClick: () => setEditing('new') }} />
         )}
       </SettingsSection>
 
