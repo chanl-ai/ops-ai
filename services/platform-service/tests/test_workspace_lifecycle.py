@@ -220,7 +220,9 @@ async def test_a_closed_workspace_answers_only_its_owner_until_restored(signin: 
     assert me["workspace"]["status"] == "closed" and me["workspace"]["purgeAfter"], me
     r = await signin.public.get("/v1/settings/members", headers=in_ops)
     assert r.status_code == 403 and _code(r) == "workspace_closed", r.text
-    r = await signin.public.get("/v1/team-names", headers={"Authorization": f"Bearer {service}"})
+    r = await signin.public.get(
+        "/v1/team-names", params={"ids": "team_x"}, headers={"Authorization": f"Bearer {service}"}
+    )
     assert r.status_code == 403 and _code(r) == "workspace_closed", r.text
     async with signin.engine.connect() as c:
         disabled = (

@@ -69,10 +69,9 @@ const workflowsWhere = (key: string, filters: WorkflowFilters = {}): OptionSourc
   key,
   fetch: async ({ search, cursor, limit = 25, ids }) => {
     const page = Number(cursor ?? 1);
-    const res = await fetchWorkflows({ page, pageSize: limit, search: ids?.length ? undefined : search, filters });
-    const rows = ids?.length ? res.data.filter((w) => ids.includes(w.id)) : res.data;
+    const res = await fetchWorkflows({ page, pageSize: ids?.length ? Math.min(ids.length, 50) : limit, ids, search: ids?.length ? undefined : search, filters });
     return {
-      data: rows.map((w) => ({ id: w.id, label: w.name, hint: w.status === 'live' ? null : w.status })),
+      data: res.data.map((w) => ({ id: w.id, label: w.name, hint: w.status === 'live' ? null : w.status })),
       nextCursor: !ids?.length && res.pagination.hasNext ? String(page + 1) : null,
     };
   },

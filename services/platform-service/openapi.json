@@ -11266,9 +11266,23 @@
     },
     "/v1/people-names": {
       "get": {
-        "description": "Every person's display name in the workspace by email, so a list naming who did something shows a name\nrather than an address. A person needs access.view where the request acts (no console screen calls it, a Chat\nuser's none); a service token needs the `settings:view` scope.",
+        "description": "The display names of the people `emails` names, so a list naming who did something shows a name\nrather than an address. A person needs access.view where the request acts (no console screen calls it, a Chat\nuser's none); a service token needs the `settings:view` scope.",
         "operationId": "people_people_names",
         "parameters": [
+          {
+            "in": "query",
+            "name": "emails",
+            "required": true,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 1000,
+              "minItems": 1,
+              "title": "Emails",
+              "type": "array"
+            }
+          },
           {
             "in": "header",
             "name": "x-team-id",
@@ -19047,9 +19061,23 @@
     },
     "/v1/team-names": {
       "get": {
-        "description": "Every team's display name in the workspace, so a page showing another team's record names its team. A\nperson needs access.view where the request acts (no console screen calls it, a Chat user's none); a service\ntoken needs the `settings:view` scope and reads its own tenant's.",
+        "description": "The display names of the teams `ids` names, so a page showing another team's record names its team. A\nperson needs access.view where the request acts (no console screen calls it, a Chat user's none); a service\ntoken needs the `settings:view` scope and reads its own tenant's.",
         "operationId": "teams_team_names",
         "parameters": [
+          {
+            "in": "query",
+            "name": "ids",
+            "required": true,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 1000,
+              "minItems": 1,
+              "title": "Ids",
+              "type": "array"
+            }
+          },
           {
             "in": "header",
             "name": "x-team-id",

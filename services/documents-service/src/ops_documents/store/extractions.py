@@ -425,7 +425,9 @@ class ExtractionsStore(Store):
             t.tenant_id == isolation.tenant(), t.team == team, t.file_id == file_id, team_visible(extractions)
         )
         async with self.tx() as c:
-            page = await list_page(c, query, params, default_sort=t.asked_at.desc())
+            page = await list_page(
+                c, query, params, search=[t.alias, t.asked_by, t.status], default_sort=t.asked_at.desc()
+            )
         return [ExtractionRow.model_validate(r) for r in page["data"]], page
 
     async def correct(

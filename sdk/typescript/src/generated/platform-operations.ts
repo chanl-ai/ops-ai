@@ -445,7 +445,9 @@ export const platformOperations = {
     "method": "GET",
     "path": "/v1/people-names",
     "pathParams": [],
-    "query": [],
+    "query": [
+      "emails"
+    ],
     "stream": false
   },
   "people_person_permissions": {
@@ -909,7 +911,9 @@ export const platformOperations = {
     "method": "GET",
     "path": "/v1/team-names",
     "pathParams": [],
-    "query": [],
+    "query": [
+      "ids"
+    ],
     "stream": false
   },
   "workspace_close_workspace": {

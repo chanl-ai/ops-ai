@@ -408,7 +408,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/people-names",
         "pathParams": [],
-        "query": [],
+        "query": ["emails"],
         "stream": False,
     },
     "people_person_permissions": {
@@ -777,7 +777,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/team-names",
         "pathParams": [],
-        "query": [],
+        "query": ["ids"],
         "stream": False,
     },
     "workspace_close_workspace": {
@@ -1046,9 +1046,9 @@ class Operations:
         "Oauth Disconnect"
         return self._t.call(SERVICE, OPERATIONS["oauth_oauth_disconnect"], {"grant_id": grant_id}, {}, {}, None)  # type: ignore[no-any-return]
 
-    def people_people_names(self) -> list[PersonName]:
+    def people_people_names(self, *, emails: list[str] | None = None) -> list[PersonName]:
         "People Names"
-        return self._t.call(SERVICE, OPERATIONS["people_people_names"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(SERVICE, OPERATIONS["people_people_names"], {}, {"emails": emails}, {}, None)  # type: ignore[no-any-return]
 
     def people_person_permissions(self, person_id: str) -> PermissionsOut:
         "Person Permissions"
@@ -1395,9 +1395,9 @@ class Operations:
         "Set Workspace Teams"
         return self._t.call(SERVICE, OPERATIONS["teams_set_workspace_teams"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
-    def teams_team_names(self) -> list[TeamName]:
+    def teams_team_names(self, *, ids: list[str] | None = None) -> list[TeamName]:
         "Team Names"
-        return self._t.call(SERVICE, OPERATIONS["teams_team_names"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(SERVICE, OPERATIONS["teams_team_names"], {}, {"ids": ids}, {}, None)  # type: ignore[no-any-return]
 
     def teams_list_teams(
         self,
@@ -1663,9 +1663,9 @@ class AsyncOperations:
         "Oauth Disconnect"
         return await self._t.call(SERVICE, OPERATIONS["oauth_oauth_disconnect"], {"grant_id": grant_id}, {}, {}, None)  # type: ignore[no-any-return]
 
-    async def people_people_names(self) -> list[PersonName]:
+    async def people_people_names(self, *, emails: list[str] | None = None) -> list[PersonName]:
         "People Names"
-        return await self._t.call(SERVICE, OPERATIONS["people_people_names"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(SERVICE, OPERATIONS["people_people_names"], {}, {"emails": emails}, {}, None)  # type: ignore[no-any-return]
 
     async def people_person_permissions(self, person_id: str) -> PermissionsOut:
         "Person Permissions"
@@ -2018,9 +2018,9 @@ class AsyncOperations:
         "Set Workspace Teams"
         return await self._t.call(SERVICE, OPERATIONS["teams_set_workspace_teams"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
-    async def teams_team_names(self) -> list[TeamName]:
+    async def teams_team_names(self, *, ids: list[str] | None = None) -> list[TeamName]:
         "Team Names"
-        return await self._t.call(SERVICE, OPERATIONS["teams_team_names"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(SERVICE, OPERATIONS["teams_team_names"], {}, {"ids": ids}, {}, None)  # type: ignore[no-any-return]
 
     async def teams_list_teams(
         self,

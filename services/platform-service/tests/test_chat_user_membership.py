@@ -74,8 +74,8 @@ async def test_the_last_admin_is_not_demoted_to_chat_user(platform: Platform) ->
         "/v1/policies/requesterMayDecide",
         "/v1/people/{other}/role-grants",
         "/v1/people/{other}/permissions",
-        "/v1/people-names",
-        "/v1/team-names",
+        "/v1/people-names?emails=a@example.com",
+        "/v1/team-names?ids=team_x",
     ],
 )
 async def test_only_a_chat_user_is_refused_and_every_other_membership_still_reads(
