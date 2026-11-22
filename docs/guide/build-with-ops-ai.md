@@ -39,6 +39,11 @@ Python and TypeScript SDKs. Each step links to an example folder you can run and
 7. **An agent starts a workflow**: a chat calls a published workflow as a tool
    ([example](../../examples/compositions/02-agent-starts-workflow/README.md)).
 
+Capability ids for the polished rungs (deep links for opsai.chanl.ai) live in
+[`examples/capabilities.yaml`](../../examples/capabilities.yaml); the machine join is
+[`examples/registry.json`](../../examples/registry.json). Chat is `chat.ask-once`; the skills path is
+`skill.publish-and-pick` in [Examples for builders](examples/skills.md).
+
 Expected at each step: the command prints the record it made or the answer it got. A refused step prints why, such as
 a workflow input missing a required field, naming the field.
 

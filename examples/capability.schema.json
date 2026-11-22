@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opsai.chanl.ai/examples/capability.schema.json",
+  "title": "Ops AI capability catalog row",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "title", "track", "status", "outcome"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9.-]*$",
+      "description": "Stable deep-link key shared by guide, folder, and opsai.chanl.ai"
+    },
+    "title": { "type": "string", "minLength": 1 },
+    "track": {
+      "type": "string",
+      "enum": ["chat", "knowledge", "tool", "agent", "skill", "workflow", "composition", "plugin"]
+    },
+    "status": {
+      "type": "string",
+      "enum": ["built", "partial", "planned"],
+      "description": "built = folder + guide wired and honest; planned = catalog approved, not yet polished"
+    },
+    "outcome": { "type": "string", "minLength": 1 },
+    "guide": {
+      "type": "string",
+      "description": "Repo-relative guide path under docs/"
+    },
+    "folder": {
+      "type": "string",
+      "description": "Repo-relative examples/ folder path"
+    },
+    "example": {
+      "type": "string",
+      "description": "Folder example.yaml id when it differs from the capability id slug"
+    },
+    "surfaces": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "python": { "type": "string", "enum": ["built", "partial", "planned"] },
+        "typescript": { "type": "string", "enum": ["built", "partial", "planned"] },
+        "cli": { "type": "string", "enum": ["built", "partial", "planned"] },
+        "ui": { "type": "string", "enum": ["built", "partial", "planned"] }
+      }
+    },
+    "notes": { "type": "string" }
+  }
+}

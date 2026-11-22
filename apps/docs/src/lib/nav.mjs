@@ -73,6 +73,8 @@ export const SITE = [
         icon: 'code',
         open: true,
         entries: [
+          // Capability deep links: examples/registry.json (from examples/capabilities.yaml) is the catalog
+          // opsai.chanl.ai can list/filter by id; guide pages name the same capability ids.
           { page: 'guide/examples/README.md', title: 'Examples for builders', icon: 'list' },
           { page: 'guide/examples/agents.md', icon: 'bot' },
           { page: 'guide/examples/skills.md', icon: 'sparkles' },

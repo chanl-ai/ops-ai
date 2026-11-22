@@ -4,8 +4,9 @@ track: chat
 status: built
 difficulty: intro
 outcome: Send one message and read the reply.
+guide: docs/guide/build-with-ops-ai.md
 capabilities:
-- id: chat.send
+- id: chat.ask-once
   status: built
 entrypoint: fixtures/message.json
 fixtures:
@@ -13,10 +14,11 @@ fixtures:
 expected:
 - expected/reply.json
 surfaces:
-  ui: built
-  cli: planned
   python: built
-  typescript: planned
+  typescript: built
+  cli: built
+  ui: built
 setupSeconds: 10
 teaches:
-- chat
+- agents.chat
+- chat.say

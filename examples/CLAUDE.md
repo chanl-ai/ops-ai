@@ -2,17 +2,27 @@
 
 Status: current.
 
-Copyable folders, one idea each, in tracks (`chat`, `knowledge`, `tools`, `agents`, `workflows`, `compositions`,
-`plugins`). They are repository data that a developer copies and runs against a stack through the public surfaces
-(the console, `opsai`, the Python and TypeScript SDKs); the product does not list them. Landing page:
+Copyable folders, one idea each, in tracks (`chat`, `knowledge`, `tools`, `agents`, `skills`, `workflows`,
+`compositions`, `plugins`). They are repository data that a developer copies and runs against a stack through the
+public surfaces (the console, `opsai`, the Python and TypeScript SDKs); the product does not list them. Landing page:
 [docs/guide/build-with-ops-ai.md](../docs/guide/build-with-ops-ai.md). Rules shared with every folder:
 [Working in one folder](../CLAUDE.md#working-in-one-folder).
+
+## Capability registry
+
+| File | Holds |
+|---|---|
+| `capabilities.yaml` | Catalog row per capability id (guide, folder, status, surfaces). Edit this to add a capability |
+| `capability.schema.json` | Schema for that catalog |
+| `registry.json` | Generated join for opsai.chanl.ai / `apps/docs`; refreshed by `scripts/check_examples.py` |
+
+A built capability’s `example.yaml` must list the same capability `id`. Deep-link key = capability id.
 
 ## A folder's shape
 
 | File | Holds |
 |---|---|
-| `example.yaml` | The manifest, checked against `example.schema.json`: `id`, `title`, `track`, `status` (`built`, `partial`, `planned`), `difficulty`, `outcome`, `capabilities` (each with its own status), `entrypoint`, `resources`, `fixtures`, `expected`, `surfaces` |
+| `example.yaml` | The manifest, checked against `example.schema.json`: `id`, `title`, `track` (includes `skill`), `status` (`built`, `partial`, `planned`), `difficulty`, `outcome`, `capabilities` (each with its own status), optional `guide`, `entrypoint`, `resources`, `fixtures`, `expected`, `surfaces` |
 | `resources/` | What the example installs: a workflow (`workflow.yaml`, checked against `workflow.schema.json`), an agent, a tool, knowledge pages |
 | `fixtures/`, `expected/` | Inputs and the outputs a run must match |
 | `setup.py` | Installs the resources into a team on a running stack and writes `.bindings.json` and `.ops-profile.json` (both ignored by git) |
@@ -25,8 +35,8 @@ Shared setup is `_lib/folder.py`; a helper there is named for the example it ser
 
 | Task | Command (repo root) |
 |---|---|
-| Every manifest, schema and generated coverage page in step (offline) | `uv run python scripts/check_examples.py --check` (part of `make docs-verify`) |
-| Rewrite the coverage pages after a manifest change | `uv run python scripts/check_examples.py` (writes `docs/guide/workflow-example-coverage.md`, `agent-example-coverage.md`, `developer-surface-coverage.md`) |
+| Every manifest, schema, capability catalog and generated coverage page in step (offline) | `uv run python scripts/check_examples.py --check` (part of `make docs-verify`) |
+| Rewrite the coverage pages and `registry.json` after a manifest or catalog change | `uv run python scripts/check_examples.py` (writes coverage pages under `docs/guide/` and `examples/registry.json`) |
 | Run one example on the live stack | its README: `uv run python examples/<track>/<slug>/setup.py`, then `uv run pytest examples/<track>/<slug>/test_example.py` and `node examples/<track>/<slug>/test_example.mjs`; `setup.py` creates records in the stack's team |
 | Lint a script you changed | `uv run ruff check examples/<track>/<slug>`: a plain `ruff check` skips `examples/` (`extend-exclude` in `pyproject.toml`), a path named on the command line is checked with the relaxed `examples/**` rules |
 

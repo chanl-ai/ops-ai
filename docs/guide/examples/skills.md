@@ -2,6 +2,11 @@
 
 Status: current. Redesign showcase: one end-to-end path on first-class SDK and CLI verbs (not `ops.raw`).
 
+**Capability id:** `skill.publish-and-pick` · **Runnable folder:**
+[`examples/skills/01-publish-and-pick/`](../../../examples/skills/01-publish-and-pick/)
+(listed in [`examples/capabilities.yaml`](../../../examples/capabilities.yaml) /
+[`examples/registry.json`](../../../examples/registry.json)).
+
 **Goal.** Write a reusable procedure once, publish it, give it to an agent, and pick it for a single reply.
 
 **When to use it.** Use a skill for any procedure more than one agent follows, or one you want to version and review

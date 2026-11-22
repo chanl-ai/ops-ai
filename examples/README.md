@@ -2,11 +2,16 @@
 
 Copyable folders that teach one idea each. They are repository data. The product does not list them.
 
+**Capability registry:** edit [`capabilities.yaml`](capabilities.yaml) to register a capability (id, guide, folder,
+status). `uv run python scripts/check_examples.py` refreshes [`registry.json`](registry.json) for
+`apps/docs` / opsai.chanl.ai deep links. Schema: [`capability.schema.json`](capability.schema.json).
+
 The landing page is [docs/guide/build-with-ops-ai.md](../docs/guide/build-with-ops-ai.md). Coverage is generated into [docs/guide/workflow-example-coverage.md](../docs/guide/workflow-example-coverage.md).
 
 | Track | Start |
 |---|---|
-| Chat | `examples/chat/01-ask-once/` |
+| Chat | `examples/chat/01-ask-once/` (`chat.ask-once`) |
+| Skill | `examples/skills/01-publish-and-pick/` (`skill.publish-and-pick`) |
 | Knowledge | `examples/knowledge/01-search-a-page/` |
 | Tool | `examples/tools/01-find-a-customer/` |
 | Agent | `examples/agents/01-answer-from-instructions/` |

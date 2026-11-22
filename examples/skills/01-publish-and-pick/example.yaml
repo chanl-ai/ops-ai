@@ -1,0 +1,31 @@
+id: publish-and-pick
+title: Publish and pick a skill
+track: skill
+status: built
+difficulty: guided
+outcome: Publish a skill, give it to an agent, and pick it for one reply.
+guide: docs/guide/examples/skills.md
+capabilities:
+- id: skill.publish-and-pick
+  status: built
+entrypoint: resources/skill.yaml
+resources:
+- resources/skill.yaml
+- resources/agent.yaml
+fixtures:
+- fixtures/message.json
+expected:
+- expected/picked.json
+surfaces:
+  python: built
+  typescript: built
+  cli: partial
+  ui: built
+setupSeconds: 40
+gaps:
+- opsai agents add-reference is the CLI grant path; opsai skills has no attach verb
+teaches:
+- skills.create
+- skills.publish
+- agents.add_reference
+- chat.say skill pick

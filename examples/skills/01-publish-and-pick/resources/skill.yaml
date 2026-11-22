@@ -1,0 +1,12 @@
+name: Example return checklist
+ownerTeam: Customer Operations
+useWhen: A customer wants to return an item.
+loading: on_match
+instructions: |
+  1. Ask for the order number if it is missing.
+  2. Check the purchase date is within 30 days.
+  3. Ask whether the customer has the receipt.
+  4. Never promise a refund for a sale item.
+inputs:
+  - name: order_number
+    description: The order being returned

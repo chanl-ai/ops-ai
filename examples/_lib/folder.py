@@ -813,6 +813,8 @@ def _complete(meta: dict[str, Any], bindings: dict[str, Any], folder: Path | Non
         return bool(bindings.get("knowledgeId"))
     if track == "tool":
         return bool(bindings.get("moduleId"))
+    if track == "skill":
+        return bool(bindings.get("skillId") and bindings.get("agentId"))
     if track == "agent":
         if not bindings.get("agentId"):
             return False
@@ -919,7 +921,10 @@ def _setup(ops: OpsAI, folder: Path, meta: dict[str, Any]) -> int:
         if not _workflow_published(ops, str(made["workflowId"])):
             print(f"NOT READY: workflow {made['workflowId']} is not published", file=sys.stderr)
             return 2
-    if agent.is_file() or meta.get("track") == "agent":
+    if meta.get("track") == "skill":
+        if err := _setup_skill(ops, folder, meta, bindings):
+            return err
+    elif agent.is_file() or meta.get("track") == "agent":
         if err := _setup_agent(ops, folder, meta, bindings):
             return err
     page = folder / "resources" / "documents" / "handbook.md"
@@ -997,6 +1002,103 @@ def _setup_composition(ops: OpsAI, folder: Path, meta: dict[str, Any], bindings:
         bindings["workflowId"] = _workflow_id(normalize)
         bindings["publish"] = review
     return 0
+
+
+def _find_skill_by_name(ops: OpsAI, name: str) -> dict[str, Any] | None:
+    for skill in ops.skills.list():
+        if skill.get("name") == name:
+            return skill
+    return None
+
+
+def _ensure_skill_first_class(ops: OpsAI, spec: dict[str, Any], note: str) -> dict[str, Any]:
+    """Create or reuse a skill and publish it through ops.skills (not ops.raw)."""
+    body = {
+        key: spec[key]
+        for key in (
+            "name",
+            "ownerTeam",
+            "useWhen",
+            "loading",
+            "instructions",
+            "inputs",
+            "refusal",
+            "toolIds",
+            "knowledgeBases",
+            "notWhen",
+            "steps",
+            "exit",
+            "returns",
+            "success",
+        )
+        if spec.get(key) is not None
+    }
+    if not body.get("ownerTeam"):
+        body["ownerTeam"] = SAMPLE_TEAM
+    found = _find_skill_by_name(ops, str(body["name"]))
+    if found is None:
+        found = ops.skills.create(body)
+        skill_id = str(found["id"])
+    else:
+        skill_id = str(found["id"])
+        detail = ops.skills.get(skill_id)
+        # Refresh the draft only when the published copy is missing or the file changed fields.
+        if detail.get("publishedVersion") is None:
+            ops.skills.save_draft(skill_id, body, note=note)
+    detail = ops.skills.get(skill_id)
+    if detail.get("publishedVersion") is not None:
+        return detail
+    try:
+        review = ops.skills.publish(skill_id, note=note)
+    except OpsError as exc:
+        if exc.code not in {"cannot_request", "review_open", "already_published"}:
+            raise
+        review = ops.skills.get(skill_id)
+    _decide_publish(_publish_review_id(review) or detail.get("pendingRequestId"), note)
+    return ops.skills.get(skill_id)
+
+
+def _setup_skill(ops: OpsAI, folder: Path, meta: dict[str, Any], bindings: dict[str, Any]) -> int:
+    """Publish a skill, give it to an agent with add_reference, and publish the agent."""
+    skill_path = folder / "resources" / "skill.yaml"
+    agent_path = folder / "resources" / "agent.yaml"
+    if not skill_path.is_file() or not agent_path.is_file():
+        print("NOT READY: skill track needs resources/skill.yaml and resources/agent.yaml", file=sys.stderr)
+        return 2
+    note = f"Example {meta['id']}"
+    skill = _ensure_skill_first_class(ops, dict(load_data(skill_path)), note)
+    if not skill.get("publishedVersion"):
+        print("NOT READY: skill is not published", file=sys.stderr)
+        return 2
+    skill_id = str(skill["id"])
+    bindings["skillId"] = skill_id
+    bindings["skillVersion"] = skill["publishedVersion"]
+    made = ops.agents.apply(dict(load_data(agent_path)))
+    agent_id = str(made.get("id") or "")
+    if not agent_id:
+        print("NOT READY: apply did not return an agent id", file=sys.stderr)
+        return 2
+    ops.agents.add_reference(agent_id, "skill", skill_id)
+    review = _publish_agent(ops, agent_id, note)
+    detail = ops.agents.get(agent_id)
+    if not detail.get("publishedVersion"):
+        print(f"NOT READY: agent {agent_id} is not published", file=sys.stderr)
+        return 2
+    bindings["agentId"] = agent_id
+    bindings["publish"] = review
+    return 0
+
+
+def pick_skill_once(
+    ops: OpsAI, agent_id: str, message: str, *, skill_id: str, inputs: dict[str, str] | None = None
+) -> dict[str, Any]:
+    """Start a console-shaped chat thread and pick a skill for one reply."""
+    thread = ops.chat.start(agent_id)
+    events = list(ops.chat.say(thread["id"], message, skill=skill_id, inputs=inputs or None))
+    done = next((e for e in reversed(events) if e.get("type") == "done" and e.get("message")), None)
+    if done is None:
+        raise ValueError("chat.say did not yield a done message")
+    return {"threadId": thread["id"], "message": done["message"], "events": events}
 
 
 def _setup_agent(ops: OpsAI, folder: Path, meta: dict[str, Any], bindings: dict[str, Any]) -> int:
@@ -1542,14 +1644,21 @@ def _ready(bindings: dict[str, Any], meta: dict[str, Any]) -> None:
             f"PY  ops.raw.tools.tool_modules_run_tool({bindings['moduleId']!r}, {READ_TOOL!r}, {{'mode': 'real', 'input': {{'query': 'ada@example.test'}}}})"
         )
     if bindings.get("agentId") and meta.get("track") == "chat":
-        print("PY  ops.agents.chat(<published id>, message)")
-        print("CLI opsai chat send  # Planned")
+        agent_id = bindings["agentId"]
+        print(f"PY  ops.agents.chat({agent_id!r}, message)")
+        print(f'CLI opsai agents chat {agent_id} --message "…"')
+        print(f'CLI opsai chat say --agent {agent_id} "…"')
+    if bindings.get("agentId") and bindings.get("skillId") and meta.get("track") == "skill":
+        agent_id = bindings["agentId"]
+        skill_id = bindings["skillId"]
+        print(f"PY  ops.chat.say(thread, message, skill={skill_id!r}, inputs={{…}})")
+        print(f"CLI opsai chat say --agent {agent_id} --skill {skill_id} --input order_number=1182 \"…\"")
     if bindings.get("agentId") and meta.get("track") == "agent":
         agent_id = bindings["agentId"]
         print(f"UI /agents/{agent_id}")
         print(f'CLI opsai agents chat {agent_id} --message "What documents open a business account?"')
         print(f"PY  ops.agents.chat({agent_id!r}, message)")
-        print("CLI opsai chat send  # Planned")
+        print(f'CLI opsai chat say --agent {agent_id} "…"')
     if (
         meta.get("track") == "composition"
         and bindings.get("workflowId")

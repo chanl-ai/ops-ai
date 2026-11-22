@@ -1,0 +1,181 @@
+# Capability catalog for builders. Edit this file to register a capability; run
+# `uv run python scripts/check_examples.py` to refresh examples/registry.json.
+# Deep-link key: each `id` is stable for docs/guide and opsai.chanl.ai.
+schema: https://opsai.chanl.ai/examples/capability.schema.json
+capabilities:
+  - id: chat.ask-once
+    title: Ask once
+    track: chat
+    status: built
+    outcome: Send one message and read the reply.
+    guide: docs/guide/build-with-ops-ai.md
+    folder: examples/chat/01-ask-once
+    example: ask-once
+    surfaces:
+      python: built
+      typescript: built
+      cli: built
+      ui: built
+
+  - id: skill.publish-and-pick
+    title: Publish and pick a skill
+    track: skill
+    status: built
+    outcome: Publish a skill, give it to an agent, and pick it for one reply.
+    guide: docs/guide/examples/skills.md
+    folder: examples/skills/01-publish-and-pick
+    example: publish-and-pick
+    surfaces:
+      python: built
+      typescript: built
+      cli: partial
+      ui: built
+    notes: "CLI publishes via opsai skills; grant uses opsai agents add-reference or the SDK."
+
+  - id: knowledge.search-a-page
+    title: Search a handbook page
+    track: knowledge
+    status: planned
+    outcome: Add one page and search it.
+    guide: docs/guide/build-with-ops-ai.md
+    folder: examples/knowledge/01-search-a-page
+    example: search-a-page
+
+  - id: tool.find-a-customer
+    title: Find a customer
+    track: tool
+    status: planned
+    outcome: Call one read tool and see a customer record.
+    guide: docs/guide/build-with-ops-ai.md
+    folder: examples/tools/01-find-a-customer
+    example: find-a-customer
+
+  - id: agent.publish-and-chat
+    title: Publish and chat with an agent
+    track: agent
+    status: planned
+    outcome: Create or update an agent, publish it, and ask a follow-up.
+    guide: docs/guide/examples/agents.md
+    folder: examples/agents/01-answer-from-instructions
+    example: answer-from-instructions
+    surfaces:
+      typescript: partial
+    notes: "TypeScript Agents.apply is create-biased vs Python upsert."
+
+  - id: agent.answer-from-knowledge
+    title: Answer from knowledge
+    track: agent
+    status: planned
+    outcome: Answer from owned pages and show citations.
+    guide: docs/guide/examples/agents.md
+    folder: examples/agents/02-cite-the-handbook
+    example: cite-the-handbook
+
+  - id: agent.grant-and-call-tool
+    title: Grant and call a tool
+    track: agent
+    status: planned
+    outcome: Grant a tool so the agent can act with live data.
+    guide: docs/guide/examples/agents.md
+    folder: examples/agents/03-look-up-a-customer
+    example: look-up-a-customer
+
+  - id: agent.test-a-draft
+    title: Test a draft
+    track: agent
+    status: planned
+    outcome: Try a draft reply before publishing.
+    guide: docs/guide/examples/agents.md
+    folder: examples/agents/01-answer-from-instructions
+    notes: "May stay folded into agent.publish-and-chat or get a thin folder."
+
+  - id: agent.run-modes
+    title: Run an agent in three modes
+    track: agent
+    status: planned
+    outcome: Start one agent in stream, wait, and background modes.
+    guide: docs/guide/examples/agents.md
+    folder: examples/agents/08-run-in-three-modes
+    example: run-in-three-modes
+
+  - id: agent.eval-cases
+    title: Score with cases
+    track: agent
+    status: planned
+    outcome: Score eval cases before a publish.
+    guide: docs/guide/examples/agents.md
+    folder: examples/agents/11-eval-a-known-customer
+    example: eval-a-known-customer
+
+  - id: agent.brief-and-publish-check
+    title: Brief and publish check
+    track: agent
+    status: planned
+    outcome: Write an agent as a brief, see what blocks publish, add references.
+    guide: docs/guide/examples/agents.md
+    folder: examples/agents/12-brief-and-publish-check
+    notes: "Folder not created yet; SDK verbs already ship on develop."
+
+  - id: agent.delegate-to-specialist
+    title: Delegate to a specialist
+    track: agent
+    status: planned
+    outcome: A triage agent hands off to a specialist.
+    guide: docs/guide/examples/coming-from-other-frameworks.md
+    folder: examples/agents/09-delegate-to-a-specialist
+    example: delegate-to-a-specialist
+
+  - id: skill.step-by-step
+    title: Step-by-step skill
+    track: skill
+    status: planned
+    outcome: Follow numbered skill steps with checks and exits.
+    guide: docs/guide/examples/step-by-step-skills.md
+    folder: examples/skills/02-step-by-step
+    notes: "Folder not created yet."
+
+  - id: workflow.publish-and-run
+    title: Publish and run a workflow
+    track: workflow
+    status: planned
+    outcome: Validate, publish, and run a workflow to an outcome.
+    guide: docs/guide/examples/workflows.md
+    folder: examples/workflows/01-normalize-a-request
+    example: normalize-a-request
+
+  - id: workflow.ask-person-and-decide
+    title: Ask a person and decide
+    track: workflow
+    status: planned
+    outcome: A run waits; a second person decides on the task id.
+    guide: docs/guide/examples/workflows.md
+    folder: examples/workflows/18-ask-a-person
+    example: ask-a-person
+    notes: "Guide CLI snippet must use taskId, not run id."
+
+  - id: workflow.agent-step
+    title: Ask an agent from a step
+    track: workflow
+    status: planned
+    outcome: A fixed graph calls a published agent.
+    guide: docs/guide/examples/workflows.md
+    folder: examples/compositions/01-workflow-asks-agent
+    example: workflow-asks-agent
+
+  - id: workflow.trace-and-refused
+    title: Trace and refused starts
+    track: workflow
+    status: planned
+    outcome: Read a run's steps and see a refused validate or start.
+    guide: docs/guide/examples/workflows.md
+    folder: examples/workflows/12-roles-refuse-a-start
+    example: roles-refuse-a-start
+
+  - id: composition.agent-starts-workflow
+    title: An agent starts a workflow
+    track: composition
+    status: planned
+    outcome: Chat starts a published workflow as a tool.
+    guide: docs/guide/build-with-ops-ai.md
+    folder: examples/compositions/02-agent-starts-workflow
+    example: agent-starts-workflow

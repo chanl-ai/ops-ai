@@ -1,0 +1,611 @@
+{
+  "$schema": "https://opsai.chanl.ai/examples/capability.schema.json",
+  "generatedBy": "scripts/check_examples.py",
+  "capabilities": [
+    {
+      "id": "chat.ask-once",
+      "title": "Ask once",
+      "track": "chat",
+      "status": "built",
+      "outcome": "Send one message and read the reply.",
+      "guide": "docs/guide/build-with-ops-ai.md",
+      "folder": "examples/chat/01-ask-once",
+      "example": "ask-once",
+      "surfaces": {
+        "python": "built",
+        "typescript": "built",
+        "cli": "built",
+        "ui": "built"
+      },
+      "deepLink": "#chat.ask-once",
+      "siteHint": "https://opsai.chanl.ai/docs/guide/examples#chat.ask-once",
+      "folderManifest": {
+        "id": "ask-once",
+        "title": "Ask once",
+        "track": "chat",
+        "status": "built",
+        "outcome": "Send one message and read the reply.",
+        "guide": "docs/guide/build-with-ops-ai.md",
+        "capabilities": [
+          {
+            "id": "chat.ask-once",
+            "status": "built"
+          }
+        ],
+        "surfaces": {
+          "python": "built",
+          "typescript": "built",
+          "cli": "built",
+          "ui": "built"
+        }
+      }
+    },
+    {
+      "id": "skill.publish-and-pick",
+      "title": "Publish and pick a skill",
+      "track": "skill",
+      "status": "built",
+      "outcome": "Publish a skill, give it to an agent, and pick it for one reply.",
+      "guide": "docs/guide/examples/skills.md",
+      "folder": "examples/skills/01-publish-and-pick",
+      "example": "publish-and-pick",
+      "surfaces": {
+        "python": "built",
+        "typescript": "built",
+        "cli": "partial",
+        "ui": "built"
+      },
+      "deepLink": "#skill.publish-and-pick",
+      "siteHint": "https://opsai.chanl.ai/docs/guide/examples#skill.publish-and-pick",
+      "notes": "CLI publishes via opsai skills; grant uses opsai agents add-reference or the SDK.",
+      "folderManifest": {
+        "id": "publish-and-pick",
+        "title": "Publish and pick a skill",
+        "track": "skill",
+        "status": "built",
+        "outcome": "Publish a skill, give it to an agent, and pick it for one reply.",
+        "guide": "docs/guide/examples/skills.md",
+        "capabilities": [
+          {
+            "id": "skill.publish-and-pick",
+            "status": "built"
+          }
+        ],
+        "surfaces": {
+          "python": "built",
+          "typescript": "built",
+          "cli": "partial",
+          "ui": "built"
+        }
+      }
+    },
+    {
+      "id": "knowledge.search-a-page",
+      "title": "Search a handbook page",
+      "track": "knowledge",
+      "status": "planned",
+      "outcome": "Add one page and search it.",
+      "guide": "docs/guide/build-with-ops-ai.md",
+      "folder": "examples/knowledge/01-search-a-page",
+      "example": "search-a-page",
+      "surfaces": {},
+      "deepLink": "#knowledge.search-a-page",
+      "siteHint": "https://opsai.chanl.ai/docs/guide/examples#knowledge.search-a-page",
+      "folderManifest": {
+        "id": "search-a-page",
+        "title": "Search a handbook page",
+        "track": "knowledge",
+        "status": "built",
+        "outcome": "Add one handbook page and search it.",
+        "guide": null,
+        "capabilities": [
+          {
+            "id": "knowledge.search",
+            "status": "built"
+          }
+        ],
+        "surfaces": {
+          "ui": "built",
+          "cli": "planned",
+          "python": "built",
+          "typescript": "planned"
+        }
+      }
+    },
+    {
+      "id": "tool.find-a-customer",
+      "title": "Find a customer",
+      "track": "tool",
+      "status": "planned",
+      "outcome": "Call one read tool and see a customer record.",
+      "guide": "docs/guide/build-with-ops-ai.md",
+      "folder": "examples/tools/01-find-a-customer",
+      "example": "find-a-customer",
+      "surfaces": {},
+      "deepLink": "#tool.find-a-customer",
+      "siteHint": "https://opsai.chanl.ai/docs/guide/examples#tool.find-a-customer",
+      "folderManifest": {
+        "id": "find-a-customer",
+        "title": "Find a customer",
+        "track": "tool",
+        "status": "built",
+        "outcome": "Call one read operation with a known email and see the customer record.",
+        "guide": null,
+        "capabilities": [
+          {
+            "id": "tools.call",
+            "status": "built"
+          }
+        ],
+        "surfaces": {
+          "ui": "built",
+          "cli": "planned",
+          "python": "built",
+          "typescript": "planned"
+        }
+      }
+    },
+    {
+      "id": "agent.publish-and-chat",
+      "title": "Publish and chat with an agent",
+      "track": "agent",
+      "status": "planned",
+      "outcome": "Create or update an agent, publish it, and ask a follow-up.",
+      "guide": "docs/guide/examples/agents.md",
+      "folder": "examples/agents/01-answer-from-instructions",
+      "example": "answer-from-instructions",
+      "surfaces": {
+        "typescript": "partial"
+      },
+      "deepLink": "#agent.publish-and-chat",
+      "siteHint": "https://opsai.chanl.ai/docs/guide/examples#agent.publish-and-chat",
+      "notes": "TypeScript Agents.apply is create-biased vs Python upsert.",
+      "folderManifest": {
+        "id": "answer-from-instructions",
+        "title": "Answer from instructions",
+        "track": "agent",
+        "status": "built",
+        "outcome": "Ask a published agent one question and read the reply.",
+        "guide": null,
+        "capabilities": [
+          {
+            "id": "agent.instructions",
+            "status": "built"
+          },
+          {
+            "id": "agent.chat",
+            "status": "built"
+          }
+        ],
+        "surfaces": {
+          "ui": "built",
+          "cli": "built",
+          "python": "built",
+          "typescript": "planned"
+        }
+      }
+    },
+    {
+      "id": "agent.answer-from-knowledge",
+      "title": "Answer from knowledge",
+      "track": "agent",
+      "status": "planned",
+      "outcome": "Answer from owned pages and show citations.",
+      "guide": "docs/guide/examples/agents.md",
+      "folder": "examples/agents/02-cite-the-handbook",
+      "example": "cite-the-handbook",
+      "surfaces": {},
+      "deepLink": "#agent.answer-from-knowledge",
+      "siteHint": "https://opsai.chanl.ai/docs/guide/examples#agent.answer-from-knowledge",
+      "folderManifest": {
+        "id": "cite-the-handbook",
+        "title": "Cite the handbook",
+        "track": "agent",
+        "status": "built",
+        "outcome": "Ask a question the handbook page answers and see the cited section.",
+        "guide": null,
+        "capabilities": [
+          {
+            "id": "agent.knowledge",
+            "status": "built"
+          }
+        ],
+        "surfaces": {
+          "ui": "built",
+          "cli": "built",
+          "python": "built",
+          "typescript": "planned"
+        }
+      }
+    },
+    {
+      "id": "agent.grant-and-call-tool",
+      "title": "Grant and call a tool",
+      "track": "agent",
+      "status": "planned",
+      "outcome": "Grant a tool so the agent can act with live data.",
+      "guide": "docs/guide/examples/agents.md",
+      "folder": "examples/agents/03-look-up-a-customer",
+      "example": "look-up-a-customer",
+      "surfaces": {},
+      "deepLink": "#agent.grant-and-call-tool",
+      "siteHint": "https://opsai.chanl.ai/docs/guide/examples#agent.grant-and-call-tool",
+      "folderManifest": {
+        "id": "look-up-a-customer",
+        "title": "Look up a customer",
+        "track": "agent",
+        "status": "built",
+        "outcome": "Ask for a customer; the agent calls the read tool.",
+        "guide": null,
+        "capabilities": [
+          {
+            "id": "agent.tool.read",
+            "status": "built"
+          }
+        ],
+        "surfaces": {
+          "ui": "built",
+          "cli": "built",
+          "python": "built",
+          "typescript": "planned"
+        }
+      }
+    },
+    {
+      "id": "agent.test-a-draft",
+      "title": "Test a draft",
+      "track": "agent",
+      "status": "planned",
+      "outcome": "Try a draft reply before publishing.",
+      "guide": "docs/guide/examples/agents.md",
+      "folder": "examples/agents/01-answer-from-instructions",
+      "example": null,
+      "surfaces": {},
+      "deepLink": "#agent.test-a-draft",
+      "siteHint": "https://opsai.chanl.ai/docs/guide/examples#agent.test-a-draft",
+      "notes": "May stay folded into agent.publish-and-chat or get a thin folder.",
+      "folderManifest": {
+        "id": "answer-from-instructions",
+        "title": "Answer from instructions",
+        "track": "agent",
+        "status": "built",
+        "outcome": "Ask a published agent one question and read the reply.",
+        "guide": null,
+        "capabilities": [
+          {
+            "id": "agent.instructions",
+            "status": "built"
+          },
+          {
+            "id": "agent.chat",
+            "status": "built"
+          }
+        ],
+        "surfaces": {
+          "ui": "built",
+          "cli": "built",
+          "python": "built",
+          "typescript": "planned"
+        }
+      }
+    },
+    {
+      "id": "agent.run-modes",
+      "title": "Run an agent in three modes",
+      "track": "agent",
+      "status": "planned",
+      "outcome": "Start one agent in stream, wait, and background modes.",
+      "guide": "docs/guide/examples/agents.md",
+      "folder": "examples/agents/08-run-in-three-modes",
+      "example": "run-in-three-modes",
+      "surfaces": {},
+      "deepLink": "#agent.run-modes",
+      "siteHint": "https://opsai.chanl.ai/docs/guide/examples#agent.run-modes",
+      "folderManifest": {
+        "id": "run-in-three-modes",
+        "title": "Run an agent in three modes",
+        "track": "agent",
+        "status": "built",
+        "outcome": "Start one agent in stream, wait and background modes.",
+        "guide": null,
+        "capabilities": [
+          {
+            "id": "agent.run-api",
+            "status": "built"
+          }
+        ],
+        "surfaces": {
+          "ui": "planned",
+          "cli": "built",
+          "python": "built",
+          "typescript": "planned"
+        }
+      }
+    },
+    {
+      "id": "agent.eval-cases",
+      "title": "Score with cases",
+      "track": "agent",
+      "status": "planned",
+      "outcome": "Score eval cases before a publish.",
+      "guide": "docs/guide/examples/agents.md",
+      "folder": "examples/agents/11-eval-a-known-customer",
+      "example": "eval-a-known-customer",
+      "surfaces": {},
+      "deepLink": "#agent.eval-cases",
+      "siteHint": "https://opsai.chanl.ai/docs/guide/examples#agent.eval-cases",
+      "folderManifest": {
+        "id": "eval-a-known-customer",
+        "title": "Evaluate a known customer",
+        "track": "agent",
+        "status": "built",
+        "outcome": "Score A3 look-up cases on a published agent through ops.agents.eval.",
+        "guide": null,
+        "capabilities": [
+          {
+            "id": "agent.eval",
+            "status": "built"
+          }
+        ],
+        "surfaces": {
+          "ui": "planned",
+          "cli": "planned",
+          "python": "built",
+          "typescript": "planned"
+        }
+      }
+    },
+    {
+      "id": "agent.brief-and-publish-check",
+      "title": "Brief and publish check",
+      "track": "agent",
+      "status": "planned",
+      "outcome": "Write an agent as a brief, see what blocks publish, add references.",
+      "guide": "docs/guide/examples/agents.md",
+      "folder": "examples/agents/12-brief-and-publish-check",
+      "example": null,
+      "surfaces": {},
+      "deepLink": "#agent.brief-and-publish-check",
+      "siteHint": "https://opsai.chanl.ai/docs/guide/examples#agent.brief-and-publish-check",
+      "notes": "Folder not created yet; SDK verbs already ship on develop."
+    },
+    {
+      "id": "agent.delegate-to-specialist",
+      "title": "Delegate to a specialist",
+      "track": "agent",
+      "status": "planned",
+      "outcome": "A triage agent hands off to a specialist.",
+      "guide": "docs/guide/examples/coming-from-other-frameworks.md",
+      "folder": "examples/agents/09-delegate-to-a-specialist",
+      "example": "delegate-to-a-specialist",
+      "surfaces": {},
+      "deepLink": "#agent.delegate-to-specialist",
+      "siteHint": "https://opsai.chanl.ai/docs/guide/examples#agent.delegate-to-specialist",
+      "folderManifest": {
+        "id": "delegate-to-a-specialist",
+        "title": "Delegate to a specialist",
+        "track": "agent",
+        "status": "built",
+        "outcome": "A triage agent delegates research to a specialist.",
+        "guide": null,
+        "capabilities": [
+          {
+            "id": "agent.delegate",
+            "status": "built"
+          }
+        ],
+        "surfaces": {
+          "ui": "planned",
+          "cli": "planned",
+          "python": "built",
+          "typescript": "planned"
+        }
+      }
+    },
+    {
+      "id": "skill.step-by-step",
+      "title": "Step-by-step skill",
+      "track": "skill",
+      "status": "planned",
+      "outcome": "Follow numbered skill steps with checks and exits.",
+      "guide": "docs/guide/examples/step-by-step-skills.md",
+      "folder": "examples/skills/02-step-by-step",
+      "example": null,
+      "surfaces": {},
+      "deepLink": "#skill.step-by-step",
+      "siteHint": "https://opsai.chanl.ai/docs/guide/examples#skill.step-by-step",
+      "notes": "Folder not created yet."
+    },
+    {
+      "id": "workflow.publish-and-run",
+      "title": "Publish and run a workflow",
+      "track": "workflow",
+      "status": "planned",
+      "outcome": "Validate, publish, and run a workflow to an outcome.",
+      "guide": "docs/guide/examples/workflows.md",
+      "folder": "examples/workflows/01-normalize-a-request",
+      "example": "normalize-a-request",
+      "surfaces": {},
+      "deepLink": "#workflow.publish-and-run",
+      "siteHint": "https://opsai.chanl.ai/docs/guide/examples#workflow.publish-and-run",
+      "folderManifest": {
+        "id": "normalize-a-request",
+        "title": "Normalize a support request",
+        "track": "workflow",
+        "status": "built",
+        "outcome": "An app posts a support request; the workflow returns canonical fields.",
+        "guide": null,
+        "capabilities": [
+          {
+            "id": "ops.trigger.request",
+            "status": "built"
+          },
+          {
+            "id": "ops.data.set",
+            "status": "built"
+          },
+          {
+            "id": "ops.flow.end",
+            "status": "built"
+          }
+        ],
+        "surfaces": {
+          "ui": "built",
+          "cli": "built",
+          "python": "built",
+          "typescript": "built"
+        }
+      }
+    },
+    {
+      "id": "workflow.ask-person-and-decide",
+      "title": "Ask a person and decide",
+      "track": "workflow",
+      "status": "planned",
+      "outcome": "A run waits; a second person decides on the task id.",
+      "guide": "docs/guide/examples/workflows.md",
+      "folder": "examples/workflows/18-ask-a-person",
+      "example": "ask-a-person",
+      "surfaces": {},
+      "deepLink": "#workflow.ask-person-and-decide",
+      "siteHint": "https://opsai.chanl.ai/docs/guide/examples#workflow.ask-person-and-decide",
+      "notes": "Guide CLI snippet must use taskId, not run id.",
+      "folderManifest": {
+        "id": "ask-a-person",
+        "title": "Ask a person and resume",
+        "track": "workflow",
+        "status": "built",
+        "outcome": "Time out an ask with a zero deadline.",
+        "guide": null,
+        "capabilities": [
+          {
+            "id": "ops.flow.ask",
+            "status": "built"
+          },
+          {
+            "id": "ops.trigger.request",
+            "status": "built"
+          },
+          {
+            "id": "ops.flow.end",
+            "status": "built"
+          }
+        ],
+        "surfaces": {
+          "ui": "planned",
+          "cli": "built",
+          "python": "built",
+          "typescript": "planned"
+        }
+      }
+    },
+    {
+      "id": "workflow.agent-step",
+      "title": "Ask an agent from a step",
+      "track": "workflow",
+      "status": "planned",
+      "outcome": "A fixed graph calls a published agent.",
+      "guide": "docs/guide/examples/workflows.md",
+      "folder": "examples/compositions/01-workflow-asks-agent",
+      "example": "workflow-asks-agent",
+      "surfaces": {},
+      "deepLink": "#workflow.agent-step",
+      "siteHint": "https://opsai.chanl.ai/docs/guide/examples#workflow.agent-step",
+      "folderManifest": {
+        "id": "workflow-asks-agent",
+        "title": "A workflow asks an agent",
+        "track": "composition",
+        "status": "built",
+        "outcome": "A workflow Agent step calls the citing agent and keeps its structured answer.",
+        "guide": null,
+        "capabilities": [
+          {
+            "id": "ops.ai.agent",
+            "status": "built"
+          },
+          {
+            "id": "bridge.workflow-to-agent",
+            "status": "built"
+          }
+        ],
+        "surfaces": {
+          "ui": "planned",
+          "cli": "planned",
+          "python": "built",
+          "typescript": "planned"
+        }
+      }
+    },
+    {
+      "id": "workflow.trace-and-refused",
+      "title": "Trace and refused starts",
+      "track": "workflow",
+      "status": "planned",
+      "outcome": "Read a run's steps and see a refused validate or start.",
+      "guide": "docs/guide/examples/workflows.md",
+      "folder": "examples/workflows/12-roles-refuse-a-start",
+      "example": "roles-refuse-a-start",
+      "surfaces": {},
+      "deepLink": "#workflow.trace-and-refused",
+      "siteHint": "https://opsai.chanl.ai/docs/guide/examples#workflow.trace-and-refused",
+      "folderManifest": {
+        "id": "roles-refuse-a-start",
+        "title": "Roles refuse a start",
+        "track": "workflow",
+        "status": "built",
+        "outcome": "A signed-in person without the needed cell is refused; the same start succeeds for a person who has it.",
+        "guide": null,
+        "capabilities": [
+          {
+            "id": "roles.cell",
+            "status": "built"
+          }
+        ],
+        "surfaces": {
+          "ui": "planned",
+          "cli": "planned",
+          "python": "built",
+          "typescript": "planned"
+        }
+      }
+    },
+    {
+      "id": "composition.agent-starts-workflow",
+      "title": "An agent starts a workflow",
+      "track": "composition",
+      "status": "planned",
+      "outcome": "Chat starts a published workflow as a tool.",
+      "guide": "docs/guide/build-with-ops-ai.md",
+      "folder": "examples/compositions/02-agent-starts-workflow",
+      "example": "agent-starts-workflow",
+      "surfaces": {},
+      "deepLink": "#composition.agent-starts-workflow",
+      "siteHint": "https://opsai.chanl.ai/docs/guide/examples#composition.agent-starts-workflow",
+      "folderManifest": {
+        "id": "agent-starts-workflow",
+        "title": "An agent starts a workflow",
+        "track": "composition",
+        "status": "built",
+        "outcome": "Chat calls the three-node workflow as a tool and returns its output.",
+        "guide": null,
+        "capabilities": [
+          {
+            "id": "agent.workflow-tool",
+            "status": "built"
+          },
+          {
+            "id": "bridge.agent-to-workflow",
+            "status": "built"
+          }
+        ],
+        "surfaces": {
+          "ui": "planned",
+          "cli": "planned",
+          "python": "built",
+          "typescript": "planned"
+        }
+      }
+    }
+  ],
+  "folders": 37
+}

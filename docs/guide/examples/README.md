@@ -1,7 +1,9 @@
 # Examples for builders
 
-Status: current. Hub layout is a redesign showcase: paths by job. Only the skill path below is fully rewritten;
-other pages still use the older topic layout until they migrate.
+Status: current. Hub layout is a redesign showcase: paths by job. Capability catalog:
+[`examples/capabilities.yaml`](../../../examples/capabilities.yaml) (machine join in
+[`examples/registry.json`](../../../examples/registry.json) for opsai.chanl.ai deep links). Two polished runnable
+folders ship first (`chat.ask-once`, `skill.publish-and-pick`); the rest of the catalog is planned wiring.
 
 Short, runnable paths for people who build on Ops AI from code. Each path states a goal, says when to use it, and
 shows the same steps in Python, TypeScript and on the command line through first-class SDK and CLI verbs.
@@ -9,8 +11,11 @@ shows the same steps in Python, TypeScript and on the command line through first
 ## Start here
 
 <!-- site: cards -->
-- **[Write, publish and use a skill](skills.md)**: Create a reusable procedure with `ops.skills` / `opsai skills`,
-  give it to an agent, and pick it for one reply. Showcase of the redesigned path shape.
+- **[Ask once](../build-with-ops-ai.md)** (`chat.ask-once`): send one message and read the reply —
+  [`examples/chat/01-ask-once/`](../../../examples/chat/01-ask-once/).
+- **[Write, publish and use a skill](skills.md)** (`skill.publish-and-pick`): create a reusable procedure with
+  `ops.skills` / `opsai skills`, give it to an agent, and pick it for one reply —
+  [`examples/skills/01-publish-and-pick/`](../../../examples/skills/01-publish-and-pick/).
 
 ## Paths by job
 

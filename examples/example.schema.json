@@ -10,7 +10,11 @@
     "title": { "type": "string", "minLength": 1 },
     "track": {
       "type": "string",
-      "enum": ["chat", "knowledge", "tool", "agent", "workflow", "composition", "plugin"]
+      "enum": ["chat", "knowledge", "tool", "agent", "skill", "workflow", "composition", "plugin"]
+    },
+    "guide": {
+      "type": "string",
+      "description": "Repo-relative teaching page under docs/; pairs with examples/capabilities.yaml"
     },
     "status": { "type": "string", "enum": ["built", "partial", "planned"] },
     "difficulty": { "type": "string", "enum": ["intro", "guided", "advanced"] },
