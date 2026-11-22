@@ -137,6 +137,11 @@ What a browser walk needs. The dev password is the seed's, in the public reposit
 | member | `r.menon@harborpine.example` | `northfield-demo` |
 | security admin | `s.adeyemi@harborpine.example` | `northfield-demo` |
 
+These people exist only on a stack in dev mode (local, preview, ci-local), where platform-service seeds them. A deployed
+origin has its own role accounts: `scripts/agents/ui_walk.mjs --origin <deployed>` reads them from
+`~/.config/ops-ai/staging-roles.env` (roles admin, builder, approver, viewer or member, chat_user) and runs
+`make seed-roles ENV=staging` first (`docs/deploy/fly-staging.md`, "Role accounts").
+
 ## Commands an agent runs
 
 | Task | Command |
