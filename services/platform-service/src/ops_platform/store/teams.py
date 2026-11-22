@@ -95,7 +95,7 @@ class TeamAdminStore(TenantDb):
                 q,
                 params,
                 search=[teams.c.name_key],
-                sortable={"name": teams.c.name_key, "status": teams.c.status, "createdAt": teams.c.created_at},
+                sortable={"name": teams.c.name_key},
                 default_sort=teams.c.name_key.asc(),
             )
         page["data"] = [TeamRow.model_validate(r).model_dump(by_alias=True) for r in page["data"]]

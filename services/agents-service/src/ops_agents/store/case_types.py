@@ -11,11 +11,9 @@ import sqlalchemy as sa
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 
 from .base import metadata
-from .typed_records import RecordNotFound, VersionedRecords, head_columns, head_indexes, version_columns
+from .typed_records import RecordNotFound, VersionedRecords, head_columns, version_columns
 
-case_types = sa.Table(
-    "case_types", metadata, *head_columns(), *head_indexes("case_types"), info={**TENANT_SCOPED, **TEAM_OWNED}
-)
+case_types = sa.Table("case_types", metadata, *head_columns(), info={**TENANT_SCOPED, **TEAM_OWNED})
 case_type_versions = sa.Table(
     "case_type_versions",
     metadata,

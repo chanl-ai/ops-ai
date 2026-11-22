@@ -25,7 +25,7 @@ from ops_service_kit.http import Json, JsonValue, Out
 from ops_service_kit.listing import ListParams
 from ops_service_kit.narrow import a_list, an_object
 from ops_store import isolation
-from ops_store.listing import LISTED, ListPage, list_page
+from ops_store.listing import ListPage, list_page
 from ops_store.outbox import add, outbox_table
 from ops_store.rows import one, rows
 from ops_store.schema import TENANT_SCOPED, team_owned
@@ -48,7 +48,7 @@ extractions = sa.Table(
     sa.Column("request", sa.Text, nullable=False),
     sa.Column("schema_digest", sa.String(64), nullable=False),
     sa.Column("alias", sa.String(64), nullable=False),
-    sa.Column("status", sa.String(16), nullable=False, info=LISTED),
+    sa.Column("status", sa.String(16), nullable=False),
     sa.Column("outcome", sa.String(16)),  # ok | review, once done
     sa.Column("result", sa.Text),
     sa.Column("error_code", sa.String(64)),
@@ -57,7 +57,7 @@ extractions = sa.Table(
     sa.Column("key_hash", sa.String(64), nullable=False),
     sa.Column("request_hash", sa.String(64), nullable=False),
     sa.Column("asked_by", sa.String(320), nullable=False),
-    sa.Column("asked_at", sa.DateTime(timezone=True), nullable=False, info=LISTED),
+    sa.Column("asked_at", sa.DateTime(timezone=True), nullable=False),
     sa.Column("started_at", sa.DateTime(timezone=True)),
     sa.Column("finished_at", sa.DateTime(timezone=True)),
     # The document type read with, and the model's measured tokens, so a test estimate prices what reading that type
@@ -72,8 +72,6 @@ extractions = sa.Table(
     sa.Index("ix_extractions_status", "status"),
     sa.Index("ix_extractions_file", "tenant_id", "file_id"),
     sa.Index("ix_extractions_type_reads", "tenant_id", "team", "type_id", "status", "finished_at"),
-    # A file's extractions list sorts by when each was asked.
-    sa.Index("ix_extractions_asked_at", "tenant_id", "team", "asked_at"),
     info={**TENANT_SCOPED, **team_owned("team")},
 )
 
@@ -427,13 +425,7 @@ class ExtractionsStore(Store):
             t.tenant_id == isolation.tenant(), t.team == team, t.file_id == file_id, team_visible(extractions)
         )
         async with self.tx() as c:
-            page = await list_page(
-                c,
-                query,
-                params,
-                sortable={"askedAt": t.asked_at, "status": t.status},
-                default_sort=t.asked_at.desc(),
-            )
+            page = await list_page(c, query, params, default_sort=t.asked_at.desc())
         return [ExtractionRow.model_validate(r) for r in page["data"]], page
 
     async def correct(

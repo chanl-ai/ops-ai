@@ -216,7 +216,7 @@ operation_mocks = sa.Table(
     sa.Column("environment", sa.String(16), nullable=False),
     # Order within the operation's mocks: the first whose match holds answers.
     sa.Column("position", sa.Integer, nullable=False),
-    sa.Column("name", sa.String(200), nullable=False, info=LISTED),
+    sa.Column("name", sa.String(200), nullable=False),
     # Input field to the value it must equal; empty matches every call.
     sa.Column("match", sa.JSON, nullable=False),
     sa.Column("status", sa.Integer, nullable=False),
@@ -233,8 +233,6 @@ operation_mocks = sa.Table(
     sa.Column("created_at", _TS, nullable=False),
     sa.Column("updated_at", _TS, nullable=False),
     sa.Index("ix_operation_mocks_operation", "tenant_id", "operation", "environment", "position"),
-    # An operation's mocks sort by name.
-    sa.Index("ix_operation_mocks_name", "tenant_id", "name"),
     info=TENANT_SCOPED,
 )
 
@@ -275,7 +273,7 @@ module_versions = _child(
 module_approvals = _child(
     "module_approvals",
     sa.Column("workflow_id", sa.String(64), nullable=False),
-    sa.Column("workflow_name", sa.String(200), nullable=False, info=LISTED),
+    sa.Column("workflow_name", sa.String(200), nullable=False),
     # The team owning the workflow when the approval was requested, from agents-service: who may see the
     # module through this approval. Null on approvals made before workflows came from agents-service.
     sa.Column("workflow_team_id", sa.String(64)),
@@ -288,21 +286,17 @@ module_approvals = _child(
     # Null on approvals made before it was kept, which then match nobody.
     sa.Column("requested_by_email", sa.String(320)),
     sa.Column("justification", sa.Text, nullable=False),
-    sa.Column("requested_at", _TS, nullable=False, info=LISTED),
+    sa.Column("requested_at", _TS, nullable=False),
     sa.Column("decided_by", sa.String(200)),
     sa.Column("decided_at", _TS),
     # requested, approved, rejected or revoked; `expired` is computed from expires_at and never stored.
-    sa.Column("status", sa.String(16), nullable=False, info=LISTED),
+    sa.Column("status", sa.String(16), nullable=False),
     sa.Column("expires_at", _TS),
     sa.Column("reason", sa.Text),
     # The team whose reviewers decide the request and the Human Tasks review deciding it; null on approvals
     # made before requests went to Reviews.
     sa.Column("decider_team", sa.String(64)),
     sa.Column("review_id", sa.String(64)),
-    # The tool access list sorts by workflow, status and request time.
-    sa.Index("ix_module_approvals_workflow_name", "tenant_id", "workflow_name"),
-    sa.Index("ix_module_approvals_status", "tenant_id", "status"),
-    sa.Index("ix_module_approvals_requested_at", "tenant_id", "requested_at"),
 )
 
 # The hosts a module calls: entries of the tenant's egress allow-list (`store.egress`), never a list of its own. The
@@ -1305,7 +1299,6 @@ class ModuleStore(Store):
                 listed.where(view),
                 q,
                 search=[a.workflow_name, a.workflow_id, t.display_name, t.name, a.requested_by],
-                sortable={"workflowName": a.workflow_name, "status": a.status, "requestedAt": a.requested_at},
                 default_sort=a.requested_at.desc(),
             )
             sums = [sa.func.sum(sa.case((where, 1), else_=0)).label(name) for name, where in views.items()]

@@ -71,7 +71,7 @@ model_aliases = sa.Table(
     sa.Column("input_per_million", MONEY, nullable=False),
     sa.Column("output_per_million", MONEY, nullable=False),
     sa.Column("status", sa.String(16), nullable=False),  # current | retired
-    sa.Column("created_at", sa.String(32), nullable=False, info=LISTED),
+    sa.Column("created_at", sa.String(32), nullable=False),
     # The reasoning effort this version's calls run at, sent when a request names none; null leaves the provider's.
     sa.Column("reasoning_effort", sa.String(16)),
     # Whether this version may receive page images: an image carries the whole page, so none is sent unless set.
@@ -84,7 +84,6 @@ model_aliases = sa.Table(
         postgresql_where=sa.text("status = 'current'"),
         mssql_where=sa.text("status = 'current'"),
     ),
-    sa.Index("ix_model_aliases_created_at", "created_at"),
     info=system("an install's alias versions: every tenant's calls are served by them, and none names a tenant"),
 )
 
@@ -101,14 +100,13 @@ model_keys = sa.Table(
     sa.Column("secret_hash", sa.String(64), nullable=False, unique=True),
     sa.Column("previous_secret_hash", sa.String(64), unique=True),
     sa.Column("previous_valid_until", sa.DateTime(timezone=True)),
-    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=db_now(), info=LISTED),
+    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=db_now()),
     sa.Column("rotated_at", sa.DateTime(timezone=True)),
     # Set for a key one service uses for many tenants (files-service's extractions): each tenant then spends
     # from its own row in model_key_tenants, starting at this budget, so one tenant cannot use up the others' share.
     sa.Column("tenant_budget", MONEY),
     # What the key may spend in one UTC day, from the call log (models_0011); null for no daily cap.
     sa.Column("daily_cap", MONEY),
-    sa.Index("ix_model_keys_created_at", "created_at"),
     info=system("one identity's model key, spent for many tenants; each tenant's share is held by tenant"),
 )
 

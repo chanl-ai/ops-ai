@@ -49,11 +49,9 @@ mcp_links = sa.Table(
     sa.Column("tools", sa.JSON, nullable=False),
     sa.Column("paused", sa.Boolean, nullable=False),
     sa.Column("created_by", sa.String(320), nullable=False),
-    sa.Column("created_at", sa.String(32), nullable=False, info=LISTED),
+    sa.Column("created_at", sa.String(32), nullable=False),
     sa.Column("updated_at", sa.String(32), nullable=False),
     sa.UniqueConstraint("tenant_id", "team_id", "slug", name="uq_mcp_links_team_slug"),
-    # The links list sorts by creation time.
-    sa.Index("ix_mcp_links_created_at", "tenant_id", "team_id", "created_at"),
     # Held to its team by the database (tools_0079): only a transaction run as ROLE in the link's team sees it.
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
@@ -141,7 +139,6 @@ class McpLinks(Store):
         held = (
             isolation.scope(tenant_id, team_ids[0]) if own else isolation.tenant_wide(LINK_TEAMS, tenant_id=tenant_id)
         )
-        by_name = sa.func.lower(mcp_links.c.name)
         with held:
             async with self.tx() as c:
                 return await list_page(
@@ -149,8 +146,7 @@ class McpLinks(Store):
                     _with_last_call(tenant_id, team_ids),
                     params,
                     search=[mcp_links.c.name],
-                    sortable={"name": by_name, "createdAt": mcp_links.c.created_at},
-                    default_sort=by_name,
+                    default_sort=sa.func.lower(mcp_links.c.name),
                     filters={"teamId": mcp_links.c.team_id},
                     facets={"teamId": mcp_links.c.team_id},
                 )

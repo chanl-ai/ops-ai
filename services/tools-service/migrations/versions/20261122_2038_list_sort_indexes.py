@@ -1,8 +1,8 @@
 """An index for each column the tools lists sort on
 
-The call log, the egress allow-list, the MCP links, an operation's mocks, the tool access list and the secrets list
-honour `sortBy` (ops_store.listing.list_page). Each sortable column had no index leading with it after the tenant
-(and the team, where the table has one), so a sorted page read the whole table. The downgrade drops them.
+The call log, the egress allow-list and the secrets list honour `sortBy` (ops_store.listing.list_page). Each sortable
+column had no index leading with it after the tenant (and the team, where the table has one), so a sorted page read
+the whole table. The downgrade drops them.
 
 Revision ID: 20261122_2038_list_sort_indexes
 Revises: tools_0088_app_card_account
@@ -22,11 +22,6 @@ INDEXES = (
     ("ix_gateway_calls_latency_ms", "gateway_calls", ["tenant_id", "latency_ms"]),
     ("ix_egress_hosts_added_at", "egress_hosts", ["tenant_id", "added_at"]),
     ("ix_egress_ranges_added_at", "egress_ranges", ["tenant_id", "added_at"]),
-    ("ix_mcp_links_created_at", "mcp_links", ["tenant_id", "team_id", "created_at"]),
-    ("ix_operation_mocks_name", "operation_mocks", ["tenant_id", "name"]),
-    ("ix_module_approvals_workflow_name", "module_approvals", ["tenant_id", "workflow_name"]),
-    ("ix_module_approvals_status", "module_approvals", ["tenant_id", "status"]),
-    ("ix_module_approvals_requested_at", "module_approvals", ["tenant_id", "requested_at"]),
     ("ix_tool_secrets_created_at", "tool_secrets", ["tenant_id", "team_id", "created_at"]),
     ("ix_tool_secrets_rotated_at", "tool_secrets", ["tenant_id", "team_id", "rotated_at"]),
     ("ix_tool_secrets_last_used_at", "tool_secrets", ["tenant_id", "team_id", "last_used_at"]),

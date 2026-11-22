@@ -18,7 +18,7 @@ from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.listing import ListParams
 from ops_store import Guarantee
 from ops_store.dialect import locked
-from ops_store.listing import LISTED, ListPage, list_page
+from ops_store.listing import ListPage, list_page
 from ops_store.rows import one
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.team_scope import team_visible
@@ -40,7 +40,7 @@ form_links = sa.Table(
     # The path the page is served at, /f/<slug>; unique in the tenant.
     sa.Column("slug", sa.String(80), nullable=False),
     sa.Column("mode", sa.String(16), nullable=False),
-    sa.Column("title", sa.String(200), nullable=False, info=LISTED),
+    sa.Column("title", sa.String(200), nullable=False),
     sa.Column("description", sa.String(1000), nullable=False, server_default=""),
     sa.Column("after_text", sa.String(1000), nullable=False, server_default=""),
     # sha256 of the link's secret; a rotated link gets a new secret and the old one stops matching.
@@ -49,13 +49,10 @@ form_links = sa.Table(
     sa.Column("daily_cap", sa.Integer, nullable=False),
     sa.Column("paused", sa.Boolean, nullable=False, server_default=sa.false()),
     sa.Column("created_by", sa.String(320), nullable=False),
-    sa.Column("created_at", sa.String(32), nullable=False, info=LISTED),
+    sa.Column("created_at", sa.String(32), nullable=False),
     sa.Column("rotated_at", sa.String(32)),
     sa.UniqueConstraint("tenant_id", "slug", name="uq_form_links_slug"),
     sa.Index("ix_form_links_workflow", "tenant_id", "workflow_id"),
-    # A workflow's forms sort by title and creation time.
-    sa.Index("ix_form_links_title", "tenant_id", "team_id", "title"),
-    sa.Index("ix_form_links_created_at", "tenant_id", "team_id", "created_at"),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
@@ -149,14 +146,7 @@ class FormLinks:
         f = form_links
         q = sa.select(f).where(f.c.tenant_id == current_tenant(), team_visible(f), f.c.workflow_id == workflow_id)
         async with tenant_tx(self.engine) as c:
-            return await list_page(
-                c,
-                q,
-                params,
-                search=[f.c.title, f.c.slug],
-                sortable={"title": f.c.title, "createdAt": f.c.created_at},
-                default_sort=f.c.created_at.desc(),
-            )
+            return await list_page(c, q, params, search=[f.c.title, f.c.slug], default_sort=f.c.created_at.desc())
 
     async def update(self, form_id: str, **values: Any) -> FormLinkRow | None:
         f = form_links

@@ -301,7 +301,6 @@ class ChannelList(RuntimeStore):
                 params,
                 key=(u.c.type, u.c.id),
                 search=[u.c.name, u.c.detail],
-                sortable={"name": u.c.name, "type": u.c.type, "health": u.c.health},
                 default_sort=u.c.sort,
                 filters={"type": u.c.type, "health": u.c.health},
                 facets={"type": u.c.type, "health": u.c.health},

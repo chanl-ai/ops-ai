@@ -22,7 +22,7 @@ from ops_service_kit.http import Json, Out
 from ops_service_kit.ids import now_iso
 from ops_service_kit.listing import ListParams
 from ops_store import Guarantee
-from ops_store.listing import LISTED, ListPage, list_page
+from ops_store.listing import ListPage, list_page
 from ops_store.rows import one
 from ops_store.rows import rows as read_rows
 from ops_store.team_scope import acting_as, acting_team, team_visible
@@ -42,7 +42,7 @@ def head_columns() -> list[sa.Column[Any]]:
         sa.Column("team_id", sa.String(64), primary_key=True),
         sa.Column("id", sa.String(64), primary_key=True),
         sa.Column("origin", sa.String(16), nullable=False),
-        sa.Column("name", sa.String(200), nullable=False, info=LISTED),
+        sa.Column("name", sa.String(200), nullable=False),
         sa.Column("description", sa.Text, nullable=False, default=""),
         # Newest saved version, draft or published, and the newest published one.
         sa.Column("version", sa.Integer, nullable=False),
@@ -51,16 +51,8 @@ def head_columns() -> list[sa.Column[Any]]:
         sa.Column("copied_from", sa.JSON),
         sa.Column("created_at", sa.String(32), nullable=False),
         sa.Column("created_by", sa.String(320), nullable=False),
-        sa.Column("updated_at", sa.String(32), nullable=False, info=LISTED),
+        sa.Column("updated_at", sa.String(32), nullable=False),
         sa.Column("updated_by", sa.String(320), nullable=False),
-    ]
-
-
-def head_indexes(table: str) -> list[sa.Index]:
-    """The indexes of a kind's type table: its list sorts by name and by update time (`sortBy`)."""
-    return [
-        sa.Index(f"ix_{table}_name", "tenant_id", "team_id", "name"),
-        sa.Index(f"ix_{table}_updated_at", "tenant_id", "team_id", "updated_at"),
     ]
 
 
@@ -227,7 +219,6 @@ class VersionedRecords:
                 q,
                 params,
                 search=[h.name, h.description],
-                sortable={"name": h.name, "updatedAt": h.updated_at},
                 # Both origins are four letters ("seed", "team"), so origin and name joined sort as origin, then name.
                 default_sort=(h.origin + h.name).asc(),
             )

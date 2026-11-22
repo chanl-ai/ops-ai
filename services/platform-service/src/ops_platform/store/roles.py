@@ -406,9 +406,7 @@ class RoleStore(TenantDb):
             q = q.where(role_assignments.c.subject_id.in_(params.ids))
             params = params.model_copy(update={"ids": None, "search": None})
         async with self.tenant_tx(tenant_id) as c:
-            page = await list_page(
-                c, q, params, search=[users.c.name, users.c.email], sortable={"name": name}, default_sort=name.asc()
-            )
+            page = await list_page(c, q, params, search=[users.c.name, users.c.email], default_sort=name.asc())
         page["data"] = [RoleHolderRow.model_validate(r).model_dump(by_alias=True) for r in page["data"]]
         return page
 
@@ -482,14 +480,7 @@ class RoleStore(TenantDb):
             )
         )
         async with self.tenant_tx(tenant_id) as c:
-            page = await list_page(
-                c,
-                q,
-                params,
-                search=[roles.c.name],
-                sortable={"roleName": roles.c.name},
-                default_sort=roles.c.name.asc(),
-            )
+            page = await list_page(c, q, params, search=[roles.c.name], default_sort=roles.c.name.asc())
         page["data"] = [RoleGrantRow.model_validate(r).model_dump(by_alias=True) for r in page["data"]]
         return page
 

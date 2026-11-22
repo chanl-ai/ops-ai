@@ -1,8 +1,8 @@
 """An index for each column the agents lists sort on
 
-The runs, cases, eval runs, form links, case types, task types and skills lists honour `sortBy`
-(ops_store.listing.list_page). Each sortable column with no index leading with it after the tenant and team gets one
-here, so a sorted page does not read the team's whole table. The downgrade drops them.
+The cases, an asset's eval runs and the skills lists honour `sortBy` (ops_store.listing.list_page). Each sortable
+column with no index leading with it after the tenant and team gets one here, so a sorted page does not read the
+team's whole table. The downgrade drops them.
 
 Revision ID: 20261122_2044_list_sort_indexes
 Revises: 0123_eval_run_digest
@@ -19,15 +19,8 @@ depends_on = None
 
 TEAM = ["tenant_id", "team_id"]
 INDEXES = (
-    ("ix_engine_runs_team_finished", "engine_runs", [*TEAM, "finished_at"]),
     ("ix_cases_team_subject", "cases", [*TEAM, "subject"]),
     ("ix_eval_runs_ran_at", "eval_runs", [*TEAM, "ran_at"]),
-    ("ix_form_links_title", "form_links", [*TEAM, "title"]),
-    ("ix_form_links_created_at", "form_links", [*TEAM, "created_at"]),
-    ("ix_case_types_name", "case_types", [*TEAM, "name"]),
-    ("ix_case_types_updated_at", "case_types", [*TEAM, "updated_at"]),
-    ("ix_task_types_name", "task_types", [*TEAM, "name"]),
-    ("ix_task_types_updated_at", "task_types", [*TEAM, "updated_at"]),
     ("ix_registry_skills_team_updated", "registry_skills", [*TEAM, "updated_at"]),
 )
 

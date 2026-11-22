@@ -76,7 +76,7 @@ kb_bases = sa.Table(
     # Its answer, sync, access and source-default settings (service.settings_of); null: the defaults (kb_0024).
     sa.Column("settings", sa.JSON),
     sa.Column("created_by", sa.String(200), nullable=False),
-    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, info=LISTED),
+    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     sa.Column("last_refreshed_at", sa.DateTime(timezone=True)),
     # The template the provisioning service made it from, and how the platform protects it: `system` cannot be
     # changed by a person, `managed` can, and the template's fields come back on the next provisioning run.
@@ -92,8 +92,6 @@ kb_bases = sa.Table(
     sa.UniqueConstraint("tenant_id", "team_id", "name", name="uq_kb_bases_name"),
     # The list's `templateId` filter (kb_0028).
     sa.Index("ix_kb_bases_template", "tenant_id", "template_id"),
-    # The bases list sorts by creation time.
-    sa.Index("ix_kb_bases_created_at", "tenant_id", "team_id", "created_at"),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
@@ -104,7 +102,7 @@ kb_sources = sa.Table(
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("team_id", sa.String(64), nullable=False),
     sa.Column("type", sa.String(32), nullable=False),
-    sa.Column("name", sa.String(200), nullable=False, info=LISTED),
+    sa.Column("name", sa.String(200), nullable=False),
     sa.Column("collection", sa.String(120), nullable=False),
     sa.Column("owner", sa.String(200), nullable=False),
     sa.Column("sensitivity", sa.String(16), nullable=False),
@@ -116,7 +114,7 @@ kb_sources = sa.Table(
     # Set by the application: MySQL 8 refuses a literal default on a JSON column (kb_0005).
     sa.Column("file_names", sa.JSON, nullable=True, default=dict),
     sa.Column("created_by", sa.String(200), nullable=False),
-    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, info=LISTED),
+    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     sa.Column("last_sync_at", sa.DateTime(timezone=True)),
     sa.Column("last_run_status", sa.String(16)),
     # A "tool" source's reading: plugin, source, its two tools, the connection, the schedule, the watermark and
@@ -132,9 +130,6 @@ kb_sources = sa.Table(
     sa.Column("last_good_sync_at", sa.DateTime(timezone=True)),
     sa.Column("failing_since", sa.DateTime(timezone=True)),
     sa.Column("failures_in_row", sa.Integer, nullable=False, server_default="0"),
-    # The sources list sorts by name and creation time.
-    sa.Index("ix_kb_sources_name", "tenant_id", "team_id", "name"),
-    sa.Index("ix_kb_sources_created_at", "tenant_id", "team_id", "created_at"),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
@@ -201,7 +196,7 @@ kb_items = sa.Table(
     sa.Column("verified", sa.Boolean, nullable=False, server_default=sa.false()),
     sa.Column("verified_by", sa.String(200)),
     sa.Column("verified_at", sa.DateTime(timezone=True)),
-    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, info=LISTED),
+    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     sa.Column("processed_at", sa.DateTime(timezone=True), info=LISTED),
     # Read through a connection's tools: the system's change marker, the item this one is attached to, and its
     # address in the system for a citation.
@@ -239,7 +234,6 @@ kb_items = sa.Table(
     sa.Index("ix_kb_items_title", "tenant_id", "team_id", "title"),
     sa.Index("ix_kb_items_status", "tenant_id", "team_id", "status"),
     sa.Index("ix_kb_items_size", "tenant_id", "team_id", "size"),
-    sa.Index("ix_kb_items_created_at", "tenant_id", "team_id", "created_at"),
     sa.Index("ix_kb_items_processed_at", "tenant_id", "team_id", "processed_at"),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
@@ -391,7 +385,7 @@ kb_runs = sa.Table(
     sa.Column("trigger", sa.String(16), nullable=False),  # manual | full | retry
     sa.Column("started_at", sa.DateTime(timezone=True), nullable=False, info=LISTED),
     sa.Column("duration_sec", sa.Float(), nullable=False),
-    sa.Column("status", sa.String(16), nullable=False, info=LISTED),
+    sa.Column("status", sa.String(16), nullable=False),
     sa.Column("counts", sa.JSON, nullable=False),
     sa.Column("errors", sa.JSON, nullable=False),
     sa.Column("log", sa.JSON, nullable=False),
@@ -407,9 +401,8 @@ kb_runs = sa.Table(
         name="fk_kb_run_source",
     ),
     sa.Index("ix_kb_runs_source", "tenant_id", "source_id", "started_at"),
-    # A source's runs sort by start time and status.
+    # A source's runs sort by start time.
     sa.Index("ix_kb_runs_started_at", "tenant_id", "team_id", "started_at"),
-    sa.Index("ix_kb_runs_status", "tenant_id", "team_id", "status"),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
@@ -780,7 +773,6 @@ ITEM_SORTS: dict[str, sa.ColumnElement[Any]] = {
     "title": kb_items.c.title,
     "status": kb_items.c.status,
     "sizeBytes": kb_items.c.size,
-    "createdAt": kb_items.c.created_at,
     "processedAt": kb_items.c.processed_at,
 }
 ITEM_COLUMNS = [c for c in kb_items.c if c.name != "tenant_id"]
@@ -1223,7 +1215,7 @@ class KnowledgeStore(Store):
                 q,
                 params,
                 search=[b.name, b.description, b.owner],
-                sortable={"name": b.name, "createdAt": b.created_at},
+                sortable={"name": b.name},
                 default_sort=b.created_at.desc(),
                 filters={"templateId": b.template_id},
                 facets={"health": health},
@@ -1255,7 +1247,6 @@ class KnowledgeStore(Store):
                 q,
                 params,
                 search=[s.name, s.owner, s.collection],
-                sortable={"name": s.name, "createdAt": s.created_at},
                 default_sort=s.created_at.desc(),
                 facets={"type": s.type, "status": s.status},
             )
@@ -1830,7 +1821,7 @@ class KnowledgeStore(Store):
                 c,
                 q,
                 params,
-                sortable={"startedAt": r.started_at, "status": r.status},
+                sortable={"startedAt": r.started_at},
                 default_sort=r.started_at.desc(),
                 facets={"status": r.status},
             )

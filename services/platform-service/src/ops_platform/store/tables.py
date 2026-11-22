@@ -63,10 +63,10 @@ teams = sa.Table(
     sa.Column("name", sa.String(200), nullable=False),
     sa.Column("owner_groups", sa.JSON, nullable=False),
     sa.Column("scope", sa.String(16), nullable=False),  # all | owned
-    sa.Column("created_at", sa.String(40), nullable=False, info=LISTED),
+    sa.Column("created_at", sa.String(40), nullable=False),
     # Migration 0013: an archived team keeps what it owns and leaves its members' tokens.
     # active | archived | deleted (never removed as a row, since audit entries reference it)
-    sa.Column("status", sa.String(16), nullable=False, server_default="active", info=LISTED),
+    sa.Column("status", sa.String(16), nullable=False, server_default="active"),
     sa.Column("archived_at", sa.String(40)),
     # The lower-case name: two teams of one workspace never share a name in any case, on every database.
     # The members list sorts by it (`sortBy=teamId`); uq_teams_tenant_name leads with it after the tenant.
@@ -75,9 +75,6 @@ teams = sa.Table(
     sa.Column("protection", sa.String(16), nullable=False, server_default="none"),  # none | managed | system
     sa.UniqueConstraint("tenant_id", "id", name="uq_teams_tenant_id"),
     sa.UniqueConstraint("tenant_id", "name_key", name="uq_teams_tenant_name"),
-    # The teams list sorts by status and by creation time.
-    sa.Index("ix_teams_status", "tenant_id", "status"),
-    sa.Index("ix_teams_created_at", "tenant_id", "created_at"),
     info=TENANT_SCOPED,
 )
 

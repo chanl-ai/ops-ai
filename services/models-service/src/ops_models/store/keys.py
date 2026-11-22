@@ -107,12 +107,7 @@ class ModelKeys(Store):
         """One page of the keys by id; `search` matches the id, the kind or the status."""
         async with self.install_tx(MODEL_KEYS, tables=(t,)) as c:
             page = await list_page(
-                c,
-                sa.select(t),
-                params,
-                search=(t.c.id, t.c.kind, t.c.status),
-                sortable={"id": t.c.id, "createdAt": t.c.created_at},
-                default_sort=t.c.id.asc(),
+                c, sa.select(t), params, search=(t.c.id, t.c.kind, t.c.status), default_sort=t.c.id.asc()
             )
         return ListResult[KeyRow].model_validate(page)
 

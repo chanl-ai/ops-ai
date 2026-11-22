@@ -1,8 +1,8 @@
-"""An index for each column the knowledge lists sort on
+"""An index for each column the knowledge document and run lists sort on
 
-The bases, sources, documents and runs lists honour `sortBy` (ops_store.listing.list_page). Each sortable column had
-no index leading with it after the tenant and team, so a sorted page read the team's whole table. The downgrade
-drops them.
+A source's and a base's documents and a source's runs honour `sortBy` (ops_store.listing.list_page). Each sortable
+column had no index leading with it after the tenant and team, so a sorted page read the team's whole table. The
+downgrade drops them.
 
 Revision ID: 20261122_2031_list_sort_indexes
 Revises: kb_0029
@@ -18,10 +18,8 @@ branch_labels = None
 depends_on = None
 
 SORTED = {
-    "kb_bases": ("created_at",),
-    "kb_sources": ("name", "created_at"),
-    "kb_items": ("title", "status", "size", "created_at", "processed_at"),
-    "kb_runs": ("started_at", "status"),
+    "kb_items": ("title", "status", "size", "processed_at"),
+    "kb_runs": ("started_at",),
 }
 
 
