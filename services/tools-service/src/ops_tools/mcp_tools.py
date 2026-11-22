@@ -101,7 +101,6 @@ OPERATIONS: tuple[Operation, ...] = (
         method="GET",
         route=_templates,
         read_only=True,
-        wrap="templates",
         cells=CREATE,
     ),
     Operation(

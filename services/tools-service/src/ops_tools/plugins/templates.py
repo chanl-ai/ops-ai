@@ -223,7 +223,7 @@ class ServiceCopies:
     @staticmethod
     async def _every(client: ServiceClient, params: dict[str, str] | None, tenant_id: str, team_id: str) -> list[Json]:
         """Every row of a templates list: agents-service answers pages of the shared list, followed to the last;
-        documents-service answers every row at once and ignores the paging keys."""
+        both answer a page of the shared list."""
         out: list[Json] = []
         page = 1
         while True:

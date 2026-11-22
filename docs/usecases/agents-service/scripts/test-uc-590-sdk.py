@@ -64,8 +64,8 @@ def main() -> None:
         ops = OpsAI.sign_in("p.shah@harborpine.example", "northfield-demo", team="team_ops", **CONN)
 
         # 21. The SDK's list matches the API's, and an install makes the copy once.
-        through_sdk = ops.raw.agents.templates_list_templates(kind="agent")
-        through_api = api.get("/v1/templates", params={"kind": "agent"}, headers=priya).json().get("data") or []
+        through_sdk = ops.templates.list(kind="agent")
+        through_api = (api.get("/v1/templates", params={"kind": "agent", "pageSize": 50}, headers=priya).json().get("data") or {}).get("data") or []
         first = ops.raw.agents.resources_copy_resource(f"{SOURCE}:case-helper", {})
         again = ops.raw.agents.resources_copy_resource(f"{SOURCE}:case-helper", {})
         check(

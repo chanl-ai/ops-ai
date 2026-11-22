@@ -86,15 +86,16 @@ export function DocumentSheet({
   }, [item?.id, page]);
   const citedRef = React.useRef<HTMLLIElement>(null);
   const cited = page ? item?.detail?.chunks.find((c) => c.page === page)?.index : undefined;
-  React.useEffect(() => {
-    if (tab === 'pieces' && cited !== undefined) citedRef.current?.scrollIntoView({ block: 'center' });
-  }, [tab, cited]);
 
   const d = item?.detail;
   const synced = item && !['file', 'text'].includes(item.sourceType);
   const questions = (d?.chunks ?? []).flatMap((c) => (c.units ?? []).filter((u) => u.kind === 'question').map((u) => ({ text: u.text, piece: c })));
   const pieces = useItemPieces(item?.id, chunkQuery, open && tab === 'pieces');
   const chunks = pieces.rows;
+  // The pieces arrive after the tab opens, so the cited one is scrolled to once its page has loaded.
+  React.useEffect(() => {
+    if (tab === 'pieces' && cited !== undefined) citedRef.current?.scrollIntoView({ block: 'center' });
+  }, [tab, cited, chunks.length]);
 
   return (
     <>
