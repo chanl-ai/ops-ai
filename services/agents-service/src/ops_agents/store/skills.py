@@ -10,7 +10,6 @@ load adds to a turn: the whole body, or the shared instructions plus the longest
 
 from __future__ import annotations
 
-import re
 from typing import ClassVar
 
 import sqlalchemy as sa
@@ -20,7 +19,7 @@ from ops_service_kit import narrow
 from ops_service_kit.errors import Conflict
 from ops_service_kit.http import Json, JsonList, Out
 from ops_service_kit.ids import new_id, now_iso
-from ops_service_kit.names import cap_slug
+from ops_service_kit.names import slugify
 from ops_store import Guarantee
 from ops_store.dialect import json_text
 from ops_store.listing import LISTED
@@ -90,7 +89,7 @@ registry_skill_versions = sa.Table(
 
 
 def slug_of(name: str) -> str:
-    return cap_slug(re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-"), 64) or "skill"
+    return slugify(name, width=64, fallback="skill")
 
 
 LABELS = {

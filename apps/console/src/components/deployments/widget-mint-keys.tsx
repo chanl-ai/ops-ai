@@ -20,6 +20,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useCreateWidgetMintKey, useRevokeWidgetMintKey, useWidgetMintKeys, useWidgetScriptUrl } from '@/hooks/widget-deployment-queries';
 import { relativeTime } from '@/lib/format';
 import type { WidgetDeployment, WidgetMintKey } from '@/lib/types/widget-deployments';
+import { nameError } from '@/lib/validation/names';
 
 /**
  * The keys the bank's server mints one deployment's sessions with (agents-service `/v1/widget-deployments/{id}/keys`).
@@ -45,7 +46,8 @@ export function WidgetMintKeysDialog({ deployment, open, onOpenChange }: { deplo
   }, [open]);
 
   const submit = async () => {
-    if (!name.trim()) return setError('Name the server that will use it, like Intranet server.');
+    const nameIssue = nameError(name, 'Name the server that will use it, like Intranet server.');
+    if (nameIssue) return setError(nameIssue);
     try {
       const made = await create.mutateAsync({ id: deployment.id, name: name.trim(), expiresInDays: Number(days) });
       setSecret(made.secret);

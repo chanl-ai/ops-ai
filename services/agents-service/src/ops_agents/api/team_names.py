@@ -41,7 +41,7 @@ def team_names_asked_once() -> Generator[None]:
 class PlatformTeamNames:
     def __init__(self, platform: ServiceClient | None, clock: Callable[[], float] = time.monotonic) -> None:
         self.platform, self.clock = platform, clock
-        self.cached: dict[str, tuple[dict[str, str], float]] = {}
+        self.cached: dict[str, tuple[dict[str, str | None], float]] = {}
         self.security: dict[str, tuple[str | None, float]] = {}
 
     async def name(self, team_id: str) -> str | None:
@@ -59,15 +59,18 @@ class PlatformTeamNames:
             return None
         tenant = current_tenant()
         hit = self.cached.get(tenant)
-        if hit is None or self.clock() - hit[1] >= CACHE_SECONDS or team_id not in hit[0]:
+        if hit is None or self.clock() - hit[1] >= CACHE_SECONDS:
+            hit = (dict[str, str | None](), self.clock())
+            self.cached[tenant] = hit
+        if team_id not in hit[0]:
             try:
-                rows = cast(list[Json], await self.platform.get("/v1/team-names") or [])
+                rows = cast(list[Json], await self.platform.get("/v1/team-names", params={"ids": [team_id]}) or [])
             except (ServiceCallError, ServiceUnreachable) as e:
                 log.warning("team names unread; showing the id", extra={"error": str(e)})
-                return hit[0].get(team_id) if hit else None
-            hit = ({str(r["id"]): str(r["name"]) for r in rows}, self.clock())
-            self.cached[tenant] = hit
-        return hit[0].get(team_id)
+                return None
+            # A team the workspace does not hold is kept as None, so it is not asked for again this minute.
+            hit[0][team_id] = next((str(r["name"]) for r in rows if str(r["id"]) == team_id), None)
+        return hit[0][team_id]
 
     async def security_team(self) -> str | None:
         """The workspace's Security team from its record (Settings > Workspace); None when it names none."""

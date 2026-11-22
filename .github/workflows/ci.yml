@@ -86,7 +86,9 @@ jobs:
     # A change of documents only has nothing for these checks; the docs job and the leak scan check it.
     if: (needs.plan.outputs.full != 'true' && needs.plan.outputs.code == 'true') || needs.plan.outputs.release == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    # make checks takes about 6 minutes and, when scripts/ changed, the script tests about 8 more (2026-11-22: 6m + 7m41s
+    # was cancelled at 15).
+    timeout-minutes: 25
     services:
       postgres:
         # PostgreSQL 17 with pgvector, which knowledge search by meaning needs (kb_0021).

@@ -255,6 +255,7 @@ class RunStore:
                 c,
                 q,
                 params,
+                search=[engine_definitions.c.name, r.c.id],
                 sortable={"createdAt": r.c.created_at, "status": r.c.status},
                 default_sort=r.c.created_at.desc(),
                 filters={"status": r.c.status, "workflowId": r.c.workflow_id},

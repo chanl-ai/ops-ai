@@ -77,6 +77,14 @@ def test_a_documents_only_change_runs_only_the_docs_job_and_a_service_change_run
     assert plan(tmp_path, "apps/console/src/app.tsx")["mssql"] == "false"
 
 
+def test_a_use_case_script_or_the_use_case_runner_is_code_not_a_document(tmp_path: Path) -> None:
+    for path in ("docs/usecases/lib/usecase_harness.py", "docs/usecases/kb-service/scripts/test-uc-1-api.mjs"):
+        p = plan(tmp_path, path)
+        assert (p["code"], p["docs"]) == ("true", "true"), (path, p)
+    assert plan(tmp_path, "packages/usecase-runner/src/harness.ts")["console"] == "true"
+    assert plan(tmp_path, "docs/usecases/kb-service/a-file-is-found.md")["code"] == "false"
+
+
 def test_ci_full_runs_every_job_whatever_changed(tmp_path: Path) -> None:
     p = plan(tmp_path, "docs/guide/plugins.md", full="true")
     assert (p["full"], p["code"], p["mssql"], p["console"]) == ("true", "true", "true", "true"), p

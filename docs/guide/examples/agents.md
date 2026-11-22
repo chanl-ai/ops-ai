@@ -314,8 +314,8 @@ draft fails.
 ## Upcoming: write the agent as a brief
 
 > [!NOTE]
-> **Upcoming.** This section is in review and is not in the current release. Its examples were run against the code
-> under review.
+> **Upcoming.** This section is merged and is not in the current release (v1.0.0). Its examples were run against
+> the merged code.
 
 **The problem.** One long block of instructions mixes what the agent is for, how it should answer and what it must
 never do. A reviewer cannot tell which line is a hard rule.

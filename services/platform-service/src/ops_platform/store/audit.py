@@ -348,7 +348,12 @@ class AuditLog(TenantDb):
         )
         async with self.tenant_tx(tenant_id) as c:
             found = await list_page(
-                c, stmt, params, sortable={"at": audit_entries.c.at}, default_sort=audit_entries.c.at.desc()
+                c,
+                stmt,
+                params,
+                search=[audit_entries.c.action, actor.c.name, actor.c.email],
+                sortable={"at": audit_entries.c.at},
+                default_sort=audit_entries.c.at.desc(),
             )
             counts = await _counts(c, team_id, account)
         return found, counts

@@ -23,7 +23,7 @@ from ops_service_kit import narrow
 from ops_service_kit.errors import Conflict, NotFound, Unprocessable, ValidationFailed
 from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.logging import get_logger
-from ops_service_kit.names import has_control, tidy
+from ops_service_kit.names import BLANK, name_problem, tidy
 
 from ..activities.catalog import AgentDefinition, kernel_skills
 from ..activities.tool_directory import ToolsUnavailable
@@ -58,6 +58,7 @@ LIMITS: dict[str, int] = {
     "maxAttached": MAX_ATTACHED,
     "tokenBudget": TOKEN_BUDGET,
     "useWhenMaxChars": USE_WHEN_MAX,
+    "instructionsMaxChars": INSTRUCTIONS_MAX,
 }
 
 # The team setting that refuses a write behind a condition the agent decides (ops_access.policies).
@@ -103,12 +104,13 @@ async def check_content(rt: Runtime, fields: Json, *, skill_id: str | None = Non
     name = tidy(str(fields.get("name") or ""))
     loading = str(fields.get("loading") or "on_match")
     use_when = str(fields.get("useWhen") or "").strip()
-    if not name:
+    problem = name_problem(name)
+    if problem == BLANK:
         raise ValidationFailed("Name the skill.", code="no_name")
     if len(name) > NAME_MAX:
         raise ValidationFailed(f"The name is at most {NAME_MAX} characters.", code="name_too_long")
-    if has_control(name):
-        raise ValidationFailed("The name cannot hold a control character.", code="bad_name")
+    if problem:
+        raise ValidationFailed(problem[1], code="bad_name")
     if len(str(fields.get("instructions") or "")) > INSTRUCTIONS_MAX:
         raise ValidationFailed(
             f"The instructions are at most {INSTRUCTIONS_MAX:,} characters.", code="instructions_too_long"

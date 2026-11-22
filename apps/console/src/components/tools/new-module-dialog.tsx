@@ -12,8 +12,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { ConnectionSelect } from '@/components/tools/connection-select';
 import { HostHeldError } from '@/lib/api/held-host';
 import type { BlankModuleInput } from '@/lib/types/tool-modules';
+import { slugify } from '@/lib/validation/names';
 
-const kebab = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const kebab = (s: string) => slugify(s, { width: 200 });
 
 /**
  * New module: one screen, a name and the app it calls (group F). The app's connection gives its address and sign-in, so

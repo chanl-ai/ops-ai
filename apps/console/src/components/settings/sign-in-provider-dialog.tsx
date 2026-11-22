@@ -15,6 +15,7 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { ApiError } from '@/lib/api/contract';
 import type { JitRole, SignInProvider, SignInProviderInput, SignInProviderKind } from '@/lib/types/sign-in';
+import { nameError } from '@/lib/validation/names';
 
 export const KIND_LABEL: Record<SignInProviderKind, string> = { oidc: 'OpenID Connect', saml: 'SAML 2.0', password: 'Email and password' };
 export const ROLE_LABEL: Record<JitRole, string> = { chat_user: 'Chat user', viewer: 'Viewer', builder: 'Builder', approver: 'Approver' };
@@ -101,7 +102,7 @@ export function SignInProviderDialog({
 
   const submit = async () => {
     const found: Errors = {
-      label: f.label.trim() ? undefined : 'Name the provider as people will see it on the sign-in page.',
+      label: nameError(f.label, 'Name the provider as people will see it on the sign-in page.'),
       issuer: f.kind === 'oidc' && !/^https?:\/\//.test(f.issuer.trim()) ? 'Give the issuer URL, e.g. https://login.bank.com.' : undefined,
       clientId: f.kind === 'oidc' && !f.clientId.trim() ? 'Give the client ID the identity provider issued.' : undefined,
       entity: f.kind === 'saml' && !f.entity.trim() ? 'Give the identity provider’s entity ID.' : undefined,

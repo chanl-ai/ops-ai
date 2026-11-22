@@ -1812,7 +1812,7 @@ class KnowledgeStore(Store):
             return await rows(c, q.order_by(kb_runs.c.started_at.desc()), RunRow)
 
     async def run_page(self, tenant: str, source_id: str, params: ListParams) -> tuple[ListPage, list[RunRow]]:
-        """One page of a source's runs, newest first, counted by status in SQL."""
+        """One page of a source's runs, newest first, searched by who started it and how, counted by status in SQL."""
         r = kb_runs.c
         shown = (col for col in kb_runs.c if col.name not in ("tenant_id", "team_id", "started_by"))
         q = sa.select(*shown).where(r.tenant_id == tenant, r.source_id == source_id, team_visible(kb_runs))
@@ -1821,6 +1821,7 @@ class KnowledgeStore(Store):
                 c,
                 q,
                 params,
+                search=[r.started_by, r.trigger],
                 sortable={"startedAt": r.started_at},
                 default_sort=r.started_at.desc(),
                 facets={"status": r.status},
