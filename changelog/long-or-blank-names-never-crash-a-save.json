@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-20",
+  "title": "A long or blank name no longer breaks saving",
+  "description": "Creating an agent, guardrail or link with a very long name used to show a server error. Names are now trimmed, a blank name or one with a line break is refused with a clear message, and the address made from a long name is shortened to fit.",
+  "tag": "fix"
+}

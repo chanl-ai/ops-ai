@@ -57,7 +57,7 @@ AREAS: dict[str, tuple[Area, str]] = {
         templates_main,
         "what a team can start from, by kind: list, install",
     ),
-    "skills": (skills_main, "skills: list, show, apply, export, publish, references"),
+    "skills": (skills_main, "skills: list, show, versions, apply, export, publish, references"),
     "guardrails": (guardrails_main, "guardrails: list, show"),
     "widgets": (widgets_main, "widget templates: list, show"),
     "threads": (threads_main, "threads: list, show, inbox"),

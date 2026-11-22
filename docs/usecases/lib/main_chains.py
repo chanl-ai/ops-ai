@@ -42,7 +42,7 @@ import time  # noqa: E402
 from typing import Any  # noqa: E402
 
 from fake_bank_https import HOST, fake_bank  # noqa: E402
-from usecase_harness import approve_tool_review, check, data  # noqa: E402
+from usecase_harness import approve_tool_review, check, data, save_agent  # noqa: E402
 
 SECURITY = {"X-Dev-User": "Nadia Petrov", "X-Team-Id": "team_security"}
 TEAM = {"X-Team-Id": "team_ops"}
@@ -105,7 +105,7 @@ def agent_with(api: Any, run: int, tools: list[str], headers: dict[str, str] | N
     as_who = headers or TEAM
     time.sleep(31)
     agent = data(api.post("/v1/agents", json={"name": f"Account desk {run}", "role": "Reads and freezes accounts"}, headers=as_who))
-    granted = data(api.patch(f"/v1/agents/{agent['id']}", json={"toolIds": tools}, headers=as_who))
+    granted = data(save_agent(api, agent["id"], {"toolIds": tools}, headers=as_who))
     api.post(f"/v1/agents/{agent['id']}/publish-requests", json={"version": granted["version"], "note": "main chains"}, headers=as_who)
     return str(agent["id"])
 
@@ -125,9 +125,7 @@ def bank_stack(*, worker: str | None = None) -> Generator[SimpleNamespace]:
     from apps_walk import AUTH
     from usecase_harness import AGENTS_PORT as agents_port
     from usecase_harness import TOOLS_PORT as tools_port
-    from usecase_harness import agents, as_role, platform, tools
-
-    from usecase_harness import bearer, signed_in
+    from usecase_harness import agents, as_role, bearer, platform, signed_in, tools
 
     with fake_bank() as bank, platform() as (accounts, _):
         # Team writes need approval only once the admin turns the policy on (off by default). The change refuses tokens

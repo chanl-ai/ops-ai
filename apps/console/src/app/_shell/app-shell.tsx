@@ -23,7 +23,8 @@ import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { useSession, useSignInPolicy, useSignOut } from '@/hooks/auth-queries';
 import { useTeam, useTeamReady } from '@/hooks/use-team';
 import { currentTeamId, ownTeamId, setCurrentTeamId } from '@/lib/api';
-import { isUnreachable, servicesDown } from '@/lib/api/unreachable';
+import { isUnreachable } from '@/lib/api/unreachable';
+import { useServicesDown } from '@/hooks/services-down';
 import { authProvider } from '@/lib/auth';
 import { isAuthPath } from '@/lib/auth/next-path';
 import { teamToUse } from '@/lib/session-gate';
@@ -153,26 +154,6 @@ function Guarded({ children }: { children: React.ReactNode }) {
 }
 
 /** Shown in place of the console when the session lifetime has passed; nothing behind it renders. */
-/** True while a page read on screen failed because the services did not answer (lib/api/unreachable.ts `servicesDown`). */
-function useServicesDown(): boolean {
-  const cache = useQueryClient().getQueryCache();
-  return React.useSyncExternalStore(
-    (changed) => cache.subscribe(changed),
-    () =>
-      servicesDown(
-        cache.getAll().map((q) => ({
-          observers: q.getObserversCount(),
-          status: q.state.status,
-          error: q.state.error,
-          failures: q.state.fetchFailureCount,
-          failureReason: q.state.fetchFailureReason,
-          side: q.meta?.side === true,
-        })),
-      ),
-    () => false,
-  );
-}
-
 /** Above any page whose reads the services are not answering: the page keeps what it has and asks again by itself. */
 function ServicesDownBanner() {
   if (!useServicesDown()) return null;

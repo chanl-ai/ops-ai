@@ -1,7 +1,7 @@
 # Release package
 
 One versioned package a client team installs on its own Linux machines with Docker, with no checkout. Runbook:
-`docs/deploy/release-package.md`; the guide inside the package: `docs/deploy/install-guide.md`.
+`docs/deploy/release-package.md`; the guide inside the package (INSTALL.md): `docs/deploy/package-install.md`.
 
 | File | Role |
 |---|---|

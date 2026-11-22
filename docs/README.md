@@ -190,7 +190,7 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `deploy/upgrade.md` | Upgrade an install to a new release with the script or by hand, how the schema check behaves, and roll back |
 | `deploy/backup-and-restore.md` | Back up and restore the database, the stored files and the keys, with the script or by hand |
 | `deploy/monitoring.md` | Check an install's health, read its logs, what to watch and how it scales |
-| `deploy/install-guide.md` | Generated from `guide/install.md` and `guide/operate.md` and shipped in the release package as INSTALL.md: install with install.sh, then status, logs, upgrade, back up, restore and scaling |
+| `deploy/install-guide.md` | Generated from `guide/install.md` and `guide/operate.md`, for a source clone (the package ships `deploy/package-install.md` as INSTALL.md instead): install with install.sh, then status, logs, upgrade, back up, restore and scaling |
 | `deploy/install.md` | `./install.sh` from a clone: what it asks, what it does, the other commands (upgrade, backup, restore, status, logs, uninstall), what is proven, and the by-hand appendix |
 | `deploy/client-install-guide.html` | The client architecture and install guide as one shareable page, generated from `guide/` by `scripts/docs/build_guide.mjs` |
 | `guide/README.md` | The client guide's index: its sections in order and what each holds |
@@ -239,6 +239,7 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `guide/skills/wf-builder/examples.md` | The seeded workflows `/wf-builder` adapts, generated from the seeds by `scripts/wf_builder_examples.py` |
 | `guide/skills/ops-debug.md` | Developer skill for Claude Code and GitHub Copilot (ops-debug): find why a service fails; generated into `.claude/skills/ops-debug/SKILL.md` and `.github/prompts/ops-debug.prompt.md` by `scripts/agent_skills.py` |
 | `guide/skills/ops-mirror.md` | Developer skill for Claude Code and GitHub Copilot (ops-mirror): work behind a company mirror; generated into `.claude/skills/ops-mirror/SKILL.md` and `.github/prompts/ops-mirror.prompt.md` by `scripts/agent_skills.py` |
+| `guide/skills/ops-fix-the-class.md` | Developer skill for Claude Code and GitHub Copilot (ops-fix-the-class): fix every place with the same fault before committing a fix, and state the sweep in a `Siblings:` trailer; generated into `.claude/skills/ops-fix-the-class/SKILL.md` and `.github/prompts/ops-fix-the-class.prompt.md` by `scripts/agent_skills.py` |
 | `guide/skills/ops-commit.md` | Developer skill for Claude Code and GitHub Copilot (ops-commit): pass the commit checks with a What's new entry; generated into `.claude/skills/ops-commit/SKILL.md` and `.github/prompts/ops-commit.prompt.md` by `scripts/agent_skills.py` |
 | `guide/skills/ops-database.md` | Developer skill for Claude Code and GitHub Copilot (ops-database): switch the database; generated into `.claude/skills/ops-database/SKILL.md` and `.github/prompts/ops-database.prompt.md` by `scripts/agent_skills.py` |
 | `guide/plugins.md` | Building a plugin: the manifest and request templates, paging, sign-in steps, settings, Python tools, knowledge sources, `opsai plugin validate` and `test`, and trying it on a local stack against a fake |
@@ -644,3 +645,4 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/tools-service/approval-fails-closed-when-the-approval.md` | uc-754: Approval fails closed: when the approval rules cannot be read, a write that needs approval is refused and never runs |
 | `usecases/tools-service/a-team-holding-only-a-workflow.md` | uc-755: A team holding only a workflow grant on another team's tool module uses it through the workflow and cannot edit, publish, run, revoke or delete it |
 | `usecases/agents-service/a-shared-form-filled-in-signed.md` | uc-756: A shared form filled in signed out starts a workflow with knowledge and a tool, a person approves a step, and the run finishes with a record |
+| `usecases/agents-service/a-builder-writes-a-skill-with.md` | uc-757: A builder writes a skill with steps and an agent brief, and a chat follows the steps |

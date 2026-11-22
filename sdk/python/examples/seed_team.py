@@ -154,7 +154,7 @@ def main() -> int:
             "instructions": "Answer from the dispute handbook and cite it.",
         }
     )
-    patched = lead.raw.agents.agents_update_agent(agent["id"], {"collections": [kb["id"]], "note": "Knowledge added."})
+    patched = lead.agents.update(agent["id"], {"collections": [kb["id"]], "note": "Knowledge added."})
     review = lead.raw.agents.agents_request_publish(
         agent["id"], {"version": patched["version"], "note": "First release."}
     )

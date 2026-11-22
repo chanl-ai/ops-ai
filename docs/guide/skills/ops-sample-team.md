@@ -3,7 +3,7 @@
 Status: current. Proven by `make skills-proof`.
 
 skill: ops-sample-team
-description: Install the sample team (people, knowledge, agents, tools, workflows, mailbox) on a running stack and walk the email demo end to end. Use when someone wants demo data, a team to try the console with, or to check the stack works from chat to the second reply.
+description: Install the sample team (people, knowledge, agents, tools, workflows, mailbox) on a running stack and walk the email demo. Use for demo data or to check the stack works from chat to the second reply.
 targets: make sample-team, make demo-walk, make demo
 
 ## When to use it

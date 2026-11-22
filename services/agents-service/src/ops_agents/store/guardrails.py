@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from ops_service_kit.errors import Conflict
 from ops_service_kit.http import Json, Out
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.names import cap_slug
 from ops_store import Guarantee
 from ops_store.rows import rows
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, team_owned_via
@@ -129,7 +130,7 @@ class GuardrailVersion(Out):
 
 
 def _slug(name: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "guardrail"
+    return cap_slug(re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-"), 120) or "guardrail"
 
 
 class GuardrailRegistry(VersionedRegistry[GuardrailRow, GuardrailVersion]):
@@ -239,7 +240,9 @@ class GuardrailRegistry(VersionedRegistry[GuardrailRow, GuardrailVersion]):
                 )
             ).first()
             if taken is not None:
-                raise Conflict(f"A guardrail named {name} exists; give this one another name.", code="name_taken")
+                # Names are compared by their slug, which stops at 120 letters.
+                cut = " Names are compared by their first 120 letters." if len(name) > 118 else ""
+                raise Conflict(f"A guardrail named {name} exists; give this one another name.{cut}", code="name_taken")
             await c.execute(
                 registry_guardrails.insert().values(
                     id=gid,

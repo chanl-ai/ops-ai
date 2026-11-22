@@ -3,7 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Bot, FlaskConical, MoreHorizontal, Pause, Play, Rocket, Send, Star, Trash2 } from 'lucide-react';
+import { ArrowLeft, Bot, CircleAlert, FlaskConical, Info, Lock, MoreHorizontal, Pause, Play, RefreshCw, Rocket, Send, Star, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 
 import {
@@ -23,9 +23,20 @@ import {
   ToolsSection,
   UsedInCard,
 } from '@/components/agents/agent-settings';
+import { AgentBriefEditor, legacyBrief, PromptModeToggle } from '@/components/agents/agent-brief-editor';
+import { AgentModelLimitsSection } from '@/components/agents/agent-model-limits-section';
+import { AgentUsesLink, AgentUsesSheet } from '@/components/agents/agent-uses-sheet';
+import { PromptModeDialogs } from '@/components/agents/prompt-mode-dialogs';
 import { MemorySection } from '@/components/agents/memory-section';
 import { RequestAgentPublishDialog } from '@/components/agents/request-agent-publish-dialog';
 import { useSendMessage } from '@/hooks/chat-queries';
+import { useAddReference } from '@/hooks/references-queries';
+import type { InstructionDocumentHandle } from '@/components/shared/instruction-document';
+import { keptEdits, keptEditsByGroup } from '@/lib/kept-edits';
+import { LeaveGuard } from '@/components/shared/leave-guard';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import type { AgentBrief, PromptMode } from '@/lib/types/domain';
+import type { PublishBlocker } from '@/lib/types/references';
 import { AgentTestPanel, TEST_TABS, type TestTab } from '@/components/agents/agent-test-panel';
 import { LivePlacesPanel } from '@/components/channels/hub/live-places';
 import { AgentChatChannel } from '@/components/agents/agent-channels';
@@ -37,6 +48,7 @@ import { TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useTabParam } from '@/hooks/use-tab-param';
 import { EvalsTab } from './_parts/evals-tab';
 import { useInstructionsAssist } from './_parts/instructions-assist';
+import { useAgentAutosave } from './_parts/use-agent-autosave';
 import { WidgetEmbeds } from '@/components/deployments/widget-embed';
 import { PageLayout } from '@/components/page-layout';
 import { PageTabPanel, PageTabs } from '@/components/shared/page-tabs';
@@ -56,6 +68,8 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '
 import {
   useAgent,
   useAgentPaused,
+  useAgentPublishCheck,
+  useAgentPublishPreview,
   useAgentRuns,
   useAgentVersions,
   useDeleteAgent,
@@ -63,6 +77,8 @@ import {
   useModelAliases,
   useRequestAgentPublish,
   useRestoreAgent,
+  useChangeAgentKnowledge,
+  useChangeAgentTools,
   useGrantableTools,
   useUpdateAgent,
 } from '@/hooks/queries';
@@ -118,6 +134,8 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
   const versions = useAgentVersions(agent.id);
   const runs = useAgentRuns(agent.id);
   const update = useUpdateAgent(agent.id);
+  const changeTools = useChangeAgentTools(agent.id);
+  const changeKnowledge = useChangeAgentKnowledge(agent.id);
   const setPaused = useAgentPaused(agent.id);
   const restore = useRestoreAgent(agent.id);
   const requestPublish = useRequestAgentPublish(agent.id);
@@ -134,24 +152,44 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
 
   const saved = React.useMemo(() => draftOf(agent), [agent]);
   const [draft, setDraft] = React.useState<AgentDraft>(saved);
-  // A newer copy of the agent (a refetch after a cached first paint, a change made elsewhere) moves every field the
-  // draft has not edited. Left stale, those fields differ from `saved`, and autosave would write the old values back.
+  // A newer copy of the agent (a refetch after a cached first paint, a change made elsewhere, another person's save
+  // read again) moves every field the draft has not edited. Left stale, those fields differ from `saved`, and autosave
+  // would write the old values back over the newer copy.
   const savedBefore = React.useRef(saved);
   React.useEffect(() => {
     const before = savedBefore.current;
     savedBefore.current = saved;
-    if (before === saved) return;
-    setDraft((d) => {
-      const next = { ...d } as Record<string, unknown>;
-      for (const k of Object.keys(saved) as (keyof AgentDraft)[])
-        if (sameValue(d[k], before[k])) next[k] = saved[k];
-      return next as unknown as AgentDraft;
-    });
+    // Limits, guardrails and the other grouped settings move setting by setting.
+    if (before !== saved) setDraft((d) => keptEditsByGroup(before, d, saved));
   }, [saved]);
-  const set =<K extends keyof AgentDraft>(k: K, v: AgentDraft[K]) => setDraft((d) => followLimits({ ...d, [k]: v }));
+  const set =<K extends keyof AgentDraft>(k: K, v: AgentDraft[K]) => setDraft((d) => followLimits({ ...d, [k]: v }, agent.toolIds, agent.collections));
+  // The prompt is a brief unless the builder switched to plain text. A legacy agent (no brief) shows its job line as
+  // Purpose and its instructions as How to answer, and stays as it is until a brief field is edited.
+  const mode: PromptMode = agent.promptMode === 'full' ? 'full' : 'brief';
+  const [briefEdit, setBriefEdit] = React.useState<AgentBrief | null>(null);
+  const briefSaved = React.useMemo(() => agent.brief ?? legacyBrief(agent), [agent]);
+  // The brief is saved whole, so an edited brief is moved onto a newer copy the same way: the fields this person
+  // changed keep their text and the rest take the newer copy's. Left whole, the next save would send the other
+  // person's fields back as they were before their edit.
+  const briefBefore = React.useRef(briefSaved);
+  React.useEffect(() => {
+    const before = briefBefore.current;
+    briefBefore.current = briefSaved;
+    if (!sameValue(before, briefSaved)) setBriefEdit((b) => b && keptEdits(before, b, briefSaved));
+  }, [briefSaved]);
+  const brief = briefEdit ?? briefSaved;
+  const briefDirty = briefEdit !== null && !sameValue(briefEdit, agent.brief ?? null);
+  const purposeMissing = mode === 'brief' && briefDirty && !briefEdit!.purpose.trim();
+  const errors = { name: draft.name.trim() ? undefined : 'The agent needs a name.', role: mode === 'full' && !draft.role.trim() ? 'Describe the job in one line.' : undefined };
+  const valid = !errors.name && !errors.role && !purposeMissing;
   const sections = changedSections(saved, draft);
-  const dirty = sections.length > 0;
+  const dirty = sections.length > 0 || briefDirty;
   const [attach, setAttach] = React.useState<AttachFilter | null>(null);
+  const [usesOpen, setUsesOpen] = React.useState(false);
+  const [limitsOpen, setLimitsOpen] = React.useState(false);
+  const [modeAsked, setModeAsked] = React.useState<PromptMode | null>(null);
+  const docControls = React.useRef<InstructionDocumentHandle>(null);
+  const addReference = useAddReference(agent.id);
   const assist = useInstructionsAssist({
     agent,
     draft,
@@ -159,15 +197,9 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
     tools: tools.data ?? [],
     dirty,
     alwaysOn: (skills.data?.pins ?? []).filter((p) => p.loading === 'always'),
-    onAttachAlways: () => setAttach('always'),
+    onAttachAlways: () => (setUsesOpen(true), setAttach('always')),
   });
-  const errors = { name: draft.name.trim() ? undefined : 'The agent needs a name.', role: draft.role.trim() ? undefined : 'Describe the job in one line.' };
-  const valid = !errors.name && !errors.role;
 
-  // The one draft saves itself: a second after the last valid change, with no dialog and no note per save.
-  const [saveError, setSaveError] = React.useState<string | null>(null);
-  // The draft a save failed on: autosave does not send it again until it changes or Retry is pressed.
-  const [failedDraft, setFailedDraft] = React.useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = React.useState(false);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   // The right panel's tab; Test in the header opens it and brings it into view on a narrow screen.
@@ -188,40 +220,50 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
   const teamCanBuild = useCanBuild();
   // The agent's own flags (the detail response asks the routes' checks); the team's permission until they load.
   const canBuild = agent.canEdit ?? teamCanBuild;
+  // A version waiting in Reviews is read-only: a change goes in after it is decided.
+  const locked = newest?.state === 'in_review';
+  const editable = canBuild && !locked;
+  const check = useAgentPublishCheck(agent.id, agent.version, canBuild && newest?.state === 'draft');
+  const preview = useAgentPublishPreview(agent.id, agent.version, canBuild && newest?.state === 'draft');
+  const purposeProblem: PublishBlocker[] = purposeMissing ? [{ kind: 'missing_field', id: null, position: { field: 'brief.purpose', step: null, index: null }, message: 'Purpose is empty. Say what this agent is for.' }] : [];
+  const problems = [...purposeProblem, ...(check.data?.problems ?? [])];
+  const goTo = (field: string) => {
+    setTab('settings');
+    requestAnimationFrame(() => docControls.current?.focus({ field }));
+  };
+  const insertReference = async (ref: { kind: 'tool' | 'knowledge' | 'skill' | 'agent' | 'workflow'; id: string }) => {
+    try {
+      const r = await addReference.mutateAsync(ref);
+      toast.success(r.added.length ? `Added ${r.added.map((a) => a.label).join(', ')} to ${agent.name}` : `${agent.name} already has it`, { description: `Saved as v${r.agentVersion}.` });
+    } catch (e) {
+      toast.error('Couldn’t add it to this agent', { description: (e as Error).message });
+    }
+  };
   const isAdmin = useCanSetDefaultAgent();
   const defaultId = useDefaultAgent().data?.agentId;
   const [makeDefaultOpen, setMakeDefaultOpen] = React.useState(false);
   const liveUse = agent.usedIn.filter((u) => u.status === 'live');
-  const patchOf = (d: AgentDraft) => {
-    const patch: Record<string, unknown> = Object.fromEntries(Object.entries(d).filter(([k, v]) => !sameValue(saved[k as keyof AgentDraft], v)));
-    // The API pins by id and version; the name and tools a pin carries are what the API returned for display.
-    // A new pin carries version 0 until saved; the service then pins the published version.
-    if (patch.widgetPins) patch.widgetPins = d.widgetPins.map((p) => ({ widgetId: p.widgetId, version: p.version || undefined }));
-    return patch;
-  };
-  const saveNow = () => {
-    const sent = JSON.stringify(draft);
-    const patch = patchOf(draft);
-    update.mutate(patch, {
-      onSuccess: (result) => {
-        setSaveError(null);
-        setFailedDraft(null);
-        // agents-service drops a stale grant on save. Without dropping it here too the draft never matches the saved
-        // agent, so the page stays "Saving your changes first" and Request publish stays disabled.
-        const sentIds = (patch.toolIds as string[] | undefined) ?? [];
-        const dropped = sentIds.filter((t) => !result.toolIds.includes(t));
-        if (dropped.length) setDraft((d) => ({ ...d, toolIds: d.toolIds.filter((t) => !dropped.includes(t)) }));
-      },
-      onError: (e) => (setSaveError(e.message), setFailedDraft(sent)),
+  const { saveNow, saveError, stale, reload, reading } = useAgentAutosave({
+    agent,
+    update,
+    draft,
+    saved,
+    brief: briefDirty ? briefEdit : null,
+    mode,
+    ready: editable && dirty && valid,
+    onBriefSaved: (sent) => setBriefEdit((b) => (b && sameValue(b, sent) ? null : b)),
+  });
+  // A grant or a removal is its own save on the stored list, never part of the draft the page autosaves.
+  const setTools = (change: { add?: string[]; remove?: string[] }) =>
+    changeTools.mutate(change, { onError: (e) => toast.error('Couldn’t change the tools', { description: e.message }) });
+  // So is a knowledge base picked or removed, which an @ insert changes too.
+  const setKnowledge = (change: { add: string[]; remove: string[] }) =>
+    changeKnowledge.mutate(change, { onError: (e) => toast.error('Couldn’t change the knowledge bases', { description: e.message }) });
+  const switchMode = (to: PromptMode) =>
+    update.mutate(to === 'full' ? { promptMode: 'full', instructions: agent.instructions, base: agent } : { promptMode: 'brief', base: agent }, {
+      onSuccess: () => (setModeAsked(null), toast.success(to === 'full' ? 'Editing as plain text' : 'Back to the brief', { description: to === 'full' ? 'Your brief stays saved; only Never is still used from it.' : 'The next version uses the prompt written from the brief.' })),
+      onError: (e) => (setModeAsked(null), toast.error('Couldn’t switch', { description: e.message })),
     });
-  };
-  React.useEffect(() => {
-    if (!canBuild || !dirty || !valid || update.isPending || failedDraft === JSON.stringify(draft)) return;
-    const t = setTimeout(() => saveNow(), 1000);
-    return () => clearTimeout(t);
-    // Saves on a change to the draft or once the last save has settled; patchOf reads `saved`, which moves with them.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft, saved, valid, canBuild, update.isPending, failedDraft]);
   const togglePaused = () =>
     setPaused.mutate(!agent.paused, {
       onSuccess: (a) => toast.success(a.paused ? `Paused ${a.name}` : `Resumed ${a.name}`, { description: a.paused ? 'New runs stop using it until you resume it. Its versions and pins are unchanged.' : `New runs use v${a.publishedVersion} again.` }),
@@ -290,8 +332,8 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
               </Button>
             )}
             {newest?.state === 'draft' && agent.canPublish !== false && (
-              <Button variant="outline" onClick={() => setPublishOpen(true)} disabled={dirty} title={dirty ? 'Saving your changes first' : undefined} data-testid="request-agent-publish">
-                <Rocket className="size-4" /> Request publish
+              <Button variant="outline" onClick={() => (purposeMissing ? goTo('brief.purpose') : setPublishOpen(true))} disabled={dirty && !purposeMissing} title={dirty && !purposeMissing ? 'Saving your changes first' : undefined} data-testid="request-agent-publish">
+                <Rocket className="size-4" /> {preview.data && !preview.data.reviewRequired ? 'Publish' : 'Request publish'}
               </Button>
             )}
             {newest?.state === 'in_review' && newest.reviewId && (
@@ -311,18 +353,6 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
               >
                 <FlaskConical className="size-4" /> Test
               </Button>
-            )}
-            {canBuild && (
-              <>
-                <span role="status" data-testid="agent-save-status" className={saveError ? 'text-xs text-destructive-text' : 'text-xs text-muted-foreground'}>
-                  {update.isPending ? 'Saving…' : saveError ? `Not saved: ${saveError}` : dirty ? (valid ? 'Saving soon…' : 'Fix the highlighted fields to save') : `Draft v${agent.version} saved`}
-                </span>
-                {saveError && !update.isPending && (
-                  <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={saveNow} data-testid="agent-save-retry">
-                    Retry
-                  </Button>
-                )}
-              </>
             )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -372,42 +402,133 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
           <SplitView id="agent-settings" bare defaultLeft={62} leftMin="40" rightMin="30" left={
     <div className="flex min-w-0 flex-col gap-4">
               <ReadOnlyNotice noun="agents" canEdit={agent.canEdit} teamId={agent.teamId} teamName={agent.teamName} />
-              <BuilderFieldset canEdit={agent.canEdit}>
-              <IdentitySection draft={draft} set={set} teamId={agent.teamId} models={modelAliases.data ?? []} errors={errors} channels={agent.controls.channels} agentId={agent.id} />
-              <InstructionsSection draft={draft} set={set} toolbar={assist.toolbar} footer={assist.footer} textareaRef={assist.textareaRef} />
-              <ToolsSection draft={draft} set={set} stale={agent.staleToolIds} />
-              <KnowledgeSection draft={draft} set={set} />
-              <WidgetsSection draft={draft} set={set} />
-              <MemorySection draft={draft} set={set} />
-              <AgentSkillsSection
-                agentName={agent.name}
-                data={skills.data}
-                isPending={skills.isPending}
-                isError={skills.isError}
-                onRetry={() => skills.refetch()}
-                blockedReason={dirty ? 'Your changes are still saving; skills change once they are saved.' : undefined}
-                busy={attachSkill.isPending || detachSkill.isPending}
-                attach={attach}
-                onAttachChange={setAttach}
-                onAttach={async (skillId, version, name, moving) => {
-                  const after = await attachSkill.mutateAsync({ skillId, version });
-                  const pinned = after.pins.find((p) => p.skillId === skillId);
-                  const label = pinned ? `${pinned.name} v${pinned.pinnedVersion}` : name;
-                  toast.success(moving ? `Moved ${name} to v${version}` : `Attached ${label}`, { description: `Saved ${agent.name} as v${agent.version + 1}. Workflows adopt it on their next publish.` });
-                }}
-                onDetach={async (pin) => {
-                  try {
-                    await detachSkill.mutateAsync(pin.skillId);
-                    toast.success(`Detached ${pin.name}`, { description: `Saved ${agent.name} as v${agent.version + 1}.` });
-                  } catch (e) {
-                    toast.error('Couldn’t detach the skill', { description: (e as Error).message });
-                  }
-                }}
+              <LeaveGuard unsaved={dirty && editable} failed={!!saveError} />
+              {locked && (
+                <Alert data-testid="agent-locked">
+                  <Lock />
+                  <AlertTitle>Waiting in Reviews</AlertTitle>
+                  <AlertDescription>
+                    <p>v{agent.version} is with a reviewer, so its fields are read-only. Edit again once it is decided.</p>
+                  </AlertDescription>
+                </Alert>
+              )}
+              {stale && (
+                <Alert data-testid="agent-stale-base">
+                  <Users />
+                  <AlertTitle>Someone else saved this agent</AlertTitle>
+                  <AlertDescription>
+                    <p>{stale} Your unsaved changes are kept on this page and nothing more is saved until you reload. Reloading shows their version with your changes on top, and saves them.</p>
+                    <Button variant="outline" size="sm" onClick={() => void reload()} disabled={reading} data-testid="agent-stale-reload">
+                      <RefreshCw className="size-3.5" /> Reload
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              )}
+              {saveError && !update.isPending && (
+                <Alert data-testid="agent-save-failed">
+                  <CircleAlert />
+                  <AlertTitle>Your last change didn’t save</AlertTitle>
+                  <AlertDescription>
+                    <p>It is kept on this page. Check your connection, then retry.</p>
+                    <p className="text-xs">{saveError}</p>
+                    <Button variant="outline" size="sm" onClick={saveNow} data-testid="agent-save-retry">
+                      <RefreshCw className="size-3.5" /> Retry
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              )}
+              {/* What opens something to read (the model button, the uses link, Model and limits) stays outside the read-only fieldsets: a disabled fieldset disables every button in it. */}
+              <div className="flex flex-wrap items-center gap-2" data-testid="agent-slim-row">
+                <Button type="button" variant="outline" size="sm" className="max-w-full" onClick={() => (setLimitsOpen(true), requestAnimationFrame(() => document.getElementById('ag-model')?.scrollIntoView({ block: 'center' })))} data-testid="agent-model-button">
+                  <span className="truncate">{draft.model || 'No model'}</span>
+                </Button>
+                <span role="status" data-testid="agent-save-status" className={saveError ? 'text-xs text-destructive-text' : 'text-xs text-muted-foreground'}>
+                  {!canBuild ? `v${agent.version}` : update.isPending ? 'Saving…' : stale ? 'Not saved: someone else saved first' : saveError ? `Not saved: ${saveError}` : dirty ? (valid ? 'Saving soon…' : 'Fix the highlighted fields to save') : update.isSuccess ? `Draft v${agent.version} saved` : `v${agent.version}`}
+                </span>
+              </div>
+              <BuilderFieldset canEdit={locked ? false : agent.canEdit}>
+              {briefEdit !== null && agent.brief === null && (
+                <Alert data-testid="agent-brief-notice">
+                  <Info />
+                  <AlertTitle>This agent is now written as a brief</AlertTitle>
+                  <AlertDescription>
+                    <p>The next version uses the prompt written from these headings. Its job line is the Purpose and its instructions are How to answer.</p>
+                  </AlertDescription>
+                </Alert>
+              )}
+              <AgentBriefEditor
+                agentId={agent.id}
+                name={agent.name}
+                brief={brief}
+                onBrief={setBriefEdit}
+                mode={mode}
+                instructions={draft.instructions}
+                onInstructions={(t) => set('instructions', t)}
+                readOnly={!editable}
+                problems={problems}
+                onInsert={insertReference}
+                controls={docControls}
+                toolbar={assist.toolbar}
+                footer={assist.footer}
+                textareaRef={assist.textareaRef}
               />
-              <SkillMenuSection draft={draft} set={set} attached={skills.data?.pins.length ?? 0} />
-              <GuardrailsSection draft={draft} set={set} shown={agent.controls.guardrails} />
-              <LimitsSection draft={draft} set={set} models={modelAliases.data ?? []} tools={tools.data ?? []} />
               </BuilderFieldset>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <AgentUsesLink uses={agent.uses} onOpen={() => setUsesOpen(true)} />
+                {editable && <PromptModeToggle mode={mode} onChoose={setModeAsked} disabled={dirty || update.isPending} />}
+              </div>
+              <BuilderFieldset canEdit={locked ? false : agent.canEdit}>
+              <IdentitySection draft={draft} set={set} teamId={agent.teamId} models={modelAliases.data ?? []} errors={errors} channels={agent.controls.channels} agentId={agent.id} showJob={mode === 'full'} showModel={false} />
+              <WidgetsSection draft={draft} set={set} toolIds={agent.toolIds} />
+              </BuilderFieldset>
+              <AgentModelLimitsSection
+                model={draft.model}
+                patterns={draft.patterns}
+                models={modelAliases.data ?? []}
+                onChange={(v) => (set('model', v.model), set('patterns', v.patterns))}
+                disabled={!editable}
+                open={limitsOpen}
+                onOpenChange={setLimitsOpen}
+              >
+                <BuilderFieldset canEdit={locked ? false : agent.canEdit}>
+                <MemorySection draft={draft} set={set} />
+                <SkillMenuSection draft={draft} set={set} attached={skills.data?.pins.length ?? 0} />
+                <GuardrailsSection draft={draft} set={set} shown={agent.controls.guardrails} />
+                <LimitsSection draft={draft} set={set} models={modelAliases.data ?? []} tools={tools.data ?? []} toolIds={agent.toolIds} collections={agent.collections} />
+                </BuilderFieldset>
+              </AgentModelLimitsSection>
+              <AgentUsesSheet open={usesOpen} onOpenChange={setUsesOpen} uses={agent.uses}>
+                <BuilderFieldset canEdit={locked ? false : agent.canEdit}>
+                  <ToolsSection draft={draft} set={set} toolIds={agent.toolIds} onChange={setTools} stale={agent.staleToolIds} />
+                  <KnowledgeSection collections={agent.collections} onChange={setKnowledge} />
+                  <AgentSkillsSection
+                    agentName={agent.name}
+                    data={skills.data}
+                    isPending={skills.isPending}
+                    isError={skills.isError}
+                    onRetry={() => skills.refetch()}
+                    blockedReason={dirty ? 'Your changes are still saving; skills change once they are saved.' : undefined}
+                    busy={attachSkill.isPending || detachSkill.isPending}
+                    attach={attach}
+                    onAttachChange={setAttach}
+                    onAttach={async (skillId, version, name, moving) => {
+                      const after = await attachSkill.mutateAsync({ skillId, version });
+                      const pinned = after.pins.find((p) => p.skillId === skillId);
+                      const label = pinned ? `${pinned.name} v${pinned.pinnedVersion}` : name;
+                      toast.success(moving ? `Moved ${name} to v${version}` : `Attached ${label}`, { description: `Saved ${agent.name} as v${agent.version + 1}. Workflows adopt it on their next publish.` });
+                    }}
+                    onDetach={async (pin) => {
+                      try {
+                        await detachSkill.mutateAsync(pin.skillId);
+                        toast.success(`Detached ${pin.name}`, { description: `Saved ${agent.name} as v${agent.version + 1}.` });
+                      } catch (e) {
+                        toast.error('Couldn’t detach the skill', { description: (e as Error).message });
+                      }
+                    }}
+                  />
+                </BuilderFieldset>
+              </AgentUsesSheet>
+              <PromptModeDialogs to={modeAsked} onCancel={() => setModeAsked(null)} onConfirm={switchMode} pending={update.isPending} />
               {canBuild && (
               <DangerZone
                 items={[
@@ -439,7 +560,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
               <AgentTestPanel
                 agentId={agent.id}
                 agentName={agent.name}
-                held={(tools.data ?? []).filter((t) => draft.toolIds.includes(t.id)).map((t) => ({ name: t.name, approval: t.requiresApproval ? (t.approval ?? 'a review') : null }))}
+                held={(tools.data ?? []).filter((t) => agent.toolIds.includes(t.id)).map((t) => ({ name: t.name, approval: t.requiresApproval ? (t.approval ?? 'a review') : null }))}
                 tab={testTab}
                 onTabChange={setTestTab}
                 threadId={testThreadId}
@@ -461,6 +582,9 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
 
           <RequestAgentPublishDialog
             agentId={agent.id}
+            onGoTo={goTo}
+            onAddBack={(ref) => void insertReference(ref)}
+            adding={addReference.isPending}
             open={publishOpen}
             onOpenChange={setPublishOpen}
             version={agent.version}

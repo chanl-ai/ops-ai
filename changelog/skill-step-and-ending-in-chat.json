@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-19",
+  "title": "Chats show where a skill is and how it ended",
+  "description": "Every chat now shows the step a skill is on and, under the reply it ended in, whether it finished, was blocked or stopped, with the reason. On a skill's page the tool you pick anywhere in a step becomes the tool that step runs, marked \"runs\".",
+  "tag": "improved"
+}

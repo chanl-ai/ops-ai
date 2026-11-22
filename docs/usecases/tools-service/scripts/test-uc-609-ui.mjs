@@ -12,6 +12,7 @@ import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 
 import { AGENTS_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack, required } from '@ops-ai/usecase-runner/harness';
+import { agentBase } from '../../lib/agent_save.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
@@ -86,8 +87,8 @@ try {
       // A new app hands agents its read tools only; the team's admin adds the writes, as from the app's Tools tab.
       await call(tools, 'POST', `/v1/apps/plugin:${ID}/tools`, priya, { tools: ['fields_post_message'] });
       const agent = required(await call(agents, 'POST', '/v1/agents', priya, { name: 'Message desk', role: 'Posts updates to the desk' }), 'create the agent');
-      let granted = await call(agents, 'PATCH', `/v1/agents/${agent.id}`, priya, { toolIds: ['fields_post_message'] });
-      for (let i = 0; i < 40 && granted.status === 400; i++) await new Promise((r) => setTimeout(r, 1000)), (granted = await call(agents, 'PATCH', `/v1/agents/${agent.id}`, priya, { toolIds: ['fields_post_message'] }));
+      let granted = await call(agents, 'PATCH', `/v1/agents/${agent.id}`, priya, { toolIds: ['fields_post_message'], ...(await agentBase(agents, priya, agent.id)) });
+      for (let i = 0; i < 40 && granted.status === 400; i++) await new Promise((r) => setTimeout(r, 1000)), (granted = await call(agents, 'PATCH', `/v1/agents/${agent.id}`, priya, { toolIds: ['fields_post_message'], ...(await agentBase(agents, priya, agent.id)) }));
       // The team's copy of the desk's agent template, so the review can say which version it came from.
       const copy = await call(agents, 'POST', `/v1/resources/${encodeURIComponent(`plugin:${ID}:desk-helper`)}/copies`, priya, {});
       const review = await call(tools, 'GET', `/v1/apps/plugin:${ID}/update`, priya);

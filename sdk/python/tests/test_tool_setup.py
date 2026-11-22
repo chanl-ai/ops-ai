@@ -71,9 +71,10 @@ def test_a_review_decision_goes_to_the_review_the_version_waits_on() -> None:
 
 def test_granting_tools_keeps_the_ones_the_agent_already_holds() -> None:
     seen: list[httpx.Request] = []
-    ops = client(lambda r: (200, {"id": "agt_1", "toolIds": ["op:a", "op:b"]}), seen)
+    ops = client(lambda r: (200, {"id": "agt_1", "version": 3, "digest": "d3", "toolIds": ["op:a", "op:b"]}), seen)
     ops.agents.grant_tools("agt_1", ["op:b", "op:c"])
-    assert json.loads(seen[-1].content) == {"toolIds": ["op:a", "op:b", "op:c"]}
+    # The save names the copy the grant was added to, so the service refuses it when that copy has moved on.
+    assert json.loads(seen[-1].content) == {"toolIds": ["op:a", "op:b", "op:c"], "baseVersion": 3, "baseDigest": "d3"}
 
 
 def test_a_held_write_asks_for_the_step_up_and_is_retried_once_with_its_token() -> None:

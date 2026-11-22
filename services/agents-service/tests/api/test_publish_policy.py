@@ -28,6 +28,8 @@ from tests.api.test_graph_versions import definition as graph_definition
 from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model
 from tests.engine.test_lifecycle_rights import ADMIN, BUILDER, introspect, jwks
 
+from ..saves import save_agent
+
 
 async def _stack(auto: bool) -> AsyncIterator[AsyncClient]:
     engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
@@ -107,7 +109,7 @@ async def agent_at_v2(c: AsyncClient, patch: dict[str, Any] | None = None) -> tu
     await set_mode(c, "agents", "never")
     a = _data(await c.post("/v1/agents", json={"name": "Payee checker", "role": "Checks payees"}, headers=BUILDER), 201)
     _data(await c.post(f"/v1/agents/{a['id']}/publish-requests", json={"version": 1}, headers=BUILDER), 201)
-    v = _data(await c.patch(f"/v1/agents/{a['id']}", json=patch or {"role": "Checks new payees"}, headers=BUILDER))
+    v = _data(await save_agent(c, a["id"], patch or {"role": "Checks new payees"}, headers=BUILDER))
     return a["id"], int(v["version"])
 
 
@@ -126,7 +128,7 @@ async def test_major_reviews_a_security_change_and_publishes_a_minor_one(client:
     await set_mode(client, "agents", "major")
     minor = _data(await client.post(f"/v1/agents/{aid}/publish-requests", json={"version": v}, headers=BUILDER), 201)
     assert (minor["status"], minor["agentPublish"]["majorChange"]) == ("approved", False), minor
-    tools = _data(await client.patch(f"/v1/agents/{aid}", json={"toolIds": ["lookup_account"]}, headers=BUILDER))
+    tools = _data(await save_agent(client, aid, {"toolIds": ["lookup_account"]}, headers=BUILDER))
     major = await client.post(f"/v1/agents/{aid}/publish-requests", json={"version": tools["version"]}, headers=BUILDER)
     body = _data(major, 201)
     assert (body["status"], body["agentPublish"]["reviewRequired"]) == ("pending", True), body
@@ -170,7 +172,7 @@ async def test_dev_auto_approve_publishes_major_but_not_always(dev_client: Async
     await set_mode(c, "agents", "major")
     auto = _data(await c.post(f"/v1/agents/{aid}/publish-requests", json={"version": v}, headers=BUILDER), 201)
     assert auto["status"] == "approved", auto
-    again = _data(await c.patch(f"/v1/agents/{aid}", json={"role": "Again"}, headers=BUILDER))
+    again = _data(await save_agent(c, aid, {"role": "Again"}, headers=BUILDER))
     await set_mode(c, "agents", "always")
     review = _data(
         await c.post(f"/v1/agents/{aid}/publish-requests", json={"version": again["version"]}, headers=BUILDER), 201
@@ -236,7 +238,7 @@ async def test_a_rejected_origin_change_leaves_the_deployment_as_it_was(client: 
 
 async def test_moving_a_deployment_follows_the_agents_setting_as_a_minor_change(client: AsyncClient) -> None:
     aid, did = await _deployment(client)
-    v = _data(await client.patch(f"/v1/agents/{aid}", json={"role": "Checks payees again"}, headers=BUILDER))
+    v = _data(await save_agent(client, aid, {"role": "Checks payees again"}, headers=BUILDER))
     _data(await client.post(f"/v1/agents/{aid}/publish-requests", json={"version": v["version"]}, headers=BUILDER), 201)
     await set_mode(client, "agents", "major")
     latest = {"serves": {"kind": "agent", "id": aid, "version": "latest"}}
@@ -267,7 +269,7 @@ async def test_the_publish_preview_says_what_the_publish_then_does(dev_client: A
     assert (preview["reviewRequired"], preview["reviewReason"]) == (False, "dev_auto_approve"), preview
     live = _data(await c.post(f"/v1/agents/{aid}/publish-requests", json={"version": v}, headers=BUILDER), 201)
     assert live["status"] == "approved", live
-    again = _data(await c.patch(f"/v1/agents/{aid}", json={"role": "Again"}, headers=BUILDER))
+    again = _data(await save_agent(c, aid, {"role": "Again"}, headers=BUILDER))
     await set_mode(c, "agents", "always")
     ask = {"version": again["version"]}
     preview = _data(await c.get(f"/v1/agents/{aid}/publish-preview", params=ask, headers=BUILDER))
@@ -286,13 +288,13 @@ async def test_a_changed_setting_applies_to_the_very_next_publish(client: AsyncC
     )
     assert first["status"] == "approved", first
     await set_mode(client, "agents", "major")
-    v2 = _data(await client.patch(f"/v1/agents/{a['id']}", json={"name": "Renamed"}, headers=BUILDER))["version"]
+    v2 = _data(await save_agent(client, a["id"], {"name": "Renamed"}, headers=BUILDER))["version"]
     minor = _data(
         await client.post(f"/v1/agents/{a['id']}/publish-requests", json={"version": v2}, headers=BUILDER), 201
     )
     assert minor["status"] == "approved", minor
     await set_mode(client, "agents", "always")
-    v3 = _data(await client.patch(f"/v1/agents/{a['id']}", json={"name": "Renamed again"}, headers=BUILDER))["version"]
+    v3 = _data(await save_agent(client, a["id"], {"name": "Renamed again"}, headers=BUILDER))["version"]
     held = _data(
         await client.post(f"/v1/agents/{a['id']}/publish-requests", json={"version": v3}, headers=BUILDER), 201
     )
@@ -303,7 +305,7 @@ async def test_an_unreadable_setting_opens_a_review(client: AsyncClient) -> None
     a = _data(await client.post("/v1/agents", json={"name": "Renamer", "role": "Renames"}, headers=BUILDER), 201)
     await set_mode(client, "agents", "never")
     _data(await client.post(f"/v1/agents/{a['id']}/publish-requests", json={"version": 1}, headers=BUILDER), 201)
-    v2 = _data(await client.patch(f"/v1/agents/{a['id']}", json={"name": "Renamed"}, headers=BUILDER))["version"]
+    v2 = _data(await save_agent(client, a["id"], {"name": "Renamed"}, headers=BUILDER))["version"]
     Platform.down = True
     held = _data(
         await client.post(f"/v1/agents/{a['id']}/publish-requests", json={"version": v2}, headers=BUILDER), 201

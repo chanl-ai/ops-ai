@@ -5,6 +5,7 @@ import { Database, Paperclip, Plus, Slash, X } from 'lucide-react';
 
 import { type PickedSkill, SkillChip, SkillInputsForm, SkillMenu, toPick } from '@/components/chat/skill-menu';
 import { KbDot } from '@/components/knowledge/knowledge-meta';
+import { CaretMenu, type MenuRow } from '@/components/shared/caret-menu';
 import { ChatPrompt } from '@/components/shared/chat-blocks';
 import { AddDocumentsDialog } from '@/components/shared/add-documents-dialog';
 import { Badge } from '@/components/ui/badge';
@@ -13,6 +14,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useFileDetails } from '@/hooks/file-queries';
+import { chatAgentOptions, useOptionSearch } from '@/hooks/options-queries';
 import { useKnowledgeBaseSearch } from '@/hooks/knowledge-queries';
 import type { ChatAttachment, SkillPick } from '@/lib/types/chat';
 import { cn } from '@/lib/utils';
@@ -152,7 +154,7 @@ export function Composer({
   footer,
   autoFocus,
   canAttach = true,
-  mentions,
+  mentionExcept,
   onMention,
   draftKey,
   skillsFor,
@@ -167,9 +169,13 @@ export function Composer({
   autoFocus?: boolean;
   /** False where attachments have no route, as in the embedded chat. */
   canAttach?: boolean;
-  /** Agents offered after @; choosing one calls `onMention` and removes the @name from the text. */
-  mentions?: MentionOption[];
+  /**
+   * With it, @ searches the agents the person may chat with on the server (hooks/options-queries.ts); choosing one
+   * calls it and removes the @name from the text.
+   */
   onMention?: (agent: MentionOption) => void;
+  /** The agent that has the chat, left out of the @ list. */
+  mentionExcept?: string;
   /** Keeps the unsent text under this key for the tab (the chat's id, or "new" on Chat's home). */
   draftKey?: string;
   /** The agent whose skills / offers; without it / is plain text. */
@@ -213,8 +219,23 @@ export function Composer({
     if (p.fields.length) setFilling(p);
     else setSkill(p);
   };
-  const typed = mentions?.length && onMention && !slash ? MENTION.exec(text) : null;
-  const matches = typed ? mentions!.filter((a) => a.name.toLowerCase().includes(typed[2].toLowerCase())) : [];
+  const typed = onMention && !slash ? MENTION.exec(text) : null;
+  const found = useOptionSearch(chatAgentOptions, typed?.[2] ?? '', !!typed);
+  const matches = React.useMemo<MenuRow<MentionOption>[]>(
+    () =>
+      (found.data?.pages ?? [])
+        .flatMap((p) => p.data)
+        .filter((o) => o.id !== mentionExcept)
+        .map((o) => ({ key: o.id, label: o.label, trailing: o.hint, pick: { id: o.id, name: o.label, role: o.hint ?? '' } })),
+    [found.data, mentionExcept],
+  );
+  const [active, setActive] = React.useState('');
+  React.useEffect(() => {
+    if (!matches.some((r) => r.key === active)) setActive(matches[0]?.key ?? '');
+  }, [matches, active]);
+  const loadMore = React.useCallback(() => {
+    if (found.hasNextPage && !found.isFetchingNextPage) void found.fetchNextPage();
+  }, [found]);
   // The menus open above the composer, unless it sits near the top (Chat's home), where they would run under the header.
   const box = React.useRef<HTMLDivElement>(null);
   const [below, setBelow] = React.useState(false);
@@ -226,6 +247,17 @@ export function Composer({
   const mention = (a: MentionOption) => {
     setText(text.replace(MENTION, '$1').trimEnd());
     onMention!(a);
+  };
+  // The caret stays in the text while the @ list is open, so the text's arrow keys, Enter and Escape drive the list,
+  // caught before the prompt's own Enter sends the message.
+  const mentionKeys = (e: React.KeyboardEvent) => {
+    if (!typed || !(e.target instanceof HTMLTextAreaElement)) return;
+    const i = matches.findIndex((r) => r.key === active);
+    const go = (key: string | undefined) => (e.preventDefault(), e.stopPropagation(), key !== undefined && setActive(key));
+    if (e.key === 'ArrowDown' && matches.length) go(matches[(i + 1) % matches.length].key);
+    else if (e.key === 'ArrowUp' && matches.length) go(matches[(i - 1 + matches.length) % matches.length].key);
+    else if (e.key === 'Enter' && !e.shiftKey && i >= 0) (go(undefined), mention(matches[i].pick));
+    else if (e.key === 'Escape') (go(undefined), setText(text.replace(MENTION, '$1')));
   };
 
   const send = () => {
@@ -242,7 +274,7 @@ export function Composer({
     return <div className="rounded-lg border border-dashed bg-muted/30 px-4 py-3 text-sm text-muted-foreground">{disabledReason}</div>;
 
   return (
-    <div ref={box} className="relative" onKeyDown={(e) => {
+    <div ref={box} className="relative" onKeyDownCapture={mentionKeys} onKeyDown={(e) => {
         if (e.key === 'Escape' && slash) setText(text.replace(SLASH, '$1'));
         // Backspace in an empty box takes the skill off, as it would a token typed before the text.
         if (e.key === 'Backspace' && skill && !text && e.target instanceof HTMLTextAreaElement) setSkill(null);
@@ -260,23 +292,21 @@ export function Composer({
         />
       )}
       {typed && (
-        <div className={cn('absolute inset-x-0 z-10 overflow-hidden rounded-lg border bg-popover shadow-md', menuPlace)} data-testid="mention-list">
-          <Command shouldFilter={false}>
-            <CommandList className="max-h-56">
-              <CommandEmpty>No agent called “{typed[2]}” you can chat with.</CommandEmpty>
-              <CommandGroup heading="Hand this chat to">
-                {matches.map((a) => (
-                  <CommandItem key={a.id} value={a.id} onSelect={() => mention(a)}>
-                    <span className="flex min-w-0 flex-col">
-                      <span className="truncate font-medium">{a.name}</span>
-                      <span className="truncate text-xs text-muted-foreground">{a.role}</span>
-                    </span>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            </CommandList>
-          </Command>
-        </div>
+        <CaretMenu<MentionOption>
+          rect={() => box.current?.getBoundingClientRect() ?? null}
+          label="Hand this chat to"
+          status={found.isPending ? 'loading' : found.isError ? 'error' : 'ready'}
+          sections={matches.length ? [{ label: 'Hand this chat to', rows: matches }] : []}
+          active={active}
+          onActive={setActive}
+          onPick={(r) => mention(r.pick)}
+          onDismiss={() => setText(text.replace(MENTION, '$1'))}
+          empty={`No agent called “${typed[2]}” you can chat with.`}
+          error="Couldn’t load the agents. What you typed is kept; try again in a moment."
+          id="chat-mention-list"
+          onEnd={loadMore}
+          loadingMore={found.isFetchingNextPage}
+        />
       )}
     {canAttach && (
       <AddDocumentsDialog

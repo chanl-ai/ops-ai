@@ -24,10 +24,9 @@ export function ScopePicker({ id, plugin, source, kind, parents, value, onChange
   }, [query]);
   const found = useSourceScopes({ plugin, source, query: searched }, !disabled);
   const held = parents.slice(0, 5);
-  const options = useHeldScopes(plugin, source, held, !disabled);
+  const options = useHeldScopes(plugin, source, held, searched, !disabled);
   const pending = found.isPending || options.pending;
-  const heldMatching = options.scopes.filter((s) => !searched || matches(s, searched));
-  const offered = dedupe([...(found.data?.scopes ?? []), ...heldMatching]).filter((s) => s.kind === kind);
+  const offered = dedupe([...(found.data?.scopes ?? []), ...options.scopes]).filter((s) => s.kind === kind);
   const picked = new Set(value);
   const kinds = kind.endsWith('y') ? `${kind.slice(0, -1)}ies` : `${kind}s`;
   // Titles of every scope seen, so a pick the current search hides is still named, not shown by its id.
@@ -82,12 +81,13 @@ export function ScopePicker({ id, plugin, source, kind, parents, value, onChange
 }
 
 /** What each picked parent holds, one query per parent (at most five, so the picker stays a few calls). */
-function useHeldScopes(plugin: string, source: string, parents: string[], enabled: boolean) {
-  const a = useSourceScopes({ plugin, source, parent: parents[0] ?? '' }, enabled && parents.length > 0);
-  const b = useSourceScopes({ plugin, source, parent: parents[1] ?? '' }, enabled && parents.length > 1);
-  const c = useSourceScopes({ plugin, source, parent: parents[2] ?? '' }, enabled && parents.length > 2);
-  const d = useSourceScopes({ plugin, source, parent: parents[3] ?? '' }, enabled && parents.length > 3);
-  const e = useSourceScopes({ plugin, source, parent: parents[4] ?? '' }, enabled && parents.length > 4);
+/** What each picked parent holds, searched by the scopes tool on the server like the main list. */
+function useHeldScopes(plugin: string, source: string, parents: string[], query: string, enabled: boolean) {
+  const a = useSourceScopes({ plugin, source, parent: parents[0] ?? '', query }, enabled && parents.length > 0);
+  const b = useSourceScopes({ plugin, source, parent: parents[1] ?? '', query }, enabled && parents.length > 1);
+  const c = useSourceScopes({ plugin, source, parent: parents[2] ?? '', query }, enabled && parents.length > 2);
+  const d = useSourceScopes({ plugin, source, parent: parents[3] ?? '', query }, enabled && parents.length > 3);
+  const e = useSourceScopes({ plugin, source, parent: parents[4] ?? '', query }, enabled && parents.length > 4);
   const asked = [a, b, c, d, e].slice(0, parents.length);
   return {
     scopes: asked.flatMap((q) => q.data?.scopes ?? []),
@@ -96,5 +96,4 @@ function useHeldScopes(plugin: string, source: string, parents: string[], enable
   };
 }
 
-const matches = (s: ScopeOption, q: string) => s.title.toLowerCase().includes(q.toLowerCase());
 const dedupe = (rows: ScopeOption[]) => [...new Map(rows.map((r) => [r.id, r])).values()];

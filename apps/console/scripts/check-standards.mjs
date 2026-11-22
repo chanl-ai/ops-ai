@@ -270,6 +270,20 @@ const REUSE = {
     owns: (rel) => rel === 'src/lib/app-links.ts',
     hit: (text) => text.search(/`\/integrations\/(?:apps\/)?\$\{/),
   },
+  // A list someone picks from is searched on the server and pages as it scrolls, so a team with thousands of items can
+  // find any of them: EntityPicker or SearchSelect over an /options source (hooks/options-queries.ts), or CaretMenu
+  // for a list opened at the caret. A picker built on Command elsewhere, or a list filtered in the browser, finds only
+  // what the browser happened to load.
+  picker: {
+    what: 'a picker built on Command outside the shared ones (use EntityPicker or SearchSelect over an /options source, or CaretMenu at the caret)',
+    owns: (rel) => rel.startsWith('src/components/ui/') || ['src/components/shared/entity-picker.tsx', 'src/components/shared/search-select.tsx', 'src/components/shared/caret-menu.tsx'].includes(rel),
+    hit: (text) => text.search(/from ['"]@\/components\/ui\/command['"]/),
+  },
+  listFilter: {
+    what: 'a list searched in the browser (search on the server: an /options source through hooks/options-queries.ts)',
+    owns: (rel) => rel.startsWith('src/lib/api/') || rel === 'src/hooks/options-queries.ts',
+    hit: (text) => text.search(/\.filter\([^;]*?\.toLowerCase\(\)\.includes\(/),
+  },
   dialogColumns: {
     what: 'a form laid out in columns inside a dialog (dialog forms are one column)',
     owns: (rel) => rel.startsWith('src/components/ui/'),

@@ -25,6 +25,7 @@ from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.logging import get_logger
 from ops_store import isolation
 
+from ..app import agent_brief
 from ..store.agent_registry import (
     AgentRegistry,
     AgentRow,
@@ -84,7 +85,8 @@ class WidgetPin(TypedDict, total=False):
 
 class SkillPin(TypedDict):
     """A spec's `skillPins` entry: what an agent version keeps of a pinned skill version (`skills.snapshot`), so the
-    runtime serves it with no lookup. `refusal` and `parts` only when the skill version has them."""
+    runtime serves it with no lookup. `refusal`, `parts`, `inputs` and the steps only when the skill version has
+    them."""
 
     skillId: str
     version: int
@@ -99,6 +101,15 @@ class SkillPin(TypedDict):
     knowledgeBases: list[str]
     tokens: int
     parts: NotRequired[list[Json]]
+    inputs: NotRequired[list[Json]]
+    # The skill's steps and endings (ops_contracts.skill_run.SkillProgram, as stored); only on a skill with steps.
+    notWhen: NotRequired[str]
+    steps: NotRequired[list[Json]]
+    exit: NotRequired[dict[str, str]]
+    returns: NotRequired[list[Json]]
+    success: NotRequired[list[str]]
+    # The skill was written as text, so its publish rule is the text's (app/skill_content.py, `unrunnable`).
+    fromText: NotRequired[bool]
     attachedBy: str
     attachedAt: str
 
@@ -125,6 +136,11 @@ class AgentSpec(TypedDict, total=False):
     widgets: AgentWidgets
     memory: AgentMemory
     skillMenu: Literal["team", "attached", "off"]
+    # An agent written as a brief (app/agent_brief.py). All three are absent on a version saved before the brief,
+    # which is served from `instructions` exactly as it was.
+    brief: Json
+    promptMode: Literal["brief", "full"]
+    patterns: Json
 
 
 # A new agent's caps are empty (no cap): a real agent can need many calls. Seeds set low ones.
@@ -215,6 +231,12 @@ def definition_of(agent_id: str, version: int, spec: Json) -> AgentDefinition:
     fragments = [Fragment.model_validate(f) for f in raw]
     if not fragments or "\n\n".join(f.text for f in fragments) != text:
         fragments = [Fragment(text=text or f"You are {s['name']}. {s['role']}")]
+    never: list[str] = []
+    if agent_brief.mode_of(spec) is not None:
+        # Written from a brief or beside one: the model reads each mention as the name it knows the target under.
+        fragments = [Fragment(text=agent_brief.rendered(f.text, spec), stable=f.stable) for f in fragments]
+        never = [agent_brief.rendered(rule, spec) for rule in agent_brief.never_of(spec)]
+    patterns = agent_brief.patterns_of(spec)
     widget_settings = s.get("widgets") or {}
     caps = s.get("guardrails") or {}
     return AgentDefinition(
@@ -243,6 +265,9 @@ def definition_of(agent_id: str, version: int, spec: Json) -> AgentDefinition:
         memory_enabled=bool(memory_of(spec)["enabled"]),
         memory_kinds=tuple(memory_of(spec)["kinds"]),
         skill_menu=s.get("skillMenu") or "team",
+        never=never,
+        thinking=None if patterns.thinking == "default" else patterns.thinking,
+        parallel_reads=patterns.parallel_reads,
     )
 
 
@@ -567,9 +592,15 @@ class AgentView(TypedDict):
     widgetPins: list[WidgetPinView]
     widgets: Json
     memory: AgentMemory
+    brief: Json | None
+    promptMode: str | None
+    patterns: Json
+    uses: agent_brief.Uses
     controls: Json
     usedIn: list[WorkflowUse]
     staleToolIds: NotRequired[list[str]]
+    # On the detail reply only: with `version`, the copy a save names as its base.
+    digest: NotRequired[str]
     templateId: NotRequired[JsonValue]
     protection: NotRequired[JsonValue]
 
@@ -630,6 +661,11 @@ def agent_view(row: Mapping[str, JsonValue], spec: Json, tasks: int) -> AgentVie
             ],
             "widgets": {"compose": False, "perTurn": None, **(s.get("widgets") or {})},
             "memory": memory_of(spec),
+            # Null on a version saved before the brief: the page then starts one from the role and instructions.
+            "brief": s.get("brief"),
+            "promptMode": agent_brief.mode_of(spec),
+            "patterns": agent_brief.patterns_of(spec).model_dump(by_alias=True),
+            "uses": agent_brief.uses_of(spec),
             "controls": CONTROLS,
             "usedIn": [],
         },
@@ -690,6 +726,7 @@ class ReviewView(TypedDict):
     decisionReason: NotRequired[str]
     egressHost: NotRequired[Json]
     toolModule: NotRequired[Json]
+    skillPublish: NotRequired[Json]
     # Added by the review list and the routes: who it is assigned to and whether the caller may decide it.
     assignee: NotRequired[JsonValue]
     caseTitle: NotRequired[str | None]

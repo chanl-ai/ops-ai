@@ -10,6 +10,9 @@
 ["GET /chat/agents"]
 queries = 1
 
+["GET /chat/agents/options"]
+queries = 1
+
 ["GET /chat/connectors"]
 queries = 2
 
@@ -87,6 +90,10 @@ query = { version = "1" }
 ["GET /v1/agents/{agent_id}/runs"]
 queries = 3
 
+["GET /v1/agents/{agent_id}/publish-check"]
+queries = 3
+query = { version = "1" }
+
 ["GET /v1/agents/{agent_id}/skills"]
 queries = 3
 
@@ -147,6 +154,9 @@ queries = 2
 queries = 2
 
 ["GET /v1/chat/agents"]
+queries = 1
+
+["GET /v1/chat/agents/options"]
 queries = 1
 
 ["GET /v1/chat/connectors"]

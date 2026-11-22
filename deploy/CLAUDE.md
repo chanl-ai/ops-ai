@@ -119,7 +119,7 @@ Edit the generator, regenerate, and commit both; never hand-edit a generated fil
 |---|---|
 | Compose install | [docs/deploy/compose.md](../docs/deploy/compose.md) |
 | One-command install, upgrade, backup, behind a mirror | [docs/deploy/install.md](../docs/deploy/install.md) |
-| Release package and its install guide | [docs/deploy/release-package.md](../docs/deploy/release-package.md), [docs/deploy/install-guide.md](../docs/deploy/install-guide.md) |
+| Release package and its install guide | [docs/deploy/release-package.md](../docs/deploy/release-package.md), [docs/deploy/package-install.md](../docs/deploy/package-install.md) (the package's INSTALL.md) |
 | Kubernetes | [docs/deploy/kubernetes.md](../docs/deploy/kubernetes.md) |
 | Fly, one app per image | [docs/deploy/fly.md](../docs/deploy/fly.md) |
 | Fly, one machine (what `make stg-deploy` runs) | [docs/deploy/fly-staging.md](../docs/deploy/fly-staging.md) |

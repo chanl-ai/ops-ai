@@ -12,6 +12,7 @@ from ops_agents.activities.tool_directory import ToolsOperations
 from ops_agents.store.tenancy import current_tenant
 from ops_identity import ServiceClient, dev_service_signer
 
+from ..saves import save_agent
 from ..unit.test_tool_directory import Clock, Tools, op
 from .test_agent_limits import FRAUD, _app, _data  # pyright: ignore[reportPrivateUsage]
 
@@ -26,8 +27,6 @@ async def test_a_tool_turned_on_moments_ago_is_granted_without_waiting_for_the_l
         assert "salesforce_get_record" not in before.get("toolIds", [])
         # Salesforce is turned on for the team: tools-service now offers its tool; the cached list does not have it.
         tools.by_tenant["local"].append(op("salesforce_get_record"))
-        granted = await c.patch(
-            f"/v1/agents/{FRAUD}", json={"toolIds": [*before.get("toolIds", []), "salesforce_get_record"]}
-        )
+        granted = await save_agent(c, FRAUD, {"toolIds": [*before.get("toolIds", []), "salesforce_get_record"]})
         assert granted.status_code == 200, granted.text
         assert "salesforce_get_record" in granted.json()["data"]["toolIds"]

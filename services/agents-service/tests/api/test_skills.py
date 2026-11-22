@@ -11,6 +11,7 @@ from typing import Any, cast
 
 from httpx import AsyncClient
 
+from ..saves import save_agent
 from .test_agent_registry import _app, _ok  # pyright: ignore[reportPrivateUsage]
 
 LEE = {"X-Dev-User": "lee@harborpine.example"}
@@ -60,20 +61,32 @@ async def test_only_a_published_version_attaches_and_only_to_an_agent_holding_it
         got = _ok(await c.put(f"/v1/agents/{BRANCH}/skills/{s['id']}", json={"version": 1}))
         assert [(p["skillId"], p["pinnedVersion"]) for p in got["pins"]] == [(s["id"], 1)]
         # The agent cannot then drop a tool the pinned skill names.
-        r = await c.patch(f"/v1/agents/{BRANCH}", json={"toolIds": ["request_document"]})
+        r = await save_agent(c, BRANCH, {"toolIds": ["request_document"]})
         assert (r.status_code, r.json()["error"]["code"]) == (422, "skill_needs_scope")
 
 
 async def test_a_published_version_never_changes_and_a_draft_edits_in_place(tmp_path: Path) -> None:
     async with _app(str(tmp_path / "db.sqlite")) as c:
         s = await _published(c)
-        d = _ok(await c.put(f"/v1/skills/{s['id']}/draft", json={"instructions": "Steps: v2.", "baseVersion": 1}))
+        d = _ok(
+            await c.put(
+                f"/v1/skills/{s['id']}/draft",
+                json={"instructions": "Steps: v2.", "baseVersion": 1, "baseDigest": s["digest"]},
+            )
+        )
         assert (d["version"], d["publishedVersion"], d["draftVersion"]) == (2, 1, 2)
-        d = _ok(await c.put(f"/v1/skills/{s['id']}/draft", json={"instructions": "Steps: v2b.", "baseVersion": 2}))
+        d = _ok(
+            await c.put(
+                f"/v1/skills/{s['id']}/draft",
+                json={"instructions": "Steps: v2b.", "baseVersion": 2, "baseDigest": d["digest"]},
+            )
+        )
         assert d["version"] == 2 and d["content"]["instructions"] == "Steps: v2b."
         v1 = next(v for v in d["versions"] if v["version"] == 1)
         assert (v1["state"], v1["content"]["instructions"]) == ("published", HARDSHIP["instructions"])
-        r = await c.put(f"/v1/skills/{s['id']}/draft", json={"instructions": "late", "baseVersion": 1})
+        r = await c.put(
+            f"/v1/skills/{s['id']}/draft", json={"instructions": "late", "baseVersion": 1, "baseDigest": s["digest"]}
+        )
         assert (r.status_code, r.json()["error"]["code"]) == (409, "stale_base")
 
 
@@ -133,6 +146,8 @@ async def test_names_and_bodies_over_their_caps_are_refused(tmp_path: Path) -> N
     async with _app(str(tmp_path / "db.sqlite")) as c:
         r = await c.post("/v1/skills", json={**HARDSHIP, "name": "x" * 201})
         assert (r.status_code, r.json()["error"]["code"]) == (400, "name_too_long")
+        r = await c.post("/v1/skills", json={**HARDSHIP, "name": "Hard\x00ship"})
+        assert (r.status_code, r.json()["error"]["code"]) == (400, "bad_name")
         r = await c.post("/v1/skills", json={**HARDSHIP, "instructions": "x" * 24001})
         assert (r.status_code, r.json()["error"]["code"]) == (400, "instructions_too_long")
 
@@ -216,3 +231,25 @@ async def test_the_knowledge_base_filter_keeps_skills_naming_any_base_given(tmp_
         assert await names({"knowledgeBases": "kb_support"}) == ["Hardship"]
         assert await names({"knowledgeBases": "kb_support", "search": "documents"}) == []
         assert await names({"knowledgeBases": "kb_none"}) == []
+
+
+async def test_a_second_builder_saving_the_same_draft_is_refused_and_told_who_saved(tmp_path: Path) -> None:
+    async with _app(str(tmp_path / "db.sqlite")) as c:
+        made = _ok(await c.post("/v1/skills", json=HARDSHIP, headers=LEE), 201)
+        url = f"/v1/skills/{made['id']}/draft"
+        # Both builders open draft 1. A draft is rewritten in place, so its number alone does not tell their copies
+        # from the one the first save leaves.
+        opened = _ok(await c.get(f"/v1/skills/{made['id']}"))
+        base = {"baseVersion": opened["version"], "baseDigest": opened["digest"]}
+        first = _ok(await c.put(url, json={"instructions": "Steps: Lee's.", **base}, headers=LEE))
+        assert first["version"] == opened["version"] and first["digest"] != opened["digest"], first
+
+        second = await c.put(url, json={"instructions": "Steps: Kim's.", **base}, headers=KIM)
+        assert (second.status_code, second.json()["error"]["code"]) == (409, "stale_base"), second.text
+        assert second.json()["error"]["details"]["savedBy"] == LEE["X-Dev-User"], second.text
+        assert _ok(await c.get(f"/v1/skills/{made['id']}"))["content"]["instructions"] == "Steps: Lee's."
+
+        unnamed = await c.put(url, json={"instructions": "Steps: no copy.", "baseVersion": first["version"]})
+        assert unnamed.status_code == 400 and "baseDigest" in unnamed.text, unnamed.text
+        again = {"baseVersion": first["version"], "baseDigest": first["digest"]}
+        assert _ok(await c.put(url, json={"instructions": "Steps: Kim's.", **again}, headers=KIM))["version"] == 1

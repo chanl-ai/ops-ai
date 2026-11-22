@@ -5,6 +5,7 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { AGENTS_PORT, approvePublishRequest, asRole, check, chromium, consoleSignIn, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { agentBase } from '../../lib/agent_save.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 let J = {};
@@ -24,7 +25,7 @@ await withUiStack(async (consoleUrl) => {
     // A published agent granted a read and a write tool, made through the API so the page under test is the editor.
     const created = (await api('/v1/agents', { method: 'POST', body: JSON.stringify({ name: NAME, role: 'Checks wires before they leave' }) })).data;
     // Edits save into the one draft, so the version to publish is the one the edit answers with.
-    const edited = (await api(`/v1/agents/${created.id}`, { method: 'PATCH', body: JSON.stringify({ toolIds: ['lookup_account', 'place_wire_hold'], note: 'tools' }) })).data;
+    const edited = (await api(`/v1/agents/${created.id}`, { method: 'PATCH', body: JSON.stringify({ toolIds: ['lookup_account', 'place_wire_hold'], note: 'tools', ...(await agentBase(agents, J, created.id)) }) })).data;
     await approvePublishRequest((await api(`/v1/agents/${created.id}/publish-requests`, { method: 'POST', body: JSON.stringify({ version: edited.version, note: 'first' }) })).data, maya);
 
     // Two chats with the agent, so Recent runs has rows to show from the API.

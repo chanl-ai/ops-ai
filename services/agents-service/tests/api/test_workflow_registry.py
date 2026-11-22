@@ -14,6 +14,7 @@ from ops_agents.api.deps import Runtime
 from ops_agents.graphs.definition import WorkflowDefinition
 
 from ..conftest import sse_events
+from ..saves import save_agent
 from .test_agent_registry import _app  # pyright: ignore[reportPrivateUsage]
 
 # No wire id: with one the scripted model calls place_wire_hold, whose gate ends the agent step with no text.
@@ -152,7 +153,7 @@ async def test_publish_starts_on_the_pointer_and_pause_and_delete_refuse_new_thr
 async def test_compiled_agent_step_pins_the_published_version(client: AsyncClient) -> None:
     """A later agent publish does not change a published workflow: the agent's definition is in the digest."""
     v1 = _ok(await client.get("/v1/graphs/wire_hold_review/versions"))[-1]
-    await client.patch("/v1/agents/ag_fraud", json={"instructions": "Different."})
+    await save_agent(client, "ag_fraud", {"instructions": "Different."})
     _ok(await client.post("/v1/agents/ag_fraud/publish-requests", json={"version": 8, "note": ""}), 201)
     assert _ok(await client.get("/v1/graphs/wire_hold_review/versions"))[-1]["digest"] == v1["digest"]
     stored = WorkflowDefinition.model_validate(await _definition(client, "wire_hold_review", v1["version"]))

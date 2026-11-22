@@ -19,6 +19,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": ["kind", "status", "source", "team", "since", "until", "case", "page", "pageSize"],
         "stream": False,
     },
+    "agents_add_reference": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/agents/{agent_id}/references",
+        "pathParams": ["agent_id"],
+        "query": [],
+        "stream": False,
+    },
     "agents_agent_skill_options": {
         "body": None,
         "headers": [],
@@ -322,6 +331,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
+    "agents_publish_check": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/agents/{agent_id}/publish-check",
+        "pathParams": ["agent_id"],
+        "query": ["version"],
+        "stream": False,
+    },
     "agents_publish_preview": {
         "body": None,
         "headers": [],
@@ -329,6 +347,15 @@ OPERATIONS: dict[str, Operation] = {
         "path": "/v1/agents/{agent_id}/publish-preview",
         "pathParams": ["agent_id"],
         "query": ["version"],
+        "stream": False,
+    },
+    "agents_read_skill_text": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/skills/{skill_id}/text",
+        "pathParams": ["skill_id"],
+        "query": [],
         "stream": False,
     },
     "agents_recent_runs": {
@@ -2080,6 +2107,12 @@ class Operations:
         "Set Paused"
         return self._t.call(SERVICE, OPERATIONS["agents_set_paused"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
 
+    def agents_publish_check(self, agent_id: str, *, version: int | None = None) -> AgentPublishCheck:
+        "Publish Check"
+        return self._t.call(
+            SERVICE, OPERATIONS["agents_publish_check"], {"agent_id": agent_id}, {"version": version}, {}, None
+        )  # type: ignore[no-any-return]
+
     def agents_publish_preview(self, agent_id: str, *, version: int | None = None) -> PublishDecisionFields:
         "Publish Preview"
         return self._t.call(
@@ -2089,6 +2122,10 @@ class Operations:
     def agents_request_publish(self, agent_id: str, body: PublishRequestInput) -> PublishReview:
         "Request Publish"
         return self._t.call(SERVICE, OPERATIONS["agents_request_publish"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def agents_add_reference(self, agent_id: str, body: AddReference) -> ReferenceAdded:
+        "Add Reference"
+        return self._t.call(SERVICE, OPERATIONS["agents_add_reference"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     def agents_recent_runs(self, agent_id: str, *, limit: int | None = None) -> list[AgentRun]:
         "Recent Runs"
@@ -2859,6 +2896,10 @@ class Operations:
     def agents_render_skill(self, skill_id: str, body: SkillRenderInput) -> SkillRendered:
         "Render Skill"
         return self._t.call(SERVICE, OPERATIONS["agents_render_skill"], {"skill_id": skill_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def agents_read_skill_text(self, skill_id: str, body: SkillTextInput) -> SkillTextReading:
+        "Read Skill Text"
+        return self._t.call(SERVICE, OPERATIONS["agents_read_skill_text"], {"skill_id": skill_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     def reviews_list_task_types(
         self,
@@ -3638,6 +3679,12 @@ class AsyncOperations:
         "Set Paused"
         return await self._t.call(SERVICE, OPERATIONS["agents_set_paused"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
 
+    async def agents_publish_check(self, agent_id: str, *, version: int | None = None) -> AgentPublishCheck:
+        "Publish Check"
+        return await self._t.call(
+            SERVICE, OPERATIONS["agents_publish_check"], {"agent_id": agent_id}, {"version": version}, {}, None
+        )  # type: ignore[no-any-return]
+
     async def agents_publish_preview(self, agent_id: str, *, version: int | None = None) -> PublishDecisionFields:
         "Publish Preview"
         return await self._t.call(
@@ -3647,6 +3694,10 @@ class AsyncOperations:
     async def agents_request_publish(self, agent_id: str, body: PublishRequestInput) -> PublishReview:
         "Request Publish"
         return await self._t.call(SERVICE, OPERATIONS["agents_request_publish"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def agents_add_reference(self, agent_id: str, body: AddReference) -> ReferenceAdded:
+        "Add Reference"
+        return await self._t.call(SERVICE, OPERATIONS["agents_add_reference"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def agents_recent_runs(self, agent_id: str, *, limit: int | None = None) -> list[AgentRun]:
         "Recent Runs"
@@ -4441,6 +4492,10 @@ class AsyncOperations:
     async def agents_render_skill(self, skill_id: str, body: SkillRenderInput) -> SkillRendered:
         "Render Skill"
         return await self._t.call(SERVICE, OPERATIONS["agents_render_skill"], {"skill_id": skill_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def agents_read_skill_text(self, skill_id: str, body: SkillTextInput) -> SkillTextReading:
+        "Read Skill Text"
+        return await self._t.call(SERVICE, OPERATIONS["agents_read_skill_text"], {"skill_id": skill_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def reviews_list_task_types(
         self,

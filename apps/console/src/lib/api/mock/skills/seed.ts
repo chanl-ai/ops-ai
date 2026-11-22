@@ -177,7 +177,7 @@ const FEE_V2 = md(
 const CARD_DISPUTE_STEPS: NonNullable<SkillContent['steps']> = [
   { do: 'Ask which charge looks wrong and roughly when it happened.' },
   { do: 'Confirm who {{customer.name}} is.', use: { kind: 'skill', id: 'verify_identity' } },
-  { do: 'Find the charge. It must be on this card.', use: { kind: 'tool', id: 'search_transactions' }, check: { text: 'result.count >= 1', by: 'rule' }, ifNot: { action: 'retry', retries: 1 } },
+  { do: 'Find the charge. It must be on this card.', use: { kind: 'tool', id: 'search_transactions' }, locked: true, check: { text: 'result.count >= 1', by: 'rule' }, ifNot: { action: 'retry', retries: 1 } },
   { do: 'Open the dispute and read @knowledge:kb_card_disputes for what to tell the customer.', use: { kind: 'tool', id: 'open_dispute' }, check: { text: 'inputs.amount <= 500', by: 'rule' }, ifNot: { action: 'exit', exit: 'needs_review' } },
   { do: 'Tell the customer the outcome and the case number.' },
 ];
