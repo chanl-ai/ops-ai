@@ -11,6 +11,7 @@ from .errors import (
     NotFound,
     OpsError,
     RateLimited,
+    RunFailed,
     ServerError,
     Unauthorized,
 )
@@ -25,6 +26,7 @@ __all__ = [
     "OpsAI",
     "OpsError",
     "RateLimited",
+    "RunFailed",
     "ServerError",
     "Unauthorized",
     "WorkflowCheck",

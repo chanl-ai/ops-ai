@@ -293,6 +293,7 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-723 | console | The console lists every area as an open sidebar section, offered only by what the person may open: admin, builder, reviewer, viewer, a chat-only person and a person in two teams; with the area_tabs flag on, the area tabs come back | ui | `console/console-areas.md` |
 | uc-722 | console | The areas rest on server facts: the seeded people hold the cells the areas are built from, and the tool-call list shows one call by its id | api | `console/console-areas-server-facts.md` |
 | uc-workflows-1 | agents-service | A Schedule trigger starts one run when its tick is due, the same tick key starts no second run, and a tick due later stays queued | api, sdk | `(no doc)` |
+| uc-workflows-2 | agents-service | A builder reads why a test run failed: its kind, code, the failed step, a sentence for an end user and the End it stopped at | api, sdk, cli | `(no doc)` |
 | uc-platform-1 | platform-service | A team's running work is counted for that team only, and the delete check names it and stops the deletion | api | `(no doc)` |
 | uc-751 | agents-service | Evals keep saved cases and runs for the team | api, sdk, cli, ui | `agents-service/evals-keep-saved-cases-and-runs.md` |
 | uc-752 | agents-service | An agent answers from a knowledge source with a citation, in mock and real mode | api, sdk, ui | `agents-service/an-agent-answers-from-a-knowledge.md` |
@@ -303,6 +304,7 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-757 | agents-service | A builder writes a skill with steps and an agent brief, and a chat follows the steps | api, sdk, cli, ui | `agents-service/a-builder-writes-a-skill-with.md` |
 | uc-761 | console | A builder edits a workflow that saves itself, publishes it past its problems and compares its versions | ui | `console/workflow-drafts-and-versions.md` |
 | uc-762 | agents-service | A builder tries one path of a skill: reads run, a write is planned and sent once only when confirmed, and nothing is stored | api, ui | `agents-service/a-builder-tries-one-skill-path.md` |
+| uc-763 | agents-service | A run outlives a killed worker and redrives from its failed step | api | `agents-service/a-run-outlives-a-killed-worker.md` |
 | uc-764 | console | An agent page shows its save state, its model, knowledge, tools and skills on the main page, and a channels tab | ui | `console/agent-page-settings-and-channels.md` |
 | uc-765 | console | A builder asks two versions of an agent one question and reads the replies side by side | ui | `console/agent-versions-side-by-side.md` |
 | uc-766 | console | A role given to a group, and the approvals cell on the role's page | ui | `console/role-for-a-group-and-approvals.md` |

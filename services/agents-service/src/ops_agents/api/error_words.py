@@ -3,7 +3,8 @@
 The tool port wraps the gateway's executor with `WordedTools`. A failed outcome keeps its code on the call record and
 the call log (`output`); only what the model reads (`for_model`) becomes `{"error": {what, next, retryable}}`, so a
 reply never echoes CONNECTION_NOT_LINKED or RATE_LIMITED. An outcome that already carries a line for the model (the
-Connect card's, activities/gateway.py CARD_LINES) is left as it is.
+Connect card's, activities/gateway.py CARD_LINES) is left as it is. Each entry names its code in the one error
+model (ops_contracts.errors.CODES), and `retryable` is read from that table, so the two cannot disagree.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from dataclasses import dataclass, replace
 from typing import Any, cast
 
 from ops_agent_kernel.ports import ToolExecutor, ToolOutcome
+from ops_contracts.errors import code_of
 from ops_service_kit.http import Json
 
 
@@ -20,29 +22,43 @@ from ops_service_kit.http import Json
 class Words:
     what: str
     next: str
-    retryable: bool
+    # The error model's code (ops_contracts.errors.CODES), which alone says whether trying again helps.
+    code: str
+
+    @property
+    def retryable(self) -> bool:
+        return code_of(self.code).retryable
 
 
-_SIGN_IN_AGAIN = Words("{app} needs you to sign in again", "Sign in to {app} from Connectors, then ask again", True)
-_UNREACHABLE = Words("{app} could not be reached", "Try again shortly; if it keeps happening, ask an admin", True)
-_FAILED = Words("{app} returned an error", "Try again; if it keeps happening, ask an admin", True)
-_NOT_SET_UP = Words("{app} is not set up for this team yet", "Ask an admin to set it up", False)
-_TIMED_OUT = Words("{app} did not answer in time", "Try again shortly", True)
-_NO_ACCESS = Words("You do not have access to this in {app}", "Ask an admin for access", False)
-_BAD_INPUT = Words("{app} did not accept the request as it was asked", "Try again with different values", True)
-_LOST = Words("The answer from {app} was lost", "Check {app} before trying again", False)
-_NOT_FOUND = Words("{app} has nothing by that name or id", "Check the name or id and ask again", True)
+_SIGN_IN_AGAIN = Words(
+    "{app} needs you to sign in again", "Sign in to {app} from Connectors, then ask again", "sign_in_needed"
+)
+_UNREACHABLE = Words(
+    "{app} could not be reached", "Try again shortly; if it keeps happening, ask an admin", "app_unavailable"
+)
+_FAILED = Words("{app} returned an error", "Try again; if it keeps happening, ask an admin", "tool_failed")
+_NOT_SET_UP = Words("{app} is not set up for this team yet", "Ask an admin to set it up", "app_not_set_up")
+_TIMED_OUT = Words("{app} did not answer in time", "Try again shortly", "app_timed_out")
+_NO_ACCESS = Words("You do not have access to this in {app}", "Ask an admin for access", "forbidden")
+_BAD_INPUT = Words(
+    "{app} did not accept the request as it was asked", "Try again with different values", "input_invalid"
+)
+_LOST = Words("The answer from {app} was lost", "Check {app} before trying again", "write_uncertain")
+_NOT_FOUND = Words("{app} has nothing by that name or id", "Check the name or id and ask again", "unknown_reference")
+_REFUSED_HOST = Words("This install may not reach {app}'s address", "Ask an admin to allow it", "forbidden")
 
 # By the gateway's and the tools' refusal codes (tools-service); codes are compared in capitals.
 WORDS: dict[str, Words] = {
-    "CONNECTION_NOT_LINKED": Words("{app} needs your sign-in", "Press Connect on the card shown, then ask again", True),
+    "CONNECTION_NOT_LINKED": Words(
+        "{app} needs your sign-in", "Press Connect on the card shown, then ask again", "sign_in_needed"
+    ),
     "NOT_SIGNED_IN": _SIGN_IN_AGAIN,
     "SIGN_IN_NOT_FOUND": _SIGN_IN_AGAIN,
     "SIGN_IN_REFUSED": _SIGN_IN_AGAIN,
     "AUTH_EXPIRED": _SIGN_IN_AGAIN,
     "CONNECTION_REVOKED": _SIGN_IN_AGAIN,
-    "AUTH_FAILED": Words("{app} did not accept the sign-in", "Ask an admin to check the app's sign-in", False),
-    "RATE_LIMITED": Words("{app} is busy and asked for fewer calls", "Try again in a minute", True),
+    "AUTH_FAILED": Words("{app} did not accept the sign-in", "Ask an admin to check the app's sign-in", "forbidden"),
+    "RATE_LIMITED": Words("{app} is busy and asked for fewer calls", "Try again in a minute", "rate_limited"),
     "FORBIDDEN": _NO_ACCESS,
     "CONNECTION_OUT_OF_SCOPE": _NO_ACCESS,
     "NOT_FOUND": _NOT_FOUND,
@@ -59,9 +75,11 @@ WORDS: dict[str, Words] = {
     "PLUGIN_FAILED": _FAILED,
     "TOOL_ERROR": _FAILED,
     "CALL_FAILED": _FAILED,
-    "ANSWER_UNREADABLE": Words("{app} answered in a form that could not be read", "Try again; then ask an admin", True),
-    "EGRESS_DENIED": Words("This install may not reach {app}'s address", "Ask an admin to allow it", False),
-    "CONNECTION_HOST_MISMATCH": Words("This install may not reach {app}'s address", "Ask an admin to allow it", False),
+    "ANSWER_UNREADABLE": Words(
+        "{app} answered in a form that could not be read", "Try again; then ask an admin", "tool_failed"
+    ),
+    "EGRESS_DENIED": _REFUSED_HOST,
+    "CONNECTION_HOST_MISMATCH": _REFUSED_HOST,
     "INVALID_INPUT": _BAD_INPUT,
     "INVALID_ARGUMENTS": _BAD_INPUT,
     "CONNECTION_NOT_SET": _NOT_SET_UP,
@@ -69,16 +87,18 @@ WORDS: dict[str, Words] = {
     "SECRET_MISSING": _NOT_SET_UP,
     "SECRET_UNAVAILABLE": _NOT_SET_UP,
     "PLUGIN_DISABLED": _NOT_SET_UP,
-    "APP_OFF_FOR_TEAM": Words("{app} is off for this team", "Ask a team admin to turn it on", False),
+    "APP_OFF_FOR_TEAM": Words("{app} is off for this team", "Ask a team admin to turn it on", "app_not_set_up"),
     "ACCOUNT_CHOICE_NEEDED": Words(
-        "Two of your {app} accounts fit", "Pick one on the card shown, then ask again", True
+        "Two of your {app} accounts fit", "Pick one on the card shown, then ask again", "sign_in_needed"
     ),
     "TOOL_NOT_ADDED": _NOT_SET_UP,
-    "WRITE_IN_PROGRESS": Words("The same change is already running in {app}", "Wait a moment, then check", True),
+    "WRITE_IN_PROGRESS": Words(
+        "The same change is already running in {app}", "Wait a moment, then check", "write_uncertain"
+    ),
     "CALL_LOST": _LOST,
     "CALL_ABANDONED": _LOST,
 }
-UNKNOWN = Words("The call to {app} failed", "Try again or ask an admin", True)
+UNKNOWN = Words("The call to {app} failed", "Try again or ask an admin", "tool_failed")
 # The platform's own reads, named as the console names their areas.
 APPS = {"search_knowledge": "the knowledge bases", "read_file": "Files", "read_document": "Documents"}
 # A code the person must never read: upper case joined by underscores. A field name (account_id) is kept, so the model

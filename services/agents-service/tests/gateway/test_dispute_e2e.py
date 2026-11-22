@@ -21,6 +21,7 @@ from ops_agents.api.app import create_app
 from ops_agents.api.sweeper import recover
 from ops_agents.store.base import metadata
 from ops_agents.store.reviews import review_approvals
+from ops_engine.store.tables import metadata as engine_metadata
 from ops_service_kit.settings import Settings
 from tests.conftest import FakeGraphModels, decide, fixture_knowledge, last_run, scripted_model, sse_events, step_up
 
@@ -36,6 +37,8 @@ async def apps(gateway: Gateway) -> AsyncIterator[tuple[httpx.AsyncClient, FastA
     async with engine.begin() as c:
         await c.run_sync(metadata.create_all)
         await c.run_sync(review_approvals.metadata.create_all)
+        # A chat reply is queued as an engine_work turn (api/chat_turns.py).
+        await c.run_sync(engine_metadata.create_all)
     app = create_app(
         settings,
         model=scripted_model(),

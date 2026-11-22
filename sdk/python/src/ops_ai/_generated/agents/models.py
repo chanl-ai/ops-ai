@@ -344,6 +344,12 @@ class BulkDecisionInput(TypedDict, closed=True):
     stepUpToken: NotRequired[str | None]
 
 
+class BulkRunsResult(TypedDict, closed=True):
+    action: str
+    changed: list[str]
+    skipped: list[str]
+
+
 class BulkSkip(TypedDict, closed=True):
     id: str
     reason: str
@@ -692,6 +698,11 @@ class EnvelopeBriefDraft(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeBulkRunsResult(TypedDict, closed=True):
+    data: BulkRunsResult
+    success: Literal[True]
+
+
 class EnvelopeChangeWaits(TypedDict, closed=True):
     data: ChangeWaits
     success: Literal[True]
@@ -735,8 +746,10 @@ class EnvelopeListAgentVersion(TypedDict, closed=True):
 class ErrorBody(TypedDict, closed=True):
     code: str
     details: NotRequired[Any]
+    kind: Literal["input", "refused", "upstream", "timeout", "internal"]
     message: str
     requestId: str
+    retryable: bool
     status: int
 
 
@@ -1649,13 +1662,18 @@ class RunChild(TypedDict, closed=True):
 
 class RunFailure(TypedDict, closed=True):
     attempt: NotRequired[int | None]
-    code: NotRequired[str | None]
-    field: NotRequired[str | None]
+    code: str
+    details: NotRequired[dict[str, str | int | float | bool | None]]
+    kind: Literal["input", "refused", "upstream", "timeout", "internal"]
     message: str
     nodeId: NotRequired[str | None]
     nodeName: NotRequired[str | None]
-    retryable: NotRequired[bool | None]
+    of: NotRequired[int | None]
+    retryAfterSeconds: NotRequired[float | None]
+    retryable: bool
     suggestion: NotRequired[str | None]
+    traceId: NotRequired[str | None]
+    userMessage: str
 
 
 class RunFile(TypedDict, closed=True):
@@ -1718,6 +1736,14 @@ class RunWaiting(TypedDict, closed=True):
     iteration: int
     node: str
     payload: dict[str, JsonValue]
+
+
+class RunsFilter(TypedDict, closed=True):
+    code: NotRequired[str | None]
+    createdFrom: NotRequired[str | None]
+    createdTo: NotRequired[str | None]
+    kind: NotRequired[str | None]
+    workflowId: NotRequired[str | None]
 
 
 class SaveBase(TypedDict, closed=True):
@@ -2867,6 +2893,11 @@ class BulkResult(TypedDict, closed=True):
     updated: list[str]
 
 
+class BulkRunsRequest(TypedDict, closed=True):
+    action: Literal["redrive", "cancel"]
+    filter: NotRequired[RunsFilter]
+
+
 class CaseEventView(TypedDict, closed=True):
     at: str
     by: str
@@ -3731,6 +3762,7 @@ class RunList(TypedDict, closed=True):
 
 class RunRow(TypedDict, closed=True):
     canCancel: NotRequired[bool | None]
+    canRedrive: NotRequired[bool | None]
     canRetry: NotRequired[bool | None]
     createdAt: str
     createdBy: str
@@ -4932,6 +4964,7 @@ class EnvelopeWorkflowDetail(TypedDict, closed=True):
 
 class RunDetail(TypedDict, closed=True):
     canCancel: NotRequired[bool | None]
+    canRedrive: NotRequired[bool | None]
     canRetry: NotRequired[bool | None]
     children: NotRequired[list[RunChild]]
     createdAt: str

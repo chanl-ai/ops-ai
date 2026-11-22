@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- agents-service, stamped at 20261122_2044_list_sort_indexes
+-- agents-service, stamped at 0125_engine_work_fair_claim
 CREATE TABLE engine_definitions (
 	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
@@ -59,6 +59,7 @@ CREATE TABLE engine_runs (
 	outcome VARCHAR(64) NULL, 
 	output NVARCHAR(max) NULL, 
 	error VARCHAR(max) NULL, 
+	failure NVARCHAR(max) NULL, 
 	waiting NVARCHAR(max) NULL, 
 	created_by VARCHAR(200) NOT NULL, 
 	started_via VARCHAR(200) NULL, 
@@ -115,9 +116,15 @@ CREATE TABLE engine_work (
 	lapses INTEGER NOT NULL DEFAULT '0', 
 	error VARCHAR(max) NULL, 
 	created_at VARCHAR(32) NOT NULL, 
+	team_id VARCHAR(64) NULL, 
+	priority INTEGER NULL, 
+	concurrency_key VARCHAR(240) NULL, 
+	rate_key VARCHAR(240) NULL, 
 	CONSTRAINT engine_work_pkey PRIMARY KEY (id), 
 	CONSTRAINT uq_engine_work_dedupe UNIQUE (tenant_id, dedupe_key)
 );
+GO
+CREATE INDEX ix_engine_work_claim ON engine_work (status, build, priority DESC, id);
 GO
 CREATE INDEX ix_engine_work_due ON engine_work (status, build, available_at);
 GO
@@ -1662,5 +1669,5 @@ CREATE TABLE alembic_version (
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version (version_num) VALUES ('20261122_2044_list_sort_indexes');
+INSERT INTO alembic_version (version_num) VALUES ('0125_engine_work_fair_claim');
 GO

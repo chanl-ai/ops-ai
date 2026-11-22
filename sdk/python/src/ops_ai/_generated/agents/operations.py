@@ -1558,6 +1558,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "workflows_bulk_engine_runs": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/runs/bulk",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
     "workflows_cancel_engine_run": {
         "body": None,
         "headers": [],
@@ -1791,6 +1800,15 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/workflows/definitions/{workflow_id}/publish-preview",
         "pathParams": ["workflow_id"],
+        "query": [],
+        "stream": False,
+    },
+    "workflows_redrive_engine_run": {
+        "body": None,
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/runs/{run_id}/redrive",
+        "pathParams": ["run_id"],
         "query": [],
         "stream": False,
     },
@@ -2970,6 +2988,10 @@ class Operations:
             SERVICE, OPERATIONS["workflows_start_engine_run"], {}, {}, {"x-acting-for": x_acting_for}, body
         )  # type: ignore[no-any-return]
 
+    def workflows_bulk_engine_runs(self, body: BulkRunsRequest) -> BulkRunsResult:
+        "Bulk Engine Runs"
+        return self._t.call(SERVICE, OPERATIONS["workflows_bulk_engine_runs"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
     def workflows_run_set_aside_email(self, event_id: str) -> RunStarted:
         "Run Set Aside Email"
         return self._t.call(SERVICE, OPERATIONS["workflows_run_set_aside_email"], {"event_id": event_id}, {}, {}, None)  # type: ignore[no-any-return]
@@ -2996,6 +3018,10 @@ class Operations:
             {},
             None,
         )  # type: ignore[no-any-return]
+
+    def workflows_redrive_engine_run(self, run_id: str) -> RunRow:
+        "Redrive Engine Run"
+        return self._t.call(SERVICE, OPERATIONS["workflows_redrive_engine_run"], {"run_id": run_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     def workflows_retry_engine_run(self, run_id: str) -> RunRow:
         "Retry Engine Run"
@@ -4683,6 +4709,10 @@ class AsyncOperations:
             SERVICE, OPERATIONS["workflows_start_engine_run"], {}, {}, {"x-acting-for": x_acting_for}, body
         )  # type: ignore[no-any-return]
 
+    async def workflows_bulk_engine_runs(self, body: BulkRunsRequest) -> BulkRunsResult:
+        "Bulk Engine Runs"
+        return await self._t.call(SERVICE, OPERATIONS["workflows_bulk_engine_runs"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
     async def workflows_run_set_aside_email(self, event_id: str) -> RunStarted:
         "Run Set Aside Email"
         return await self._t.call(
@@ -4713,6 +4743,10 @@ class AsyncOperations:
             {},
             None,
         )  # type: ignore[no-any-return]
+
+    async def workflows_redrive_engine_run(self, run_id: str) -> RunRow:
+        "Redrive Engine Run"
+        return await self._t.call(SERVICE, OPERATIONS["workflows_redrive_engine_run"], {"run_id": run_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def workflows_retry_engine_run(self, run_id: str) -> RunRow:
         "Retry Engine Run"

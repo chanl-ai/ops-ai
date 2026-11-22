@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-21",
+  "title": "A restarted workflow never pays twice for an AI step",
+  "description": "When a workflow run restarts after a crash, an AI or agent step it had already asked reuses the answer it got instead of asking the model again. A step whose input changed still gets a fresh answer.",
+  "tag": "fix"
+}

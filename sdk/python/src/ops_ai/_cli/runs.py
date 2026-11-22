@@ -1,5 +1,5 @@
 """`opsai runs` and `opsai tasks`: workflow runs as the Runs page shows them (start, status, events as they happen,
-cancel, retry), and Human Tasks as the Human Tasks queue shows them (list, open one, decide it)."""
+cancel, retry, redrive, bulk), and Human Tasks as the Human Tasks queue shows them (list, open one, decide it)."""
 
 from __future__ import annotations
 
@@ -30,8 +30,16 @@ def runs_main(argv: list[str]) -> int:
         ("events", "a run's events as they happen, until it ends or waits"),
         ("cancel", "cancel a run"),
         ("retry", "queue a Stuck run again from its last step"),
+        ("redrive", "queue a Failed or Stuck run again from its failed step"),
     ):
         sub.add_parser(name, parents=common, help=text).add_argument("run")
+    bulk = sub.add_parser("bulk", parents=common, help="redrive or cancel every run a filter matches")
+    bulk.add_argument("action", choices=("redrive", "cancel"))
+    bulk.add_argument("--workflow")
+    bulk.add_argument("--kind", help="the error kind: input, refused, upstream, timeout or internal")
+    bulk.add_argument("--code", help="the error code, as a run's failure shows it")
+    bulk.add_argument("--from", dest="created_from", help="runs started at or after this ISO time")
+    bulk.add_argument("--to", dest="created_to", help="runs started before this ISO time")
     ns = ap.parse_args(argv)
     try:
         return _runs(ns, client(ns))
@@ -46,7 +54,7 @@ def _runs(ns: argparse.Namespace, ops: OpsAI) -> int:
     if ns.verb == "start":
         started = ops.runs.start(ns.workflow, input=payload(ns.input), mode="live" if ns.live else "test")
         if ns.wait:
-            done = ops.runs.wait(str(started["runId"]))
+            done = ops.runs.wait(str(started["runId"]), check=True)
             return emit(ns, done, text=_status(done))
         return emit(ns, started, text=f"{started.get('runId')} started")
     if ns.verb == "show":
@@ -65,6 +73,18 @@ def _runs(ns: argparse.Namespace, ops: OpsAI) -> int:
         return emit(ns, ops.runs.cancel(ns.run))
     if ns.verb == "retry":
         return emit(ns, ops.runs.retry(ns.run))
+    if ns.verb == "redrive":
+        return emit(ns, ops.runs.redrive(ns.run))
+    if ns.verb == "bulk":
+        given = {
+            "workflowId": ns.workflow,
+            "kind": ns.kind,
+            "code": ns.code,
+            "createdFrom": ns.created_from,
+            "createdTo": ns.created_to,
+        }
+        done = ops.runs.bulk(ns.action, **{k: v for k, v in given.items() if v is not None})
+        return emit(ns, done, text=f"{len(done['changed'])} changed, {len(done['skipped'])} skipped")
     return 2
 
 

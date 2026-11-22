@@ -3,8 +3,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Agent ag_missing was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -106,8 +108,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Published skill sk_missing was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -130,8 +134,10 @@
           ],
           "teamId": "team_ops"
         },
+        "kind": "refused",
         "message": "Your role cannot edit agent wire-fraud-sentinel; a Builder or Admin can.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -256,8 +262,10 @@
     "body": {
       "error": {
         "code": "no_use_when",
+        "kind": "input",
         "message": "An on-match skill needs a use-when line: it is what the model reads to load it.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -277,8 +285,10 @@
             "msg": "Extra inputs are not permitted"
           }
         ],
+        "kind": "input",
         "message": "x: Extra inputs are not permitted",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -301,8 +311,10 @@
           ],
           "teamId": "team_ops"
         },
+        "kind": "refused",
         "message": "Your role cannot create a skill; a Builder or Admin can.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -317,8 +329,10 @@
     "body": {
       "error": {
         "code": "skill_pinned",
+        "kind": "input",
         "message": "hardship-request-triage is attached to Wire Fraud Sentinel; detach it first.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 409
       },
       "success": false
@@ -335,8 +349,10 @@
           "scope": "own",
           "teamId": "team_ops"
         },
+        "kind": "refused",
         "message": "Your role lets you delete only your own; hardship-request-triage is someone else's.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -481,8 +497,10 @@
     "body": {
       "error": {
         "code": "reason_required",
+        "kind": "input",
         "message": "Say why the skill is deprecated.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -505,8 +523,10 @@
           ],
           "teamId": "team_ops"
         },
+        "kind": "refused",
         "message": "Your role cannot edit skill hardship-request-triage; a Builder or Admin can.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -546,8 +566,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Skill <sk> on ag_fraud was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -672,8 +694,10 @@
     "body": {
       "error": {
         "code": "skill_deprecated",
+        "kind": "input",
         "message": "The skill is deprecated; it takes no new versions.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 409
       },
       "success": false
@@ -684,8 +708,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Skill <sk> was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -701,8 +727,10 @@
           "savedBy": "usr_b@harborpine.example",
           "version": 1
         },
+        "kind": "input",
         "message": "The draft was saved after it was read; reload and try again.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 409
       },
       "success": false
@@ -725,8 +753,10 @@
           ],
           "teamId": "team_ops"
         },
+        "kind": "refused",
         "message": "Your role cannot edit skill hardship-request-triage; a Builder or Admin can.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -1856,8 +1886,10 @@
             }
           ]
         },
+        "kind": "input",
         "message": "v1 is already published; save a change to open a draft.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -1880,8 +1912,10 @@
           ],
           "teamId": "team_ops"
         },
+        "kind": "refused",
         "message": "Your role cannot publish skill hardship-request-triage; a Builder or Admin can.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -2006,8 +2040,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Skill sk_missing was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -2018,8 +2054,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Skill <sk> was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -2048,8 +2086,10 @@
             "reason"
           ]
         },
+        "kind": "refused",
         "message": "reason is required.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 422
       },
       "success": false
@@ -2060,8 +2100,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Skill <sk> was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false

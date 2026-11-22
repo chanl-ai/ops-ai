@@ -595,6 +595,7 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/agents-service/a-builder-runs-the-three.md` | uc-621: A builder runs the three foundation Examples |
 | `usecases/agents-service/a-builder-asks-the-first-three.md` | uc-622: A builder asks the first three published agents |
 | `usecases/agents-service/a-builder-validates-applies-and-test.md` | uc-623: A builder validates, applies and test-runs the three-node workflow |
+| `usecases/agents-service/a-builder-reads-why-a-test-run-failed.md` | uc-workflows-2: A builder reads why a test run failed, at the API, the SDK and the CLI |
 | `usecases/agents-service/a-builder-runs-the-two-composition.md` | uc-624: A builder runs the two composition Examples |
 | `usecases/tools-service/sign-in-return-any-window.md` | uc-625: Connect comes back Connected in any window, for every sign-in app |
 | `usecases/tools-service/apps-screens-for-each-role.md` | uc-626: Apps screens offer only what you may do, in plain words |
@@ -648,6 +649,7 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/agents-service/a-shared-form-filled-in-signed.md` | uc-756: A shared form filled in signed out starts a workflow with knowledge and a tool, a person approves a step, and the run finishes with a record |
 | `usecases/agents-service/a-builder-writes-a-skill-with.md` | uc-757: A builder writes a skill with steps and an agent brief, and a chat follows the steps |
 | `usecases/agents-service/a-builder-tries-one-skill-path.md` | uc-762: A builder tries one path of a skill, and no write runs until they confirm |
+| `usecases/agents-service/a-run-outlives-a-killed-worker.md` | uc-763: A run outlives a killed worker and redrives from its failed step |
 | `usecases/console/agent-page-settings-and-channels.md` | uc-764: An agent page shows its save state, its model, knowledge, tools and skills on the main page, and a channels tab |
 | `usecases/console/agent-versions-side-by-side.md` | uc-765: A builder asks two versions of an agent one question and reads the replies side by side |
 | `usecases/console/role-for-a-group-and-approvals.md` | uc-766: A role given to a group, and the approvals cell on the role's page |

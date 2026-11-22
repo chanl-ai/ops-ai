@@ -37,7 +37,6 @@ from ops_agents.domain.accounts import chosen_accounts
 from ops_contracts.chat import EffectiveSettings
 from ops_contracts.skill_run import SkillProgram, SkillRunState
 from ops_service_kit.http import Json, JsonList, JsonValue
-from ops_service_kit.ids import new_id
 
 from .common import (
     GraphDeps,
@@ -52,6 +51,7 @@ from .common import (
     with_apps,
     with_memory,
 )
+from .metering import turn_ids
 
 # How many earlier lines of reads a turn is given, newest kept.
 EARLIER_READS = 8
@@ -200,9 +200,10 @@ def build(
             )
             for p in state.get("attached_passages") or []
         ]
+        ids = turn_ids("agent")
         req = TurnRequest(
-            turn_id=new_id("turn"),
-            run_id=new_id("run"),
+            run_id=ids[0],
+            turn_id=ids[1],
             settings=_with_turn_skills(
                 await with_apps(
                     deps,
@@ -303,9 +304,10 @@ def build(
         approved = d.get("decision") == "approved"
         now = await allowed_now(state, d)
         effective = _effective(state)
+        resume_ids = turn_ids("resume")
         req = TurnRequest(
-            turn_id=new_id("turn"),
-            run_id=new_id("run"),
+            run_id=resume_ids[0],
+            turn_id=resume_ids[1],
             settings=_with_turn_skills(
                 await with_apps(
                     deps,

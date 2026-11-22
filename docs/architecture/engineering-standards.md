@@ -106,7 +106,7 @@ or runs only on a full CI plan or nightly. No: nothing fails today; the page say
 | `DA5` | Lists are paged and filtered in SQL | no |
 | `DA6` | Every route has a statement budget | no |
 | `DA7` | Foreign keys and filter columns are indexed | no |
-| `DA8` | One migration chain per service, one head | partial |
+| `DA8` | One migration chain per service, one head | yes |
 | `DA9` | Every migration downgrades and runs on both databases | yes |
 | `DA10` | A column is dropped one release after it stops being read | no |
 | `DA11` | Request paths are async end to end | no |

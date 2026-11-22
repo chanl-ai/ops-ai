@@ -62,7 +62,7 @@ def main() -> int:
         return 1
     base = found.stdout.strip()
     named = {
-        shape(m) for m in re.findall(r"(/v1/[\w{}\-./*]*|/reviews[\w{}\-./*]*|/runs[\w{}\-./*]*)", PAGE.read_text())
+        shape(m) for m in re.findall(r"(/v1/[\w{}\-./*:]*|/reviews[\w{}\-./*]*|/runs[\w{}\-./*]*)", PAGE.read_text())
     }
     missing = 0
     for folder in sorted((ROOT / "services").glob("*-service")):

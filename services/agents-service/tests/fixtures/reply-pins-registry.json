@@ -114,8 +114,10 @@
             "msg": "Field required"
           }
         ],
+        "kind": "input",
         "message": "name: Field required",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -517,8 +519,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Agent ag_missing was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -614,8 +618,10 @@
     "body": {
       "error": {
         "code": "already_published",
+        "kind": "refused",
         "message": "v1 is already published.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 422
       },
       "success": false
@@ -1089,8 +1095,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Deployment dep_missing was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -1208,8 +1216,10 @@
     "body": {
       "error": {
         "code": "name_taken",
+        "kind": "input",
         "message": "A guardrail named No investment advice exists; give this one another name.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 409
       },
       "success": false
@@ -1419,8 +1429,10 @@
     "body": {
       "error": {
         "code": "no_use_when",
+        "kind": "input",
         "message": "An on-match skill needs a use-when line: it is what the model reads to load it.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -2745,8 +2757,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Widget wd_missing was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -2949,8 +2963,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Workflow wf_missing was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false

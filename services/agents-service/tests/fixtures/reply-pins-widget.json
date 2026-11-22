@@ -3,8 +3,10 @@
     "body": {
       "error": {
         "code": "not_paused",
+        "kind": "input",
         "message": "This conversation is not paused on its budget.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 409
       },
       "success": false
@@ -55,8 +57,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Widget was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -87,8 +91,10 @@
     "body": {
       "error": {
         "code": "origin_not_allowed",
+        "kind": "refused",
         "message": "https://e.x may not use this widget.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -129,8 +135,10 @@
             "msg": "Extra inputs are not permitted"
           }
         ],
+        "kind": "input",
         "message": "x: Extra inputs are not permitted",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -153,8 +161,10 @@
           ],
           "teamId": "team_ops"
         },
+        "kind": "refused",
         "message": "Your role cannot create this widget deployment; a Builder or Admin can.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -224,8 +234,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Widget deployment was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -254,8 +266,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Widget deployment was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -275,8 +289,10 @@
             "msg": "Input should be less than or equal to 365"
           }
         ],
+        "kind": "input",
         "message": "expiresInDays: Input should be less than or equal to 365",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -304,8 +320,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Widget deployment was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -326,8 +344,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Mint key was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -343,8 +363,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Conversation was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -358,8 +380,10 @@
         "details": {
           "field": "overrides.turn.temperature"
         },
+        "kind": "refused",
         "message": "overrides.turn.temperature: a public widget key may not set this.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 422
       },
       "success": false
@@ -379,8 +403,10 @@
             "msg": "Input should be a valid string"
           }
         ],
+        "kind": "input",
         "message": "regenerate: Input should be a valid string",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -488,8 +514,10 @@
     "body": {
       "error": {
         "code": "widget_key_invalid",
+        "kind": "refused",
         "message": "That mint key is not valid or was revoked.",
         "requestId": "<req>",
+        "retryable": true,
         "status": 401
       },
       "success": false
@@ -500,8 +528,10 @@
     "body": {
       "error": {
         "code": "widget_key_other_deployment",
+        "kind": "refused",
         "message": "That mint key is for another widget deployment.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -512,8 +542,10 @@
     "body": {
       "error": {
         "code": "widget_key_required",
+        "kind": "refused",
         "message": "Mint widget sessions from the bank's server with the deployment's mint key (Widgets, Mint keys).",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -524,8 +556,10 @@
     "body": {
       "error": {
         "code": "widget_key_invalid",
+        "kind": "refused",
         "message": "That mint key is not valid or was revoked.",
         "requestId": "<req>",
+        "retryable": true,
         "status": 401
       },
       "success": false
@@ -546,8 +580,10 @@
     "body": {
       "error": {
         "code": "widget_key_required",
+        "kind": "refused",
         "message": "Mint widget sessions from the bank's server with the deployment's mint key (Widgets, Mint keys).",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -567,8 +603,10 @@
             "msg": "Extra inputs are not permitted"
           }
         ],
+        "kind": "input",
         "message": "teamId: Extra inputs are not permitted",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -579,8 +617,10 @@
     "body": {
       "error": {
         "code": "origin_not_allowed",
+        "kind": "refused",
         "message": "https://evil.example may not use this widget.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -603,8 +643,10 @@
     "body": {
       "error": {
         "code": "api_key_refused",
+        "kind": "refused",
         "message": "A page signs the person in; servers mint with /sessions.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -615,8 +657,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Widget was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -627,8 +671,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Widget was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -639,8 +685,10 @@
     "body": {
       "error": {
         "code": "origin_not_allowed",
+        "kind": "refused",
         "message": "https://e.x may not use this widget.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -651,8 +699,10 @@
     "body": {
       "error": {
         "code": "api_key_refused",
+        "kind": "refused",
         "message": "A person previews from the console, signed in.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -685,8 +735,10 @@
           ],
           "teamId": "team_ops"
         },
+        "kind": "refused",
         "message": "Your role cannot edit this widget deployment; a Builder or Admin can.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -724,8 +776,10 @@
     "body": {
       "error": {
         "code": "origin_not_allowed",
+        "kind": "refused",
         "message": "https://portal.bank.example may not use this widget.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -736,8 +790,10 @@
     "body": {
       "error": {
         "code": "unauthorized",
+        "kind": "refused",
         "message": "This widget has no session; it starts one when it loads.",
         "requestId": "<req>",
+        "retryable": true,
         "status": 401
       },
       "success": false
@@ -771,8 +827,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Conversation was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false

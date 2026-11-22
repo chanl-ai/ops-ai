@@ -3,8 +3,10 @@
     "body": {
       "error": {
         "code": "mailbox_incomplete",
+        "kind": "refused",
         "message": "A Microsoft 365 mailbox needs the Microsoft tenant id, the app's client id.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 422
       },
       "success": false
@@ -15,8 +17,10 @@
     "body": {
       "error": {
         "code": "address_taken",
+        "kind": "input",
         "message": "levy.intake@gmail.com is connected already in this workspace.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 409
       },
       "success": false
@@ -36,8 +40,10 @@
             "msg": "Extra inputs are not permitted"
           }
         ],
+        "kind": "input",
         "message": "password: Extra inputs are not permitted",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -60,8 +66,10 @@
           ],
           "teamId": "team_ops"
         },
+        "kind": "refused",
         "message": "Your role cannot create a mailbox; a Builder or Admin can.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -105,8 +113,10 @@
     "body": {
       "error": {
         "code": "address_taken",
+        "kind": "input",
         "message": "disputes@gmail.com is connected already in this workspace.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 409
       },
       "success": false
@@ -126,8 +136,10 @@
             "msg": "Extra inputs are not permitted"
           }
         ],
+        "kind": "input",
         "message": "paused: Extra inputs are not permitted",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -150,8 +162,10 @@
           ],
           "teamId": "team_ops"
         },
+        "kind": "refused",
         "message": "Your role cannot edit this mailbox; a Builder or Admin can.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -195,8 +209,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Mailbox mbx_missing1 was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -207,8 +223,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Mailbox <first> was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false

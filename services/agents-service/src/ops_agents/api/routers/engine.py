@@ -19,6 +19,7 @@ from sse_starlette import EventSourceResponse
 from ops_access import can, require_view
 from ops_access.check import DEFAULT as ACCESS
 from ops_agent_kernel.pii import masked
+from ops_contracts.errors import Detail, RunError, run_error
 from ops_documents_client import DocumentNotFound, DocumentsClient
 from ops_engine import default_registry
 from ops_engine.definition import InvalidDefinitionError, WorkflowDefinition, advise, parse, validate
@@ -27,6 +28,7 @@ from ops_engine.document_types import pinned, unpinned
 from ops_engine.node_types import start_form
 from ops_engine.starts import only_from_workflows
 from ops_engine.store import (
+    REDRIVABLE,
     TERMINAL,
     DefinitionStore,
     DefinitionSummary,
@@ -1202,16 +1204,24 @@ class RunWaiting(Out):
 
 
 class RunFailure(Out):
-    """The failing step as a builder reads it: the same sentence as `error`, plus where and whether a retry helps."""
+    """Why a run failed, in the one error model (ops_contracts.errors): a kind, a stable code, the builder's
+    message, a sentence safe for a customer and whether a retry helps, with the failing step and attempt."""
 
-    code: str | None = None
+    kind: Literal["input", "refused", "upstream", "timeout", "internal"]
+    code: str
     message: str
+    user_message: str
+    retryable: bool
+    retry_after_seconds: float | None = None
     node_id: str | None = None
     node_name: str | None = None
-    field: str | None = None
     attempt: int | None = None
-    retryable: bool | None = None
+    of: int | None = None
+    trace_id: str | None = None
+    # What to do next, for the builder: Retry, Redrive from the failed step, or fix the step.
     suggestion: str | None = None
+    # The error's plain values: which clock ran out, which End the run reached, a code the table did not know.
+    details: dict[str, Detail] = Field(default_factory=dict)
 
 
 class RunRow(Out):
@@ -1222,6 +1232,8 @@ class RunRow(Out):
     can_cancel: bool | None = None
     # Whether the caller may retry it now: a Stuck run, by whoever may cancel it.
     can_retry: bool | None = None
+    # Whether the caller may redrive it now: a Failed or Stuck run, by whoever may cancel it.
+    can_redrive: bool | None = None
     workflow_id: str
     version: int
     digest: str
@@ -1449,6 +1461,17 @@ def can_retry(me: Principal, run: StoredRun) -> bool:
     return run.status == "stuck" and can_cancel(me, run)
 
 
+def can_redrive(me: Principal, run: StoredRun) -> bool:
+    """Redrive for the caller: a Failed or Stuck run, by whoever may cancel the run."""
+    if run.status not in REDRIVABLE:
+        return False
+    try:
+        require_runs_cancel(me, team_id=run.team_id, started_by=run.created_by, what="this run")
+    except ApiError:
+        return False
+    return True
+
+
 def can_cancel(me: Principal, run: StoredRun) -> bool:
     """runs/cancel for the caller on an unfinished run, by the rule the cancel route applies."""
     if run.status in ("succeeded", "failed", "cancelled"):
@@ -1463,14 +1486,19 @@ def can_cancel(me: Principal, run: StoredRun) -> bool:
 class RunFailureView(TypedDict):
     """Why a run failed (`run_failure`), keys in reply order."""
 
-    code: None
+    kind: str
+    code: str
     message: str
-    nodeId: JsonValue
-    nodeName: None
-    field: None
-    attempt: JsonValue
+    userMessage: str
     retryable: bool
+    retryAfterSeconds: float | None
+    nodeId: str | None
+    nodeName: str | None
+    attempt: int | None
+    of: int | None
+    traceId: str | None
     suggestion: str
+    details: dict[str, Detail]
 
 
 class RunWaitingView(TypedDict):
@@ -1531,25 +1559,43 @@ class RunResultView(TypedDict):
 
 
 def run_failure(run: StoredRun, steps: list[Json]) -> RunFailureView | None:
-    """The stored error sentence plus the last step that failed, so a builder does not parse `error` themselves."""
-    message = run.error
-    if not message:
+    """The run's error as the error model recorded it. A run that failed before the record existed (agents
+    migration 0124) reads as `stuck` when it is Stuck and `internal_error` otherwise, with the last failing step."""
+    if not run.error:
         return None
-    failed = next((s for s in reversed(steps) if s.get("error")), None)
-    attempts = list(cast(Iterable[JsonValue], (failed or {}).get("attempts") or []))
+    if run.failure:
+        err = RunError.model_validate(run.failure)
+    else:
+        failed = next((s for s in reversed(steps) if s.get("error")), None)
+        attempts = list(cast(Iterable[JsonValue], (failed or {}).get("attempts") or []))
+        node = (failed or {}).get("nodeId")
+        err = run_error(
+            "stuck" if run.status == "stuck" else "internal_error",
+            run.error,
+            step=node if isinstance(node, str) else None,
+            attempt=cast(int, an_object(attempts[-1], "a step's attempt")["attempt"]) if attempts else None,
+        )
+    if run.status == "stuck":
+        suggestion = "Retry this stuck run from its last recorded step."
+    elif err.retryable:
+        suggestion = "Retry the run; the step that failed runs again."
+    else:
+        suggestion = "Fix the failing step's input or resource, then start a test run."
     return {
-        "code": None,
-        "message": message,
-        "nodeId": (failed or {}).get("nodeId"),
-        "nodeName": None,
-        "field": None,
-        "attempt": an_object(attempts[-1], "a step's attempt")["attempt"] if attempts else None,
-        "retryable": run.status == "stuck",
-        "suggestion": (
-            "Retry this stuck run from its last recorded step."
-            if run.status == "stuck"
-            else "Inspect the failing step, fix its input or resource, then start a test run."
-        ),
+        "kind": err.kind,
+        "code": err.code,
+        "message": err.message,
+        "userMessage": err.user_message,
+        # A Stuck run is left for Retry whatever its code.
+        "retryable": err.retryable or run.status == "stuck",
+        "retryAfterSeconds": err.retry_after_seconds,
+        "nodeId": err.step.id if err.step else None,
+        "nodeName": err.step.name if err.step else None,
+        "attempt": err.attempt,
+        "of": err.of,
+        "traceId": err.trace_id,
+        "suggestion": suggestion,
+        "details": err.details,
     }
 
 
@@ -1717,6 +1763,7 @@ async def list_engine_runs(
             "outcomeText": ended.get(r.id),
             "canCancel": can_cancel(me, r),
             "canRetry": can_retry(me, r),
+            "canRedrive": can_redrive(me, r),
             "workflowName": r.workflow_name or UNNAMED_WORKFLOW,
             "startedBy": who.get(started_by_of(raw)),
         }
@@ -1764,6 +1811,7 @@ async def get_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
         "result": run_result(raw, steps, reads.stored, decided=decided, names=who),
         "canCancel": can_cancel(me, run),
         "canRetry": can_retry(me, run),
+        "canRedrive": can_redrive(me, run),
         "startedBy": who.get(started_by_of(raw)),
         "story": told,
     }
@@ -1893,6 +1941,90 @@ async def retry_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
     return ok(
         await for_people(rt, retried, run_view(retried) | {"canCancel": can_cancel(me, retried), "canRetry": False})
     )
+
+
+@runs_router.post("/{run_id}/redrive", response_model=Envelope[RunRow])
+async def redrive_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
+    """Queues a Failed or Stuck run again from its failed step, on the version the run pinned: steps it recorded are
+    not run again and a write with a record at the gateway is never sent again. Who may cancel the run may redrive
+    it; a run neither Failed nor Stuck is refused (409 run_not_redrivable).
+    No request transaction: the masking policy (platform-service) is asked after the write, with none open."""
+    run = await visible_run(rt, run_id, me)
+    require_runs_cancel(me, team_id=run.team_id, started_by=run.created_by, what=f"run {run_id}")
+    redriven, changed = await runs(rt).redrive(run_id)
+    if not changed or redriven is None:
+        raise Conflict("Only a failed or stuck run can be redriven.", code="run_not_redrivable")
+    await EventLog(rt.db).append(
+        thread_id=run_id, team_id=run.team_id, run_id=run_id, type_="redriven", node=None, data={"by": me.email}
+    )
+    view = run_view(redriven) | {"canCancel": can_cancel(me, redriven), "canRetry": False, "canRedrive": False}
+    return ok(await for_people(rt, redriven, view))
+
+
+class RunsFilter(In):
+    """Which runs a bulk action takes: each given field narrows it. `kind` and `code` are the run's recorded error
+    (ops_contracts.errors); `createdFrom` and `createdTo` bound when the run started, ISO times, the end excluded."""
+
+    workflow_id: str | None = None
+    kind: str | None = None
+    code: str | None = None
+    created_from: str | None = None
+    created_to: str | None = None
+
+
+class BulkRunsRequest(In):
+    action: Literal["redrive", "cancel"]
+    filter: RunsFilter = Field(default_factory=RunsFilter)
+
+
+class BulkRunsResult(Out):
+    action: str
+    # The runs the action changed, and those the filter matched that the caller may not act on or that moved first.
+    changed: list[str]
+    skipped: list[str]
+
+
+@runs_router.post("/bulk", response_model=Envelope[BulkRunsResult])
+async def bulk_engine_runs(rt: Rt, me: Me, body: BulkRunsRequest) -> JSONResponse:
+    """Redrives every Failed or Stuck run, or cancels every unfinished one, of the acting team that the filter
+    matches, oldest first and at most BULK_LIMIT in one call. Each run is checked as its single route checks it: one
+    the caller may not cancel is skipped and listed, never acted on.
+    No request transaction: each run is changed in its own, as the single routes change it."""
+    f = body.filter
+    statuses = REDRIVABLE if body.action == "redrive" else ("queued", "running", "waiting", "stuck")
+    pinned = scope[1] if (scope := key_scope(me)) is not None and scope[0] == "workflow" else None
+    if pinned is not None and f.workflow_id not in (None, pinned):
+        return ok({"action": body.action, "changed": [], "skipped": []})
+    store = runs(rt)
+    matched = await store.matching(
+        statuses,
+        workflow_id=pinned or f.workflow_id,
+        kind=f.kind,
+        code=f.code,
+        created_from=f.created_from,
+        created_to=f.created_to,
+    )
+    changed: list[str] = []
+    skipped: list[str] = []
+    for run in matched:
+        if not (can_redrive(me, run) if body.action == "redrive" else can_cancel(me, run)):
+            skipped.append(run.id)
+            continue
+        if body.action == "redrive":
+            _, moved = await store.redrive(run.id)
+        else:
+            cancelled, moved = await store.cancel(run.id, reason="by_user")
+            if moved and cancelled is not None:
+                await store.settle_parents(run.id, cancelled.created_by)
+        if not moved:
+            skipped.append(run.id)
+            continue
+        changed.append(run.id)
+        kind = "redriven" if body.action == "redrive" else "cancelled"
+        await EventLog(rt.db).append(
+            thread_id=run.id, team_id=run.team_id, run_id=run.id, type_=kind, node=None, data={"by": me.email}
+        )
+    return ok({"action": body.action, "changed": changed, "skipped": skipped})
 
 
 @runs_router.post(

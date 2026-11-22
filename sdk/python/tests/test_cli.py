@@ -156,3 +156,34 @@ def test_tasks_approve_asks_for_the_password_each_time_and_ignores_ops_password(
     step_up = next(r for r in seen if r.url.path.endswith("/step-up"))
     assert json.loads(step_up.content) == {"password": "typed-pw"}
     assert "approve" in capsys.readouterr().out
+
+
+def _runs_client(failure: dict[str, Any] | None, start_status: int = 201) -> Any:
+    def handler(r: httpx.Request) -> httpx.Response:
+        if r.method == "POST":
+            if start_status >= 400:
+                refused = {"code": "forbidden", "message": "You may not start this workflow."}
+                return httpx.Response(start_status, json={"success": False, "error": refused})
+            return httpx.Response(start_status, json={"success": True, "data": {"runId": "wfrun_1"}})
+        run = {"id": "wfrun_1", "status": "failed", "error": "Find customer failed.", "failure": failure}
+        return httpx.Response(200, json={"success": True, "data": run})
+
+    http = httpx.Client(transport=httpx.MockTransport(handler))
+    return OpsAI(api_key="ok_t", base_url="https://ops.test", team="team_a", http=http)
+
+
+def test_ops_runs_exit_with_one_status_per_error_kind(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A run that failed upstream exits 4 with one line naming kind, code, step, attempt and retryable; a refused
+    # start exits 3, not the 1 every API error used to share, and keeps its HTTP class in the SDK.
+    upstream = {"kind": "upstream", "code": "tool_failed", "message": "Find customer failed after 3 attempts.",
+                "userMessage": "An app this step uses returned an error.", "retryable": True,
+                "nodeName": "Find customer", "attempt": 3, "of": 3, "traceId": "4f2c"}  # fmt: skip
+    monkeypatch.setattr("ops_ai._cli.runs.client", lambda _ns: _runs_client(upstream))
+    assert main(["runs", "start", "wf_card", "--wait"]) == 4
+    line = capsys.readouterr().err.strip()
+    assert line.startswith('failed · upstream/tool_failed at "Find customer" · attempt 3 of 3 · retryable'), line
+    monkeypatch.setattr("ops_ai._cli.runs.client", lambda _ns: _runs_client(None, start_status=403))
+    assert main(["runs", "start", "wf_card", "--wait"]) == 3
+    assert capsys.readouterr().err.startswith("forbidden: ")

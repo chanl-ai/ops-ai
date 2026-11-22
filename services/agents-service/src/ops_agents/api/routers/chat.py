@@ -54,6 +54,8 @@ from ops_contracts.chat import (
     ThreadList,
     WidgetAction,
 )
+from ops_contracts.errors import run_error
+from ops_engine.store import Work, WorkQueue
 from ops_identity.fastapi import Tx
 from ops_service_kit.errors import (
     ApiError,
@@ -70,13 +72,14 @@ from ops_service_kit.logging import get_logger
 from ops_service_kit.narrow import json_object
 from ops_store import isolation
 
+from ...graphs.metering import step_calls
 from ...store.chat_list import ChatListQuery, ChatPage, chat_facets, chat_page
 from ...store.events import EventLog
 from ...store.graphs import StoredThread
 from ...store.leases import LeaseHeldError
 from ...store.team_defaults import TeamDefaults
 from ...store.tenancy import current_tenant
-from .. import hitl_facade
+from .. import chat_turns, hitl_facade
 from ..agent_calls import agent_team
 from ..agent_registry import definition_of, live_agent, pinned_definition, refuse_new_turns, registry
 from ..auth import Principal, caller_of, principal, require_chat_use
@@ -641,8 +644,9 @@ def _frame(event: ChatStreamEvent) -> dict[str, str]:
     return {"data": json.dumps(event.wire(), ensure_ascii=False)}
 
 
-async def _start_run(rt: Runtime, thread_id: str, graph_input: Json) -> tuple[str, Json, Any]:
-    """Takes the thread's lease and records the run, as POST /v1/threads/{id}/runs/stream does."""
+async def _start_run(rt: Runtime, thread_id: str, graph_input: Json) -> tuple[str, Json, Any, Work]:
+    """Takes the thread's lease, records the run, as POST /v1/threads/{id}/runs/stream does, and queues the reply as
+    a turn this process claims (chat_turns.py): a worker continues it if this process dies."""
     store = graph_store(rt)
     row, graph = await resolve(rt, thread_id)
     if waiting := pending(await graph.aget_state(config(thread_id))):
@@ -655,6 +659,7 @@ async def _start_run(rt: Runtime, thread_id: str, graph_input: Json) -> tuple[st
     run_id = new_id("run")
     require_graphs(rt)
     assert rt.leases is not None
+    await chat_turns.refuse_at_capacity(rt, str(row["team_id"]))
     try:
         generation = await rt.leases.acquire(thread_id, run_id)
     except LeaseHeldError as e:
@@ -663,7 +668,8 @@ async def _start_run(rt: Runtime, thread_id: str, graph_input: Json) -> tuple[st
         await rt.leases.release(thread_id, run_id)
         raise Conflict("That run id is already in use.", code="run_active")
     await store.set_thread_status(thread_id, "busy", now_iso(), generation=generation)
-    return run_id, row, graph
+    work = await chat_turns.enqueue(rt, thread_id, str(row["team_id"]), run_id)
+    return run_id, row, graph, work
 
 
 async def _compacted(rt: Runtime, thread_id: str, meta: Json, history: list[Json]) -> list[Json]:
@@ -830,7 +836,7 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
         ]
         if read.passages:
             graph_input["attached_passages"] = [*read.passages]
-    run_id, thread_row, graph = await _start_run(rt, thread_id, graph_input)
+    run_id, thread_row, graph, turn = await _start_run(rt, thread_id, graph_input)
     if replaced:
         # The supersede rule: the replaced turns stay in the log and drop out of the conversation.
         await EventLog(graph_store(rt).engine).append(
@@ -884,8 +890,10 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
         """The reply, run to its end whether or not anyone still reads it: a reader who leaves (a closed tab, a dropped
         connection) stops reading, never the run, so its model calls and cost are recorded and its lease let go."""
         failed: BaseException | None = None
+        queue = chat_turns.turn_queue(rt)
         try:
             async with asyncio.TaskGroup() as group:
+                renewing = group.create_task(_renew(queue, turn))
                 extraction: asyncio.Future[Extraction] | None = None
                 child = None
                 if learns:
@@ -895,12 +903,15 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
                     async for frame in reply(extraction):
                         frames.put_nowait(frame)
                 finally:
+                    renewing.cancel()
                     if child is not None:
                         child.cancel()
         except BaseExceptionGroup as group_failed:
             failed = group_failed.exceptions[0]
         except Exception as e:
             failed = e
+        # Ended here, a failure included: the reply is told and recorded, so no worker continues it.
+        await queue.done(turn, status="failed" if failed is not None else "done")
         if failed is not None:
             log.warning("chat_turn_failed", thread_id=thread_id, run_id=run_id, error=type(failed).__name__)
         frames.put_nowait(failed)
@@ -918,7 +929,8 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
     async def reply(extraction: asyncio.Future[Extraction] | None) -> AsyncIterator[dict[str, str]]:
         yield _frame(StartEvent(user_message=user_message, message_id=assistant.id))
         # The turn runs for this person: a workflow tool is offered and started only if they may start it.
-        with acting_for(me):
+        # The turn's id keys its model calls and writes, so a worker that continues it pays and sends nothing twice.
+        with acting_for(me), step_calls(run_id):
             async with aclosing(
                 execute(rt, thread_row, graph, graph_input=graph_input, run_id=run_id, kind="input")
             ) as run:
@@ -952,12 +964,33 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
             )
             builder.apply("memory", {"saved": saved})
         if assistant.error:
-            yield _frame(ErrorEvent(message=assistant.error, partial=assistant, code=assistant.error_code))
+            # A refusal with a code carries models-service's own sentence; a failure without one carries an exception's
+            # text, which stays on the stored message for the builder and is never streamed to the person.
+            # A missing code is our own fault, never the model's, so it reads `internal_error` and Try again is not
+            # offered; the streamed partial carries the sentence too (a reload reads the stored text).
+            err = run_error(assistant.error_code or "internal_error", assistant.error)
+            said = assistant.error if assistant.error_code else err.user_message
+            partial = assistant if assistant.error_code else assistant.model_copy(update={"error": said})
+            yield _frame(
+                ErrorEvent(message=said, partial=partial, code=err.code, kind=err.kind, retryable=err.retryable)
+            )
         else:
             yield _frame(DoneEvent(message=assistant))
 
     # `sep="\n"`: the console splits frames on a blank line made of "\n\n", not "\r\n\r\n".
     return EventSourceResponse(stream(), sep="\n", ping=15)
+
+
+async def _renew(queue: WorkQueue, turn: Work) -> None:
+    """Keeps this process's claim on the turn while it runs, as the thread's lease is kept: a lapsed claim is what a
+    dead process looks like to the workers."""
+    while True:
+        await asyncio.sleep(queue.ttl / 3)
+        try:
+            if not await queue.renew(turn):
+                return
+        except Exception as e:  # A blip is tried again at the next beat.
+            log.warning("chat_turn_renew_failed", turn=turn.id, error=type(e).__name__)
 
 
 async def _decide_own_write(rt: Runtime, me: Principal, thread_id: str, reply: ChatMessage) -> None:

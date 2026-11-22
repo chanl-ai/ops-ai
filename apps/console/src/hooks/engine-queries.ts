@@ -147,6 +147,15 @@ export function useRetryEngineRun() {
   });
 }
 
+/** Redrive on a Failed run: it is queued again from its failed step, on its own version, and the page polls it on. */
+export function useRedriveEngineRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (runId: string) => api.engine.redriveRun(runId),
+    onSettled: (_r, _e, runId) => Promise.all([qc.invalidateQueries({ queryKey: ek.run(runId) }), qc.invalidateQueries({ queryKey: ['engine', 'runs'] })]),
+  });
+}
+
 /** Run again on an email the mailbox listener set aside; Activity lists the run it starts. */
 export function useRunSetAsideEmail() {
   const qc = useQueryClient();
