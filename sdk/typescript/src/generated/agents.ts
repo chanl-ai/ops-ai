@@ -1713,7 +1713,8 @@ export interface paths {
         };
         /**
          * List Memories
-         * @description What agents remember about the caller, newest first; `agentId` keeps one agent's.
+         * @description One page of what agents remember about the caller, newest first, on the shared list contract: `search` matches
+         *     the key and the value, `agentId` keeps what that agent uses (its own and every agent's) and `kind` those kinds.
          */
         get: operations["memory_list_memories"];
         put?: never;
@@ -6598,6 +6599,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[ListResult[MemoryView]] */
+        Envelope_ListResult_MemoryView__: {
+            data: components["schemas"]["ListResult_MemoryView_"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[ListResult[TaskTypeView]] */
         Envelope_ListResult_TaskTypeView__: {
             data: components["schemas"]["ListResult_TaskTypeView_"];
@@ -7272,16 +7282,6 @@ export interface components {
         Envelope_list_MailboxView__: {
             /** Data */
             data: components["schemas"]["MailboxView"][];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
-        /** Envelope[list[MemoryView]] */
-        Envelope_list_MemoryView__: {
-            /** Data */
-            data: components["schemas"]["MemoryView"][];
             /**
              * Success
              * @constant
@@ -8465,6 +8465,18 @@ export interface components {
         ListResult_FormView_: {
             /** Data */
             data: components["schemas"]["FormView"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
+        };
+        /** ListResult[MemoryView] */
+        ListResult_MemoryView_: {
+            /** Data */
+            data: components["schemas"]["MemoryView"][];
             /** Facets */
             facets: {
                 [key: string]: {
@@ -23446,6 +23458,13 @@ export interface operations {
         parameters: {
             query?: {
                 agentId?: string | null;
+                kind?: string[] | null;
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -23459,7 +23478,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_list_MemoryView__"];
+                    "application/json": components["schemas"]["Envelope_ListResult_MemoryView__"];
                 };
             };
             /** @description Invalid request */

@@ -4,12 +4,21 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
 import { sdk } from '@/lib/api/ops-sdk';
-import { useTeamQuery } from './team-query';
+import { usePagedQuery } from './paged-query';
+
+/** What one page of the memory list asks the server for: the page, the words typed and one agent's memories. */
+export interface MemoryAsk {
+  page: number;
+  pageSize: number;
+  search?: string;
+  agentId?: string;
+}
 
 /** Under 'chat' so a reply that saved something (chat invalidates its root) refreshes the list too. */
-export const mk = { list: (agentId?: string) => ['chat', 'memories', agentId ?? 'all'] as const };
+export const mk = { list: (ask: MemoryAsk) => ['chat', 'memories', ask] as const };
 
-export const useMemories = (agentId?: string) => useTeamQuery({ queryKey: mk.list(agentId), queryFn: () => sdk((ops) => ops.raw.agents.memory_list_memories({ query: { agentId } })) });
+/** One page of what agents remember about the person, searched and filtered by agent on the server. */
+export const useMemories = (ask: MemoryAsk) => usePagedQuery({ queryKey: mk.list(ask), queryFn: () => sdk((ops) => ops.raw.agents.memory_list_memories({ query: ask })) });
 
 function useMemoryWrite<A, R>(fn: (a: A) => Promise<R>) {
   const qc = useQueryClient();

@@ -8395,6 +8395,25 @@
         "title": "Envelope[ListResult[FormView]]",
         "type": "object"
       },
+      "Envelope_ListResult_MemoryView__": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ListResult_MemoryView_"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[ListResult[MemoryView]]",
+        "type": "object"
+      },
       "Envelope_ListResult_TaskTypeView__": {
         "additionalProperties": false,
         "properties": {
@@ -9866,29 +9885,6 @@
           "data"
         ],
         "title": "Envelope[list[MailboxView]]",
-        "type": "object"
-      },
-      "Envelope_list_MemoryView__": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/MemoryView"
-            },
-            "title": "Data",
-            "type": "array"
-          },
-          "success": {
-            "const": true,
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "data"
-        ],
-        "title": "Envelope[list[MemoryView]]",
         "type": "object"
       },
       "Envelope_list_ModelAlias__": {
@@ -13119,6 +13115,38 @@
           "facets"
         ],
         "title": "ListResult[FormView]",
+        "type": "object"
+      },
+      "ListResult_MemoryView_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/MemoryView"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "facets": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Facets",
+            "type": "object"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        },
+        "required": [
+          "data",
+          "pagination",
+          "facets"
+        ],
+        "title": "ListResult[MemoryView]",
         "type": "object"
       },
       "ListResult_TaskTypeView_": {
@@ -47657,7 +47685,7 @@
         "x-ops-public": "sdk"
       },
       "get": {
-        "description": "What agents remember about the caller, newest first; `agentId` keeps one agent's.",
+        "description": "One page of what agents remember about the caller, newest first, on the shared list contract: `search` matches\nthe key and the value, `agentId` keeps what that agent uses (its own and every agent's) and `kind` those kinds.",
         "operationId": "memory_list_memories",
         "parameters": [
           {
@@ -47674,6 +47702,119 @@
                 }
               ],
               "title": "Agentid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {
@@ -47746,7 +47887,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_list_MemoryView__"
+                  "$ref": "#/components/schemas/Envelope_ListResult_MemoryView__"
                 }
               }
             },

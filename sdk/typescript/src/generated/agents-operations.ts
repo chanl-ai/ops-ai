@@ -1466,7 +1466,14 @@ export const agentsOperations = {
     "path": "/v1/me/memories",
     "pathParams": [],
     "query": [
-      "agentId"
+      "agentId",
+      "kind",
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
