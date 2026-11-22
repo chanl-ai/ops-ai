@@ -1,42 +1,37 @@
-# Skill examples
+# Write, publish and use a skill
 
-Status: current.
+Status: current. Redesign showcase: one end-to-end path on first-class SDK and CLI verbs (not `ops.raw`).
 
-A skill is a reusable procedure, written once and attached to any agent that should follow it. It has a line that
-says when to use it and the instructions to follow. These examples write a skill, attach it to an agent, and pick it
-for one reply.
+**Goal.** Write a reusable procedure once, publish it, give it to an agent, and pick it for a single reply.
 
-Connect first: see [Before you start](README.md#before-you-start). The examples use the agent from
-[Agent examples](agents.md#create-and-publish-an-agent).
+**When to use it.** Use a skill for any procedure more than one agent follows, or one you want to version and review
+on its own. Prefer a [workflow](workflows.md) when there is no conversation, or long waits that must survive restarts.
+Prefer a [step-by-step skill](step-by-step-skills.md) when the conversation must keep a fixed order with checks.
+
+Connect first: see [Before you start](README.md#before-you-start).
 
 ## What each surface can do
 
 | Task | Python | TypeScript | Command line |
 |---|---|---|---|
 | List and read skills | built | built | built |
-| Write and publish a skill | built, by API operation name | built, by API operation name | upcoming |
-| Attach a skill to an agent | built, by API operation name | built, by API operation name | upcoming |
+| Create, save a draft and publish (`ops.skills` / `opsai skills`) | built | built | built |
+| Give a skill to an agent (`agents.add_reference` / `addReference`) | built | built | — (use SDK, or attach in the console) |
 | Pick a skill for one reply | built | built | built |
-| Write and publish with `ops.skills` and `opsai skills apply` | upcoming | upcoming | upcoming |
-| Skills that run step by step | upcoming | upcoming | upcoming |
+| Skills that run step by step | see [step-by-step skills](step-by-step-skills.md) | same | same |
 
-"By API operation name" means the SDK has no short verb for the task yet. You call the operation under `ops.raw`,
-with the name the API reference gives it.
+The happy path below uses those verbs. OpenAPI operation names under `ops.raw` are an [escape hatch](#escape-hatch-raw-operations), not the tutorial.
 
-## Write and publish a skill
+## 1. Write and publish the skill
 
-**The problem.** Several agents should handle a return the same way. Copying the procedure into each agent's
-instructions means fixing it in several places later.
-
-**When to use it.** Use a skill for any procedure more than one agent follows, or one you want to version and review
-on its own.
+Create the skill, then ask to publish its newest draft. On a development stack the request is approved at once.
 
 ```python
 from ops_ai import OpsAI
 
 ops = OpsAI()
 
-skill = ops.raw.agents.agents_create_skill({
+skill = ops.skills.create({
     "name": "Return checklist",
     "ownerTeam": "Customer Support",
     "useWhen": "A customer wants to return an item.",
@@ -49,8 +44,8 @@ skill = ops.raw.agents.agents_create_skill({
     ),
     "inputs": [{"name": "order_number", "description": "The order being returned"}],
 })
-published = ops.raw.agents.agents_request_skill_publish(skill["id"], {"note": "First version"})
-print(skill["id"], published["status"], published["publishedVersion"])
+published = ops.skills.publish(skill["id"], note="First version")
+print(skill["id"], published["status"], published.get("publishedVersion"))
 ```
 
 ```ts
@@ -58,99 +53,150 @@ import { OpsAI } from '@chanl-ai/ops-ai';
 
 const ops = new OpsAI();
 
-const skill = await ops.raw.agents.agents_create_skill({
-  body: {
-    name: 'Return checklist (TypeScript)',
-    ownerTeam: 'Customer Support',
-    useWhen: 'A customer wants to return an item.',
-    loading: 'on_match',
-    instructions:
-      '1. Ask for the order number.\n' +
-      '2. Check the purchase date is within 30 days.\n' +
-      '3. Ask whether the customer has the receipt.\n' +
-      '4. Never promise a refund for a sale item.',
-    inputs: [{ name: 'order_number', description: 'The order being returned' }],
-  },
+const skill = await ops.skills.create({
+  name: 'Return checklist (TypeScript)',
+  ownerTeam: 'Customer Support',
+  useWhen: 'A customer wants to return an item.',
+  loading: 'on_match',
+  instructions:
+    '1. Ask for the order number.\n' +
+    '2. Check the purchase date is within 30 days.\n' +
+    '3. Ask whether the customer has the receipt.\n' +
+    '4. Never promise a refund for a sale item.',
+  inputs: [{ name: 'order_number', description: 'The order being returned' }],
 });
-const published = await ops.raw.agents.agents_request_skill_publish({ path: { skill_id: skill.id }, body: { note: 'First version' } });
+const published = await ops.skills.publish(skill.id, 'First version');
 console.log(skill.id, published.status, published.publishedVersion);
 ```
 
-The command line lists and reads skills today.
+Command line. The skill is a YAML or JSON file; `apply` creates it or saves a new draft of the skill the file names
+by id, slug or name.
+
+```yaml title="return-checklist.yaml"
+name: Return checklist
+ownerTeam: Customer Support
+useWhen: A customer wants to return an item.
+loading: on_match
+instructions: |
+  1. Ask for the order number.
+  2. Check the purchase date is within 30 days.
+  3. Ask whether the customer has the receipt.
+  4. Never promise a refund for a sale item.
+inputs:
+  - name: order_number
+    description: The order being returned
+```
 
 ```bash
-opsai skills list --search "Return checklist"
-SKILL=$(opsai skills list --search "Return checklist" --json | jq -r '.[0].id')
+SKILL=$(opsai skills apply return-checklist.yaml --note "First version" --json | jq -r .id)
+opsai skills publish "$SKILL" --note "First version"
 opsai skills show "$SKILL"
 ```
 
 | Field | What it does |
 |---|---|
 | `name` | The skill's name. A team uses each name once |
-| `ownerTeam` | The team that answers for the skill. Required |
+| `ownerTeam` | The team that answers for the skill. Required to create |
 | `useWhen` | One line that says when the skill applies. The agent reads it to decide whether to load the skill |
 | `loading` | `on_match` loads the skill when a request matches `useWhen`. `always` puts it in every reply |
-| `instructions` | The procedure the agent follows. Required |
+| `instructions` | The procedure the agent follows. Required (may be empty when the skill uses numbered `steps`) |
 | `inputs` | Named values a person gives when they pick the skill |
 | `toolIds`, `knowledgeBases` | Tools and knowledge bases the skill needs |
 | `refusal` | What the agent says when the skill tells it to refuse |
 
-## Attach the skill to an agent
-
-**The problem.** A published skill does nothing until an agent holds it.
-
-**When to use it.** Attach after the skill is published. The agent keeps the version you attach, so a later version
-of the skill reaches the agent only when you attach that version. Attaching changes the agent's draft, so publish
-the agent again.
+To change a skill after create, save a draft then publish again:
 
 ```python
-agent = next(a for a in ops.agents.list(search="Returns helper") if a["name"] == "Returns helper")
-
-held = ops.raw.agents.agents_attach_skill(agent["id"], skill["id"], {"version": published["publishedVersion"]})
-ops.agents.publish(agent["id"], note="Uses the return checklist")
-for pin in held["pins"]:
-    print(pin["name"], pin["pinnedVersion"], pin["loading"])
-print(held["limits"])
+ops.skills.save_draft(skill["id"], {"instructions": "…updated…"}, note="Adds the receipt step")
+ops.skills.publish(skill["id"], note="Adds the receipt step")
 ```
 
 ```ts
-let agent;
-for await (const a of ops.agents.list({ search: 'Returns helper (TypeScript)' })) agent = a;
-
-const held = await ops.raw.agents.agents_attach_skill({
-  path: { agent_id: agent.id, skill_id: skill.id },
-  body: { version: published.publishedVersion },
-});
-await ops.agents.publish(agent.id, 'Uses the return checklist');
-for (const pin of held.pins) console.log(pin.name, pin.pinnedVersion, pin.loading);
-console.log(held.limits);
+await ops.skills.saveDraft(skill.id, { instructions: '…updated…' }, { note: 'Adds the receipt step' });
+await ops.skills.publish(skill.id, 'Adds the receipt step');
 ```
 
-The answer lists the skills the agent holds and the limits: how many skills an agent may hold, how many it may load
-in one reply, and how much text they may add.
+```bash
+opsai skills apply return-checklist.yaml --note "Adds the receipt step"
+opsai skills publish "$SKILL" --note "Adds the receipt step"
+```
 
-## Pick a skill for one reply
+**You should see.** A skill id (`skl_…`), a publish request whose status is approved on a development stack, and
+`opsai skills show` listing the published version.
 
-**The problem.** The agent loads a skill when it judges that the request matches. Sometimes the person already knows
-which procedure they want and should not depend on that judgement.
+## 2. Give the skill to an agent
 
-**When to use it.** Use it to start a known procedure, and to pass the values it needs. The pick applies to that one
-reply.
+A published skill does nothing until an agent holds it. `add_reference` grants the skill (and brings tools and
+knowledge bases the skill names). Attaching changes the agent's draft, so publish the agent again.
+
+This path creates a small agent so the steps stand alone. You can reuse an agent from
+[Agent examples](agents.md#create-and-publish-an-agent) instead.
+
+```python
+agent = ops.agents.apply({
+    "name": "Returns helper",
+    "role": "Answer questions about returns",
+    "instructions": "Help with returns. Keep answers short. Follow attached skills.",
+})
+added = ops.agents.add_reference(agent["id"], "skill", skill["id"])
+for item in added["added"]:
+    print(item["kind"], item["id"])
+ops.agents.publish(agent["id"], note="Uses the return checklist")
+```
+
+```ts
+const agent = await ops.agents.apply({
+  name: 'Returns helper (TypeScript)',
+  role: 'Answer questions about returns',
+  instructions: 'Help with returns. Keep answers short. Follow attached skills.',
+});
+const added = await ops.agents.addReference(agent.id, 'skill', skill.id);
+for (const item of added.added) console.log(item.kind, item.id);
+await ops.agents.publish(agent.id, 'Uses the return checklist');
+```
+
+```bash
+# Create or update the agent, then grant the skill from Python or TypeScript (CLI has no add-reference yet).
+AGENT=$(opsai agents --json apply returns-helper.yaml | jq -r .id)
+opsai agents publish "$AGENT" --note "Uses the return checklist"
+```
+
+**You should see.** `added` lists `skill` and the skill id when the agent did not already hold it; an empty `added`
+means it already did. After publish, people chat with the published agent that holds the skill.
+
+## 3. Pick the skill for one reply
+
+The agent loads a skill when it judges that the request matches `useWhen`. Sometimes the person already knows which
+procedure they want. Pass the skill (and its inputs) on that one reply.
+
+These snippets use the console-shaped chat stack (`ops.chat` / `opsai chat`), so the reply carries the same message
+shape the console shows.
 
 ```python
 thread = ops.chat.start(agent["id"])
-events = list(ops.chat.say(thread["id"], "I want to return my boots.", skill=skill["id"], inputs={"order_number": "1182"}))
-
-message = events[-1]["message"]
-for used in message["skills"]:
+events = list(
+    ops.chat.say(
+        thread["id"],
+        "I want to return my boots.",
+        skill=skill["id"],
+        inputs={"order_number": "1182"},
+    )
+)
+message = next(e["message"] for e in reversed(events) if e.get("type") == "done" and e.get("message"))
+for used in message.get("skills") or []:
     print(used["name"], used["version"], used["how"], used["inputs"])
 ```
 
 ```ts
 const thread = await ops.chat.start(agent.id);
-const events = await ops.chat.say(thread.id, 'I want to return my boots.', { skill: skill.id, inputs: { order_number: '1182' } });
-
-for (const used of events.at(-1).message.skills) console.log(used.name, used.version, used.how, used.inputs);
+const events = await ops.chat.say(thread.id, 'I want to return my boots.', {
+  skill: skill.id,
+  inputs: { order_number: '1182' },
+});
+const done = [...events].reverse().find((e) => e.type === 'done' && e.message);
+for (const used of done?.message?.skills ?? []) {
+  console.log(used.name, used.version, used.how, used.inputs);
+}
 ```
 
 ```bash
@@ -160,44 +206,37 @@ opsai chat say --agent "Returns helper" --skill "$SKILL" --input order_number=11
 Each reply records the skills it used. `how` is `picked` when a person chose the skill, and the record keeps the
 skill's version and the inputs it was given.
 
-## Upcoming: skill verbs
+**You should see.** A `done` event whose message lists the skill name, version, `how: picked`, and
+`order_number: 1182`.
 
-> [!NOTE]
-> **Upcoming.** This section is merged and is not in the current release (v1.0.0). The verbs were run against
-> the merged code on [Step-by-step skills](step-by-step-skills.md).
+## Verbs at a glance
 
-Skills get their own verbs, so a skill is a file you apply and publish like an agent.
-
-```python
-skill = ops.skills.create({"name": "Return checklist", "ownerTeam": "Customer Support", "instructions": "..."})
-ops.skills.save_draft(skill["id"], {"instructions": "..."}, note="Adds the receipt step")
-ops.skills.publish(skill["id"], note="Adds the receipt step")
-ops.skills.references("refund", for_skill=skill["id"])
-```
-
-```ts
-const skill = await ops.skills.create({ name: 'Return checklist', ownerTeam: 'Customer Support', instructions: '...' });
-await ops.skills.saveDraft(skill.id, { instructions: '...' }, { note: 'Adds the receipt step' });
-await ops.skills.publish(skill.id, 'Adds the receipt step');
-await ops.skills.references('refund', skill.id);
-```
-
-```bash
-opsai skills apply return-checklist.yaml --note "Adds the receipt step"
-opsai skills publish <id> --note "Adds the receipt step"
-opsai skills export <id> --format yaml
-opsai skills references <id> --search refund
-```
-
-| Verb | What it will do |
+| Verb | What it does |
 |---|---|
-| `create`, `save_draft` / `apply` | Create a skill, or save a new draft of the skill a file names by id, slug or name |
-| `publish` | Ask to publish the newest draft. A skill that cannot be published is refused, and the error names each problem |
-| `export` | Print a stored skill as a file `apply` reads |
-| `references` | Search what the skill's text may mention: tools, knowledge bases, other skills, agents and workflows |
+| `skills.create` / `opsai skills apply` (new file) | Create a skill |
+| `skills.save_draft` / `opsai skills apply` (existing) | Save a new draft of the skill a file names by id, slug or name |
+| `skills.publish` / `opsai skills publish` | Ask to publish the newest draft. A skill that cannot be published is refused, and the error names each problem |
+| `skills.export` / `opsai skills export` | Print a stored skill as a file `apply` reads |
+| `skills.references` / `opsai skills references` | Search what the skill's text may mention: tools, knowledge bases, other skills, agents and workflows |
+| `agents.add_reference` / `addReference` | Grant the agent a skill (or tool, knowledge base, agent, workflow) its brief can use |
 
-## Next steps
+## Escape hatch: raw operations
 
-- [Step-by-step skills](step-by-step-skills.md): numbered steps with checks, exits and sub-skills. Upcoming.
-- [Agent examples](agents.md): the agent these skills attach to.
-- [Workflow examples](workflows.md): fixed steps with a person's approval.
+Screens and generated clients that call by OpenAPI operation name use `ops.raw`. Prefer the verbs above in new code.
+
+| Task | Raw operation (illustrative) |
+|---|---|
+| Create | `ops.raw.agents.agents_create_skill` |
+| Publish | `ops.raw.agents.agents_request_skill_publish` |
+| Attach by pin | `ops.raw.agents.agents_attach_skill` (version pin). Prefer `agents.add_reference` unless you need the pin body |
+
+Python passes path fields positionally; TypeScript passes `{ path, query, body }`. See the [Python SDK](../../sdk/python.md)
+and [TypeScript SDK](../../sdk/typescript.md).
+
+## Next
+
+<!-- site: cards -->
+- [Step-by-step skills](step-by-step-skills.md): numbered steps with checks, exits and sub-skills.
+- [Agent examples](agents.md): deeper agent publish, knowledge and tools. (Older layout.)
+- [Workflow examples](workflows.md): fixed steps with a person's approval. (Older layout.)
+- [Examples hub](README.md): other paths and how to read status labels.
