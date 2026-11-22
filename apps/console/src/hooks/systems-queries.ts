@@ -78,10 +78,11 @@ export type ConnectionKinds = Data<'apps_connection_kinds'>;
 
 export type AppPage = Data<'apps_get_app'>;
 /** The accounts of an app a step or an agent may name (`usable`: the team's live ones), each with what it points at. */
-export const useAppAccounts = (appId: string | undefined) =>
+export const useAppAccounts = (appId: string | undefined, { withTest = false }: { withTest?: boolean } = {}) =>
   useTeamQuery({
-    queryKey: [...APPS, appId ?? '', 'accounts', 'usable'],
-    queryFn: () => sdk((ops) => ops.raw.tools.apps_list_account_choices({ path: { app_id: appId ?? '' }, query: { usable: true } })),
+    queryKey: [...APPS, appId ?? '', 'accounts', withTest ? 'with-test' : 'usable'],
+    // A try lists the app's test account too; a step or an agent names live accounts only.
+    queryFn: () => sdk((ops) => ops.raw.tools.apps_list_account_choices({ path: { app_id: appId ?? '' }, query: { usable: !withTest } })),
     enabled: !!appId,
   });
 /** One app's page, joined by tools-service: card, accounts, your own sign-in, tools, skills and latest runs. */
