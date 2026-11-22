@@ -14,6 +14,7 @@ import { providerKeyOptions } from '@/hooks/provider-key-queries';
 import type { ProviderConnectionInput } from '@/lib/types/models';
 
 import { CONNECTABLE_TYPES, type ConnectableType, ENDPOINT_FIELD, PROVIDER_TYPES } from './provider-meta';
+import { nameError } from '@/lib/validation/names';
 
 type Field = 'name' | 'baseUrl' | 'apiVersion' | 'region' | 'keyRef';
 type Errors = Partial<Record<Field | 'submit', string>>;
@@ -62,7 +63,7 @@ export function ConnectProviderDialog({
 
   const submit = async () => {
     const missing: Errors = {
-      name: name.trim() ? undefined : 'Name the connection.',
+      name: nameError(name, 'Name the connection.'),
       baseUrl: baseUrl.trim() ? undefined : 'Enter the endpoint.',
       apiVersion: !azure || apiVersion.trim() ? undefined : 'Enter v1 or a dated version, such as 2024-10-21.',
       keyRef: !azure || keyRef ? undefined : 'Pick the key it signs in with.',

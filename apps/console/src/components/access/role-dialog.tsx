@@ -12,6 +12,7 @@ import { RoleSelect } from '@/components/access/role-select';
 import { rolesWhere } from '@/hooks/me-queries';
 import { useOptionLabels } from '@/hooks/options-queries';
 import type { RoleInput, RoleSummary } from '@/lib/types/settings';
+import { nameError } from '@/lib/validation/names';
 
 const NOTHING = '__nothing__';
 /** Every role of the workspace, the choices to copy from; searched on the server. */
@@ -55,8 +56,9 @@ export function RoleDialog({
   }, [copyName]);
 
   const submit = async () => {
-    if (!name.trim()) {
-      setErrors({ name: 'Name the role.' });
+    const nameIssue = nameError(name, 'Name the role.');
+    if (nameIssue) {
+      setErrors({ name: nameIssue });
       return;
     }
     try {

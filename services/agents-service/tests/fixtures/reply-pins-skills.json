@@ -44,6 +44,7 @@
         "agentId": "ag_fraud",
         "available": [],
         "limits": {
+          "instructionsMaxChars": 24000,
           "maxAttached": 12,
           "maxPerTurn": 2,
           "tokenBudget": 6000,
@@ -75,6 +76,7 @@
         "agentId": "ag_fraud",
         "available": [],
         "limits": {
+          "instructionsMaxChars": 24000,
           "maxAttached": 12,
           "maxPerTurn": 2,
           "tokenBudget": 6000,
@@ -528,6 +530,7 @@
           }
         ],
         "limits": {
+          "instructionsMaxChars": 24000,
           "maxAttached": 12,
           "maxPerTurn": 2,
           "tokenBudget": 6000,
@@ -1577,6 +1580,7 @@
           "kb_support"
         ],
         "limits": {
+          "instructionsMaxChars": 24000,
           "maxAttached": 12,
           "maxPerTurn": 2,
           "tokenBudget": 6000,

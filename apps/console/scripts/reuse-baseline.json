@@ -79,5 +79,17 @@
     "src/components/shared/tag-input.tsx",
     "src/components/skills/generate-skill-dialog.tsx",
     "src/components/templates/templates-gallery.tsx"
+  ],
+  "nameRule": [
+    "src/lib/api/mock/auth/index.ts",
+    "src/lib/api/mock/files/index.ts",
+    "src/lib/api/mock/governance/catalog.ts",
+    "src/lib/api/mock/index.ts",
+    "src/lib/api/mock/knowledge/index.ts",
+    "src/lib/api/mock/knowledge/ingest.ts",
+    "src/lib/api/mock/skills/index.ts",
+    "src/lib/api/mock/templates/index.ts",
+    "src/lib/api/mock/tool-modules/index.ts",
+    "src/lib/api/mock/widgets/index.ts"
   ]
 }

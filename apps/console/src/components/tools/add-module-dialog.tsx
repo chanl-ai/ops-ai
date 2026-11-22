@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils';
 import { ConnectionSelect } from './connection-select';
 import { HttpOperationBuilder } from './http-operation-builder';
 import { OperationPicker } from './operation-picker';
+import { slugify } from '@/lib/validation/names';
 
 const STEPS = ['Source', 'Operations'] as const;
 type Kind = 'mcp' | 'openapi' | 'http';
@@ -46,7 +47,7 @@ function httpsProblem(raw: string) {
   return null;
 }
 
-const kebab = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const kebab = (s: string) => slugify(s, { width: 200 });
 
 /**
  * Import operations from an MCP server, an OpenAPI spec or one HTTP request. `create` saves a new draft module named

@@ -80,7 +80,7 @@ export type WorkflowRow = Awaited<ReturnType<OpsAI['raw']['agents']['workflows_l
 };
 
 /** One page of the current engine's workflows; the filters, search and sort go to the route. */
-export const fetchWorkflows = (p: ListParams<WorkflowFilters>): Promise<ListResult<WorkflowRow>> =>
+export const fetchWorkflows = (p: ListParams<WorkflowFilters> & { ids?: string[] }): Promise<ListResult<WorkflowRow>> =>
   sdk((ops) =>
     ops.raw.agents.workflows_list_workflows({
       query: {
@@ -89,6 +89,7 @@ export const fetchWorkflows = (p: ListParams<WorkflowFilters>): Promise<ListResu
         search: p.search || undefined,
         sortBy: p.sortBy,
         sortOrder: p.sortOrder,
+        ids: p.ids?.length ? p.ids : undefined,
         status: p.filters?.status?.length ? p.filters.status : undefined,
         startable: p.filters?.startable?.includes('true') || undefined,
         takesFiles: p.filters?.takesFiles?.includes('true') || undefined,

@@ -28,6 +28,7 @@ import { cn } from '@/lib/utils';
 import { SKILL_LOADING_LABEL, SkillLoadingField } from './skill-loading';
 import { joinSections, SECTION_TITLE, SECTIONS } from './skill-meta';
 import { SkillTestDialog } from './skill-test-dialog';
+import { nameError } from '@/lib/validation/names';
 
 const STEPS = ['Start from', 'Scope', 'Draft', 'Tests', 'Review'] as const;
 
@@ -178,7 +179,7 @@ export function GenerateSkillDialog({
   const agentWarnings = (gen.skill?.warnings ?? []).filter((w) => w.kind === 'agent_lacks' && targets.includes(w.ref.split(':')[0]));
   const draftErrors = {
     generating: gen.phase === 'streaming' ? 'Wait for the draft to finish.' : gen.phase === 'stopped' ? 'Generation stopped before it finished. Regenerate to continue.' : gen.phase === 'error' ? (gen.error ?? 'Generation failed.') : gen.phase !== 'done' ? 'Generate the draft.' : undefined,
-    name: !draft.name.trim() ? 'Name the skill.' : undefined,
+    name: nameError(draft.name, 'Name the skill.'),
     useWhen: !draft.useWhen.trim() && draft.loading === 'on_match' ? 'Say when the skill should be used.' : draft.useWhen.length > (opts?.limits.useWhenMaxChars ?? 1024) ? `Keep it under ${opts?.limits.useWhenMaxChars ?? 1024} characters.` : undefined,
     sections: SECTIONS.some((k) => !draft.sections[k].trim()) ? 'Every section needs text.' : undefined,
     scope: outTools.length || outKbs.length ? 'Resolve the warnings: remove each item outside the scope, or add it to the scope.' : undefined,

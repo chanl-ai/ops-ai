@@ -12,6 +12,7 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import type { Lookups } from '@/lib/api';
 import type { GatePolicy, GatePolicyInput } from '@/lib/types/domain';
+import { nameError } from '@/lib/validation/names';
 
 const EMPTY: GatePolicyInput = { name: '', workflowId: '', condition: '', reviewers: '', sla: '1 h', onTimeout: '', fourEyes: false };
 
@@ -19,7 +20,8 @@ type Errors = Partial<Record<keyof GatePolicyInput, string>>;
 
 function validate(v: GatePolicyInput): Errors {
   const e: Errors = {};
-  if (!v.name.trim()) e.name = 'Name the gate so reviewers know why a run paused.';
+  const nameIssue = nameError(v.name, 'Name the gate so reviewers know why a run paused.');
+  if (nameIssue) e.name = nameIssue;
   if (!v.workflowId) e.workflowId = 'Choose the workflow this gate belongs to.';
   if (!v.condition.trim()) e.condition = 'Add the condition that pauses a run.';
   if (!v.reviewers) e.reviewers = 'Choose who reviews paused runs.';
