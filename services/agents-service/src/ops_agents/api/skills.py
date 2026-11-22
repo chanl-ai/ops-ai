@@ -58,6 +58,7 @@ LIMITS: dict[str, int] = {
     "maxAttached": MAX_ATTACHED,
     "tokenBudget": TOKEN_BUDGET,
     "useWhenMaxChars": USE_WHEN_MAX,
+    "instructionsMaxChars": INSTRUCTIONS_MAX,
 }
 
 # The team setting that refuses a write behind a condition the agent decides (ops_access.policies).

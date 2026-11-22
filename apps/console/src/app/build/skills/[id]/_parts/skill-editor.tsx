@@ -158,6 +158,8 @@ export function SkillEditor({ skill: sk, tab = 'instructions', hidden, rail, can
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
   const limit = options.data?.limits.useWhenMaxChars ?? 1024;
+  const textMax = options.data?.limits.instructionsMaxChars ?? 24000;
+  const textLength = (stepped ? form.text : form.instructions).length;
   const errors = { name: nameError(form.name, 'Name the skill.') };
   const found = React.useMemo(() => (newest.state === 'draft' ? inText(sk.publishCheck.problems ?? NONE) : NONE), [newest.state, sk.publishCheck.problems]);
   const problems = React.useMemo(() => (refused ? [...found, refused] : found), [found, refused]);
@@ -413,7 +415,13 @@ export function SkillEditor({ skill: sk, tab = 'instructions', hidden, rail, can
               {/* One row on a wide screen: what the text uses on the left, the keys on the right. */}
               <footer className="flex flex-col gap-1 border-t px-4 py-2 text-xs text-muted-foreground tabular-nums sm:flex-row sm:items-center sm:justify-between" data-testid="skill-text-uses">
                 <span>{reading.isError ? 'Couldn’t read the text just now; it still saves.' : (usesLine(reading.reading?.uses) ?? 'Mention a tool or knowledge with @ in the steps and it shows here.')}</span>
-                <span>@ mention · Tab indents</span>
+                <span className="flex items-center gap-3">
+                  {/* The server refuses past the limit; the count turns amber from 90 percent so a long paste is caught here. */}
+                  <span className={textLength > textMax ? 'text-destructive-text' : textLength >= textMax * 0.9 ? 'text-warning-text' : undefined} data-testid="skill-text-count">
+                    {textLength.toLocaleString()} of {textMax.toLocaleString()} characters{textLength > textMax ? ': shorten it to save' : ''}
+                  </span>
+                  <span>@ mention · Tab indents</span>
+                </span>
               </footer>
             </section>
             {mine && mineOpen && (

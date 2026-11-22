@@ -439,6 +439,8 @@ export interface SkillRuntimeLimits {
   /** Tokens of skill bodies one turn may load. */
   tokenBudget: number;
   useWhenMaxChars: number;
+  /** Characters of skill text or instructions the server accepts; an older service leaves it out. */
+  instructionsMaxChars?: number;
 }
 
 /** What attaching the draft would change on one target agent: the review step shows one per agent. */

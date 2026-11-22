@@ -71,7 +71,7 @@ export interface SkillsDeps {
   me: string;
 }
 
-const LIMITS: SkillRuntimeLimits = { maxPerTurn: 2, maxAttached: 12, tokenBudget: 6000, useWhenMaxChars: 1024 };
+const LIMITS: SkillRuntimeLimits = { maxPerTurn: 2, maxAttached: 12, tokenBudget: 6000, useWhenMaxChars: 1024, instructionsMaxChars: 24000 };
 const DAY = 86_400_000;
 const ago = (days: number) => new Date(Date.now() - days * DAY).toISOString();
 const ymd = (iso: string) => iso.slice(0, 10);
