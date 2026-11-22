@@ -15,7 +15,8 @@ import { Input } from '@/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { plural } from '@/lib/format';
 import type { ToolAccess } from '@/lib/types/domain';
-import type { DiscoveredOperation, DiscoveryResult, HttpOperationInput, ImportOperationsInput, ModuleInput, ModuleSource } from '@/lib/types/tool-modules';
+import { useDiscoveredNames } from '@/hooks/tool-module-queries';
+import type { DiscoveryResult, HttpOperationInput, ImportOperationsInput, ModuleInput, ModuleSource, OperationPick } from '@/lib/types/tool-modules';
 import { cn } from '@/lib/utils';
 
 import { ConnectionSelect } from './connection-select';
@@ -64,17 +65,18 @@ export function AddModuleDialog({
   mode = 'create',
   moduleName,
   onAppend,
-  existingNames = [],
+  moduleId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   mode?: 'create' | 'append';
   /** Append mode: shown in the title. */
   moduleName?: string;
-  /** Append mode: the operations the module already has, listed but not selected or imported again. */
-  existingNames?: string[];
+  /** Append mode: the module the operations are for; the picker marks the ones it already has. */
+  moduleId?: string;
   onAppend?: (input: ImportOperationsInput) => Promise<void>;
-  onDiscover: (source: ModuleSource) => Promise<DiscoveryResult>;
+  /** Reads the source and keeps what it found for the picker, for `moduleId` in append mode. */
+  onDiscover: (source: ModuleSource, moduleId?: string) => Promise<DiscoveryResult>;
   discovering: boolean;
   onCreate: (input: ModuleInput) => Promise<void>;
   creating: boolean;
@@ -95,6 +97,7 @@ export function AddModuleDialog({
   const [touched, setTouched] = React.useState(false);
   const [connectionId, setConnectionId] = React.useState<{ id: string; name: string } | null>(null);
   const bodyRef = React.useRef<HTMLDivElement>(null);
+  const names = useDiscoveredNames();
 
   React.useEffect(() => {
     if (!open) return;
@@ -159,10 +162,12 @@ export function AddModuleDialog({
         if (problem) return setFieldErr({ spec: problem });
       }
       try {
-        const d = await onDiscover(source);
+        const d = await onDiscover(source, append ? moduleId : undefined);
+        // Reads start selected; writes are opt-in so nothing that changes data is exposed by default. The reads
+        // come from the server, so a source with thousands of operations is never read whole into the browser.
+        const reads = await names.mutateAsync({ discoveryId: d.id, access: ['read'] });
         setFound(d);
-        // Reads start selected; writes are opt-in so nothing that changes data is exposed by default.
-        setSelected(new Map(d.operations.filter((o) => o.access === 'read' && !existingNames.includes(o.name)).map((o) => [o.name, o.access])));
+        setSelected(new Map(reads.map((o) => [o.name, o.access])));
         setStep(2);
       } catch (e) {
         // Discovery failures are about the address the user typed, so they sit on that field.
@@ -175,7 +180,7 @@ export function AddModuleDialog({
     }
   }
 
-  const chosen: DiscoveredOperation[] = kind === 'http' ? [] : (found?.operations ?? []).filter((o) => selected.has(o.name)).map((o) => ({ ...o, access: selected.get(o.name)! }));
+  const chosen: OperationPick[] = kind === 'http' ? [] : [...selected].map(([name, access]) => ({ name, access }));
 
   /** Saves straight from the operations step: the module is named from what was read, and renamed on its page. */
   async function finish() {
@@ -236,7 +241,7 @@ export function AddModuleDialog({
             {step === 1 ? 'Cancel' : 'Back'}
           </Button>
           {step < 2 ? (
-            <LoadingButton isLoading={discovering} loadingText={kind === 'mcp' ? 'Reading the server…' : 'Reading the spec…'} onClick={next} data-testid="import-next">
+            <LoadingButton isLoading={discovering || names.isPending} loadingText={kind === 'mcp' ? 'Reading the server…' : 'Reading the spec…'} onClick={next} data-testid="import-next">
               Next
             </LoadingButton>
           ) : (
@@ -307,7 +312,7 @@ export function AddModuleDialog({
       {step === 2 && kind !== 'http' && found && (
         <div className="flex flex-col gap-3">
           <p className="text-sm text-muted-foreground">
-            {found.system} lists {plural(found.operations.length, 'operation')} at version {found.version}. Reads are selected; writes are opt-in.
+            {found.system} lists {plural(found.operationTotal, 'operation')} at version {found.version}. Reads are selected; writes are opt-in.
           </p>
           {found.warnings.map((w) => (
             <Alert key={w}>
@@ -315,7 +320,7 @@ export function AddModuleDialog({
               <AlertDescription>{w}</AlertDescription>
             </Alert>
           ))}
-          <OperationPicker operations={found.operations} selected={selected} onChange={setSelected} existing={append ? existingNames : []} />
+          <OperationPicker discoveryId={found.id} total={found.operationTotal} selected={selected} onChange={setSelected} />
         </div>
       )}
 

@@ -78,7 +78,6 @@
     "src/components/shared/instruction-document/instruction-document.tsx",
     "src/components/shared/tag-input.tsx",
     "src/components/skills/generate-skill-dialog.tsx",
-    "src/components/templates/templates-gallery.tsx",
-    "src/components/tools/operation-picker.tsx"
+    "src/components/templates/templates-gallery.tsx"
   ]
 }

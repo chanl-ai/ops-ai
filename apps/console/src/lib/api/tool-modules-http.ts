@@ -1,6 +1,6 @@
-import type { ListParams, ListResult } from '@/lib/types/query';
+import type { ListParams } from '@/lib/types/query';
 
-import type { DiscoveredOperation, DiscoveryResult, ModuleSource, ToolModuleDetail } from '@/lib/types/tool-modules';
+import type { DiscoveryAsk, OperationPick, ToolModuleDetail } from '@/lib/types/tool-modules';
 
 import { type HeldHost, unlessHeld } from './held-host';
 import type { ToolModulesApi } from './tool-modules-contract';
@@ -8,23 +8,14 @@ import type { ToolModulesApi } from './tool-modules-contract';
 type Get = <T>(path: string) => Promise<T>;
 type Send = <T>(method: string, path: string, body?: unknown) => Promise<T>;
 
-interface StoredDiscovery extends Omit<DiscoveryResult, 'operations'> {
-  id: string;
-  operationTotal: number;
-}
-
-/**
- * The discovery with every operation, read from the stored discovery a page at a time. Bridges the picker, which
- * searches in the browser, until it reads one page at a time through the shared server list.
- */
-async function discoverAll(get: Get, send: Send, source: ModuleSource): Promise<DiscoveryResult> {
-  const found = await send<StoredDiscovery>('POST', '/tool-modules/discover', source);
-  const operations: DiscoveredOperation[] = [];
-  for (let page = 1; ; page++) {
-    const listed = await get<ListResult<DiscoveredOperation>>(`/tool-modules/discoveries/${found.id}/operations?page=${page}&pageSize=50`);
-    operations.push(...listed.data.map(({ added: _added, ...o }: DiscoveredOperation & { added?: boolean }) => o));
-    if (!listed.pagination.hasNext) return { ...found, operations };
-  }
+/** The shared list query of a stored discovery's operations and names. */
+function discoveryQuery(ask: DiscoveryAsk & { page?: number; pageSize?: number }): string {
+  const q = new URLSearchParams();
+  if (ask.page) q.set('page', String(ask.page));
+  if (ask.pageSize) q.set('pageSize', String(ask.pageSize));
+  if (ask.search) q.set('search', ask.search);
+  for (const a of ask.access ?? []) q.append('access', a);
+  return q.toString();
 }
 
 /** REST routes for tool modules; `get`, `send` and `qs` come from the main HTTP client so auth and envelopes match. */
@@ -34,7 +25,9 @@ export function createToolModulesHttp(get: Get, send: Send, qs: (p: ListParams &
     grants: ({ view, search, page, pageSize }) => get(`${base}/grants?${new URLSearchParams({ view, page: String(page), pageSize: String(pageSize), ...(search ? { search } : {}) })}`),
     list: (p) => get(`${base}?${qs(p)}`),
     get: (id) => get(`${base}/${id}`),
-    discover: (source) => discoverAll(get, send, source),
+    discover: (source, moduleId) => send('POST', `${base}/discover`, { ...source, ...(moduleId ? { moduleId } : {}) }),
+    discoveredOperations: (id, ask) => get(`${base}/discoveries/${id}/operations?${discoveryQuery(ask)}`),
+    discoveredNames: (id, ask) => get<{ data: OperationPick[] }>(`${base}/discoveries/${id}/names?${discoveryQuery(ask)}`).then((r) => r.data),
     // The three writes that may first set an app's address can be held for Security (202) instead of saved.
     create: (i) => send<ToolModuleDetail | HeldHost>('POST', base, i).then(unlessHeld),
     createBlankModule: (i) => send<ToolModuleDetail | HeldHost>('POST', `${base}/blank`, i).then(unlessHeld),

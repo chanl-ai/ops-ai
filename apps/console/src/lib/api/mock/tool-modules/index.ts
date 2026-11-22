@@ -4,6 +4,7 @@ import type {
   CredentialKind,
   BlankModuleInput,
   DiscoveredOperation,
+  OperationPick,
   Environment,
   HttpOperationInput,
   ModuleApproval,
@@ -519,6 +520,26 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
     return major ? `${a + 1}.0.0` : `${a}.${b + 1}.0`;
   }
 
+  /** Discoveries kept for the picker, as tools-service stores them: the operations and the module they are for. */
+  const discoveries = new Map<string, { operations: DiscoveredOperation[]; moduleId?: string }>();
+
+  const DISCOVERY_LIST = { text: (r: DiscoveredOperation) => `${r.name} ${r.description} ${r.path ?? ''}`, value: (r: DiscoveredOperation, k: string) => String((r as unknown as Record<string, unknown>)[k]), facetKeys: ['group', 'access'] };
+
+  function storedDiscovery(did: string) {
+    const d = discoveries.get(did);
+    if (!d) throw new ApiError('Discovery not found.', 404);
+    const have = new Set(d.moduleId ? find(d.moduleId).ops.map((o) => o.name) : []);
+    return d.operations.map((o) => ({ ...o, added: have.has(o.name) }));
+  }
+
+  /** The caller's picks as the source describes them: name and access from the caller, the rest from the source. */
+  function picked(source: Parameters<ToolModulesApi['discover']>[0], picks: OperationPick[]): DiscoveredOperation[] {
+    const listed = new Map(discovered(source).operations.map((o) => [o.name, o]));
+    const unknown = picks.filter((o) => !listed.has(o.name)).map((o) => o.name);
+    if (unknown.length) throw new ApiError(`${unknown.join(', ')} is not in the source.`, 400);
+    return picks.map((o) => ({ ...listed.get(o.name)!, access: o.access }));
+  }
+
   function discovered(source: Parameters<ToolModulesApi['discover']>[0]) {
     if (source.kind === 'mcp') {
       let host: string;
@@ -646,7 +667,28 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
 
     get: (mid) => respond(() => detail(find(mid))),
 
-    discover: (source) => respond(() => discovered(source)),
+    discover: (source, moduleId) =>
+      respond(() => {
+        const { operations, ...meta } = discovered(source);
+        const did = id('disc');
+        discoveries.set(did, { operations, moduleId });
+        return { id: did, ...meta, operationTotal: operations.length };
+      }),
+
+    discoveredOperations: (did, ask) =>
+      respond((md) => {
+        const rows = storedDiscovery(did);
+        const page = list(rows, { page: ask.page, pageSize: ask.pageSize, search: ask.search, filters: { access: ask.access } }, DISCOVERY_LIST, md);
+        const matching = list(rows, { page: 1, pageSize: Math.max(1, rows.length), search: ask.search, filters: { access: ask.access } }, DISCOVERY_LIST, md);
+        return { ...page, addedTotal: matching.data.filter((r) => r.added).length };
+      }),
+
+    discoveredNames: (did, ask) =>
+      respond((md) => {
+        const rows = storedDiscovery(did).filter((r) => !r.added);
+        const all = list(rows, { page: 1, pageSize: Math.max(1, rows.length), search: ask.search, filters: { access: ask.access } }, DISCOVERY_LIST, md);
+        return all.data.map((o) => ({ name: o.name, access: o.access }));
+      }),
 
     create: (input) =>
       respond(() => {
@@ -655,7 +697,7 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
         if (input.uniqueName) for (let n = 2; mods.some((m) => m.name === name); n++) name = `${kebab(input.name)}-${n}`;
         if (mods.some((m) => m.name === name)) throw new ApiError(`A module named ${name} already exists.`, 409);
         if (!input.displayName.trim()) throw new ApiError('Give the module a display name.', 400);
-        let opsIn: DiscoveredOperation[] = input.operations ?? [];
+        let opsIn: DiscoveredOperation[] = input.source ? picked(input.source, input.operations ?? []) : [];
         // As the service: the kind comes from the source (or http for one request), the address from what was read.
         const kind: ModuleType = input.source?.kind === 'mcp' ? 'mcp' : input.source?.kind === 'openapi' ? 'openapi' : 'http';
         let endpoint = '';
@@ -759,7 +801,7 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
       respond(() => {
         const m = find(mid);
         if (!input.operations.length) throw new ApiError('Choose at least one operation to import.', 400);
-        const fresh = input.operations.filter((o) => !m.ops.some((x) => x.name === o.name));
+        const fresh = picked(input.source, input.operations).filter((o) => !m.ops.some((x) => x.name === o.name));
         if (!fresh.length) throw new ApiError('Every chosen operation is already in this module.', 409);
         const listed = discovered(input.source).operations.map((o) => o.name);
         appendOps(m, fresh);

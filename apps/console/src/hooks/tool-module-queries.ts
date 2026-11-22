@@ -5,7 +5,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
 import type { ListParams } from '@/lib/types/query';
-import type { ApprovalRequestInput, BlankModuleInput, HttpOperationInput, GrantView, ImportOperationsInput, ModuleDetailsPatch, ModuleFilters, ModuleInput, ModuleSource, ModuleTestInput, ModuleView, OperationPatch } from '@/lib/types/tool-modules';
+import type { ApprovalRequestInput, BlankModuleInput, DiscoveredOperationRow, DiscoveryAsk, HttpOperationInput, GrantView, ImportOperationsInput, ModuleDetailsPatch, ModuleFilters, ModuleInput, ModuleSource, ModuleTestInput, ModuleView, OperationPatch } from '@/lib/types/tool-modules';
+import { useServerList } from './server-list';
 import { useTeamQuery } from './team-query';
 
 /** Module keys start with 'modules'; module writes also refresh 'tools' (agent grants read operations) and 'agent'. */
@@ -24,8 +25,22 @@ function useModuleWrite<A, R>(fn: (a: A) => Promise<R>) {
   return useMutation({ mutationFn: fn, onSuccess: () => Promise.all(['modules', 'tools', 'agent', 'agents'].map((k) => qc.invalidateQueries({ queryKey: [k] }))) });
 }
 
-/** Discovery reads a server or spec and saves nothing, so it invalidates nothing. */
-export const useDiscoverModule = () => useMutation({ mutationFn: (source: ModuleSource) => api.toolModules.discover(source) });
+/** Discovery reads a server or spec and keeps what it found for the picker; it saves no module, so it invalidates nothing. */
+export const useDiscoverModule = () => useMutation({ mutationFn: ({ source, moduleId }: { source: ModuleSource; moduleId?: string }) => api.toolModules.discover(source, moduleId) });
+
+/**
+ * A stored discovery's operations, searched on the server and read a page at a time. `addedTotal` is how many matching
+ * operations the module already has, from the route, so the picker counts what an import would add.
+ */
+export function useDiscoveredOperations(discoveryId: string | undefined, ask: DiscoveryAsk) {
+  const list = useServerList<DiscoveredOperationRow>(['modules', 'discovery', discoveryId, ask.access], (page) => api.toolModules.discoveredOperations(discoveryId!, { ...page, access: ask.access }), { search: ask.search, enabled: !!discoveryId, pageSize: 50 });
+  // Each page is a DiscoveredOperationPage; useServerList types it by the fields every list shares.
+  const first = list.data?.pages[0];
+  return { ...list, addedTotal: first && 'addedTotal' in first ? Number(first.addedTotal) : 0 };
+}
+
+/** Select-all: every matching operation of a stored discovery the module does not have yet. */
+export const useDiscoveredNames = () => useMutation({ mutationFn: ({ discoveryId, ...ask }: DiscoveryAsk & { discoveryId: string }) => api.toolModules.discoveredNames(discoveryId, ask) });
 export const useTestModule = () => useMutation({ mutationFn: ({ id, ...input }: ModuleTestInput & { id: string }) => api.toolModules.test(id, input) });
 
 export const useCreateModule = () => useModuleWrite((i: ModuleInput) => api.toolModules.create(i));
