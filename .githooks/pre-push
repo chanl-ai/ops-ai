@@ -24,6 +24,7 @@ printf '%s\n' "$refs" | while read -r _local_ref local_sha remote_ref remote_sha
   [ -n "$since" ] || continue
   files=$(git diff --name-only --diff-filter=ACMR "$since" "$local_sha" -- '*.py')
   console=$(git diff --name-only "$since" "$local_sha" -- apps/console apps/embed package.json pnpm-lock.yaml)
+  [ -n "${OPS_FULL_HOOK:-}" ] || console=  # the console suite runs in CI's merge queue; OPS_FULL_HOOK=1 runs it here
   # Skips only when rev-list succeeds and lists nothing: an unnamed remote, a URL or a failed lookup runs the suite.
   if [ -n "$console" ] && [ -n "$remote" ] && unsent=$(git rev-list -n 1 "$local_sha" --not "--remotes=$remote" 2>/dev/null) && [ -z "$unsent" ]; then
     echo "pre-push: every commit pushed to $remote_ref is already on $remote, so the console unit suite was skipped."

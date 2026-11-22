@@ -82,7 +82,9 @@ mapfile -t present < <(GIT_INDEX_FILE="$index" git -C "$root" diff --cached --na
 touches() { [ "${#staged[@]}" -gt 0 ] && grep -qE "$1" <<<"$(printf '%s\n' "${staged[@]}")"; }
 # The console's typecheck, standards and tests (apps/console/CLAUDE.md), and the embed app's typecheck, which draws the
 # console's chat components.
-if touches '^apps/(console|embed)/|^package\.json$|^pnpm-lock\.yaml$'; then
+# Heavy checks (console typecheck, standards, unit tests, make checks) run only with OPS_FULL_HOOK=1; CI's merge
+# queue runs them once per group, so a commit takes seconds instead of up to 15 minutes.
+if [ -n "${OPS_FULL_HOOK:-}" ] && touches '^apps/(console|embed)/|^package\.json$|^pnpm-lock\.yaml$'; then
   # The same steps as `pnpm --filter @ops-ai/console verify` (apps/console/package.json), with two differences that do not
   # change what is judged. The type checks are incremental: their state lives next to the persistent export, so only the
   # files that changed since the last commit check, and their dependents, are checked again, with the same errors.
@@ -144,7 +146,7 @@ real_uv="$(command -v uv || echo uv)"
 mkdir -p "$run/.bin"
 printf '#!/bin/sh\nif [ "$1" = run ]; then shift; exec "$@"; fi\nexec "%s" "$@"\n' "$real_uv" > "$run/.bin/uv"
 chmod +x "$run/.bin/uv"
-if ! PATH="$run/.bin:$root/.venv/bin:$PATH" GIT_DIR="$git_dir" PYTHONPATH="$export_path" make -s -C "$tmp" checks STAGED=1 STAGED_FILES="$run/.staged" \
+if [ -n "${OPS_FULL_HOOK:-}" ] && ! PATH="$run/.bin:$root/.venv/bin:$PATH" GIT_DIR="$git_dir" PYTHONPATH="$export_path" make -s -C "$tmp" checks STAGED=1 STAGED_FILES="$run/.staged" \
   PY="$root/.venv/bin/python" PYRIGHT="$root/.venv/bin/pyright" LINT_IMPORTS="$root/.venv/bin/lint-imports --no-logo" >"$run/.checks.log" 2>&1; then
   tail -60 "$run/.checks.log"; echo "verify-staged: make checks failed (above); fix what it names"; exit 1
 fi
