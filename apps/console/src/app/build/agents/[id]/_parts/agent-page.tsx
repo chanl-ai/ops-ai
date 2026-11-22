@@ -423,7 +423,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
                 isError={versions.isError}
                 onRetry={() => versions.refetch()}
                 restoring={restore.isPending}
-                onPublish={agent.canPublish !== false ? () => (purposeMissing ? goTo('brief.purpose') : setPublishOpen(true)) : undefined}
+                onPublish={agent.canPublish !== false && !(dirty && !purposeMissing) ? () => (purposeMissing ? goTo('brief.purpose') : setPublishOpen(true)) : undefined}
                 onRestore={async (v) => {
                   try {
                     const a = await restore.mutateAsync(v);
@@ -516,7 +516,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
                   <ModelSelect id="ag-model" value={draft.model} onValueChange={(v) => set('model', v)} aliases={modelAliases.data ?? []} className="w-auto max-w-full" />
                 </fieldset>
               </div>
-              <BuilderFieldset canEdit={locked ? false : agent.canEdit}>
+              {/* No read-only fieldset here: the editor takes readOnly, and View prompt in its footer stays usable. */}
               {briefEdit !== null && agent.brief === null && (
                 <Alert data-testid="agent-brief-notice">
                   <Info />
@@ -551,7 +551,6 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
                   </div>
                 }
               />
-              </BuilderFieldset>
               <BuilderFieldset canEdit={locked ? false : agent.canEdit}>
               {mode === 'full' && <AgentJobField draft={draft} set={set} error={errors.role} />}
               </BuilderFieldset>

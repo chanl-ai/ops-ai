@@ -25,7 +25,7 @@ export function ViewPromptDialog({ agentId, version, name }: { agentId: string; 
         onOpenChange={setOpen}
         size="lg"
         title={`Prompt for ${name}`}
-        description={<>What the model receives from v{version}, read only. Never is applied last, on every reply. The platform&rsquo;s own rules and any running skill step are added by each turn.</>}
+        description={<>What the model receives from v{version}, read only. Never is applied last, on every reply. The platform&rsquo;s own rules, always-on skills and any running skill step are added by each turn.</>}
       >
         {prompt.isPending ? (
           <Skeleton className="h-64 w-full" />

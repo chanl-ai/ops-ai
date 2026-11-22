@@ -27,7 +27,7 @@ const toValue = (b: AgentBrief, only: 'all' | 'never'): DocumentValue => ({
           { kind: 'field', key: 'brief.examples', label: 'Examples', locked: true, text: b.examples, placeholder: 'Optional. A question and the answer you want, as the person would see it.' },
         ] as const)
       : []),
-    { kind: 'list', key: 'brief.never', label: 'Never', items: b.never, placeholder: 'Something this agent must never do. Applied last, on every reply.' },
+    { kind: 'list', key: 'brief.never', label: 'Never · applied last, on every reply', items: b.never, placeholder: 'Something this agent must never do. Applied last, on every reply.' },
   ],
 });
 
