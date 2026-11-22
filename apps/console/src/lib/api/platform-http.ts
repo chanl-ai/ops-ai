@@ -4,6 +4,7 @@ import type { Team } from '@/lib/types/team';
 
 import type { OpsApi } from './contract';
 import { createTransport } from './http';
+import { optionsQs } from './options';
 import { createOAuthHttp } from './oauth-http';
 import { createSignInProvidersHttp } from './sign-in-providers-http';
 import { createWorkspacePoliciesHttp } from './workspace-policies-http';
@@ -30,6 +31,8 @@ export function createPlatformTeamsHttp(baseUrl: string): OpsApi['teams'] {
     renameRole: (id, input) => send<RoleDetail>('PATCH', `/roles/${encodeURIComponent(id)}`, input),
     deleteRole: (id, moveTo) => send<void>('DELETE', `/roles/${encodeURIComponent(id)}${moveTo ? `?moveTo=${encodeURIComponent(moveTo)}` : ''}`),
     roleHolders: (id, p) => get<ListResult<RoleHolder>>(`/roles/${encodeURIComponent(id)}/holders?${qs(p)}`),
+    roleHolderOptions: (id, p) => get(`/roles/${encodeURIComponent(id)}/holder-options?${optionsQs(p)}`),
+    giveRoleTo: (id, holder) => send<RoleHolder>('POST', `/roles/${encodeURIComponent(id)}/holders`, holder),
     roleGrants: (person, p) => get<ListResult<RoleGrant>>(`/people/${encodeURIComponent(person)}/role-grants?${qs(p)}`),
     giveRole: (person, input) => send<RoleGrant>('POST', `/people/${encodeURIComponent(person)}/role-grants`, input),
     takeRole: (person, grant) => send<void>('DELETE', `/people/${encodeURIComponent(person)}/role-grants/${encodeURIComponent(grant)}`),

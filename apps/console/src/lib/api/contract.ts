@@ -304,6 +304,11 @@ export interface OpsApi {
     renameRole?(id: string, input: { name: string; description?: string }): Promise<RoleDetail>;
     deleteRole?(id: string, moveTo?: string): Promise<void>;
     roleHolders?(id: string, p: ListParams): Promise<ListResult<RoleHolder>>;
+    /** Who the role can be given to in the team the console acts in: its people and the workspace's groups, one
+     * searched list whose values are `person:<user id>` or `group:<group id>`. */
+    roleHolderOptions?(id: string, p: OptionsParams): Promise<OptionsPage>;
+    /** Gives the role to a person or a group in the team the console acts in; that team's admins. */
+    giveRoleTo?(id: string, holder: { kind: 'person' | 'group'; id: string }): Promise<RoleHolder>;
     /** The custom roles given to a person, each in one of their teams; given and taken by that team's admins. */
     roleGrants?(personId: string, p: ListParams): Promise<ListResult<RoleGrant>>;
     /** Gives the role in the team the console acts in. */

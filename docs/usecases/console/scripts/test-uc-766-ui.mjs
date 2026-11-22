@@ -1,8 +1,8 @@
 // uc-766 a role given to a group opens the approvals cell for its members, ui layer:
 // docs/usecases/console/role-for-a-group-and-approvals.md. Signed in through platform-service: Wanjiru (workspace
 // admin) makes a role holding the approvals cells and its page shows them; Ravi (viewer) reads Approvals with its
-// switches off until his group is given the role, then can change them. No route or screen gives a role to a group, so
-// the group and its role are seeded by lib/group_role.py.
+// switches off until Wanjiru gives his group the role from the role's page, then can change them. No route or screen
+// makes a group yet, so the group holding Ravi is seeded by lib/group_role.py; the role is given on the screen.
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 
@@ -69,13 +69,32 @@ await withUiStack(
         await viewerPage.context().close();
       });
 
-      await step('3 the role is given to a group holding the viewer', async () => {
-        const out = execFileSync('uv', ['run', 'python', join(ROOT, 'docs/usecases/lib/group_role.py'), pgUrl(process.env.OPS_USECASE_DB ?? 'ops_usecase'), admin.tenantId, admin.user.id, viewer.user.id, role.id, 'team_ops', `Case desk ${TAG}`], { cwd: join(ROOT, 'services/platform-service'), encoding: 'utf8' }).trim();
+      await step('3 the role is given to a group holding the viewer, from the role page', async () => {
+        const group = `Case desk ${TAG}`;
+        const out = execFileSync('uv', ['run', 'python', join(ROOT, 'docs/usecases/lib/group_role.py'), pgUrl(process.env.OPS_USECASE_DB ?? 'ops_usecase'), admin.tenantId, admin.user.id, viewer.user.id, group], { cwd: join(ROOT, 'services/platform-service'), encoding: 'utf8' }).trim();
         const page = await consoleSignIn(browser, consoleUrl, WANJIRU, PASSWORD, errors);
+        // The role is given in the team the console acts in: Operations, Ravi's team, as the team switcher would set it.
+        await page.evaluate(() => sessionStorage.setItem('ops-team', 'team_ops'));
         await page.goto(`${consoleUrl}/govern/access/roles/${role.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-        await page.getByText(/held by \d+/).first().waitFor({ timeout: 120_000 });
+        await page.getByTestId('role-give').click({ timeout: 120_000 });
+        await page.getByTestId('give-role-to-holder').click();
+        await page.getByTestId('give-role-to-holder-search').fill(group);
+        const option = page.getByTestId(`give-role-to-holder-option-group:${out}`);
+        await option.waitFor({ timeout: 30_000 });
+        // The search runs on the server after a pause in typing; the unfiltered first page shows until it answers.
+        const rows = page.locator('[data-testid^="give-role-to-holder-option-"]');
+        await page.waitForFunction(() => document.querySelectorAll('[data-testid^="give-role-to-holder-option-"]').length === 1, null, { timeout: 15_000 }).catch(() => undefined);
+        const offered = await rows.allInnerTexts();
+        await option.click();
+        await shootBothWidths(page, 'console', 'uc-766-give-role-to-group', async () => page.waitForTimeout(300));
+        const given = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/v1/roles/${role.id}/holders`), { timeout: 60_000 });
+        await page.getByTestId('give-role-to-submit').click();
+        const answer = await given;
+        const status = answer.status();
+        const team = (await answer.json()).data?.teamId;
+        await page.getByText(/held by 1$/).first().waitFor({ timeout: 30_000 }).catch(() => undefined);
         const held = (await page.getByText(/held by \d+/).first().innerText()).trim();
-        check('3 the role is given to a group holding the viewer', /^[\w-]+$/.test(out) && /held by 1$/.test(held), { group: out, held });
+        check('3 the role is given to a group holding the viewer, from the role page', status === 201 && team === 'team_ops' && offered.length === 1 && /held by 1$/.test(held), { group: out, offered, status, team, held });
         await page.context().close();
       });
 

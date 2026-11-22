@@ -27,6 +27,8 @@ export const linkToolOptions: OptionSource<ToolOptionsPage> = { key: 'link-tool-
 export const fileOptions: OptionSource = { key: 'file-options', fetch: (p) => api.files.options(p) };
 /** The team's active people, by email: who a task is sent to. */
 export const peopleOptions: OptionSource = { key: 'people-options', fetch: (p) => api.settings.members.options(p) };
+/** Who a role can be given to in the team the console acts in: its people and the workspace's groups, one list. */
+export const roleHolderOptions = (roleId: string): OptionSource => ({ key: `role-holder-options:${roleId}`, fetch: (p) => api.teams.roleHolderOptions!(roleId, p) });
 /**
  * The team's agents under `filters`, searched and paged by the agents list route (`ids` names the ones a stored choice
  * holds); a page number is the cursor.
