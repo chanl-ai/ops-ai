@@ -25,9 +25,13 @@ from .conftest import DEMO_PASSWORD, SignInRig, seed_tx
 
 DEFAULTS: dict[str, Any] = {
     "requesterMayDecide": False,
+    # No floor under the teams' approval rules until the Security team sets one.
+    "approvalsFloor": {},
     "extractionFloor": 0.8,
     "stepUp": False,
     "publishReview": {},
+    # No team set: a skill written as text publishes with a write the agent decides, shown as a hint.
+    "skillPublishStrict": {},
     "companySignInRequired": False,
     "chatThreadsOwnerOnly": True,
     "egressNewHosts": "ask_security",
@@ -86,13 +90,13 @@ async def test_a_new_workspace_has_every_policy_open_but_the_ai_uses_which_start
 async def test_a_change_is_audited_with_before_and_after_and_moves_the_permission_version(engine: AsyncEngine) -> None:
     db, t = TenantDb(engine), await tenant(engine)
     store, version = PolicyStore(db), await RoleStore(db).version(t)
-    assert await store.set(t, "requesterMayDecide", True, by=ADA, request_id="r1") == (False, True)
+    assert await store.set(t, "stepUp", True, by=ADA, request_id="r1") == (False, True)
     assert await store.set(t, "extractionFloor", 0.9, by=ADA, request_id="r2") == (0.8, 0.9)
     assert await store.set(t, "extractionFloor", None, by=ADA, request_id="r3") == (0.9, None)
-    assert await store.values(t) == {**DEFAULTS, "requesterMayDecide": True, "extractionFloor": None}
+    assert await store.values(t) == {**DEFAULTS, "stepUp": True, "extractionFloor": None}
     assert await RoleStore(db).version(t) == version + 3
     assert await audit(engine, t) == [
-        ("policy.set", "requesterMayDecide", {"before": False, "after": True}),
+        ("policy.set", "stepUp", {"before": False, "after": True}),
         ("policy.set", "extractionFloor", {"before": 0.8, "after": 0.9}),
         ("policy.set", "extractionFloor", {"before": 0.9, "after": None}),
     ]
@@ -143,7 +147,7 @@ async def test_only_who_holds_settings_manage_changes_a_policy_and_the_change_is
 
     listed = await signin.public.get("/v1/policies", headers=signin.admin)
     assert {p["key"]: p["value"] for p in listed.json()["data"]} == DEFAULTS
-    assert listed.json()["data"][0]["changedBy"] == "settings.manage"
+    assert next(p for p in listed.json()["data"] if p["key"] == "stepUp")["changedBy"] == "settings.manage"
     put = await signin.public.put("/v1/policies/stepUp", json={"value": True}, headers=signin.admin)
     assert put.status_code == 200, put.text
     assert put.json()["data"] | {"effect": ""} == {
@@ -235,6 +239,39 @@ async def test_a_team_admin_sets_their_own_teams_publish_reviews_and_no_other_te
     )
     live = await signin.public.get("/v1/policies/publishReview", headers={"Authorization": f"Bearer {tools}"})
     assert live.json()["data"]["value"][team_a] == {"agents": "always"}, live.text
+
+
+async def test_a_team_admin_sets_their_teams_approval_rules_and_the_security_teams_floor_stops_a_looser_one(
+    signin: SignInRig,
+) -> None:
+    """D5: the team's approval rules are `approvals.manage` in the team, which its admin holds and a builder does not;
+    the Security team's floor (approvalsFloor) refuses a team's looser value and leaves a stricter one. Until every
+    caller passes the record's own area, the only area a team may turn on alone is reviews."""
+    team, ana = await _team_admin(signin, "ana")
+    _, bo = await _team_admin(signin, "bo", role="builder")
+    for unread in ({"agents": True}, {}):
+        r = await signin.public.put("/v1/policies/requesterMayDecide", json={"value": unread}, headers=ana)
+        assert (r.status_code, r.json()["error"]["code"]) == (400, "policy_value"), r.text
+    on = {"value": {"reviews": True}}
+    put = await signin.public.put("/v1/policies/requesterMayDecide", json=on, headers=ana)
+    assert put.status_code == 200 and put.json()["data"]["value"] == {team: {"reviews": True}}, put.text
+    assert put.json()["data"]["changedBy"] == "approvals.manage"
+    refused = await signin.public.put("/v1/policies/requesterMayDecide", json=on, headers=bo)
+    assert refused.status_code == 403, refused.text
+    floor = {"value": {"requesterMayDecide": False}}
+    assert (await signin.public.put("/v1/policies/approvalsFloor", json=floor, headers=ana)).status_code == 403
+    sec = await signin.security_admin_only(f"sec.floor@{signin.zone}")
+    # 0 equals False but every reader tests `is False`, so a 0 floor would save and lock nothing.
+    zero = await signin.public.put(
+        "/v1/policies/approvalsFloor", json={"value": {"requesterMayDecide": 0}}, headers=sec
+    )
+    assert (zero.status_code, zero.json()["error"]["code"]) == (400, "policy_value"), zero.text
+    put = await signin.public.put("/v1/policies/approvalsFloor", json=floor, headers=sec)
+    assert put.status_code == 200, put.text
+    looser = await signin.public.put("/v1/policies/requesterMayDecide", json=on, headers=ana)
+    assert (looser.status_code, looser.json()["error"]["code"]) == (409, "approval_floor"), looser.text
+    stricter = await signin.public.put("/v1/policies/requesterMayDecide", json={"value": False}, headers=ana)
+    assert stricter.status_code == 200, stricter.text
 
 
 async def test_only_the_security_team_lets_a_team_send_page_images(signin: SignInRig) -> None:

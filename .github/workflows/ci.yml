@@ -4,6 +4,8 @@ name: ci
 
 on:
   pull_request:
+    # labeled: adding ci:full starts a run of every job without a new push.
+    types: [opened, synchronize, reopened, labeled]
   # develop and main run the same checks after a merge; the staging job at the end deploys develop, and a release or
   # hotfix branch (docs/deploy/release.md) so the release is tested on staging.
   push:
@@ -45,12 +47,17 @@ jobs:
       scripts: ${{ steps.plan.outputs.scripts }}
       service_jobs: ${{ steps.plan.outputs.service_jobs }}
       repo_pool: ${{ steps.plan.outputs.repo_pool }}
+      code: ${{ steps.plan.outputs.code }}
+      mssql: ${{ steps.plan.outputs.mssql }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup
       - id: plan
+        env:
+          # [ci full] in the pull request's title, or its ci:full label, runs every job whatever changed.
+          CI_FULL: ${{ contains(github.event.pull_request.title, '[ci full]') || contains(github.event.pull_request.labels.*.name, 'ci:full') }}
         run: |
           base=$(git merge-base "$BASE_SHA" HEAD)
           scripts/ci-plan.sh "$base" | tee -a "$GITHUB_OUTPUT"
@@ -58,7 +65,8 @@ jobs:
   checks:
     # The one list of checks (make/checks.mk), the same one `make verify`, verify-changed.sh and pre-commit run.
     needs: plan
-    if: needs.plan.outputs.full != 'true' || needs.plan.outputs.release == 'true'
+    # A change of documents only has nothing for these checks; the docs job and the leak scan check it.
+    if: (needs.plan.outputs.full != 'true' && needs.plan.outputs.code == 'true') || needs.plan.outputs.release == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
@@ -219,6 +227,7 @@ jobs:
     # SQL Server unless OPS_MSSQL_SERVER and MSSQL_SA_PASSWORD are set (packages/ops_store/CLAUDE.md), so a run that
     # skips any of them fails here. The image is the pinned one deploy/fly/mssql/Dockerfile builds on.
     needs: plan
+    if: needs.plan.outputs.mssql == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     services:
@@ -269,7 +278,7 @@ jobs:
             [documents-service]="tests/test_isolation.py tests/test_template_copies.py"
             [files-service]="tests/test_isolation.py tests/test_store.py"
             [kb-service]="tests/test_kb_isolation.py tests/test_kb_changed.py tests/test_team_isolation.py tests/test_background_tenants.py tests/test_system_user_predicates.py tests/test_lookup_indexes.py tests/test_list_routes.py tests/test_statement_budget.py"
-            [platform-service]="tests/test_store_both_databases.py tests/test_lookup_exposure.py tests/test_migrations.py tests/test_rls.py tests/test_policies.py tests/test_access_check.py tests/test_acting_for.py tests/test_api_key_target.py tests/test_audit_events.py tests/test_bootstrap.py tests/test_boundary.py tests/test_cors.py tests/test_custom_roles.py tests/test_dev_sign_in.py tests/test_flags.py tests/test_identity_seam.py tests/test_introspect.py tests/test_member_options.py tests/test_reply_pins.py tests/test_saml_security.py tests/test_seed.py tests/test_team_names.py tests/test_tenancy_mode.py tests/test_workspace_admin.py tests/test_body_name_pins.py tests/test_signin_lockout.py tests/test_signin_password.py tests/test_auth.py tests/test_holders.py tests/test_signin_secrets.py tests/test_api_keys.py tests/test_step_up.py"
+            [platform-service]="tests/test_store_both_databases.py tests/test_lookup_exposure.py tests/test_migrations.py tests/test_rls.py tests/test_policies.py tests/test_access_check.py tests/test_acting_for.py tests/test_api_key_target.py tests/test_audit_events.py tests/test_bootstrap.py tests/test_boundary.py tests/test_cors.py tests/test_custom_roles.py tests/test_dev_sign_in.py tests/test_flags.py tests/test_identity_seam.py tests/test_introspect.py tests/test_member_options.py tests/test_reply_pins.py tests/test_saml_security.py tests/test_seed.py tests/test_team_names.py tests/test_tenancy_mode.py tests/test_workspace_admin.py tests/test_body_name_pins.py tests/test_signin_lockout.py tests/test_signin_password.py tests/test_auth.py tests/test_holders.py tests/test_signin_secrets.py tests/test_api_keys.py tests/test_step_up.py tests/test_role_assignments.py"
             [tools-service]="tests/test_policed_tables.py tests/test_module_tenant_policy.py tests/test_mcp_link_rows_isolated.py tests/test_secret_rows_isolated.py tests/test_sign_in_rows_isolated.py tests/test_registry_store.py tests/test_background_two_tenants.py tests/test_gateway_fences.py tests/test_statement_budget.py"
           )
           failed=0

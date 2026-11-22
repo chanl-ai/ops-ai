@@ -856,7 +856,8 @@ export interface paths {
         /**
          * Read Role
          * @description One role and its grid: every area and action in the catalogue, with the scope it grants or null, and
-         *     whether the caller may change it (`canEdit`: a workspace admin, for any role but Admin).
+         *     whether the caller may change it (`canEdit`: a workspace admin, for any role but Admin, Owner and Security
+         *     admin).
          */
         get: operations["roles_read_role"];
         put?: never;
@@ -909,7 +910,9 @@ export interface paths {
          * Edit Role
          * @description Sets a role's cells, built-in or custom; every service decides from them once the holders' tokens refresh.
          *     A workspace admin's (access.manage in every team): roles apply in every team. Audited; 409
-         *     `admin_holds_every_cell` for Admin, 400 `unknown_cell` for a cell outside the catalogue.
+         *     `admin_holds_every_cell` for Admin, 409 `role_set_by_rule` for Owner and Security admin, 400 `owner_only` for
+         *     workspace.manage on another built-in role, 400 `builtin_role_empty` for an empty list on a built-in role (reset
+         *     it instead), 400 `unknown_cell` for a cell outside the catalogue.
          */
         put: operations["roles_edit_role"];
         post?: never;
@@ -2535,7 +2538,7 @@ export interface components {
              * Via
              * @enum {string}
              */
-            via: "person" | "team";
+            via: "person" | "team" | "group";
         };
         /** GridRow */
         GridRow: {
@@ -3077,7 +3080,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "bool" | "floor" | "days" | "hours" | "publish_modes" | "names" | "choice" | "app_changes" | "app_changes_by_app";
+            kind: "bool" | "floor" | "days" | "hours" | "publish_modes" | "names" | "choice" | "app_changes" | "app_changes_by_app" | "by_area" | "floor_rules";
             /** Note */
             note?: string | null;
             /** Title */
@@ -3284,7 +3287,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "person" | "team";
+            kind: "person" | "team" | "group";
             /** Name */
             name: string;
             /** Teamid */

@@ -196,7 +196,7 @@ class GrantOut(TypedDict, closed=True):
 class GrantingRole(TypedDict, closed=True):
     id: str
     name: str
-    via: Literal["person", "team"]
+    via: Literal["person", "team", "group"]
 
 
 class GridRow(TypedDict, closed=True):
@@ -436,6 +436,8 @@ class PolicyOut(TypedDict, closed=True):
         "choice",
         "app_changes",
         "app_changes_by_app",
+        "by_area",
+        "floor_rules",
     ]
     note: NotRequired[str | None]
     title: str
@@ -511,7 +513,7 @@ class RoleGrantOut(TypedDict, closed=True):
 class RoleHolderOut(TypedDict, closed=True):
     email: NotRequired[str | None]
     id: str
-    kind: Literal["person", "team"]
+    kind: Literal["person", "team", "group"]
     name: str
     teamId: str
 

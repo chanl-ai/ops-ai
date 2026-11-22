@@ -57,6 +57,10 @@ KIND = {
     "role.delete": "deleted",
     "role.grant": "role_changed",
     "role.ungrant": "role_changed",
+    "group.create": "created",
+    "group.member_add": "role_changed",
+    "group.member_remove": "role_changed",
+    "group.delete": "deleted",
     "signin_secret.save": "edited",
     "signin_secret.delete": "deleted",
 }

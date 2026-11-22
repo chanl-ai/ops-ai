@@ -346,6 +346,7 @@ export const SITE = [
         entries: [
           'deploy/release.md',
           { page: 'deploy/install-guide.md', title: 'Install guide, one page (generated)', icon: 'clipboard-list' },
+          { page: 'deploy/package-install.md', title: 'INSTALL.md inside the release package', icon: 'package' },
           'deploy/docs-site.md',
           {
             group: 'Team environments',

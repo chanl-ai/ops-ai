@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-20",
+  "title": "Roles for groups and a team's own approval rules",
+  "description": "A role can now be given to a group of people, in one team or every team, and never carries admin-level permissions through a group. A team's admin sets the team's approval rules, including letting whoever asked decide in one area at a time, inside a floor the Security team can lock.",
+  "tag": "new"
+}
