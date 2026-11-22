@@ -1037,6 +1037,12 @@ class ListResultDocumentRow(TypedDict, closed=True):
     pagination: Pagination
 
 
+class ListResultItemChunk(TypedDict, closed=True):
+    data: list[ItemChunk]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
 class ListResultItem(TypedDict, closed=True):
     data: list[Item]
     facets: dict[str, dict[str, int]]
@@ -1247,6 +1253,11 @@ class EnvelopeKnowledgeChange(TypedDict, closed=True):
 
 class EnvelopeListResultDocumentRow(TypedDict, closed=True):
     data: ListResultDocumentRow
+    success: Literal[True]
+
+
+class EnvelopeListResultItemChunk(TypedDict, closed=True):
+    data: ListResultItemChunk
     success: Literal[True]
 
 

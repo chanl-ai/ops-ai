@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_kb.store import KnowledgeStore
 from ops_kb.store.document_list import document_page
-from ops_kb.store.knowledge import NewBase, NewSource, kb_items, kb_runs
+from ops_kb.store.knowledge import NewBase, NewSource, kb_chunks, kb_items, kb_runs
 from ops_service_kit.listing import ListParams
 from ops_store import isolation
 from ops_store.team_scope import acting_as
@@ -429,3 +429,48 @@ async def test_a_duplicate_names_its_copy_only_when_the_callers_team_can_see_it(
     with isolation.tenant_wide(WIDE, tenant_id=tenant), acting_as("team_ops"):
         named = await KnowledgeStore(engine).copy_names(tenant, [kept, hidden, crossed, stray])
     assert [c.id for c in named] == [kept]
+
+
+async def test_a_documents_pieces_are_searched_and_paged_on_the_server(
+    kb: httpx.AsyncClient,  # noqa: F811
+    engine: AsyncEngine,
+    tenant: str,
+) -> None:
+    """The pieces tab reads a page: a search that is not sent to SQL, a page past its size, a withdrawn piece shown or
+    another item's piece mixed in each fails here."""
+    [source] = await _seed_sources(engine, tenant, "team_ops", "Refund policies")
+    [item, other] = await insert_rows(
+        engine, tenant, "team_ops", kb_items, item_row(source, "Refunds"), item_row(source, "Fees")
+    )
+
+    def piece(of: str, at: int, text: str, *, withdrawn: bool = False) -> dict[str, Any]:
+        return {
+            "id": f"ch_{uuid4().hex[:12]}",
+            "item_id": of,
+            "version": 1,
+            "position": at,
+            "title": "Refunds",
+            "section": f"Section {at}",
+            "page": None,
+            "tokens": 5,
+            "text": text,
+            "withdrawn_at": AT if withdrawn else None,
+        }
+
+    await insert_rows(
+        engine,
+        tenant,
+        "team_ops",
+        kb_chunks,
+        piece(item, 2, "A REFUND over 500 needs a second approver."),
+        piece(item, 0, "Refunds are paid in 5 days."),
+        piece(item, 1, "Cards are replaced free."),
+        piece(item, 3, "An old refund rule.", withdrawn=True),
+        piece(other, 0, "A refund fee applies."),
+    )
+    first = await _page(kb, f"/v1/items/{item}/chunks", search="refund", pageSize=1)
+    assert [c["text"] for c in first["data"]] == ["Refunds are paid in 5 days."]
+    assert (first["pagination"]["total"], first["pagination"]["hasNext"]) == (2, True)
+    second = await _page(kb, f"/v1/items/{item}/chunks", search="refund", pageSize=1, page=2)
+    assert [c["index"] for c in second["data"]] == [2]
+    assert (await kb.get("/v1/items/item_missing/chunks")).status_code == 404

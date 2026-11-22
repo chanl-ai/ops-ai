@@ -9,6 +9,8 @@ import { DialogShell } from '@/components/shared/dialog-shell';
 import { FieldRow, FieldSectionLabel } from '@/components/shared/field-row';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
+import { QueryError } from '@/components/shared/query-states';
+import { useItemPieces } from '@/hooks/knowledge-queries';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -91,7 +93,8 @@ export function DocumentSheet({
   const d = item?.detail;
   const synced = item && !['file', 'text'].includes(item.sourceType);
   const questions = (d?.chunks ?? []).flatMap((c) => (c.units ?? []).filter((u) => u.kind === 'question').map((u) => ({ text: u.text, piece: c })));
-  const chunks = d?.chunks.filter((c) => !chunkQuery || `${c.text} ${c.location}`.toLowerCase().includes(chunkQuery.toLowerCase())) ?? [];
+  const pieces = useItemPieces(item?.id, chunkQuery, open && tab === 'pieces');
+  const chunks = pieces.rows;
 
   return (
     <>
@@ -328,14 +331,23 @@ export function DocumentSheet({
                           .filter(([, v]) => v)
                           .map(([k, v]) => (
                           <Badge key={k} variant="outline" className="h-5 px-1.5 font-mono text-[10px] font-normal">
-                            {k}: {v}
+                            {k}: {String(v)}
                           </Badge>
                         ))}
                       </div>
                     </li>
                   ))}
-                  {chunks.length === 0 && <li className="py-6 text-center text-sm text-muted-foreground">{d.chunks.length ? 'No piece matches.' : 'No pieces yet.'}</li>}
+                  {pieces.isPending && [0, 1, 2].map((i) => <Skeleton key={i} className="my-3 h-12 w-full" />)}
+                  {!pieces.isPending && !pieces.isError && chunks.length === 0 && <li className="py-6 text-center text-sm text-muted-foreground">{chunkQuery ? 'No piece matches.' : 'No pieces yet.'}</li>}
                 </ol>
+                {pieces.isError && <QueryError what="pieces" error={pieces.error} onRetry={() => pieces.refetch()} retrying={pieces.isFetching} />}
+                {pieces.hasNextPage && (
+                  <div className="flex justify-center">
+                    <LoadingButton variant="ghost" size="sm" isLoading={pieces.isFetchingNextPage} onClick={() => void pieces.fetchNextPage()} data-testid="item-pieces-more">
+                      Show more
+                    </LoadingButton>
+                  </div>
+                )}
               </TabsContent>
 
               <TabsContent value="questions" className="flex flex-col gap-2 pt-3">
