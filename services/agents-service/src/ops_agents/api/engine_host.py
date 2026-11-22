@@ -28,7 +28,16 @@ from ops_agents.activities.gateway import (
     gateway_error,
 )
 from ops_checkpointer import LeaseSupersededError
-from ops_engine.ports import AS_TEAM_ACCOUNT, STEP_ACCOUNTS, Access, LeaseBusyError, ToolResult, outside_call
+from ops_engine.ports import (
+    AS_TEAM_ACCOUNT,
+    STEP_ACCOUNTS,
+    WRITE_CLASSES,
+    Access,
+    LeaseBusyError,
+    ToolResult,
+    WriteClass,
+    outside_call,
+)
 from ops_engine.store import DefinitionStore, RunStore
 from ops_identity import ServiceCallError
 from ops_policy import input_hash
@@ -164,6 +173,16 @@ class GatewayTools:
         with outside_call():
             found = (await self._gw().tool_policy(operation)).get("deadlineSeconds")
         return float(found) if isinstance(found, (int, float)) else None
+
+    async def write_class(self, operation: str) -> WriteClass:
+        """The class `operation` declares in its policy (`writeClass`) for a write whose gateway died; `unsafe` when it
+        declares none, so a person decides."""
+        with outside_call():
+            found = (await self._gw().tool_policy(operation)).get("writeClass")
+        for kind in WRITE_CLASSES:
+            if found == kind:
+                return kind
+        return "unsafe"
 
     async def find(self, key: str, operation: str) -> ToolResult | None:
         """The gateway's record of the write sent under `key`, decided on its claim (the effect row) alone; with no

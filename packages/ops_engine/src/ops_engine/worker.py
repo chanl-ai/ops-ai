@@ -38,6 +38,7 @@ from .compiler import (
     CompiledCache,
     NodeFailedError,
     WriteInDoubtError,
+    WriteNeedsPersonError,
     WriteUncertainError,
     failure_code,
     technical,
@@ -347,6 +348,12 @@ class Worker:
             with suppress(LeaseSupersededError):
                 await self.runs.update(run.id, generation=generation, status="queued", error=str(e))
                 await self.queue.release(work, min(30.0, float(2**work.attempts)), error=str(e))
+        except WriteNeedsPersonError as e:
+            # Its gateway died and its class cannot settle it: a person decides (Retry reads the gateway again).
+            log.warning("engine_write_needs_person", run=run.id, work=work.id, error=e.detail)
+            with suppress(LeaseSupersededError):
+                message, detail, err = failure_of(e)
+                await self._stuck(run, generation, work, message, detail, err=err)
         except WriteUncertainError as e:
             # A write that may have run: the run fails now with the reason, and no pass sends it again.
             log.warning("engine_write_uncertain", run=run.id, work=work.id, error=e.detail)

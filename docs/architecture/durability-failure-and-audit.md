@@ -95,6 +95,12 @@ when the gateway never ran it (`POST /v1/calls/abandon`, `services/tools-service
 | write, not idempotent | Send a reply | One attempt, then a reconciliation read | Manual handling if the read cannot tell |
 | money | Place a wire hold | One attempt, then a reconciliation read; approval token from two approvers | Manual handling |
 
+A write whose gateway claimed it and then died (the call lost, or still claimed past the step's deadline) goes by
+the class its operation declares (`WriteClass`, `packages/ops_engine/src/ops_engine/ports.py`): `idempotent` is sent
+again under the next attempt's key, `checkable` is settled by a read of the system and sent again only when the read
+says it never ran, and `unsafe` (the default) pauses the run as Stuck for a person. The gateway adapter reads the class
+from the operation's policy (`writeClass`); tools-service does not declare it yet, so every write is `unsafe` today.
+
 No run ends silently: a failed or stuck run, a recursion limit hit, or a timer past its retry cap lands in manual
 handling, shown in Reviews. A workflow on the engine retries by side-effect class (`RETRY_BY_EFFECTS`,
 `packages/ops_engine/src/ops_engine/compiler.py:1399`), and the run reconciler marks stuck runs

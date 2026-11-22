@@ -14,6 +14,11 @@ from ops_agent_kernel.ports import KnowledgePort
 from ops_service_kit.http import Json
 
 Access = Literal["read", "write", "unknown"]
+# What a write does when its gateway died after claiming it, so no record says whether it ran. `idempotent`: the
+# system dedupes on the run-and-step key (`run:node:iteration`), so it is sent again. `checkable`: a read of the system
+# (ToolPort's optional `read_back`) says whether it ran. `unsafe`: a person decides; the run pauses as Stuck.
+WriteClass = Literal["idempotent", "checkable", "unsafe"]
+WRITE_CLASSES: tuple[WriteClass, ...] = ("idempotent", "checkable", "unsafe")
 
 # Marks an exception raised by a real outbound call: a tool, an app, a model or another service failing, which the
 # error model reads as upstream and retryable (`tool_failed`). Anything a step raises without it is our own fault
@@ -105,6 +110,10 @@ class ToolPort(Protocol):
         """The gateway's record of the write sent under `key`, for reconciling it after a crash; None when the gateway
         has none, in which case the key is abandoned there so a call still in flight cannot run later."""
         ...
+
+    # Two optional methods, read with getattr so a port without them reads every write as `unsafe`:
+    # `write_class(operation) -> WriteClass`, the class the operation declares, and `read_back(operation, input) ->
+    # ToolResult | None` for a `checkable` one: the system's answer when the write ran, None when it did not.
 
 
 class ExpressionPort(Protocol):

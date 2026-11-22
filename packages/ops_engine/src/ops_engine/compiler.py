@@ -129,6 +129,11 @@ class WriteUncertainError(NodeFailedError):
         super().__init__(plain, detail, code="write_uncertain", step=step, step_name=step_name, attempt=attempt)
 
 
+class WriteNeedsPersonError(WriteUncertainError):
+    """An uncertain write whose gateway died and whose class cannot settle it (`unsafe`, or a read that cannot
+    tell): the run pauses as Stuck for a person to decide, instead of failing."""
+
+
 def technical(e: BaseException) -> str:
     return f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
 
@@ -1469,7 +1474,7 @@ class Wrapper:
             # A write that may have reached the gateway (its process died mid-call, or the call raised) is never sent
             # again: its own key decides what happened.
             settled = await self.reconcile(
-                last, deadline_s=await self.deadline(params), may_resend=last.attempt < policy.attempts
+                last, deadline_s=await self.deadline(params), may_resend=last.attempt < policy.attempts, params=params
             )
             if settled is not None:
                 return settled
@@ -1505,7 +1510,7 @@ class Wrapper:
                 if reconciled:
                     # A timeout or a 5xx says nothing about whether the write happened; the gateway's record does.
                     settled = await self.reconcile(
-                        r, cause=message, deadline_s=timeout, may_resend=attempt < policy.attempts
+                        r, cause=message, deadline_s=timeout, may_resend=attempt < policy.attempts, params=params
                     )
                     if settled is not None:
                         return settled
@@ -1575,6 +1580,34 @@ class Wrapper:
         await self.ports.hooks.after_step(r.run_id, r.node_id, status)
         return {channel(r.node_id): _envelope(replace(r, port=outcome.port, output=outcome.out))}
 
+    async def dead_gateway(
+        self,
+        dangling: StepRow,
+        message: str,
+        recorded: Any,
+        params: Mapping[str, JsonValue] | None,
+        *,
+        may_resend: bool,
+    ) -> Json | None:
+        """A write whose gateway claimed it and then died (lost, or still claimed past the step's deadline), by the
+        class its operation declares: an `idempotent` one returns None, so the caller sends it again; a `checkable` one
+        is settled by a read of the system, and sent again when the read says it never ran; an `unsafe` one, or one
+        whose read cannot tell, pauses the run for a person (WriteNeedsPersonError). Never a key held forever."""
+        operation = str(cast(Json, dangling.input or {}).get("operation") or "")
+        classify = getattr(self.ports.tools, "write_class", None)
+        kind = await classify(operation) if classify is not None else "unsafe"
+        await self.journal.finish(dangling, status="error", port=None, output=recorded, error=message)
+        read_back = getattr(self.ports.tools, "read_back", None)
+        if kind == "checkable" and read_back is not None and params is not None:
+            seen = cast(ToolResult | None, await read_back(operation, cast(Json, params.get("input") or {})))
+            if seen is not None and seen.ok:
+                return await self.record(dangling, Outcome("ok", seen.output))
+            if seen is None and may_resend:
+                return None
+        elif kind == "idempotent" and may_resend:
+            return None
+        raise WriteNeedsPersonError(uncertain_failure(self.node.name or self.node.id), f"{message} ({kind} write)")
+
     async def reconcile(
         self,
         dangling: StepRow,
@@ -1582,6 +1615,7 @@ class Wrapper:
         cause: str | None = None,
         deadline_s: float | None = None,
         may_resend: bool = False,
+        params: Mapping[str, JsonValue] | None = None,
     ) -> Json | None:
         """A write whose outcome is unknown: the gateway's record under the attempt's own key decides. Found done
         means the write happened; refused or failed by its input is that port; absent means it never arrived, and the
@@ -1597,12 +1631,14 @@ class Wrapper:
         if found is not None and found.pending:
             if _past(dangling.started_at, deadline_s if deadline_s is not None else self.type.timeout_seconds):
                 message = f"{dangling.key} was still running at the gateway at the step's deadline"
-                await self.journal.finish(dangling, status="error", port=None, output=None, error=message)
-                raise WriteUncertainError(uncertain_failure(name), message)
+                return await self.dead_gateway(dangling, message, None, params, may_resend=may_resend)
             raise WriteInDoubtError(f"{dangling.key} is still running at the gateway")
         if found is not None and not found.ok and not found.refused:
             recorded: Any = found.output
-            if found.lost or sent_and_unanswered(_error_of(recorded)):
+            if found.lost:
+                message = found.reason or technical_error(recorded)
+                return await self.dead_gateway(dangling, message, recorded, params, may_resend=may_resend)
+            if sent_and_unanswered(_error_of(recorded)):
                 message = found.reason or technical_error(recorded)
                 await self.journal.finish(dangling, status="error", port=None, output=recorded, error=message)
                 raise WriteUncertainError(uncertain_failure(name), message)
