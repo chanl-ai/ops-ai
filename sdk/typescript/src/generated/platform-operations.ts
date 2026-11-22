@@ -333,7 +333,9 @@ export const platformOperations = {
   },
   "members_change_roles": {
     "body": "json",
-    "headers": [],
+    "headers": [
+      "x-acting-for"
+    ],
     "method": "POST",
     "path": "/v1/settings/members/role",
     "pathParams": [],
@@ -342,7 +344,9 @@ export const platformOperations = {
   },
   "members_invite_members": {
     "body": "json",
-    "headers": [],
+    "headers": [
+      "x-acting-for"
+    ],
     "method": "POST",
     "path": "/v1/settings/members/invite",
     "pathParams": [],

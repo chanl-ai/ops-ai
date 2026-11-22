@@ -22,7 +22,7 @@ import hashlib
 import time
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import replace
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 from fastapi import Header, Request
 
@@ -181,35 +181,9 @@ class Identity:
             raise _refused()
         named: list[Any] = claims.get("team_ids") or []
         team_ids = [str(t) for t in named]
-        # A claim left out (or empty) is none; one of another shape fails the request, as `.items()` on it did.
-        roles_claim = an_object(claims["roles"], "the token's roles") if claims.get("roles") else {}
-        access_claim = an_object(claims["access"], "the token's access") if claims.get("access") else {}
         version = claims.get("perm_version")
-        policies = an_object(claims["policies"], "the token's policies") if claims.get("policies") else {}
-        grids_claim = an_object(claims["grids"], "the token's grids") if claims.get("grids") else {}
         await self._require_current(str(claims["tenant_id"]), version if isinstance(version, int) else None)
-        return Principal(
-            kind="person",
-            sub=str(claims["sub"]),
-            email=str(claims.get("email", "")),
-            name=str(claims.get("name", "")),
-            tenant_id=str(claims["tenant_id"]),
-            team_id=_pick_team(team_ids, team),
-            team_ids=team_ids,
-            roles={str(k): str(v) for k, v in roles_claim.items()},
-            scopes=[],
-            auth_method="session" if claims.get("auth_method") != "dev" else "dev",
-            access={str(k): [str(r) for r in a_list(v, "a team's roles")] for k, v in access_claim.items()},
-            grids={
-                str(r): {str(a): str(x) for a, x in an_object(g, "a role's grid").items()}
-                for r, g in grids_claim.items()
-            },
-            permission_version=int(version) if isinstance(version, int) else None,
-            policies={str(k): v for k, v in policies.items()},
-            security_team=str(claims["security_team"]) if claims.get("security_team") else None,
-            client_id=str(claims["client_id"]) if claims.get("client_id") else None,
-            client_name=str(claims["client_name"])[:120] if claims.get("client_name") else None,
-        )
+        return person_from_claims(claims, team_ids=team_ids, team_id=_pick_team(team_ids, team))
 
     async def _require_current(self, tenant_id: str, version: int | None) -> None:
         if self.current_version is None:
@@ -379,3 +353,49 @@ def mint_service_token(
     if team_id is not None:
         claims["team_id"] = team_id
     return mint(claims, signer, ttl_s=ttl_s)
+
+
+def person_from_claims(claims: Json, *, team_ids: list[str], team_id: str | None) -> Principal:
+    """A person as a verified token's claims name them and what they may do; one shape for a session and an
+    acting-for token, so ops_access decides the same from either."""
+    # A claim left out (or empty) is none; one of another shape fails the request, as `.items()` on it did.
+    roles_claim = an_object(claims["roles"], "the token's roles") if claims.get("roles") else {}
+    access_claim = an_object(claims["access"], "the token's access") if claims.get("access") else {}
+    version = claims.get("perm_version")
+    policies = an_object(claims["policies"], "the token's policies") if claims.get("policies") else {}
+    grids_claim = an_object(claims["grids"], "the token's grids") if claims.get("grids") else {}
+    return Principal(
+        kind="person",
+        sub=str(claims["sub"]),
+        email=str(claims.get("email", "")),
+        name=str(claims.get("name", "")),
+        tenant_id=str(claims["tenant_id"]),
+        team_id=team_id,
+        team_ids=team_ids,
+        roles={str(k): str(v) for k, v in roles_claim.items()},
+        scopes=[],
+        auth_method="session" if claims.get("auth_method") != "dev" else "dev",
+        access={str(k): [str(r) for r in a_list(v, "a team's roles")] for k, v in access_claim.items()},
+        grids={
+            str(r): {str(a): str(x) for a, x in an_object(g, "a role's grid").items()} for r, g in grids_claim.items()
+        },
+        permission_version=int(version) if isinstance(version, int) else None,
+        policies={str(k): v for k, v in policies.items()},
+        security_team=str(claims["security_team"]) if claims.get("security_team") else None,
+        client_id=str(claims["client_id"]) if claims.get("client_id") else None,
+        client_name=str(claims["client_name"])[:120] if claims.get("client_name") else None,
+    )
+
+
+def principal_of(person: ActingForPerson, tenant_id: str) -> Principal:
+    """The person an acting-for token names, holding only what the token says they may do in its one team: a
+    token without those claims (minted in dev, or before they existed) gives a person with no roles, so every cell
+    of theirs is refused."""
+    claims: Json = {
+        **cast(Json, person.access or {}),
+        "sub": person.sub,
+        "email": person.email,
+        "name": person.name,
+        "tenant_id": tenant_id,
+    }
+    return person_from_claims(claims, team_ids=[person.team_id], team_id=person.team_id)

@@ -9097,7 +9097,9 @@ export interface operations {
     members_invite_members: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-acting-for"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -9308,7 +9310,9 @@ export interface operations {
     members_change_roles: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-acting-for"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };

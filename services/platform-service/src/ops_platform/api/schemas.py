@@ -67,6 +67,8 @@ class ActingForIn(In):
     """The person a tool call acts for, by the email a run or chat turn records; the team is the service token's."""
 
     email: str = Field(min_length=3, max_length=320)
+    # The service the token is to be sent to; unset, the calling service's default (acting_for.AUDIENCES).
+    audience: str | None = Field(default=None, max_length=32)
 
 
 class ActingForOut(Out):
