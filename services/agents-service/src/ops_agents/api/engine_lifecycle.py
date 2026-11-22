@@ -37,7 +37,7 @@ from .deps import Runtime
 from .email_trigger import EMAIL_TRIGGER, require_binding
 from .publish_policy import decide, team_document
 from .review_sla import sla_hours
-from .routers.tool_catalog import known_tools
+from .routers.tool_catalog import directory_tools, known_tools
 
 KIND = "engine"
 REGISTRY = default_registry()
@@ -145,7 +145,12 @@ async def _missing_tools(rt: Runtime, definition: Json) -> list[Blocker]:
     if not steps:
         return []
 
-    offered = {t["id"] for t in await known_tools(rt)}
+    # The registry's operations first: they need no store read, and a step naming a workflow is rare, so the
+    # workflow rows are read only when a step is still unmatched.
+    listed = await directory_tools(rt)
+    offered = {t["id"] for t in listed}
+    if any(op not in offered for _, op in steps):
+        offered = {t["id"] for t in await known_tools(rt, listed=listed)}
     if any(op not in offered for _, op in steps):
         offered = {t["id"] for t in await known_tools(rt, fresh=True)}
     out: list[Blocker] = []

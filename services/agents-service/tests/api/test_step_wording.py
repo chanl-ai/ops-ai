@@ -53,14 +53,16 @@ async def _tool_steps(s: Stack, run: str, calls: list[tuple[str, str, dict[str, 
 
 
 class _Directory:
-    """The tool directory with no operations, counting its reads."""
+    """The team's tool directory, counting its reads. It keeps the team's operations, so the run's workflow, whose
+    step calls get_customer, still publishes."""
 
-    def __init__(self) -> None:
+    def __init__(self, inner: Any) -> None:
+        self.inner = inner
         self.reads = 0
 
     async def operations(self) -> list[Any]:
         self.reads += 1
-        return []
+        return list(await self.inner.operations())
 
 
 async def test_activity_never_titles_a_call_with_its_tool_name(stack: Stack) -> None:  # noqa: F811
@@ -91,7 +93,7 @@ async def test_activity_describes_a_page_of_calls_in_fixed_reads(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     c, rt = stack
-    directory = _Directory()
+    directory = _Directory(rt.directory())
     monkeypatch.setattr(rt, "directory", lambda: directory)
     statements: list[str] = []
 
@@ -146,8 +148,9 @@ async def test_a_task_list_reads_the_directory_once(
     for _ in range(3):
         await drafted(dev_platform, james)
     transport = cast(ASGITransport, dev_platform._transport)  # pyright: ignore[reportPrivateUsage]
-    directory = _Directory()
-    monkeypatch.setattr(cast(Any, transport.app).state.runtime, "directory", lambda: directory)
+    runtime = cast(Any, transport.app).state.runtime
+    directory = _Directory(runtime.directory())
+    monkeypatch.setattr(runtime, "directory", lambda: directory)
     listed = await dev_platform.get("/reviews", headers=james)
     assert listed.status_code == 200 and len(listed.json()["data"]["data"]) >= 3, listed.text
     assert directory.reads == 1, directory.reads
