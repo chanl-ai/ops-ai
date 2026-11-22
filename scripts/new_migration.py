@@ -21,8 +21,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SERVICES = ("agents", "tools", "models", "kb", "platform", "files", "documents")
-# Alembic's version table is sized by the first migration of each chain; the longest id in the repo is 55 characters.
-MAX_ID = 50
+# Alembic's version table is sized by the first migration of each chain: tools' alembic_version_tools.version_num is
+# varchar(32), the narrowest, so a longer id fails its upgrade with "value too long".
+MAX_ID = 32
 
 
 def revision_id(name: str, now: datetime) -> str:
