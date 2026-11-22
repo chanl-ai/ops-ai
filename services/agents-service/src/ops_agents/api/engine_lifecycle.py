@@ -10,29 +10,32 @@ only in `request_publish`.
 
 from __future__ import annotations
 
-from typing import cast
+from dataclasses import dataclass
+from typing import Literal, cast
 
 from pydantic import JsonValue
 
 from ops_engine import default_registry
-from ops_engine.definition import WorkflowDefinition, validate
+from ops_engine.definition import InvalidDefinitionError, parse, validate
+from ops_engine.diff import diff
 from ops_engine.node_types import list_columns
 from ops_engine.store import DefinitionRow, DefinitionStore, DefinitionVersion
 from ops_engine.store.definitions import ListColumns
 from ops_service_kit import narrow
-from ops_service_kit.errors import Conflict, NotFound, Unprocessable
+from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, Unprocessable
 from ops_service_kit.http import Json
 
 from ..store.agent_registry import PublishRequestRow
 from ..store.engine import EngineTransactions
 from ..store.mailboxes import MailboxStore
 from ..store.tenancy import current_team
+from . import ai_steps_gate
 from .account_names import require_team_accounts, step_names
 from .agent_registry import ReviewView, registry, review_view
 from .auth import Principal, require_builder
 from .deps import Runtime
-from .email_trigger import require_binding
-from .publish_policy import decide
+from .email_trigger import EMAIL_TRIGGER, require_binding
+from .publish_policy import decide, team_document
 from .review_sla import sla_hours
 
 KIND = "engine"
@@ -69,15 +72,18 @@ def nodes_of(definition: Json | None) -> dict[str, Json]:
 
 
 def changes(old: Json | None, new: Json) -> list[str]:
-    """What a reviewer reads: steps added, removed or changed against the version that serves the workflow now."""
+    """What a reviewer reads: steps added, removed, changed or moved against the version that serves the workflow now,
+    in the words of the editor's diff (`ops_engine.diff`)."""
     if old is None:
         return ["First version"]
-    before, after = nodes_of(old), nodes_of(new)
-    out = [f"Added step {n.get('name') or i}" for i, n in after.items() if i not in before]
-    out += [f"Removed step {n.get('name') or i}" for i, n in before.items() if i not in after]
-    out += [f"Changed step {n.get('name') or i}" for i, n in after.items() if i in before and before[i] != n]
-    if old.get("connections") != new.get("connections"):
+    d = diff(old, new)
+    out = [f"Added step {s['name']}" for s in d["added"]]
+    out += [f"Removed step {s['name']}" for s in d["removed"]]
+    out += [f"Changed step {s['name']}" for s in d["changed"]]
+    out += [f"Moved step {s['name']}" for s in d["moved"]]
+    if d["connected"] or d["disconnected"]:
         out.append("Changed connections")
+    out += [f"Changed workflow {f['field']}" for f in d["workflow"]]
     return out or ["No step changed"]
 
 
@@ -110,9 +116,122 @@ def require_rights(me: Principal, row: DefinitionRow, action: str) -> None:
     )
 
 
-async def request_publish(rt: Runtime, me: Principal, workflow_id: str, version: int | None, note: str) -> ReviewView:
+@dataclass(frozen=True)
+class Blocker:
+    """One reason a publish is refused: `check` as the publish dialog lists it (DefinitionCheck's fields), and
+    `error`, the refusal the publish answers with when it is the first one."""
+
+    check: Json
+    error: ApiError
+
+
+def _on_trigger(definition: Json) -> str | None:
+    """The id of the definition's email trigger step, where a mailbox refusal is fixed."""
+    for n in narrow.json_list(definition.get("nodes")):
+        if isinstance(n, dict) and n.get("type") == EMAIL_TRIGGER:
+            return str(n.get("id") or "") or None
+    return None
+
+
+async def blockers(
+    rt: Runtime, me: Principal, row: DefinitionRow, definition: Json, *, digest: str | None = None
+) -> list[Blocker]:
+    """Every reason publishing `definition` as a version of `row`'s workflow is refused: a publish request already
+    open, its error checks, AI steps while the team has them off, an email trigger on a mailbox the publisher may not
+    bind, accounts the team does not have, and with `digest` (the definition as its version would store it) a stored
+    version it equals that is no draft. The publish dialog lists them all and the publish refuses on the first, before
+    any version is made, so the two cannot differ. Asks platform-service and tools-service, so it runs with no
+    transaction open."""
+    out: list[Blocker] = []
+    if (request := await pending(rt, row.workflow_id)) is not None:
+        message = f"Version {request.version} is waiting for review ({request.id}); decide it in Reviews first."
+        out.append(
+            Blocker(
+                {"node": None, "level": "error", "code": "review_open", "message": message},
+                Conflict(message, code="review_open"),
+            )
+        )
+    if digest is not None:
+        # The store hands back a stored version with this digest instead of making one; only a draft or a superseded
+        # version (made again as the next one) can then be published.
+        same = next((v for v in reversed(await definitions(rt).versions(row.workflow_id)) if v.digest == digest), None)
+        if same is not None and same.stage not in ("draft", "superseded"):
+            message = (
+                f"These changes are the same as version {same.version}, which is {same.stage}; nothing to publish."
+            )
+            out.append(
+                Blocker(
+                    {"node": None, "level": "error", "code": "not_a_draft", "message": message},
+                    Conflict(message, code="not_a_draft"),
+                )
+            )
+    try:
+        d = parse(definition)
+    except InvalidDefinitionError as e:
+        check: Json = {"node": None, "level": "error", "code": "invalid_definition", "message": str(e)}
+        return [Blocker(check, Unprocessable(str(e), code="definition_checks", details={"checks": [check]}))]
+    if checks := validate(d, REGISTRY):
+        failing = Unprocessable(
+            f"The workflow has {len(checks)} failing checks.",
+            code="definition_checks",
+            details={"checks": cast(JsonValue, checks)},
+        )
+        out += [Blocker(c, failing) for c in checks]
+    team = current_team() or (row.team_id or "")
+    # The owning team's policy, as a version is stored under (`_store_version`): a workflow no team owns runs none.
+    if (uses := ai_steps_gate.ai_nodes(d, REGISTRY)) and not await ai_steps_gate.allowed(rt, row.team_id):
+        err = Unprocessable(ai_steps_gate.OFF, code="ai_steps_off", details={"nodes": cast(JsonValue, uses)})
+        out += [
+            Blocker({"node": n, "level": "error", "code": "ai_steps_off", "message": ai_steps_gate.OFF}, err)
+            for n in uses
+        ]
+    try:
+        await require_binding(MailboxStore(rt.db), me, row.model_copy(update={"definition": definition}))
+    except (Unprocessable, Forbidden) as e:
+        node = _on_trigger(definition)
+        out.append(
+            Blocker({"node": node, "level": "error", "code": e.code, "message": e.message, "field": "mailbox"}, e)
+        )
+    try:
+        await require_team_accounts(rt, team, step_names(definition))
+    except Unprocessable as e:
+        out.append(Blocker({"node": None, "level": "error", "code": e.code, "message": e.message}, e))
+    return out
+
+
+def refuse(found: list[Blocker]) -> None:
+    """Raises the first blocker's refusal; a no-op when there is none."""
+    if found:
+        raise found[0].error
+
+
+@dataclass(frozen=True)
+class PolicyReads:
+    """What opening a publish request reads from platform-service: the publishReview document (None when unread) and
+    the review deadline. A publish that makes its version first reads these before it, so a failed read leaves the
+    versions and the working copy as they were and the same publish can be sent again."""
+
+    document: Json | None
+    sla_hours: float
+
+
+async def policy_reads(rt: Runtime) -> PolicyReads:
+    return PolicyReads(await team_document(rt), await sla_hours(rt))
+
+
+async def request_publish(
+    rt: Runtime,
+    me: Principal,
+    workflow_id: str,
+    version: int | None,
+    note: str,
+    *,
+    checked: bool = False,
+    reads: PolicyReads | None = None,
+) -> ReviewView:
     """Opens the publish request for a draft (the newest version when `version` is None) and returns it as a Review.
-    Approved at once only where the publish policy says no review is needed, which makes the version live."""
+    Approved at once only where the publish policy says no review is needed, which makes the version live. `reads`:
+    the policy reads the caller made before making the version (policy_reads)."""
     store = definitions(rt)
     row = await store.row(workflow_id, version, team=current_team())
     if row is None:
@@ -121,17 +240,15 @@ async def request_publish(rt: Runtime, me: Principal, workflow_id: str, version:
     require_rights(me, row, "publish")
     if row.stage != "draft":
         raise Conflict(f"v{row.version} is {row.stage}, not a draft.", code="not_a_draft")
-    checks = validate(WorkflowDefinition.model_validate(row.definition), REGISTRY)
-    if checks:
-        raise Unprocessable(
-            f"v{row.version} has {len(checks)} failing checks.", code="definition_checks", details={"checks": checks}
-        )
-    await require_binding(MailboxStore(rt.db), me, row)
+    # `checked`: the caller asked `blockers` for this definition a moment ago, before making the version.
+    if not checked:
+        refuse(await blockers(rt, me, row, row.definition))
     current = await store.serving(workflow_id, team=current_team())
     team = current_team() or (row.team_id or "")
-    await require_team_accounts(rt, team, step_names(row.definition))
-    req = await open_publish(rt, workflow_id, row, current, by=me.email, team=team, note=note)
-    return review_view(req, name=row.name, slug="", sla_hours=await sla_hours(rt))
+    if reads is None:
+        reads = await policy_reads(rt)
+    req = await open_publish(rt, workflow_id, row, current, by=me.email, team=team, note=note, document=reads.document)
+    return review_view(req, name=row.name, slug="", sla_hours=reads.sla_hours)
 
 
 async def open_publish(
@@ -143,6 +260,7 @@ async def open_publish(
     by: str,
     team: str,
     note: str,
+    document: Json | Literal["read"] | None = "read",
 ) -> PublishRequestRow:
     """The publish request for a checked draft `row` over the live `current`, decided by the team's publishReview read
     now: approved and live at once where no review is needed, otherwise waiting in Reviews. A person's publish and a
@@ -163,7 +281,12 @@ async def open_publish(
         "digest": row.digest,
     }
     decision = await decide(
-        rt, area="workflows", team_id=team, old=current.definition if current else None, new=row.definition
+        rt,
+        area="workflows",
+        team_id=team,
+        old=current.definition if current else None,
+        new=row.definition,
+        document=document,
     )
     body |= decision.record()
     approved = not decision.review_required

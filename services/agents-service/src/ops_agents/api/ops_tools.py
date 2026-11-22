@@ -497,7 +497,7 @@ async def _filled(rt: Runtime, me: Principal, card: Json) -> Json:
         elif kind == "run":
             view = _data(await engine_routes.get_engine_run(rt=rt, me=me, run_id=ref))
         elif kind == "start":
-            definition = await engine_routes.definition_view(rt, ref)
+            definition = await engine_routes.definition_view(rt, me, ref)
             can(caller_of(me), "workflows", "run", team=definition.get("teamId"), what=f"workflow {ref}")
             view = definition
         else:

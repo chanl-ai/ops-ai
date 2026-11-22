@@ -1,4 +1,5 @@
 import type { OpsApi } from './contract';
+import type { SignInPolicy } from '@/lib/types/sign-in';
 import { DEFAULT_USER_ID, DEMO_PASSWORD, DEMO_TOTP, USERS } from './mock/auth/seed';
 import { createCasesOnlyHttp, createChatOnlyHttp, createHttpApi, createKnowledgeOnlyHttp, createRegistryOnlyHttp,
   createRegistryPromptVariables, createRegistryToolsDirectory, createRegistryToolsList, createToolsOnlyHttp } from './http';
@@ -100,6 +101,14 @@ function createApi(): OpsApi {
   return api;
 }
 export const api: OpsApi = createApi();
+
+/**
+ * The workspace sign-in policy the app shell reads (sign-in, sign-up, the MFA guard, re-authentication). No route on
+ * platform-service serves one: it answers each email's methods itself (`authProvider.signInOptions`), offers no
+ * self sign-up, and its adapter enrols no MFA, so on that stack the shell reads none and every reader falls back to
+ * those answers. Settings > Sign-in still reads `api.signInPolicy` for the sections that are sample data.
+ */
+export const readShellSignInPolicy = (): Promise<SignInPolicy | null> => (onPlatform ? Promise.resolve(null) : api.signInPolicy.get());
 
 /**
  * Each area's pages and the service URL that serves them, so the console can mark the pages still on sample data as
