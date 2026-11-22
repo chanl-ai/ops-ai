@@ -31700,6 +31700,7 @@ export interface operations {
                 startable?: boolean;
                 takesFiles?: boolean;
                 engine?: "all" | "current";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
