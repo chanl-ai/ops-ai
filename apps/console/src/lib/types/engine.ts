@@ -203,6 +203,8 @@ export interface EngineRun {
   canCancel?: boolean;
   /** Whether the signed-in person may retry it now: it is Stuck and they may cancel it. */
   canRetry?: boolean;
+  /** Whether the signed-in person may redrive it now: it is Failed or Stuck and they may cancel it. */
+  canRedrive?: boolean;
   workflowId: string;
   version: number;
   digest: string;

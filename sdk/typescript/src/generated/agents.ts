@@ -1981,6 +1981,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/runs/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk Engine Runs
+         * @description Redrives every Failed or Stuck run, or cancels every unfinished one, of the acting team that the filter
+         *     matches, oldest first and at most BULK_LIMIT in one call. Each run is checked as its single route checks it: one
+         *     the caller may not cancel is skipped and listed, never acted on.
+         *     No request transaction: each run is changed in its own, as the single routes change it.
+         */
+        post: operations["workflows_bulk_engine_runs"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/runs/set-aside-emails/{event_id}/run": {
         parameters: {
             query?: never;
@@ -2092,6 +2115,29 @@ export interface paths {
         get: operations["workflows_engine_run_events"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/runs/{run_id}/redrive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Redrive Engine Run
+         * @description Queues a Failed or Stuck run again from its failed step, on the version the run pinned: steps it recorded are
+         *     not run again and a write with a record at the gateway is never sent again. Who may cancel the run may redrive
+         *     it; a run neither Failed nor Stuck is refused (409 run_not_redrivable).
+         *     No request transaction: the masking policy (platform-service) is asked after the write, with none open.
+         */
+        post: operations["workflows_redrive_engine_run"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4490,6 +4536,24 @@ export interface components {
             /** Updated */
             updated: string[];
         };
+        /** BulkRunsRequest */
+        BulkRunsRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "redrive" | "cancel";
+            filter?: components["schemas"]["RunsFilter"];
+        };
+        /** BulkRunsResult */
+        BulkRunsResult: {
+            /** Action */
+            action: string;
+            /** Changed */
+            changed: string[];
+            /** Skipped */
+            skipped: string[];
+        };
         /** BulkSkip */
         BulkSkip: {
             /** Id */
@@ -5744,6 +5808,15 @@ export interface components {
         /** Envelope[BulkResult] */
         Envelope_BulkResult_: {
             data: components["schemas"]["BulkResult"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[BulkRunsResult] */
+        Envelope_BulkRunsResult_: {
+            data: components["schemas"]["BulkRunsResult"];
             /**
              * Success
              * @constant
@@ -9132,6 +9205,8 @@ export interface components {
         RunDetail: {
             /** Cancancel */
             canCancel?: boolean | null;
+            /** Canredrive */
+            canRedrive?: boolean | null;
             /** Canretry */
             canRetry?: boolean | null;
             /** Children */
@@ -9299,6 +9374,8 @@ export interface components {
         RunRow: {
             /** Cancancel */
             canCancel?: boolean | null;
+            /** Canredrive */
+            canRedrive?: boolean | null;
             /** Canretry */
             canRetry?: boolean | null;
             /** Createdat */
@@ -9395,6 +9472,23 @@ export interface components {
             payload: {
                 [key: string]: components["schemas"]["JsonValue"];
             };
+        };
+        /**
+         * RunsFilter
+         * @description Which runs a bulk action takes: each given field narrows it. `kind` and `code` are the run's recorded error
+         *     (ops_contracts.errors); `createdFrom` and `createdTo` bound when the run started, ISO times, the end excluded.
+         */
+        RunsFilter: {
+            /** Code */
+            code?: string | null;
+            /** Createdfrom */
+            createdFrom?: string | null;
+            /** Createdto */
+            createdTo?: string | null;
+            /** Kind */
+            kind?: string | null;
+            /** Workflowid */
+            workflowId?: string | null;
         };
         /** SavedCase */
         SavedCase: {
@@ -23941,6 +24035,111 @@ export interface operations {
             };
         };
     };
+    workflows_bulk_engine_runs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkRunsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_BulkRunsResult_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     workflows_run_set_aside_email: {
         parameters: {
             query?: never;
@@ -24386,6 +24585,109 @@ export interface operations {
                 content: {
                     "application/json": unknown;
                     "text/event-stream": string;
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    workflows_redrive_engine_run: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_RunRow_"];
                 };
             };
             /** @description Invalid request */

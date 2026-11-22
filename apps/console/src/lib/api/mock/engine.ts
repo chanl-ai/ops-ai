@@ -20,6 +20,7 @@ export function createEngineMock(): EngineApi {
     run: unavailable,
     cancelRun: unavailable,
     retryRun: unavailable,
+    redriveRun: unavailable,
     runSetAsideEmail: unavailable,
   };
 }

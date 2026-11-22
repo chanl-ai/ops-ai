@@ -1845,6 +1845,15 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "workflows_bulk_engine_runs": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/runs/bulk",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
   "workflows_cancel_engine_run": {
     "body": null,
     "headers": [],
@@ -2120,6 +2129,17 @@ export const agentsOperations = {
     "path": "/v1/workflows/definitions/{workflow_id}/pause",
     "pathParams": [
       "workflow_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "workflows_redrive_engine_run": {
+    "body": null,
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/runs/{run_id}/redrive",
+    "pathParams": [
+      "run_id"
     ],
     "query": [],
     "stream": false

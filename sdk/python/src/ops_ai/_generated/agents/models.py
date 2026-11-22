@@ -277,6 +277,12 @@ class BulkDecisionInput(TypedDict, closed=True):
     stepUpToken: NotRequired[str | None]
 
 
+class BulkRunsResult(TypedDict, closed=True):
+    action: str
+    changed: list[str]
+    skipped: list[str]
+
+
 class BulkSkip(TypedDict, closed=True):
     id: str
     reason: str
@@ -610,6 +616,11 @@ class EnvelopeAppToolsGiven(TypedDict, closed=True):
 
 class EnvelopeApproval(TypedDict, closed=True):
     data: Approval
+    success: Literal[True]
+
+
+class EnvelopeBulkRunsResult(TypedDict, closed=True):
+    data: BulkRunsResult
     success: Literal[True]
 
 
@@ -1630,6 +1641,14 @@ class RunWaiting(TypedDict, closed=True):
     iteration: int
     node: str
     payload: dict[str, JsonValue]
+
+
+class RunsFilter(TypedDict, closed=True):
+    code: NotRequired[str | None]
+    createdFrom: NotRequired[str | None]
+    createdTo: NotRequired[str | None]
+    kind: NotRequired[str | None]
+    workflowId: NotRequired[str | None]
 
 
 class SavedCaseCheck(TypedDict, closed=True):
@@ -2673,6 +2692,11 @@ class BulkResult(TypedDict, closed=True):
     updated: list[str]
 
 
+class BulkRunsRequest(TypedDict, closed=True):
+    action: Literal["redrive", "cancel"]
+    filter: NotRequired[RunsFilter]
+
+
 class CaseEventView(TypedDict, closed=True):
     at: str
     by: str
@@ -3479,6 +3503,7 @@ class RunList(TypedDict, closed=True):
 
 class RunRow(TypedDict, closed=True):
     canCancel: NotRequired[bool | None]
+    canRedrive: NotRequired[bool | None]
     canRetry: NotRequired[bool | None]
     createdAt: str
     createdBy: str
@@ -4471,6 +4496,7 @@ class EnvelopeWorkflowDetail(TypedDict, closed=True):
 
 class RunDetail(TypedDict, closed=True):
     canCancel: NotRequired[bool | None]
+    canRedrive: NotRequired[bool | None]
     canRetry: NotRequired[bool | None]
     children: NotRequired[list[RunChild]]
     createdAt: str

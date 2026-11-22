@@ -234,6 +234,19 @@ export class Runs extends Resource {
     return this.raw.agents.workflows_retry_engine_run({ path: { run_id: runId } });
   }
 
+  /** Queues a Failed or Stuck run again from its failed step, on the version it started on. */
+  redrive(runId: string) {
+    return this.raw.agents.workflows_redrive_engine_run({ path: { run_id: runId } });
+  }
+
+  /** Redrives or cancels every run the filter matches; returns the runs changed and those skipped. */
+  bulk(
+    action: 'redrive' | 'cancel',
+    filter: { workflowId?: string; kind?: string; code?: string; createdFrom?: string; createdTo?: string } = {},
+  ) {
+    return this.raw.agents.workflows_bulk_engine_runs({ body: { action, filter } });
+  }
+
   /** Starts the run of an email the mailbox listener set aside, under the email's own run key. */
   runSetAsideEmail(eventId: string) {
     return this.raw.agents.workflows_run_set_aside_email({ path: { event_id: eventId } });

@@ -23,6 +23,8 @@ from .work import WorkQueue
 TERMINAL = ("succeeded", "failed", "cancelled")
 # The statuses Redrive takes a run back from.
 REDRIVABLE = ("failed", "stuck")
+# The most runs one bulk redrive or cancel takes; a larger set is narrowed by its filter or sent again.
+BULK_LIMIT = 500
 # A run that another run's step started names that run in created_by: `run:<parent id>`.
 CHILD_PREFIX = "run:"
 
@@ -212,6 +214,39 @@ class RunStore:
             q = q.limit(limit)
         async with self.tx.tenant_tx() as c:
             return await rows(c, q, RunRow)
+
+    async def matching(
+        self,
+        statuses: tuple[str, ...],
+        *,
+        workflow_id: str | None = None,
+        kind: str | None = None,
+        code: str | None = None,
+        created_from: str | None = None,
+        created_to: str | None = None,
+        limit: int = BULK_LIMIT,
+    ) -> list[RunRow]:
+        """The acting team's runs a bulk action takes, oldest first, at most `limit`: in one of `statuses`, and when
+        given on `workflow_id`, created in [`created_from`, `created_to`), and failed with error `kind` or `code` (the
+        run's recorded failure; a run with none matches neither)."""
+        r = engine_runs
+        q = r.select().where(r.c.tenant_id == self.tx.tenant(), team_visible(r), r.c.status.in_(statuses))
+        if workflow_id:
+            q = q.where(r.c.workflow_id == workflow_id)
+        if created_from:
+            q = q.where(r.c.created_at >= created_from)
+        if created_to:
+            q = q.where(r.c.created_at < created_to)
+        async with self.tx.tenant_tx() as c:
+            found = await rows(c, q.order_by(r.c.created_at, r.c.id), RunRow)
+        # The failure is a JSON column; its kind and code are read here, so the query stays portable.
+        picked = [
+            run
+            for run in found
+            if (kind is None or (run.failure or {}).get("kind") == kind)
+            and (code is None or (run.failure or {}).get("code") == code)
+        ]
+        return picked[:limit]
 
     async def page(
         self,

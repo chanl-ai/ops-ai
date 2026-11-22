@@ -19,7 +19,7 @@ import hashlib
 import time
 from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
@@ -288,6 +288,15 @@ class Runs(Resource):
         """Queues a Stuck run again from its last recorded step; nothing it sent is sent again."""
         return self._raw.agents.workflows_retry_engine_run(run_id)
 
+    def redrive(self, run_id: str) -> Any:
+        """Queues a Failed or Stuck run again from its failed step, on the version it started on."""
+        return self._raw.agents.workflows_redrive_engine_run(run_id)
+
+    def bulk(self, action: str, **filter: Any) -> Any:
+        """Redrives (`action="redrive"`) or cancels (`"cancel"`) every run the filter matches: workflowId, kind, code,
+        createdFrom, createdTo. Returns the runs changed and those skipped."""
+        return self._raw.agents.workflows_bulk_engine_runs(cast(Any, {"action": action, "filter": filter}))
+
     def run_set_aside_email(self, event_id: str) -> Any:
         """Starts the run of an email the mailbox listener set aside, under the email's own run key."""
         return self._raw.agents.workflows_run_set_aside_email(event_id)
@@ -319,6 +328,15 @@ class AsyncRuns(AsyncResource):
     async def retry(self, run_id: str) -> Any:
         """Queues a Stuck run again from its last recorded step; nothing it sent is sent again."""
         return await self._raw.agents.workflows_retry_engine_run(run_id)
+
+    async def redrive(self, run_id: str) -> Any:
+        """Queues a Failed or Stuck run again from its failed step, on the version it started on."""
+        return await self._raw.agents.workflows_redrive_engine_run(run_id)
+
+    async def bulk(self, action: str, **filter: Any) -> Any:
+        """Redrives (`action="redrive"`) or cancels (`"cancel"`) every run the filter matches: workflowId, kind, code,
+        createdFrom, createdTo. Returns the runs changed and those skipped."""
+        return await self._raw.agents.workflows_bulk_engine_runs(cast(Any, {"action": action, "filter": filter}))
 
     async def run_set_aside_email(self, event_id: str) -> Any:
         """Starts the run of an email the mailbox listener set aside, under the email's own run key."""

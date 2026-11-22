@@ -22,6 +22,7 @@ export function createEngineHttp(get: Get, send: Send): EngineApi {
     run: (runId) => get(`/runs/${encodeURIComponent(runId)}`),
     cancelRun: (runId) => send('POST', `/runs/${encodeURIComponent(runId)}/cancel`),
     retryRun: (runId) => send('POST', `/runs/${encodeURIComponent(runId)}/retry`),
+    redriveRun: (runId) => send('POST', `/runs/${encodeURIComponent(runId)}/redrive`),
     runSetAsideEmail: (eventId) => send('POST', `/runs/set-aside-emails/${encodeURIComponent(eventId)}/run`),
   };
 }
