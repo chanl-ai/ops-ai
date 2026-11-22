@@ -279,6 +279,8 @@ def self_test() -> int:
         "console": "false",
         "docs": "false",
         "mssql": "false",
+        "heavy": "true",
+        "repo_jobs": "[]",
         "repo_pool": "",
         "services": '["a-service"]',
         "packages": '["p"]',
