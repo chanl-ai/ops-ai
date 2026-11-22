@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from several_accounts import SF, add_org, code_of, flow, retail_on, rig, save_and_publish
 from steps import required
-from usecase_harness import check, data, finish
+from usecase_harness import check, data, finish, save_agent
 
 FLOW = "uc707_eu"
 
@@ -32,8 +32,7 @@ with rig("uc-707", with_agents=True) as r:
     assert r.api is not None
     agent = required(r.api.post("/v1/agents", json={"name": "Case desk", "role": "Finds cases"}, headers=r.priya), "/v1/agents")
     aid = str(agent.get("id") or "ag_missing")
-    named = r.api.patch(f"/v1/agents/{aid}", json={"toolIds": ["salesforce_query"], "accounts": {SF: "EU org"}},
-                        headers=r.priya)  # fmt: skip
+    named = save_agent(r.api, aid, {"toolIds": ["salesforce_query"], "accounts": {SF: "EU org"}}, headers=r.priya)
     held = r.gw.delete(f"/v1/apps/{SF}/accounts/{r.ids['EU org']}", headers=r.priya)
     by_agent = dict((held.json().get("error") or {}).get("details") or {}) if held.status_code == 409 else {}
     check(
@@ -43,7 +42,7 @@ with rig("uc-707", with_agents=True) as r:
         {"named": named.text[:200], "held": held.text[:400]},
     )  # fmt: skip
     # 4. With the agent naming Retail org too, the delete goes through.
-    r.api.patch(f"/v1/agents/{aid}", json={"accounts": {SF: "Retail org"}}, headers=r.priya)
+    save_agent(r.api, aid, {"accounts": {SF: "Retail org"}}, headers=r.priya)
     gone = r.gw.delete(f"/v1/apps/{SF}/accounts/{r.ids['EU org']}", headers=r.priya)
     check(
         "4 once the step and the agent name Retail org, EU org is deleted",

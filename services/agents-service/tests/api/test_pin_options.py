@@ -17,6 +17,7 @@ from tests.engine.test_lifecycle_rights import (  # noqa: F401  # a fixture
     stack,  # pyright: ignore[reportUnusedImport]
 )
 
+from ..saves import save_agent
 from .test_agent_registry import _app, _ok  # pyright: ignore[reportPrivateUsage]
 from .test_skills import HARDSHIP, _published  # pyright: ignore[reportPrivateUsage]
 from .test_widget_registry import LIMIT_CARD
@@ -112,7 +113,7 @@ async def test_f6_wildcards_match_only_themselves(tmp_path: Path) -> None:
 async def test_a_new_pin_without_a_version_takes_the_published_one(tmp_path: Path) -> None:
     async with _app(str(tmp_path / "db.sqlite")) as c:
         g = await _guardrail(c, "Picked rule")
-        saved = await c.patch("/v1/agents/ag_branch", json={"guardrailPins": [{"guardrailId": g["id"]}]})
+        saved = await save_agent(c, "ag_branch", {"guardrailPins": [{"guardrailId": g["id"]}]})
         assert saved.status_code == 200, saved.text
         assert [(p["guardrailId"], p["version"]) for p in saved.json()["data"]["guardrailPins"]] == [(g["id"], 1)]
 

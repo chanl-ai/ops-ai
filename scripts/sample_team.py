@@ -110,6 +110,14 @@ def data(r: httpx.Response) -> Any:
     return body.get("data") if isinstance(body, dict) and "data" in body else body
 
 
+def save_agent(api: httpx.Client, agent_id: Any, fields: dict[str, Any]) -> httpx.Response:
+    """PATCH an agent, naming the copy it just read (baseVersion, baseDigest) as the API requires; returns the PATCH."""
+    path = f"/v1/agents/{agent_id}"
+    seen = api.get(path)
+    copy = (seen.json().get("data") or {}) if seen.status_code == 200 else {}
+    return api.patch(path, json={**fields, "baseVersion": copy.get("version"), "baseDigest": copy.get("digest")})
+
+
 def read_env(path: Path) -> dict[str, str]:
     values: dict[str, str] = {}
     for raw in path.read_text().splitlines():
@@ -465,7 +473,7 @@ class Models:
             detail = data(api.get(f"/v1/agents/{agent_id}"))
             if detail.get("model") == alias:
                 continue
-            patched = data(api.patch(f"/v1/agents/{agent_id}", json={"model": alias, "note": why}))
+            patched = data(save_agent(api, agent_id, {"model": alias, "note": why}))
             review = data(
                 api.post(f"/v1/agents/{agent_id}/publish-requests", json={"version": patched["version"], "note": why})
             )
@@ -610,7 +618,7 @@ def ensure_agents(
         body = {k: v for k, v in wanted.items() if k != "guardrailPins"}
         body["guardrailPins"] = [{"guardrailId": g} for g in wanted["guardrailPins"]]
         note = agent.get("note", "Instructions, tools, knowledge, skills and guardrails for the team.")
-        data(api.patch(f"/v1/agents/{found['id']}", json={**body, "note": note}))
+        data(save_agent(api, found["id"], {**body, "note": note}))
         for sid in skill_ids:
             if sid not in held:
                 data(api.put(f"/v1/agents/{found['id']}/skills/{sid}", json={}))

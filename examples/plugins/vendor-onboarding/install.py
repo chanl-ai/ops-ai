@@ -199,9 +199,7 @@ def ensure_agent(p: People, model: str) -> None:
         body = {k: spec[k] for k in ("name", "role", "channels", "instructions")} | {"model": model}
         found = st.data(api.post("/v1/agents", json=body))
         st.say("MADE", f"agent {spec['name']}", f"{found['id']} on model alias {model}")
-    patched = st.data(
-        api.patch(f"/v1/agents/{found['id']}", json={"memory": spec["memory"], "note": "From the plugin."})
-    )
+    patched = st.data(st.save_agent(api, found["id"], {"memory": spec["memory"], "note": "From the plugin."}))
     review = st.data(api.post(f"/v1/agents/{found['id']}/publish-requests", json={"version": patched["version"]}))
     st.decide_publish(p.approver, review, f"agent {spec['name']}")
     REFS[f"@agent/{entry['id']}"] = str(found["id"])

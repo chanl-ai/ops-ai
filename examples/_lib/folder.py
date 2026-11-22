@@ -1244,7 +1244,7 @@ def _pin_folder_controls(
         bindings["guardrailId"] = guardrail["id"]
         bindings["guardrailVersion"] = guardrail["publishedVersion"]
     if bindings.get("guardrailId"):
-        ops.raw.agents.agents_update_agent(
+        ops.agents.update(
             agent_id,
             {
                 "guardrailPins": [

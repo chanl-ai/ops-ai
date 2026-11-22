@@ -3,6 +3,7 @@
 // the fake bank's insights spec (one operation per shape, one declaring x-ops-shape, one that fits no shape), grants
 // them to an agent and asks for each in chat; agents-service shapes each answer and the console draws it.
 import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, approveToolReview, check, chromium, finish, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
+import { saveAgent } from '../../lib/agent_save.mjs';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
 const agentsUrl = `http://127.0.0.1:${AGENTS_PORT}`;
@@ -38,7 +39,7 @@ await withUiStack(
     await approveToolReview(made.id, N, J);
     await new Promise((r) => setTimeout(r, 31_000)); // agents-service keeps each tenant's tool list for 30 seconds
     const agent = await json(await fetch(`${agentsUrl}/v1/agents`, { method: 'POST', headers: J, body: JSON.stringify({ name: `Insights desk ${TAG}`, role: 'Reads account insights' }) }));
-    const granted = await fetch(`${agentsUrl}/v1/agents/${agent.id}`, { method: 'PATCH', headers: J, body: JSON.stringify({ toolIds: ASK }) });
+    const granted = await saveAgent(agentsUrl, J, agent.id, { toolIds: ASK });
     if (!granted.ok) throw new Error(`setup: granting answered ${granted.status}: ${await granted.text()}`);
     await json(await fetch(`${agentsUrl}/v1/agents/${agent.id}/publish-requests`, { method: 'POST', headers: J, body: JSON.stringify({ version: (await granted.json()).data.version, note: 'uc-061' }) }));
     const thread = (await json(await fetch(`${agentsUrl}/chat/threads`, { method: 'POST', headers: J, body: JSON.stringify({ agentId: agent.id, kbIds: [] }) }))).id;

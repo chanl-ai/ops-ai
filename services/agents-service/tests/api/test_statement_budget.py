@@ -26,6 +26,7 @@ from ops_service_kit.testing import Seeded, SeedTeam, StatementBudget, budget_ch
 from ops_store.database import open_database
 
 from ..conftest import SEED, emptied, started
+from ..saves import save_agent
 from .test_case_record_route_pins import DISPUTE
 from .test_forms import INPUTS, flow
 from .test_guardrails_route_pins import RULE
@@ -206,7 +207,7 @@ def seed_team(served: tuple[FastAPI, AsyncClient], swaps: dict[str, str]) -> See
             tag = f"{n}-{i:02d}"
             agent = _id(await client.post("/v1/agents", json={"name": f"Agent {tag}", "role": "Answers"}, headers=DEV))
             # A tool and an account on each agent, so the lists of who uses one grow with the agents.
-            held = await client.patch(f"/v1/agents/{agent}", json=HOLDS, headers=DEV)
+            held = await save_agent(client, agent, HOLDS, headers=DEV)
             assert held.status_code == 200, held.text
             case_set: dict[str, Any] = {"cases": [{"name": f"Case {tag}", "input": "Hello", "checks": []}]}
             saved = await client.put(f"/v1/agents/{agent}/eval-cases", json=case_set, headers=DEV)

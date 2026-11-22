@@ -3,6 +3,7 @@
 // publishes go through the agent's publish route as James, the route the agent page's button calls.
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 import { publishReviewOn } from '../../lib/workflow_ui.mjs';
+import { agentBase } from '../../lib/agent_save.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const PRIYA = 'p.shah@harborpine.example';
@@ -54,7 +55,7 @@ await withUiStack(
     const agent = rows.find((a) => a.publishedVersion != null && !a.paused) ?? rows[0];
     if (!agent) throw new Error(`setup: no agent in team_ops: ${JSON.stringify(listed).slice(0, 300)}`);
     const publish = async (patch) => {
-      const saved = await call('PATCH', `/v1/agents/${agent.id}`, J, patch);
+      const saved = await call('PATCH', `/v1/agents/${agent.id}`, J, { ...patch, ...(await agentBase(agents, J, agent.id)) });
       const req = await call('POST', `/v1/agents/${agent.id}/publish-requests`, J, { version: saved.body?.data?.version, note: 'uc-114' });
       const d = req.body?.data;
       return { id: d?.id, status: req.status, review: d?.status, record: d?.agentPublish && { reviewRequired: d.agentPublish.reviewRequired, policy: d.agentPublish.policy, majorChange: d.agentPublish.majorChange }, saved: saved.status };
@@ -62,7 +63,7 @@ await withUiStack(
 
     // A new draft, published from the agent page; returns the message the page showed.
     const publishFromPage = async (page, patch) => {
-      const saved = (await call('PATCH', `/v1/agents/${agent.id}`, J, patch)).body?.data;
+      const saved = (await call('PATCH', `/v1/agents/${agent.id}`, J, { ...patch, ...(await agentBase(agents, J, agent.id)) })).body?.data;
       await page.goto(`${consoleUrl}/agents/${agent.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await page.getByTestId('request-agent-publish').click();
       await page.locator('#agent-publish-note').fill('uc-114 from the page');

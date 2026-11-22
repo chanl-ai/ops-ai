@@ -14,7 +14,7 @@ from PIL import Image
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Flowable, PageBreak, Paragraph, SimpleDocTemplate
-from usecase_harness import KB_PORT, agents, check, data, every_page, finish, kb, put_in_files, sse, until
+from usecase_harness import KB_PORT, agents, check, data, every_page, finish, kb, put_in_files, save_agent, sse, until
 
 # The team kb-service's dev caller makes the base in (team_ops): a chat sees only its own team's bases.
 TEAM = {"X-Team-Id": "team_ops"}
@@ -69,7 +69,7 @@ def agent(api: Any, name: str, collections: list[str]) -> str:
     made = data(
         api.post("/v1/agents", json={"name": f"{name} {RUN}", "role": "Answers lending questions"}, headers=TEAM)
     )
-    saved = data(api.patch(f"/v1/agents/{made['id']}", json={"collections": collections}, headers=TEAM))
+    saved = data(save_agent(api, made["id"], {"collections": collections}, headers=TEAM))
     body = {"version": saved["version"], "note": "uc-080"}
     api.post(f"/v1/agents/{made['id']}/publish-requests", json=body, headers=TEAM)
     return str(made["id"])

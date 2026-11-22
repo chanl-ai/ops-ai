@@ -9,6 +9,7 @@ from typing import Any, cast
 
 from ops_agents.api import guardrails
 
+from ..saves import save_agent
 from .test_agent_registry import _app, _ok  # pyright: ignore[reportPrivateUsage]
 
 BRANCH = "ag_branch"
@@ -41,7 +42,7 @@ async def _load(c: object, path: Path) -> None:
 
 async def test_a_seed_keeps_a_draft_a_person_saved(tmp_path: Path) -> None:
     async with _app(str(tmp_path / "db.sqlite")) as c:
-        draft = _ok(await c.patch(f"/v1/agents/{BRANCH}", json={"role": "Answers branch staff, edited by Lee"}))
+        draft = _ok(await save_agent(c, BRANCH, {"role": "Answers branch staff, edited by Lee"}))
         await _load(c, _seed(tmp_path))
         after = _ok(await c.get(f"/v1/agents/{BRANCH}"))
         assert (after["version"], after["role"], after["guardrailPins"]) == (draft["version"], draft["role"], [])

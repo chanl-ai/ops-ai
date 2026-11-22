@@ -649,6 +649,8 @@ class SkillDetailView(SkillListRow):
     """The skill page's reply: the list row, then these, in reply order."""
 
     content: SkillContent
+    # The newest version's stored digest: with `version`, the copy a draft save names as its base.
+    digest: str
     versions: list[SkillVersionView]
     tests: list[JsonValue]
     runs: list[JsonValue]
@@ -753,6 +755,7 @@ async def detail(rt: Runtime, skill_id: str, *, fresh: bool = False) -> SkillDet
         {
             **base,
             "content": _wire(content_of(newest.content)),
+            "digest": newest.digest,
             "versions": [
                 {
                     "version": v.version,

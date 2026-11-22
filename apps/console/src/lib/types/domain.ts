@@ -27,6 +27,8 @@ export interface Agent {
   canPublish?: boolean;
   /** The owning team's name, for a person outside it who cannot look it up in their own teams. */
   teamName?: string | null;
+  /** With `version`, the copy a save names as its base (`baseOf`); on the detail response only. */
+  digest?: string | null;
   id: string;
   name: string;
   slug: string;
@@ -177,7 +179,10 @@ export interface AgentGuardrails {
   blockedTopics: string[];
 }
 
-/** One save of the agent page; every save becomes a new agent version. */
+/**
+ * The fields one save of an agent's draft can change. The tool list is changed only by a grant, an @ insert and a
+ * skill attach or detach, each read from the stored list (`changeAgentTools`); the page's autosave never sends it.
+ */
 export type AgentPatch = Partial<AgentInput> & {
   toolIds?: string[];
   collections?: string[];

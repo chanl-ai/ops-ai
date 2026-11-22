@@ -37,7 +37,7 @@ from ops_service_kit.listing import ListQuery
 from ops_service_kit.names import Name
 from ops_store import isolation
 
-from ...store.agent_registry import AgentRow
+from ...store.agent_registry import AgentRow, digest_of, refuse_stale
 from ...store.evals import EvalStore
 from ...store.graphs import StoredThread
 from ...store.template_copies import TemplateCopies
@@ -140,6 +140,10 @@ class WidgetPinInput(In):
 
 
 class AgentPatch(In):
+    # The copy the change was made on: the agent's `version` and `digest` as last read. A save from an older copy is
+    # refused (409 `stale_base`), so it never writes over a grant or an edit saved in between.
+    base_version: int
+    base_digest: str
     name: Name | None = None
     role: str | None = Field(default=None, min_length=1, max_length=400)
     model: str | None = None
@@ -330,7 +334,10 @@ async def _view(rt: Runtime, agent_id: str, *, directory: ToolRows | Literal["as
     tasks = (await tasks_24h(rt)).get(agent_id, 0)
     # The reply is built from the same keys a listed page row carries (`_decorated` reads both).
     listed = {**row.model_dump(), "spec": spec, "tasks_24h": tasks}
-    return _decorated(listed, await _offered(rt, directory), (await used_in_all(rt)).get(agent_id, []))
+    view = _decorated(listed, await _offered(rt, directory), (await used_in_all(rt)).get(agent_id, []))
+    # What a save names with `version` as the copy it was made on; computed as the registry compares it.
+    view["digest"] = digest_of(spec)
+    return view
 
 
 def _decorated(row: Json, offered: set[str] | None, uses: list[WorkflowUse]) -> AgentView:
@@ -465,16 +472,26 @@ async def get_agent(rt: Rt, me: Reader, agent_id: str) -> JSONResponse:
 
 @router.patch("/{agent_id}", response_model=Envelope[Agent])
 async def update_agent(rt: Rt, me: Cl, agent_id: str, body: AgentPatch) -> JSONResponse:
-    """Saves the patched spec as a new draft version; what is live does not change until it is published."""
+    """Saves the patched spec as the agent's draft; what is live does not change until it is published.
+
+    409 `stale_base` when `baseVersion` and `baseDigest` are not the newest copy (its details name who saved it and
+    when): read the agent again and repeat the change."""
     reg = registry(rt)
     row = await changeable(rt, me, agent_id, "edit")
     if body.template_id is not None or body.protection is not None:
         require_provisioner(caller_of(me), "agents")
+    newest = await reg.version(agent_id, row.version)
     # The draft as the patch below edits it, key by key.
-    spec: Json = dict((await reg.version(agent_id, row.version)).spec)
+    spec: Json = dict(newest.spec)
+    # The copy the patch is applied to. The save below names it, so a save landing while tools-service or kb-service
+    # is asked is refused too.
+    read = (row.version, digest_of(spec))
+    refuse_stale((body.base_version, body.base_digest), *read, saved_by=newest.saved_by, saved_at=newest.saved_at)
     patch = body.model_dump(
         exclude_none=True,
         exclude={
+            "base_version",
+            "base_digest",
             "note",
             "guardrails",
             "guardrail_pins",
@@ -523,7 +540,7 @@ async def update_agent(rt: Rt, me: Cl, agent_id: str, body: AgentPatch) -> JSONR
     # naming the limit, rather than leaving callers a choice the agent no longer has.
     if "limits" in spec:
         check_limits(limits_of(spec), spec)
-    await reg.save(agent_id, spec, by=me.email, note=body.note or "")
+    await reg.save(agent_id, spec, by=me.email, note=body.note or "", base=read)
     await reg.set_template(agent_id, template_id=body.template_id, protection=body.protection)
     return ok(await _view(rt, agent_id))
 

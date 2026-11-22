@@ -18,6 +18,8 @@ from tests.api.test_child_runs import (
 )
 from tests.conftest import sse_events
 
+from ..saves import save_agent
+
 
 async def directory(client: AsyncClient) -> dict[str, dict[str, Any]]:
     r = await client.get("/v1/tools", params={"pageSize": 200})
@@ -90,14 +92,14 @@ async def test_granting_an_unpublished_or_paused_workflow_is_refused_with_the_re
 ) -> None:
     client, _ = stack
     held: list[str] = (await client.get("/v1/agents/ag_dispute")).json()["data"]["toolIds"]
-    never = await client.patch("/v1/agents/ag_branch", json={"toolIds": ["workflow:never_published"]})
+    never = await save_agent(client, "ag_branch", {"toolIds": ["workflow:never_published"]})
     assert never.status_code == 400 and never.json()["error"]["code"] == "not_published", never.text
     await pause(client, "dispute_email")
-    paused = await client.patch("/v1/agents/ag_branch", json={"toolIds": ["workflow:dispute_email"]})
+    paused = await save_agent(client, "ag_branch", {"toolIds": ["workflow:dispute_email"]})
     assert paused.status_code == 400 and paused.json()["error"]["code"] == "workflow_paused", paused.text
     assert "paused" in paused.json()["error"]["message"]
     # An agent that already holds it keeps the grant while the workflow is paused; it is just not offered.
-    kept = await client.patch("/v1/agents/ag_dispute", json={"toolIds": held})
+    kept = await save_agent(client, "ag_dispute", {"toolIds": held})
     assert kept.status_code == 200 and "workflow:dispute_email" in kept.json()["data"]["toolIds"], kept.text
 
 

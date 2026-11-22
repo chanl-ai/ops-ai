@@ -13,7 +13,7 @@ from typing import Any
 
 from several_accounts import QUERY, SF, add_org, retail_on, rig
 from steps import required
-from usecase_harness import check, data, finish, sse, turn_text
+from usecase_harness import check, data, finish, save_agent, sse, turn_text
 
 
 def say(r: Any, thread: str, text: str) -> str:
@@ -35,7 +35,7 @@ with rig("uc-704", with_agents=True) as r:
     eu = sf["eu_base"].removeprefix("https://")
     agent = required(r.api.post("/v1/agents", json={"name": "Desk", "role": "Answers the team"}, headers=r.priya), "/v1/agents")
     aid = str(agent.get("id"))
-    draft = required(r.api.patch(f"/v1/agents/{aid}", json={"toolIds": ["salesforce_query"]}, headers=r.priya), "grant the tool")
+    draft = required(save_agent(r.api, aid, {"toolIds": ["salesforce_query"]}, headers=r.priya), "grant the tool")
     r.api.post(f"/v1/agents/{aid}/publish-requests", json={"version": draft.get("version")}, headers=r.priya)
     # The apps line is written for the team's default agent only (api/apps_line.py).
     r.api.put("/v1/chat/default-agent", json={"agentId": aid}, headers=r.priya)
