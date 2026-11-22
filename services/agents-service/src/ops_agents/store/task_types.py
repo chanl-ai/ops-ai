@@ -14,11 +14,13 @@ from ops_service_kit.http import Json
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 
 from .base import metadata
-from .typed_records import SEED, TEAM, RecordNotFound, VersionedRecords, head_columns, version_columns
+from .typed_records import SEED, TEAM, RecordNotFound, VersionedRecords, head_columns, head_indexes, version_columns
 
 __all__ = ["SEED", "TEAM", "TaskTypeNotFound", "TaskTypeStore", "record_of", "task_type_versions", "task_types"]
 
-task_types = sa.Table("task_types", metadata, *head_columns(), info={**TENANT_SCOPED, **TEAM_OWNED})
+task_types = sa.Table(
+    "task_types", metadata, *head_columns(), *head_indexes("task_types"), info={**TENANT_SCOPED, **TEAM_OWNED}
+)
 task_type_versions = sa.Table(
     "task_type_versions",
     metadata,

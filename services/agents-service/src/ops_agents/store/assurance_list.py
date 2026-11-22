@@ -402,12 +402,14 @@ def gates(checks: Checks) -> sa.Subquery:
 async def suites_page(conn: AsyncConnection, params: ListParams, *, tier: str) -> ListPage:
     """Suites by name then kind and id; search over the asset's name; `kind`, `tier`, `result` filter and count."""
     u = suites(tier)
+    by_name = sa.func.lower(u.c.name)
     return await list_page(
         conn,
         sa.select(u),
         params,
         search=[u.c.name],
-        default_sort=sa.func.lower(u.c.name),
+        sortable={"name": by_name, "cases": u.c.cases, "regressions": u.c.regressions, "lastRunAt": u.c.ran_at},
+        default_sort=by_name,
         filters={"kind": u.c.kind, "tier": u.c.tier, "result": u.c.result},
         facets={"kind": u.c.kind, "tier": u.c.tier, "result": u.c.result},
         key=(u.c.kind, u.c.asset_id),
@@ -422,6 +424,13 @@ async def runs_page(conn: AsyncConnection, params: ListParams) -> ListPage:
         sa.select(u),
         params,
         search=[u.c.name],
+        sortable={
+            "name": u.c.name,
+            "regressions": u.c.regressions,
+            "durationMs": u.c.duration_ms,
+            "costUsd": u.c.cost_usd,
+            "ranAt": u.c.ran_at,
+        },
         default_sort=u.c.ran_at.desc(),
         filters={"kind": u.c.kind, "trigger": u.c.trigger},
         facets={"kind": u.c.kind, "trigger": u.c.trigger},
@@ -437,6 +446,7 @@ async def gates_page(conn: AsyncConnection, params: ListParams, *, checks: Check
         sa.select(u),
         params,
         search=[u.c.name],
+        sortable={"name": u.c.name, "requestedAt": u.c.created_at},
         default_sort=u.c.created_at.desc(),
         filters={"tier": u.c.tier, "result": u.c.result},
         facets={"tier": u.c.tier, "result": u.c.result},

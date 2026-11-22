@@ -121,12 +121,14 @@ engine_runs = sa.Table(
     # the requesterMayDecide policy, read from their roles at the start (agents migration 0095). A run's step
     # approving a write is then decided as theirs; false for a run no person started.
     sa.Column("started_by_approver", sa.Boolean, nullable=False, server_default=sa.false()),
-    sa.Column("created_at", sa.String(32), nullable=False),
+    sa.Column("created_at", sa.String(32), nullable=False, info=LISTED),
     sa.Column("updated_at", sa.String(32), nullable=False),
-    sa.Column("finished_at", sa.String(32)),
+    sa.Column("finished_at", sa.String(32), info=LISTED),
     sa.UniqueConstraint("tenant_id", "workflow_id", "run_key", name="uq_engine_runs_key"),
     # The runs list: one team's runs newest first, optionally by status, with a count per status (migration 0066).
     sa.Index("ix_engine_runs_team_created", "tenant_id", "team_id", "created_at"),
+    # The runs list sorts by finish time.
+    sa.Index("ix_engine_runs_team_finished", "tenant_id", "team_id", "finished_at"),
     sa.Index("ix_engine_runs_team_status_created", "tenant_id", "team_id", "status", "created_at"),
     # The runs list filtered by one workflow.
     sa.Index("ix_engine_runs_workflow_created", "tenant_id", "workflow_id", "created_at"),

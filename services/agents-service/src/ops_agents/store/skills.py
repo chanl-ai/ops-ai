@@ -50,7 +50,7 @@ registry_skills = sa.Table(
     # Set once with a reason; terminal. Pins already on agents keep working; new pins are refused.
     sa.Column("deprecated_reason", sa.Text),
     sa.Column("created_at", sa.String(32), nullable=False),
-    sa.Column("updated_at", sa.String(32), nullable=False),
+    sa.Column("updated_at", sa.String(32), nullable=False, info=LISTED),
     sa.Column("updated_by", sa.String(200), nullable=False),
     # Who created the skill, written once; delete rights read it (version 1's saved_by changes with each draft save).
     sa.Column("created_by", sa.String(200), nullable=False, server_default=""),
@@ -63,6 +63,8 @@ registry_skills = sa.Table(
     # The skills list filters one team's skills by owner team and by origin (agents 0113).
     sa.Index("ix_registry_skills_team_owner", "tenant_id", "team_id", "owner_team"),
     sa.Index("ix_registry_skills_team_origin", "tenant_id", "team_id", "origin"),
+    # The skills list sorts by update time.
+    sa.Index("ix_registry_skills_team_updated", "tenant_id", "team_id", "updated_at"),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
