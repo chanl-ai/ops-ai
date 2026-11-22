@@ -520,6 +520,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": ["search", "cursor", "limit", "ids", "agents"],
         "stream": False,
     },
+    "agents_try_targets": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/try-targets",
+        "pathParams": [],
+        "query": ["skill", "workflow", "step"],
+        "stream": False,
+    },
     "agents_update_agent": {
         "body": "json",
         "headers": [],
@@ -3164,6 +3173,19 @@ class Operations:
         "Get Tool"
         return self._t.call(SERVICE, OPERATIONS["agents_get_tool"], {"tool_id": tool_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def agents_try_targets(
+        self, *, skill: str | None = None, workflow: str | None = None, step: str | None = None
+    ) -> TryTargets:
+        "Try Targets"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["agents_try_targets"],
+            {},
+            {"skill": skill, "workflow": workflow, "step": step},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
     def agents_list_widgets(
         self,
         *,
@@ -4804,6 +4826,19 @@ class AsyncOperations:
     async def agents_get_tool(self, tool_id: str) -> ToolRow:
         "Get Tool"
         return await self._t.call(SERVICE, OPERATIONS["agents_get_tool"], {"tool_id": tool_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def agents_try_targets(
+        self, *, skill: str | None = None, workflow: str | None = None, step: str | None = None
+    ) -> TryTargets:
+        "Try Targets"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["agents_try_targets"],
+            {},
+            {"skill": skill, "workflow": workflow, "step": step},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     async def agents_list_widgets(
         self,
