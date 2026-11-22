@@ -198,6 +198,17 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "agents_draft_agent_brief": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/agents/{agent_id}/brief-draft",
+    "pathParams": [
+      "agent_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "agents_get_agent": {
     "body": null,
     "headers": [],

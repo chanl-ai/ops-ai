@@ -298,6 +298,18 @@ class Brief(TypedDict, closed=True):
     success: NotRequired[list[Succes]]
 
 
+class BriefDraft(TypedDict, closed=True):
+    examples: str
+    handOff: list[str]
+    howToAnswer: str
+    job: str
+    never: list[str]
+
+
+class BriefDraftInput(TypedDict, closed=True):
+    description: str
+
+
 class BriefView(TypedDict, closed=True):
     examples: NotRequired[str]
     goal: NotRequired[str]
@@ -672,6 +684,11 @@ class EnvelopeAppToolsGiven(TypedDict, closed=True):
 
 class EnvelopeApproval(TypedDict, closed=True):
     data: Approval
+    success: Literal[True]
+
+
+class EnvelopeBriefDraft(TypedDict, closed=True):
+    data: BriefDraft
     success: Literal[True]
 
 
@@ -2393,6 +2410,7 @@ class UploadedFile(TypedDict, closed=True):
 
 
 class UsedIn(TypedDict, closed=True):
+    channel: NotRequired[Literal["email"] | None]
     own: NotRequired[bool | None]
     pinnedVersion: int
     status: Literal["live", "draft", "paused"]

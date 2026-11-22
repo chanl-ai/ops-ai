@@ -26,11 +26,12 @@ from ops_agents.activities.agent_limits import AgentLimits, check_limits, limits
 from ops_agents.activities.agent_limits import wire as wire_limits
 from ops_agents.activities.tool_directory import ToolsUnavailable
 from ops_agents.app import agent_brief
+from ops_agents.app.brief_draft import draft_brief
 from ops_agents.app.evals import parse_cases, run_eval
 from ops_agents.domain.evals import TRIGGER_MANUAL
 from ops_identity.fastapi import Tx
 from ops_service_kit import narrow
-from ops_service_kit.errors import Conflict, NotFound, Unprocessable, ValidationFailed
+from ops_service_kit.errors import Conflict, NotFound, ServiceUnavailable, Unprocessable, ValidationFailed
 from ops_service_kit.http import Envelope, In, Json, JsonList, ListResult, Out
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.listing import ListQuery
@@ -65,6 +66,7 @@ from ..agent_test import one_test_turn
 from ..auth import Principal, caller, caller_in, caller_of, principal, reader_of, require_builder, started_by
 from ..child_runs import engine_workflows, refusal, team_workflows
 from ..deps import Runtime, runtime
+from ..engine_agents import KernelModels
 from ..envelope import ok
 from ..guardrails import resolve_pins
 from ..model_aliases import chat_aliases
@@ -80,6 +82,7 @@ from ..schemas import (
     AgentRun,
     AgentTestTurn,
     AgentVersion,
+    BriefDraft,
     MemorySettings,
     PublishDecisionFields,
     PublishReview,
@@ -198,6 +201,11 @@ class PausedInput(In):
     paused: bool
 
 
+class BriefDraftInput(In):
+    # What the agent is for, in the builder's words, or a procedure pasted in.
+    description: str = Field(min_length=1, max_length=8000)
+
+
 class TestInput(In):
     # No run-as: a test runs as the person testing (there is no Run as), so a field naming someone else
     # would be accepted and ignored.
@@ -298,12 +306,20 @@ async def used_in_all(rt: Runtime) -> dict[str, list[WorkflowUse]]:
             }
             out.setdefault(r.id, []).append(use)
 
-    def add(agent_id: str, workflow_id: str, name: str, version: int | None, status: str) -> None:
+    def add(
+        agent_id: str, workflow_id: str, name: str, version: int | None, status: str, *, channel: str | None = None
+    ) -> None:
         if version is None or any(u["workflowId"] == workflow_id for u in out.get(agent_id, [])):
             return
-        out.setdefault(agent_id, []).append(
-            {"workflowId": workflow_id, "workflowName": name, "pinnedVersion": int(version), "status": status}
-        )
+        use: WorkflowUse = {
+            "workflowId": workflow_id,
+            "workflowName": name,
+            "pinnedVersion": int(version),
+            "status": status,
+        }
+        if channel:
+            use["channel"] = channel
+        out.setdefault(agent_id, []).append(use)
 
     assert rt.graph_store is not None
     for w in await workflow_registry(rt).rows():
@@ -321,10 +337,12 @@ async def used_in_all(rt: Runtime) -> dict[str, list[WorkflowUse]]:
                 add(row.id, w.id, w.name, published.get(row.id), "draft" if status == "draft" else status)
     for d in await engine_workflows(rt):
         definition = cast(Json, d["definition"] or {})
-        for node in cast(list[Json], definition.get("nodes") or []):
+        nodes = cast(list[Json], definition.get("nodes") or [])
+        channel = "email" if any(n.get("type") == "ops.trigger.email" for n in nodes) else None
+        for node in nodes:
             params = cast(Json, node.get("parameters") or {})
             if node.get("type") == "ops.ai.agent" and (aid := str(params.get("agent") or "")):
-                add(aid, d["workflow_id"], d["name"], published.get(aid), "live")
+                add(aid, d["workflow_id"], d["name"], published.get(aid), "live", channel=channel)
     return out
 
 
@@ -740,6 +758,25 @@ async def publish_preview(rt: Rt, me: Me, agent_id: str, version: Annotated[int,
         require_newest_draft(row, version)
         decision = await _publish_decision(rt, agent_id, row, version, document)
     return ok(decision.record())
+
+
+@router.post("/{agent_id}/brief-draft", response_model=Envelope[BriefDraft])
+async def draft_agent_brief(rt: Rt, me: Me, agent_id: str, body: BriefDraftInput) -> JSONResponse:
+    """A proposed text per brief heading from a description, written by the deployment's model and naming only the
+    tools and knowledge the newest version holds. Nothing is saved; 503 `model_unavailable` with no model."""
+    row = await changeable(rt, me, agent_id, "edit")
+    if rt.ports is None:
+        raise ServiceUnavailable(rt.model_error or "No model is configured.", code="model_unavailable")
+    spec = (await registry(rt).version(agent_id, row.version)).spec
+    proposal = await draft_brief(
+        KernelModels(rt.ports, rt.settings.model_alias),
+        body.description,
+        name=str(spec.get("name") or row.slug),
+        tools=[str(t) for t in cast(list[object], spec.get("toolIds") or [])],
+        knowledge=[str(k) for k in cast(list[object], spec.get("collections") or [])],
+        key=f"brief-draft:{agent_id}:{new_id('draft')}",
+    )
+    return ok(proposal)
 
 
 async def _publish_problems(rt: Runtime, spec: Json) -> list[Json]:

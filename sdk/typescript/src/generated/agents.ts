@@ -338,6 +338,27 @@ export interface paths {
         patch: operations["agents_update_agent"];
         trace?: never;
     };
+    "/v1/agents/{agent_id}/brief-draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Draft Agent Brief
+         * @description A proposed text per brief heading from a description, written by the deployment's model and naming only the
+         *     tools and knowledge the newest version holds. Nothing is saved; 503 `model_unavailable` with no model.
+         */
+        post: operations["agents_draft_agent_brief"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/agents/{agent_id}/eval-cases": {
         parameters: {
             query?: never;
@@ -4785,6 +4806,28 @@ export interface components {
             success?: string[];
         };
         /**
+         * BriefDraft
+         * @description A proposed text per brief heading, drafted from a description. Nothing is saved: each heading is accepted or
+         *     skipped in the console, and an accepted one saves as an ordinary edit of the brief.
+         */
+        BriefDraft: {
+            /** Examples */
+            examples: string;
+            /** Handoff */
+            handOff: string[];
+            /** Howtoanswer */
+            howToAnswer: string;
+            /** Job */
+            job: string;
+            /** Never */
+            never: string[];
+        };
+        /** BriefDraftInput */
+        BriefDraftInput: {
+            /** Description */
+            description: string;
+        };
+        /**
          * BriefView
          * @description An agent's brief as replied (`ops_agent_kernel.prompt_writer.Brief` is the request form).
          */
@@ -6149,6 +6192,15 @@ export interface components {
         /** Envelope[BatchView] */
         Envelope_BatchView_: {
             data: components["schemas"]["BatchView"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[BriefDraft] */
+        Envelope_BriefDraft_: {
+            data: components["schemas"]["BriefDraft"];
             /**
              * Success
              * @constant
@@ -12136,6 +12188,8 @@ export interface components {
         };
         /** UsedIn */
         UsedIn: {
+            /** Channel */
+            channel?: "email" | null;
             /** Own */
             own?: boolean | null;
             /** Pinnedversion */
@@ -14758,6 +14812,113 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_Agent_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    agents_draft_agent_brief: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BriefDraftInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_BriefDraft_"];
                 };
             };
             /** @description Invalid request */

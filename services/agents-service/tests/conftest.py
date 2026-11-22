@@ -127,6 +127,16 @@ def _last_user_text(messages: list[ModelMessage]) -> str:
     return ""
 
 
+# What the scripted model proposes for a brief draft (POST /v1/agents/{id}/brief-draft), one text per heading.
+DRAFTED_BRIEF: dict[str, Any] = {
+    "job": "Tells branch staff where a loan application stands.",
+    "howToAnswer": "Look the application up, then say its stage and the next step.",
+    "handOff": ["The customer disputes a decision."],
+    "examples": "Q: Where is LN-20418? A: In underwriting; a decision is due Friday.",
+    "never": ["Promise an approval."],
+}
+
+
 def structured(info: AgentInfo, args: dict[str, Any]) -> ModelResponse:
     """A structured answer in the form the request asks for: the JSON a native response format wants (the kernel's
     schema turns), else a call of the output tool (the guardrail check's classifier)."""
@@ -170,6 +180,8 @@ def scripted(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
     if "which apps can you reach" in text.lower() and APPS_HEAD in (prompt := _prompt_text(messages)):
         told = prompt.split(APPS_HEAD, 1)[1].split("\n\n", 1)[0].strip()
         return ModelResponse(parts=[TextPart(told)])
+    if text.startswith("<draft-brief>") and info.model_request_parameters.output_mode in ("native", "tool"):
+        return structured(info, DRAFTED_BRIEF)
     if text.startswith("<remember>") and info.model_request_parameters.output_mode in ("native", "tool"):
         return structured(info, remembered(text))
     if "<knowledge>" in text and "limit" in text.lower():

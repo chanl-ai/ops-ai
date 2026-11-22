@@ -57,6 +57,8 @@ class UsedIn(Out):
     status: Literal["live", "draft", "paused"]
     # The agent's own one-step workflow, which publishes with it (UX walk agents-2).
     own: bool | None = None
+    # `email` when the workflow starts from an email, so the agent's Channels tab lists it under Email.
+    channel: Literal["email"] | None = None
 
 
 class GuardrailPin(Out):
@@ -1747,6 +1749,17 @@ class PublishBlocker(Out):
     id: str | None = None
     position: BlockerPosition | None = None
     message: str
+
+
+class BriefDraft(Out):
+    """A proposed text per brief heading, drafted from a description. Nothing is saved: each heading is accepted or
+    skipped in the console, and an accepted one saves as an ordinary edit of the brief."""
+
+    job: str
+    how_to_answer: str
+    hand_off: list[str]
+    examples: str
+    never: list[str]
 
 
 class AgentPrompt(Out):

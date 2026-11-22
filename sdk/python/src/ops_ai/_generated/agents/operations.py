@@ -163,6 +163,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "agents_draft_agent_brief": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/agents/{agent_id}/brief-draft",
+        "pathParams": ["agent_id"],
+        "query": [],
+        "stream": False,
+    },
     "agents_get_agent": {
         "body": None,
         "headers": [],
@@ -2128,6 +2137,10 @@ class Operations:
         "Delete Agent"
         return self._t.call(SERVICE, OPERATIONS["agents_delete_agent"], {"agent_id": agent_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def agents_draft_agent_brief(self, agent_id: str, body: BriefDraftInput) -> BriefDraft:
+        "Draft Agent Brief"
+        return self._t.call(SERVICE, OPERATIONS["agents_draft_agent_brief"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
+
     def assurance_agent_cases(self, agent_id: str) -> SavedCases:
         "Agent Cases"
         return self._t.call(SERVICE, OPERATIONS["assurance_agent_cases"], {"agent_id": agent_id}, {}, {}, None)  # type: ignore[no-any-return]
@@ -3734,6 +3747,10 @@ class AsyncOperations:
     async def agents_delete_agent(self, agent_id: str) -> Any:
         "Delete Agent"
         return await self._t.call(SERVICE, OPERATIONS["agents_delete_agent"], {"agent_id": agent_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def agents_draft_agent_brief(self, agent_id: str, body: BriefDraftInput) -> BriefDraft:
+        "Draft Agent Brief"
+        return await self._t.call(SERVICE, OPERATIONS["agents_draft_agent_brief"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def assurance_agent_cases(self, agent_id: str) -> SavedCases:
         "Agent Cases"

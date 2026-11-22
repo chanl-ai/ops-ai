@@ -543,6 +543,9 @@ class WorkflowUse(TypedDict):
     pinnedVersion: int
     status: str
     own: NotRequired[bool]
+    # How people reach the agent through this workflow, when its trigger is a message channel: `email` for an
+    # email trigger. Absent for a request, schedule or event trigger.
+    channel: NotRequired[str]
 
 
 class GuardrailPinView(TypedDict):
