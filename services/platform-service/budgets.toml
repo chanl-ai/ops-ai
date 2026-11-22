@@ -138,4 +138,4 @@ query = { ids = "team_x" }
 queries = 8   # the access.view decision a Chat user fails reads the caller's roles
 
 ["GET /v1/teams"]
-queries = 10
+queries = 9

@@ -593,12 +593,13 @@ def create_public_app(
             }
         )
 
-    @app.get("/v1/teams", tags=["teams"], response_model=Envelope[list[TeamOut]], responses=ERRORS)
-    async def list_teams(_: Tx, claims: Annotated[Claims, Depends(claims_of)]) -> Any:  # pyright: ignore[reportUnusedFunction]
-        """The teams the caller may switch to: their own, and every active team for a workspace admin."""
+    @app.get("/v1/teams", tags=["teams"], response_model=Envelope[ListResult[TeamOut]], responses=ERRORS)
+    async def list_teams(_: Tx, q: ListQuery, claims: Annotated[Claims, Depends(claims_of)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+        """One page of the teams the caller may switch to, by name, on the shared list contract: their own, and every
+        active team for a workspace admin. `search` matches the name; `ids` names exact teams, as the switcher labels
+        the current one."""
         tenant, user = str(claims["tenant_id"]), str(claims["sub"])
-        teams = await team_store.teams_of(tenant, user, everywhere=await everywhere(tenant, user))
-        return ok([t.model_dump(by_alias=True) for t in teams])
+        return ok(await team_store.teams_page(tenant, user, q, everywhere=await everywhere(tenant, user)))
 
     @app.get("/v1/settings/members", tags=["members"], response_model=Envelope[ListResult[MemberOut]], responses=ERRORS)
     async def list_members(  # pyright: ignore[reportUnusedFunction]

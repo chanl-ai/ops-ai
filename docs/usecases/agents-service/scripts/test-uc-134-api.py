@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from usecase_harness import agents, check, data, finish, sse
+from usecase_harness import agents, check, data, every_page, finish, sse
 
 MAYA = {"X-Team-Id": "team_ops", "X-Dev-User": "m.okafor@harborpine.example"}
 JAMES = {"X-Team-Id": "team_ops", "X-Dev-User": "j.richardson@harborpine.example"}
@@ -31,24 +31,24 @@ def searched(events: list[dict[str, Any]]) -> str:
 
 with agents() as api:
     say(api, MAYA, "Hello. My timezone is Eastern.")
-    kept = data(api.get("/v1/me/memories?agentId=ag_branch", headers=MAYA))
+    kept = every_page(api, "/v1/me/memories", headers=MAYA, agentId="ag_branch")
     check("1 the fact is kept for Maya", [(m["key"], m["value"]) for m in kept] == [("timezone", "Eastern")], kept)
 
     found = searched(say(api, MAYA, 'call search_memory {"query": "timezone"}'))
     check("2 a new chat finds it with search_memory", "Eastern" in found, found[:300])
 
     fixed = api.patch(f"/v1/me/memories/{kept[0]['id']}", json={"value": "Pacific"}, headers=MAYA)
-    now = data(api.get("/v1/me/memories?agentId=ag_branch", headers=MAYA))
+    now = every_page(api, "/v1/me/memories", headers=MAYA, agentId="ag_branch")
     check(
         "3 a correction replaces it",
         fixed.status_code == 200 and [m["value"] for m in now] == ["Pacific"],
         [m["value"] for m in now],
     )
 
-    check("4 another person sees none of it", data(api.get("/v1/me/memories", headers=JAMES)) == [])
+    check("4 another person sees none of it", every_page(api, "/v1/me/memories", headers=JAMES) == [])
 
     gone = api.delete(f"/v1/me/memories/{now[0]['id']}", headers=MAYA)
-    after = data(api.get("/v1/me/memories", headers=MAYA))
+    after = every_page(api, "/v1/me/memories", headers=MAYA)
     again = searched(say(api, MAYA, 'call search_memory {"query": "timezone"}'))
     actions = [a["action"] for a in data(api.get("/v1/me/memories/export", headers=MAYA))["audit"]]
     check(

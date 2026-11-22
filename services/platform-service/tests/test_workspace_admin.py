@@ -46,7 +46,7 @@ async def test_a_workspace_admin_acts_in_a_team_they_do_not_belong_to(signin: Si
     )
     assert invite.status_code == 200, invite.text
     listed = await signin.public.get("/v1/teams", headers={"Authorization": f"Bearer {session['token']}"})
-    assert any(t["id"] == team and t["role"] == "admin" for t in listed.json()["data"])
+    assert any(t["id"] == team and t["role"] == "admin" for t in listed.json()["data"]["data"])
     # Another service verifies the same token and lets the admin act in that team.
     jwks = {"keys": [dev_signer().public_jwk()]}
 
@@ -68,7 +68,7 @@ async def test_a_team_admin_is_kept_to_their_own_teams(signin: SignInRig) -> Non
     r = await signin.public.get("/v1/settings/members", headers={**h, "X-Team-Id": team})
     assert r.status_code == 403 and r.json()["error"]["code"] == "team_forbidden", r.text
     listed = await signin.public.get("/v1/teams", headers={"Authorization": h["Authorization"]})
-    assert team not in [t["id"] for t in listed.json()["data"]]
+    assert team not in [t["id"] for t in listed.json()["data"]["data"]]
 
     async def fetch() -> dict[str, Any]:
         return {"keys": [dev_signer().public_jwk()]}

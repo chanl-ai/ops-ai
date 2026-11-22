@@ -7,7 +7,7 @@ import { CopyButton } from '@/components/shared/copy-button';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
-import { TeamSelectField } from '@/components/shared/team-select-field';
+import { type PickedTeam, TeamSelectField } from '@/components/shared/team-select-field';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -31,19 +31,19 @@ export function ApiKeyDialog({
   scopes,
   onSubmit,
   isPending,
-  teams,
-  defaultTeamId,
+  pickTeam,
+  defaultTeam,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   scopes: SettingsLookups['apiScopes'];
   onSubmit: (input: ApiKeyInput) => Promise<{ key: string }>;
   isPending: boolean;
-  /** Platform scope only: shows a team field. */
-  teams?: { id: string; name: string }[];
-  defaultTeamId?: string;
+  /** Platform scope only: shows a team field offering the teams the person may create keys in (`allowed`). */
+  pickTeam?: { allowed?: string[] };
+  defaultTeam?: PickedTeam;
 }) {
-  const [teamId, setTeamId] = React.useState(defaultTeamId ?? '');
+  const [team, setTeam] = React.useState<PickedTeam | null>(defaultTeam ?? null);
   const [name, setName] = React.useState('');
   const [picked, setPicked] = React.useState<string[]>(['runs:write']);
   const [expiry, setExpiry] = React.useState('365');
@@ -51,13 +51,13 @@ export function ApiKeyDialog({
   const [key, setKey] = React.useState<string | null>(null);
   React.useEffect(() => {
     if (!open) return;
-    setTeamId(defaultTeamId ?? '');
+    setTeam(defaultTeam ?? null);
     setName('');
     setPicked(['runs:write']);
     setExpiry('365');
     setError(null);
     setKey(null);
-  }, [open, defaultTeamId]);
+  }, [open, defaultTeam?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (key)
     return (
@@ -107,7 +107,7 @@ export function ApiKeyDialog({
                 if (nameIssue) return setError(nameIssue);
                 if (!picked.length) return setError('Pick at least one scope.');
                 try {
-                  const res = await onSubmit({ name, scopes: picked, expiresInDays: expiry === 'never' ? null : Number(expiry), ...(teams ? { teamId } : {}) });
+                  const res = await onSubmit({ name, scopes: picked, expiresInDays: expiry === 'never' ? null : Number(expiry), ...(pickTeam ? { teamId: team?.id ?? '' } : {}) });
                   setKey(res.key);
                 } catch (e) {
                   setError((e as Error).message);
@@ -121,7 +121,7 @@ export function ApiKeyDialog({
       }
     >
       <div className="flex flex-col gap-4">
-        {teams && <TeamSelectField id="key-team" teams={teams} value={teamId} onChange={setTeamId} hint="Runs started with the key belong to this team." />}
+        {pickTeam && <TeamSelectField id="key-team" value={team} onChange={setTeam} allowed={pickTeam.allowed} reason="You can’t create keys in this team." hint="Runs started with the key belong to this team." />}
         <FormField id="key-name" label="Name" hint="Name the system that will use it.">
           <Input id="key-name" value={name} onChange={(e) => (setName(e.target.value), setError(null))} placeholder="e.g. Core banking event bridge" />
         </FormField>

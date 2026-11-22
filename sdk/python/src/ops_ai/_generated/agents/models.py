@@ -3302,11 +3302,6 @@ class EnvelopeListMailboxView(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeListMemoryView(TypedDict, closed=True):
-    data: list[MemoryView]
-    success: Literal[True]
-
-
 class EnvelopeListModelAlias(TypedDict, closed=True):
     data: list[ModelAlias]
     success: Literal[True]
@@ -3523,6 +3518,12 @@ class ListResultEvalRunRow(TypedDict, closed=True):
 
 class ListResultFormView(TypedDict, closed=True):
     data: list[FormView]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
+class ListResultMemoryView(TypedDict, closed=True):
+    data: list[MemoryView]
     facets: dict[str, dict[str, int]]
     pagination: Pagination
 
@@ -4322,6 +4323,11 @@ class EnvelopeListResultEvalRunRow(TypedDict, closed=True):
 
 class EnvelopeListResultFormView(TypedDict, closed=True):
     data: ListResultFormView
+    success: Literal[True]
+
+
+class EnvelopeListResultMemoryView(TypedDict, closed=True):
+    data: ListResultMemoryView
     success: Literal[True]
 
 

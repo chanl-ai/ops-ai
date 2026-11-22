@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
-from usecase_harness import TEAM, agents, check, data, finish, sse
+from usecase_harness import TEAM, agents, check, data, every_page, finish, sse
 
 OTHER = {"X-Team-Id": "team_security"}
 MINE = "/v1/me/memories"
@@ -38,7 +38,7 @@ def found(events: list[dict[str, Any]]) -> str:
 
 
 def listed(api: httpx.Client, headers: dict[str, str] = TEAM) -> list[str]:
-    return [str(m["value"]) for m in data(api.get(MINE, headers=headers))]
+    return [str(m["value"]) for m in every_page(api, MINE, headers=headers)]
 
 
 with agents() as api:
@@ -99,7 +99,7 @@ with agents() as api:
         shown,
     )
 
-    zone = next((m for m in data(api.get(MINE, headers=TEAM)) if m["value"] == "Mountain"), {"id": "missing"})
+    zone = next((m for m in every_page(api, MINE, headers=TEAM) if m["value"] == "Mountain"), {"id": "missing"})
     check("forget", api.delete(f"{MINE}/{zone['id']}", headers=TEAM).status_code == 204)
     check("Undo within 30 days puts it back", api.post(f"{MINE}/{zone['id']}/undo", headers=TEAM).status_code == 204)
     check("it is listed again", "Mountain" in listed(api), listed(api))
@@ -119,7 +119,7 @@ with agents() as api:
         say(api, thread(api, "ag_dispute", TEAM), "Remember that I prefer plain answers without tables.")
     )
     check("asked again, it is the same memory", [m.get("decision") for m in repeated] == ["same"], repeated)
-    kept = [m for m in data(api.get(MINE, headers=TEAM)) if "tables" in str(m["value"])]
+    kept = [m for m in every_page(api, MINE, headers=TEAM) if "tables" in str(m["value"])]
     check(
         "My memory lists it once, as asked for, not as corrected",
         [(m["value"], m["source"]) for m in kept] == [("plain answers without tables", "asked")],
@@ -131,7 +131,7 @@ with agents() as api:
         [(m.get("value"), m.get("decision")) for m in changed] == [("answers with a short table", "replaces")],
         changed,
     )
-    preferences = [m["value"] for m in data(api.get(MINE, headers=TEAM)) if m["kind"] == "preference"]
+    preferences = [m["value"] for m in every_page(api, MINE, headers=TEAM) if m["kind"] == "preference"]
     check("only the new preference is listed", preferences == ["answers with a short table"], preferences)
     numbered = remembered(say(api, thread(api, "ag_branch", TEAM), "Remember that I prefer short numbered summaries."))
     check(
@@ -152,7 +152,7 @@ with agents() as api:
         == [("short bullet-point summaries", "active", "replaces")],
         switched,
     )
-    kept = [m["value"] for m in data(api.get(MINE, headers=TEAM)) if m["kind"] == "preference"]
+    kept = [m["value"] for m in every_page(api, MINE, headers=TEAM) if m["kind"] == "preference"]
     check("14 only the new preference is listed", kept == ["short bullet-point summaries"], kept)
     summary = say(api, thread(api, "ag_branch", TEAM), "Give me a summary of my day.")
     reply = str(next((e for e in summary if e.get("type") == "done"), {}).get("message", {}).get("content", ""))

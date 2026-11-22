@@ -827,7 +827,14 @@ export const platformOperations = {
     "method": "GET",
     "path": "/v1/teams",
     "pathParams": [],
-    "query": [],
+    "query": [
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
+    ],
     "stream": false
   },
   "teams_list_workspace_teams": {

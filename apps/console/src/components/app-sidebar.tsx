@@ -97,7 +97,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const closeOnPhone = () => isMobile && setOpenMobile(false);
   const { data: lookups, isError: lookupsFailed, refetch: retryLookups } = useLookups();
   const identity = useWorkspaceIdentity();
-  const { team, teams, switchTeam, create, canCreate, isError: teamsFailed, retry: retryTeams } = useTeam();
+  const { team, switchTeam, create, canCreate, isError: teamsFailed, retry: retryTeams } = useTeam();
   const allows = useNavAllows();
   const { current: area, ready: cellsReady, failed: cellsFailed, retry: retryCells } = useAreas();
   // Area tabs on: the sidebar lists the area picked in the top bar. Off (the default): every area as a section.
@@ -174,7 +174,6 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
         <TeamSwitcher
           error={teamsFailed}
           onRetry={() => void retryTeams()}
-          teams={teams}
           activeTeam={team}
           subtitle={[brand.name ?? identity?.workspace, 'Ops AI'].filter(Boolean).join(' · ')}
           onSelect={switchTeam}

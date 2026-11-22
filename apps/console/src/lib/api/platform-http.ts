@@ -17,7 +17,10 @@ import { createWorkspaceTeamsHttp } from './workspace-teams-http';
 export function createPlatformTeamsHttp(baseUrl: string): OpsApi['teams'] {
   const { get, send, qs } = createTransport(`${baseUrl}/v1`);
   return {
-    list: async () => (await get<Omit<Team, 'icon'>[]>('/teams')).map((t) => ({ ...t, icon: 'team' as const })),
+    list: async (p) => {
+      const page = await get<ListResult<Omit<Team, 'icon'>>>(`/teams?${qs(p)}`);
+      return { ...page, data: page.data.map((t) => ({ ...t, icon: 'team' as const })) };
+    },
     me: () => get<Me>('/me'),
     roles: (p) => get<ListResult<RoleSummary>>(`/roles?${qs(p)}`),
     role: (id) => get<RoleDetail>(`/roles/${encodeURIComponent(id)}`),

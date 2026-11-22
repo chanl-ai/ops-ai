@@ -94,7 +94,9 @@ async def test_only_settings_manage_verifies(signin: SignInRig) -> None:
     await signin.person(viewer, role="viewer")
     s = await signin.public.post("/v1/auth/sign-in", json={"email": viewer, "password": DEMO_PASSWORD})
     token = s.json()["data"]["token"]
-    own = (await signin.public.get("/v1/teams", headers={"Authorization": f"Bearer {token}"})).json()["data"][0]["id"]
+    own = (await signin.public.get("/v1/teams", headers={"Authorization": f"Bearer {token}"})).json()["data"]["data"][
+        0
+    ]["id"]
     h = {"Authorization": f"Bearer {token}", "X-Team-Id": own}
     domain = f"perm.{signin.zone}"
     r = await signin.configure("sip_perm", _oidc(signin, domain), verify=False)

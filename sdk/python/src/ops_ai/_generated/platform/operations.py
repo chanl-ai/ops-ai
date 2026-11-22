@@ -714,7 +714,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/teams",
         "pathParams": [],
-        "query": [],
+        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "teams_list_workspace_teams": {
@@ -1399,9 +1399,32 @@ class Operations:
         "Team Names"
         return self._t.call(SERVICE, OPERATIONS["teams_team_names"], {}, {"ids": ids}, {}, None)  # type: ignore[no-any-return]
 
-    def teams_list_teams(self) -> list[TeamOut]:
+    def teams_list_teams(
+        self,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultTeamOut:
         "List Teams"
-        return self._t.call(SERVICE, OPERATIONS["teams_list_teams"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["teams_list_teams"],
+            {},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     def workspace_close_workspace(self, body: WorkspaceCloseIn) -> WorkspaceStateOut:
         "Close Workspace"
@@ -1999,9 +2022,32 @@ class AsyncOperations:
         "Team Names"
         return await self._t.call(SERVICE, OPERATIONS["teams_team_names"], {}, {"ids": ids}, {}, None)  # type: ignore[no-any-return]
 
-    async def teams_list_teams(self) -> list[TeamOut]:
+    async def teams_list_teams(
+        self,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultTeamOut:
         "List Teams"
-        return await self._t.call(SERVICE, OPERATIONS["teams_list_teams"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["teams_list_teams"],
+            {},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     async def workspace_close_workspace(self, body: WorkspaceCloseIn) -> WorkspaceStateOut:
         "Close Workspace"

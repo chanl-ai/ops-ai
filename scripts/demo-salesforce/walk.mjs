@@ -99,7 +99,7 @@ async function step(name, page, body) {
 }
 
 const admin = await tokenFor(ADMIN.OPS_BOOTSTRAP_ADMIN_EMAIL, ADMIN.OPS_BOOTSTRAP_ADMIN_PASSWORD);
-const team = (await call(PLATFORM, 'GET', '/v1/teams', { Authorization: `Bearer ${admin}` })).data?.find((t) => t.name === TEAM_NAME)?.id;
+const team = (await call(PLATFORM, 'GET', `/v1/teams?search=${encodeURIComponent(TEAM_NAME)}`, { Authorization: `Bearer ${admin}` })).data?.data?.find((t) => t.name === TEAM_NAME)?.id;
 const as = async (email) => ({ Authorization: `Bearer ${await tokenFor(email, PASSWORD)}`, 'X-Team-Id': team });
 const lead = await as(LEAD);
 const salesforceCard = async () => ((await call(TOOLS, 'GET', '/v1/systems', lead)).data ?? []).find((c) => c.pluginId === PLUGIN);

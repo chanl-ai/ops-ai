@@ -97,7 +97,7 @@ function columns(showTeam: boolean, onRevoke: ((k: ApiKey) => void) | null): Col
 const SORT_COLUMNS = { name: 'name', createdBy: 'createdAt', lastUsedAt: 'lastUsedAt', expiresAt: 'expiresAt' };
 
 export default function ApiKeysPage() {
-  const { team, teams } = useTeam();
+  const { team } = useTeam();
   const showTeam = team?.scope === 'all';
   const list = useListParams('name', undefined, undefined, SORT_COLUMNS);
   // platform-service lists a team's keys under access.manage, creates them under access.create and revokes them under
@@ -109,7 +109,8 @@ export default function ApiKeysPage() {
   // Across teams, only the keys of teams whose access the person manages, and a new key only in a team they may create in.
   const covered = useTeamsAllowing('access', 'manage');
   const creatable = useTeamsAllowing('access', 'create') ?? [];
-  const params = React.useMemo(() => (showTeam && covered ? { ...list.params, filters: { ...list.params.filters, teamId: covered } } : list.params), [showTeam, covered, list.params]);
+  const keyTeams = covered === 'all' ? undefined : covered;
+  const params = React.useMemo(() => (showTeam && keyTeams ? { ...list.params, filters: { ...list.params.filters, teamId: keyTeams } } : list.params), [showTeam, keyTeams, list.params]);
   const query = useApiKeys(params, may === true && (!showTeam || !!covered));
   const lookups = useSettingsLookups();
   const create = useCreateApiKey();
@@ -158,8 +159,8 @@ export default function ApiKeysPage() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         scopes={lookups.data?.apiScopes ?? []}
-        teams={team?.scope === 'all' ? teams.filter((t) => creatable.includes(t.id)).map((t) => ({ id: t.id, name: t.name })) : undefined}
-        defaultTeamId={team?.id}
+        pickTeam={team?.scope === 'all' ? { allowed: creatable === 'all' ? undefined : creatable } : undefined}
+        defaultTeam={team ? { id: team.id, label: team.name } : undefined}
         isPending={create.isPending}
         onSubmit={(input) => create.mutateAsync(input).then((r) => (created.show(r.apiKey), r))}
       />
