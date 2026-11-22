@@ -21,7 +21,8 @@ from .store.team_defaults import TeamDefaults
 
 log = get_logger("ops_tools.defaults")
 
-DEFAULTS_VERSION = 1
+# 2: the Workspace app.
+DEFAULTS_VERSION = 2
 
 
 async def ensure_defaults(
