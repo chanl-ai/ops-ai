@@ -82,6 +82,15 @@ export interface AgentPrompt {
   text: string;
 }
 
+/** `POST /v1/agents/{id}/brief-draft`: a proposed text per brief heading; nothing is saved until one is accepted. */
+export interface BriefDraft {
+  job: string;
+  howToAnswer: string;
+  handOff: string[];
+  examples: string;
+  never: string[];
+}
+
 /** `GET /v1/agents/{id}/publish-check`: whether the newest draft can be sent for publish, and what stops it. */
 export interface AgentPublishCheck {
   canRequest: boolean;

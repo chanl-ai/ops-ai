@@ -177,6 +177,8 @@ export const useAgentPublishPreview = (id: string, version: number, enabled: boo
 /** The prompt the model reads for a version, for View prompt; asked only while the dialog is open. */
 export const useAgentPrompt = (id: string, version: number, enabled: boolean) =>
   useTeamQuery({ queryKey: ['agent', id, 'prompt', version], queryFn: () => api.agents.promptView(id, version), enabled, staleTime: 0 });
+/** A proposed text per brief heading for the Draft dialog; writes nothing, so nothing is refetched after it. */
+export const useDraftBrief = (id: string) => useMutation({ mutationFn: (description: string) => api.agents.draftBrief(id, description) });
 /** What stops the newest draft from publishing and where; read when the publish dialog opens and after each save. */
 export const useAgentPublishCheck = (id: string, version: number, enabled = true) =>
   useTeamQuery({ queryKey: ['agent', id, 'publish-check', version], queryFn: () => api.agents.publishCheck(id, version), enabled, staleTime: 0 });

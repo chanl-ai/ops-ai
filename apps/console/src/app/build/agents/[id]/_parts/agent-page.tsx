@@ -7,7 +7,7 @@ import { SaveState } from '@/components/shared/save-state';
 import * as React from 'react';
 import Link from 'next/link';
 import { useParams, usePathname, useRouter } from 'next/navigation';
-import { ArrowLeft, Bot, CircleAlert, FlaskConical, Info, MoreHorizontal, Pause, Play, RefreshCw, Rocket, Send, Star, Trash2, Users } from 'lucide-react';
+import { ArrowLeft, Bot, CircleAlert, FlaskConical, Info, MoreHorizontal, Pause, Play, RefreshCw, Rocket, Send, Sparkles, Star, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 
 import {
@@ -54,6 +54,8 @@ import { AgentSkillsSection, type AttachFilter } from '@/components/skills/agent
 import { useAgentSkills, useAttachSkill, useDetachSkill } from '@/hooks/skill-queries';
 import { TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { EvalsTab } from './evals-tab';
+import { DraftBriefDialog } from '@/components/agents/draft-brief-dialog';
+
 import { useInstructionsAssist } from './instructions-assist';
 import { useAgentAutosave } from './use-agent-autosave';
 import { WidgetEmbeds } from '@/components/deployments/widget-embed';
@@ -192,6 +194,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
     if (!sameValue(before, briefSaved)) setBriefEdit((b) => b && keptEdits(before, b, briefSaved));
   }, [briefSaved]);
   const brief = briefEdit ?? briefSaved;
+  const [draftOpen, setDraftOpen] = React.useState(false);
   const briefDirty = briefEdit !== null && !sameValue(briefEdit, agent.brief ?? null);
   const purposeMissing = mode === 'brief' && briefDirty && !briefEdit!.purpose.trim();
   const errors = { name: draft.name.trim() ? undefined : 'The agent needs a name.', role: mode === 'full' && !draft.role.trim() ? 'Describe the job in one line.' : undefined };
@@ -204,9 +207,6 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
   const addReference = useAddReference(agent.id);
   const assist = useInstructionsAssist({
     agent,
-    draft,
-    setInstructions: (t) => set('instructions', t),
-    tools: tools.data ?? [],
     dirty,
     alwaysOn: (skills.data?.pins ?? []).filter((p) => p.loading === 'always'),
     onAttachAlways: () => (setAttach('always'), requestAnimationFrame(() => document.getElementById('agent-skills')?.scrollIntoView({ block: 'center' }))),
@@ -372,17 +372,6 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    {agent.wrapperWorkflowId && (
-                      <DropdownMenuItem
-                        onClick={() => {
-                          setTab('channels');
-                          setDeployOpen(true);
-                        }}
-                        data-testid="embed-agent"
-                      >
-                        <Send className="size-4" /> New embed
-                      </DropdownMenuItem>
-                    )}
                     {pausable && (
                       <DropdownMenuItem onClick={togglePaused}>
                         {agent.paused ? <Play className="size-4" /> : <Pause className="size-4" />} {agent.paused ? 'Resume agent' : 'Pause agent'}
@@ -531,6 +520,11 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
                 name={agent.name}
                 brief={brief}
                 onBrief={setBriefEdit}
+                cardHeader={
+                  <Button variant="ghost" size="sm" onClick={() => setDraftOpen(true)} title="Propose a brief from a description of the job" data-testid="agent-brief-draft">
+                    <Sparkles className="size-3.5" /> Draft
+                  </Button>
+                }
                 mode={mode}
                 instructions={draft.instructions}
                 onInstructions={(t) => set('instructions', t)}
@@ -644,6 +638,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
             }}
           />
           {assist.dialogs}
+          <DraftBriefDialog agentId={agent.id} brief={brief} onBrief={setBriefEdit} open={draftOpen} onOpenChange={setDraftOpen} />
           <MakeDefaultAgentDialog agent={agent} open={makeDefaultOpen} onOpenChange={setMakeDefaultOpen} />
           <DeleteDialog
             open={deleteOpen}

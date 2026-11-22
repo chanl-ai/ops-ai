@@ -66,7 +66,7 @@ export interface Agent {
   wrapperWorkflowId?: string;
   /** Workflows that use this agent, with the agent version each one was published with. */
   /** Where the agent runs. `own` is its one-step workflow, which publishes with it: never behind, never republished. */
-  usedIn: { workflowId: string; workflowName: string; pinnedVersion: number; status: LifecycleStatus; own?: boolean }[];
+  usedIn: { workflowId: string; workflowName: string; pinnedVersion: number; status: LifecycleStatus; own?: boolean; channel?: 'email' }[];
   limits: AgentLimits;
   /** Widget templates the agent may fill in chat, by version; absent in the mock's seeded agents. */
   widgetPins?: WidgetPin[];

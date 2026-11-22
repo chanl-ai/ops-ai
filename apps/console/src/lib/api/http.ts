@@ -261,6 +261,7 @@ export function createHttpApi(baseUrl: string): OpsApi {
       publishPreview: (id, version) => get(`/agents/${id}/publish-preview?version=${version}`),
       publishCheck: (id, version) => get(`/agents/${id}/publish-check?version=${version}`),
       promptView: (id, version) => get(`/agents/${id}/prompt${version === undefined ? '' : `?version=${version}`}`),
+      draftBrief: (id, description) => send('POST', `/agents/${id}/brief-draft`, { description }),
       setPaused: (id, paused) => send('POST', `/agents/${id}/paused`, { paused }),
       // GET /tools answers one page of the Tools page's rows (each a grantable tool with its app and users): the agent
       // page reads the largest page the route serves.
@@ -323,7 +324,7 @@ export function createHttpApi(baseUrl: string): OpsApi {
     engine: createEngineHttp(get, send),
     channels: createChannelsHttp(get, send),
     templates: createTemplatesHttp(get, send, qs),
-    prompts: createPromptsHttp(get, send, qs, baseUrl),
+    prompts: createPromptsHttp(get),
     skills: createSkillsHttp(get, send, qs, baseUrl),
     widgets: createWidgetsHttp(get, send, qs),
     widgetDeployments: createWidgetDeploymentsHttp(get, send, baseUrl),

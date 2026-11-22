@@ -54,6 +54,7 @@ export function AgentBriefEditor({
   toolbar,
   footer,
   cardFooter,
+  cardHeader,
   textareaRef,
 }: {
   agentId: string;
@@ -74,6 +75,8 @@ export function AgentBriefEditor({
   footer?: React.ReactNode;
   /** The brief card's footer row: what the agent uses on the left, View prompt on the right. */
   cardFooter?: React.ReactNode;
+  /** The brief card's header actions (Draft); not shown while the agent is plain text. */
+  cardHeader?: React.ReactNode;
   textareaRef?: React.Ref<HTMLTextAreaElement>;
 }) {
   const context = React.useMemo(() => ({ forAgent: agentId }), [agentId]);
@@ -114,6 +117,7 @@ export function AgentBriefEditor({
         controls={controls}
         readOnly={readOnly}
         footerSlot={cardFooter}
+        headerSlot={mode === 'full' || readOnly ? undefined : cardHeader}
         hint="Type @ to add a tool, knowledge, skill or agent"
       />
     </div>
