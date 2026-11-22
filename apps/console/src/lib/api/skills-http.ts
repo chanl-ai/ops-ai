@@ -38,6 +38,7 @@ export function createSkillsHttp(get: Get, send: Send, qs: (p: ListParams & { vi
     bulkDeprecate: (ids, reason) => send('POST', '/skills/bulk-deprecate', { ids, reason }),
     bulkRemove: (ids) => send('POST', '/skills/bulk-delete', { ids }),
     exportSkills: (ids, version) => send('POST', '/skills/export', { ids, version }),
+    readText: (id, input) => send('POST', `/skills/${id}/text`, input),
     tests: {
       add: (id, i) => send('POST', `/skills/${id}/tests`, i),
       update: (id, cid, i) => send('PUT', `/skills/${id}/tests/${cid}`, i),

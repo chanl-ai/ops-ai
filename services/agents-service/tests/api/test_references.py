@@ -107,3 +107,36 @@ async def test_references_stay_inside_the_team_and_an_insert_grants_once(
     assert (raced.status_code, raced.json().get("error", {}).get("code")) == (409, "stale_base"), raced.text
     kept = (await c.get(f"/v1/agents/{AGENT}", headers=BUILDER)).json()["data"]
     assert kept["name"] == "Renamed meanwhile" and "kb_people" not in kept["collections"], kept
+
+
+@pytest.mark.parametrize("kind", ["skill", "tool"])
+async def test_every_item_of_a_kind_is_reached_through_its_pages(client: AsyncClient, kind: str) -> None:
+    """The @ list's "More …" row pages one kind with `cursor`: no item is skipped or listed twice past the first page,
+    whether the store cuts the rows (skills) or another service's whole list is cut here (tools)."""
+    c = client
+    for n in range(5):
+        await _skill(c, f"Paged recall {n}", BUILDER)
+    draft = await _skill(c, "Paged recall draft", BUILDER, publish=False)
+    search = "paged recall" if kind == "skill" else ""
+    whole = _listed(
+        await c.get(
+            "/v1/references", params={"forSkill": draft, "search": search, "kind": kind, "limit": 25}, headers=BUILDER
+        )
+    )
+    assert len(whole) >= 3, whole
+    seen: list[str] = []
+    cursor: str | None = None
+    for _ in range(len(whole) + 1):
+        params: dict[str, Any] = {"forSkill": draft, "search": search, "kind": kind, "limit": 2}
+        if cursor:
+            params["cursor"] = cursor
+        r = await c.get("/v1/references", params=params, headers=BUILDER)
+        groups = cast(list[dict[str, Any]], r.json()["data"]["groups"])
+        cursor = None
+        for group in groups:
+            if group["kind"] == kind:
+                seen += [f"{kind}:{i['id']}" for i in cast(list[dict[str, Any]], group["items"])]
+                cursor = cast(str | None, group["nextCursor"])
+        if not cursor:
+            break
+    assert sorted(seen) == sorted(whole), "paging skipped or repeated an item"

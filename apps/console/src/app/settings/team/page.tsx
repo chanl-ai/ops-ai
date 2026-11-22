@@ -6,7 +6,8 @@ import { MakeDefaultAgentDialog } from '@/components/chat/make-default-agent';
 import { SettingsPageLayout } from '@/components/settings/settings-page-layout';
 import { FormField } from '@/components/shared/form-field';
 import { QueryError } from '@/components/shared/query-states';
-import { Combobox } from '@/components/shared/setting/pickers';
+import { SearchSelect } from '@/components/shared/search-select';
+import { fixedOptions } from '@/hooks/options-queries';
 import { SampleData } from '@/components/shared/sample-data';
 import { SettingCard } from '@/components/shared/setting/setting-card';
 import { Section } from '@/components/shared/surface';
@@ -16,10 +17,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useCanSetDefaultAgent, useChatAgents, useDefaultAgent } from '@/hooks/chat-queries';
 import { useTeam } from '@/hooks/use-team';
 
-const OWNERS = [
-  { value: 'ops', label: 'Operations leads' },
-  { value: 'platform', label: 'Platform admins' },
-];
+const OWNERS = fixedOptions('team-owners', [
+  { id: 'ops', label: 'Operations leads' },
+  { id: 'platform', label: 'Platform admins' },
+]);
+const OWNER_LABEL: Record<string, string> = { ops: 'Operations leads', platform: 'Platform admins' };
 
 /**
  * Team › General. The default agent is stored (agents-service `/v1/chat/default-agent`); the team's name and
@@ -47,7 +49,7 @@ export default function GeneralSettingsPage() {
         </SettingCard>
         <SettingCard id="owner" title="Owner" description="The group that answers for what this team runs." onSave={() => undefined}>
           <div className="w-full sm:w-1/2">
-            <Combobox options={OWNERS} value={owner} onChange={setOwner} noun="groups" label="Owner" />
+            <SearchSelect source={OWNERS} value={owner ? { id: owner, label: OWNER_LABEL[owner] ?? owner } : null} onChange={setOwner} placeholder="Pick a group" searchPlaceholder="Search groups…" ariaLabel="Owner" className="w-full" />
           </div>
         </SettingCard>
       </SampleData>

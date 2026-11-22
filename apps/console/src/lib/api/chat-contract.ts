@@ -1,4 +1,5 @@
 import type { BulkResult } from '@/lib/types/domain';
+import type { OptionsPage, OptionsParams } from '@/lib/types/query';
 import type {
   BudgetAnswer,
   ChatAgent,
@@ -25,6 +26,8 @@ import type { MemoriesApi } from './memories-contract';
 export interface ChatApi {
   /** Live agents the current user may chat with. */
   agents(): Promise<ChatAgent[]>;
+  /** The same agents as an `/options` source, searched on name and role and paged on the server: the composer's `@` list. */
+  agentOptions(p: OptionsParams): Promise<OptionsPage>;
   /** The agent the team's new chats start on; `set` is a team admin's (403 otherwise). */
   defaultAgent: {
     get(): Promise<TeamDefaultAgent>;

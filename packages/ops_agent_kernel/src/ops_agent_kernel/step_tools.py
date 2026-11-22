@@ -81,9 +81,16 @@ def grants(skills: Sequence[Skill]) -> list[ToolGrant]:
             STEP_DONE,
             "platform",
             "Says the current step of the running skill is done. Refused while the step's tool has not run, and "
-            "for a step whose check runs on the tool result.",
+            "for a step whose check runs on the tool result. On a step that asks you to decide which way a path "
+            "goes, say it with holds: true when the condition holds, false when it does not.",
             "read",
-            {"type": "object", "properties": {"summary": {"type": "string", "maxLength": 300}}},
+            {
+                "type": "object",
+                "properties": {
+                    "summary": {"type": "string", "maxLength": 300},
+                    "holds": {"type": "boolean", "description": "Whether the step's condition holds"},
+                },
+            },
         ),
         ToolGrant(
             EXIT,
@@ -107,7 +114,8 @@ def grants(skills: Sequence[Skill]) -> list[ToolGrant]:
 def handle(name: str, run: SkillRunState, skills: Sequence[Skill], arguments: Json) -> Moved:
     """One call to a step tool: the record after it and what the model is told."""
     if name == STEP_DONE:
-        return steps.step_done(run, skills)
+        holds = arguments.get("holds")
+        return steps.step_done(run, skills, holds if isinstance(holds, bool) else None)
     if name == EXIT:
         return steps.leave(run, skills, str(arguments.get("name") or ""), json_object(arguments.get("returns")))
     slug = str(arguments.get("slug") or "")

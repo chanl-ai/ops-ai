@@ -108,6 +108,8 @@ class SkillPin(TypedDict):
     exit: NotRequired[dict[str, str]]
     returns: NotRequired[list[Json]]
     success: NotRequired[list[str]]
+    # The skill was written as text, so its publish rule is the text's (app/skill_content.py, `unrunnable`).
+    fromText: NotRequired[bool]
     attachedBy: str
     attachedAt: str
 
@@ -724,6 +726,7 @@ class ReviewView(TypedDict):
     decisionReason: NotRequired[str]
     egressHost: NotRequired[Json]
     toolModule: NotRequired[Json]
+    skillPublish: NotRequired[Json]
     # Added by the review list and the routes: who it is assigned to and whether the caller may decide it.
     assignee: NotRequired[JsonValue]
     caseTitle: NotRequired[str | None]

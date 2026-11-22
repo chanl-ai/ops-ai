@@ -23,6 +23,7 @@ from .guardrails import guardrails
 from .guardrails import publish as publish_guardrail
 from .review_sla import sla_hours
 from .skills import publish as publish_skill
+from .skills import review_body as skill_review_body
 from .skills import skills
 from .widgets import publish as publish_widget
 from .widgets import widgets
@@ -83,9 +84,11 @@ async def view(
             {
                 **v,
                 "workflowId": "",
+                "kind": "skill_publish",
                 "actionTool": "publish_skill",
                 "policy": policy,
                 "reasoning": req.body["changes"],
+                "skillPublish": await skill_review_body(rt, req),
             },
         )
     if req.kind == "guardrail":

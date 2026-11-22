@@ -202,6 +202,7 @@
         "slug": "hardship-request-triage",
         "status": "draft",
         "tests": [],
+        "text": "Steps: confirm the customer, record the reason as {reason}, offer the hardship form.",
         "tokens": 21,
         "toolCount": 0,
         "updatedAt": "<timeZ>",
@@ -415,6 +416,7 @@
         "slug": "hardship-request-triage",
         "status": "deprecated",
         "tests": [],
+        "text": "Steps: confirm, record {reason}, offer the form.",
         "tokens": 12,
         "toolCount": 0,
         "updatedAt": "<timeZ>",
@@ -425,6 +427,7 @@
         "version": 1,
         "versions": [
           {
+            "approvedBy": null,
             "changes": [
               "Changed instructions"
             ],
@@ -451,6 +454,7 @@
             "note": "",
             "publishedAt": "<timeZ>",
             "publishedBy": "auto-approve (dev)",
+            "requestedBy": "usr_b@harborpine.example",
             "reviewId": "<SKP>",
             "savedAt": "<timeZ>",
             "savedBy": "usr_b@harborpine.example",
@@ -607,6 +611,7 @@
         "slug": "hardship-request-triage",
         "status": "draft",
         "tests": [],
+        "text": "Steps: confirm, record {reason}, offer the form.",
         "tokens": 12,
         "toolCount": 0,
         "updatedAt": "<timeZ>",
@@ -1768,6 +1773,7 @@
         "slug": "hardship-request-triage",
         "status": "published",
         "tests": [],
+        "text": "Steps: confirm, record {reason}, offer the form.",
         "tokens": 12,
         "toolCount": 0,
         "updatedAt": "<timeZ>",
@@ -1778,6 +1784,7 @@
         "version": 1,
         "versions": [
           {
+            "approvedBy": null,
             "changes": [
               "Changed instructions"
             ],
@@ -1804,6 +1811,7 @@
             "note": "",
             "publishedAt": "<timeZ>",
             "publishedBy": "auto-approve (dev)",
+            "requestedBy": "usr_b@harborpine.example",
             "reviewId": "<SKP>",
             "savedAt": "<timeZ>",
             "savedBy": "usr_b@harborpine.example",
@@ -1930,6 +1938,7 @@
         "slug": "hardship-request-triage",
         "status": "draft",
         "tests": [],
+        "text": "Steps: confirm the customer, record the reason as {reason}, offer the hardship form.",
         "tokens": 21,
         "toolCount": 0,
         "updatedAt": "<timeZ>",

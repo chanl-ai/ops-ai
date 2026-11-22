@@ -15,7 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { plural } from '@/lib/format';
 import type { SkillCreateInput, SkillDetail, SkillImportPreview, SkillLoading, SkillVersion } from '@/lib/types/skills';
 
-import { DiffView, EDIT_CLASS, EditClassBadge, UNWRITTEN_SECTIONS } from './skill-meta';
+import { DiffView, EDIT_CLASS, EditClassBadge, UNWRITTEN_SECTIONS, WORKED_EXAMPLE } from './skill-meta';
 import { SkillLoadingField } from './skill-loading';
 
 function TeamSelect({ id, teams, value, onChange, error }: { id: string; teams: string[]; value: string; onChange: (v: string) => void; error?: string }) {
@@ -63,7 +63,7 @@ export function NewSkillDialog({ open, onOpenChange, teams, defaultTeam, maxUseW
     setErrors(e);
     if (e.name || e.useWhen || e.team) return;
     try {
-      await onSubmit({ name: name.trim(), useWhen: loading === 'always' ? '' : useWhen.trim(), loading, instructions: UNWRITTEN_SECTIONS, ownerTeam: team, toolIds: [], knowledgeBases: [], guardrails: [], origin: 'blank' });
+      await onSubmit({ name: name.trim(), useWhen: loading === 'always' ? '' : useWhen.trim(), loading, instructions: loading === 'always' ? UNWRITTEN_SECTIONS : WORKED_EXAMPLE, ownerTeam: team, toolIds: [], knowledgeBases: [], guardrails: [], origin: 'blank' });
       onOpenChange(false);
     } catch (err) {
       setErrors({ submit: (err as Error).message });
@@ -411,7 +411,8 @@ export function VersionDiffDialog({ open, onOpenChange, versions, from, to, onCh
                 field('Resources', a.content.resources.map((r) => r.name).join(', '), b.content.resources.map((r) => r.name).join(', ')),
               ]}
             </div>
-            <DiffView before={a.content.instructions} after={b.content.instructions} testId="version-diff" />
+            {/* A skill written as text compares its text; its stored instructions are empty once the text has steps. */}
+            <DiffView before={a.content.source ?? a.content.instructions} after={b.content.source ?? b.content.instructions} testId="version-diff" />
           </>
         )}
       </div>
