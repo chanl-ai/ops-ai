@@ -1,6 +1,6 @@
 # A run outlives a killed worker and redrives from its failed step
 
-Status: current. Id: `uc-762`. Service: `agents-service`. Layers: api.
+Status: current. Id: `uc-763`. Service: `agents-service`. Layers: api.
 
 Short title: A run outlives a killed worker and redrives from its failed step
 
@@ -54,7 +54,7 @@ real one.
 
 | Layer | Script | State |
 |---|---|---|
-| api | `agents-service/scripts/test-uc-762-api.py` | works |
+| api | `agents-service/scripts/test-uc-763-api.py` | works |
 
 ## Non-vacuous check
 

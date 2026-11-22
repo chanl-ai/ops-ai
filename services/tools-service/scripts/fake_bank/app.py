@@ -229,7 +229,7 @@ TRANSACTIONS = [
 ]
 DISPUTES: dict[str, Dispute] = {}
 NOTES: dict[str, list[Note]] = {}
-# The author prefix that holds a note write open for its seconds (`slow:8:uc-762`).
+# The author prefix that holds a note write open for its seconds (`slow:8:uc-763`).
 SLOW = "slow:"
 
 

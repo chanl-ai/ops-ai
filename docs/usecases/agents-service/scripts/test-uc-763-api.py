@@ -1,6 +1,6 @@
 # The use case runner puts docs/usecases/lib (usecase_harness) on the path; pyright alone cannot see it.
 # pyright: basic, reportMissingImports=false
-"""uc-762 a run outlives a killed worker and redrives from its failed step, api layer:
+"""uc-763 a run outlives a killed worker and redrives from its failed step, api layer:
 docs/usecases/agents-service/a-run-outlives-a-killed-worker.md.
 
 Own services, no real model: platform-service for the team's aiSteps setting, models-service on the fake OpenAI with
@@ -49,7 +49,7 @@ OPS = {"X-Team-Id": "team_ops"}
 SECURITY = {"X-Dev-User": "Nadia Petrov", "X-Team-Id": "team_security"}
 MODELS_ADMIN = service_headers("models")
 RUN = uuid.uuid4().hex[:6]
-WID = f"uc762_note_{RUN}"
+WID = f"uc763_note_{RUN}"
 HOLD_S = 3
 BODY = "UC259-NOTE Priya Natarajan called: please close savings account 4471 by 30 November 2026."
 
@@ -70,9 +70,9 @@ SUMMARY = {
 }
 NODES = [
     {"id": "start", "type": "ops.trigger.request", "typeVersion": 1, "name": "Request"},
-    note("logged", "$.input.body", "uc-762"),
+    note("logged", "$.input.body", "uc-763"),
     SUMMARY,
-    note("filed", "$.nodes.summary.out.summary", f"slow:{HOLD_S}:uc-762"),
+    note("filed", "$.nodes.summary.out.summary", f"slow:{HOLD_S}:uc-763"),
     {"id": "done", "type": "ops.flow.end", "typeVersion": 1, "name": "Done", "parameters": {"outcome": "filed"}},
     {"id": "failed", "type": "ops.flow.end", "typeVersion": 1, "name": "Failed", "parameters": {"outcome": "failed"}},
 ]
@@ -82,7 +82,7 @@ WIRES += [("summary", "error", "failed")]
 DEFINITION = {
     "schemaVersion": 2,
     "id": WID,
-    "name": "Note a call (uc-762)",
+    "name": "Note a call (uc-763)",
     "nodes": NODES,
     "connections": [{"from": {"node": f, "port": p}, "to": {"node": t, "port": "in"}} for f, p, t in WIRES],
 }
@@ -96,8 +96,8 @@ def bank_module(gw: httpx.Client, host: str) -> None:
         {**o, "access": "read" if (o.get("method") or "GET").upper() == "GET" else "write"} for o in found["operations"]
     ]
     body = {
-        "name": f"uc762-bank-{RUN}",
-        "displayName": "Core Banking (uc-762)",
+        "name": f"uc763-bank-{RUN}",
+        "displayName": "Core Banking (uc-763)",
         "system": found["system"],
         "type": "openapi",
         "endpoint": found["endpoint"],
@@ -107,7 +107,7 @@ def bank_module(gw: httpx.Client, host: str) -> None:
     made = data(gw.post("/v1/tool-modules", json=body))
     op = next(o for o in made["operations"] if o["name"] == "add_customer_note")
     data(gw.patch(f"/v1/tool-modules/{made['id']}/operations/{op['id']}", json={"requiresApproval": False}))
-    data(gw.post(f"/v1/tool-modules/{made['id']}/reviews", json={"note": "uc-762"}))
+    data(gw.post(f"/v1/tool-modules/{made['id']}/reviews", json={"note": "uc-763"}))
     approve_tool_review(gw, made["id"], SECURITY)
 
 
@@ -186,8 +186,8 @@ def main() -> None:
             )
         )
         admin = stack.enter_context(httpx.Client(base_url=models_url, timeout=30))
-        gw.post("/v1/egress/hosts", json={"value": bank["host"], "note": "uc-762"})
-        gw.post("/v1/egress/ranges", json={"value": bank["range"], "note": "uc-762"})
+        gw.post("/v1/egress/hosts", json={"value": bank["host"], "note": "uc-763"})
+        gw.post("/v1/egress/ranges", json={"value": bank["range"], "note": "uc-763"})
         gw.post("/v1/secrets", json={"name": "BANK_API_KEY", "value": "dev-bank-key"}, headers=OPS)
         bank_module(gw, bank["host"])
         priya = bearer(signed_in(people, "p.shah@harborpine.example"), "team_ops")
@@ -206,7 +206,7 @@ def main() -> None:
 
         # 1. A run starts; its worker is killed while the summary's write is held open at the bank.
         first = str(data(api.post("/v1/runs", json=start, headers=OPS))["runId"])
-        with engine_worker(f"uc762-a-{RUN}", env) as doomed:
+        with engine_worker(f"uc763-a-{RUN}", env) as doomed:
             mid = until(in_flight(api, first), 90)
             gone = kill_worker(doomed) if mid else False
         killed = run_of(api, first)
@@ -218,7 +218,7 @@ def main() -> None:
         )
 
         # 2. A replacement worker takes the run over and finishes it; the run page shows it filed.
-        with engine_worker(f"uc762-b-{RUN}", env):
+        with engine_worker(f"uc763-b-{RUN}", env):
             until(ended(api, first), 120 + HOLD_S)
             page = run_of(api, first)
             check(
@@ -241,9 +241,9 @@ def main() -> None:
         second = str(data(api.post("/v1/runs", json=start, headers=OPS))["runId"])
         dying = {"OPS_ENGINE_FAULT_KILL_AFTER_NODE": "summary", "OPS_ENGINE_FAULT_IGNORE_RECORDED": "1"}
         for i in range(7):
-            with engine_worker(f"uc762-dying-{i}-{RUN}", env | dying) as doomed:
+            with engine_worker(f"uc763-dying-{i}-{RUN}", env | dying) as doomed:
                 until(doomed.poll, 90)
-        with engine_worker(f"uc762-marking-{RUN}", env | {"OPS_ENGINE_RECONCILE_SECONDS": "2"}):
+        with engine_worker(f"uc763-marking-{RUN}", env | {"OPS_ENGINE_RECONCILE_SECONDS": "2"}):
             stuck = until(ended(api, second, "stuck", "failed"), 90) or {}
         check(
             "4 a run whose worker keeps dying on its summary stops as Stuck, offering Redrive, its first note written once",
@@ -252,7 +252,7 @@ def main() -> None:
         )
 
         # 5. Redrive with a healthy worker goes on from the summary and runs no finished step again.
-        with engine_worker(f"uc762-c-{RUN}", env):
+        with engine_worker(f"uc763-c-{RUN}", env):
             redriven = api.post(f"/v1/runs/{second}/redrive", headers=OPS)
             finished = until(ended(api, second), 120 + HOLD_S) or {}
         page = run_of(api, second)
