@@ -23,14 +23,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 LIMIT = 3
-# Clear of the default stack and of the offsets tests and lanes use. Not 50000: the mail ports move by offset/10 and
-# GreenMail's SMTP (3025 + 5000) would land on the default stack's Mailpit (8025).
-FIRST_OFFSET = 51000
+# Clear of the default stack and of the offsets tests (1000, 30000) and lanes use. Every port of the last slot stays
+# at or below MAX_PORT (scripts/tests/test_preview.py checks this against the stack's real ports).
+FIRST_OFFSET = 36000
 STEP = 1000
 # Offsets tried, in order. Those whose highest port is over MAX_PORT are listed and refused by name, so a machine with
 # every usable offset taken says why instead of "no free slot".
 CANDIDATES = 10
-MAX_PORT = 65535
+# The last port below macOS's ephemeral range (49152 up), which it hands to any server bound to port 0.
+MAX_PORT = 49151
 CONSOLE_BASE = 3016
 # Ports the stack does not bind when OPS_INFRA=external (postgres, opa and the mail servers run as side containers).
 INFRA_PORTS = ("OPS_PG_PORT", "OPS_OPA_PORT", "OPS_GREENMAIL_", "OPS_MAILPIT_")
