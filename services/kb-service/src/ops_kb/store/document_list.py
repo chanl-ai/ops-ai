@@ -17,7 +17,7 @@ from ops_service_kit.listing import ListParams
 from ops_store.listing import ListPage, Several, list_page
 from ops_store.team_scope import team_visible
 
-from .knowledge import ITEM_COLUMNS, ItemRow, KnowledgeStore, kb_base_sources, kb_items, kb_sources
+from .knowledge import ITEM_COLUMNS, ITEM_SORTS, ItemRow, KnowledgeStore, kb_base_sources, kb_items, kb_sources
 
 # The console's word for an item being read.
 SHOWN_STATUS = {"reading": "processing"}
@@ -109,6 +109,7 @@ async def document_page(
             query,
             params,
             search=[i.title, i.path],
+            sortable=ITEM_SORTS,
             default_sort=i.created_at.asc(),
             filters={"sourceId": i.source_id, "status": shown, "docType": kind},
             facets={"sourceId": i.source_id, "status": shown, "docType": kind},
