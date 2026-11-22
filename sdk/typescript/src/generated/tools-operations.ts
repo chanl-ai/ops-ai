@@ -1063,6 +1063,15 @@ export const toolsOperations = {
     "query": [],
     "stream": false
   },
+  "tool_modules_try_one_tool": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/tool-modules/tries",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
   "tool_modules_update_module_details": {
     "body": "json",
     "headers": [],

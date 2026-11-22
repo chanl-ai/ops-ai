@@ -1203,6 +1203,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/tool-modules/tries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Try One Tool
+         * @description Off the request transaction: one tool of a skill path or a workflow step, tried by a person. A read runs; a
+         *     write answers its plan and is sent only when the same values come back with `planId`. Nothing is stored as a
+         *     version or a run.
+         */
+        post: operations["tool_modules_try_one_tool"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/tool-modules/{module_id}": {
         parameters: {
             query?: never;
@@ -3507,6 +3529,15 @@ export interface components {
         /** Envelope[ToolRunResult] */
         Envelope_ToolRunResult_: {
             data: components["schemas"]["ToolRunResult"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[ToolTryResult] */
+        Envelope_ToolTryResult_: {
+            data: components["schemas"]["ToolTryResult"];
             /**
              * Success
              * @constant
@@ -6346,6 +6377,59 @@ export interface components {
             /** Waits */
             waits?: string[];
         };
+        /**
+         * ToolTryIn
+         * @description One tool tried from a skill path or a workflow step: a read runs, a write comes back as a plan and is sent only
+         *     when the same values come back with the plan's id.
+         */
+        ToolTryIn: {
+            /** Accounts */
+            accounts?: {
+                [key: string]: string;
+            };
+            /** Input */
+            input?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Planid */
+            planId?: string | null;
+            /** Tool */
+            tool: string;
+        };
+        /** ToolTryResult */
+        ToolTryResult: {
+            /**
+             * Access
+             * @enum {string}
+             */
+            access: "read" | "write";
+            /** Account */
+            account?: string | null;
+            /** Callid */
+            callId: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "ran" | "planned" | "sent" | "refused";
+            /** Live */
+            live: boolean;
+            /** Log */
+            log?: components["schemas"]["TestLogLine"][];
+            /** Ok */
+            ok?: boolean | null;
+            output?: components["schemas"]["JsonValue"];
+            plan?: components["schemas"]["TryPlan"] | null;
+            /** Planid */
+            planId?: string | null;
+            /** Reasons */
+            reasons?: string[];
+            /** Replayof */
+            replayOf?: string | null;
+            request?: components["schemas"]["TestRequestOut"] | null;
+            /** Status */
+            status?: number | null;
+        };
         /** ToolUsedBy */
         ToolUsedBy: {
             /** Agents */
@@ -6364,6 +6448,36 @@ export interface components {
         ToolsAddIn: {
             /** Tools */
             tools: string[];
+        };
+        /**
+         * TryPlan
+         * @description What a write would send: the tool, the values, the system and account, and an http operation's request.
+         */
+        TryPlan: {
+            /** Access */
+            access: string;
+            /** Connectionid */
+            connectionId?: string | null;
+            input: components["schemas"]["JsonValue"];
+            request?: components["schemas"]["TryPlanRequest"] | null;
+            /** System */
+            system?: string | null;
+            /**
+             * Testaccount
+             * @default false
+             */
+            testAccount: boolean;
+            /** Tool */
+            tool: string;
+        };
+        /** TryPlanRequest */
+        TryPlanRequest: {
+            /** Body */
+            body?: string | null;
+            /** Method */
+            method: string;
+            /** Url */
+            url: string;
         };
         /** ValidationError */
         ValidationError: {
@@ -14458,6 +14572,129 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_ToolGrantList_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not available on this service yet */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The source could not be reached */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    tool_modules_try_one_tool: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ToolTryIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ToolTryResult_"];
                 };
             };
             /** @description Invalid request */

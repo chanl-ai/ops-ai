@@ -92,6 +92,10 @@ class NotLiveError(PermissionError):
         self.stage = stage
 
 
+# The node type of a step that calls one tool (node_types.py), whose journalled input names it as `operation`.
+TOOL_NODE = "ops.action.tool"
+
+
 class RunStore:
     # A run and its start row commit together (TRANSACTION); a repeated run key loses on the unique key (CAS).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.CAS})
@@ -557,6 +561,32 @@ class RunStore:
             for step in await rows(c, q, RunStep):
                 out[step.run_id].append(step)
         return out
+
+    async def last_tool_output(self, team_id: str, tool: str, *, scan: int = 200) -> JsonValue | None:
+        """The answer `tool` gave the newest finished tool step of one of `team_id`'s live runs, for a try's sample:
+        a live run's call reached the system, where a test run's may have been a mock's answer. Only the newest `scan`
+        tool steps are read, so a tool not called lately has none; another team's runs are never read."""
+        s, r = engine_steps, engine_runs
+        q = (
+            sa.select(s.c.input, s.c.output)
+            .select_from(s.join(r, sa.and_(r.c.id == s.c.run_id, r.c.tenant_id == s.c.tenant_id)))
+            .where(
+                s.c.tenant_id == self.tx.tenant(),
+                r.c.team_id == team_id,
+                r.c.mode == "live",
+                s.c.node_type == TOOL_NODE,
+                s.c.status == "ok",
+                s.c.output.is_not(None),
+            )
+            .order_by(s.c.finished_at.desc())
+            .limit(scan)
+        )
+        async with self.tx.tenant_tx() as c:
+            for row in (await c.execute(q)).mappings():
+                given = row["input"]
+                if isinstance(given, dict) and cast(Json, given).get("operation") == tool:
+                    return cast(JsonValue, row["output"])
+        return None
 
     async def work(self, run_id: str) -> list[dict[str, Any]]:
         q = (

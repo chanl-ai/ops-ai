@@ -11,6 +11,7 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useEngineOptions } from '@/hooks/engine-queries';
 import { AccountSelect } from '@/components/connections/account-select';
+import { JsonInput } from '@/components/shared/json-input';
 
 import type { EngineOption, NodeForm, NodeFormField, OptionSource } from '@/lib/types/engine';
 
@@ -351,37 +352,3 @@ function OptionsInput({ id, value, steps, onChange }: { id: string; value: unkno
 }
 
 /** A JSON value the type keeps as a schema of its own (an input or answer schema); a parse error stays in the field. */
-function JsonInput({ id, value, onChange }: { id: string; value: unknown; onChange: (v: unknown) => void }) {
-  const show = (v: unknown) => (v === undefined ? '' : JSON.stringify(v, null, 2));
-  const [text, setText] = React.useState(() => show(value));
-  const [error, setError] = React.useState<string>();
-  return (
-    <div className="flex flex-col gap-1">
-      <Textarea
-        id={id}
-        value={text}
-        rows={5}
-        spellCheck={false}
-        className="font-mono text-xs"
-        placeholder='e.g. {"type": "object"}'
-        aria-invalid={error ? true : undefined}
-        onChange={(e) => {
-          setText(e.target.value);
-          if (!e.target.value.trim()) {
-            setError(undefined);
-            onChange(undefined);
-            return;
-          }
-          try {
-            onChange(JSON.parse(e.target.value));
-            setError(undefined);
-          } catch {
-            setError('Not valid JSON yet');
-          }
-        }}
-        data-field={id}
-      />
-      {error && <p className="text-xs text-destructive-text">{error}</p>}
-    </div>
-  );
-}

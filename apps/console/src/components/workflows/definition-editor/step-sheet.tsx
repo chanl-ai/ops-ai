@@ -2,8 +2,9 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { AlertTriangle, ChevronDown, Plus, Trash2 } from 'lucide-react';
+import { AlertTriangle, ChevronDown, FlaskConical, Plus, Trash2 } from 'lucide-react';
 
+import { TryPanel } from '@/components/agents/try-panel';
 import { ConnectMailbox } from '@/components/channels/connect-mailbox';
 import { MailboxStatusDot } from '@/components/channels/mailbox-panels';
 import { DetailSheet } from '@/components/shared/detail-sheet';
@@ -117,12 +118,32 @@ export function StepSheet({ node, type, workflowId, steps, checks, order, readOn
           <StepFields key={node.id} node={node} type={type} steps={steps} errors={byField} onChange={onChange} />
         </fieldset>
       )}
+      {node && node.type === TOOL_STEP && !readOnly && <TryThisStep key={node.id} workflowId={workflowId} nodeId={node.id} />}
 
     </DetailSheet>
   );
 }
 
 const EMAIL_TRIGGER = 'ops.trigger.email';
+const TOOL_STEP = 'ops.action.tool';
+
+/** Try this one step on the saved working copy, folded until asked for so opening a step reads nothing more. */
+function TryThisStep({ workflowId, nodeId }: { workflowId: string; nodeId: string }) {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} className="mt-6 flex flex-col gap-3 border-t pt-4" data-testid="step-try">
+      <CollapsibleTrigger asChild>
+        <Button type="button" variant="outline" size="sm" className="self-start" data-testid="step-try-open">
+          <FlaskConical className="size-4" /> Try step
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <p className="mb-3 text-xs text-muted-foreground">Tries the step as last saved. Reads run; a write is shown first and sent only when you confirm.</p>
+        {open && <TryPanel target={{ kind: 'workflow_step', workflowId, step: nodeId }} canTry />}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
 
 /** The run input an Email received trigger gives every run: the email, with each attachment already in Files. */
 const EMAIL_INPUT: [string, string][] = [

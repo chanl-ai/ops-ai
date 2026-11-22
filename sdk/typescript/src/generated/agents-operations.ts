@@ -660,6 +660,19 @@ export const agentsOperations = {
     ],
     "stream": false
   },
+  "agents_try_targets": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/try-targets",
+    "pathParams": [],
+    "query": [
+      "skill",
+      "workflow",
+      "step"
+    ],
+    "stream": false
+  },
   "agents_update_agent": {
     "body": "json",
     "headers": [],

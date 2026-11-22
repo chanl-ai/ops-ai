@@ -6,7 +6,7 @@ import { ReviewNotice } from '@/components/shared/review-notice';
 import * as React from 'react';
 import Link from 'next/link';
 import { useParams, usePathname, useRouter } from 'next/navigation';
-import { Activity, Archive, TriangleAlert, BookOpen, Copy, Download, FlaskConical, History, MoreHorizontal, Paperclip, Send, Sparkles, Trash2, Users } from 'lucide-react';
+import { Activity, Archive, TriangleAlert, BookOpen, Copy, Download, FlaskConical, History, MoreHorizontal, Paperclip, Play, Send, Sparkles, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { openLink } from '@/components/files/file-actions';
@@ -23,6 +23,7 @@ import { RecordSkeleton } from '@/components/shared/record-skeleton';
 import { DeprecateSkillDialog, RequestReviewDialog } from '@/components/skills/skill-dialogs';
 import { EditClassBadge, ORIGIN, SkillStatusBadge } from '@/components/skills/skill-meta';
 import { SkillUsedBySheet } from '@/components/skills/skill-used-by-sheet';
+import { TryPanel } from '@/components/agents/try-panel';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { BuilderFieldset, ReadOnlyNotice } from '@/components/shared/builder-only';
@@ -71,6 +72,7 @@ export function SkillPageRoot() {
 function SkillView({ skill: s }: { skill: SkillDetail }) {
   const router = useRouter();
   const [panel, setPanel] = useTabParam(PANELS, 'instructions');
+  const [trying, setTrying] = React.useState(false);
   const seg = usePathname().split('/')[4];
   const tab: Tab = panel === 'tests' ? 'tests' : (TABS as readonly string[]).includes(seg) ? (seg as Tab) : 'instructions';
   const setTab = (t: Tab) => router.push(`/build/skills/${s.id}${t === 'instructions' ? '' : `/${t}`}`, { scroll: false });
@@ -148,9 +150,16 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
             status={canBuild && saveView ? <SaveState status={saveView.status} detail={saveView.detail} onRetry={() => saveCtl.current?.retry()} /> : undefined}
             save={canBuild && saveView ? { onSave: () => void saveCtl.current?.saveNow(), disabled: !saveView.canSave, saving: saveView.status === 'saving', testId: 'save-skill-draft' } : undefined}
             test={
-              <Button variant="outline" onClick={() => setTab('tests')} title={`${plural(s.tests.length, 'test')}`} data-testid="skill-open-tests">
-                <FlaskConical className="size-4" /> Test
-              </Button>
+              <>
+                {canBuild && ((newest.content.steps ?? []).length > 0 || !!newest.content.source) && (
+                  <Button variant="outline" onClick={() => setTrying(true)} title="Run one path with sample values; writes wait for your confirm" data-testid="skill-open-try">
+                    <Play className="size-4" /> Try
+                  </Button>
+                )}
+                <Button variant="outline" onClick={() => setTab('tests')} title={`${plural(s.tests.length, 'test')}`} data-testid="skill-open-tests">
+                  <FlaskConical className="size-4" /> Test
+                </Button>
+              </>
             }
             primary={
               canBuild && (
@@ -305,6 +314,16 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
           </div>
 
           <SkillUsedBySheet skill={s} open={panel === 'used_by'} onOpenChange={close} canEdit={canBuild} />
+          <DetailSheet
+            open={trying}
+            onOpenChange={setTrying}
+            title={`Try ${s.name}`}
+            description={unsaved ? 'Tries the saved draft; save first to try your changes.' : 'Tries the newest saved draft, one path at a time.'}
+            widthClass="sm:max-w-xl"
+            testId="skill-try-sheet"
+          >
+            {trying && <TryPanel target={{ kind: 'skill', skillId: s.id }} canTry={canBuild} />}
+          </DetailSheet>
           <DetailSheet
             open={!!sheet}
             onOpenChange={close}

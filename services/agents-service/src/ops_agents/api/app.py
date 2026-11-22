@@ -123,6 +123,7 @@ from .routers import team_assistant as team_assistant_routes
 from .routers import team_usage as team_usage_routes
 from .routers import timers as timer_routes
 from .routers import tool_uses as tool_uses_routes
+from .routers import tries as try_routes
 from .routers import widget as embed_routes
 from .routers import widgets as widget_routes
 from .schemas import ERROR_RESPONSES
@@ -545,6 +546,7 @@ def create_app(
     mount(assurance_routes.router, "Assurance")
     mount(guardrail_routes.router, "Agents")
     mount(skill_routes.router, "Agents")
+    mount(try_routes.router, "Agents")
     mount(reference_routes.router, "Agents")
     mount(widget_routes.router, "Agents")
     mount(model_alias_catalog.router, "Agents")

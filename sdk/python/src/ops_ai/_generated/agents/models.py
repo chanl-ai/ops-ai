@@ -2336,6 +2336,20 @@ class ToolsNotAdded(TypedDict, closed=True):
     name: str
 
 
+class TryStep(TypedDict, closed=True):
+    access: NotRequired[str | None]
+    accounts: NotRequired[dict[str, str]]
+    do: str
+    holds: NotRequired[bool | None]
+    input: NotRequired[dict[str, JsonValue]]
+    key: str
+    number: int
+    sample: NotRequired[JsonValue]
+    sampleFrom: NotRequired[Literal["last_run", "schema", "none"]]
+    test: NotRequired[str | None]
+    tool: NotRequired[str | None]
+
+
 class TurnUsage(TypedDict, closed=True):
     inputTokens: int
     model: str
@@ -3992,6 +4006,21 @@ class ToolUsedBy(TypedDict, closed=True):
     workflows: list[ToolUserRef]
 
 
+class TryPath(TypedDict, closed=True):
+    ends: str
+    id: str
+    label: str
+    steps: list[TryStep]
+
+
+class TryTargets(TypedDict, closed=True):
+    id: str
+    kind: Literal["skill", "workflow_step"]
+    more: NotRequired[bool]
+    name: str
+    paths: list[TryPath]
+
+
 class UpdateReview(TypedDict, closed=True):
     changes: list[str]
     copy: CopyRef
@@ -4428,6 +4457,11 @@ class EnvelopeThreadState(TypedDict, closed=True):
 
 class EnvelopeToolOptionsPage(TypedDict, closed=True):
     data: ToolOptionsPage
+    success: Literal[True]
+
+
+class EnvelopeTryTargets(TypedDict, closed=True):
+    data: TryTargets
     success: Literal[True]
 
 

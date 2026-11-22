@@ -3030,6 +3030,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/try-targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Try Targets
+         * @description The paths a builder can try: `skill` for a skill's paths, or `workflow` and `step` for one tool step of a
+         *     workflow. A builder of the skill's or workflow's team only (403); the samples are that team's own runs' answers.
+         */
+        get: operations["agents_try_targets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/widgets": {
         parameters: {
             query?: never;
@@ -7071,6 +7092,15 @@ export interface components {
         /** Envelope[ToolRow] */
         Envelope_ToolRow_: {
             data: components["schemas"]["ToolRow"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[TryTargets] */
+        Envelope_TryTargets_: {
+            data: components["schemas"]["TryTargets"];
             /**
              * Success
              * @constant
@@ -12284,6 +12314,68 @@ export interface components {
             count: number;
             /** Name */
             name: string;
+        };
+        /** TryPath */
+        TryPath: {
+            /** Ends */
+            ends: string;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Steps */
+            steps: components["schemas"]["TryStep"][];
+        };
+        /** TryStep */
+        TryStep: {
+            /** Access */
+            access?: string | null;
+            /** Accounts */
+            accounts?: {
+                [key: string]: string;
+            };
+            /** Do */
+            do: string;
+            /** Holds */
+            holds?: boolean | null;
+            /** Input */
+            input?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Key */
+            key: string;
+            /** Number */
+            number: number;
+            sample?: components["schemas"]["JsonValue"];
+            /**
+             * Samplefrom
+             * @default none
+             * @enum {string}
+             */
+            sampleFrom: "last_run" | "schema" | "none";
+            /** Test */
+            test?: string | null;
+            /** Tool */
+            tool?: string | null;
+        };
+        /** TryTargets */
+        TryTargets: {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "skill" | "workflow_step";
+            /**
+             * More
+             * @default false
+             */
+            more: boolean;
+            /** Name */
+            name: string;
+            /** Paths */
+            paths: components["schemas"]["TryPath"][];
         };
         /**
          * TurnUsage
@@ -30777,6 +30869,111 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_ToolRow_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    agents_try_targets: {
+        parameters: {
+            query?: {
+                skill?: string | null;
+                workflow?: string | null;
+                step?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_TryTargets_"];
                 };
             };
             /** @description Invalid request */

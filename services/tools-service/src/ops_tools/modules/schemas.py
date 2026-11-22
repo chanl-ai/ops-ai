@@ -634,6 +634,56 @@ class ToolRunIn(In):
     confirmed: bool = False
 
 
+class ToolTryIn(In):
+    """One tool tried from a skill path or a workflow step: a read runs, a write comes back as a plan and is sent only
+    when the same values come back with the plan's id."""
+
+    tool: Name120
+    input: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
+    # App id to account name, as the account picker writes it; none uses the app's test account when it has one.
+    accounts: dict[str, str] = Field(default_factory=dict[str, str], max_length=1)
+    # The id of the plan the person confirmed; the values must be the ones planned.
+    plan_id: str | None = Field(default=None, max_length=80)
+
+
+class TryPlanRequest(Out):
+    method: str
+    url: str
+    body: str | None = None
+
+
+class TryPlan(Out):
+    """What a write would send: the tool, the values, the system and account, and an http operation's request."""
+
+    tool: str
+    access: str
+    input: JsonValue
+    system: str | None = None
+    connection_id: str | None = None
+    test_account: bool = False
+    request: TryPlanRequest | None = None
+
+
+class ToolTryResult(Out):
+    # ran: a read ran; planned: a write was shown, not sent; sent: a confirmed write ran; refused: the gateway refused.
+    kind: Literal["ran", "planned", "sent", "refused"]
+    access: Access
+    call_id: str
+    # Whether the try runs on a live account, which the confirm says plainly.
+    live: bool
+    account: str | None = None
+    plan_id: str | None = None
+    plan: TryPlan | None = None
+    ok: bool | None = None
+    output: JsonValue = None
+    status: int | None = None
+    reasons: list[str] = Field(default_factory=list[str])
+    # A confirm sent again: the first send's call, whose answer this is; nothing was sent twice.
+    replay_of: str | None = None
+    request: TestRequestOut | None = None
+    log: list[TestLogLine] = Field(default_factory=list[TestLogLine])
+
+
 class ToolRunResult(ModuleTestResult):
     # True when the answer came from a mock, never the system: every Mock run, and a Real one the test environment's
     # mock answers for this input.

@@ -864,6 +864,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "tool_modules_try_one_tool": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/tool-modules/tries",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
     "tool_modules_update_module_details": {
         "body": "json",
         "headers": [],
@@ -1488,6 +1497,10 @@ class Operations:
             {},
             None,
         )  # type: ignore[no-any-return]
+
+    def tool_modules_try_one_tool(self, body: ToolTryIn) -> ToolTryResult:
+        "Try One Tool"
+        return self._t.call(SERVICE, OPERATIONS["tool_modules_try_one_tool"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
     def tool_modules_get_module(self, module_id: str) -> ToolModuleDetail:
         "Get Module"
@@ -2256,6 +2269,10 @@ class AsyncOperations:
             {},
             None,
         )  # type: ignore[no-any-return]
+
+    async def tool_modules_try_one_tool(self, body: ToolTryIn) -> ToolTryResult:
+        "Try One Tool"
+        return await self._t.call(SERVICE, OPERATIONS["tool_modules_try_one_tool"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def tool_modules_get_module(self, module_id: str) -> ToolModuleDetail:
         "Get Module"

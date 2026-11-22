@@ -319,6 +319,9 @@ query = { follow = "false" }
 ["GET /v1/threads/{thread_id}/state"]
 queries = 5
 
+["GET /v1/try-targets"]
+not_budgeted = "needs a skill with steps: the seed's skills have none, so it answers 400 no_steps and measures nothing"
+
 ["GET /v1/tool-uses"]
 queries = 14
 query = { tools = "lookup_account" }

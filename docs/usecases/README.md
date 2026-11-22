@@ -390,6 +390,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-756 | agents-service | A shared form filled in signed out starts a workflow with knowledge and a tool, a person approves a step, and the run finishes with a record | api, ui | works |
 | uc-757 | agents-service | A builder writes a skill with steps and an agent brief, and a chat follows the steps | api, sdk, cli, ui | draft |
 | uc-761 | console | A builder edits a workflow that saves itself, publishes it past its problems and compares its versions | ui | current |
+| uc-762 | agents-service | A builder tries one path of a skill: reads run, a write is planned and sent once only when confirmed, and nothing is stored | api, ui | current |
 | uc-764 | console | An agent page shows its save state, its model, knowledge, tools and skills on the main page, and a channels tab | ui | draft |
 | uc-765 | console | A builder asks two versions of an agent one question and reads the replies side by side | ui | failing |
 | uc-766 | console | A role given to a group, and the approvals cell on the role's page | ui | draft |
