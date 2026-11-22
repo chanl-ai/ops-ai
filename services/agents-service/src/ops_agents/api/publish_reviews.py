@@ -12,13 +12,15 @@ from ops_agents.store.agent_registry import PublishRequestRow, registry_agents
 from ops_agents.store.review_sources import ReviewSources
 from ops_engine.store import DefinitionRow
 from ops_service_kit import narrow
-from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
+from ops_service_kit.errors import Conflict, NotFound, Unprocessable, ValidationFailed
+from ops_service_kit.http import JsonList
 from ops_store import isolation
 
 from . import (
     deployment_reviews,
     egress_host_reviews,
     engine_lifecycle,
+    eval_gate,
     service_events,
     tool_access_reviews,
     tool_module_reviews,
@@ -285,6 +287,8 @@ async def decide(
     reason = (reason or "").strip() or None
     if decision != "approved" and reason is None:
         raise ValidationFailed("A reason is required to reject or return.", code="reason_required")
+    if req.kind == "agent" and decision == "approved":
+        await _require_evals_pass(rt, req)
     if not await reg.decide_request(request_id, decision, approver.email, reason):
         raise Conflict(f"{request_id} was decided by someone else first.", code="already_decided")
     # The reviewer holds reviews.decide in the owning team, which need not be the team they act in: the publish reads
@@ -299,6 +303,20 @@ async def decide(
         elif decision == "approved":
             await _publish(rt, req, approver.email)
         return (await view(rt, await reg.request(request_id))).copy()
+
+
+async def _require_evals_pass(rt: Runtime, req: PublishRequestRow) -> None:
+    """A run that failed after the request opened stops the approval with the refusal the publish request gives:
+    422 `cannot_publish`, the same `PublishBlocker` list in `details.problems`, and the request stays pending. Read as
+    the agent's team, as the publish itself is."""
+    with isolation.scope(isolation.tenant(), await subject_team(rt, req) or isolation.team()):
+        row = await registry(rt).row(req.subject_id)
+        if found := await eval_gate.problems(rt, row, int(req.version)):
+            raise Unprocessable(
+                "This version cannot be approved yet: " + " ".join(str(p["message"]) for p in found),
+                code="cannot_publish",
+                details={"problems": cast(JsonList, found)},
+            )
 
 
 async def _publish(rt: Runtime, req: PublishRequestRow, by: str) -> None:

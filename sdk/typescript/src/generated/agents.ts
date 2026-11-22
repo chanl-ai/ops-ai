@@ -376,7 +376,12 @@ export interface paths {
          * @description Replaces the agent's active cases with these. An unknown check type is 422 and nothing changes.
          */
         put: operations["assurance_save_agent_cases"];
-        post?: never;
+        /**
+         * Add Agent Cases
+         * @description Adds these cases after the agent's last one and leaves the others, so two people adding at once each keep
+         *     theirs; answers the saved set. No cases, or an unknown check type, is 422 and nothing changes.
+         */
+        post: operations["assurance_add_agent_cases"];
         delete?: never;
         options?: never;
         head?: never;
@@ -390,14 +395,19 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Agent Eval Runs
+         * @description The agent's kept runs on the shared list contract, newest first, then by id. A row leaves out the case
+         *     results; `GET /v1/eval-runs/{id}` carries them.
+         */
+        get: operations["assurance_agent_eval_runs"];
         put?: never;
         /**
          * Create Eval Run
          * @description Scores cases on the newest version through the same one-turn test path. With no cases in the body it runs the
-         *     agent's saved cases, also on the live version when that is another one, and keeps the run, so repeating it makes a
-         *     second run. With cases in the body it scores them and keeps nothing. Empty cases and an unknown check type are
-         *     422.
+         *     agent's saved cases, also on the live version when that is another one, and keeps the run (`EvalRunRecord`), so
+         *     repeating it makes a second run. With cases in the body it scores them and keeps nothing (`AgentEvalRun`). Empty
+         *     cases and an unknown check type are 422.
          */
         post: operations["agents_create_eval_run"];
         delete?: never;
@@ -1319,6 +1329,46 @@ export interface paths {
          *     person with workflows.view in their team, or a service holding `workflows:view` for the team its token names.
          */
         get: operations["workflows_list_document_type_uses"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/eval-cases/{case_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Eval Case
+         * @description Deletes one active case of an agent or a skill. Another team's case, a draft or one already gone is 404.
+         */
+        delete: operations["assurance_delete_eval_case"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/eval-runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Eval Run
+         * @description One kept run of an agent with each case's result. Another team's run is 404.
+         */
+        get: operations["assurance_eval_run"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4023,10 +4073,15 @@ export interface components {
             /** Guardrails */
             guardrails: ("redactPii" | "maxToolCallsPerTurn" | "maxModelCallsPerTurn" | "maxModelCallsPerConversation" | "maxCostPerConversation" | "whenUnsure" | "blockedTopics")[];
         };
-        /** AgentEvalRun */
+        /**
+         * AgentEvalRun
+         * @description Cases sent in the body, scored and not kept.
+         */
         AgentEvalRun: {
             /** Agentid */
             agentId: string;
+            /** Costusd */
+            costUsd: number;
             /** Id */
             id: string;
             /** Results */
@@ -4037,6 +4092,8 @@ export interface components {
              */
             status: "complete";
             summary: components["schemas"]["EvalSummary"];
+            /** Unpriced */
+            unpriced: boolean;
         };
         /** AgentInput */
         AgentInput: {
@@ -4304,6 +4361,7 @@ export interface components {
             toolCalls: components["schemas"]["ToolCallView"][];
             /** Tools */
             tools?: components["schemas"]["HeldTool"][];
+            usage: components["schemas"]["TurnUsage"];
             wouldPause?: components["schemas"]["WouldPause"] | null;
         };
         /**
@@ -6120,15 +6178,6 @@ export interface components {
              */
             success: true;
         };
-        /** Envelope[AgentEvalRun] */
-        Envelope_AgentEvalRun_: {
-            data: components["schemas"]["AgentEvalRun"];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
         /** Envelope[AgentPrompt] */
         Envelope_AgentPrompt_: {
             data: components["schemas"]["AgentPrompt"];
@@ -6390,6 +6439,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[EvalRunRecord] */
+        Envelope_EvalRunRecord_: {
+            data: components["schemas"]["EvalRunRecord"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[EventOut] */
         Envelope_EventOut_: {
             data: components["schemas"]["EventOut"];
@@ -6537,6 +6595,15 @@ export interface components {
         /** Envelope[ListResult[DefinitionRow]] */
         Envelope_ListResult_DefinitionRow__: {
             data: components["schemas"]["ListResult_DefinitionRow_"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[ListResult[EvalRunRow]] */
+        Envelope_ListResult_EvalRunRow__: {
+            data: components["schemas"]["ListResult_EvalRunRow_"];
             /**
              * Success
              * @constant
@@ -7040,6 +7107,16 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[Union[EvalRunRecord, AgentEvalRun]] */
+        Envelope_Union_EvalRunRecord__AgentEvalRun__: {
+            /** Data */
+            data: components["schemas"]["EvalRunRecord"] | components["schemas"]["AgentEvalRun"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[Union[ThreadReview, PublishReview]] */
         Envelope_Union_ThreadReview__PublishReview__: {
             /** Data */
@@ -7377,12 +7454,22 @@ export interface components {
             /** Casename */
             caseName: string;
             draft: components["schemas"]["EvalCaseOutcome"];
+            /**
+             * Judgeunpriced
+             * @default false
+             */
+            judgeUnpriced: boolean;
             live?: components["schemas"]["EvalCaseOutcome"] | null;
             /**
              * Regression
              * @default false
              */
             regression: boolean;
+            /**
+             * Unpriced
+             * @default false
+             */
+            unpriced: boolean;
         };
         /** EvalCasesInput */
         EvalCasesInput: {
@@ -7391,6 +7478,8 @@ export interface components {
         };
         /** EvalCheckInput */
         EvalCheckInput: {
+            /** Rubric */
+            rubric?: string | null;
             /** Text */
             text?: string | null;
             /** Tool */
@@ -7400,18 +7489,105 @@ export interface components {
         };
         /** EvalCheckResult */
         EvalCheckResult: {
+            /** Confidence */
+            confidence?: number | null;
             /** Label */
             label: string;
+            /** Reason */
+            reason?: string | null;
             /**
              * Status
              * @enum {string}
              */
             status: "pass" | "fail";
         };
+        /**
+         * EvalGate
+         * @description Whether the version a run scored may publish on its evals, and each step, as a publish check reads it.
+         */
+        EvalGate: {
+            /** Blocked */
+            blocked: boolean;
+            /** Steps */
+            steps: components["schemas"]["GateStep"][];
+        };
+        /** EvalGateDetails */
+        EvalGateDetails: {
+            /** Steps */
+            steps: components["schemas"]["GateStep"][];
+        };
         /** EvalRunInput */
         EvalRunInput: {
             /** Cases */
             cases?: components["schemas"]["EvalCaseInput"][] | null;
+            /** Trigger */
+            trigger?: string | null;
+        };
+        /**
+         * EvalRunRecord
+         * @description One kept run with each case's result.
+         */
+        EvalRunRecord: {
+            /** Agentid */
+            agentId: string;
+            /** Costusd */
+            costUsd: number;
+            gate?: components["schemas"]["EvalGate"] | null;
+            /** Id */
+            id: string;
+            /** Liveversion */
+            liveVersion: number | null;
+            /** Ranat */
+            ranAt: string;
+            /** Results */
+            results: components["schemas"]["EvalCaseResult"][];
+            /** Startedby */
+            startedBy: string;
+            /**
+             * Status
+             * @constant
+             */
+            status: "complete";
+            summary: components["schemas"]["EvalSummary"];
+            /** Trigger */
+            trigger: string;
+            /** Unpriced */
+            unpriced: boolean;
+            /** Version */
+            version: number;
+        };
+        /**
+         * EvalRunRow
+         * @description A kept run as a row of an agent's runs list (`app.evals.stored_run`): everything but the case results, which
+         *     the single read (`EvalRunRecord`) carries. `version` is the newest version it ran on and `live_version` the live
+         *     one it was compared with, when that was another. `trigger` is manual or publish_request; `started_by` is a
+         *     person's email or `key:<id>`.
+         */
+        EvalRunRow: {
+            /** Agentid */
+            agentId: string;
+            /** Costusd */
+            costUsd: number;
+            /** Id */
+            id: string;
+            /** Liveversion */
+            liveVersion: number | null;
+            /** Ranat */
+            ranAt: string;
+            /** Startedby */
+            startedBy: string;
+            /**
+             * Status
+             * @constant
+             */
+            status: "complete";
+            summary: components["schemas"]["EvalSummary"];
+            /** Trigger */
+            trigger: string;
+            /** Unpriced */
+            unpriced: boolean;
+            /** Version */
+            version: number;
         };
         /** EvalSummary */
         EvalSummary: {
@@ -8303,6 +8479,18 @@ export interface components {
             };
             pagination: components["schemas"]["Pagination"];
         };
+        /** ListResult[EvalRunRow] */
+        ListResult_EvalRunRow_: {
+            /** Data */
+            data: components["schemas"]["EvalRunRow"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
+        };
         /** ListResult[FormView] */
         ListResult_FormView_: {
             /** Data */
@@ -9093,13 +9281,14 @@ export interface components {
          * @description One thing that blocks a publish. `id` names the reference for a reference problem, as `<kind>:<id>`.
          */
         PublishBlocker: {
+            details?: components["schemas"]["EvalGateDetails"] | null;
             /** Id */
             id?: string | null;
             /**
              * Kind
              * @enum {string}
              */
-            kind: "missing_field" | "missing_reference" | "unavailable_reference" | "bad_step" | "bad_check" | "bad_exit" | "sub_skill_not_held" | "prompt_rule_in_text" | "review_open" | "already_published" | "deprecated" | "too_long" | "mention" | "hint";
+            kind: "missing_field" | "missing_reference" | "unavailable_reference" | "bad_step" | "bad_check" | "bad_exit" | "sub_skill_not_held" | "prompt_rule_in_text" | "review_open" | "already_published" | "deprecated" | "too_long" | "mention" | "hint" | "eval_failed" | "eval_not_run" | "eval_no_cases" | "eval_setting_unread";
             /** Message */
             message: string;
             position?: components["schemas"]["BlockerPosition"] | null;
@@ -10068,6 +10257,8 @@ export interface components {
         };
         /** SavedCaseCheck */
         SavedCaseCheck: {
+            /** Rubric */
+            rubric?: string | null;
             /** Text */
             text?: string | null;
             /** Tool */
@@ -11121,7 +11312,7 @@ export interface components {
         /**
          * StepCheck
          * @description What must hold before a step is done. `by` is set when the skill is saved: a rule is run on the step's result
-         *     in code, a sentence is confirmed by the model.
+         *     in code, a sentence is decided by the judge model (`ops_agent_kernel.judge`).
          */
         StepCheck: {
             /** By */
@@ -12173,6 +12364,18 @@ export interface components {
             name: string;
             /** Paths */
             paths: components["schemas"]["TryPath"][];
+        };
+        /**
+         * TurnUsage
+         * @description Tokens one test turn spent, on the alias it ran on.
+         */
+        TurnUsage: {
+            /** Inputtokens */
+            inputTokens: number;
+            /** Model */
+            model: string;
+            /** Outputtokens */
+            outputTokens: number;
         };
         /** TypeRef */
         TypeRef: {
@@ -15306,6 +15509,223 @@ export interface operations {
             };
         };
     };
+    assurance_add_agent_cases: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EvalCasesInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SavedCases_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    assurance_agent_eval_runs: {
+        parameters: {
+            query?: {
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
+            };
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ListResult_EvalRunRow__"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     agents_create_eval_run: {
         parameters: {
             query?: never;
@@ -15327,7 +15747,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_AgentEvalRun_"];
+                    "application/json": components["schemas"]["Envelope_Union_EvalRunRecord__AgentEvalRun__"];
                 };
             };
             /** @description Invalid request */
@@ -20614,6 +21034,210 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_dict_str__list_ToolUser___"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    assurance_delete_eval_case: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    assurance_eval_run: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_EvalRunRecord_"];
                 };
             };
             /** @description Invalid request */
@@ -31273,6 +31897,7 @@ export interface operations {
                 startable?: boolean;
                 takesFiles?: boolean;
                 engine?: "all" | "current";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;

@@ -130,6 +130,17 @@ POLICIES: tuple[Policy, ...] = (
         title="Strict skill publishing",
     ),
     Policy(
+        "evalsRequired",
+        # Off: an agent with no saved cases, or none run on the version, publishes; a failed blocking step stops it.
+        {},
+        "An agent publishes only when its saved cases have run on that version and every blocking step passed. Off: "
+        "no cases or no run does not stop a publish, and a failed blocking step still does.",
+        changed_by=("reviews", "manage"),
+        per_team=True,
+        live=True,
+        title="Require passing evals to publish",
+    ),
+    Policy(
         "companySignInRequired",
         # Off: a password follows the sign-in providers, as before company sign-in could be required.
         False,
@@ -428,8 +439,8 @@ def policy(p: Principal, key: str) -> Any:
 
 def team_on(values: object, team: str | None) -> bool:
     """Whether `team` turned a per-team switch on (toolWritesNeedApproval, aiSteps, taskAssist, checkBeforeSend,
-    pageImages, skillPublishStrict), from the value GET /v1/policies/{key} returns (read live on each call); off for a
-    team that set nothing."""
+    pageImages, skillPublishStrict, evalsRequired), from the value GET /v1/policies/{key} returns (read live on each
+    call); off for a team that set nothing."""
     return team is not None and json_object(values).get(team) is True
 
 

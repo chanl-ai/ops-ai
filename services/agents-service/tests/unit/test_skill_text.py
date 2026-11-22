@@ -1,6 +1,6 @@
 """A skill written as text, read into steps and run by the kernel, by failure mode: the end of an `if` block falling
 into its `else`; an `if` nested inside an `else` jumping to the wrong step; a mention inside a condition becoming a
-step or being checked; a path the agent decides taken on the model's silence, or counted as a failed check that holds
+step or being checked; a path the judge decides taken on the model's word, or counted as a failed check that holds
 tools; a guard written as `if not <rule>:` letting a missing value through; a skill saved as a list of steps not
 reading back to the same steps, retries, locks and jumps back included; a condition on the tool's words left to the
 model; a guard written after a sentence holding nothing; a stop holding only on one side of its `if`; a path that
@@ -94,18 +94,19 @@ def test_free_text_reads_as_no_steps_and_a_deleted_mention_is_the_only_error() -
     assert [(e["line"], e["id"]) for e in gone.errors] == [(6, "tool:issue_refund")]
 
 
-def test_a_path_the_agent_decides_needs_its_verdict_and_takes_the_other_path_without_a_hold() -> None:
+def test_a_path_the_judge_decides_waits_for_its_verdict_and_takes_the_other_path_without_a_hold() -> None:
     skill = _skill(read(RETAIL, fields=FIELDS).program)
     run = steps.start(SkillRunState(), skill, [skill], by="model")
     run = steps.on_result(run, [skill], {"found": True}, True).run
     assert run.running is not None and run.running.step == 2
     run = steps.on_result(run, [skill], {"orders": []}, True).run
-    refused = step_tools.handle(step_tools.STEP_DONE, run, [skill], {})
-    assert not refused.ok and "holds true" in refused.said, "silence is not a verdict"
-    run = _done(run, holds=False)
+    refused = step_tools.handle(step_tools.STEP_DONE, run, [skill], {"holds": True})
+    assert not refused.ok and "The judge decides this step" in refused.said, "the model's word is not a verdict"
+    run = steps.decided(run, [skill], False, "No refund was asked for.").run
     running = run.running
     assert running is not None and running.step == 4, "no refund: the else path"
     assert running.results["2"].passed is False and running.attempts == {} and run.holds == []
+    assert (running.results["2"].judged_by, running.results["2"].reason) == ("judge", "No refund was asked for.")
     run = _done(run)
     assert run.running is not None and run.running.step == 8, "the end of the else skips nothing it should run"
 

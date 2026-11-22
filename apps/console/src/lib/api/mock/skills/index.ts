@@ -1,5 +1,4 @@
 import type { Agent, BulkResult, Review, ReviewDecisionInput, Tool } from '@/lib/types/domain';
-import type { EvalCheckResult } from '@/lib/types/evals';
 import type {
   AgentSkillPin,
   AgentSkills,
@@ -34,6 +33,7 @@ import type {
   SkillView,
   SkillWarning,
   SkillLoading,
+  SkillCheckResult,
 } from '@/lib/types/skills';
 import type { PublishBlocker, PublishWarning } from '@/lib/types/references';
 import type { SearchHit } from '@/lib/types/search';
@@ -71,7 +71,7 @@ export interface SkillsDeps {
   me: string;
 }
 
-const LIMITS: SkillRuntimeLimits = { maxPerTurn: 2, maxAttached: 12, tokenBudget: 6000, useWhenMaxChars: 1024 };
+const LIMITS: SkillRuntimeLimits = { maxPerTurn: 2, maxAttached: 12, tokenBudget: 6000, useWhenMaxChars: 1024, instructionsMaxChars: 24000 };
 const DAY = 86_400_000;
 const ago = (days: number) => new Date(Date.now() - days * DAY).toISOString();
 const ymd = (iso: string) => iso.slice(0, 10);
@@ -253,7 +253,7 @@ export function createSkillsMock(deps: SkillsDeps) {
       const matched = matchOf(terms, t.input);
       // An always-on skill is in every turn, so every test input runs with it.
       const loaded = content.loading === 'always' || matched.length > 0;
-      const checks: EvalCheckResult[] = t.checks.map((c) => {
+      const checks: SkillCheckResult[] = t.checks.map((c) => {
         const label = c.type === 'calls_tool' ? `Calls ${c.tool}` : c.type === 'not_calls_tool' ? `Does not call ${c.tool}` : c.type === 'cites' ? `Cites ${c.source}${c.section ? ` ${c.section}` : ''}` : c.type === 'reply_contains' ? `Says “${c.text}”` : c.type === 'reply_not_contains' ? `Never says “${c.text}”` : 'Check';
         if (!loaded) return { label, status: 'fail', detail: 'The skill was not chosen for this input.' };
         if (c.type === 'calls_tool' && !toolNames.includes(c.tool ?? '')) return { label, status: 'fail', detail: `${c.tool} is not one of the skill’s tools.` };

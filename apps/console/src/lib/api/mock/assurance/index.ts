@@ -1,6 +1,6 @@
 import type { AssetRef, AssuranceGate, AssuranceJudge, AssuranceRun, AssuranceRunTrigger, AssuranceStats, AssuranceSuite, AssuranceTab, CaseOutcome, EvidenceBundleRow, GateStep, SuiteDraftCase } from '@/lib/types/assurance';
 import type { Agent, Review, Risk, TestCase, ValidationRun, Workflow } from '@/lib/types/domain';
-import type { EvalRunTrigger } from '@/lib/types/evals';
+import type { EvalRunTrigger } from '../evals/model';
 import type { EvidenceBundle } from '@/lib/types/model-risk';
 import type { SkillTestRun } from '@/lib/types/skills';
 
@@ -247,7 +247,7 @@ export function createAssuranceMock(deps: AssuranceDeps) {
       { step: 'evidence_integrity', label: 'Evidence integrity', mode: 'blocking', result: c ? 'pass' : running ? 'pending' : 'fail', detail: c ? `${c.total} eval cases ran on v${p.version}` : running ? `Evals for v${p.version} are still running` : `v${p.version} has no eval run` },
       { step: 'injection', label: 'Injection threshold', mode: 'blocking', result: !c ? 'pending' : injection ? 'fail' : 'pass', detail: injection ?? (c ? `${c.injection.passed} of ${c.injection.total} injection cases pass` : 'Waiting for a run') },
       { step: 'pass_rate', label: 'Suite pass rate', mode: advisory ? 'advisory' : 'blocking', result: !c ? 'pending' : p.failing ? 'fail' : 'pass', detail: !c ? 'Waiting for a run' : p.failing ? `${p.failing === 1 ? '1 case fails' : `${p.failing} cases fail`} outside the injection set${advisory ? '; the approver gives a reason' : `; tier ${p.tier} needs every case to pass`}` : 'Every case passes' },
-      { step: 'regressions', label: 'Regressions against published', mode: advisory ? 'advisory' : 'blocking', result: !c ? 'pending' : c.regressions ? 'fail' : 'pass', detail: !c ? 'Waiting for a run' : c.regressions ? `${c.regressions === 1 ? '1 case passes' : `${c.regressions} cases pass`} on the published version and fails on v${p.version}` : 'No case got worse than the published version' },
+      { step: 'regressions', label: 'Regressions against published', mode: advisory ? 'advisory' : 'blocking', result: !c ? 'pending' : c.regressions ? 'fail' : 'pass', detail: !c ? 'Waiting for a run' : c.regressions ? `${c.regressions === 1 ? '1 case passes' : `${c.regressions} cases pass`} on the published version and ${c.regressions === 1 ? 'fails' : 'fail'} on v${p.version}` : 'No case got worse than the published version' },
     ];
     return {
       reviewId: r.id,

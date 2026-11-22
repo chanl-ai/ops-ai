@@ -32,6 +32,7 @@ from pydantic_ai.messages import (
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
+from ops_agent_kernel import judge
 from ops_agents.activities.catalog import load_catalog
 from ops_agents.api.app import create_app
 from ops_agents.api.apps_line import HEAD as APPS_HEAD
@@ -101,6 +102,19 @@ def remembered(text: str) -> dict[str, Any]:
             same = value == f["value"] or f["kind"] == "preference"
             f |= {"decision": "same" if same else "replaces", "ref": ref}
     return {"memories": found}
+
+
+# A judge rubric's quoted words: the scripted judge passes a check whose quoted words all appear in the evidence.
+_QUOTED = re.compile(r"[“\"]([^”\"]+)[”\"]")
+
+
+def judged(text: str) -> dict[str, Any]:
+    """The scripted judge's verdict on a `judge.prompt`, so a test can make it say yes (quote words the reply holds)
+    and no (quote words it does not)."""
+    check, _, evidence = text.removeprefix(judge.PROMPT_HEAD).partition("\n\nEvidence:\n")
+    words = _QUOTED.findall(check)
+    passed = bool(words) and all(w.lower() in evidence.lower() for w in words)
+    return {"passed": passed, "reason": f"The reply {'says' if passed else 'does not say'} {', '.join(words) or 'it'}."}
 
 
 # A widget button's reply: "<text> (action: <tool>, key: value, ...)" asks for one granted tool.
@@ -176,6 +190,9 @@ def scripted(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         return ModelResponse(parts=[TextPart("Here is what I found.")])
     text = _last_user_text(messages)
     tools = {t.name for t in info.function_tools}
+    # First: the evidence a judge is shown is a reply, which can hold any keyword below.
+    if text.startswith(judge.PROMPT_HEAD):
+        return structured(info, judged(text))
     # Repeats the apps line the turn was given, so a use case reads what the model is told about each app (uc-704).
     if "which apps can you reach" in text.lower() and APPS_HEAD in (prompt := _prompt_text(messages)):
         told = prompt.split(APPS_HEAD, 1)[1].split("\n\n", 1)[0].strip()

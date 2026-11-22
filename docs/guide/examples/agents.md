@@ -314,8 +314,8 @@ draft fails.
 ## Upcoming: write the agent as a brief
 
 > [!NOTE]
-> **Upcoming.** This section is in review and is not in the current release. Its examples were run against the code
-> under review.
+> **Upcoming.** This section is merged and is not in the current release (v1.0.0). Its examples were run against
+> the merged code.
 
 **The problem.** One long block of instructions mixes what the agent is for, how it should answer and what it must
 never do. A reviewer cannot tell which line is a hard rule.
@@ -388,6 +388,33 @@ opsai agents add-reference "$AGENT" tool search_customers
 opsai agents publish-check "$AGENT"
 opsai agents publish "$AGENT" --note "First version"
 ```
+
+The publish check also carries the agent's evals. Only a run of that exact version on its content as it reads now
+counts: a draft keeps its version number while it is edited, so any save after a run needs a new run, and until then
+the check answers `eval_not_run` (the agent changed since its last run) whatever the team's setting. A blocking step
+that failed on the newest counted run is `eval_failed`, and the publish is refused; an approval of a request whose
+version failed after it opened is refused the same way, 422 `cannot_publish` with the problems in `details.problems`.
+With the team's "Require passing evals to publish" setting (`evalsRequired`) on, no saved cases is `eval_no_cases` and
+no run on the version is `eval_not_run`; a setting that cannot be read is `eval_setting_unread`.
+
+`opsai agents eval` runs the saved cases on the newest version, keeps the run and prints one line per case (with the
+judge's reason when a judge check failed), the pass rate, regressions, the cost and each publish gate step. Its exit
+code is for CI: 0 when the gate is open, 1 when a blocking step failed, 2 when the run could not happen (no model,
+agent not found, not allowed). With `--cases FILE` it scores the cases in the file and keeps nothing: exit 0 when every
+case passes, 1 when any fails.
+
+```bash
+opsai agents eval "$AGENT" || exit 1
+```
+
+```python
+run = ops.agents.eval(agent["id"])                  # the saved cases; the run is kept
+print(run["gate"]["blocked"], run["costUsd"])
+ops.agents.eval_runs(agent["id"])                   # kept runs, newest first, without results
+ops.agents.eval_run(run["id"])                      # one run with its case results
+```
+
+In TypeScript these are `ops.agents.eval(id)`, `evalCases`, `addEvalCases`, `evalRuns` and `evalRun`.
 
 | Field | What it does |
 |---|---|

@@ -39,7 +39,7 @@ from ops_service_kit.http import (
     options_window,
 )
 from ops_service_kit.ids import new_id, now_iso
-from ops_service_kit.listing import ListQuery
+from ops_service_kit.listing import IDS_MAX, ListQuery
 from ops_service_kit.request_timing import note_caller
 from ops_service_kit.settings import Settings
 from ops_signin import PasswordHasher
@@ -1070,9 +1070,10 @@ def create_public_app(
         _: Tx,
         request: Request,
         token: Annotated[str, Depends(_bearer)],
+        ids: Annotated[list[str], Query(min_length=1, max_length=IDS_MAX)],
         x_team_id: Annotated[str | None, Header()] = None,
     ) -> Any:
-        """Every team's display name in the workspace, so a page showing another team's record names its team. A
+        """The display names of the teams `ids` names, so a page showing another team's record names its team. A
         person needs access.view where the request acts (no console screen calls it, a Chat user's none); a service
         token needs the `settings:view` scope and reads its own tenant's."""
         if readers.signs(token):
@@ -1084,16 +1085,17 @@ def create_public_app(
             actor = await reading(await claims_of(request, token), x_team_id)
             await reads_access(actor)
             tenant = actor.tenant_id
-        return ok([t.model_dump(by_alias=True) for t in await team_store.names(tenant)])
+        return ok([t.model_dump(by_alias=True) for t in await team_store.names(tenant, ids)])
 
     @app.get("/v1/people-names", tags=["people"], response_model=Envelope[list[PersonName]], responses=ERRORS)
     async def people_names(  # pyright: ignore[reportUnusedFunction]
         _: Tx,
         request: Request,
         token: Annotated[str, Depends(_bearer)],
+        emails: Annotated[list[str], Query(min_length=1, max_length=IDS_MAX)],
         x_team_id: Annotated[str | None, Header()] = None,
     ) -> Any:
-        """Every person's display name in the workspace by email, so a list naming who did something shows a name
+        """The display names of the people `emails` names, so a list naming who did something shows a name
         rather than an address. A person needs access.view where the request acts (no console screen calls it, a Chat
         user's none); a service token needs the `settings:view` scope."""
         if readers.signs(token):
@@ -1105,7 +1107,7 @@ def create_public_app(
             actor = await reading(await claims_of(request, token), x_team_id)
             await reads_access(actor)
             tenant = actor.tenant_id
-        return ok([p.model_dump(by_alias=True) for p in await team_store.people_names(tenant)])
+        return ok([p.model_dump(by_alias=True) for p in await team_store.people_names(tenant, emails)])
 
     @app.put("/v1/policies/{key}", tags=["policies"], response_model=Envelope[PolicyOut], responses=ERRORS)
     async def set_policy(  # pyright: ignore[reportUnusedFunction]

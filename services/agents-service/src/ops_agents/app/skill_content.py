@@ -98,8 +98,9 @@ class BlockerWire(TypedDict):
 
 
 def blocker_of(problem: Problem) -> BlockerWire:
-    """A publish problem as a `Blocker`: the field it is in, and no step id, which only a workflow has."""
-    position = problem["position"]
+    """A publish problem as a `Blocker`: the field it is in, and no step id, which only a workflow has. An eval problem
+    names no field, so it may carry no position."""
+    position = problem.get("position")
     field = position["field"] if position else None
     return {"node": None, "field": field, "level": "error", "code": problem["kind"], "message": problem["message"]}
 

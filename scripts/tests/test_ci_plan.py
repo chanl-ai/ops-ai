@@ -77,6 +77,14 @@ def test_a_documents_only_change_runs_only_the_docs_job_and_a_service_change_run
     assert plan(tmp_path, "apps/console/src/app.tsx")["mssql"] == "false"
 
 
+def test_a_use_case_script_or_the_use_case_runner_is_code_not_a_document(tmp_path: Path) -> None:
+    for path in ("docs/usecases/lib/usecase_harness.py", "docs/usecases/kb-service/scripts/test-uc-1-api.mjs"):
+        p = plan(tmp_path, path)
+        assert (p["code"], p["docs"]) == ("true", "true"), (path, p)
+    assert plan(tmp_path, "packages/usecase-runner/src/harness.ts")["console"] == "true"
+    assert plan(tmp_path, "docs/usecases/kb-service/a-file-is-found.md")["code"] == "false"
+
+
 def test_ci_full_runs_every_job_whatever_changed(tmp_path: Path) -> None:
     p = plan(tmp_path, "docs/guide/plugins.md", full="true")
     assert (p["full"], p["code"], p["mssql"], p["console"]) == ("true", "true", "true", "true"), p
@@ -125,6 +133,17 @@ def test_a_push_run_has_its_own_concurrency_group_so_a_queued_push_is_not_droppe
     # One group per ref keeps one pending run and drops the rest, even with cancel-in-progress off.
     assert "github.sha" in conc["group"] and "github.ref" not in conc["group"], conc
     assert "pull_request" in str(conc["cancel-in-progress"]) and "push" not in str(conc["cancel-in-progress"]), conc
+
+
+def test_a_merge_queue_run_is_planned_like_a_pull_request_from_the_queue_base() -> None:
+    ci = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+    # PyYAML reads the key `on` as True.
+    assert "merge_group" in ci[True], ci[True]
+    assert "github.event.merge_group.base_sha" in ci["env"]["BASE_SHA"], ci["env"]["BASE_SHA"]
+    # The last-green plan belongs to a push only; a queue run taking it would be planned from an old commit.
+    assert 'GITHUB_EVENT_NAME" = push' in _plan_step()["run"]
+    # ci-ok runs always and waits on every job, so it reports on the queue's run.
+    assert ci["jobs"]["ci-ok"]["if"] == "always()" and "plan" in ci["jobs"]["ci-ok"]["needs"]
 
 
 def test_the_plan_of_a_develop_push_starts_from_the_last_green_commit_not_the_event_before() -> None:

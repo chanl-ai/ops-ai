@@ -1,11 +1,11 @@
 {
-  "_note": "Per job in .github/workflows/ci.yml, each run: step (its name, else its first command line) and either the local command that is its twin or a no_local_twin reason. `make ci-local` runs the twins; `make checks` (scripts/ci_steps.py --check) fails when this file and ci.yml disagree.",
+  "_note": "Per job in .github/workflows/ci.yml, each run: step (its name, else its first command line) and either the local command that is its twin or a no_local_twin reason. `make ci-local` (scripts/ci_local.py) runs the twins; `make checks` (scripts/ci_steps.py --check) fails when this file and ci.yml disagree.",
   "jobs": {
     "plan": [
       {"step": "Plan the jobs", "no_local_twin": "Picks which jobs a pull request runs; `bash scripts/ci-plan.sh <base>` prints that plan and a local run always takes every twin."}
     ],
     "checks": [
-      {"step": "Lint and format the changed Python", "twin": "base=$(git merge-base origin/main HEAD); files=$(git diff --name-only --diff-filter=ACMR \"$base\" HEAD -- '*.py'); [ -z \"$files\" ] || { uv run ruff format --check $files && uv run ruff check $files; }"},
+      {"step": "Lint and format the changed Python", "twin": "base=$(git merge-base \"${BASE_SHA:-origin/main}\" HEAD); files=$(git diff --name-only --diff-filter=ACMR \"$base\" HEAD -- '*.py'); [ -z \"$files\" ] || { uv run ruff format --check $files && uv run ruff check $files; }"},
       {"step": "Types of the packages", "twin": "uv run python scripts/check_tests_typecheck.py packages"},
       {"step": "make -s checks", "twin": "make -s checks"},
       {"step": "Script tests", "twin": "uv run pytest -q scripts/tests"}

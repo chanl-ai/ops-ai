@@ -41,6 +41,7 @@ from ..envelope import ok
 from ..publish_policy import decide
 from ..schemas import AgentSkills, SkillDetail, SkillList, SkillOptions, SkillRendered, SkillTextReading
 from ..skills import (
+    INSTRUCTIONS_MAX,
     LIMITS,
     agent_skills,
     check_content,
@@ -153,7 +154,7 @@ class SkillDraftPatch(In):
 
 
 class SkillTextInput(In):
-    text: str = Field(max_length=24000)
+    text: str = Field(max_length=INSTRUCTIONS_MAX)
     loading: Literal["on_match", "always"] = "on_match"
     has_parts: bool = False
     # The endings the form declares beside the text: a bare `stop <name>` ends the skill only with one of them.
