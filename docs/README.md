@@ -647,3 +647,8 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/tools-service/a-team-holding-only-a-workflow.md` | uc-755: A team holding only a workflow grant on another team's tool module uses it through the workflow and cannot edit, publish, run, revoke or delete it |
 | `usecases/agents-service/a-shared-form-filled-in-signed.md` | uc-756: A shared form filled in signed out starts a workflow with knowledge and a tool, a person approves a step, and the run finishes with a record |
 | `usecases/agents-service/a-builder-writes-a-skill-with.md` | uc-757: A builder writes a skill with steps and an agent brief, and a chat follows the steps |
+| `usecases/console/agent-page-settings-and-channels.md` | uc-764: An agent page shows its save state, its model, knowledge, tools and skills on the main page, and a channels tab |
+| `usecases/console/agent-versions-side-by-side.md` | uc-765: A builder asks two versions of an agent one question and reads the replies side by side |
+| `usecases/console/role-for-a-group-and-approvals.md` | uc-766: A role given to a group, and the approvals cell on the role's page |
+| `usecases/console/chat-only-person-my-apps.md` | uc-767: A person who only chats sees My apps in the sidebar and can chat |
+| `usecases/console/name-limits-on-a-form.md` | uc-768: One create form holds a name to the same rule the server keeps |
