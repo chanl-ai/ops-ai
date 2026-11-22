@@ -1,14 +1,16 @@
-# Every merge of a release/* or hotfix/* branch into main is tagged `vX.Y.Z` (the version in the branch name; What's new
-# shows it) with `make release-tag`, which runs the same way locally (DRY=1 prints the name). A push to main that is
-# no release or hotfix merge gets no tag. The tag push made with the workflow token starts no workflow of its own, so
-# this one starts sdk-publish.yml and release-images.yml on the new tag with workflow_dispatch, which the token may
-# start. Staging runs develop and the release branch under test, so a merge to main does not touch it; to put any
-# other commit on staging, run deploy-staging.yml by hand (`make stg-deploy-ci REF=<ref>`).
+# A merge into develop of the pull request `release: X.Y.Z into develop` (or `hotfix: X.Y.Z into develop`) is tagged
+# `vX.Y.Z` with `make release-tag`, which runs the same way locally (DRY=1 prints the name). Then main is fast-forwarded to
+# that commit with a plain push (`make release-main`); main's protection may refuse the workflow token, and then the
+# job stops red and prints the one command the owner runs, after which re-running the job starts the publish below. A
+# push to develop that is no release gets no tag. The tag push made with the workflow token starts no workflow of its
+# own, so this one starts sdk-publish.yml and release-images.yml on the new tag with workflow_dispatch, which the token
+# may start. A merge to develop that is no release deploys to staging as before; to put another commit there, run
+# deploy-staging.yml by hand (`make stg-deploy-ci REF=<ref>`).
 name: release-tag
 
 on:
   push:
-    branches: [main]
+    branches: [develop]
 
 permissions:
   contents: read
@@ -18,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      contents: write # pushes the version tag
+      contents: write # pushes the version tag and fast-forwards main
       actions: write # starts sdk-publish.yml and release-images.yml on it
     concurrency:
       group: release-tag
@@ -35,8 +37,20 @@ jobs:
           out=$(make -s release-tag)
           echo "$out"
           case "$out" in
-            *"pushed to"*) echo "tag=$(git tag --points-at "$REF" --list 'v[0-9]*.[0-9]*.[0-9]*' | head -1)" >> "$GITHUB_OUTPUT" ;;
+            *"pushed to"* | *"is already v"*) echo "tag=$(git tag --points-at "$REF" --list 'v[0-9]*.[0-9]*.[0-9]*' | head -1)" >> "$GITHUB_OUTPUT" ;;
           esac
+      - name: Fast-forward main to the tag
+        if: steps.tag.outputs.tag != ''
+        env:
+          REF: ${{ github.sha }}
+        run: |
+          rc=0
+          # The script, not make: make turns the script's exit 3 (push refused) into its own exit 2.
+          sh scripts/release-main.sh || rc=$?
+          if [ "$rc" = 3 ]; then
+            echo "::error title=main not moved::main's protection refused the token. The owner runs the command above, then re-runs this job."
+          fi
+          exit "$rc"
       - name: Publish the SDKs and build the images for the new tag
         if: steps.tag.outputs.tag != ''
         env:

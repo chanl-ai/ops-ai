@@ -22,7 +22,7 @@ printf '%s\n' "$refs" | while read -r _local_ref local_sha remote_ref remote_sha
   branch=${remote_ref#refs/heads/}
   if [ "$branch" != "$remote_ref" ]; then
     case "$branch" in
-      main | develop | release/* | dependabot/*) ;;
+      main | develop | release/* | hotfix/* | dependabot/*) ;;
       *)
         if ! printf '%s\n' "$branch" | grep -qE '^(feat|fix|chore|docs|refactor|perf|test|ci)/[a-z0-9]+(-[a-z0-9]+)+$' ||
           printf '%s\n' "${branch#*/}" | grep -qE '(^|-)(wip|tmp|temp|new|old|final|v[0-9]+|misc|stuff|fixes|updates|changes|improvements|cleanup|feedback|lane)(-|$)'; then

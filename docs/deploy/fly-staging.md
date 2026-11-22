@@ -157,8 +157,8 @@ is replaced by a newer one, a running one finishes). It starts two ways:
 |---|---|
 | Put another commit, tag or branch on staging | `make stg-deploy-ci REF=<ref>`; it starts the run and watches it to the end |
 | Keep it there through later merges | Set the repository variable `STAGING_HOLD` to the reason; merges are still checked but not deployed |
-| Test a release on staging | Cut `release/X.Y.Z` (`make release-cut`, `docs/deploy/release.md`); each push to it deploys, and while it exists merges to `develop` skip the deploy with a notice |
-| Go back to `develop` | Delete the release or hotfix branch (after the back-merge) and clear `STAGING_HOLD`; the next merge to `develop` deploys, or `make stg-deploy-ci` now |
+| Test a release on staging | After telling the owner, `make stg-deploy-ci REF=release/current`; a push to the train deploys nothing, so set `STAGING_HOLD` for as long as the owner tries it. A numbered `release/X.Y.Z` or any `hotfix/*` branch on origin still freezes merges to `develop` (`docs/deploy/release.md`) |
+| Go back to `develop` | Delete the hotfix branch after its merge and clear `STAGING_HOLD`; the next merge to `develop` deploys, or `make stg-deploy-ci` now |
 
 `REF` is what is deployed; the workflow file runs from `develop` (`WORKFLOW_REF=` changes that). GitHub offers a
 hand-started run only for a workflow that is also on the default branch, `main`, so the button and `make stg-deploy-ci`
@@ -168,7 +168,7 @@ process, OCR, plugins and one signed-in request (the first admin signs in and li
 `skip_walk` leaves out. If a step fails after the machine was replaced, the job runs `make stg-rollback TO=<the release
 before>` without the walk and fails either way; a failure before that point leaves staging as it was. The job summary
 shows the commit, the trigger, the reason, any pin it overrode, the URL, each step's seconds, the walk's counts and the
-rollback's result. A push to `main` (a release) is only tagged, by `release-tag.yml`.
+rollback's result. A release is only tagged, by `release-tag.yml`, on the merge into `develop`.
 
 The local pin (`staging-pin` in the config folder, written by `repo.sh snapshot`) still stops `make stg-deploy` on the
 owner's machine; the runner has no such file, so it lists the release and hotfix branches on origin (`git ls-remote`) and reads `STAGING_HOLD` instead.
@@ -200,7 +200,7 @@ runs after merge.
 
 ### Production on GitHub: not built yet
 
-No workflow deploys production. A tag `vX.Y.Z` is made by `release-tag.yml` on the merge of a release or hotfix branch into `main`; nothing deploys
+No workflow deploys production. A tag `vX.Y.Z` is made by `release-tag.yml` on the develop merge of a release or hotfix pull request; nothing deploys
 it. A workflow that read a repository variable could not prove that a person approves each deploy, since the
 environment's reviewers and the place the deploy token lives are invisible to it. Before one returns, the owner sets up:
 

@@ -77,7 +77,7 @@ Rule: production deploys only a tag `vX.Y.Z` on a commit staging ran; migrations
 start; rollback redeploys the previous image; migrations only add (`DA10`).
 Why: promotion is repeatable and reversible.
 
-Today: `.github/workflows/release-tag.yml` tags the merge of a release or hotfix branch into `main` (`docs/deploy/release.md`); no workflow deploys the tag. A workflow returns once
+Today: `.github/workflows/release-tag.yml` tags the develop merge of a release or hotfix pull request and fast-forwards `main` to it (`docs/deploy/release.md`); no workflow deploys the tag. A workflow returns once
 the owner has made the `production` environment (`docs/deploy/fly-staging.md`, "Production on GitHub"). `release-images.yml`
 has never built from a merged commit.
 

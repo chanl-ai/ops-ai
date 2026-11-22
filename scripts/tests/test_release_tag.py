@@ -1,6 +1,8 @@
-"""`make release-tag` (scripts/release-tag.sh) on scratch repositories, by failure mode: a release merge is tagged with
-the wrong version or not at all; a rerun on the same merge changes the tag; a commit that is no release merge gets a
-tag; a tag already naming another commit is moved instead of refused; a dry run makes a tag."""
+"""`make release-tag` (scripts/release-tag.sh) on scratch repositories, by failure mode: a release merge into develop is
+tagged with the wrong version or not at all (the title is the commit's subject after a squash, the first body line of a
+merge commit); an old-scheme merge from release/X.Y.Z is tagged; a rerun on the same merge changes the tag; a commit
+that is no release merge gets a tag; a tag already naming another commit is moved instead of refused; a dry run makes
+a tag."""
 
 from __future__ import annotations
 
@@ -9,8 +11,8 @@ import subprocess
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[1] / "release-tag.sh"
-RELEASE = "Merge pull request #7 from chanl-ai/release/1.2.0"
-HOTFIX = "Merge pull request #9 from chanl-ai/hotfix/1.2.1"
+RELEASE = "release: 1.2.0 into develop"
+HOTFIX = "hotfix: 1.2.1 into develop"
 
 
 def git(repo: Path, *args: str) -> str:
@@ -23,10 +25,11 @@ def tag(repo: Path, **env: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def commit(repo: Path, name: str, message: str | None = None) -> str:
+def commit(repo: Path, name: str, message: str | None = None, body: str | None = None) -> str:
     (repo / name).write_text(name)
     git(repo, "add", name)
-    git(repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--no-verify", "-m", message or name)
+    extra = ["-m", body] if body else []
+    git(repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--no-verify", "-m", message or name, *extra)
     return git(repo, "rev-parse", "HEAD")
 
 
@@ -65,8 +68,20 @@ def test_a_commit_that_is_no_release_merge_gets_no_tag_and_a_dry_run_makes_none(
     remote, work = clone_pair(tmp_path)
     commit(work, "b", "fix(api): something")
     assert "gets no tag" in tag(work).stdout
-    commit(work, "c", "Merge pull request #8 from chanl-ai/feat/api-thing")
+    commit(work, "c", "Merge pull request #8 from chanl-ai/feat/api-thing", body="feat(api): a thing")
+    assert "gets no tag" in tag(work).stdout
+    commit(work, "e", "Merge pull request #7 from chanl-ai/release/1.2.0")
     assert "gets no tag" in tag(work).stdout
     commit(work, "d", RELEASE)
     assert "next is v1.2.0" in tag(work, DRY="1").stdout
     assert git(remote, "tag", "--list") == "" and git(work, "tag", "--list") == ""
+
+
+def test_a_queue_merge_commit_is_tagged_from_the_pull_request_title_in_its_body(tmp_path: Path) -> None:
+    remote, work = clone_pair(tmp_path)
+    queue = "Merge pull request #12 from chanl-ai/gh-readonly-queue/develop/pr-12-abc"
+    merge = commit(work, "b", queue, body=RELEASE)
+    squash = commit(work, "c", f"{HOTFIX} (#13)")
+    assert tag(work, REF=merge).returncode == 0 and tag(work, REF=squash).returncode == 0
+    assert git(remote, "rev-list", "-n", "1", "v1.2.0") == merge
+    assert git(remote, "rev-list", "-n", "1", "v1.2.1") == squash
