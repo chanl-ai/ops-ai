@@ -16,7 +16,7 @@ import {
   draftOf,
   followLimits,
   GuardrailsSection,
-  IdentitySection,
+  AgentJobField,
   InstructionsSection,
   KnowledgeSection,
   WidgetsSection,
@@ -30,7 +30,8 @@ import { AgentBriefEditor, legacyBrief, PromptModeToggle } from '@/components/ag
 import { ModelSelect } from '@/components/agents/model-select';
 import { AgentModelLimitsSection } from '@/components/agents/agent-model-limits-section';
 import { AgentCompareView } from '@/components/agents/test-compare';
-import { AgentUsesLink, AgentUsesSheet } from '@/components/agents/agent-uses-sheet';
+import { AgentUsesLink } from '@/components/agents/agent-uses-line';
+import { EditableTitle } from '@/components/shared/editable-title';
 import { PromptModeDialogs } from '@/components/agents/prompt-mode-dialogs';
 import { MemorySection } from '@/components/agents/memory-section';
 import { RequestAgentPublishDialog } from '@/components/agents/request-agent-publish-dialog';
@@ -44,7 +45,7 @@ import type { AgentBrief, PromptMode } from '@/lib/types/domain';
 import type { PublishBlocker } from '@/lib/types/references';
 import { AgentTestPanel } from '@/components/agents/agent-test-panel';
 import { LivePlacesPanel } from '@/components/channels/hub/live-places';
-import { AgentChatChannel } from '@/components/agents/agent-channels';
+import { AgentChatChannel, AgentIdSection } from '@/components/agents/agent-channels';
 import { SkillMenuSection } from '@/components/agents/skill-menu-section';
 import { MakeDefaultAgentDialog } from '@/components/chat/make-default-agent';
 import { AgentSkillsSection, type AttachFilter } from '@/components/skills/agent-skills-section';
@@ -197,7 +198,6 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
   const sections = changedSections(saved, draft);
   const dirty = sections.length > 0 || briefDirty;
   const [attach, setAttach] = React.useState<AttachFilter | null>(null);
-  const [usesOpen, setUsesOpen] = React.useState(false);
   const [modeAsked, setModeAsked] = React.useState<PromptMode | null>(null);
   const docControls = React.useRef<InstructionDocumentHandle>(null);
   const addReference = useAddReference(agent.id);
@@ -208,7 +208,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
     tools: tools.data ?? [],
     dirty,
     alwaysOn: (skills.data?.pins ?? []).filter((p) => p.loading === 'always'),
-    onAttachAlways: () => (setUsesOpen(true), setAttach('always')),
+    onAttachAlways: () => (setAttach('always'), requestAnimationFrame(() => document.getElementById('agent-skills')?.scrollIntoView({ block: 'center' }))),
   });
 
   const [deleteOpen, setDeleteOpen] = React.useState(false);
@@ -287,7 +287,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
       <PageLayout
         icon={Bot}
         backHref="/build/agents"
-        title={agent.name}
+        title={editable ? <EditableTitle value={draft.name} onChange={(v) => set('name', v)} label="Agent name" error={errors.name} /> : draft.name}
         description={agent.role}
         badge={
           <>
@@ -467,6 +467,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
               <div className="flex flex-col gap-4">
                 {/* Where each version is live, then the embeds' own snippets and keys, which are made here. */}
                 <LivePlacesPanel kind="agent" id={agent.id} name={agent.name} between={<AgentChatChannel agent={agent} />} />
+                <AgentIdSection agent={agent} />
                 <WidgetEmbeds agentId={agent.id} publishedVersion={agent.publishedVersion} scriptUrl={widgetScriptUrl} createOpen={deployOpen} onCreateOpenChange={setDeployOpen} canEdit={agent.canEdit} />
               </div>
             ) : (
@@ -545,15 +546,15 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
               />
               </BuilderFieldset>
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <AgentUsesLink uses={agent.uses} onOpen={() => setUsesOpen(true)} />
+                <AgentUsesLink uses={agent.uses} />
                 {editable && <PromptModeToggle mode={mode} onChoose={setModeAsked} disabled={dirty || update.isPending} />}
               </div>
               <BuilderFieldset canEdit={locked ? false : agent.canEdit}>
-              <IdentitySection draft={draft} set={set} teamId={agent.teamId} models={modelAliases.data ?? []} errors={errors} channels={agent.controls.channels} agentId={agent.id} showJob={mode === 'full'} showModel={false} />
+              {mode === 'full' && <AgentJobField draft={draft} set={set} error={errors.role} />}
               </BuilderFieldset>
-              <AgentUsesSheet open={usesOpen} onOpenChange={setUsesOpen} uses={agent.uses}>
+              <div className="flex flex-col gap-4">
                 <BuilderFieldset canEdit={locked ? false : agent.canEdit}>
-                  <ToolsSection draft={draft} set={set} toolIds={agent.toolIds} onChange={setTools} stale={agent.staleToolIds} />
+                  <ToolsSection draft={draft} set={set} toolIds={agent.toolIds} onChange={setTools} stale={agent.staleToolIds} grantable={tools.data ?? []} />
                   <KnowledgeSection collections={agent.collections} onChange={setKnowledge} />
                   <AgentSkillsSection
                     agentName={agent.name}
@@ -581,7 +582,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
                     }}
                   />
                 </BuilderFieldset>
-              </AgentUsesSheet>
+              </div>
               <PromptModeDialogs to={modeAsked} onCancel={() => setModeAsked(null)} onConfirm={switchMode} pending={update.isPending} />
               {canBuild && (
               <DangerZone

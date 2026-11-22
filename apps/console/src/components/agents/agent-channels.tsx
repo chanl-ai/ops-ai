@@ -4,6 +4,7 @@ import * as React from 'react';
 import { MessagesSquare, Route } from 'lucide-react';
 
 import { MakeDefaultAgentDialog } from '@/components/chat/make-default-agent';
+import { CopyField } from '@/components/shared/setting/copy-field';
 import { Row, Rows, Section } from '@/components/shared/surface';
 import { LiveBadge } from '@/components/status-badges';
 import { Badge } from '@/components/ui/badge';
@@ -77,6 +78,15 @@ export function AgentChatChannel({ agent }: { agent: Agent }) {
         </Rows>
       )}
       <MakeDefaultAgentDialog agent={agent} open={open} onOpenChange={setOpen} />
+    </Section>
+  );
+}
+
+/** How the API, the CLI and a workflow's agent step name this agent, next to the other ways in. */
+export function AgentIdSection({ agent }: { agent: Agent }) {
+  return (
+    <Section title="Agent ID" description="How the API, the CLI and a workflow’s agent step name this agent.">
+      <CopyField id="ag-id" value={agent.id} label="agent ID" />
     </Section>
   );
 }
