@@ -47,7 +47,7 @@ import type { AgentBrief, PromptMode } from '@/lib/types/domain';
 import type { PublishBlocker } from '@/lib/types/references';
 import { AgentTestPanel } from '@/components/agents/agent-test-panel';
 import { LivePlacesPanel } from '@/components/channels/hub/live-places';
-import { AgentChatChannel, AgentIdSection } from '@/components/agents/agent-channels';
+import { AgentChannels } from '@/components/agents/agent-channels';
 import { SkillMenuSection } from '@/components/agents/skill-menu-section';
 import { MakeDefaultAgentDialog } from '@/components/chat/make-default-agent';
 import { AgentSkillsSection, type AttachFilter } from '@/components/skills/agent-skills-section';
@@ -453,8 +453,8 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
             agent.wrapperWorkflowId ? (
               <div className="flex flex-col gap-4">
                 {/* Where each version is live, then the embeds' own snippets and keys, which are made here. */}
-                <LivePlacesPanel kind="agent" id={agent.id} name={agent.name} between={<AgentChatChannel agent={agent} />} />
-                <AgentIdSection agent={agent} />
+                <AgentChannels agent={agent} onNewEmbed={() => setDeployOpen(true)} />
+                <LivePlacesPanel kind="agent" id={agent.id} name={agent.name} />
                 <WidgetEmbeds agentId={agent.id} publishedVersion={agent.publishedVersion} scriptUrl={widgetScriptUrl} createOpen={deployOpen} onCreateOpenChange={setDeployOpen} canEdit={agent.canEdit} />
               </div>
             ) : (

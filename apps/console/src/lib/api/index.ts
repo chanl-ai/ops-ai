@@ -35,6 +35,8 @@ const documentsUrl = process.env.NEXT_PUBLIC_OPS_DOCUMENTS_API_URL;
 const modelsUrl = process.env.NEXT_PUBLIC_OPS_MODELS_API_URL;
 const embedUrl = process.env.NEXT_PUBLIC_OPS_EMBED_URL;
 const authProviderName = process.env.NEXT_PUBLIC_AUTH_PROVIDER ?? 'mock';
+/** The agents service's public address (it ends in /v1), as the Channels tab's API snippets name it. */
+export const agentsApiUrl = (registryUrl ?? chatUrl ?? baseUrl ?? 'https://ops.example.com/v1').replace(/\/$/, '');
 const onPlatform = authProviderName === 'platform' && Boolean(platformUrl);
 const onRealService = Boolean(chatUrl || casesUrl || registryUrl || toolsUrl || knowledgeUrl || (authProviderName === 'platform' && platformUrl));
 
