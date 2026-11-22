@@ -47,9 +47,9 @@ export function SkillCheckRow({ check, onChange, onRemove, options, index }: { c
   );
   return (
     <div className="flex flex-col gap-2 rounded-lg border p-3" data-testid="eval-check-row">
-      <div className="flex items-start gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
         <Select value={check.type} onValueChange={(t) => onChange({ type: t as SkillCheckType })}>
-          <SelectTrigger className="w-56 shrink-0" aria-label={`Check ${index + 1} type`}>
+          <SelectTrigger className="w-full sm:w-56 sm:shrink-0" aria-label={`Check ${index + 1} type`}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -60,7 +60,7 @@ export function SkillCheckRow({ check, onChange, onRemove, options, index }: { c
             ))}
           </SelectContent>
         </Select>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 sm:flex-1">
           {(check.type === 'calls_tool' || check.type === 'not_calls_tool') && sel(`chk-${index}-tool`, check.tool, tools, 'Choose a tool', (tool) => onChange({ ...check, tool }), true)}
           {check.type === 'cites' && sel(`chk-${index}-src`, check.source, options?.collections ?? [], 'Choose a knowledge base', (source) => onChange({ ...check, source }))}
           {check.type === 'extracts' && (
@@ -78,7 +78,7 @@ export function SkillCheckRow({ check, onChange, onRemove, options, index }: { c
             />
           )}
         </div>
-        <Button variant="ghost" size="icon" className="size-9 shrink-0" aria-label={`Remove check ${index + 1}`} onClick={onRemove}>
+        <Button variant="ghost" size="icon" className="size-9 shrink-0 self-end sm:self-auto" aria-label={`Remove check ${index + 1}`} onClick={onRemove}>
           <X className="size-4" />
         </Button>
       </div>

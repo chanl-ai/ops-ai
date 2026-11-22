@@ -28,9 +28,9 @@ function CheckRow({ check, onChange, onRemove, tools, index }: { check: EvalChec
   const meta = CHECK_TYPES.find((t) => t.value === check.type)!;
   return (
     <div className="flex flex-col gap-2 rounded-lg border p-3" data-testid="eval-check-row">
-      <div className="flex items-start gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
         <Select value={check.type} onValueChange={(t) => onChange({ type: t as EvalCheckType })}>
-          <SelectTrigger className="w-56 shrink-0" aria-label={`Check ${index + 1} type`}>
+          <SelectTrigger className="w-full sm:w-56 sm:shrink-0" aria-label={`Check ${index + 1} type`}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -41,7 +41,7 @@ function CheckRow({ check, onChange, onRemove, tools, index }: { check: EvalChec
             ))}
           </SelectContent>
         </Select>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 sm:flex-1">
           {check.type === 'calls_tool' && (
             <Select value={check.tool ?? ''} onValueChange={(tool) => onChange({ ...check, tool })}>
               <SelectTrigger className="w-full font-mono text-xs" aria-label="Choose a tool">
@@ -68,7 +68,7 @@ function CheckRow({ check, onChange, onRemove, tools, index }: { check: EvalChec
             </div>
           )}
         </div>
-        <Button variant="ghost" size="icon" className="size-9 shrink-0" aria-label={`Remove check ${index + 1}`} onClick={onRemove}>
+        <Button variant="ghost" size="icon" className="size-9 shrink-0 self-end sm:self-auto" aria-label={`Remove check ${index + 1}`} onClick={onRemove}>
           <X className="size-4" />
         </Button>
       </div>
