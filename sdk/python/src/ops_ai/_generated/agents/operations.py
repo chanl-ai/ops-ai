@@ -1402,7 +1402,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/templates",
         "pathParams": [],
-        "query": ["kind", "source"],
+        "query": ["kind", "source", "page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "threads_approve": {
@@ -3119,10 +3119,35 @@ class Operations:
         "Team Usage"
         return self._t.call(SERVICE, OPERATIONS["workflows_team_usage"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
-    def templates_list_templates(self, *, kind: str | None = None, source: str | None = None) -> list[TemplateView]:
+    def templates_list_templates(
+        self,
+        *,
+        kind: str | None = None,
+        source: str | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultTemplateView:
         "List Templates"
         return self._t.call(
-            SERVICE, OPERATIONS["templates_list_templates"], {}, {"kind": kind, "source": source}, {}, None
+            SERVICE,
+            OPERATIONS["templates_list_templates"],
+            {},
+            {
+                "kind": kind,
+                "source": source,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
         )  # type: ignore[no-any-return]
 
     def threads_list_threads(
@@ -4803,11 +4828,34 @@ class AsyncOperations:
         return await self._t.call(SERVICE, OPERATIONS["workflows_team_usage"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def templates_list_templates(
-        self, *, kind: str | None = None, source: str | None = None
-    ) -> list[TemplateView]:
+        self,
+        *,
+        kind: str | None = None,
+        source: str | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultTemplateView:
         "List Templates"
         return await self._t.call(
-            SERVICE, OPERATIONS["templates_list_templates"], {}, {"kind": kind, "source": source}, {}, None
+            SERVICE,
+            OPERATIONS["templates_list_templates"],
+            {},
+            {
+                "kind": kind,
+                "source": source,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
         )  # type: ignore[no-any-return]
 
     async def threads_list_threads(

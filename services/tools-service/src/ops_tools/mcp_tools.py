@@ -61,7 +61,7 @@ class Operation:
 
 
 def _templates(args: Json) -> tuple[str, Json]:
-    return "/v1/templates", {k: v for k, v in args.items() if k in ("kind", "source") and v}
+    return "/v1/templates", {k: v for k, v in args.items() if k in ("kind", "source", "search", "page") and v}
 
 
 def _install(args: Json) -> tuple[str, Json]:
@@ -88,6 +88,12 @@ OPERATIONS: tuple[Operation, ...] = (
             "properties": {
                 "kind": {"type": "string", "enum": [*KINDS], "description": "Keep one kind."},
                 "source": {"type": "string", "description": "Keep one pack or app, as plugin:<id>."},
+                "search": {"type": "string", "description": "Words in the template's or its app's title."},
+                "page": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "The page to read; the reply says if more follow.",
+                },
             },
             "additionalProperties": False,
         },
@@ -95,7 +101,6 @@ OPERATIONS: tuple[Operation, ...] = (
         method="GET",
         route=_templates,
         read_only=True,
-        wrap="templates",
         cells=CREATE,
     ),
     Operation(

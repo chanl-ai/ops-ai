@@ -2894,6 +2894,19 @@ class KnowledgeService:
             )
         return ItemReading(reader_version=narrow.field(answer, "readerVersion", str), ocr=ocr, pages=out)
 
+    async def item_chunks(self, who: Who, item_id: str, params: ListParams) -> ListPage:
+        """A page of the item's pieces, searched by text in SQL, each with what search matches it as: the pieces tab of
+        a document, which a long document cannot load whole."""
+        async with isolation.request_transaction():
+            if not await self.store.items(who.tenant_id, item_id=item_id):
+                raise NotFound("No item with that id.")
+            page, chunks = await self.store.chunk_page(who.tenant_id, item_id, params)
+            units = await self.store.units(who.tenant_id, item_id, [c.id for c in chunks])
+        searched: dict[str, list[SearchedAs]] = {}
+        for u in units:
+            searched.setdefault(u.chunk_id, []).append({"kind": u.kind, "text": u.text})
+        return {**page, "data": [dict(_chunk_detail(c, searched)) for c in chunks]}
+
     async def item(self, who: Who, item_id: str) -> ItemDetailView:
         """The item, its source, pieces, versions and copy read in one transaction; then, with none open,
         documents-service's reading of its file."""
@@ -2925,20 +2938,7 @@ class KnowledgeService:
             "sourceType": s.type,
             "detail": {
                 "content": "\n\n".join(c.text for c in chunks),
-                "chunks": [
-                    {
-                        "index": c.position,
-                        "tokens": c.tokens,
-                        "location": _location(c.section, c.page),
-                        **cast(CitationParts, {"page": c.page} if c.page else {}),
-                        "kind": "content",
-                        "text": c.text,
-                        # What search matches for this piece: its own text, its children and its questions.
-                        "units": searched.get(c.id, []),
-                        "metadata": c.metadata or {},
-                    }
-                    for c in chunks
-                ],
+                "chunks": [_chunk_detail(c, searched) for c in chunks],
                 "revisions": [],
                 "versions": [
                     {
@@ -3977,6 +3977,21 @@ class ChunkDetail(CitationParts):
     text: str
     units: list[SearchedAs]
     metadata: Mapping[str, JsonValue]
+
+
+def _chunk_detail(c: ChunkRow, searched: Mapping[str, list[SearchedAs]]) -> ChunkDetail:
+    """A piece as a document's detail and its pieces page show it."""
+    return {
+        "index": c.position,
+        "tokens": c.tokens,
+        "location": _location(c.section, c.page),
+        **cast(CitationParts, {"page": c.page} if c.page else {}),
+        "kind": "content",
+        "text": c.text,
+        # What search matches for this piece: its own text, its children and its questions.
+        "units": searched.get(c.id, []),
+        "metadata": c.metadata or {},
+    }
 
 
 class Allowed(TypedDict, total=False):

@@ -24,7 +24,7 @@ from typing_extensions import TypeVar
 
 from .errors import ApiError, TooManyRequests
 from .ids import new_id
-from .listing import page_sizes
+from .listing import ListParams, page_sizes
 from .logging import get_logger
 from .request_timing import RequestTimingMiddleware, current_request_id
 from .settings import Settings
@@ -282,6 +282,46 @@ def paged(
     if labels is not None:
         out["labels"] = labels
     return out
+
+
+def page_rows(
+    rows: list[R],
+    params: ListParams,
+    *,
+    search: Callable[[R], str],
+    key: Callable[[R], str],
+    filters: Mapping[str, Callable[[R], str | None]] | None = None,
+    sortable: Mapping[str, Callable[[R], Any]] | None = None,
+) -> ListPage[R]:
+    """The ListResult JSON of rows a service holds in memory rather than in a table (the templates the team's plugins
+    ship), with the same `ids`, search, filters, facets, sort and page window as `ops_store.listing.list_page`, which
+    every list kept in a database uses instead. `search` gives a row's searchable text, `key` its id; rows keep the
+    order given unless `sortBy` names a `sortable` entry, and equal values stay in that order."""
+    filters = filters or {}
+    if params.ids is not None:
+        wanted = set(params.ids)
+        chosen = [r for r in rows if key(r) in wanted]
+    else:
+        words = (params.search or "").strip().casefold()
+        chosen = [r for r in rows if words in search(r).casefold()] if words else list(rows)
+
+    def kept(r: R, skip: str | None = None) -> bool:
+        return all(str(filters[k](r)) in v for k, v in params.filters.items() if k in filters and v and k != skip)
+
+    facets = {
+        name: {
+            str(value): sum(1 for r in chosen if kept(r, name) and str(read(r)) == str(value))
+            for value in {read(r) for r in chosen if kept(r, name)}
+            if value is not None
+        }
+        for name, read in filters.items()
+    }
+    listed = [r for r in chosen if kept(r)]
+    by = (sortable or {}).get(params.sort_by or "")
+    if by is not None:
+        listed.sort(key=by, reverse=params.sort_order != "asc")
+    page, offset = page_window(len(listed), params.page, params.page_size)
+    return paged(listed[offset : offset + params.page_size], len(listed), page, params.page_size, facets=facets)
 
 
 def ok(data: Any, status: int = 200) -> JSONResponse:

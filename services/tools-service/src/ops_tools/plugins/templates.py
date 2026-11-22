@@ -211,10 +211,7 @@ class ServiceCopies:
             ("documents-service", self.documents, None),
         ):
             try:
-                rows = cast(
-                    list[Json],
-                    await client.get("/v1/templates", params=params, tenant=tenant_id, team=team_id),
-                )
+                rows = await self._every(client, params, tenant_id, team_id)
             except (ServiceCallError, ServiceUnreachable) as e:
                 raise ServiceUnavailable(
                     f"{name} did not answer with the team's copies of this app's resources. Try again shortly.",
@@ -222,6 +219,22 @@ class ServiceCopies:
                 ) from e
             out += [r for r in rows if r.get("source") == source]
         return out
+
+    @staticmethod
+    async def _every(client: ServiceClient, params: dict[str, str] | None, tenant_id: str, team_id: str) -> list[Json]:
+        """Every row of a templates list: agents-service answers pages of the shared list, followed to the last;
+        both answer a page of the shared list."""
+        out: list[Json] = []
+        page = 1
+        while True:
+            asked = {**(params or {}), "page": str(page), "pageSize": "50"}
+            got = await client.get("/v1/templates", params=asked, tenant=tenant_id, team=team_id)
+            if isinstance(got, list):
+                return out + cast(list[Json], got)
+            out += cast(list[Json], got["data"])
+            if not got["pagination"]["hasNext"]:
+                return out
+            page += 1
 
 
 def who_adds(area: str, action: str) -> str:

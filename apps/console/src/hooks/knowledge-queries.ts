@@ -21,6 +21,7 @@ import type {
   WrittenItemInput,
 } from '@/lib/types/knowledge';
 import type { ListParams } from '@/lib/types/query';
+import { useServerList } from './server-list';
 import { useTeamQuery } from './team-query';
 import { useDebounced } from './use-debounced';
 
@@ -67,6 +68,13 @@ export const useSourceRuns = (id: string, p: ListParams<RunFilters>) =>
   usePagedQuery({ queryKey: kk.runs(id, p), queryFn: () => api.knowledge.sources.runs(id, p), refetchInterval: (q) => pollWhile(!!q.state.data?.data.some((r) => r.status === 'running')) });
 export const useSyncRun = (id: string | null) =>
   useTeamQuery({ queryKey: kk.run(id ?? ''), queryFn: () => api.knowledge.sources.run(id!), enabled: !!id, refetchInterval: (q) => pollWhile(q.state.data?.status === 'running') });
+/** A document's pieces matching `search`, a page at a time from GET /v1/items/{id}/chunks: a long document is never loaded whole to search it. */
+export const useItemPieces = (id: string | undefined, search: string, enabled: boolean) =>
+  useServerList(
+    ['item-pieces', id],
+    (ask) => sdk((ops) => ops.raw.kb.items_list_item_chunks({ path: { item_id: id ?? '' }, query: ask })),
+    { search, enabled: enabled && !!id, pageSize: 50 },
+  );
 export const useItem = (id: string | null) =>
   useTeamQuery({ queryKey: kk.item(id ?? ''), queryFn: () => api.knowledge.items.get(id!), enabled: !!id, refetchInterval: (q) => pollWhile(q.state.data?.status === 'processing') });
 export const useSourceKinds = (enabled = true) => useTeamQuery({ queryKey: kk.sourceKinds, queryFn: api.knowledge.sourceKinds, enabled, staleTime: 60_000 });

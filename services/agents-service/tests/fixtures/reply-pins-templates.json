@@ -114,42 +114,53 @@
   },
   "list": {
     "body": {
-      "data": [
-        {
-          "addCell": {
-            "action": "create",
-            "area": "skills"
-          },
-          "canAdd": true,
-          "copy": null,
-          "id": "cite-policy",
-          "installed": {
-            "changed": false,
-            "copies": 0,
-            "newerAvailable": false,
-            "version": null
-          },
-          "kind": "skill",
-          "off": null,
-          "plugin": {
-            "id": "test.templates",
-            "title": "Case desk",
-            "version": "0.2.0"
-          },
-          "removeCell": null,
-          "requires": {
-            "bind": [],
-            "resources": [],
-            "tools": [
-              "templates_get_case"
-            ]
-          },
-          "source": "plugin:test.templates",
-          "state": "available",
-          "title": "Cite the policy",
-          "version": 1
+      "data": {
+        "data": [
+          {
+            "addCell": {
+              "action": "create",
+              "area": "skills"
+            },
+            "canAdd": true,
+            "copy": null,
+            "id": "cite-policy",
+            "installed": {
+              "changed": false,
+              "copies": 0,
+              "newerAvailable": false,
+              "version": null
+            },
+            "kind": "skill",
+            "off": null,
+            "plugin": {
+              "id": "test.templates",
+              "title": "Case desk",
+              "version": "0.2.0"
+            },
+            "removeCell": null,
+            "requires": {
+              "bind": [],
+              "resources": [],
+              "tools": [
+                "templates_get_case"
+              ]
+            },
+            "source": "plugin:test.templates",
+            "state": "available",
+            "title": "Cite the policy",
+            "version": 1
+          }
+        ],
+        "facets": {},
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 20,
+          "total": 1,
+          "totalPages": 1
         }
-      ],
+      },
       "success": true
     },
     "status": 200
