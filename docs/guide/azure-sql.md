@@ -40,8 +40,7 @@ sqlcmd -b -U ops_migrator -d ops -i grants.sql
 |---|---|---|
 | A full install on Azure SQL or SQL Server, from the scripts to a signed-in console | The scripts and each service's stores are tested on SQL Server 2025; the whole install has not run on one | Planned |
 | Running the services on Azure SQL and SQL Server | Each service's store and isolation tests pass on SQL Server 2025; database code specific to PostgreSQL remains in some services and is moving into the shared layer | Partial |
-| Saved run state for workflows and chats | Its three tables are written with PostgreSQL-specific code and are not in the SQL Server scripts | Planned |
-| Knowledge search | PostgreSQL full-text search has no SQL Server equivalent in the scripts yet | Planned |
+| Knowledge search | PostgreSQL full-text search and pgvector have no SQL Server equivalent in the scripts yet; a search there returns no passages | Planned |
 | Sign-in data | The platform service still sets the tenant with PostgreSQL statements and uses four lookup functions that run before the tenant is known | Planned |
 | The worker's queue claim and the timer poller | The claim happens before the tenant is known, which SQL Server's block predicate refuses; the timer poller starts only on PostgreSQL | Planned |
 | Tenant policies for the tools, models, knowledge, files and documents tables | The same gap as on PostgreSQL ([Tenants and teams](data-and-database.md#tenants-and-teams)) | Planned |

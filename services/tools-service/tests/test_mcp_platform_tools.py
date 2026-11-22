@@ -73,7 +73,7 @@ def _content(result: Any) -> dict[str, Any]:
 class AskerMayDecide:
     """The tenant's requesterMayDecide, on: a person holding reviews.decide approves their own write."""
 
-    async def allowed(self, _tenant: str) -> bool:
+    async def allowed(self, _tenant: str, _team: str | None = None) -> bool:
         return True
 
 

@@ -132,6 +132,26 @@ async def test_the_requester_does_not_decide_unless_the_tenant_switched_requeste
     refused("own_request", ACCESS.can, dev, "reviews", "decide", requested_by=["dana@bank.test"])
 
 
+async def test_a_team_lets_the_requester_decide_in_one_area_only_and_the_floor_takes_it_back() -> None:
+    """D6: nobody approves their own request by default; a team turns it on for one area, which leaves its other areas
+    and every other team strict; the Security team's floor (`approvalsFloor`) takes it back everywhere."""
+    on_for_agents = {"requesterMayDecide": {"team_a": {"agents": True}}}
+    p = await person(access={"team_a": ["admin"], "team_b": ["admin"]}, policies=on_for_agents)
+    asked = ["a@bank.test"]
+    assert ACCESS.can(p, "agents", "decide", team="team_a", requested_by=asked) == "all"
+    refused("own_request", ACCESS.can, p, "workflows", "decide", team="team_a", requested_by=asked)
+    other_team = await person(
+        team="team_b", team_ids=["team_a", "team_b"], access={"team_b": ["admin"]}, policies=on_for_agents
+    )
+    refused("own_request", ACCESS.can, other_team, "agents", "decide", team="team_b", requested_by=asked)
+    default = await person(access={"team_a": ["admin"]})
+    refused("own_request", ACCESS.can, default, "agents", "decide", team="team_a", requested_by=asked)
+    floored = await person(
+        access={"team_a": ["admin"]}, policies={**on_for_agents, "approvalsFloor": {"requesterMayDecide": False}}
+    )
+    refused("own_request", ACCESS.can, floored, "agents", "decide", team="team_a", requested_by=asked)
+
+
 async def test_a_token_without_the_access_claim_maps_its_membership_roles() -> None:
     p = await person(roles={"team_a": "approver"})
     assert p.access == {}
@@ -364,7 +384,8 @@ def test_a_grid_encodes_into_a_short_claim_and_back() -> None:
     grants: list[Grant] = [("agents", "view", "all"), ("memory", "edit", "own"), ("chat", "view", "own")]
     claim = encode_grid(grants)
     assert sorted(decode_grid(claim)) == sorted(grants)
-    assert len(str(encode_grid([(a, x, "all") for a in AREAS for x in ACTIONS]))) < 600
+    # Every cell of the catalogue's 26 areas: one more area adds about 22 characters.
+    assert len(str(encode_grid([(a, x, "all") for a in AREAS for x in ACTIONS]))) < 640
 
 
 async def test_a_refusal_names_the_roles_the_workspaces_edited_grid_gives_the_cell() -> None:

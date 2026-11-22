@@ -362,10 +362,10 @@ def gates(checks: Checks) -> sa.Subquery:
     passed = sa.func.coalesce(val.c.passed, run.c.passed, 0)
     total = sa.func.coalesce(val.c.total, run.c.total, 0)
     regressions = sa.func.coalesce(val.c.regressions, run.c.regressions, 0)
-    cases = sa.func.coalesce(active.c.active, 0)
+    case_count = sa.func.coalesce(active.c.active, 0)
     ran_before = _ran_before(p.c.kind, p.c.subject_id, p.c.version)
     steps = _eval_steps(
-        summary_id, passed, total, regressions, checks, ran_before=ran_before, cases=cases, gated=~is_workflow
+        summary_id, passed, total, regressions, checks, ran_before=ran_before, cases=case_count, gated=~is_workflow
     )
     failing: list[sa.ColumnElement[bool]] = [steps.blocked]
     if "structural" in checks.blocking:
@@ -387,7 +387,7 @@ def gates(checks: Checks) -> sa.Subquery:
         total.label("total"),
         regressions.label("regressions"),
         val.c.checks_failing.label("checks_failing"),
-        cases.label("cases"),
+        case_count.label("cases"),
         steps.pass_rate.label("pass_rate_result"),
         steps.regressions.label("regressions_result"),
         sa.case((steps.stale, 1), else_=0).label("stale"),
@@ -487,15 +487,15 @@ async def version_gate(conn: AsyncConnection, kind: str, asset_id: str, version:
     )
     passed, total = sa.func.coalesce(newest.c.passed, 0), sa.func.coalesce(newest.c.total, 0)
     regressions = sa.func.coalesce(newest.c.regressions, 0)
-    cases = sa.func.coalesce(active.c.active, 0)
+    case_count = sa.func.coalesce(active.c.active, 0)
     ran_before = _ran_before(kind, asset_id, version)
-    steps = _eval_steps(newest.c.id, passed, total, regressions, checks, ran_before=ran_before, cases=cases)
+    steps = _eval_steps(newest.c.id, passed, total, regressions, checks, ran_before=ran_before, cases=case_count)
     q = sa.select(
         newest.c.id.label("run_id"),
         passed.label("passed"),
         total.label("total"),
         regressions.label("regressions"),
-        cases.label("cases"),
+        case_count.label("cases"),
         steps.pass_rate.label("pass_rate_result"),
         steps.regressions.label("regressions_result"),
         sa.case((steps.stale, 1), else_=0).label("stale"),

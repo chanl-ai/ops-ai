@@ -12,6 +12,7 @@ ask models-service for the aliases, and the test, eval and job routes run the mo
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Annotated, Literal, TypeAlias, cast
 
 from fastapi import APIRouter, Body, Depends, Query
@@ -742,6 +743,10 @@ async def publish_preview(rt: Rt, me: Me, agent_id: str, version: Annotated[int,
     return ok(decision.record())
 
 
+# The one eval problem that holds a publish request for a reviewer instead of refusing it.
+HELD = "eval_setting_unread"
+
+
 async def _publish_problems(rt: Runtime, row: AgentRow, version: int, spec: Json) -> list[Json]:
     """What stops a version's publish: what its brief names and the agent lacks, what in the skills it pins must not
     run as stored, and its evals (`eval_gate`). The check and the publish both read this list."""
@@ -758,7 +763,8 @@ async def publish_check(rt: Rt, me: Me, _: Tx, agent_id: str, version: Annotated
     row = await changeable(rt, me, agent_id, "publish")
     require_newest_draft(row, version)
     problems = await _publish_problems(rt, row, version, (await registry(rt).version(agent_id, version)).spec)
-    return ok({"canRequest": not problems, "problems": problems})
+    # An unread eval setting is listed but does not stop the request: it holds it for a reviewer (request_publish).
+    return ok({"canRequest": all(p["kind"] == HELD for p in problems), "problems": problems})
 
 
 @router.post("/{agent_id}/publish-requests", response_model=Envelope[PublishReview], status_code=201)
@@ -770,7 +776,12 @@ async def request_publish(rt: Rt, me: Me, agent_id: str, body: PublishRequestInp
     require_newest_draft(row, body.version)
     v = await reg.version(agent_id, body.version)
     spec = v.spec
-    if problems := await _publish_problems(rt, row, body.version, spec):
+    problems = await _publish_problems(rt, row, body.version, spec)
+    # An unread eval setting holds the request for a reviewer, as an unread publishReview does; the approval reads the
+    # setting again and refuses while it is still unread (publish_reviews.decide), so nothing publishes unchecked.
+    unread = any(p["kind"] == HELD for p in problems)
+    problems = [p for p in problems if p["kind"] != HELD]
+    if problems:
         raise Unprocessable(
             "This version cannot be published yet: " + " ".join(str(p["message"]) for p in problems),
             code="cannot_publish",
@@ -781,6 +792,8 @@ async def request_publish(rt: Rt, me: Me, agent_id: str, body: PublishRequestInp
     named = cast(dict[str, str], spec.get("accounts") or {})
     await require_team_accounts(rt, str(row.team_id or ""), [("The agent", a, n) for a, n in named.items()])
     decision = await _publish_decision(rt, agent_id, row, body.version)
+    if unread:
+        decision = replace(decision, review_required=True, reason="policy_unread")
     approved = not decision.review_required
     review_body = {
         **agent_review_body(agent_id, spec, row, v, note=body.note, by=me.email),

@@ -252,7 +252,7 @@ class _Required:
 
 @pytest.mark.parametrize(
     ("setting", "refused"),
-    [("off", None), ("on", "eval_no_cases"), ("unread", "eval_setting_unread"), ("no platform", None)],
+    [("off", None), ("on", "eval_no_cases"), ("unread", "held"), ("no platform", None)],
 )
 async def test_the_team_setting_decides_whether_an_agent_with_no_cases_publishes(
     dev_platform: AsyncClient, setting: str, refused: str | None
@@ -263,6 +263,11 @@ async def test_the_team_setting_decides_whether_an_agent_with_no_cases_publishes
         asked = await c.post(f"/v1/agents/{aid}/publish-requests", json={"version": 1, "note": "go"}, headers=OPS)
         if refused is None:
             assert asked.status_code == 201, asked.text
+        elif refused == "held":
+            # Unread, like an unread publishReview, holds the request for a reviewer instead of publishing.
+            body = asked.json()["data"]
+            assert asked.status_code == 201 and body["status"] == "pending", asked.text
+            assert body["agentPublish"]["reviewReason"] == "policy_unread", asked.text
         else:
             assert asked.status_code == 422 and _kinds(asked) == [refused], asked.text
 

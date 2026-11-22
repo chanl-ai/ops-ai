@@ -10,7 +10,7 @@
 
 PREVIEW_WORKTREES ?= $(abspath $(STACK_HOME)/../ops-ai-worktrees)
 PREVIEW_PAGE ?= $(STACK_HOME)/.run/previews.html
-PREVIEW = python3 $(ROOT)/scripts/preview.py --home $(STACK_HOME) --worktrees $(PREVIEW_WORKTREES) --run-root $(STACK_HOME)/.run --page $(PREVIEW_PAGE) $(if $(DRY_RUN),--dry-run)
+PREVIEW = python3 $(ROOT)/scripts/preview.py --home $(STACK_HOME) --worktrees $(PREVIEW_WORKTREES) --run-root $(STACK_HOME)/.run --page $(PREVIEW_PAGE) --data-root $(STACK_HOME)/.data $(if $(DRY_RUN),--dry-run)
 
 wt: ## Worktree and stack for BRANCH on the next free port offset (shared package caches); refuses a fourth, naming the three
 	@$(PREVIEW) start --branch "$(BRANCH)"
