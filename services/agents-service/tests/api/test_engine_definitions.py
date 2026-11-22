@@ -131,6 +131,9 @@ async def test_the_workflows_list_holds_v2_beside_v1_on_the_server(client: Async
     await client.post("/v1/runs", json={"workflowId": "both_e", "input": {"customerId": "C1", "amount": 5}})
     found = (await client.get("/v1/workflows", params={"search": "both kinds"})).json()["data"]["data"]
     assert [(w["id"], w["status"], w["runs24h"]) for w in found] == [("both_e", "live", 1)]
+    # A picker labels a stored choice by id on page one, whatever the page size or search.
+    named_by_id = await client.get("/v1/workflows", params={"ids": "both_e", "pageSize": 1, "search": "nothing"})
+    assert [w["id"] for w in named_by_id.json()["data"]["data"]] == ["both_e"], named_by_id.text
 
 
 async def test_a_draft_stays_when_its_template_copy_cannot_be_released(

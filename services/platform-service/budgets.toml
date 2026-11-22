@@ -74,6 +74,7 @@ transactions = 2   # listed: the assistants' names are the install's own rows (o
 connections = 2
 
 ["GET /v1/people-names"]
+query = { emails = "ana@example.com" }
 queries = 8   # the access.view decision a Chat user fails reads the caller's roles
 
 ["GET /v1/people/{person_id}/permissions"]
@@ -133,6 +134,7 @@ connections = 3
 queries = 9
 
 ["GET /v1/team-names"]
+query = { ids = "team_x" }
 queries = 8   # the access.view decision a Chat user fails reads the caller's roles
 
 ["GET /v1/teams"]

@@ -2213,7 +2213,8 @@ export const agentsOperations = {
       "status",
       "startable",
       "takesFiles",
-      "engine"
+      "engine",
+      "ids"
     ],
     "stream": false
   },
