@@ -366,6 +366,6 @@ export function createHttpApi(baseUrl: string): OpsApi {
       remove: (id) => send('DELETE', `/tests/${id}`),
     },
     lookups: { get: () => get('/lookups') },
-    teams: { list: () => get('/teams'), create: (i) => send('POST', '/teams', i) },
+    teams: { list: (p) => get(`/teams?${qs(p)}`), create: (i) => send('POST', '/teams', i) },
   };
 }

@@ -984,11 +984,6 @@ class EnvelopeListTeamName(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeListTeamOut(TypedDict, closed=True):
-    data: list[TeamOut]
-    success: Literal[True]
-
-
 class HoldersOut(TypedDict, closed=True):
     holders: list[Holder]
     roles: list[RoleRef]
@@ -1032,6 +1027,12 @@ class ListResultRoleHolderOut(TypedDict, closed=True):
 
 class ListResultRoleOut(TypedDict, closed=True):
     data: list[RoleOut]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
+class ListResultTeamOut(TypedDict, closed=True):
+    data: list[TeamOut]
     facets: dict[str, dict[str, int]]
     pagination: Pagination
 
@@ -1141,6 +1142,11 @@ class EnvelopeListResultRoleHolderOut(TypedDict, closed=True):
 
 class EnvelopeListResultRoleOut(TypedDict, closed=True):
     data: ListResultRoleOut
+    success: Literal[True]
+
+
+class EnvelopeListResultTeamOut(TypedDict, closed=True):
+    data: ListResultTeamOut
     success: Literal[True]
 
 

@@ -1535,6 +1535,25 @@
         "title": "Envelope[ListResult[RoleOut]]",
         "type": "object"
       },
+      "Envelope_ListResult_TeamOut__": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ListResult_TeamOut_"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[ListResult[TeamOut]]",
+        "type": "object"
+      },
       "Envelope_ListResult_WorkspaceTeamOut__": {
         "additionalProperties": false,
         "properties": {
@@ -2192,29 +2211,6 @@
           "data"
         ],
         "title": "Envelope[list[TeamName]]",
-        "type": "object"
-      },
-      "Envelope_list_TeamOut__": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/TeamOut"
-            },
-            "title": "Data",
-            "type": "array"
-          },
-          "success": {
-            "const": true,
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "data"
-        ],
-        "title": "Envelope[list[TeamOut]]",
         "type": "object"
       },
       "Envelope_list_str__": {
@@ -3224,6 +3220,38 @@
           "facets"
         ],
         "title": "ListResult[RoleOut]",
+        "type": "object"
+      },
+      "ListResult_TeamOut_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/TeamOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "facets": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Facets",
+            "type": "object"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        },
+        "required": [
+          "data",
+          "pagination",
+          "facets"
+        ],
+        "title": "ListResult[TeamOut]",
         "type": "object"
       },
       "ListResult_WorkspaceTeamOut_": {
@@ -19166,9 +19194,103 @@
     },
     "/v1/teams": {
       "get": {
-        "description": "The teams the caller may switch to: their own, and every active team for a workspace admin.",
+        "description": "One page of the teams the caller may switch to, by name, on the shared list contract: their own, and every\nactive team for a workspace admin. `search` matches the name; `ids` names exact teams, as the switcher labels\nthe current one.",
         "operationId": "teams_list_teams",
         "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",
@@ -19191,7 +19313,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_list_TeamOut__"
+                  "$ref": "#/components/schemas/Envelope_ListResult_TeamOut__"
                 }
               }
             },

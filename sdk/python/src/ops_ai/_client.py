@@ -82,7 +82,7 @@ class Noun:
 
 
 NOUNS: dict[str, Noun] = {
-    "teams": Noun("platform", list="teams_list_teams", paged=False),
+    "teams": Noun("platform", list="teams_list_teams"),
     "agents": Noun("agents", list="agents_list_agents", get="agents_get_agent", create="agents_create_agent"),
     "workflows": Noun("agents", list="workflows_list_workflows", get="workflows_get_workflow"),
     "threads": Noun("agents", list="threads_list_threads", get="threads_thread_state", create="threads_create_thread"),

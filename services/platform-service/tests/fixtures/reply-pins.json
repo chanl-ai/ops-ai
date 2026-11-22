@@ -12546,22 +12546,33 @@
     }
   },
   "signOut": null,
-  "teams": [
-    {
-      "id": "<team>",
-      "memberCount": 1,
-      "name": "Team admin <team>",
-      "ownerGroups": [],
-      "role": "admin",
-      "scope": "owned"
-    },
-    {
-      "id": "<team>",
-      "memberCount": 1,
-      "name": "Team viewer <team>",
-      "ownerGroups": [],
-      "role": "admin",
-      "scope": "owned"
+  "teams": {
+    "data": [
+      {
+        "id": "<team>",
+        "memberCount": 1,
+        "name": "Team admin <team>",
+        "ownerGroups": [],
+        "role": "admin",
+        "scope": "owned"
+      },
+      {
+        "id": "<team>",
+        "memberCount": 1,
+        "name": "Team viewer <team>",
+        "ownerGroups": [],
+        "role": "admin",
+        "scope": "owned"
+      }
+    ],
+    "facets": {},
+    "pagination": {
+      "hasNext": false,
+      "hasPrev": false,
+      "page": 1,
+      "pageSize": 20,
+      "total": 2,
+      "totalPages": 1
     }
-  ]
+  }
 }

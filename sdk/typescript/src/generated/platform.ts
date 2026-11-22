@@ -1496,7 +1496,9 @@ export interface paths {
         };
         /**
          * List Teams
-         * @description The teams the caller may switch to: their own, and every active team for a workspace admin.
+         * @description One page of the teams the caller may switch to, by name, on the shared list contract: their own, and every
+         *     active team for a workspace admin. `search` matches the name; `ids` names exact teams, as the switcher labels
+         *     the current one.
          */
         get: operations["teams_list_teams"];
         put?: never;
@@ -2140,6 +2142,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[ListResult[TeamOut]] */
+        Envelope_ListResult_TeamOut__: {
+            data: components["schemas"]["ListResult_TeamOut_"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[ListResult[WorkspaceTeamOut]] */
         Envelope_ListResult_WorkspaceTeamOut__: {
             data: components["schemas"]["ListResult_WorkspaceTeamOut_"];
@@ -2439,16 +2450,6 @@ export interface components {
         Envelope_list_TeamName__: {
             /** Data */
             data: components["schemas"]["TeamName"][];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
-        /** Envelope[list[TeamOut]] */
-        Envelope_list_TeamOut__: {
-            /** Data */
-            data: components["schemas"]["TeamOut"][];
             /**
              * Success
              * @constant
@@ -2811,6 +2812,18 @@ export interface components {
         ListResult_RoleOut_: {
             /** Data */
             data: components["schemas"]["RoleOut"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
+        };
+        /** ListResult[TeamOut] */
+        ListResult_TeamOut_: {
+            /** Data */
+            data: components["schemas"]["TeamOut"][];
             /** Facets */
             facets: {
                 [key: string]: {
@@ -12197,7 +12210,14 @@ export interface operations {
     };
     teams_list_teams: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -12210,7 +12230,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_list_TeamOut__"];
+                    "application/json": components["schemas"]["Envelope_ListResult_TeamOut__"];
                 };
             };
             /** @description Invalid request */

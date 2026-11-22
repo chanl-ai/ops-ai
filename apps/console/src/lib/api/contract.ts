@@ -280,7 +280,9 @@ export interface OpsApi {
   };
   /** Teams the user can switch between. The current team id is sent with every call (see team-context.ts). */
   teams: {
-    list(): Promise<Team[]>;
+    /** One page of the person's teams by name: `search` matches the name, `ids` names exact teams (the current one, a
+     * record's owning team) so a label never needs the whole list. */
+    list(p: ListParams): Promise<ListResult<Team>>;
     /** Absent under platform sign-in, where an admin creates teams in platform settings; the switcher then offers no Add team. */
     create?(input: TeamInput): Promise<Team>;
     /** The person's role on each team, read fresh from platform-service so a role change shows without signing in

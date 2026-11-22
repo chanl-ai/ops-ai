@@ -171,18 +171,18 @@ export function useCanCheck(): (area: string, action: string, everyTeam?: boolea
 }
 
 /**
- * The person's teams in which they hold `area.action`: all of them when a workspace role grants it, undefined while
- * permissions load. A list that spans teams shows only these, and a team picker offers only these.
+ * The person's teams in which they hold `area.action`: `'all'` when a workspace role grants it in every team,
+ * undefined while permissions load. A list that spans teams shows only these, and a team picker offers only these.
  */
-export function useTeamsAllowing(area: string, action: string): string[] | undefined {
-  const { team, teamId, teams } = useTeam();
+export function useTeamsAllowing(area: string, action: string): string[] | 'all' | undefined {
+  const { team, teamId } = useTeam();
   const perms = useMyPermissions();
   const here = useCanCheck()(area, action);
   // Without per-team permissions only the current team's answer is known.
   if (!api.teams.me) return here === undefined ? undefined : here ? [team?.id ?? teamId] : [];
   if (!perms.data) return undefined;
   const held = (list: { area: string; action: string }[]) => list.some((p) => p.area === area && p.action === action);
-  if (held(perms.data.workspace ?? [])) return teams.map((t) => t.id);
+  if (held(perms.data.workspace ?? [])) return 'all';
   return perms.data.teams.filter((t) => held(t.permissions)).map((t) => t.teamId);
 }
 

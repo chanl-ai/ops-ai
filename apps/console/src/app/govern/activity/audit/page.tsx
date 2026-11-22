@@ -24,7 +24,8 @@ import { useDownloadFile, useExportAudit } from '@/hooks/file-queries';
 import { useAudit } from '@/hooks/governance-queries';
 import { useNavAllows } from '@/hooks/me-queries';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
-import { useTeam } from '@/hooks/use-team';
+import { useTeam, useTeamsNamed } from '@/hooks/use-team';
+import { teamLabel } from '@/components/shared/team-name';
 import { ApiError } from '@/lib/api';
 import { AUDIT_LOG } from '@/lib/nav';
 import { dateTime, plural, relativeTime } from '@/lib/format';
@@ -110,7 +111,7 @@ const VIEWS: { id: AuditView; label: string; icon?: typeof Rocket }[] = [
 ];
 
 export default function AuditPage() {
-  const { team, teams } = useTeam();
+  const { team } = useTeam();
   // platform-service reads the log for whoever holds audit.view in the team; anyone else is told so without a request.
   const may = useNavAllows()(AUDIT_LOG);
   const canExport = may === true;
@@ -127,6 +128,7 @@ export default function AuditPage() {
   const cols = React.useMemo(() => columns(showTeam), [showTeam]);
   const counts = query.data?.viewCounts;
   const facets = query.data?.facets ?? {};
+  const teams = useTeamsNamed(Object.keys(facets.teamId ?? {}));
   const withCounts = (column: string, opts: { label: string; value: string }[]) => opts.map((o) => ({ ...o, count: facets[column]?.[o.value] ?? 0 })).filter((o) => o.count > 0 || column === 'action');
 
   const exportAudit = useExportAudit();
@@ -202,7 +204,7 @@ export default function AuditPage() {
               { column: 'action', title: 'Action', options: withCounts('action', options(ACTION_LABEL)) },
               { column: 'targetType', title: 'Target', options: withCounts('targetType', options(TARGET_LABEL)) },
               { column: 'actorKind', title: 'Actor', options: withCounts('actorKind', [{ value: 'person', label: 'Person' }, { value: 'workflow', label: 'Workflow identity' }]) },
-              ...(showTeam ? [{ column: 'teamId', title: 'Team', options: withCounts('teamId', teams.map((t) => ({ value: t.id, label: t.name }))) }] : []),
+              ...(showTeam ? [{ column: 'teamId', title: 'Team', options: withCounts('teamId', Object.keys(facets.teamId ?? {}).map((id) => ({ value: id, label: teamLabel(id, teams) }))) }] : []),
             ]}
             onColumnFiltersChange={list.onColumnFiltersChange}
             serverPagination={serverPagination(list, query)}

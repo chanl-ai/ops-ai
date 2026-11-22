@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { pageOptions } from '@/lib/api/options';
 import { fetchAgents, fetchWorkflows } from './queries';
 import { sdk } from '@/lib/api/ops-sdk';
+import type { Team } from '@/lib/types/team';
 import type { AgentFilters, ConnectionOptionsPage, Option, OptionsPage, OptionsParams, ToolOptionsPage, WorkflowFilters } from '@/lib/types/query';
 import type { RefKind, ReferenceContext } from '@/lib/types/references';
 import type { SkillLoading } from '@/lib/types/skills';
@@ -39,6 +40,26 @@ const agentsWhere = (key: string, filters: AgentFilters = {}): OptionSource => (
   },
 });
 export const agentOptions = agentsWhere('agent-options');
+/** A page of teams to pick: each choice carries its team, so a switch needs no second read. */
+export interface TeamOptionsPage extends OptionsPage {
+  data: (OptionsPage['data'][number] & { team: Team })[];
+}
+
+/**
+ * The teams the person may switch to, by name, from GET /v1/teams (`ids` labels a stored choice); a page number is the
+ * cursor. With `allowed`, any other team is shown disabled with `reason`, so a form offers only the teams it may act in.
+ */
+export const teamOptions = (allowed?: string[], reason = 'You can’t do this in that team.'): OptionSource<TeamOptionsPage> => ({
+  key: allowed ? `team-options:${[...allowed].sort().join(',')}` : 'team-options',
+  fetch: async ({ search, cursor, limit = 25, ids }) => {
+    const page = Number(cursor ?? 1);
+    const res = await api.teams.list({ page, pageSize: ids?.length ? ids.length : limit, ids: ids?.length ? ids : undefined, search: ids?.length ? undefined : search });
+    return {
+      data: res.data.map((t) => ({ id: t.id, label: t.name, hint: t.scope === 'all' ? 'All teams' : null, disabled: allowed && !allowed.includes(t.id) ? reason : null, team: t })),
+      nextCursor: !ids?.length && res.pagination.hasNext ? String(page + 1) : null,
+    };
+  },
+});
 /** The agents the person may hand a chat to, as GET /chat/agents lists them: the composer's `@` list. */
 export const chatAgentOptions: OptionSource = { key: 'chat-agent-options', fetch: (p) => api.chat.agentOptions(p) };
 /** The agents an embed can serve: published ones. */

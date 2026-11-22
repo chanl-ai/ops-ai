@@ -180,6 +180,43 @@ class TeamStore(TenantDb):
             for r in found
         ]
 
+    async def teams_page(self, tenant_id: str, user_id: str, params: ListParams, *, everywhere: bool) -> ListPage:
+        """`teams_of` on the shared list contract, by name: `search` matches the name and `ids` names exact teams
+        (the switcher's current team). A workspace admin (`everywhere`) is offered every active team, as admin where
+        they are no member; a member count is one correlated count per row of the page, in the page's statement."""
+        mine = sa.and_(members.c.team_id == teams.c.id, members.c.user_id == user_id, members.c.status == "active")
+        joined = teams.outerjoin(members, mine) if everywhere else teams.join(members, mine)
+        others = members.alias("others")
+        size = (
+            sa.select(sa.func.count())
+            .where(others.c.team_id == teams.c.id, others.c.status == "active")
+            .correlate(teams)
+            .scalar_subquery()
+        )
+        q = (
+            sa.select(
+                teams.c.id,
+                teams.c.name,
+                teams.c.owner_groups,
+                teams.c.scope,
+                sa.func.coalesce(members.c.role, "admin").label("role"),
+                size.label("member_count"),
+            )
+            .select_from(joined)
+            .where(teams.c.status == "active")
+        )
+        async with self.tenant_tx(tenant_id) as c:
+            page = await list_page(
+                c,
+                q,
+                params,
+                search=[teams.c.name],
+                sortable={"name": teams.c.name_key},
+                default_sort=teams.c.name_key.asc(),
+            )
+        page["data"] = [TeamOf.model_validate(r).model_dump(by_alias=True) for r in page["data"]]
+        return page
+
     async def scope_of(self, tenant_id: str, team_id: str) -> str | None:
         async with self.tenant_tx(tenant_id) as c:
             return (await c.execute(sa.select(teams.c.scope).where(teams.c.id == team_id))).scalar()
