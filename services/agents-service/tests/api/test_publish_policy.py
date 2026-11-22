@@ -348,7 +348,8 @@ async def test_publishing_a_tidied_workflow_needs_no_review_and_a_real_change_st
     _data(await client.post("/v1/workflows/definitions", json={"definition": placed}, headers=BUILDER), 201)
     first = _data(await client.post("/v1/workflows/definitions/tidy_a/publish-requests", json={}, headers=BUILDER), 201)
     assert first["status"] == "approved", first
-    await set_mode(client, "workflows", "major")
+    # Moving steps changes nothing that runs, so even a team that reviews every publish skips it.
+    await set_mode(client, "workflows", "always")
     _data(
         await client.post("/v1/workflows/definitions", json={"definition": _moved(placed, 160)}, headers=BUILDER), 201
     )
@@ -358,6 +359,7 @@ async def test_publishing_a_tidied_workflow_needs_no_review_and_a_real_change_st
         False,
         "minor_change",
     ), moved
+    await set_mode(client, "workflows", "major")
     edited = _moved(placed, 320)
     edited["nodes"][1] = edited["nodes"][1] | {"parameters": {"values": {"customer": "$.input.other"}}}
     _data(await client.post("/v1/workflows/definitions", json={"definition": edited}, headers=BUILDER), 201)
