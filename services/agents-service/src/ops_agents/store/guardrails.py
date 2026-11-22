@@ -7,7 +7,6 @@ Publish requests are the registry's (`registry_publish_requests`, kind `guardrai
 
 from __future__ import annotations
 
-import re
 from typing import ClassVar, NotRequired, TypedDict, cast
 
 import sqlalchemy as sa
@@ -17,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from ops_service_kit.errors import Conflict
 from ops_service_kit.http import Json, Out
 from ops_service_kit.ids import new_id, now_iso
-from ops_service_kit.names import cap_slug
+from ops_service_kit.names import slugify
 from ops_store import Guarantee
 from ops_store.rows import rows
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, team_owned_via
@@ -130,7 +129,7 @@ class GuardrailVersion(Out):
 
 
 def _slug(name: str) -> str:
-    return cap_slug(re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-"), 120) or "guardrail"
+    return slugify(name, width=120, fallback="guardrail")
 
 
 class GuardrailRegistry(VersionedRegistry[GuardrailRow, GuardrailVersion]):

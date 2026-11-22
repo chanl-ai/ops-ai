@@ -8,7 +8,6 @@ rows with its id, listed by `GET /v1/executions?link=<id>`.
 
 # No `from __future__ import annotations`: FastAPI resolves the `Depends(caller)` annotations at import, and
 # `caller` is local to the router factory.
-import re
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Query
@@ -21,7 +20,7 @@ from ops_identity.fastapi import Tx
 from ops_service_kit.errors import NotFound, Unprocessable
 from ops_service_kit.http import Envelope, In, ListResult, Out, ok
 from ops_service_kit.listing import ListQuery
-from ops_service_kit.names import Name, Name120, cap_slug
+from ops_service_kit.names import Name, Name120, slugify
 
 from .callers import caller_in
 from .mcp_server import WORKFLOW_PREFIX
@@ -89,7 +88,7 @@ class McpLinkView(Out):
 
 def slug_of(name: str) -> str:
     """The address part for a link's name: lowercase words joined by hyphens, as an assistant shows it."""
-    return cap_slug(re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-"), 64) or "link"
+    return slugify(name, width=64, fallback="link")
 
 
 def mcp_links_router(
