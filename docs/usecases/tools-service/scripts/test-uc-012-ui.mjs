@@ -50,11 +50,14 @@ await withUiStack(
       await dialog.locator('#mk-openapi').click();
       await dialog.getByLabel('Spec URL').fill(specUrl);
       const discovered = armed(page.waitForResponse((r) => r.request().method() === 'POST' && r.url() === `${tools}/v1/tool-modules/discover`, { timeout: 60_000 }));
+      const paged = armed(page.waitForResponse((r) => r.request().method() === 'GET' && r.url().startsWith(`${tools}/v1/tool-modules/discoveries/`), { timeout: 60_000 }));
       await dialog.getByTestId('import-next').click();
       const discoverRes = await discovered;
       const found = discoverRes ? (await discoverRes.json()).data : undefined;
+      const pageRes = await paged;
+      const ops = pageRes ? (await pageRes.json()).data?.data : undefined;
       // Access comes from the method: both documented operations are GETs, so both read and start selected.
-      check('the dialog reads the bank document through tools-service, each GET a read', discoverRes?.status() === 200 && found?.operations?.every((o) => o.access === 'read') && found.operations.length === 2, { status: discoverRes?.status(), ops: found?.operations?.map((o) => [o.name, o.access]) });
+      check('the dialog reads the bank document through tools-service, each GET a read', discoverRes?.status() === 200 && found?.operationTotal === 2 && ops?.length === 2 && ops.every((o) => o.access === 'read'), { status: discoverRes?.status(), found, ops: ops?.map((o) => [o.name, o.access]) });
 
       await dialog.locator('#op-latest_statement').click();
       const created = armed(page.waitForResponse((r) => r.request().method() === 'POST' && r.url() === `${tools}/v1/tool-modules`, { timeout: 60_000 }));

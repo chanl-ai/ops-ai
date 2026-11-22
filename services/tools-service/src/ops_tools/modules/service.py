@@ -64,6 +64,7 @@ from ..registry import approval_policy
 from ..secrets import SecretResolver, scrub
 from ..store.calls import CallLog, CallStats, DayStats, GatewayCall
 from ..store.connections import Account, ConnectionStore
+from ..store.discoveries import Discoveries, DiscoveryRow, FoundOperation, NameRow
 from ..store.mocks import MockStore
 from ..store.module_list import ModuleList, Window
 from ..store.modules import (
@@ -100,7 +101,7 @@ from ..store.modules import (
 )
 from . import openapi
 from .directory import Directory, Team, owns_module
-from .discovered import Discovered, DiscoveredOperation, PublicDiscovered, PublicOperation
+from .discovered import Discovered, DiscoveredOperation, DiscoverySummary, PublicDiscovered, PublicOperation
 from .executions import CallRowJson, DayJson, ModuleActivityJson, call_row
 from .policy import PublishPolicy, RequesterMayDecide, ToolsMode, WriteApprovals, own_request_refusal, tool_mode
 from .review_events import ACCESS_REQUESTED, access_event, policy_changed_event
@@ -111,6 +112,7 @@ from .schemas import (
     CodeOperationIn,
     CodeSettingsIn,
     DiscoveredOperationIn,
+    DiscoverIn,
     HttpOperationIn,
     ImportOperationsIn,
     ModuleDetailsPatchIn,
@@ -468,6 +470,8 @@ class OperationView(AnswerView):
 
 # Short enough that an approval granted for 30 days (the test default) is not expiring the day it is granted.
 EXPIRING = timedelta(days=7)
+# How long a discovery's operations are kept for the picker; import reads the source again, so none is needed after.
+DISCOVERY_LIFETIME = timedelta(hours=24)
 GRANT_VIEWS = ("active", "expiring", "requested", "expired", "ended", "all")
 MODULE_VIEWS = ("all", "needs_approval", "expiring", "expired", "failing", "security_review")
 FAILING_RATE = 0.02
@@ -697,6 +701,12 @@ def _code_operation(f: CodeOperationIn) -> DiscoveredOperation:
     }
 
 
+def _person(who: Caller) -> str:
+    """Who a stored discovery belongs to: the principal's subject. Every dev-header caller (`verified` false) shares
+    one subject and is told apart by the name `X-Dev-User` gives, as is a caller made in code (no principal)."""
+    return who.principal.sub if who.principal is not None and who.verified else who.name
+
+
 def _kebab(s: str) -> str:
     return re.sub(r"^-|-$", "", re.sub(r"[^a-z0-9]+", "-", s.lower()))
 
@@ -847,6 +857,8 @@ class ModuleService:
         self.connections = ConnectionStore(store.engine)
         # The Tools list, chosen and paged in SQL.
         self.listing = ModuleList(store.engine)
+        # What a discovery found, kept for 24 hours for the add-module picker.
+        self.discoveries = Discoveries(store.engine)
         # The operations' mock answers, which Try it's test answer reads as a test run does.
         self.mocks = MockAnswers(MockStore(store.engine))
         # Signs the test console's real reads in through the module's connection, in the test environment; without it
@@ -3166,9 +3178,68 @@ class ModuleService:
         ]
         return {**result, "operations": ops}
 
-    async def discover(self, who: Caller, source: ModuleSourceIn) -> PublicDiscovered:
+    async def discover(self, who: Caller, source: DiscoverIn) -> DiscoverySummary:
+        """Reads the source and stores what it lists for 24 hours, for the caller and the module named (none for a new
+        module): its meta and operation count are answered, its operations are paged by `discovered_operations`."""
         _can(who, "tools", "create", what="tools")
-        return self._public(await self._discover(who, source))
+        module_id = (await self._changeable(who, source.module_id))["id"] if source.module_id else None
+        found = self._public(await self._discover(who, source))
+        ops: list[FoundOperation] = [
+            {
+                "name": o["name"],
+                "description": o["description"],
+                "access": o["access"],
+                "method": o["method"],
+                "path": o["path"],
+                "group": o["group"],
+                "input": list(o["input"]),
+            }
+            for o in found["operations"]
+        ]
+        now = self.clock()
+        summary: DiscoverySummary = {
+            "id": new_id("disc"),
+            "type": found["type"],
+            "system": found["system"],
+            "suggestedName": found["suggestedName"],
+            "version": found["version"],
+            "endpoint": found["endpoint"],
+            "warnings": list(found["warnings"]),
+            "noAuth": bool(found.get("noAuth", False)),
+            "operationTotal": len(ops),
+        }
+        meta: dict[str, JsonValue] = {
+            k: cast(JsonValue, v) for k, v in summary.items() if k not in ("id", "operationTotal")
+        }
+        await self.discoveries.save(
+            tenant_id=who.tenant_id,
+            team_id=who.team.id,
+            id=summary["id"],
+            person=_person(who),
+            module_id=module_id,
+            meta=meta,
+            operations=ops,
+            now=now,
+            expires_at=now + DISCOVERY_LIFETIME,
+        )
+        return summary
+
+    async def _discovery(self, who: Caller, discovery_id: str) -> DiscoveryRow:
+        found = await self.discoveries.find(
+            who.tenant_id, discovery_id, team_id=who.team.id, person=_person(who), now=self.clock()
+        )
+        if found is None:
+            raise NotFound("Discovery")
+        return found
+
+    async def discovered_operations(self, who: Caller, discovery_id: str, q: ListParams) -> ListPage[Any]:
+        """A page of the caller's own discovery, with `addedTotal`: how many matching ones the module already has."""
+        page, added = await self.discoveries.operations(who.tenant_id, await self._discovery(who, discovery_id), q)
+        return {**page, "addedTotal": added}  # type: ignore[typeddict-unknown-key]
+
+    async def discovered_names(self, who: Caller, discovery_id: str, q: ListParams) -> dict[str, list[NameRow]]:
+        """Every matching operation of the caller's own discovery the module does not have yet, by name and access."""
+        return {"data": await self.discoveries.names(who.tenant_id, await self._discovery(who, discovery_id), q)}
 
     @staticmethod
     def _chosen(found: Discovered, chosen: Sequence[DiscoveredOperation]) -> list[DiscoveredOperation]:

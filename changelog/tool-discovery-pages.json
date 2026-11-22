@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-22",
+  "title": "Large API documents open faster in the tool picker",
+  "description": "When you add operations from an OpenAPI document or an MCP server, what discovery finds is kept for a day for you alone, without the calls' headers, and read a page at a time instead of all at once.",
+  "tag": "improved"
+}
