@@ -59,6 +59,8 @@ class UsedIn(Out):
     status: Literal["live", "draft", "paused"]
     # The agent's own one-step workflow, which publishes with it (UX walk agents-2).
     own: bool | None = None
+    # `email` when the workflow starts from an email, so the agent's Channels tab lists it under Email.
+    channel: Literal["email"] | None = None
 
 
 class GuardrailPin(Out):
@@ -187,6 +189,8 @@ class BriefView(Out):
     purpose: str
     goal: str = ""
     how_to_answer: str = ""
+    hand_off: list[str] = Field(default_factory=list[str])
+    examples: str = ""
     never: list[str] = Field(default_factory=list[str])
     success: list[str] = Field(default_factory=list[str])
 
@@ -754,8 +758,10 @@ class PublishReview(Out):
     # Minutes left before it is overdue, negative once overdue; null once decided.
     sla_minutes: int | None = None
     approvals: list[str]
-    status: Literal["pending", "in_review", "approved", "rejected", "returned"]
+    status: Literal["pending", "in_review", "approved", "rejected", "returned", "withdrawn"]
     created_at: str
+    # The withdrawn request this one sends again; its comments carry over.
+    follows: str | None = None
     decided_by: str | None = None
     decided_at: str | None = None
     decision_reason: str | None = None
@@ -1302,7 +1308,7 @@ class ThreadReview(Out):
     # When the deadline falls; null as for sla_minutes.
     due_at: str | None = None
     approvals: list[str]
-    status: Literal["pending", "in_review", "approved", "rejected", "returned"]
+    status: Literal["pending", "in_review", "approved", "rejected", "returned", "withdrawn"]
     created_at: str
     reasoning: list[str]
     evidence: list[Evidence]
@@ -1763,6 +1769,17 @@ class ReferenceSearch(Out):
     groups: list[ReferenceGroup]
 
 
+class Blocker(Out):
+    """One reason a publish is refused, in the one shape the agent, skill and workflow publish checks return: the
+    workflow step (`node`) or the field it is in, its level and code, and the sentence the publish dialog shows."""
+
+    node: str | None = None
+    field: str | None = None
+    level: Literal["error", "warning"] = "error"
+    code: str
+    message: str
+
+
 class BlockerPosition(Out):
     """Where a publish problem is: the field (`steps`, `notWhen`, `useWhen`, `brief.never`, `source`), and the step
     (from 1) or list index when it has one; for `source`, `index` is the line (from 1)."""
@@ -1805,11 +1822,31 @@ class PublishBlocker(Out):
     details: EvalGateDetails | None = None
 
 
+class BriefDraft(Out):
+    """A proposed text per brief heading, drafted from a description. Nothing is saved: each heading is accepted or
+    skipped in the console, and an accepted one saves as an ordinary edit of the brief."""
+
+    job: str
+    how_to_answer: str
+    hand_off: list[str]
+    examples: str
+    never: list[str]
+
+
+class AgentPrompt(Out):
+    """The prompt one version of an agent gives the model, read only: its instructions, then the never rules last."""
+
+    version: int
+    text: str
+
+
 class AgentPublishCheck(Out):
     """Whether the newest draft can be published, and each thing that stops it with the field it is in."""
 
     can_request: bool
     problems: list[PublishBlocker] = Field(default_factory=list[PublishBlocker])
+    # The problems in the shape every publish check returns.
+    blockers: list[Blocker] = Field(default_factory=list[Blocker])
 
 
 class ReferenceAdded(Out):
@@ -1822,8 +1859,8 @@ class ReferenceAdded(Out):
 
 class SkillPublishCheck(Out):
     can_request: bool
-    # Each problem's sentence, kept for callers that read only these; `problems` says where each one is.
-    blockers: list[str]
+    # The problems in the shape every publish check returns.
+    blockers: list[Blocker]
     problems: list[PublishBlocker] = Field(default_factory=list[PublishBlocker])
     # What does not block: a tool a step's sentence names and the step does not run.
     warnings: list[PublishBlocker] = Field(default_factory=list[PublishBlocker])

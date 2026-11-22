@@ -4,37 +4,30 @@ import * as React from 'react';
 import Link from 'next/link';
 import { ArrowUpRight, BookOpen, LayoutTemplate, Plus, Wrench } from 'lucide-react';
 
-import { CHANNEL_ICON } from '@/components/agents/agent-card';
 import { EvalSummaryLine } from '@/components/evals/eval-meta';
-import { CopyField } from '@/components/shared/setting/copy-field';
 import { AccountSelect } from '@/components/connections/account-select';
 import { EntityPicker } from '@/components/shared/entity-picker';
 import { FormField } from '@/components/shared/form-field';
 import { SettingsSection } from '@/components/shared/settings-section';
-import { Row, Rows } from '@/components/shared/surface';
-import { VersionTimeline, VersionTimelineItem } from '@/components/shared/version-history';
-import { AgentVersionBadge, LiveBadge } from '@/components/status-badges';
+import { LiveBadge } from '@/components/status-badges';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { guardrailOptions, knowledgeBaseOptions, toolOptions, widgetOptionsFor } from '@/hooks/options-queries';
+import { ListSection, type ListRow } from '@/components/shared/list-section';
+import { guardrailOptions, knowledgeBaseOptions, toolOptions, useOptionLabels, widgetOptionsFor } from '@/hooks/options-queries';
 import { useGuardrailsByIds, type Guardrail } from '@/hooks/guardrail-queries';
 import type { Lookups } from '@/lib/api';
 import { plural, relativeTime } from '@/lib/format';
 import type { ToolOptionsPage } from '@/lib/types/query';
 import type { WidgetPin, WidgetSettings } from '@/lib/types/widgets';
-import type { Agent, AgentControls, AgentGuardrails, AgentLimits, AgentPatterns, AgentPublicKeyOverride, AgentRun, AgentVersion, Channel, GrantableTool, MemorySettings, ModelAlias, SkillMenu } from '@/lib/types/domain';
+import type { Agent, AgentControls, AgentGuardrails, AgentLimits, AgentPatterns, AgentPublicKeyOverride, AgentRun, Channel, GrantableTool, MemorySettings, ModelAlias, SkillMenu } from '@/lib/types/domain';
 
-import { modelHint, ModelSelect } from './model-select';
-import { teamLabel } from '@/components/shared/team-name';
-import { useTeam } from '@/hooks/use-team';
 import { listChange } from '@/lib/agent-tools';
 import { appPageHref } from '@/lib/app-links';
 
@@ -126,52 +119,15 @@ export function changedSections(saved: AgentDraft, draft: AgentDraft) {
   return [...new Set(keys.map((k) => SECTION[k]))];
 }
 
-const CHANNEL_LABEL: Record<Channel, string> = { voice: 'Voice', chat: 'Chat', email: 'Email', api: 'API' };
 
 type Set = <K extends keyof AgentDraft>(k: K, v: AgentDraft[K]) => void;
 
-/** `models` are the aliases publish accepts; an agent saved on any other alias still shows it, marked, so it can be changed. */
-/** `channels` are the ones the runtime serves (`Agent.controls`); no other is offered. */
-export function IdentitySection({ draft, set, teamId, models, errors, channels, agentId, showJob = true, showModel = true }: { draft: AgentDraft; set: Set; teamId: string | null; models: ModelAlias[]; errors: Partial<Record<'name' | 'role', string>>; channels: Channel[]; /** Shown to copy for the API and the CLI; absent before the agent is saved. */ agentId?: string; /** False while the prompt is written as a brief: its Purpose is the job. */ showJob?: boolean; /** False where the model is chosen under Model and limits. */ showModel?: boolean }) {
-  const { teams } = useTeam();
+/** The one-line job, asked only while the prompt is plain text: a brief's Purpose is the job. */
+export function AgentJobField({ draft, set, error }: { draft: AgentDraft; set: Set; error?: string }) {
   return (
-    <SettingsSection title="Identity" description="Reviewers see the name and job on every run this agent pauses.">
-      <div className="grid gap-4 md:grid-cols-2">
-        <FormField id="ag-name" label="Name" error={errors.name}>
-          <Input id="ag-name" value={draft.name} onChange={(e) => set('name', e.target.value)} className="bg-card" aria-invalid={!!errors.name} />
-        </FormField>
-        <FormField id="ag-owner" label="Owning team" hint="The team that created the agent. It cannot be moved to another team.">
-          <Input id="ag-owner" value={teamLabel(teamId, teams)} readOnly disabled className="bg-card" />
-        </FormField>
-        {agentId && (
-          <FormField id="ag-id" label="Agent ID" hint="How the API, the CLI and a workflow's agent step name this agent." className="md:col-span-2">
-            <CopyField id="ag-id" value={agentId} label="agent ID" />
-          </FormField>
-        )}
-        {showJob && (
-          <FormField id="ag-role" label="Job" error={errors.role} className="md:col-span-2">
-            <Input id="ag-role" value={draft.role} onChange={(e) => set('role', e.target.value)} className="bg-card" aria-invalid={!!errors.role} />
-          </FormField>
-        )}
-        {showModel && (
-          <FormField id="ag-model" label="Model" hint={modelHint(models, draft.model)}>
-            <ModelSelect id="ag-model" value={draft.model} onValueChange={(v) => set('model', v)} aliases={models} className="bg-card" />
-          </FormField>
-        )}
-        <FormField id="ag-channels" label="Can talk on" hint="Where the agent is reachable is set by the deployments of the workflows that use it.">
-          <ToggleGroup id="ag-channels" type="multiple" variant="outline" value={draft.channels.filter((c) => channels.includes(c))} onValueChange={(v) => v.length && set('channels', v as Channel[])} className="w-full bg-card">
-            {channels.map((c) => {
-              const Icon = CHANNEL_ICON[c];
-              return (
-                <ToggleGroupItem key={c} value={c} className="flex-1" aria-label={CHANNEL_LABEL[c]}>
-                  <Icon className="size-3.5" /> {CHANNEL_LABEL[c]}
-                </ToggleGroupItem>
-              );
-            })}
-          </ToggleGroup>
-        </FormField>
-      </div>
-    </SettingsSection>
+    <FormField id="ag-role" label="Job" error={error}>
+      <Input id="ag-role" value={draft.role} onChange={(e) => set('role', e.target.value)} className="bg-card" aria-invalid={!!error} />
+    </FormField>
   );
 }
 
@@ -219,40 +175,50 @@ function ToolsNotAddedNote({ apps }: { apps: NonNullable<ToolOptionsPage['notAdd
  * Grants the registry no longer offers (unpublished, hidden or removed from their module) are listed apart with
  * Remove, rather than as a chip the picker cannot label.
  */
-export function ToolsSection({ draft, set, toolIds, onChange, stale = [] }: { draft: AgentDraft; set: Set; toolIds: string[]; onChange: (change: { add?: string[]; remove?: string[] }) => void; stale?: string[] }) {
+export function ToolsSection({ draft, set, toolIds, onChange, stale = [], grantable = [] }: { draft: AgentDraft; set: Set; toolIds: string[]; onChange: (change: { add?: string[]; remove?: string[] }) => void; stale?: string[]; grantable?: GrantableTool[] }) {
   const gone = stale.filter((id) => toolIds.includes(id));
   const offered = toolIds.filter((id) => !gone.includes(id));
   // The picker answers the whole list it shows; what is sent is only what the person added or took away.
   const pick = (ids: string[]) => onChange({ add: ids.filter((id) => !offered.includes(id)), remove: offered.filter((id) => !ids.includes(id)) });
+  const labels = new Map((useOptionLabels(toolOptions, offered).data?.data ?? []).map((o) => [o.id, o]));
+  const held = new Map(grantable.map((t) => [t.id, t]));
+  const rows: ListRow[] = [
+    ...offered.map((id) => {
+      const o = labels.get(id);
+      const t = held.get(id);
+      return {
+        id,
+        title: o?.label ?? id,
+        description: o?.hint ?? undefined,
+        state: t?.requiresApproval ? <Badge variant="outline">Review: {t.approval ?? 'every call'}</Badge> : undefined,
+        remove: { label: `Remove ${o?.label ?? id}`, onClick: () => onChange({ remove: [id] }) },
+      };
+    }),
+    ...gone.map((id) => ({
+      id,
+      title: <code className="font-mono text-sm">{id}</code>,
+      description: 'No longer offered: unpublished, hidden or removed from its module.',
+      state: <Badge variant="outline" className="border-warning/40 text-warning-text">Gone</Badge>,
+      remove: { label: `Remove ${id}`, onClick: () => onChange({ remove: [id] }) },
+    })),
+  ];
   return (
-    <SettingsSection title={`Tools · ${toolIds.length}`} description="The only systems this agent may call. Tools marked review pause every call for a person.">
-      <div className="flex flex-col gap-3">
-        {toolIds.length === 0 && <p className="text-sm text-muted-foreground">No tools. The agent can only answer from knowledge.</p>}
+    <ListSection
+      id="agent-tools"
+      icon={Wrench}
+      title="Tools"
+      count={toolIds.length}
+      description="The only systems this agent may call. Tools marked review pause every call for a person."
+      add={<EntityPicker source={toolOptions} value={offered} onChange={pick} showChosen={false} addLabel="Add" searchPlaceholder="Search tools by name or system…" emptyText="No tool matches." testId="agent-tools-picker" note={(first) => <ToolsNotAddedNote apps={first.notAdded ?? []} />} />}
+      rows={rows}
+      empty="No tools. The agent can only answer from knowledge."
+    >
+      <div className="border-t p-4">
         <FormField id="agent-accounts" label="Account" hint="Which account of an app this agent’s calls use. A workflow step that names its own account wins.">
           <AccountSelect id="agent-accounts" value={draft.accounts} onChange={(v) => set('accounts', v)} />
         </FormField>
-        <EntityPicker source={toolOptions} value={offered} onChange={pick} addLabel="Grant tools" searchPlaceholder="Search tools by name or system…" emptyText="No tool matches." icon={Wrench} testId="agent-tools-picker" note={(first) => <ToolsNotAddedNote apps={first.notAdded ?? []} />} />
-        {gone.length > 0 && (
-          <div className="flex flex-col gap-1" data-testid="stale-grants">
-            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">No longer offered</p>
-            <Rows className="rounded-lg border border-warning/40">
-              {gone.map((id) => (
-                <Row
-                  key={id}
-                  title={<code className="font-mono text-sm">{id}</code>}
-                  description="Unpublished, hidden or removed from its module."
-                  trailing={
-                    <Button type="button" variant="outline" size="sm" onClick={() => onChange({ remove: [id] })} aria-label={`Remove ${id}`}>
-                      Remove
-                    </Button>
-                  }
-                />
-              ))}
-            </Rows>
-          </div>
-        )}
       </div>
-    </SettingsSection>
+    </ListSection>
   );
 }
 
@@ -261,11 +227,18 @@ export function ToolsSection({ draft, set, toolIds, onChange, stale = [] }: { dr
  * a pick is its own save (`onChange`), never part of the draft the page autosaves.
  */
 export function KnowledgeSection({ collections, onChange }: { collections: string[]; onChange: (change: { add: string[]; remove: string[] }) => void }) {
+  const labels = new Map((useOptionLabels(knowledgeBaseOptions, collections).data?.data ?? []).map((o) => [o.id, o]));
   return (
-    <SettingsSection title={`Knowledge · ${collections.length}`} description="Knowledge bases the agent may search and cite.">
-      {collections.length === 0 && <p className="mb-2 text-sm text-muted-foreground">No knowledge bases. The agent cannot cite policy or product documents.</p>}
-      <EntityPicker source={knowledgeBaseOptions} value={collections} onChange={(ids) => onChange(listChange(collections, ids))} addLabel="Choose knowledge bases" searchPlaceholder="Search knowledge bases…" emptyText="No knowledge base matches." icon={BookOpen} testId="agent-knowledge-picker" />
-    </SettingsSection>
+    <ListSection
+      id="agent-knowledge"
+      icon={BookOpen}
+      title="Knowledge"
+      count={collections.length}
+      description="Knowledge bases the agent may search and cite."
+      add={<EntityPicker source={knowledgeBaseOptions} value={collections} onChange={(ids) => onChange(listChange(collections, ids))} showChosen={false} addLabel="Add" searchPlaceholder="Search knowledge bases…" emptyText="No knowledge base matches." testId="agent-knowledge-picker" />}
+      rows={collections.map((id) => ({ id, title: labels.get(id)?.label ?? id, description: labels.get(id)?.hint ?? undefined, remove: { label: `Remove ${labels.get(id)?.label ?? id}`, onClick: () => onChange({ add: [], remove: [id] }) } }))}
+      empty="No knowledge bases. The agent cannot cite policy or product documents."
+    />
   );
 }
 
@@ -374,7 +347,7 @@ export function GuardrailsSection({ draft, set, shown }: { draft: AgentDraft; se
                         </Link>
                         {version !== undefined && published(x).length > 1 ? (
                           <Select value={String(version)} onValueChange={(v) => pinVersion(x, Number(v))}>
-                            <SelectTrigger className="h-7 w-24 text-xs" aria-label={`${x.name} version`}>
+                            <SelectTrigger className="w-24" aria-label={`${x.name} version`}>
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -622,41 +595,6 @@ export function UsedInCard({ agent }: { agent: Agent }) {
           <p className="rounded-md bg-warning/10 px-2.5 py-2 text-xs text-warning-text">
             v{agent.version} reaches production when {behind.length === 1 ? behind[0].workflowName : `${behind.length} workflows`} {behind.length === 1 ? 'is' : 'are'} republished.
           </p>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-export function HistoryCard({ versions, loading, onOpen }: { versions?: AgentVersion[]; loading: boolean; onOpen: () => void }) {
-  return (
-    <Card className="gap-3">
-      <CardHeader className="px-4">
-        <CardTitle className="text-sm">History</CardTitle>
-        <CardAction>
-          <Button variant="ghost" size="sm" className="h-7" onClick={onOpen}>
-            All versions
-          </Button>
-        </CardAction>
-      </CardHeader>
-      <CardContent className="px-4">
-        {loading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
-        ) : (
-          <VersionTimeline compact>
-            {(versions ?? []).slice(0, 3).map((v) => (
-              <VersionTimelineItem key={v.version} compact dot={v.current ? 'current' : 'muted'}>
-                <div className="flex min-w-0 items-center gap-1.5 text-sm">
-                  <span className="font-mono text-xs font-medium">v{v.version}</span>
-                  {/* w-0 keeps the note's full width out of the rail's min-content, which would push the rail past a phone's width. */}
-                  <span className="w-0 flex-1 break-words">{v.note}</span>
-                  <AgentVersionBadge state={v.state} />
-                </div>
-                <span className="text-xs text-muted-foreground">{relativeTime(v.savedAt)}</span>
-                {v.evalSummary && <EvalSummaryLine summary={v.evalSummary} className="flex" />}
-              </VersionTimelineItem>
-            ))}
-          </VersionTimeline>
         )}
       </CardContent>
     </Card>

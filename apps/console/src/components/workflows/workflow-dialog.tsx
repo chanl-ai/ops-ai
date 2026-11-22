@@ -57,7 +57,7 @@ export function WorkflowDialog({
             Cancel
           </Button>
           <LoadingButton onClick={submit} isLoading={isPending} loadingText="Creating…">
-            Create and open
+            Create
           </LoadingButton>
         </div>
       }

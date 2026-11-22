@@ -255,7 +255,7 @@ export function createAgentPublishMock(deps: AgentPublishDeps) {
     ];
   };
 
-  const requestPublish = (aid: string, version: number, note: string): Review => {
+  const requestPublish = (aid: string, version: number, note: string, _follows?: string): Review => {
     const a = agentOr404(aid);
     const stop = evalProblems(aid, version);
     if (stop.length) throw new ApiError(`This version cannot be published yet: ${stop.map((p) => p.message).join(' ')}`, 422, undefined, 'cannot_publish', { problems: stop });

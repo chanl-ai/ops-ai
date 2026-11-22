@@ -50,6 +50,10 @@ export interface InstructionDocumentProps {
   readOnly?: boolean;
   /** `add-step` shows Add a step under a document that has steps. */
   footer?: 'add-step';
+  /** The card's own footer row (counts, actions); shown read-only too, and in place of the hint. */
+  footerSlot?: React.ReactNode;
+  /** Actions in the card's own header row, right-aligned above the first heading (the brief's Draft). */
+  headerSlot?: React.ReactNode;
   hint?: string;
   /** What the document is, for a screen reader: "Dispute desk instructions". */
   label: string;
@@ -85,7 +89,7 @@ const MENU_COPY: Record<Trigger, { label: string; empty: (q: string) => string }
  * skills, agents and workflows as chips. `@` opens the grouped picker under the caret, `{{` the variables, `/` adds a
  * step, a check or an if-not line. The agent page and the skill page draw the same component with different blocks.
  */
-export function InstructionDocument({ value, onChange, searchReferences, onInsertReference, resolved, missing = [], onMissingChange, invalid = [], warnings = [], variables, readOnly = false, footer, hint = 'Type @ to add a tool, knowledge or skill', label, controls }: InstructionDocumentProps) {
+export function InstructionDocument({ value, onChange, searchReferences, onInsertReference, resolved, missing = [], onMissingChange, invalid = [], warnings = [], variables, readOnly = false, footer, footerSlot, headerSlot, hint = 'Type @ to add a tool, knowledge or skill', label, controls }: InstructionDocumentProps) {
   const bridge = React.useRef<MenuBridge | null>(null);
   const [extensions] = React.useState(() => instructionExtensions(() => bridge.current));
   // What the page last saw, so a value it hands back unchanged does not reload the document and move the caret.
@@ -338,17 +342,18 @@ export function InstructionDocument({ value, onChange, searchReferences, onInser
   return (
     <DocumentContext.Provider value={context}>
       <div className="rounded-lg border bg-card" data-testid="instruction-document">
+        {headerSlot && <div className="flex flex-wrap items-center justify-end gap-2 border-b px-4 py-2">{headerSlot}</div>}
         <EditorContent editor={editor} />
         {unplaced.length > 0 && (
           <div className="flex flex-col gap-2 px-4 pb-4">
             <FixRows blockers={unplaced} />
           </div>
         )}
-        {!readOnly && (
+        {(!readOnly || footerSlot) && (
           <div className="flex flex-wrap items-center gap-2 border-t px-4 py-2">
-            <p className="text-xs text-muted-foreground">{hint}</p>
+            {footerSlot ?? <p className="text-xs text-muted-foreground">{hint}</p>}
             <span className="flex-1" />
-            {footer === 'add-step' && (
+            {!readOnly && footer === 'add-step' && (
               <Button type="button" variant="ghost" size="sm" onClick={() => editor && addStep(editor)}>
                 <Plus />
                 Add a step

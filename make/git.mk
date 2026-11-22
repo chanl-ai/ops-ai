@@ -54,7 +54,7 @@ git-rules: ## Print the git rules for the shared tree and check them
 # the stack back. The review worktree is detached at origin/BRANCH, so any branch can be reviewed, including one that is
 # checked out somewhere else.
 #   make review BRANCH=feat/apps-salesforce
-.PHONY: review
+.PHONY: review builder-watch
 REVIEW_DIR ?= $(STACK_HOME)-review
 
 review: ## Check BRANCH out from origin into the review worktree and run the stack from it, restarting only what changed
@@ -74,3 +74,6 @@ review: ## Check BRANCH out from origin into the review worktree and run the sta
 	@$(MAKE) -s -C "$(REVIEW_DIR)" install
 	@$(MAKE) -C "$(REVIEW_DIR)" up
 	@echo "review: $(BRANCH) at $$(git -C "$(REVIEW_DIR)" rev-parse --short HEAD) on http://localhost:$(OPS_CONSOLE_PORT), run from $(REVIEW_DIR)"
+
+builder-watch: ## Every worktree under ops-ai-worktrees: last commit age, uncommitted files, a process in it; stalled = 30 min, changes, no process (WATCH=<seconds> prints only changes; exit 1 on a stalled one)
+	@bash $(ROOT)/scripts/builder-watch.sh $(if $(WATCH),--watch $(WATCH))

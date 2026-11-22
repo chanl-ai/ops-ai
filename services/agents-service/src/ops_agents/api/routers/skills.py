@@ -285,7 +285,7 @@ async def _request_review(rt: Runtime, skill_id: str, note: str, by: str) -> Non
     d = await detail(rt, skill_id, fresh=True)
     if not d["publishCheck"]["canRequest"]:
         raise ValidationFailed(
-            " ".join(d["publishCheck"]["blockers"]),
+            " ".join(b["message"] for b in d["publishCheck"]["blockers"]),
             code="cannot_request",
             details={"problems": d["publishCheck"]["problems"]},
         )

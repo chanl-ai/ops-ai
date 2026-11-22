@@ -113,3 +113,70 @@ def test_ci_ok_fails_on_a_failed_or_cancelled_job_and_passes_a_skipped_one() -> 
     assert _gate({"plan": "success", "checks": "skipped", "repo": "success"}) == 0
     assert _gate({"plan": "success", "checks": "failure"}) == 1
     assert _gate({"plan": "success", "console": "cancelled"}) == 1
+
+
+def _plan_step() -> dict[str, Any]:
+    steps = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())["jobs"]["plan"]["steps"]
+    return next(s for s in steps if s.get("id") == "plan")
+
+
+def test_a_push_run_has_its_own_concurrency_group_so_a_queued_push_is_not_dropped() -> None:
+    conc = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())["concurrency"]
+    # One group per ref keeps one pending run and drops the rest, even with cancel-in-progress off.
+    assert "github.sha" in conc["group"] and "github.ref" not in conc["group"], conc
+    assert "pull_request" in str(conc["cancel-in-progress"]) and "push" not in str(conc["cancel-in-progress"]), conc
+
+
+def test_a_merge_queue_run_is_planned_like_a_pull_request_from_the_queue_base() -> None:
+    ci = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+    # PyYAML reads the key `on` as True.
+    assert "merge_group" in ci[True], ci[True]
+    assert "github.event.merge_group.base_sha" in ci["env"]["BASE_SHA"], ci["env"]["BASE_SHA"]
+    # The last-green plan belongs to a push only; a queue run taking it would be planned from an old commit.
+    assert 'GITHUB_EVENT_NAME" = push' in _plan_step()["run"]
+    # ci-ok runs always and waits on every job, so it reports on the queue's run.
+    assert ci["jobs"]["ci-ok"]["if"] == "always()" and "plan" in ci["jobs"]["ci-ok"]["needs"]
+
+
+def test_the_plan_of_a_develop_push_starts_from_the_last_green_commit_not_the_event_before() -> None:
+    run = _plan_step()["run"]
+    assert "ci-last-green.sh" in run and "CI_FULL=true" in run, run
+
+
+def _repo_with_commits(tmp_path: Path, n: int) -> list[str]:
+    def git(*a: str) -> str:
+        return subprocess.run(["git", *a], cwd=tmp_path, capture_output=True, text=True, check=True).stdout.strip()
+
+    git("init", "-q")
+    git("config", "user.email", "t@t")
+    git("config", "user.name", "t")
+    shas = []
+    for i in range(n):
+        (tmp_path / "f").write_text(str(i))
+        git("add", "f")
+        git("commit", "-qm", str(i))
+        shas.append(git("rev-parse", "HEAD"))
+    return shas
+
+
+def _last_green(tmp_path: Path, current: str, runs: list[dict[str, str]]) -> str:
+    return subprocess.run(
+        ["bash", str(ROOT / "scripts/ci-last-green.sh"), current],
+        cwd=tmp_path,
+        input=json.dumps({"workflow_runs": runs}),
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+
+
+def test_last_green_skips_the_current_commit_and_unknown_ones_and_is_empty_when_none(tmp_path: Path) -> None:
+    c0, c1, c2 = _repo_with_commits(tmp_path, 3)
+    runs = [
+        {"head_sha": c2, "conclusion": "success", "created_at": "2026-11-22T03"},
+        {"head_sha": "f" * 40, "conclusion": "success", "created_at": "2026-11-22T02"},
+        {"head_sha": c1, "conclusion": "success", "created_at": "2026-11-22T01"},
+        {"head_sha": c0, "conclusion": "success", "created_at": "2026-11-22T00"},
+    ]
+    assert _last_green(tmp_path, c2, runs) == c1
+    assert _last_green(tmp_path, c2, []) == ""

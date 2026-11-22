@@ -4,7 +4,7 @@ import * as React from 'react';
 
 import Link from 'next/link';
 
-import { EvalSteps } from '@/components/agents/publish-problems';
+import { EvalSteps } from '@/components/agents/eval-problems';
 import { isOpen } from '@/components/reviews/review-columns';
 import { keyFieldsBlock, type ReadChecks } from '@/components/reviews/document-read';
 import { ModelValidationDecisionForm } from '@/components/reviews/model-validation';

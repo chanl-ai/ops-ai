@@ -1,7 +1,9 @@
 'use client';
 
-import { BookOpen, Gauge, ShieldCheck, Sparkles, UserCheck, Wrench } from 'lucide-react';
+import { BookOpen, ChevronDown, Gauge, ShieldCheck, Sparkles, UserCheck, Wrench } from 'lucide-react';
 
+import { Button } from '@/components/ui/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ChainOfThought, ChainOfThoughtContent, ChainOfThoughtHeader, ChainOfThoughtStep } from '@/components/ai-elements/chain-of-thought';
 import { knowledgeBaseOptions, useOptionLabels } from '@/hooks/options-queries';
 import type { ApprovalWidget, ChatMessage } from '@/lib/types/chat';
@@ -120,5 +122,21 @@ export function TestWhy({ message, held }: { message: ChatMessage; held: HeldToo
         />
       </ChainOfThoughtContent>
     </ChainOfThought>
+  );
+}
+
+/** Under a test reply: closed it is one line; open it is what the agent did to answer. */
+export function ShowSteps({ message, held }: { message: ChatMessage; held: HeldTool[] }) {
+  return (
+    <Collapsible className="px-1 pb-2" data-testid="show-steps">
+      <CollapsibleTrigger asChild>
+        <Button type="button" variant="ghost" size="sm" className="group text-muted-foreground" data-testid="show-steps-toggle">
+          <ChevronDown className="size-4 transition-transform group-data-[state=open]:rotate-180" aria-hidden /> Show steps
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="pt-1">
+        <TestWhy message={message} held={held} />
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

@@ -4,6 +4,7 @@ import * as React from 'react';
 import { type AgentDraft, sameValue } from '@/components/agents/agent-settings';
 import { useWorkspaceIdentity } from '@/hooks/me-queries';
 import { useReadAgentAgain, type useUpdateAgent } from '@/hooks/queries';
+import { useAutosave } from '@/hooks/use-autosave';
 import { onStaleSave, staleSave } from '@/lib/save-base';
 import type { Agent, AgentBrief, AgentPatch, PromptMode } from '@/lib/types/domain';
 
@@ -20,8 +21,8 @@ export function agentPatch(saved: AgentDraft, draft: AgentDraft, brief: AgentBri
 }
 
 /**
- * The one draft saves itself: a second after the last valid change, with no dialog and no note per save. Each save
- * names the copy of the agent the page holds. One refused because that copy is old is handled here:
+ * The agent's draft saves itself through `useAutosave`; this supplies what is particular to an agent. Each save names
+ * the copy of the agent the page holds. One refused because that copy is old is handled by `refusal`:
  *
  * - after the person's own write (an @ insert, a grant, a skill attached), the newest copy is read and the change is
  *   sent once more, with no message. The page keeps every field the person changed and takes the rest.
@@ -52,55 +53,21 @@ export function useAgentAutosave({
 }) {
   const readAgain = useReadAgentAgain();
   const me = useWorkspaceIdentity()?.user.email;
-  const [saveError, setSaveError] = React.useState<string | null>(null);
-  // What a save failed on: autosave does not send it again until it changes or Retry is pressed.
-  const [failed, setFailed] = React.useState<string | null>(null);
-  const [stale, setStale] = React.useState<string | null>(null);
-  // The newest copy is being read after a refused save; the next save waits for it, or it would name the old copy again.
-  const [reading, setReading] = React.useState(false);
-  // What was last sent again after the person's own write, so one change is sent again once.
-  const resent = React.useRef<string | null>(null);
-  const editing = JSON.stringify([draft, brief]);
-
-  const read = () => {
-    setReading(true);
-    return readAgain().finally(() => setReading(false));
-  };
-  const saveNow = () => {
-    const sent = editing;
-    const patch = agentPatch(saved, draft, brief, mode);
-    update.mutate(
-      { ...patch, base: agent },
-      {
-        onSuccess: () => {
-          // The saved brief is the service's reading of what was sent; edits made while it was in flight stay.
-          if (patch.brief) onBriefSaved(patch.brief);
-          setSaveError(null);
-          setFailed(null);
-          resent.current = null;
-        },
-        onError: (e) => {
-          const refused = staleSave(e);
-          const next = refused && onStaleSave(refused, me, agent.version);
-          if (next?.resend && resent.current !== sent) {
-            resent.current = sent;
-            return void read();
-          }
-          if (next && !next.resend) return setStale(next.note);
-          setSaveError(e.message);
-          setFailed(sent);
-        },
-      },
-    );
-  };
-  React.useEffect(() => {
-    if (!ready || update.isPending || reading || stale || failed === editing) return;
-    const t = setTimeout(() => saveNow(), 1000);
-    return () => clearTimeout(t);
-    // Saves on a change to the draft or once the last save has settled; the patch reads `saved`, which moves with them.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editing, saved, ready, update.isPending, reading, stale, failed]);
-
-  const reload = () => read().then(() => setStale(null));
-  return { saveNow, saveError, stale, reload, reading };
+  const patch = agentPatch(saved, draft, brief, mode);
+  const auto = useAutosave({
+    waiting: ready ? JSON.stringify([draft, brief]) : null,
+    enabled: ready,
+    settledOn: saved,
+    readNewest: readAgain,
+    send: () => update.mutateAsync({ ...patch, base: agent }),
+    // The saved brief is the service's reading of what was sent; edits made while it was in flight stay.
+    onSaved: () => patch.brief && onBriefSaved(patch.brief),
+    refusal: (e) => {
+      const refused = staleSave(e);
+      const next = refused && onStaleSave(refused, me, agent.version);
+      return next ? (next.resend ? { resend: true } : { stale: next.note }) : null;
+    },
+  });
+  const reload = () => readAgain().then(() => auto.clearStale());
+  return { saveNow: auto.saveNow, saveError: auto.error, stale: auto.stale, reload, reading: auto.reading, status: auto.status };
 }

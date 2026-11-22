@@ -65,7 +65,7 @@ export function SkillCheckRow({ check, onChange, onRemove, options, index }: { c
           {check.type === 'cites' && sel(`chk-${index}-src`, check.source, options?.collections ?? [], 'Choose a knowledge base', (source) => onChange({ ...check, source }))}
           {check.type === 'extracts' && (
             <div className="grid gap-2">
-              <Input aria-label="Field" value={check.field ?? ''} onChange={(e) => onChange({ ...check, field: e.target.value })} placeholder="e.g. amount" className="font-mono text-xs" />
+              <Input aria-label="Field" value={check.field ?? ''} onChange={(e) => onChange({ ...check, field: e.target.value })} placeholder="e.g. amount" className="font-mono" />
               <Input aria-label="Value" value={check.value ?? ''} onChange={(e) => onChange({ ...check, value: e.target.value })} placeholder="e.g. 1240.18" />
             </div>
           )}
@@ -78,7 +78,7 @@ export function SkillCheckRow({ check, onChange, onRemove, options, index }: { c
             />
           )}
         </div>
-        <Button variant="ghost" size="icon" className="size-9 shrink-0 self-end sm:self-auto" aria-label={`Remove check ${index + 1}`} onClick={onRemove}>
+        <Button variant="ghost" size="icon" className="shrink-0 self-end sm:self-auto" aria-label={`Remove check ${index + 1}`} onClick={onRemove}>
           <X className="size-4" />
         </Button>
       </div>
@@ -89,16 +89,16 @@ export function SkillCheckRow({ check, onChange, onRemove, options, index }: { c
         <div className="flex flex-col gap-1.5">
           {(check.args ?? []).map((a, i) => (
             <div key={i} className="flex items-center gap-2">
-              <Input aria-label="Argument" value={a.path} onChange={(e) => onChange({ ...check, args: check.args!.map((x, j) => (j === i ? { ...x, path: e.target.value } : x)) })} placeholder="e.g. amount" className="font-mono text-xs" />
+              <Input aria-label="Argument" value={a.path} onChange={(e) => onChange({ ...check, args: check.args!.map((x, j) => (j === i ? { ...x, path: e.target.value } : x)) })} placeholder="e.g. amount" className="font-mono" />
               <span className="text-xs text-muted-foreground">equals</span>
               <Input aria-label="Expected value" value={a.equals} onChange={(e) => onChange({ ...check, args: check.args!.map((x, j) => (j === i ? { ...x, equals: e.target.value } : x)) })} placeholder="e.g. 1240.18" />
-              <Button variant="ghost" size="icon" className="size-8 shrink-0" aria-label="Remove argument" onClick={() => onChange({ ...check, args: check.args!.filter((_, j) => j !== i) })}>
+              <Button variant="ghost" size="icon" className="shrink-0" aria-label="Remove argument" onClick={() => onChange({ ...check, args: check.args!.filter((_, j) => j !== i) })}>
                 <X className="size-3.5" />
               </Button>
             </div>
           ))}
           <Button variant="ghost" size="sm" className="self-start" onClick={() => onChange({ ...check, args: [...(check.args ?? []), { path: '', equals: '' }] })}>
-            <Plus className="size-3.5" /> Match an argument
+            <Plus className="size-3.5" /> Add argument
           </Button>
         </div>
       )}

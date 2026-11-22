@@ -101,3 +101,38 @@ async def test_reviews_list_and_decide_publish_requests_under_the_publish_rules(
         assert again.status_code == 409
         resolved = _ok(await c.get("/reviews", params={"view": "resolved", "page": 1, "pageSize": 50}))
         assert rid in {r["id"] for r in resolved["data"]}
+
+
+async def test_someone_other_than_the_requester_cannot_withdraw_and_a_decided_request_stays_decided(
+    tmp_path: Path,
+) -> None:
+    async with _app(str(tmp_path / "db.sqlite"), registry_auto_approve=False) as c:
+        agent = _ok(await c.post("/v1/agents", json={"name": "Checker", "role": "Checks"}), 201)
+        rid = _ok(await c.post(f"/v1/agents/{agent['id']}/publish-requests", json={"version": 1}), 201)["id"]
+
+        other = await c.post(f"/v1/publish-requests/{rid}/withdraw", headers=KIM)
+        assert (other.status_code, other.json()["error"]["code"]) == (403, "not_the_asker"), other.text
+        assert _ok(await c.get(f"/v1/publish-requests/{rid}"))["status"] == "pending"
+
+        _ok(await _decide(c, rid, "approved", **KIM))
+        late = await c.post(f"/v1/publish-requests/{rid}/withdraw")
+        assert (late.status_code, late.json()["error"]["code"]) == (409, "already_decided"), late.text
+
+
+async def test_withdrawing_returns_the_version_to_a_draft_and_send_again_links_the_earlier_request(
+    tmp_path: Path,
+) -> None:
+    async with _app(str(tmp_path / "db.sqlite"), registry_auto_approve=False) as c:
+        agent = _ok(await c.post("/v1/agents", json={"name": "Checker", "role": "Checks"}), 201)
+        aid = agent["id"]
+        rid = _ok(await c.post(f"/v1/agents/{aid}/publish-requests", json={"version": 1, "note": "go"}), 201)["id"]
+
+        withdrawn = _ok(await c.post(f"/v1/publish-requests/{rid}/withdraw"))
+        assert withdrawn["status"] == "withdrawn" and withdrawn["approvals"] == [], withdrawn
+        states = [(v["version"], v["state"]) for v in _ok(await c.get(f"/v1/agents/{aid}/versions"))]
+        assert states == [(1, "draft")], states
+        listed = _ok(await c.get("/reviews", params={"view": "open", "page": 1, "pageSize": 50}))
+        assert rid not in {r["id"] for r in listed["data"]}, "a withdrawn request leaves the reviewer's queue"
+
+        again = _ok(await c.post(f"/v1/agents/{aid}/publish-requests", json={"version": 1, "follows": rid}), 201)
+        assert again["status"] == "pending" and again["follows"] == rid, again

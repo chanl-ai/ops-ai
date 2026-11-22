@@ -20,6 +20,7 @@ import { LoadingButton } from '@/components/shared/loading-button';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
 import { selectColumn } from '@/components/shared/select-column';
 import { serverPagination } from '@/components/shared/server-pagination';
+import { Row, Rows, Section } from '@/components/shared/surface';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -83,7 +84,7 @@ function caseColumns(onDelete: ((c: EvalCase) => void) | null): ColumnDef<CaseRo
             meta: { className: 'w-10' },
             cell: ({ row }) => (
               <StopRowClick>
-                <Button variant="ghost" size="icon" className="size-8" aria-label={`Delete ${row.original.name}`} onClick={() => onDelete(row.original)}>
+                <Button variant="ghost" size="icon" aria-label={`Delete ${row.original.name}`} onClick={() => onDelete(row.original)}>
                   <Trash2 className="size-4" />
                 </Button>
               </StopRowClick>
@@ -166,6 +167,10 @@ export function EvalsTab({ agent }: { agent: Agent }) {
 
   const [view, setView] = React.useState<'cases' | 'runs'>('cases');
   const [addOpen, setAddOpen] = React.useState(false);
+  // A success check from the agent's brief, offered as the rubric of a new case; the brief no longer shows them.
+  const [seed, setSeed] = React.useState<Partial<EvalCaseInput> | undefined>();
+  const successChecks = agent.brief?.success ?? [];
+  const openAdd = (from?: string) => (setSeed(from ? { name: from, checks: [{ type: 'judge', rubric: from }] } : undefined), setAddOpen(true));
   const [importOpen, setImportOpen] = React.useState(false);
   const [deleting, setDeleting] = React.useState<EvalCase | null>(null);
   const [bulkDeleting, setBulkDeleting] = React.useState<EvalCase[] | null>(null);
@@ -209,7 +214,7 @@ export function EvalsTab({ agent }: { agent: Agent }) {
               <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
                 <Upload className="size-3.5" /> Import CSV
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setAddOpen(true)} data-testid="add-eval-case-button">
+              <Button variant="outline" size="sm" onClick={() => openAdd()} data-testid="add-eval-case-button">
                 <Plus className="size-3.5" /> Add case
               </Button>
               <LoadingButton size="sm" isLoading={runEvals.isPending} loadingText="Running…" disabled={!hasCases} onClick={start} data-testid="run-evals-button">
@@ -227,7 +232,7 @@ export function EvalsTab({ agent }: { agent: Agent }) {
             icon={FlaskConical}
             title={hasCases ? 'No eval runs yet' : 'No saved cases yet'}
             description={hasCases ? 'Run evals to test this agent against its saved cases.' : 'Add the cases this agent must keep getting right, then run them.'}
-            action={mayRun ? (hasCases ? { label: 'Run evals', onClick: start } : { label: 'Add case', onClick: () => setAddOpen(true) }) : undefined}
+            action={mayRun ? (hasCases ? { label: 'Run evals', onClick: start } : { label: 'Add case', onClick: () => openAdd() }) : undefined}
           />
         ) : (
           <>
@@ -242,6 +247,25 @@ export function EvalsTab({ agent }: { agent: Agent }) {
           </>
         )}
       </section>
+
+      {mayRun && successChecks.length > 0 && (
+        <Section title="Success checks from the brief" description="Written on an earlier version of the brief. Make each a case so a run grades it." flush>
+          <Rows testId="eval-success-checks">
+            {successChecks.map((check) => (
+              <Row
+                key={check}
+                wrap
+                title={check}
+                trailing={
+                  <Button variant="outline" size="sm" onClick={() => openAdd(check)}>
+                    <Plus className="size-3.5" /> Make case
+                  </Button>
+                }
+              />
+            ))}
+          </Rows>
+        </Section>
+      )}
 
       {(hasCases || !!latest.data) && (
         <section className="flex flex-col gap-3">
@@ -268,7 +292,7 @@ export function EvalsTab({ agent }: { agent: Agent }) {
                 selectionResetKey={resetKey}
                 bulkActions={mayRun ? [{ label: 'Delete', icon: Trash2, variant: 'destructive', onClick: (rows) => setBulkDeleting(rows) }] : undefined}
                 rowNoun="case"
-                emptyState={<ListEmpty icon={FlaskConical} noun="eval cases" filtered={false} description="Add the cases this agent must keep getting right." createLabel={mayRun ? 'Add case' : undefined} onCreate={mayRun ? () => setAddOpen(true) : undefined} />}
+                emptyState={<ListEmpty icon={FlaskConical} noun="eval cases" filtered={false} description="Add the cases this agent must keep getting right." createLabel={mayRun ? 'Add case' : undefined} onCreate={mayRun ? () => openAdd() : undefined} />}
               />
             )
           ) : runs.isPending ? (
@@ -330,6 +354,7 @@ export function EvalsTab({ agent }: { agent: Agent }) {
         onOpenChange={setAddOpen}
         tools={toolNames}
         collections={agent.collections}
+        seed={seed}
         isPending={addCases.isPending}
         onSubmit={async (i) => {
           await save([i]);

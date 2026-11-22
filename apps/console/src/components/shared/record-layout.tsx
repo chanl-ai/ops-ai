@@ -31,16 +31,23 @@ export function RecordLayout({
   rail,
   children,
   className,
+  railRight,
 }: {
   rail: React.ReactNode;
   children: React.ReactNode;
   className?: string;
+  /** The rail on the right, for a page that opens on its main column (an editor); stacked, the main column is first. */
+  railRight?: boolean;
 }) {
   // The main column keeps priority on a 13-inch laptop: the app sidebar folds before the rail and main squeeze.
   useSidebarFoldsWhenNarrow();
   return (
     <div className={className}>
-      <SplitView id="record-layout" bare rightFirstWhenStacked defaultLeft={27} leftMin="20" rightMin="40" left={<div className="flex w-full min-w-0 flex-col gap-4">{rail}</div>} right={<div className="min-w-0">{children}</div>} />
+      {railRight ? (
+        <SplitView id="record-layout-rail-right" bare defaultLeft={70} leftMin="40" rightMin="20" left={<div className="min-w-0">{children}</div>} right={<div className="flex w-full min-w-0 flex-col gap-4">{rail}</div>} />
+      ) : (
+        <SplitView id="record-layout" bare rightFirstWhenStacked defaultLeft={27} leftMin="20" rightMin="40" left={<div className="flex w-full min-w-0 flex-col gap-4">{rail}</div>} right={<div className="min-w-0">{children}</div>} />
+      )}
     </div>
   );
 }

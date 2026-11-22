@@ -28,7 +28,7 @@ from ops_service_kit.names import has_control, tidy
 from ..activities.catalog import AgentDefinition, kernel_skills
 from ..activities.tool_directory import ToolsUnavailable
 from ..app import skill_content, skill_text
-from ..app.skill_content import KnownSkill, Problem
+from ..app.skill_content import BlockerWire, KnownSkill, Problem, blocker_of
 from ..store.agent_registry import PublishRequestRow
 from ..store.skill_list import pinning_agents, published_pinning
 from ..store.skills import SkillRegistry, SkillRow, SkillVersionRow, slug_of
@@ -692,8 +692,8 @@ class PendingSkillReview(TypedDict):
 
 class PublishCheck(TypedDict):
     canRequest: bool
-    # Each problem's sentence; `problems` is the same list with where each one is.
-    blockers: list[str]
+    # The problems in the shape every publish check returns (schemas.Blocker).
+    blockers: list[BlockerWire]
     problems: list[Problem]
     # What the builder should look at and may publish with: a tool a step's sentence names and does not run.
     warnings: list[Problem]
@@ -907,7 +907,7 @@ async def detail(rt: Runtime, skill_id: str, *, fresh: bool = False) -> SkillDet
             strict=lambda: strict_publishing(rt, row.team_id or None),
         )
         problems += blocking
-    blockers = [p["message"] for p in problems]
+    blockers = [blocker_of(p) for p in problems]
     latest = row.published_version
     published = next((v for v in versions if v.version == latest), None)
     usage: list[SkillUsage] = []

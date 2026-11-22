@@ -78,6 +78,7 @@ export function ThreadMessages({
   onCopy,
   onFeedback,
   onWidgetAction,
+  afterReply,
 }: {
   threadId: string;
   messages: ChatMessage[];
@@ -97,6 +98,8 @@ export function ThreadMessages({
   onCopy: (text: string, what?: string) => void;
   onFeedback: (messageId: string, fb: MessageFeedback | null) => void;
   onWidgetAction: (messageId: string, widgetId: string, action: WidgetAction) => Promise<void>;
+  /** Drawn under a finished reply, as the agent page's test chat draws what the agent did. */
+  afterReply?: (message: ChatMessage) => React.ReactNode;
 }) {
   const streaming = !!live?.streaming;
   const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
@@ -158,6 +161,7 @@ export function ThreadMessages({
                 )
               }
             />
+            {afterReply && !(isLive && streaming) ? afterReply(m) : null}
             {endedInReply(m).map((e, n) => (
               // A skill can end twice in one reply (left by the agent, started again), so its place is part of the key.
               <SkillEnded key={`${e.skillId}/${e.version}/${n}`} ending={e} />
