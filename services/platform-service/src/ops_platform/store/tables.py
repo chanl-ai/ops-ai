@@ -124,17 +124,17 @@ api_keys = sa.Table(
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("tenant_id", sa.String(64), sa.ForeignKey("tenants.id"), nullable=False, index=True),
     sa.Column("team_id", sa.String(64), nullable=False, index=True),
-    sa.Column("name", sa.String(200), nullable=False),
+    sa.Column("name", sa.String(200), nullable=False, info=LISTED),
     sa.Column("prefix", sa.String(64), nullable=False, unique=True),  # the key's id, looked up before the hash
     sa.Column("secret_hash", sa.String(64), nullable=False),
     sa.Column("scopes", sa.JSON, nullable=False),  # read | write
     sa.Column("created_by", sa.String(64), nullable=False),
-    sa.Column("created_at", sa.String(40), nullable=False),
-    sa.Column("last_used_at", sa.String(40)),
+    sa.Column("created_at", sa.String(40), nullable=False, info=LISTED),
+    sa.Column("last_used_at", sa.String(40), info=LISTED),
     sa.Column("revoked_at", sa.String(40)),
     # Set when the creator leaves the team or is suspended (I10); a disabled key verifies as revoked.
     sa.Column("disabled_at", sa.String(40)),
-    sa.Column("expires_at", sa.String(40)),  # null: the key does not expire
+    sa.Column("expires_at", sa.String(40), info=LISTED),  # null: the key does not expire
     # What the key may start: agent or workflow, its id, and a pinned workflow version (null: the live one). No
     # target: any live workflow of the key's team.
     sa.Column("target_kind", sa.String(16), info=LISTED),
@@ -147,6 +147,11 @@ api_keys = sa.Table(
     # The keys list keeps the keys made for one target (an MCP link's Keys tab).
     sa.Index("ix_api_keys_team_target_kind", "team_id", "target_kind"),
     sa.Index("ix_api_keys_team_target_id", "team_id", "target_id"),
+    # The keys list sorts by name, creation, last use and expiry.
+    sa.Index("ix_api_keys_team_name", "team_id", "name"),
+    sa.Index("ix_api_keys_team_created_at", "team_id", "created_at"),
+    sa.Index("ix_api_keys_team_last_used_at", "team_id", "last_used_at"),
+    sa.Index("ix_api_keys_team_expires_at", "team_id", "expires_at"),
     info=TENANT_SCOPED,
 )
 
@@ -192,9 +197,11 @@ audit_entries = sa.Table(
     sa.Column("target_kind", sa.String(40), nullable=False),
     sa.Column("target_id", sa.String(64), nullable=False),
     sa.Column("request_id", sa.String(64), nullable=False),
-    sa.Column("at", sa.String(40), nullable=False),
+    sa.Column("at", sa.String(40), nullable=False, info=LISTED),
     sa.Column("detail", sa.JSON(none_as_null=True), nullable=False),
     sa.ForeignKeyConstraint(["tenant_id", "team_id"], ["teams.tenant_id", "teams.id"], name="fk_audit_entries_team"),
+    # The audit list is newest first and sorts by time.
+    sa.Index("ix_audit_entries_at", "tenant_id", "at"),
     info=TENANT_SCOPED,
 )
 
@@ -203,12 +210,14 @@ roles = sa.Table(
     metadata,
     sa.Column("tenant_id", sa.String(64), sa.ForeignKey("tenants.id"), primary_key=True),
     sa.Column("id", sa.String(64), primary_key=True),
-    sa.Column("name", sa.String(200), nullable=False),
+    sa.Column("name", sa.String(200), nullable=False, info=LISTED),
     sa.Column("builtin", sa.Boolean, nullable=False, info=LISTED),
     sa.Column("description", sa.String(500), nullable=False),
     sa.Column("created_at", sa.String(40), nullable=False),
     # The roles list filters on built-in or custom (`builtin`).
     sa.Index("ix_roles_builtin", "tenant_id", "builtin"),
+    # The roles list, and a person's own grants, sort by the role's name.
+    sa.Index("ix_roles_name", "tenant_id", "name"),
     info=TENANT_SCOPED,
 )
 

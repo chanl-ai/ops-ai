@@ -39,13 +39,16 @@ const COLUMNS: ColumnDef<Row>[] = [
   { accessorKey: 'assignmentCount', header: ({ column }) => <DataTableColumnHeader column={column} title="People" />, meta: { kind: 'number' } },
 ];
 
+/** The table's columns the server sorts by, each with its `sortBy` value. */
+const SORT_COLUMNS = { name: 'name', assignmentCount: 'assignmentCount' };
+
 /**
  * Access › Roles: every role of the workspace, what it is for and how many hold it; a row opens its grid. A workspace
  * admin creates a custom role here, empty or as a copy of another.
  */
 export default function RolesPage() {
   const router = useRouter();
-  const list = useListParams('name');
+  const list = useListParams('name', undefined, undefined, SORT_COLUMNS);
   const roles = useRoles(list.params);
   const manages = useManagesRoles();
   const create = useCreateRole();
@@ -79,6 +82,7 @@ export default function RolesPage() {
           searchPlaceholder="Search roles…"
           onColumnFiltersChange={list.onColumnFiltersChange}
           serverPagination={serverPagination(list, roles)}
+          serverSorting={list.serverSort}
           hideViewSwitcher
           emptyState={<ListEmpty icon={ShieldCheck} noun="roles" filtered={list.isFiltered} description="Roles come with the workspace; none were found." />}
         />

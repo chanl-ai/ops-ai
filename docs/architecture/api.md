@@ -98,7 +98,7 @@ This section is the reference the SDK guides link to.
 | `page` | 1-based page number, default 1 |
 | `pageSize` | Rows per page: the install default is 20 (`OPS_PAGE_SIZE_DEFAULT`) and the largest is 50 (`OPS_PAGE_SIZE_MAX`); a larger value is answered at 50 |
 | `search` | Text matched by the list's own search columns |
-| `sortBy`, `sortOrder` | A column the list declares sortable, and `asc` or `desc` (default `desc`); rows with equal values keep a fixed order by id, so a page never repeats or skips a row |
+| `sortBy`, `sortOrder` | A column the list declares sortable, and `asc` or `desc` (default `desc`); rows with equal values keep a fixed order by id, so a page never repeats or skips a row. A list declares only the columns its console table sorts by, each with an index (`deploy/database/tests/test_indexes.py`); any other `sortBy` is ignored and the list keeps its default order |
 | `ids` | Repeated; at most 1000. Answers exactly those rows, whatever `search` says; used by pickers and labels |
 | any other key | A filter of that list, repeated once per value: `?status=open&status=held` keeps either |
 

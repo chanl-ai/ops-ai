@@ -2,6 +2,7 @@ import type { ToolCallFilters } from '@/lib/types/governance';
 import type { ListParams } from '@/lib/types/query';
 
 import { ApiError } from './contract';
+import { addSort } from './sort-query';
 
 import type { GovernanceApi } from './governance-contract';
 
@@ -40,7 +41,7 @@ export function createGovernanceHttp(get: Get, send: Send, qs: (p: ListParams & 
 export function createExecutionsHttp(get: Get): GovernanceApi['toolCalls'] {
   return {
     list: (p: ListParams<ToolCallFilters>) => {
-      const q = new URLSearchParams({ page: String(p.page), pageSize: String(p.pageSize) });
+      const q = addSort(new URLSearchParams({ page: String(p.page), pageSize: String(p.pageSize) }), p);
       const thread = p.filters?.runId?.[0];
       if (thread) q.set('thread', thread);
       const tool = p.filters?.tool?.[0];

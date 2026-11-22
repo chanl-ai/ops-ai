@@ -44,12 +44,12 @@ import { createMcpLinksHttp } from './mcp-links-http';
 import { createReferencesHttp } from './references-http';
 import { createWikiHttp } from './wiki-http';
 import { fetchWithIdentity } from './request-identity';
+import { addSort } from './sort-query';
 
 function qs(params: ListParams & { view?: string; group?: string }) {
   const q = new URLSearchParams({ page: String(params.page), pageSize: String(params.pageSize) });
   if (params.search) q.set('search', params.search);
-  if (params.sortBy) q.set('sortBy', params.sortBy);
-  if (params.sortOrder) q.set('sortOrder', params.sortOrder);
+  addSort(q, params);
   for (const id of params.ids ?? []) q.append('ids', id);
   if (params.view) q.set('view', params.view);
   if (params.group) q.set('group', params.group);

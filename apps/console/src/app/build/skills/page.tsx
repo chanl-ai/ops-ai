@@ -168,11 +168,14 @@ function columns(open: (s: SkillRow) => void, onExport: (s: SkillRow) => void): 
 
 const VIEWS: SkillView[] = ['all', 'published', 'always', 'drafts', 'in_review', 'deprecated', 'unused'];
 
+/** The table's columns the server sorts by, each with its `sortBy` value. */
+const SORT_COLUMNS = { name: 'name', status: 'status', usedBy: 'usedBy', updatedAt: 'updatedAt' };
+
 export default function SkillsPage() {
   const router = useRouter();
   const search = useSearchParams();
   const [view, setView] = React.useState<SkillView>(() => (VIEWS.includes(search.get('view') as SkillView) ? (search.get('view') as SkillView) : 'all'));
-  const list = useListParams<SkillFilters>('name');
+  const list = useListParams<SkillFilters>('name', undefined, undefined, SORT_COLUMNS);
   const query = useSkills({ ...list.params, view });
   const options = useSkillOptions();
   const { team } = useTeam();
@@ -316,6 +319,7 @@ export default function SkillsPage() {
                 : []),
             ]}
             serverPagination={serverPagination(list, query)}
+            serverSorting={list.serverSort}
             emptyState={
               <ListEmpty
                 icon={Sparkles}
