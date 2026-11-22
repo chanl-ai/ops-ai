@@ -176,14 +176,23 @@ class RoleStore(TenantDb):
                 "builtin": sa.case((roles.c.builtin == sa.true(), "true"), else_="false"),
                 "canDecideReviews": sa.case((decides, "true"), else_="false"),
             }
+            assigned = sa.func.coalesce(held.c.n, 0)
             q = sa.select(
                 roles.c.id,
                 roles.c.name,
                 roles.c.builtin,
                 roles.c.description,
-                sa.func.coalesce(held.c.n, 0).label("assignment_count"),
+                assigned.label("assignment_count"),
             ).select_from(roles.outerjoin(held, held.c.role_id == roles.c.id))
-            page = await list_page(c, q, params, search=[roles.c.name], default_sort=place.asc(), filters=flags)
+            page = await list_page(
+                c,
+                q,
+                params,
+                search=[roles.c.name],
+                sortable={"name": roles.c.name, "assignmentCount": assigned},
+                default_sort=place.asc(),
+                filters=flags,
+            )
         page["data"] = [
             RoleSummary.model_validate({**r, "permission_count": len(grids.get(str(r["id"]), []))}).model_dump(
                 by_alias=True

@@ -60,7 +60,7 @@ async def chat(c: AsyncClient, headers: dict[str, str], agent: str = "ag_branch"
 async def mine(c: AsyncClient, headers: dict[str, str], agent: str | None = None) -> list[dict[str, Any]]:
     r = await c.get(MINE + (f"?agentId={agent}" if agent else ""), headers=headers)
     assert r.status_code == 200, r.text
-    return r.json()["data"]
+    return r.json()["data"]["data"]
 
 
 async def profile(rt: Any, agent: str = "ag_branch", question: str = "timezone and account") -> str:
@@ -85,6 +85,28 @@ async def test_a_memory_follows_its_person_in_the_team(stack: Stack) -> None:  #
     assert "timezone: Eastern" in await profile(rt, "ag_dispute"), "another agent in the team uses it too"
     found = await say(c, await chat(c, VIEWER), 'call search_memory {"query": "timezone"}', VIEWER)
     assert "Eastern" in tool_outputs(found), found
+
+
+async def test_the_memory_list_searches_filters_and_pages_on_the_server(stack: Stack) -> None:  # noqa: F811
+    c, rt = stack
+    await say(c, await chat(c, VIEWER), "Remember that my timezone is Eastern.", VIEWER)
+    await say(c, await chat(c, VIEWER), "Remember that my preferred account is CHQ-2219.", VIEWER)
+
+    async def page(**params: Any) -> dict[str, Any]:
+        r = await c.get(MINE, params=params, headers=VIEWER)
+        assert r.status_code == 200, r.text
+        return r.json()["data"]
+
+    assert [m["value"] for m in (await page(search="eastern"))["data"]] == ["Eastern"], "search reads the value"
+    assert [m["key"] for m in (await page(search="preferred"))["data"]] == ["preferred account"], "and the key"
+    assert (await page(kind="episode"))["data"] == [], "kind keeps those kinds"
+    first = await page(pageSize=1)
+    assert first["pagination"]["total"] == 2 and first["pagination"]["hasNext"], first["pagination"]
+    second = await page(pageSize=1, page=2)
+    assert {first["data"][0]["id"], second["data"][0]["id"]} == {m["id"] for m in await mine(c, VIEWER)}
+    other = await keep(rt, "branch", "Leeds Central", agent="ag_dispute")
+    assert other in {m["id"] for m in await mine(c, VIEWER)}, "unfiltered, every agent's memory is listed"
+    assert other not in {m["id"] for m in await mine(c, VIEWER, "ag_branch")}, "agentId keeps what that agent may use"
 
 
 async def test_only_the_persons_own_words_are_read_for_memory(stack: Stack) -> None:  # noqa: F811

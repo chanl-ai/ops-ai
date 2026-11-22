@@ -1159,7 +1159,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/me/memories",
         "pathParams": [],
-        "query": ["agentId"],
+        "query": ["agentId", "kind", "page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "memory_undo_memory": {
@@ -2745,9 +2745,36 @@ class Operations:
         "Knowledge Usage"
         return self._t.call(SERVICE, OPERATIONS["agents_knowledge_usage"], {}, {"ids": ids}, {}, None)  # type: ignore[no-any-return]
 
-    def memory_list_memories(self, *, agent_id: str | None = None) -> list[MemoryView]:
+    def memory_list_memories(
+        self,
+        *,
+        agent_id: str | None = None,
+        kind: list[str] | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultMemoryView:
         "List Memories"
-        return self._t.call(SERVICE, OPERATIONS["memory_list_memories"], {}, {"agentId": agent_id}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["memory_list_memories"],
+            {},
+            {
+                "agentId": agent_id,
+                "kind": kind,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     def memory_forget_agent_memories(self, *, agent_id: str | None = None) -> Forgotten:
         "Forget Agent Memories"
@@ -4416,9 +4443,36 @@ class AsyncOperations:
         "Knowledge Usage"
         return await self._t.call(SERVICE, OPERATIONS["agents_knowledge_usage"], {}, {"ids": ids}, {}, None)  # type: ignore[no-any-return]
 
-    async def memory_list_memories(self, *, agent_id: str | None = None) -> list[MemoryView]:
+    async def memory_list_memories(
+        self,
+        *,
+        agent_id: str | None = None,
+        kind: list[str] | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultMemoryView:
         "List Memories"
-        return await self._t.call(SERVICE, OPERATIONS["memory_list_memories"], {}, {"agentId": agent_id}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["memory_list_memories"],
+            {},
+            {
+                "agentId": agent_id,
+                "kind": kind,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     async def memory_forget_agent_memories(self, *, agent_id: str | None = None) -> Forgotten:
         "Forget Agent Memories"

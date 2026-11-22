@@ -26,7 +26,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useStartCredentialCheck } from '@/hooks/connections-queries';
 import { type AppCredentialDetail, useAppCredential, useConnectionKinds, useSignOutTeam, useStartSignIn, useSystemCard } from '@/hooks/systems-queries';
-import { useTeam } from '@/hooks/use-team';
+import { useTeam, useTeamsNamed } from '@/hooks/use-team';
 import type { Kinds } from '@/lib/connect-plan';
 import { shortDate } from '@/lib/format';
 
@@ -101,13 +101,15 @@ export default function AppCredentialPage() {
   const q = useAppCredential(decodeURIComponent(id));
   const c = q.data;
   const kinds = useConnectionKinds();
-  const { team, teamId, teams, switchTeam } = useTeam();
+  const { team, teamId, switchTeam } = useTeam();
   const router = useRouter();
-  // A link to a credential names its team; the page opens in it when the person is in that team.
+  // A link to a credential names its team; the page opens in it when the person is in that team (read by id).
   const wanted = useSearchParams().get('team');
+  const held = useTeamsNamed([wanted]);
+  const wantedTeam = wanted ? held.get(wanted) : undefined;
   React.useEffect(() => {
-    if (wanted && wanted !== teamId && teams.some((t) => t.id === wanted)) switchTeam(wanted);
-  }, [wanted, teamId, teams, switchTeam]);
+    if (wantedTeam && wantedTeam.id !== teamId) switchTeam(wantedTeam.id, wantedTeam);
+  }, [wantedTeam, teamId, switchTeam]);
   const card = useSystemCard(c?.app).data ?? undefined;
   const all = kinds.data as Kinds | undefined;
   const connects = Boolean(card && all && connectsInWindow(card, all));

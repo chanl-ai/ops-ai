@@ -1123,9 +1123,59 @@ export interface paths {
         put?: never;
         /**
          * Discover
-         * @description Off the request transaction: it fetches the source, so no connection is held while it answers.
+         * @description Reads the source and keeps what it lists for 24 hours, for the caller and the module named by `moduleId`
+         *     (none for a new module), without the calls' headers. Answers the discovery's id, the source's meta and how
+         *     many operations it lists; GET /discoveries/{id}/operations pages them. Off the request transaction: it fetches
+         *     the source, so no connection is held while it answers.
          */
         post: operations["tool_modules_discover"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tool-modules/discoveries/{discovery_id}/names": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Discovered Names
+         * @description Select-all for the picker: the name and access of every operation matching the same search and filters
+         *     that the module does not have yet, unpaged. It answers at most the discovery's own operations, which the
+         *     source's size bounds (`operationTotal` on the discovery), so the picker can send an import of all of them
+         *     without loading every page.
+         */
+        get: operations["tool_modules_list_discovered_names"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tool-modules/discoveries/{discovery_id}/operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Discovered Operations
+         * @description One page of a discovery's operations in the source's order, searched on name, description and path, with
+         *     `group` and `access` filters and facets. Each row says whether the module the discovery was made for already
+         *     has it (`added`), and `addedTotal` counts the matching ones it has. Only the person who made the discovery, in
+         *     its team, reads it: anyone else, and anyone after 24 hours, gets 404. The filters are read from the shared
+         *     list query; they are named here for the document.
+         */
+        get: operations["tool_modules_list_discovered_operations"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2869,13 +2919,101 @@ export interface components {
             /** Reason */
             reason?: string | null;
         };
-        /** DiscoveredOperation */
-        DiscoveredOperation: {
+        /**
+         * DiscoverIn
+         * @description A source to read, and the module its operations are for (`moduleId`): none while a new module is drafted. A
+         *     module the caller may not change is refused.
+         */
+        DiscoverIn: {
+            /** Connectionid */
+            connectionId?: string | null;
+            /** Fileid */
+            fileId?: string | null;
+            /** Filename */
+            fileName?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "mcp" | "openapi";
+            /** Moduleid */
+            moduleId?: string | null;
+            /** Specurl */
+            specUrl?: string | null;
+            /** Url */
+            url?: string | null;
+        };
+        /** DiscoveredName */
+        DiscoveredName: {
             /**
              * Access
              * @enum {string}
              */
             access: "read" | "write";
+            /** Name */
+            name: string;
+        };
+        /**
+         * DiscoveredNames
+         * @description Every operation matching the search and filters that the module does not have yet, for select-all.
+         */
+        DiscoveredNames: {
+            /** Data */
+            data: components["schemas"]["DiscoveredName"][];
+        };
+        /**
+         * DiscoveredOperationIn
+         * @description An operation picked from a source, by name with its confirmed access class. With a source, every other field is
+         *     read from the source again, so a pick made by select-all (a name and access only) is enough.
+         */
+        DiscoveredOperationIn: {
+            /**
+             * Access
+             * @enum {string}
+             */
+            access: "read" | "write";
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /**
+             * Group
+             * @default
+             */
+            group: string;
+            /** Input */
+            input?: components["schemas"]["SchemaFieldIn"][];
+            /** Method */
+            method?: ("GET" | "POST" | "PUT" | "PATCH" | "DELETE") | null;
+            /** Name */
+            name: string;
+            /** Path */
+            path?: string | null;
+        };
+        /** DiscoveredOperationList */
+        DiscoveredOperationList: {
+            /** Addedtotal */
+            addedTotal: number;
+            /** Data */
+            data: components["schemas"]["DiscoveredOperationRow"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
+        };
+        /** DiscoveredOperationRow */
+        DiscoveredOperationRow: {
+            /**
+             * Access
+             * @enum {string}
+             */
+            access: "read" | "write";
+            /** Added */
+            added: boolean;
             /** Description */
             description: string;
             /** Group */
@@ -2889,37 +3027,23 @@ export interface components {
             /** Path */
             path?: string | null;
         };
-        /** DiscoveredOperationIn */
-        DiscoveredOperationIn: {
-            /**
-             * Access
-             * @enum {string}
-             */
-            access: "read" | "write";
-            /** Description */
-            description: string;
-            /** Group */
-            group: string;
-            /** Input */
-            input: components["schemas"]["SchemaFieldIn"][];
-            /** Method */
-            method?: ("GET" | "POST" | "PUT" | "PATCH" | "DELETE") | null;
-            /** Name */
-            name: string;
-            /** Path */
-            path?: string | null;
-        };
-        /** DiscoveryResult */
+        /**
+         * DiscoveryResult
+         * @description A source as discovery read it: its meta and how many operations it lists. The operations are stored for 24
+         *     hours for the person who asked, and read a page at a time from GET /v1/tool-modules/discoveries/{id}/operations.
+         */
         DiscoveryResult: {
             /** Endpoint */
             endpoint: string;
+            /** Id */
+            id: string;
             /**
              * Noauth
              * @default false
              */
             noAuth: boolean;
-            /** Operations */
-            operations: components["schemas"]["DiscoveredOperation"][];
+            /** Operationtotal */
+            operationTotal: number;
             /** Suggestedname */
             suggestedName: string;
             /** System */
@@ -3086,6 +3210,24 @@ export interface components {
         /** Envelope[CredentialDeleted] */
         Envelope_CredentialDeleted_: {
             data: components["schemas"]["CredentialDeleted"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[DiscoveredNames] */
+        Envelope_DiscoveredNames_: {
+            data: components["schemas"]["DiscoveredNames"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[DiscoveredOperationList] */
+        Envelope_DiscoveredOperationList_: {
+            data: components["schemas"]["DiscoveredOperationList"];
             /**
              * Success
              * @constant
@@ -13913,7 +14055,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ModuleSourceIn"];
+                "application/json": components["schemas"]["DiscoverIn"];
             };
         };
         responses: {
@@ -13924,6 +14066,270 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_DiscoveryResult_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not available on this service yet */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The source could not be reached */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    tool_modules_list_discovered_names: {
+        parameters: {
+            query?: {
+                /** @description The operations' resource groups */
+                group?: string[] | null;
+                /** @description read or write */
+                access?: string[] | null;
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
+            };
+            header?: never;
+            path: {
+                discovery_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_DiscoveredNames_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not available on this service yet */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The source could not be reached */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    tool_modules_list_discovered_operations: {
+        parameters: {
+            query?: {
+                /** @description The operations' resource groups */
+                group?: string[] | null;
+                /** @description read or write */
+                access?: string[] | null;
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
+            };
+            header?: never;
+            path: {
+                discovery_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_DiscoveredOperationList_"];
                 };
             };
             /** @description Invalid request */

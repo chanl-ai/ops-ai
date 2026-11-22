@@ -427,13 +427,16 @@ class SubjectBindingIn(In):
 
 
 class DiscoveredOperationIn(In):
+    """An operation picked from a source, by name with its confirmed access class. With a source, every other field is
+    read from the source again, so a pick made by select-all (a name and access only) is enough."""
+
     name: Name120
-    description: str
+    description: str = ""
     access: Access
     method: Method | None = None
     path: str | None = None
-    group: str
-    input: list[SchemaFieldIn]
+    group: str = ""
+    input: list[SchemaFieldIn] = Field(default_factory=list[SchemaFieldIn])
 
 
 class HeaderIn(In):
@@ -730,15 +733,40 @@ class DiscoveredOperation(Out):
 
 
 class DiscoveryResult(Out):
+    """A source as discovery read it: its meta and how many operations it lists. The operations are stored for 24
+    hours for the person who asked, and read a page at a time from GET /v1/tool-modules/discoveries/{id}/operations."""
+
+    id: str
     type: ModuleType
     system: str
     suggested_name: str
     version: str
     endpoint: str
-    operations: list[DiscoveredOperation]
     warnings: list[str]
     # No operation carries an auth header: imported as is, calls go out with no credentials.
     no_auth: bool = False
+    operation_total: int
+
+
+class DiscoveredOperationRow(DiscoveredOperation):
+    # The module the discovery was made for already has an operation of this name: an import skips it.
+    added: bool
+
+
+class DiscoveredOperationList(ListResult[DiscoveredOperationRow]):
+    # How many operations matching the search and filters the module already has, for the picker's count.
+    added_total: int
+
+
+class DiscoveredName(Out):
+    name: str
+    access: Access
+
+
+class DiscoveredNames(Out):
+    """Every operation matching the search and filters that the module does not have yet, for select-all."""
+
+    data: list[DiscoveredName]
 
 
 class ModuleSourceIn(In):
@@ -750,6 +778,13 @@ class ModuleSourceIn(In):
     file_name: str | None = None
     file_id: str | None = None
     connection_id: str | None = None
+
+
+class DiscoverIn(ModuleSourceIn):
+    """A source to read, and the module its operations are for (`moduleId`): none while a new module is drafted. A
+    module the caller may not change is refused."""
+
+    module_id: str | None = None
 
 
 class ImportOperationsIn(In):

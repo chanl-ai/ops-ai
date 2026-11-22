@@ -11,6 +11,7 @@ import { useFlagged } from '@/hooks/flag-queries';
 import { useNavAllows } from '@/hooks/me-queries';
 import { useRecentSearches, useSearch, useVisitSearchHit } from '@/hooks/search-queries';
 import { comboLabel, usePageShortcuts } from '@/hooks/use-shortcut';
+import { teamOptions } from '@/hooks/options-queries';
 import { useTeam } from '@/hooks/use-team';
 import { AREA_LABEL, childrenOffered, itemOffered, NAV, SETTINGS_VIEW } from '@/lib/nav';
 import type { NavNeed } from '@/lib/nav';
@@ -18,6 +19,8 @@ import type { FlagName } from '@/lib/types/flags';
 import type { SearchHit } from '@/lib/types/search';
 
 /** Sub-pages that are not in the sidebar but are worth jumping to; one with a `flag` shows only while the install turns it on. */
+const TEAMS = teamOptions();
+
 const EXTRA_PAGES: (PalettePage & { flag?: FlagName; needs?: NavNeed })[] = [
   // Connecting an assistant is the MCP channel of Deployments, so the page entry opens that tab.
   { title: 'MCP links', href: '/build/channels/mcp', area: 'Build', section: 'Channels', icon: Link2, keywords: 'MCP URL Claude Cursor Copilot ChatGPT connect', flag: 'mcp_gateway', needs: { area: 'deployments', action: 'view' } },
@@ -37,7 +40,7 @@ export function HeaderSearch() {
   const search = useSearch(query, open);
   const recents = useRecentSearches(open);
   const visit = useVisitSearchHit();
-  const { teams, teamId, switchTeam } = useTeam();
+  const { teamId, switchTeam } = useTeam();
   const extraPages = useFlagged(EXTRA_PAGES);
   const pageShortcuts = usePageShortcuts();
 
@@ -110,11 +113,12 @@ export function HeaderSearch() {
           go(hit.href);
         }}
         onNavigate={go}
-        teams={teams.map((t) => ({ id: t.id, name: t.name, current: t.id === teamId }))}
-        onSwitchTeam={(id) => {
+        teamSource={TEAMS}
+        currentTeamId={teamId}
+        onSwitchTeam={(id, name) => {
           setOpen(false);
           switchTeam(id);
-          toast.success(`Switched to ${teams.find((t) => t.id === id)?.name ?? 'team'}`);
+          toast.success(`Switched to ${name}`);
         }}
       />
     </>

@@ -154,12 +154,15 @@ function columns(canEdit: boolean, onRotate: (s: SecretMeta) => void, onRename: 
   return canEdit ? cols : cols.filter((c) => c.id !== 'actions');
 }
 
+/** The table's columns the server sorts by, each with its `sortBy` value. */
+const SORT_COLUMNS = { name: 'name', createdAt: 'createdAt', rotatedAt: 'rotatedAt', lastUsedAt: 'lastUsedAt' };
+
 /**
  * The team's secrets: the values tool calls send, such as API keys, with Add, Rotate, Rename and Delete for the Security
  * team's admins. Shown on Apps › Credentials; storage credentials are on the Storage settings page.
  */
 export function SecretsPanel() {
-  const list = useListParams('name');
+  const list = useListParams('name', undefined, undefined, SORT_COLUMNS);
   const created = useCreatedRows<SecretMeta>();
   const [filterResetKey, setFilterResetKey] = React.useState(0);
   const query = useSecretsPage(list.params);
@@ -197,6 +200,7 @@ export function SecretsPanel() {
           searchPlaceholder="Search secrets…"
           onColumnFiltersChange={list.onColumnFiltersChange}
           serverPagination={serverPagination(list, query)}
+          serverSorting={list.serverSort}
           filterResetKey={filterResetKey}
           hideViewSwitcher
           // The page header already carries Add secret; a second one in the empty state doubles it.

@@ -240,47 +240,80 @@
   },
   "list": {
     "body": {
-      "data": [
-        {
-          "agentId": "",
-          "agentName": "",
-          "confidence": 1.0,
-          "createdAt": "<timeZ>",
-          "id": "<mem>",
-          "key": "preferred account",
-          "kind": "fact",
-          "source": "asked",
-          "sourceThreadId": "<th>",
-          "value": "<CHQ>"
+      "data": {
+        "data": [
+          {
+            "agentId": "",
+            "agentName": "",
+            "confidence": 1.0,
+            "createdAt": "<timeZ>",
+            "id": "<mem>",
+            "key": "preferred account",
+            "kind": "fact",
+            "source": "asked",
+            "sourceThreadId": "<th>",
+            "value": "<CHQ>"
+          }
+        ],
+        "facets": {},
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 20,
+          "total": 1,
+          "totalPages": 1
         }
-      ],
+      },
       "success": true
     },
     "status": 200
   },
   "list.otherAgent": {
     "body": {
-      "data": [
-        {
-          "agentId": "",
-          "agentName": "",
-          "confidence": 1.0,
-          "createdAt": "<timeZ>",
-          "id": "<mem>",
-          "key": "preferred account",
-          "kind": "fact",
-          "source": "asked",
-          "sourceThreadId": "<th>",
-          "value": "<CHQ>"
+      "data": {
+        "data": [
+          {
+            "agentId": "",
+            "agentName": "",
+            "confidence": 1.0,
+            "createdAt": "<timeZ>",
+            "id": "<mem>",
+            "key": "preferred account",
+            "kind": "fact",
+            "source": "asked",
+            "sourceThreadId": "<th>",
+            "value": "<CHQ>"
+          }
+        ],
+        "facets": {},
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 20,
+          "total": 1,
+          "totalPages": 1
         }
-      ],
+      },
       "success": true
     },
     "status": 200
   },
   "list.otherPerson": {
     "body": {
-      "data": [],
+      "data": {
+        "data": [],
+        "facets": {},
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 20,
+          "total": 0,
+          "totalPages": 1
+        }
+      },
       "success": true
     },
     "status": 200

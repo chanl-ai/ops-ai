@@ -47,7 +47,7 @@ async def _same_answers(platform: Platform, p: Person) -> dict[str, Any]:
     h = await bearer(platform, p)
     me = (await platform.public.get("/v1/me", headers=h)).json()["data"]
     permissions = (await platform.public.get("/v1/me/permissions", headers=h)).json()["data"]
-    listed = (await platform.public.get("/v1/teams", headers=h)).json()["data"]
+    listed = (await platform.public.get("/v1/teams", headers=h)).json()["data"]["data"]
 
     # Teams in the permissions come in no stated order from `holdings_in` (its read has no ORDER BY); /v1/me lists
     # them in membership order, so the two are compared team by team.
@@ -55,7 +55,9 @@ async def _same_answers(platform: Platform, p: Person) -> dict[str, Any]:
         return {**answer, "teams": sorted(answer["teams"], key=lambda t: t["teamId"])}
 
     assert by_team(me["permissions"]) == by_team(permissions)
-    assert me["teams"] == [{"id": t["id"], "name": t["name"], "role": t["role"]} for t in listed]
+    # /v1/teams lists by name, /v1/me in membership order.
+    shown = sorted(({"id": t["id"], "name": t["name"], "role": t["role"]} for t in listed), key=lambda t: t["id"])
+    assert sorted(me["teams"], key=lambda t: t["id"]) == shown
     return me
 
 

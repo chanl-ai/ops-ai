@@ -32,6 +32,13 @@ await withUiStack(
     }
     const source = { kind: 'openapi', specUrl: `https://${stack.bank.host}/v1/openapi-shapes.json` };
     const found = await json(await fetch(`${tools}/v1/tool-modules/discover`, { method: 'POST', headers: J, body: JSON.stringify(source) }));
+    // The discovery is stored; its operations are read a page at a time.
+    found.operations = [];
+    for (let p = 1; ; p++) {
+      const listed = await json(await fetch(`${tools}/v1/tool-modules/discoveries/${found.id}/operations?page=${p}&pageSize=50`, { headers: J }));
+      found.operations.push(...listed.data.map(({ name, access }) => ({ name, access })));
+      if (!listed.pagination.hasNext) break;
+    }
     const names = found.operations.map((o) => o.name);
     check('discovery finds one read per shape in the insights spec', ASK.every((n) => names.includes(n)), names);
     const made = await json(await fetch(`${tools}/v1/tool-modules`, { method: 'POST', headers: J, body: JSON.stringify({ name: `uc061-insights-${TAG}`, displayName: `Insights ${TAG}`, system: 'Core banking', type: 'openapi', endpoint: '', operations: found.operations, source }) }));

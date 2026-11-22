@@ -13,7 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { useTeam } from '@/hooks/use-team';
+import { useTeamsNamed } from '@/hooks/use-team';
 import { bytes, dateTime, mimeLabel, relativeTime } from '@/lib/format';
 import type { DownloadLink, FileDetail, FilePreview } from '@/lib/types/files';
 
@@ -101,7 +101,7 @@ export function FileSheet({
   }, [file?.id]);
   const f = file;
   // files-service names the owning team by id; the person's own teams carry the name (the mock already sends a name).
-  const { teams } = useTeam();
+  const teams = useTeamsNamed([file?.team]);
   const Icon = f ? fileIcon(f.name) : null;
   const blocked = f && (f.scan.status === 'infected' || f.scan.status === 'failed' ? (f.scan.status === 'infected' ? 'Quarantined: not downloadable' : 'Not scanned, so not downloadable') : f.scan.status === 'pending' ? 'Still being scanned' : undefined);
 
@@ -193,7 +193,7 @@ export function FileSheet({
             <KeyValues
               rows={[
                 ['Purpose', PURPOSE_LABEL[f.purpose]],
-                ['Team', teams.find((t) => t.id === f.team)?.name ?? f.team],
+                ['Team', teams.get(f.team)?.name ?? f.team],
                 ['Type', `${(f.name.split('.').pop() ?? mimeLabel(f.mime)).toUpperCase()} · ${f.mime} · ${bytes(f.size)}`],
                 ['Digest', <span key="d" className="font-mono text-xs break-all">sha256:{f.digest}</span>],
                 ['Uploaded', `${f.uploadedBy} · ${dateTime(f.uploadedAt)}`],

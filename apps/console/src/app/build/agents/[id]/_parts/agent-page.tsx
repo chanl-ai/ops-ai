@@ -94,7 +94,7 @@ import { useCanSetDefaultAgent, useDefaultAgent } from '@/hooks/chat-queries';
 import { useCanBuild } from '@/hooks/me-queries';
 import { useWidgetScriptUrl } from '@/hooks/widget-deployment-queries';
 import { relativeTime } from '@/lib/format';
-import { useTeam } from '@/hooks/use-team';
+import { useTeamsNamed } from '@/hooks/use-team';
 import { teamLabel } from '@/components/shared/team-name';
 import type { Agent } from '@/lib/types/domain';
 import { SplitView } from '@/components/shared/setting/split-view';
@@ -142,8 +142,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
   const tools = useGrantableTools();
   const modelAliases = useModelAliases();
   const { data: lookups } = useLookups();
-  const { teams } = useTeam();
-  const teamName = teamLabel(agent.teamId, teams);
+  const teamName = teamLabel(agent.teamId, useTeamsNamed([agent.teamId]));
   const versions = useAgentVersions(agent.id);
   const runs = useAgentRuns(agent.id);
   const update = useUpdateAgent(agent.id);

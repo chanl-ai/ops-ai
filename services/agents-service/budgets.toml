@@ -222,7 +222,7 @@ queries = 9
 queries = 1
 
 ["GET /v1/me/memories"]
-queries = 1
+queries = 2
 
 ["GET /v1/me/memories/export"]
 queries = 3

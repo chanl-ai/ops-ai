@@ -105,6 +105,7 @@ Every repository module, generated from the code; `make python-verify` fails whe
 | tools-service | `ops_tools.store.calls` | `CallLog` | CAS, TRANSACTION | `gateway_calls`, `gateway_fences` |
 | tools-service | `ops_tools.store.catalog` | `ToolCatalog` | CAS, TRANSACTION | none |
 | tools-service | `ops_tools.store.connections` | `ConnectionStore` | CAS, TRANSACTION | `app_credentials`, `connect_links`, `connection_audit`, `connection_tokens`, `connections`, `oauth_states` |
+| tools-service | `ops_tools.store.discoveries` | `Discoveries` | TRANSACTION | `tool_discoveries`, `tool_discovery_operations` |
 | tools-service | `ops_tools.store.egress` | `EgressStore` | TRANSACTION | `egress_audit`, `egress_hosts`, `egress_ranges` |
 | tools-service | `ops_tools.store.mcp_links` | `McpLinks` | CAS | `mcp_links` |
 | tools-service | `ops_tools.store.mocks` | `MockStore` | TRANSACTION | none |

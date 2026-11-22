@@ -28,7 +28,7 @@ import { type AgentRow, agentsBulkSupported, useAgents, useBulkDeleteAgents, use
 import { useCreateParam } from '@/hooks/use-create-param';
 import { useCanSetDefaultAgent, useDefaultAgent } from '@/hooks/chat-queries';
 import { useCanBuild } from '@/hooks/me-queries';
-import { useTeam } from '@/hooks/use-team';
+import { useTeam, useTeamsNamed } from '@/hooks/use-team';
 import { useSticky } from '@/hooks/use-sticky';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { count, pct, plural, relativeTime } from '@/lib/format';
@@ -130,7 +130,8 @@ export default function AgentsPage() {
   const router = useRouter();
   const list = useListParams<AgentFilters>('name');
   const query = useAgents(list.params);
-  const { team, teams } = useTeam();
+  const { team } = useTeam();
+  const teams = useTeamsNamed(Object.keys(query.data?.facets?.teamId ?? {}));
   const canBuild = useCanBuild();
   const remove = useDeleteAgent();
   // Templates have no API yet (docs/console/strategy.md), so `?create` opens the blank one-screen create only.

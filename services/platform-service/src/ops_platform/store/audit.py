@@ -352,6 +352,7 @@ class AuditLog(TenantDb):
                 stmt,
                 params,
                 search=[audit_entries.c.action, actor.c.name, actor.c.email],
+                sortable={"at": audit_entries.c.at},
                 default_sort=audit_entries.c.at.desc(),
             )
             counts = await _counts(c, team_id, account)

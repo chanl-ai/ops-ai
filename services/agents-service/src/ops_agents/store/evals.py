@@ -62,7 +62,7 @@ eval_runs = sa.Table(
     sa.Column("cost_usd", sa.Float(), nullable=False, default=0.0),
     sa.Column("results", sa.JSON, nullable=False),
     sa.Column("started_by", sa.String(320), nullable=False),
-    sa.Column("ran_at", sa.String(32), nullable=False),
+    sa.Column("ran_at", sa.String(32), nullable=False, info=LISTED),
     # The digest of the version's content when the run started (agents 0121). A draft is rewritten under one version
     # number, so the publish gate counts a run only while this still equals the version's own digest; null on runs
     # kept before, which count for nothing.
@@ -70,6 +70,8 @@ eval_runs = sa.Table(
     sa.Index("ix_eval_runs_asset", "tenant_id", "team_id", "kind", "asset_id", "ran_at"),
     # The runs list filters and counts by what started a run (agents 0121).
     sa.Index("ix_eval_runs_trigger", "tenant_id", "team_id", "trigger"),
+    # An asset's runs sort by when each ran.
+    sa.Index("ix_eval_runs_ran_at", "tenant_id", "team_id", "ran_at"),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
@@ -158,6 +160,7 @@ class EvalStore(RuntimeStore):
                 c,
                 q,
                 params,
+                sortable={"ranAt": t.c.ran_at, "trigger": t.c.trigger},
                 default_sort=t.c.ran_at.desc(),
                 filters={"trigger": t.c.trigger},
                 facets={"trigger": t.c.trigger},

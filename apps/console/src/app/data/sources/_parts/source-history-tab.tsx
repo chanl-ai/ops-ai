@@ -25,6 +25,9 @@ type Row = SyncRun & { onRowClick: (r: SyncRun) => void };
 
 const num = (n: number | undefined) => <span className="tabular-nums">{n === undefined ? '—' : count(n)}</span>;
 
+/** The table's columns the server sorts by, each with its `sortBy` value. */
+const SORT_COLUMNS = { startedAt: 'startedAt' };
+
 /**
  * Every sync and rebuild of the source with what it checked, changed, removed and failed, and the model calls its AI
  * steps made. A running one can be cancelled; `?run=` opens one with its errors and log. Addresses a sync removed for
@@ -34,7 +37,7 @@ export function SourceHistoryTab({ source, onSync }: { source: SourceDetail; onS
   const params = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const list = useListParams<RunFilters>(undefined, 20);
+  const list = useListParams<RunFilters>(undefined, 20, undefined, SORT_COLUMNS);
   const query = useSourceRuns(source.id, list.params);
   const runId = params.get('run');
   const run = useSyncRun(runId);
@@ -128,6 +131,7 @@ export function SourceHistoryTab({ source, onSync }: { source: SourceDetail; onS
         hideViewSwitcher
         initialColumnVisibility={{ checked: true, changed: true, deleted: true, failed: true, model: true, status: true }}
         serverPagination={serverPagination(list, query)}
+        serverSorting={list.serverSort}
         emptyState={
           <ListEmpty
             icon={History}

@@ -23,9 +23,7 @@ async def _listed(api: Api) -> None:
 
 async def test_discovery_lists_the_servers_tools_as_writes(bank_api: Api) -> None:
     await _listed(bank_api)
-    r = await bank_api.call("POST", "/discover", json=SOURCE)
-    assert r.status_code == 200, r.text
-    found = r.json()["data"]
+    found = await bank_api.discovered(SOURCE)
     assert (found["type"], found["system"], found["version"]) == ("mcp", "Case desk", "4.1.0")
     assert {o["name"]: o["access"] for o in found["operations"]} == {"lookup_case": "write", "close_case": "write"}
     assert found["operations"][0]["input"] == [{"name": "caseId", "type": "string", "required": True}]

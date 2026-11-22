@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- agents-service, stamped at 0123_eval_run_digest
+-- agents-service, stamped at 20261122_2044_list_sort_indexes
 CREATE TABLE engine_definitions (
 	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
@@ -310,6 +310,8 @@ CREATE INDEX ix_cases_team_priority ON cases (tenant_id, team_id, priority);
 GO
 CREATE INDEX ix_cases_team_status ON cases (tenant_id, team_id, status);
 GO
+CREATE INDEX ix_cases_team_subject ON cases (tenant_id, team_id, subject);
+GO
 CREATE UNIQUE INDEX uq_cases_producer_key ON cases (tenant_id, team_id, producer_key) WHERE producer_key IS NOT NULL;
 GO
 CREATE TABLE case_events (
@@ -556,6 +558,8 @@ CREATE TABLE eval_runs (
 GO
 CREATE INDEX ix_eval_runs_asset ON eval_runs (tenant_id, team_id, kind, asset_id, ran_at);
 GO
+CREATE INDEX ix_eval_runs_ran_at ON eval_runs (tenant_id, team_id, ran_at);
+GO
 CREATE INDEX ix_eval_runs_trigger ON eval_runs (tenant_id, team_id, [trigger]);
 GO
 CREATE TABLE registry_skills (
@@ -580,6 +584,8 @@ GO
 CREATE INDEX ix_registry_skills_team_origin ON registry_skills (tenant_id, team_id, origin);
 GO
 CREATE INDEX ix_registry_skills_team_owner ON registry_skills (tenant_id, team_id, owner_team);
+GO
+CREATE INDEX ix_registry_skills_team_updated ON registry_skills (tenant_id, team_id, updated_at);
 GO
 CREATE INDEX ix_registry_skills_tenant_team ON registry_skills (tenant_id, team_id);
 GO
@@ -1656,5 +1662,5 @@ CREATE TABLE alembic_version (
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version (version_num) VALUES ('0123_eval_run_digest');
+INSERT INTO alembic_version (version_num) VALUES ('20261122_2044_list_sort_indexes');
 GO

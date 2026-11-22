@@ -41,6 +41,23 @@ def data(r: httpx.Response) -> Any:
     return body["data"]
 
 
+async def discovered(api: httpx.AsyncClient, source: dict[str, Any]) -> dict[str, Any]:
+    """The source as tools-service discovers it, with every page of its stored operations as `operations`."""
+    found: dict[str, Any] = data(await api.post("/v1/tool-modules/discover", json=source))
+    ops: list[dict[str, Any]] = []
+    page = 1
+    while True:
+        listed = data(
+            await api.get(
+                f"/v1/tool-modules/discoveries/{found['id']}/operations", params={"page": page, "pageSize": 100}
+            )
+        )
+        ops += listed["data"]
+        if not listed["pagination"]["hasNext"]:
+            return {**found, "operations": ops}
+        page += 1
+
+
 def pending_review(module: dict[str, Any]) -> str | None:
     """The publish request of the module's version waiting for review, if one is."""
     versions: list[dict[str, Any]] = list(module.get("versions") or [])
@@ -75,14 +92,14 @@ async def reimport(
     waiting for Security (an earlier run that stopped) is decided first through `approver`. Returns the module detail.
     Idempotent: a module already up to date gets its policy re-checked only."""
     source = {"kind": "openapi", "specUrl": f"https://{host}/openapi.json"}
-    found = data(await api.post("/v1/tool-modules/discover", json=source))
+    found = await discovered(api, source)
     module = await decide_pending(approver, api, module_id, data(await api.get(f"/v1/tool-modules/{module_id}")))
     have = {o["name"] for o in module["operations"]}
     fresh = [o for o in found["operations"] if o["name"] not in have]
     # One at a time: an operation name is unique in the tenant, and a name another module already took is skipped
     # rather than stopping the reimport of the rest.
     for o in fresh:
-        chosen = {**o, "access": "read" if (o.get("method") or "GET").upper() == "GET" else "write"}
+        chosen = {"name": o["name"], "access": "read" if (o.get("method") or "GET").upper() == "GET" else "write"}
         r = await api.post(
             f"/v1/tool-modules/{module_id}/operations/import", json={"source": source, "operations": [chosen]}
         )
@@ -156,7 +173,7 @@ async def ensure_module(api: httpx.AsyncClient, host: str = HOST) -> tuple[str, 
     if any(host in str(m.get("endpoint") or "") for m in await every_module(api)):
         return await find_module(api, host), False
     source = {"kind": "openapi", "specUrl": f"https://{host}/openapi.json"}
-    found = data(await api.post("/v1/tool-modules/discover", json=source))
+    found = await discovered(api, source)
     body = {
         "name": "northfield-core-banking",
         "displayName": "Harbor & Pine Core Banking",
@@ -164,7 +181,7 @@ async def ensure_module(api: httpx.AsyncClient, host: str = HOST) -> tuple[str, 
         "type": "openapi",
         "endpoint": found["endpoint"],
         "operations": [
-            {**o, "access": "read" if (o.get("method") or "GET").upper() == "GET" else "write"}
+            {"name": o["name"], "access": "read" if (o.get("method") or "GET").upper() == "GET" else "write"}
             for o in found["operations"]
         ],
         "source": source,

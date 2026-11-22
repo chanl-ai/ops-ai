@@ -511,9 +511,20 @@ def ensure_bank_module(builder: Session, admin: Session) -> None:
     source = {"kind": "openapi", "specUrl": f"https://{BANK_HOST}/openapi.json"}
     try:
         doc = data(api.post("/v1/tool-modules/discover", json=source))
+        # The discovery is stored; its operations are picked by name from its pages.
+        listed: list[dict[str, Any]] = []
+        page = 1
+        while True:
+            got = data(
+                api.get(f"/v1/tool-modules/discoveries/{doc['id']}/operations", params={"page": page, "pageSize": 50})
+            )
+            listed += got["data"]
+            if not got["pagination"]["hasNext"]:
+                break
+            page += 1
         operations = [
-            {**o, "access": "read" if (o.get("method") or "GET").upper() == "GET" else "write"}
-            for o in doc["operations"]
+            {"name": o["name"], "access": "read" if (o.get("method") or "GET").upper() == "GET" else "write"}
+            for o in listed
         ]
         draft = next((m for m in listed if m["name"] == BANK_MODULE), None)
         made = draft or data(

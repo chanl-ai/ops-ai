@@ -62,7 +62,7 @@ async def gw(
 async def imported_before_levy(gw: Api) -> str:
     """The module as first imported: the document's operations before search_customers matched addresses and
     add_customer_note existed."""
-    found = (await gw.call("POST", "/discover", json=SOURCE)).json()["data"]
+    found = await gw.discovered(SOURCE)
     old = [o for o in found["operations"] if o["name"] not in ("search_customers", "add_customer_note")]
     assert old, found
     body = {
@@ -71,7 +71,7 @@ async def imported_before_levy(gw: Api) -> str:
         "system": found["system"],
         "type": "openapi",
         "endpoint": found["endpoint"],
-        "operations": [{**o, "access": "read" if o["method"] == "GET" else "write"} for o in old],
+        "operations": [{"name": o["name"], "access": "read" if o["method"] == "GET" else "write"} for o in old],
         "source": SOURCE,
     }
     r = await gw.call("POST", "", json=body)

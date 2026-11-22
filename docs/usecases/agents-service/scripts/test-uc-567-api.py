@@ -26,6 +26,8 @@ from typing import Any
 import httpx
 from fake_bank_https import private_address
 from usecase_harness import (
+    discovered,
+    picks,
     AGENTS_DIR,
     AGENTS_PORT,
     FILES_PORT,
@@ -188,10 +190,8 @@ def notes_held(run: dict[str, Any], text: str) -> int:
 def bank_module(gw: httpx.Client, host: str) -> str:
     """The core bank's operations as one published module: reads from GET, and the note write runs at once."""
     source = {"kind": "openapi", "specUrl": f"https://{host}/openapi.json"}
-    found = data(gw.post("/v1/tool-modules/discover", json=source))
-    ops = [
-        {**o, "access": "read" if (o.get("method") or "GET").upper() == "GET" else "write"} for o in found["operations"]
-    ]
+    found = discovered(gw, source)
+    ops = picks(found)
     made = data(
         gw.post(
             "/v1/tool-modules",
