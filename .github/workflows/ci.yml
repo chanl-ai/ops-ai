@@ -15,9 +15,10 @@ permissions:
   contents: read
 
 # A newer push to a pull request cancels its older run. A push to develop or main never cancels one: that run may be
-# deploying staging, and a deploy stopped halfway leaves the machine between two releases.
+# deploying staging, and a deploy stopped halfway leaves the machine between two releases. Its group holds the commit,
+# because a group with one slot also drops a queued run when a newer one queues, even with cancel-in-progress off.
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -30,13 +31,17 @@ env:
   OPS_GREENMAIL_HOST: 127.0.0.1
   OPS_MAILPIT_HOST: 127.0.0.1
   # What the changed-files plan compares against: the pull request's base, or the branch tip before a push. A branch's
-  # first push has no tip before it (an all-zero sha), so the whole difference from main is checked.
+  # first push has no tip before it (an all-zero sha), so the whole difference from main is checked. The plan step
+  # replaces it for develop and main (below).
   BASE_SHA: ${{ github.event.pull_request.base.sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || 'origin/main' }}
 
 jobs:
   plan:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
     outputs:
       full: ${{ steps.plan.outputs.full }}
       release: ${{ steps.plan.outputs.release }}
@@ -55,10 +60,19 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/setup
       - id: plan
+        name: Plan the jobs
         env:
           # [ci full] in the pull request's title, or its ci:full label, runs every job whatever changed.
           CI_FULL: ${{ contains(github.event.pull_request.title, '[ci full]') || contains(github.event.pull_request.labels.*.name, 'ci:full') }}
+          GH_TOKEN: ${{ github.token }}
         run: |
+          # A push to develop or main is planned from the last commit whose run passed ci-ok, so a merge whose run was
+          # lost or failed is checked with the next one. With no such commit the plan is a full run.
+          if [ "$GITHUB_EVENT_NAME" = push ] && { [ "$GITHUB_REF" = refs/heads/develop ] || [ "$GITHUB_REF" = refs/heads/main ]; }; then
+            green=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=${GITHUB_REF#refs/heads/}&event=push&status=success&per_page=50" \
+              | scripts/ci-last-green.sh "$GITHUB_SHA" || true)
+            if [ -n "$green" ]; then BASE_SHA=$green; else export CI_FULL=true; fi
+          fi
           base=$(git merge-base "$BASE_SHA" HEAD)
           scripts/ci-plan.sh "$base" | tee -a "$GITHUB_OUTPUT"
 
