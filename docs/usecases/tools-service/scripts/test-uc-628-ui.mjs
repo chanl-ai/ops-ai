@@ -276,6 +276,16 @@ try {
         }
         const james = await signedIn(browser, consoleUrl, 'j.richardson@harborpine.example', 1280);
         await step('4 James’s first chat with the team’s assistant asks for his own Salesforce account', async () => {
+          // The Turn on window's default sign-in is the team account, so a first chat after a default turn-on runs as the
+          // team and shows no card. Salesforce is turned on again per person, as step 0b does, so a person who has not
+          // connected is the one the Connect card is for. The app goes off and its account is removed first, as step 0c
+          // does, so this is a first turn-on.
+          const was = ((await call(tools, 'GET', `/v1/apps?ids=${encodeURIComponent(sfId)}`, priya)).data?.data ?? []).find((c) => c.id === sfId);
+          await call(tools, 'PUT', `/v1/apps/${encodeURIComponent(sfId)}/team`, priya, { enabled: false });
+          if (was?.connectionId) await call(tools, 'DELETE', `/v1/apps/${encodeURIComponent(sfId)}/accounts/${was.connectionId}`, priya);
+          const on = await call(tools, 'PUT', `/v1/apps/${encodeURIComponent(sfId)}/team`, priya, { enabled: true, signIn: 'person_or_team', settings: { login_url: sf.info.login_url } });
+          await call(agentsUrl, 'POST', '/v1/team-assistant/app-tools', priya, { moduleIds: on.data?.moduleIds ?? [] });
+          check('4 setup: Salesforce is turned on again per person', on.status === 200, { status: on.status });
           const thread = (await call(agentsUrl, 'POST', '/v1/chat/threads', as(await tokenFor('j.richardson@harborpine.example'), 'team_ops'), { kbIds: [] })).data;
           await james.goto(`${consoleUrl}/chat/${thread.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           const box = james.getByRole('textbox', { name: 'Message' });
