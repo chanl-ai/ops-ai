@@ -801,24 +801,25 @@ async def definition_sample(
     field's name, path and the value the acting team's newest finished run gave it, so the sheet joins nothing. All
     steps when `step` is left out. Only the acting team's runs feed it, through the runs list's own team rule and
     `visible_run`; values are masked when the team masks personal data for people. 403 unless the caller may view the
-    team's workflows. No request transaction: documents-service, tools-service and the masking policy are asked with
-    none open."""
+    team's workflows. One transaction for the run and its steps; documents-service, tools-service and the masking
+    policy are asked with none open."""
     store = definitions(rt)
     row = await store.row(workflow_id, team=current_team())
     if row is None:
         raise NotFound(f"Workflow definition {workflow_id}")
     copy = await _open_copy(store, workflow_id, row.version)
     held = copy.definition if copy is not None else row.definition
-    team = current_team()
+    team = current_team() or me.team_id or None
     picked = None
     steps: list[Any] = []
-    if team is not None:
-        newest = await runs(rt).list(workflow_id=workflow_id, status="succeeded", team_id=team, limit=1)
+    # The runs list's own rule (team_visible, in its request transaction) picks among the acting team's runs only.
+    async with isolation.request_transaction():
+        newest = await runs(rt).list(workflow_id=workflow_id, status="succeeded", limit=1)
         if newest:
             picked = await visible_run(rt, newest[0].id, me)
             steps = await runs(rt).step_rows(picked.id)
     shapes = await step_shapes.version_shapes(rt, team or "", held)
-    mask = await ai_steps_gate.people_see_masked(rt, team)
+    mask = await ai_steps_gate.people_see_masked(rt, picked.team_id if picked else team)
     return ok(step_sample.sample_view(workflow_id, held, step, shapes=shapes, run=picked, steps=steps, mask=mask))
 
 
