@@ -43,6 +43,16 @@ export async function publishReviewOn(areas, team = 'team_ops') {
   if (!r.ok) throw new Error(`turning publish review on for ${team}: ${r.status} ${(await r.text()).slice(0, 200)}`);
 }
 
+/**
+ * Turns the two-person rule on for `team` (requesterMayDecide off), as Priya, its admin, does under Approvals ›
+ * Advanced. It is off by default, so a use case proving that whoever asked does not decide turns it on first; an Admin
+ * of the team still decides their own request. Sign people in after this call, as a policy change refuses older tokens.
+ */
+export async function twoPersonRuleOn(team = 'team_ops') {
+  const r = await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/policies/requesterMayDecide`, { method: 'PUT', headers: await as(PRIYA, team), body: JSON.stringify({ value: false }) });
+  if (!r.ok) throw new Error(`turning the two-person rule on for ${team}: ${r.status} ${(await r.text()).slice(0, 200)}`);
+}
+
 /** Polls `probe` once a second until it returns something truthy, or `seconds` pass (then undefined). */
 export async function until(probe, seconds = 90) {
   for (const end = Date.now() + seconds * 1000; Date.now() < end; await sleep(1000)) {

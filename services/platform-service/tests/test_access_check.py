@@ -96,3 +96,17 @@ async def test_a_locked_action_says_why_and_who_can_grant_it(signin: SignInRig) 
     assert why["askable"], "the workspace admin reaches every team and can give roles"
     mine = await signin.public.get("/v1/me/why?area=agents&action=view", headers=h)
     assert mine.json()["data"]["allowed"] is True, mine.text
+
+
+async def test_whom_to_ask_never_names_the_caller(signin: SignInRig) -> None:
+    # The workspace admin holds access.manage, so a list that kept the caller would name her to herself.
+    email = await _admin_email(signin)
+    me = await signin.public.get("/v1/me", headers={"Authorization": signin.admin["Authorization"]})
+    name = str(me.json()["data"]["user"]["name"])
+    why = await signin.public.get("/v1/me/why?area=agents&action=publish", headers=signin.admin)
+    assert why.status_code == 200, why.text
+    assert why.json()["data"]["allowed"] is True, why.text
+    assert name not in why.json()["data"]["askable"], why.json()["data"]["askable"]
+    held = await signin.public.get("/v1/access/holders?area=access&action=manage", headers=signin.admin)
+    assert held.status_code == 200, held.text
+    assert email not in [h["email"] for h in held.json()["data"]["holders"]], held.json()["data"]["holders"]

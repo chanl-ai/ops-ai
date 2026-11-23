@@ -8,12 +8,14 @@ const asMap = (v: unknown): Record<string, unknown> => (v && typeof v === 'objec
 /**
  * Whether whoever asked may approve their own request in `teamId`. A boolean holds for every team (a value stored
  * before the key was per team). Else `{team or '*': true, false or {area: bool}}`: the team's own part over the
- * workspace's `*`. A per-area part reads as on when any area is on, so the page never shows Off while someone may
- * approve their own request somewhere in the team. Anything else is off.
+ * workspace's `*`; a team with neither reads the default, on (the two-person rule off). A per-area part reads as on
+ * when any area is on, so the page never shows the rule on while someone may approve their own request somewhere in
+ * the team.
  */
 export function requesterMayDecideOf(value: unknown, teamId: string): boolean {
   if (typeof value === 'boolean') return value;
   const held = asMap(value);
+  if (!(teamId in held) && !('*' in held)) return true;
   const part = teamId in held ? held[teamId] : held['*'];
   if (typeof part === 'boolean') return part;
   return Object.values(asMap(part)).some((v) => v === true);

@@ -7,8 +7,13 @@ reads the action decided and the decision in its activity. No model call is made
 
 from __future__ import annotations
 
+import os
 from contextlib import ExitStack
 from typing import Any
+
+# The team's two-person rule on (requesterMayDecide off; the default is on), so the run's starter does not decide its
+# own write. The dev identity carries the policy as a platform token would.
+os.environ["OPS_DEV_POLICIES"] = '{"requesterMayDecide": false}'
 
 import httpx
 from usecase_harness import AGENTS_PORT, TEAM, TOOLS_PORT, agents, check, data, engine_worker, finish, tools, until
@@ -126,7 +131,7 @@ with ExitStack() as stack:
     )
 
     review_id = tasks[0]["taskId"] if tasks else run_id
-    # The run's starter does not decide its own run's write (requesterMayDecide is off by default); Lee does.
+    # The run's starter does not decide its own run's write (the two-person rule, pinned on above); Lee does.
     own = api.post(f"/reviews/{review_id}/decision", json={"decision": "approved", "reason": "uc-251"}, headers=TEAM)
     check("3a the person who started the run cannot approve its write (403)", own.status_code == 403, own.text[:200])
     lee = {**TEAM, "X-Dev-User": "lee@harborpine.example"}

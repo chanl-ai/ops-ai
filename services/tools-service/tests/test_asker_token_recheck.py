@@ -1,7 +1,8 @@
 """An approval the person who asked gave themselves, checked again when the write is sent, by failure mode: the
 asker approved while requesterMayDecide let them (or while the write needed no reviewer), the policy changed before the
 call, and the gateway still ran the write on that token. The gateway reads today's policy at the call, so the token
-counts only while the asker may still decide. Rig: test_calls' gateway and fake bank; the person is acting-for."""
+counts only while the asker may still decide, or is an Admin of the team. Rig: test_calls' gateway and fake bank; the
+person is acting-for."""
 
 from __future__ import annotations
 
@@ -25,8 +26,9 @@ ASKER = "j.richardson@bank.test"
 ARGS = {"accountId": "CHQ-2219", "hours": 24}
 
 
-def acting_for_asker(tenant: str) -> dict[str, str]:
-    """agents-service's token for a chat turn in the module's team, acting for the person who asked."""
+def acting_for_asker(tenant: str, **held: Any) -> dict[str, str]:
+    """agents-service's token for a chat turn in the module's team, acting for the person who asked; `held` adds the
+    access claims a session's token carries (their roles)."""
     service = mint_service_token(
         dev_service_signer(), service="agents", audience="tools", tenant_id=tenant, team_id="team_platform"
     )
@@ -39,6 +41,7 @@ def acting_for_asker(tenant: str) -> dict[str, str]:
         "kind": "acting_for",
         "act": {"sub": "service:agents"},
         "aud": "tools",
+        **held,
     }
     return {
         "Authorization": f"Bearer {service}",
@@ -46,7 +49,7 @@ def acting_for_asker(tenant: str) -> dict[str, str]:
     }
 
 
-async def send(g: Gateway, approver: str) -> Any:
+async def send(g: Gateway, approver: str, **held: Any) -> Any:
     tool = g.tool("place_hold")
     token = mint(Binding(g.thread, "s1", tool, input_hash(ARGS), [approver]), REVIEW_KEY, ttl_s=300)
     body = {
@@ -56,11 +59,12 @@ async def send(g: Gateway, approver: str) -> Any:
         "runContext": {"thread": g.thread, "step": "s1", "act": "agent:dispute_triage"},
         "approvalToken": token,
     }
-    return await g.client.post("/v1/calls", json=body, headers=acting_for_asker(g.tenant))
+    return await g.client.post("/v1/calls", json=body, headers=acting_for_asker(g.tenant, **held))
 
 
+@pytest.mark.usefixtures("two_person_rule_on")
 async def test_the_askers_own_approval_is_refused_once_the_policy_no_longer_lets_them_decide(gateway: Gateway) -> None:
-    # The token was minted while the asker could decide; at the call requesterMayDecide is off (the default).
+    # The token was minted while the asker could decide; at the call the team's two-person rule is on.
     refused = await send(gateway, ASKER)
     assert refused.status_code == 403, refused.text
     assert refused.json()["error"]["code"] == "own_request", refused.text
@@ -76,6 +80,17 @@ async def test_another_persons_approval_still_runs_the_write(gateway: Gateway) -
 async def test_the_askers_own_approval_runs_while_the_policy_lets_them_decide(gateway: Gateway) -> None:
     ran = await send(gateway, ASKER)
     assert ran.status_code == 200, ran.text
+
+
+@pytest.mark.usefixtures("two_person_rule_on")
+async def test_an_admins_own_approval_runs_while_the_two_person_rule_is_on(gateway: Gateway) -> None:
+    ran = await send(gateway, ASKER, access={"team_platform": ["admin"]})
+    assert ran.status_code == 200, ran.text
+
+
+@pytest.fixture
+def two_person_rule_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPS_DEV_POLICIES", '{"requesterMayDecide": false}')
 
 
 @pytest.fixture

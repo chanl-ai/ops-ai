@@ -24,7 +24,7 @@ from ops_service_kit.ids import new_id, now_iso
 from .conftest import DEMO_PASSWORD, SignInRig, seed_tx
 
 DEFAULTS: dict[str, Any] = {
-    "requesterMayDecide": False,
+    "requesterMayDecide": True,
     # No floor under the teams' approval rules until the Security team sets one.
     "approvalsFloor": {},
     "extractionFloor": 0.8,
