@@ -55,7 +55,7 @@ const DISPUTE = {
   customerName: 'Marcus Bell',
   cardAccount: 'CARD-4471',
   feeId: 'FEE-3901',
-  amount: '35',
+  amount: 35,
   complaint: 'Charged a late fee after paying on time',
 };
 
@@ -74,19 +74,28 @@ async function readCase(page, consoleUrl, caseId) {
 await withUiStack(
   async (consoleUrl, stack) => {
     await stack.startWorker();
-    const J = await as(JAMES);
+    let J = await as(JAMES);
     const made = await saveAndPublish(J, DEFINITION);
     if (!made.live) throw new Error(`setup: the fee dispute workflow did not go live: ${made.saved.status} ${JSON.stringify(made.saved.data).slice(0, 300)}; asked ${made.asked.status} ${JSON.stringify(made.asked.data ?? made.asked.error ?? null).slice(0, 600)}`);
+    // James is a Builder, so with the team's two-person rule on he does not approve his own run's write. Turned on once
+    // the workflow is live (with it on, his own publish would wait for someone else too) and before the run starts, so the
+    // review waits for another person instead of passing on his own say.
+    await twoPersonRuleOn('team_ops');
+    // A policy change ends the tokens issued before it (permissions_changed): James signs in again.
+    J = await as(JAMES);
     const runId = await start(J, ID, DISPUTE);
     const waiting = await until(async () => {
       const r = (await (await fetch(`${agents}/v1/runs/${runId}`, { headers: J })).json()).data;
       return r?.status === 'waiting' ? r : undefined;
     });
     const caseId = waiting?.steps?.find((s) => s.nodeId === 'open')?.output?.caseId;
-    if (!caseId) throw new Error(`setup: the run opened no case: ${JSON.stringify(waiting ?? null).slice(0, 300)}`);
-    // James is a Builder, so with the team's two-person rule on he does not approve his own run's write. Turned on once
-    // the workflow is live: with it on, his own publish would wait for someone else too.
-    await twoPersonRuleOn('team_ops');
+    if (!caseId) {
+      const lastRes = await fetch(`${agents}/v1/runs/${runId}`, { headers: J });
+      const lastBody = await lastRes.json();
+      const last = lastBody.data;
+      if (!last) throw new Error(`setup: reading run ${runId} answered ${lastRes.status} ${JSON.stringify(lastBody).slice(0, 400)}`);
+      throw new Error(`setup: the run opened no case: ${JSON.stringify({ status: last?.status, error: last?.error, steps: last?.steps?.map((x) => [x.nodeId, x.status, x.error ?? x.output]) }).slice(0, 900)}`);
+    }
 
     const browser = await chromium.launch();
     const errors = [];
@@ -102,7 +111,7 @@ await withUiStack(
       );
       check(
         '2 it says what it waits on, links the task, and lists the drafted action as pending',
-        /waiting on/i.test(before.left) && /Waive fee: .*fee id FEE-3901, amount 35\?/.test(before.left) && /^\/reviews/.test(before.task ?? '') && JSON.stringify(before.actions) === JSON.stringify(['pending']),
+        /waiting on/i.test(before.left) && /Waive fee: .*fee id FEE-3901, amount 35\.00\?/.test(before.left) && /^\/reviews/.test(before.task ?? '') && JSON.stringify(before.actions) === JSON.stringify(['pending']),
         before,
       );
 
