@@ -954,7 +954,7 @@ delete, run, decide, manage). Every check in every service goes through that gri
 <tr><td>The token is bound to the tool, the run&#39;s step and the hash of the exact input the approver saw; any change to the input voids every approval of it</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>A token lives 15 minutes; a late resume renews it from the recorded approvals of that exact call for up to 24 hours, so a reviewer is never asked twice</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>Each operation&#39;s policy sets how many distinct people must approve and whether each needs a fresh sign-in; the same person cannot approve twice</td><td><span class="b b-ok">Built</span></td></tr>
-<tr><td>Whether the person who asked may also decide is a setting (<code>requesterMayDecide</code>, off by default), changed by a team admin in Governance › Policies</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td>Whether the person who asked may also decide is a setting: the two-person rule (<code>requesterMayDecide</code> off), off by default and never binding a team's Admins, changed by a team admin in Governance › Approvals › Advanced</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>Publishing an agent, workflow, skill, guardrail, task type or widget needs a second person&#39;s review, unless the team&#39;s publish policy says otherwise; a major change to a tool module needs the Security team&#39;s review</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>Approval tokens are signed with a shared key that the agents and tools services both hold. Signing with an asymmetric key that only the reviews code holds</td><td><span class="b b-plan">Planned</span></td></tr>
 </tbody></table></div>

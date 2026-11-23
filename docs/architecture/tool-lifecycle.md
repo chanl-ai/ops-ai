@@ -28,7 +28,7 @@ around a connection (plugins, sign-in providers, triggers, MCP): [integrations i
 | Access classes | Builder | Read, Write and "Moves money" | **Read and Write only.** How many approvers a write needs is set on the operation (see "Write approval"), not implied by a class |
 | Security review | Owner requests, Security decides | Built | Unchanged |
 | Try an operation | Module owner | The module's own team runs it with no workflow approval; a workflow's context without that workflow's approval is refused (`no_approval`) | The module's team tries any operation of its own module without a workflow approval, in Mock or for real on a published module; a real write is logged under them |
-| Workflow access | Workflow owner requests, the module's team decides | Requests work. Approve is disabled for everyone, because "is this mine" compares against a fixed seed name | The decision compares the signed-in person with the requester. Anyone on the module's team who holds `tools.decide` (Admin, Builder and Reviewer, not Viewer) decides, except the requester while `requesterMayDecide` is off |
+| Workflow access | Workflow owner requests, the module's team decides | Requests work. Approve is disabled for everyone, because "is this mine" compares against a fixed seed name | The decision compares the signed-in person with the requester. Anyone on the module's team who holds `tools.decide` (Admin, Builder and Reviewer, not Viewer) decides, except the requester while the team's two-person rule is on (`requesterMayDecide` off) and they are not an Admin of the team |
 | Grant to an agent | Builder | Built: the picker lists published operations from the registry | A grant whose operation is no longer offered shows as stale and can be removed. Saving drops it instead of answering 400 |
 | Call: read | Agent | Built: runs through `/v1/calls` on the real model | Unchanged |
 | Call: write | Agent | Drafts an approval card. On the shared stack the approved call is refused (the token is not accepted) | The approved call runs once, with the token bound to its input |
@@ -43,7 +43,7 @@ to the call shape it goes through security review.
 | Field | Values | Default |
 |---|---|---|
 | `approvers` | 1 or 2 distinct people | 1 |
-| `requesterMayDecide` | Whether the person who asked for a decision may also take it | Off (register row E51); a team turns it on in Settings |
+| `requesterMayDecide` | Whether the person who asked for a decision may also take it | On (register row E51, resolved 2026-11-22); a team turns the two-person rule on (the value off) under Approvals › Advanced, which never binds an Admin of the team |
 
 The approvers come from the run's (or chat's) team: a held write is decided by people with `reviews.decide` there,
 whatever module the operation is on. An `approverTeam` an older caller still sends is accepted and ignored.
@@ -88,7 +88,7 @@ The chat widget and the Reviews row decide the same review through the same deci
 | The maintainers can try a module without a workflow approval | Testing your own module is not a workflow's call, and writes stay on the stub |
 | Chat approvals appear in Reviews | A second approver should not need the requester to send them a chat link |
 | Adding a `{{SECRET}}` header is a major change and goes to Security | A new secret widens what the module can reach; only Security reviews that |
-| Self-approval is off by default | One person placing and approving a hold is no review. A team that wants a single builder to walk the path turns `requesterMayDecide` on |
+| Self-approval follows the team's roles | A person who may decide approves their own hold, and an Admin of the team always may. A team that wants a second person turns the two-person rule on (`requesterMayDecide` off) |
 
 ## Not in this design
 
