@@ -1,10 +1,20 @@
-"""Public noun return annotations stay typed (not Any) across the builder-facing surface."""
+"""Public noun return annotations stay typed (not Any) across the builder-facing surface.
+
+Behaviour of `runs.wait(check=)` is covered in test_client.py. Live local/staging proof is
+`make sdk-typed-proof AS=builder [ENV=staging]`; a failed-run walk is
+`make usecase-test UC=uc-workflows-2 LAYER=sdk`.
+"""
 
 from __future__ import annotations
 
+import ast
+import inspect
+import subprocess
 from collections.abc import AsyncIterator, Iterator
+from pathlib import Path
 from typing import Any, get_args, get_origin, get_type_hints
 
+import ops_ai
 from ops_ai import (
     Agent,
     AgentBackgroundRun,
@@ -26,6 +36,7 @@ from ops_ai import (
     KnowledgeBaseRow,
     OpsAI,
     RunDetail,
+    RunFailed,
     RunRow,
     RunStarted,
     SearchOut,
@@ -98,6 +109,7 @@ def test_package_exports_builder_types() -> None:
         ("ChatEvent", ChatEvent),
         ("RunStarted", RunStarted),
         ("WaitedRun", WaitedRun),
+        ("RunFailed", RunFailed),
         ("CaseRow", CaseRow),
         ("TeamOut", TeamOut),
         ("Guardrail", Guardrail),
@@ -109,6 +121,7 @@ def test_package_exports_builder_types() -> None:
         ("InboxItem", InboxItem),
     ):
         assert typ.__name__ == name
+    assert ops_ai.RunFailed is RunFailed
 
 
 def test_agents_public_returns_are_typed() -> None:
@@ -176,6 +189,10 @@ def test_resource_generics_are_concrete_on_subclasses() -> None:
     assert _return(Runs.start) is RunStarted
     assert _return(Runs.wait) is WaitedRun
     assert _return(Runs.cancel) is RunRow
+    assert _return(Runs.retry) is RunRow
+    assert _return(Runs.redrive) is RunRow
+    assert "check" in inspect.signature(Runs.wait).parameters
+    assert inspect.signature(Runs.wait).parameters["check"].default is False
 
     assert _is_task_item(_iterator_item(_return(Tasks.list)))
     assert _is_task_item(_return(Tasks.decide))
@@ -194,6 +211,8 @@ def test_async_resource_subclasses_are_typed() -> None:
     assert _return(AsyncThreads.get) is ThreadState
     assert _return(AsyncRuns.start) is RunStarted
     assert _return(AsyncRuns.wait) is WaitedRun
+    assert "check" in inspect.signature(AsyncRuns.wait).parameters
+    assert _return(AsyncRuns.redrive) is RunRow
     assert _is_task_item(_return(AsyncTasks.decide))
     assert _return(AsyncFiles.upload) is FileDetail
     assert _return(AsyncKnowledge.search) is SearchOut
@@ -229,3 +248,42 @@ def test_opsai_resource_attributes_are_parameterized() -> None:
     assert hints["tasks"] is Tasks
     assert hints["files"] is Files
     assert hints["knowledge"] is Knowledge
+
+
+def test_resource_bases_do_not_use_pep695_type_params() -> None:
+    """class Resource[T] is 3.12-only; the SDK promises 3.11 via Generic[TRow, TDetail]."""
+    client_src = Path(ops_ai.__file__).resolve().parent / "_client.py"
+    tree = ast.parse(client_src.read_text())
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and node.name in ("Resource", "AsyncResource"):
+            assert not getattr(node, "type_params", None), f"{node.name} uses PEP 695 type parameters"
+
+
+def test_import_ops_ai_on_python_311_when_available() -> None:
+    """When uv can resolve Python 3.11, import ops_ai must succeed on that interpreter."""
+    sdk_root = Path(__file__).resolve().parents[1]
+    cmd = [
+        "uv",
+        "run",
+        "--python",
+        "3.11",
+        "--no-project",
+        "--with-editable",
+        str(sdk_root),
+        "python",
+        "-c",
+        "import ops_ai; from ops_ai import OpsAI, RunFailed, WaitedRun",
+    ]
+    try:
+        completed = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=120)
+    except FileNotFoundError:
+        return
+    err = (completed.stderr or "") + (completed.stdout or "")
+    if completed.returncode != 0 and (
+        "No interpreter" in err
+        or "could not find" in err.lower()
+        or "download-python" in err.lower()
+        or "requires-python" in err.lower()
+    ):
+        return
+    assert completed.returncode == 0, err

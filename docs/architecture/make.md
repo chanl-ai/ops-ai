@@ -40,7 +40,7 @@ into it before reviewing it.
 | Fragment | Targets | Owns |
 |---|---|---|
 | `make/env.mk` | none | Ports (overridable defaults), `OPS_PORT_OFFSET`, compose project, the stack's state folders in the main checkout, the `OPS_*` the services read derived from the ports, the help formatter |
-| `make/dev.mk` | `up`, `down`, `restart`, `health`, `logs`, `ports`, `api`, `sdk-call` | The local stack through `scripts/stack.sh`; one route or SDK call as a seeded person (`scripts/api_as.py`) |
+| `make/dev.mk` | `up`, `down`, `restart`, `health`, `logs`, `ports`, `api`, `sdk-call` | The local stack through `scripts/stack.sh`; one route or SDK call as a seeded person (`scripts/api_as.py`). Typed returns against that stack or staging: `make sdk-typed-proof` in `sdk.mk` |
 | `make/cli.mk` | `<area>-<verb>` (`chat`, `kb-*`, `apps-*`, `tools-*`, `runs-*`, `tasks-*`, `cases-*`, `files-*`, `documents-*`, `people-*`, `models-*`, `memories-*`), `test-data-clean` | The `opsai` command (`sdk/python`) as a seeded person (`AS=`); the list: `make/CLAUDE.md` |
 | `make/db.mk` | `db-up`, `db-down`, `db-shell`, `db-reset`, `migrate`, `migration` | Compose (PostgreSQL, OPA) and Alembic |
 | `make/db-scripts.mk` | `db-ddl`, `db-upgrade-sql`, `db-drift`, `db-release`, `db-scripts-proof`; `mssql-remote-up`, `-proxy`, `-test`, `-status`, `-sweep`, `-down` | The schema as scripts a DBA applies (`deploy/database/schema.py`, `docs/deploy/database.md`); the shared SQL Server on Fly for both-database tests from a Mac (`deploy/database/mssql_remote.sh`) |
@@ -49,7 +49,7 @@ into it before reviewing it.
 | `make/checks.mk` | `checks`, `checks-list`, `ci-local` | The one list of standards checks (`CHECKS`): what `python-verify`, the CI `checks` job, `verify-changed.sh` and pre-commit (`STAGED=1`, with `STAGED_FILES=`) run; `PY`, `PYTEST` and `LINT_IMPORTS` name the tools |
 | `make/python.mk` | `python-install`, `python-verify`, `python-lint`, `python-pool`, `python-checks`, `python-scripts`, `test` | The uv workspace: ruff and pyright on `packages/`, then each service's verify with model keys unset; the four `python-*` pieces run alone as the repo job's matrix entries in CI |
 | `make/docs.mk` | `docs-verify`, `docs-guides-check` | `scripts/check-docs.mjs`, `scripts/check-guides.mjs` |
-| `make/sdk.mk` | `sdk`, `sdk-verify`, `sdk-check` | The SDKs in `sdk/`: regenerate, the drift check and both test suites (in `verify`), and the install smoke plus the examples on `make up` |
+| `make/sdk.mk` | `sdk`, `sdk-verify`, `sdk-check`, `sdk-typed-proof` | The SDKs in `sdk/`: regenerate, the drift check and both test suites (in `verify`), the install smoke plus the examples on `make up`, and a typed-returns smoke as `AS=` on local or staging |
 | `make/usecase.mk` | `usecase-test`, `usecase-list`, `usecase-show`, `usecase-coverage`, `usecase-new`, `usecase-runner-test` | Calls `scripts/usecase.mjs` (`packages/usecase-runner`); use-case ports and database `OPS_USECASE_*`. Registry and rules: `docs/usecases/README.md` |
 | `make/git.mk` | `commit`, `commit-hunks`, `review`, `builder-watch` | Committing named files through the hooks, and the review worktree |
 | `make/plugins.mk` | `plugins-sync`, `plugins-bump` | Putting the plugins `deploy/plugins.json` pins into `OPS_PLUGINS_DIR`, and moving the pins |
