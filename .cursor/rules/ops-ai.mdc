@@ -1,0 +1,6 @@
+---
+description: Coding rules for this repository
+alwaysApply: true
+---
+
+Follow `AGENTS.md` at the repository root for branch names, pull requests, commits, tests and what must stay out of a public repo.
