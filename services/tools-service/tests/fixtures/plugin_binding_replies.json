@@ -4,8 +4,10 @@
    "body": {
     "error": {
      "code": "not_found",
+     "kind": "input",
      "message": "App plugin:test.fields was not found.",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 404
     },
     "success": false
@@ -661,8 +663,10 @@
    "body": {
     "error": {
      "code": "not_found",
+     "kind": "input",
      "message": "App plugin:test.fields was not found.",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 404
     },
     "success": false
@@ -904,8 +908,10 @@
    "body": {
     "error": {
      "code": "not_found",
+     "kind": "input",
      "message": "Fields desk is not turned on for this team.",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 404
     },
     "success": false

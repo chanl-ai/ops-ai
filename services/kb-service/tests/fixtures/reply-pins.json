@@ -376,8 +376,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "No knowledge base with that id.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -600,8 +602,10 @@
     "body": {
       "error": {
         "code": "conflict",
+        "kind": "input",
         "message": "A knowledge base with this name already exists.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 409
       },
       "success": false
@@ -1869,8 +1873,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "No knowledge base with that id.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -1881,8 +1887,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "No item with that id.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -1893,8 +1901,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "No source with that id.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -1914,8 +1924,10 @@
             "msg": "Field required"
           }
         ],
+        "kind": "input",
         "message": "name: Field required",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -1926,8 +1938,10 @@
     "body": {
       "error": {
         "code": "collection_without_owner",
+        "kind": "input",
         "message": "Name the knowledge base's owner: the person who answers for what it serves.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -2073,8 +2087,10 @@
     "body": {
       "error": {
         "code": "invalid_settings",
+        "kind": "input",
         "message": "A knowledge base's retrieval settings have no nope.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -2255,8 +2271,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "No knowledge base with that id.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
