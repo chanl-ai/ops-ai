@@ -475,6 +475,7 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `usecases/agents-service/archive-a-workflow.md` | uc-252: A builder archives a workflow: it starts no run and leaves both lists, its run kept; restored, it serves its live version again |
 | `usecases/agents-service/branches-join.md` | uc-400: A workflow's branches join before the next step, the step after the Join running once |
 | `usecases/agents-service/step-output-shapes.md` | uc-401: A workflow's step outputs are known before it runs, and a misspelt mapping is warned |
+| `usecases/agents-service/step-sheet-plain-words.md` | uc-512: A workflow step reads in plain words, with what it receives and a field picker |
 | `usecases/agents-service/wait-for-children.md` | uc-402: A workflow waits for its children and uses their results |
 | `usecases/agents-service/wait-and-reminders.md` | uc-403: A workflow waits for a time or date and reminds a person |
 | `usecases/agents-service/an-account-admin-sees-every-background-process.md` | uc-516: An account admin sees every background process and what it did |

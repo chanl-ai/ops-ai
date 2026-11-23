@@ -269,6 +269,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-252 | agents-service | A builder archives a workflow: it starts no run and leaves both lists, its run kept; restored, it serves its live version again | api, ui | passing |
 | uc-400 | agents-service | A workflow forks into two checks and a Join: the step after it runs once with both by the step they came from; a skipped branch is null; a fork meeting at a plain step is warned | api, ui | passing |
 | uc-401 | agents-service | A never-run workflow's steps list their output fields by port, from type, settings, answer or operation; a misspelt mapping is warned on save | api | passing |
+| uc-512 | agents-service | A builder reads a workflow step in plain words, sees what it receives with the last run values, and picks a field by name that the next run reads | api, sdk, ui | new |
 | uc-402 | agents-service | A parent reads three attachments in children two at a time, one fails, and goes on once with every result in item order | api, ui | passing |
 | uc-403 | agents-service | A workflow waits two seconds, waits until a date or goes on when it is past or not a date, and a waiting review is reminded in Activity until decided | api, ui | passing |
 | uc-331 | files-service | A file is read with Detect from the Files page | api, ui | passing |
