@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- agents-service, stamped at 0120_model_call_reservations
+-- agents-service, stamped at 20261123_1900_workflow_schedules
 CREATE TABLE engine_definitions (
 	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
@@ -932,6 +932,22 @@ CREATE TABLE review_assignments (
 GO
 CREATE INDEX ix_review_assignments_review ON review_assignments (tenant_id, review_id, assigned_at);
 GO
+CREATE TABLE workflow_schedules (
+	tenant_id VARCHAR(64) NOT NULL, 
+	workflow_id VARCHAR(64) NOT NULL, 
+	trigger_step VARCHAR(100) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	[rule] NVARCHAR(max) NOT NULL, 
+	changed_by VARCHAR(200) NOT NULL, 
+	changed_at VARCHAR(32) NOT NULL, 
+	rule_digest VARCHAR(64) NULL, 
+	last_slot_at VARCHAR(32) NULL, 
+	last_outcome VARCHAR(16) NULL, 
+	last_run_id VARCHAR(64) NULL, 
+	seen_at VARCHAR(32) NULL, 
+	CONSTRAINT workflow_schedules_pkey PRIMARY KEY (tenant_id, workflow_id, trigger_step)
+);
+GO
 CREATE TABLE task_assists (
 	tenant_id VARCHAR(64) NOT NULL, 
 	step_id VARCHAR(200) NOT NULL, 
@@ -1543,6 +1559,12 @@ CREATE SECURITY POLICY ops_security.review_assignments_tenant
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.review_assignments AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.workflow_schedules_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.workflow_schedules,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.workflow_schedules AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.workflow_schedules AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE SECURITY POLICY ops_security.task_assists_tenant
     ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.task_assists,
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.task_assists AFTER INSERT,
@@ -1670,5 +1692,5 @@ CREATE TABLE alembic_version (
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version (version_num) VALUES ('0120_model_call_reservations');
+INSERT INTO alembic_version (version_num) VALUES ('20261123_1900_workflow_schedules');
 GO

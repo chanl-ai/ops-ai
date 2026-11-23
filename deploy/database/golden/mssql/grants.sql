@@ -81,6 +81,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.model_call_records TO ops_agents_run
 REVOKE SELECT, INSERT, UPDATE, DELETE ON dbo.model_call_records_unattributed FROM ops_agents_runtime;
 REVOKE UPDATE, DELETE ON dbo.review_assignments FROM ops_agents_runtime;
 GRANT SELECT, INSERT ON dbo.review_assignments TO ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.workflow_schedules TO ops_agents_runtime;
 REVOKE DELETE ON dbo.task_assists FROM ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE ON dbo.task_assists TO ops_agents_runtime;
 REVOKE DELETE ON dbo.task_types FROM ops_agents_runtime;
