@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Mapping, Sequence
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, ClassVar, NotRequired, TypedDict, cast
 
 import sqlalchemy as sa
@@ -27,8 +27,10 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from ops_policy import context_of
 from ops_service_kit.errors import Conflict
 from ops_service_kit.http import Json, Out
+from ops_service_kit.listing import ListParams
 from ops_service_kit.settings import PluginClient
 from ops_store import Guarantee
+from ops_store.listing import ListPage, list_page
 from ops_store.outbox import add as add_event
 from ops_store.rows import Select, one, rows
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
@@ -43,6 +45,10 @@ from .tenancy import ROLE
 
 _TS = sa.DateTime(timezone=True)
 SHARED = ""
+# The refused_reason of a person's sign-in an admin ended (Apps > People); `ended_by` names the admin.
+ENDED_BY_ADMIN = "ended_by_admin"
+# How often a token row's last_used_at is written at most: often enough for "last used", rare enough for a busy row.
+USED_EVERY = timedelta(minutes=1)
 # A team token's columns that change its account's state on a renewal (records.account_state, team_test); a token
 # with no refresh token lapses at its expiry, so any write of one changes its card's `due_at`.
 _STATE_FIELDS = frozenset({"refused_at", "test"})
@@ -208,6 +214,10 @@ connection_tokens = sa.Table(
     sa.Column("test", sa.JSON),
     # The person whose own sign-in it is, by name, as the app's accounts list names it; null on the team's row.
     sa.Column("person_name", sa.String(200)),
+    # When a call last signed with this row, written at most once a minute (ConnectionStore.used), for Apps > People.
+    sa.Column("last_used_at", _TS),
+    # The admin who ended this person's sign-in (refused_reason ENDED_BY_ADMIN); a new sign-in clears both.
+    sa.Column("ended_by", sa.String(200)),
     sa.ForeignKeyConstraint(
         ["tenant_id", "connection_id"], ["connections.tenant_id", "connections.id"], ondelete="CASCADE"
     ),
@@ -548,6 +558,7 @@ class TokenWrite(TypedDict, total=False):
     refreshed_at: datetime
     refused_at: datetime | None
     refused_reason: str | None
+    ended_by: str | None
     test: Json | None
 
 
@@ -622,6 +633,9 @@ class OwnSignIn(Out):
     refreshed_at: datetime
     refused_at: datetime | None
     test: JsonValue
+    # ENDED_BY_ADMIN when an admin ended it (ended_by names them), else the system's words; None while it works.
+    refused_reason: str | None = None
+    ended_by: str | None = None
 
 
 class TokenFields(Out):
@@ -663,6 +677,8 @@ class TokenRow(TokenFields):
     # The account's last test, {status, message, at}; null before one ran.
     test: JsonValue
     person_name: str | None
+    last_used_at: datetime | None = None
+    ended_by: str | None = None
 
 
 class TeamToken(TokenRow):
@@ -693,6 +709,36 @@ class SignIn(Out):
     expires_at: datetime | None
     refused_at: datetime | None
     test: JsonValue
+    renews: bool
+
+
+class PersonRow(Out):
+    """One person on Apps > People: their own sign-ins on the team's accounts, counted by state, and the last call
+    any of them signed."""
+
+    person_id: str
+    person_name: str | None
+    connected: int
+    expired: int
+    refused: int
+    last_used_at: datetime | None
+
+
+class PersonAppSignIn(Out):
+    """One of a person's own sign-ins on Apps > People, with its account and app and what its state is read from."""
+
+    person_id: str
+    connection_id: str
+    app_id: str
+    account_name: str | None
+    connection_name: str
+    account: str | None
+    refreshed_at: datetime
+    expires_at: datetime | None
+    refused_at: datetime | None
+    refused_reason: str | None
+    ended_by: str | None
+    last_used_at: datetime | None
     renews: bool
 
 
@@ -1451,7 +1497,7 @@ class ConnectionStore(Store):
         """A finished sign-in's token, whatever was held before; a refusal marked on the row before is cleared."""
         key = self._token_key(tenant_id, connection_id, person)
         # A new sign-in starts untested: the test that follows it writes its own outcome.
-        values = {"refused_at": None, "refused_reason": None, "test": None, **values}
+        values = {"refused_at": None, "refused_reason": None, "ended_by": None, "test": None, **values}
         async with self.tx() as c:
             if (await c.execute(connection_tokens.update().where(*key).values(**values))).rowcount == 0:
                 await c.execute(
@@ -1474,6 +1520,184 @@ class ConnectionStore(Store):
             if marked and person == SHARED:
                 await _forget_account_cards(c, tenant_id, connection_id)
             return marked
+
+    async def used(self, tenant_id: str, connection_id: str, person: str, *, at: datetime) -> bool:
+        """Notes that a call signed with this token row: at most one write a minute per row, decided in the UPDATE's
+        WHERE, so a burst of calls from several workers writes once. False when nothing was written."""
+        t = connection_tokens.c
+        q = connection_tokens.update().where(
+            *self._token_key(tenant_id, connection_id, person),
+            sa.or_(t.last_used_at.is_(None), t.last_used_at < at - USED_EVERY),
+        )
+        async with self.tx() as c:
+            return (await c.execute(q.values(last_used_at=at))).rowcount > 0
+
+    async def end_sign_in(
+        self, tenant_id: str, connection_id: str, person: str, *, by: str, at: datetime, event: AuditEvent
+    ) -> bool | None:
+        """An admin ends a person's own sign-in: the row is marked refused with ENDED_BY_ADMIN, so the person's next
+        call asks them to connect, and `event` is written to the account's audit log in the same transaction. True
+        when this call ended it, False when it was already ended by an admin (nothing is written), None when the person
+        holds no sign-in on the account."""
+        if person == SHARED:
+            return None
+        t = connection_tokens.c
+        key = self._token_key(tenant_id, connection_id, person)
+        not_ended = sa.or_(t.refused_reason.is_(None), t.refused_reason != ENDED_BY_ADMIN)
+        async with self.tx() as c:
+            q = connection_tokens.update().where(*key, not_ended, team_visible(connection_tokens))
+            done = await c.execute(q.values(refused_at=at, refused_reason=ENDED_BY_ADMIN, ended_by=by[:200]))
+            if done.rowcount > 0:
+                await self._audit(c, tenant_id, connection_id, event)
+                return True
+            held = (
+                sa.select(sa.func.count()).select_from(connection_tokens).where(*key, team_visible(connection_tokens))
+            )
+            return False if (await c.execute(held)).scalar_one() else None
+
+    @staticmethod
+    def _state_counts(now: datetime) -> tuple[sa.ColumnElement[int], sa.ColumnElement[int], sa.ColumnElement[int]]:
+        """Connected, expired and refused as 1 or 0 per token row, as records.person_state reads one row: a CASE, since
+        SQL Server sums no predicate."""
+        t = connection_tokens.c
+        refused = t.refused_at.is_not(None)
+        expired = sa.and_(t.refused_at.is_(None), t.expires_at < now, t.refresh_ct.is_(None))
+        one = sa.literal(1)
+        zero = sa.literal(0)
+        return (
+            sa.case((sa.or_(refused, expired), zero), else_=one),
+            sa.case((expired, one), else_=zero),
+            sa.case((refused, one), else_=zero),
+        )
+
+    def _team_sign_ins(self, tenant_id: str, team_id: str, apps: Sequence[str]) -> list[sa.ColumnElement[bool]]:
+        t, k = connection_tokens.c, connections.c
+        where = [
+            t.tenant_id == tenant_id,
+            t.team_id == team_id,
+            t.person_id != SHARED,
+            team_visible(connection_tokens),
+            team_visible(connections),
+        ]
+        if apps:
+            where.append(k.app_id.in_(list(apps)))
+        return where
+
+    async def people_page(
+        self, tenant_id: str, team_id: str, q: ListParams, *, apps: Sequence[str], states: Sequence[str], now: datetime
+    ) -> tuple[ListPage, dict[str, dict[str, int]], dict[str, str]]:
+        """One page of the people who hold their own sign-ins on the team's accounts, grouped, counted by state,
+        searched by name and paged in SQL: `apps` keeps their sign-ins to those apps, `states` the people with at least
+        one sign-in in any of those states. With the facets, people per app and per state over the search, and the
+        name of an account of each app the facet counts."""
+        t, k = connection_tokens.c, connections.c
+        on = sa.and_(k.tenant_id == t.tenant_id, k.id == t.connection_id)
+        connected, expired, refused = self._state_counts(now)
+        grouped = (
+            sa.select(
+                t.person_id.label("person_id"),
+                sa.func.max(t.person_name).label("person_name"),
+                sa.func.sum(connected).label("connected"),
+                sa.func.sum(expired).label("expired"),
+                sa.func.sum(refused).label("refused"),
+                sa.func.max(t.last_used_at).label("last_used_at"),
+            )
+            .select_from(connection_tokens.join(connections, on))
+            .where(*self._team_sign_ins(tenant_id, team_id, apps))
+            .group_by(t.person_id)
+            .subquery("people")
+        )
+        g = grouped.c
+        held = {"connected": g.connected > 0, "expired": g.expired > 0, "refused": g.refused > 0}
+        wanted = [held[s] for s in states if s in held]
+        query = sa.select(grouped).where(sa.or_(*wanted)) if wanted else sa.select(grouped)
+        by_name = sa.func.lower(sa.func.coalesce(g.person_name, g.person_id))
+        plain = q.model_copy(update={"filters": {}, "ids": None, "sort_by": None})
+        async with self.tx() as c:
+            page = await list_page(
+                c, query, plain, search=[g.person_name, g.person_id], default_sort=by_name.asc(), key=(g.person_id,)
+            )
+            facets, names = await self._people_facets(c, tenant_id, team_id, q.search, now)
+        page["data"] = [PersonRow.model_validate(r).model_dump() for r in page["data"]]
+        return page, facets, names
+
+    async def _people_facets(
+        self, c: AsyncConnection, tenant_id: str, team_id: str, search: str | None, now: datetime
+    ) -> tuple[dict[str, dict[str, int]], dict[str, str]]:
+        """People per app and per state over the search, each person counted once under each value; and an account's
+        name for each app, which names a custom app."""
+        t, k = connection_tokens.c, connections.c
+        on = sa.and_(k.tenant_id == t.tenant_id, k.id == t.connection_id)
+        where = self._team_sign_ins(tenant_id, team_id, ())
+        if search:
+            where.append(sa.or_(contains(t.person_name, search), contains(t.person_id, search)))
+        frm = connection_tokens.join(connections, on)
+        per_app = (
+            sa.select(k.app_id, sa.func.count(sa.distinct(t.person_id)), sa.func.min(k.name))
+            .select_from(frm)
+            .where(*where)
+            .group_by(k.app_id)
+        )
+        _, expired, refused = self._state_counts(now)
+        state = sa.case((refused == 1, "refused"), (expired == 1, "expired"), else_="connected").label("state")
+        pairs = sa.select(t.person_id, state).select_from(frm).where(*where).distinct().subquery()
+        per_state = sa.select(pairs.c.state, sa.func.count()).group_by(pairs.c.state)
+        apps = [(str(a), int(n), str(name)) for a, n, name in await c.execute(per_app)]
+        facets = {
+            "app": {a: n for a, n, _ in apps},
+            "state": {str(s): int(n) for s, n in await c.execute(per_state)},
+        }
+        return facets, {a: name for a, _, name in apps}
+
+    async def sign_in_counts(
+        self, tenant_id: str, team_id: str, app_ids: Sequence[str], now: datetime
+    ) -> dict[str, tuple[int, int, int]]:
+        """Each app's people's own sign-ins on the team's accounts, counted as (connected, expired, refused) in one
+        GROUP BY: the Apps list's sign-in health."""
+        if not app_ids:
+            return {}
+        t, k = connection_tokens.c, connections.c
+        on = sa.and_(k.tenant_id == t.tenant_id, k.id == t.connection_id)
+        connected, expired, refused = self._state_counts(now)
+        q = (
+            sa.select(k.app_id, sa.func.sum(connected), sa.func.sum(expired), sa.func.sum(refused))
+            .select_from(connection_tokens.join(connections, on))
+            .where(*self._team_sign_ins(tenant_id, team_id, app_ids))
+            .group_by(k.app_id)
+        )
+        async with self.tx() as c:
+            return {str(a): (int(x), int(y), int(z)) for a, x, y, z in await c.execute(q)}
+
+    async def people_sign_ins(self, tenant_id: str, team_id: str, people: Sequence[str]) -> list[PersonAppSignIn]:
+        """Each named person's own sign-ins on the team's accounts, with the account and app each is on, by app then
+        account: the rows of one page of Apps > People."""
+        if not people:
+            return []
+        t, k = connection_tokens.c, connections.c
+        on = sa.and_(k.tenant_id == t.tenant_id, k.id == t.connection_id)
+        q = (
+            sa.select(
+                t.person_id,
+                t.connection_id,
+                k.app_id,
+                k.account_name,
+                k.name.label("connection_name"),
+                t.account,
+                t.refreshed_at,
+                t.expires_at,
+                t.refused_at,
+                t.refused_reason,
+                t.ended_by,
+                t.last_used_at,
+                # A CASE, not the bare test: SQL Server refuses a predicate as a selected value.
+                sa.case((t.refresh_ct.is_not(None), 1), else_=0).label("renews"),
+            )
+            .select_from(connection_tokens.join(connections, on))
+            .where(*self._team_sign_ins(tenant_id, team_id, ()), t.person_id.in_(list(people)))
+            .order_by(k.app_id, k.name, t.connection_id)
+        )
+        async with self.tx() as c:
+            return await rows(c, q, PersonAppSignIn)
 
     async def name_token(self, tenant_id: str, connection_id: str, person: str, account: str) -> bool:
         """Who a sign-in signed in as, kept on its row when the token answer did not say; False when the row holds a
@@ -1555,7 +1779,9 @@ class ConnectionStore(Store):
             return []
         t = connection_tokens.c
         q = (
-            sa.select(t.connection_id, t.account, t.pinned, t.refreshed_at, t.refused_at, t.test)
+            sa.select(
+                t.connection_id, t.account, t.pinned, t.refreshed_at, t.refused_at, t.test, t.refused_reason, t.ended_by
+            )
             .where(
                 t.tenant_id == tenant_id,
                 t.connection_id.in_(connection_ids),

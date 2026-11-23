@@ -194,6 +194,26 @@ class Apps:
         plugin_of(app)
         return cast(dict[str, Any], self._raw.tools.apps_app_users(app))
 
+    def people(
+        self, *, app: list[str] | None = None, state: list[str] | None = None, search: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Apps > People, page after page: each person holding their own sign-ins on the team's apps, with the apps,
+        their sign-ins counted by state (connected, expired, refused), the last call any of them signed and every
+        sign-in. `app` keeps their sign-ins to those apps, `state` the people with a sign-in in any of those states,
+        `search` matches the name. Needs permission to manage the team's apps."""
+        return _every(self._raw.tools.apps_list_app_people, app=app, state=state, search=search)
+
+    def end_sign_in(self, app: str, person: str, *, account: str | None = None) -> list[dict[str, Any]]:
+        """Ends a person's own sign-in to an app, so their next call asks them to connect; recorded in the audit log.
+        `account` names one of the app's accounts; left out, every account of the app the person signed in to is
+        ended. Ending one again changes nothing (`changed` false). Needs permission to manage the team's apps."""
+        if account is not None:
+            return [cast(dict[str, Any], self._raw.tools.apps_end_sign_in(app, account, person))]
+        held = [s for p in self.people(app=[app]) if p["personId"] == person for s in p["signIns"] if s["appId"] == app]
+        if not held:
+            raise ValueError(f"{person} holds no sign-in to {app}.")
+        return [cast(dict[str, Any], self._raw.tools.apps_end_sign_in(app, s["accountId"], person)) for s in held]
+
     def add_custom(
         self,
         kind: str,

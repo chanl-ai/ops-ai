@@ -18,7 +18,7 @@ import { type MyConnector, useMyConnectors } from '@/hooks/connections-queries';
 import { useCan } from '@/hooks/me-queries';
 import { facetFilterFn } from '@/hooks/use-list-params';
 import { useTeam } from '@/hooks/use-team';
-import { labelFor } from '@/lib/app-state';
+import { ENDED_BY_AN_ADMIN, labelFor } from '@/lib/app-state';
 import { plural, shortDate } from '@/lib/format';
 import { myAppHref } from '@/lib/app-links';
 import { MY_APPS } from '@/lib/nav';
@@ -64,6 +64,11 @@ function AppsCard({ c, controls }: { c: MyConnector; controls: MyAppControls }) 
         {c.canDo}
       </p>
       <CouldntConnect appId={c.appId} why={controls.failed[c.appId]} />
+      {c.appStateReason === ENDED_BY_AN_ADMIN && (
+        <p className="text-sm text-warning-text" data-testid={`connector-ended-${c.appId}`}>
+          Ended by an admin. Connect again to go on.
+        </p>
+      )}
       {/* An app the team sets up first has nothing of the person's to show: its state and one action say it all. */}
       {c.appGroup !== 'needs_admin' && (
         <>

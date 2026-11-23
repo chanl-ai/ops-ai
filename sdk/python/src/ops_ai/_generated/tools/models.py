@@ -756,6 +756,28 @@ class Permission(TypedDict, closed=True):
     required: NotRequired[bool]
 
 
+class PersonAppSignInView(TypedDict, closed=True):
+    account: NotRequired[str | None]
+    accountId: str
+    accountName: str
+    appId: str
+    appName: str
+    endedBy: NotRequired[str | None]
+    expiresAt: NotRequired[str | None]
+    lastUsedAt: NotRequired[str | None]
+    logo: NotRequired[str | None]
+    refusedAt: NotRequired[str | None]
+    refusedReason: NotRequired[str | None]
+    since: NotRequired[str | None]
+    state: Literal["connected", "expired", "refused"]
+
+
+class PersonAppView(TypedDict, closed=True):
+    appId: str
+    logo: NotRequired[str | None]
+    name: str
+
+
 class PersonCredentialsIn(TypedDict, closed=True):
     credentials: dict[str, str]
 
@@ -932,6 +954,22 @@ class SignInCompleteIn(TypedDict, closed=True):
     error: NotRequired[str | None]
     errorDescription: NotRequired[str | None]
     state: str
+
+
+class SignInCounts(TypedDict, closed=True):
+    connected: NotRequired[int]
+    expired: NotRequired[int]
+    refused: NotRequired[int]
+
+
+class SignInEnded(TypedDict, closed=True):
+    accountId: str
+    appId: str
+    changed: bool
+    endedBy: NotRequired[str | None]
+    personId: str
+    refusedReason: str
+    state: Literal["refused"]
 
 
 class SignInIn(TypedDict, closed=True):
@@ -1368,6 +1406,17 @@ class AppCredential(TypedDict, closed=True):
     type: Literal["ops_ai", "own"]
 
 
+class AppPerson(TypedDict, closed=True):
+    apps: list[PersonAppView]
+    connected: int
+    expired: int
+    lastUsedAt: NotRequired[str | None]
+    name: str
+    personId: str
+    refused: int
+    signIns: list[PersonAppSignInView]
+
+
 class AppResource(TypedDict, closed=True):
     canAdd: bool
     canRemove: NotRequired[bool]
@@ -1590,6 +1639,11 @@ class EnvelopePlatformEventOut(TypedDict, closed=True):
 
 class EnvelopeSendPolicyView(TypedDict, closed=True):
     data: SendPolicyView
+    success: Literal[True]
+
+
+class EnvelopeSignInEnded(TypedDict, closed=True):
+    data: SignInEnded
     success: Literal[True]
 
 
@@ -2199,6 +2253,13 @@ class AppCredentialDetail(TypedDict, closed=True):
     updated: NotRequired[str | None]
 
 
+class AppPeopleList(TypedDict, closed=True):
+    data: list[AppPerson]
+    facets: dict[str, dict[str, int]]
+    labels: dict[str, dict[str, str]]
+    pagination: Pagination
+
+
 class AppTool(TypedDict, closed=True):
     access: str
     added: NotRequired[bool]
@@ -2259,6 +2320,11 @@ class EnvelopeAppCredentialChange(TypedDict, closed=True):
 
 class EnvelopeAppCredentialDetail(TypedDict, closed=True):
     data: AppCredentialDetail
+    success: Literal[True]
+
+
+class EnvelopeAppPeopleList(TypedDict, closed=True):
+    data: AppPeopleList
     success: Literal[True]
 
 
@@ -2412,6 +2478,7 @@ class SystemCard(TypedDict, closed=True):
     pluginId: NotRequired[str | None]
     sandboxId: NotRequired[str | None]
     signIn: NotRequired[Literal["team", "person", "person_or_team"] | None]
+    signIns: NotRequired[SignInCounts | None]
     state: NotRequired[Literal["connected", "not_signed_in", "expired", "refused", "revoked"] | None]
     status: NotRequired[str | None]
     toolsAdded: NotRequired[int | None]

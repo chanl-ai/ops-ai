@@ -29,7 +29,7 @@ from ..connections.account_events import CONNECTED, connected_key, needs_reconne
 from ..connections.records import EXPIRED, REFUSED
 from ..environments import LIVE
 from ..secrets import SecretMissing, SecretResolver
-from ..store.connections import SHARED, Account, AuditEvent, ConnectionStore, TokenRow
+from ..store.connections import ENDED_BY_ADMIN, SHARED, Account, AuditEvent, ConnectionStore, TokenRow
 from ..store.modules import Module, ModuleRef
 from .assertion import SigningError, read_certificate
 from .kinds import Kind, kind_of, origin
@@ -287,8 +287,12 @@ class Authenticator:
             raise AuthFailed("CONNECTION_NOT_SET", f"{name} has no {', '.join(missing)}.")
         settings = plain
         if person != SHARED and acting_for is not None and held_own is not None and held_own.refused_at:
-            # The system refused this key or sign-in before: ask for a new one rather than send it again.
-            raise await self._not_linked(conn, acting_for, settings, scopes=list(scopes), reason="refused")
+            # The system refused this key or sign-in before, or an admin ended it: ask for a new one rather than send
+            # it again.
+            ended = (held_own.ended_by or "an admin") if held_own.refused_reason == ENDED_BY_ADMIN else None
+            raise await self._not_linked(
+                conn, acting_for, settings, scopes=list(scopes), reason="refused", ended_by=ended
+            )
         if person != SHARED and kind.person_fields:
             own = await self.tokens.own(tenant_id, str(connection_id), person, row=held_own)
             if own is None:
@@ -336,6 +340,9 @@ class Authenticator:
         prepared.credential = "person" if person != SHARED else ("team" if kind.holds_token else None)
         prepared.person = person if person != SHARED else None
         SIGNED_WITH.set(prepared.credential)
+        if prepared.credential is not None:
+            # Apps > People's "last used": the row this call signs with, at most one write a minute (the store's WHERE).
+            await self.connections.used(tenant_id, str(connection_id), person, at=datetime.now(UTC))
         prepared.certificate = certificate_of(settings, values)
         return prepared
 
@@ -474,9 +481,11 @@ class Authenticator:
         *,
         scopes: list[str],
         reason: NotLinkedReason = "not_connected",
+        ended_by: str | None = None,
     ) -> AuthFailed:
         """CONNECTION_NOT_LINKED with a link only `person` can use to sign in their own account, asking for the
-        connection's scopes and `scopes` (the operation's, and on insufficient_scope those already granted)."""
+        connection's scopes and `scopes` (the operation's, and on insufficient_scope those already granted).
+        `ended_by`: the admin who ended the person's sign-in (Apps > People), said in place of a refusal."""
         kind = kind_of(str(conn.auth_kind))
         # The kind and the fields a person gives, so the console asks for a key in place of a sign-in it cannot start.
         details: Json = {
@@ -506,6 +515,9 @@ class Authenticator:
             "insufficient_scope": f"{conn.name} needs {who} to connect their own account again, allowing more.",
             "refused": f"{conn.name} refused the key or sign-in of {who}; they connect again to go on.",
         }.get(reason, f"{conn.name} needs {who} to connect their own account.")
+        if ended_by is not None:
+            details["endedBy"] = ended_by
+            message = f"{ended_by} ended the {conn.name} sign-in of {who}; they connect again to go on."
         return AuthFailed("CONNECTION_NOT_LINKED", message, details=details)
 
     async def _secret_values(
