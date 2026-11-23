@@ -1,9 +1,9 @@
-"""The rules an admin may set for a workspace, with each default in one place. Most defaults are open, agents' changes
-to apps included (appChanges: no team asks); the ones that hold something back are requesterMayDecide (off) and the
-AI uses (aiSteps, taskAssist, checkBeforeSend). A team changes any of them. Each value is changed through `can()` on
-the policy's `changed_by` cell: most in the Security team; the team's approval rules (`approvals.manage`) in the team,
-inside the floor the Security team sets (`approvalsFloor`). platform-service stores the values per tenant and puts
-them on every token; services read them there with `policy(p, key)`."""
+"""The rules an admin may set for a workspace, with each default in one place. Most defaults are open, agents'
+changes to apps included (appChanges: no team asks; requesterMayDecide: the asker may decide); the ones that hold
+something back are the AI uses (aiSteps, taskAssist, checkBeforeSend). A team changes any of them. Each value is
+changed through `can()` on the policy's `changed_by` cell: most in the Security team; the team's approval rules
+(`approvals.manage`) in the team, inside the floor the Security team sets (`approvalsFloor`). platform-service stores
+the values per tenant and puts them on every token; services read them there with `policy(p, key)`."""
 
 from __future__ import annotations
 
@@ -71,12 +71,13 @@ DEFAULT_PUBLISH_MODE = "major"
 POLICIES: tuple[Policy, ...] = (
     Policy(
         "requesterMayDecide",
-        # Off by default: someone other than the person who asked decides. Per team and per area: a team turns it on
-        # for one area at a time. A stored true from before it was per team means on in every team and area, so a
-        # workspace that set it on keeps that.
-        False,
-        "The person who asked for a decision may also make it, in the areas the team turns on. Off (the default): "
-        "someone else has to decide.",
+        # On by default: the person who asked may decide, as the team's roles allow. A team that wants a second person
+        # turns the two-person rule on, which stores false for the team. A team that stored nothing reads this default,
+        # so every existing team without a saved value takes it. An Admin of the team decides their own request
+        # whatever the value (`can`).
+        True,
+        "The person who asked for a decision may also make it. Off (the two-person rule, an advanced setting): someone "
+        "else has to decide, unless the person is an Admin of the team.",
         kind="by_area",
         changed_by=APPROVALS,
         per_team=True,
@@ -486,12 +487,16 @@ def requester_may_decide(value: object, team: str | None, area: str, floor: obje
     """Whether whoever asked for a decision in `area` of `team` may also take it, from `requesterMayDecide` as a token
     or GET /v1/policies carries it and the Security team's `approvalsFloor`. The one reader of the value's shape: true
     or false for every team (a value stored before it was per team, or a dev policy); else per team ({team or `*`:
-    true, false or {area: true or false}}), the team's own part over the workspace's `*`. Anything else is off."""
+    true, false or {area: true or false}}), the team's own part over the workspace's `*`. In an object with no part
+    for the team and no `*`, the team reads the catalogue default (on); a per-area part that does not name the area is
+    off, as the team chose areas one at a time. Anything else unreadable is off."""
     if json_object(floor).get("requesterMayDecide") is False:
         return False
     if isinstance(value, bool):
         return value
     held = json_object(value)
+    if isinstance(value, dict) and team not in held and "*" not in held:
+        return BY_KEY["requesterMayDecide"].default is True
     part = held.get(team) if team is not None and team in held else held.get("*")
     if isinstance(part, bool):
         return part

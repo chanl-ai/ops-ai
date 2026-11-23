@@ -11,7 +11,7 @@ test('self-approval is read from the team’s own saved part, falling back to th
   assert.equal(requesterMayDecideOf({ '*': true }, 'team_new'), true);
   assert.equal(requesterMayDecideOf({ team_ops: { agents: true } }, 'team_ops'), true);
   assert.equal(requesterMayDecideOf(true, 'team_ops'), true);
-  assert.equal(requesterMayDecideOf(null, 'team_ops'), false);
+  assert.equal(requesterMayDecideOf(null, 'team_ops'), true);
 });
 
 test('Governance › Policies does not list the approvals floor', () => {

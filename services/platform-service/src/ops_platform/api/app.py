@@ -778,10 +778,10 @@ def create_public_app(
         claims: Annotated[Claims, Depends(claims_of)],
         team: Annotated[str | None, Query(max_length=64)] = None,
     ) -> Any:
-        """Which roles grant `area.action` in a team (the Security team for its actions), and who holds them there:
-        what a "View only" notice names. The team is `team`, the record's, when the page shows another team's
-        record, else the one the request acts in; a member of that team, or a workspace admin, may ask, holding
-        access.view where the request acts (a Chat user does not: 403 `admin_required`)."""
+        """Which roles grant `area.action` in a team (the Security team for its actions), and who holds them there
+        other than the caller: what a "View only" notice names. The team is `team`, the record's, when the page shows
+        another team's record, else the one the request acts in; a member of that team, or a workspace admin, may ask,
+        holding access.view where the request acts (a Chat user does not: 403 `admin_required`)."""
         if area not in AREAS or action not in ACTIONS:
             raise ValidationFailed(f"{area}.{action} is not in the catalogue.", code="unknown_cell")
         await people.require_admin(actor, "access", "view")
@@ -795,7 +795,7 @@ def create_public_app(
             raise Conflict(
                 "This workspace names no Security team; a workspace admin names it.", code="no_security_team"
             )
-        found = await holder_store.holders(actor.tenant_id, team, area, action)
+        found = await holder_store.holders(actor.tenant_id, team, area, action, excluding=actor.user_id)
         return ok({"teamId": team, **found.model_dump(by_alias=True)})
 
     @app.get("/v1/me/permissions", tags=["me"], response_model=Envelope[PermissionsOut], responses=ERRORS)

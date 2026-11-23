@@ -5,7 +5,7 @@ import { Eye } from 'lucide-react';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { useCan, useCanBuild, useHolders, useMe } from '@/hooks/me-queries';
+import { useCan, useCanBuild, useHolders } from '@/hooks/me-queries';
 import { useTeam, useTeamsNamed } from '@/hooks/use-team';
 
 /** Renders its children only for a person `can()` lets change the team's `area` records (agents by default). */
@@ -41,12 +41,12 @@ export function ReadOnlyNotice({ noun, area = 'agents', canEdit, teamId, teamNam
   const held = useTeamsNamed([teamId && current && teamId !== current.id ? teamId : null]);
   const other = teamId && current && teamId !== current.id ? (held.get(teamId) ?? { id: teamId, name: teamName ?? teamId }) : undefined;
   const member = !!other && held.has(other.id);
-  const me = useMe().data?.user.email?.toLowerCase();
   // The record's own team when it is another one the person belongs to; the holders route refuses a team they are not in.
   const holders = useHolders(area, 'edit', can === false && (!other || member), other?.id);
   if (can !== false) return null;
   const roles = holders.data?.roles.map((r) => r.name) ?? [];
-  const people = (holders.data?.holders ?? []).filter((h) => h.email.toLowerCase() !== me).map((h) => h.name);
+  // platform-service leaves the caller out of the holders it names.
+  const people = (holders.data?.holders ?? []).map((h) => h.name);
   return (
     <Alert data-testid="read-only-notice">
       <Eye className="size-4" />

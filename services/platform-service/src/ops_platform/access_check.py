@@ -91,12 +91,15 @@ class AccessCheck:
 
     async def why(self, caller: Actor, area: str, action: str) -> AccessAnswer:
         """The caller's own answer for `area.action` in the team they act in, the roles that grant it there, and who
-        in the team can give roles: what a locked button says. Not audited, as a person reads only their own."""
+        in the team can give roles, never the caller: what a locked button says. Not audited, as a person reads only
+        their own."""
         answer = await self._answer(
             caller.tenant_id, caller.team_id, caller.user_id, area, action, owner=None, requested_by=None
         )
         granting = await self.holders.holders(caller.tenant_id, caller.team_id, area, action)
-        admins = await self.holders.holders(caller.tenant_id, caller.team_id, "access", "manage")
+        admins = await self.holders.holders(
+            caller.tenant_id, caller.team_id, "access", "manage", excluding=caller.user_id
+        )
         answer["roles"] = [{"id": r.id, "name": r.name} for r in granting.roles]
         answer["askable"] = [h.name for h in admins.holders]
         return answer

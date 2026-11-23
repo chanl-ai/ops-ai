@@ -7,8 +7,8 @@ const PASSWORD = 'northfield-demo';
 const TOTP = '123456';
 const ADMIN = 'w.kamau@harborpine.example';
 
-// requesterMayDecide is a workspace policy, off by default: the person who asked may not decide their own request. A
-// workspace admin turns it on for this run, as the doc's precondition says.
+// requesterMayDecide is a team policy, on by default; the run starts with the two-person rule on (the value off), so
+// the person who asked may not decide their own request, then a workspace admin turns it back on.
 async function requesterMayDecide(value) {
   const platform = `http://127.0.0.1:${PLATFORM_PORT}`;
   const signIn = await fetch(`${platform}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: ADMIN, password: PASSWORD }) });
@@ -28,6 +28,7 @@ await withUiStack(async (consoleUrl) => {
       if (r.request().method() === 'POST' && /\/reviews\/[^/]+\/decision$/.test(r.url())) decisions.push(r.status());
     });
 
+    check('the workspace admin turns the two-person rule on', (await requesterMayDecide(false)) === 200);
     await page.goto(`${consoleUrl}/chat?agent=ag_fraud`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
     const box = page.getByLabel('Message');
     await box.waitFor({ timeout: 120_000 });

@@ -67,7 +67,7 @@ packages/ops_access/src/ops_access/policies.py policy-default memoryRetentionDay
 packages/ops_access/src/ops_access/policies.py policy-default mcpConnectionHours=8 1 open  # keep platform: an open default, read through policy()
 packages/ops_access/src/ops_access/policies.py policy-default pageImages={} 1 E03  # keep platform: holds something back by decision, read through policy()
 packages/ops_access/src/ops_access/policies.py policy-default publishReview={} 1 E01  # keep platform: holds something back by decision, read through policy()
-packages/ops_access/src/ops_access/policies.py policy-default requesterMayDecide=false 1 E49  # keep platform: holds something back by decision, read through policy()
+packages/ops_access/src/ops_access/policies.py policy-default requesterMayDecide=true 1 open  # keep platform: an open default, read through policy()
 packages/ops_access/src/ops_access/policies.py policy-default reviewSlaHours=8 1 open  # keep platform: an open default, read through policy()
 packages/ops_access/src/ops_access/policies.py policy-default securityTeamAddsSecrets=false 1 open  # keep platform: an open default, read through policy()
 packages/ops_access/src/ops_access/policies.py policy-default skillPublishStrict={} 1 open  # keep platform: an open default, read through policy()
