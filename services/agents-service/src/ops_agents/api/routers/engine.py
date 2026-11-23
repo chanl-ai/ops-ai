@@ -68,7 +68,7 @@ from ...store.mailboxes import MailboxStore
 from ...store.template_copies import TemplateCopies
 from ...store.tenancy import current_team, current_tenant
 from ...store.trigger_events import TriggerEvents
-from .. import ai_steps_gate, engine_lifecycle, run_starts, run_story, step_shapes, task_view
+from .. import ai_steps_gate, engine_lifecycle, run_starts, run_story, step_sample, step_shapes, task_view
 from ..account_names import account_uses_in
 from ..actors import ActorView, NamedActors, actor_reads, named_actors, started_by_of
 from ..agent_registry import ReviewView
@@ -754,6 +754,67 @@ async def definition_shapes(rt: Rt, _: Reader, workflow_id: str, version: int) -
         raise NotFound(f"Workflow definition {workflow_id} version {version}")
     steps = await step_shapes.version_shapes(rt, current_team() or "", row.definition)
     return ok({"workflowId": workflow_id, "version": version, "steps": steps})
+
+
+class SampleField(Out):
+    name: str
+    label: str
+    # The path a mapping stores: `$.input.<field>` for the trigger, `$.nodes.<step>.out.<field>` for any other step.
+    path: str
+    # The last run's value as text, masked and cut at step_sample.SAMPLE_VALUE_MAX_CHARS; null when it gave none.
+    sample: str | None = None
+
+
+class SampleStep(Out):
+    id: str
+    name: str
+    kind: str | None = None
+    installed: bool
+    fields: list[SampleField]
+
+
+class SampleRun(Out):
+    id: str
+    version: int
+    created_at: str
+
+
+class DefinitionSample(Out):
+    workflow_id: str
+    step: str | None = None
+    # False when the working copy does not hold `step` yet: the sheet asks to save before it lists fields.
+    saved: bool
+    run: SampleRun | None = None
+    steps: list[SampleStep]
+
+
+@router.get("/definitions/{workflow_id}/sample", response_model=Envelope[DefinitionSample])
+async def definition_sample(
+    rt: Rt, me: Reader, workflow_id: str, step: Annotated[str | None, Query(max_length=80)] = None
+) -> JSONResponse:
+    """What `step` receives: each step that can finish before it, from the working copy when one is open, with each
+    field's name, path and the value the acting team's newest finished run gave it, so the sheet joins nothing. All
+    steps when `step` is left out. Only the acting team's runs feed it, through the runs list's own team rule and
+    `visible_run`; values are masked when the team masks personal data for people. 403 unless the caller may view the
+    team's workflows. No request transaction: documents-service, tools-service and the masking policy are asked with
+    none open."""
+    store = definitions(rt)
+    row = await store.row(workflow_id, team=current_team())
+    if row is None:
+        raise NotFound(f"Workflow definition {workflow_id}")
+    copy = await _open_copy(store, workflow_id, row.version)
+    held = copy.definition if copy is not None else row.definition
+    team = current_team()
+    picked = None
+    steps: list[Any] = []
+    if team is not None:
+        newest = await runs(rt).list(workflow_id=workflow_id, status="succeeded", team_id=team, limit=1)
+        if newest:
+            picked = await visible_run(rt, newest[0].id, me)
+            steps = await runs(rt).step_rows(picked.id)
+    shapes = await step_shapes.version_shapes(rt, team or "", held)
+    mask = await ai_steps_gate.people_see_masked(rt, team)
+    return ok(step_sample.sample_view(workflow_id, held, step, shapes=shapes, run=picked, steps=steps, mask=mask))
 
 
 @router.get("/definitions/{workflow_id}", response_model=Envelope[DefinitionView])

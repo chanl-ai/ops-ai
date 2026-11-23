@@ -3516,6 +3516,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/workflows/definitions/{workflow_id}/sample": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Definition Sample
+         * @description What `step` receives: each step that can finish before it, from the working copy when one is open, with each
+         *     field's name, path and the value the acting team's newest finished run gave it, so the sheet joins nothing. All
+         *     steps when `step` is left out. Only the acting team's runs feed it, through the runs list's own team rule and
+         *     `visible_run`; values are masked when the team masks personal data for people. 403 unless the caller may view the
+         *     team's workflows. No request transaction: documents-service, tools-service and the masking policy are asked with
+         *     none open.
+         */
+        get: operations["workflows_definition_sample"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/workflows/definitions/{workflow_id}/versions/{version}/shapes": {
         parameters: {
             query?: never;
@@ -5913,6 +5938,18 @@ export interface components {
             /** Workflowid */
             workflowId: string;
         };
+        /** DefinitionSample */
+        DefinitionSample: {
+            run?: components["schemas"]["SampleRun"] | null;
+            /** Saved */
+            saved: boolean;
+            /** Step */
+            step?: string | null;
+            /** Steps */
+            steps: components["schemas"]["SampleStep"][];
+            /** Workflowid */
+            workflowId: string;
+        };
         /** DefinitionShapes */
         DefinitionShapes: {
             /** Steps */
@@ -6463,6 +6500,15 @@ export interface components {
         /** Envelope[DefinitionPublished] */
         Envelope_DefinitionPublished_: {
             data: components["schemas"]["DefinitionPublished"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[DefinitionSample] */
+        Envelope_DefinitionSample_: {
+            data: components["schemas"]["DefinitionSample"];
             /**
              * Success
              * @constant
@@ -10351,6 +10397,39 @@ export interface components {
             kind?: string | null;
             /** Workflowid */
             workflowId?: string | null;
+        };
+        /** SampleField */
+        SampleField: {
+            /** Label */
+            label: string;
+            /** Name */
+            name: string;
+            /** Path */
+            path: string;
+            /** Sample */
+            sample?: string | null;
+        };
+        /** SampleRun */
+        SampleRun: {
+            /** Createdat */
+            createdAt: string;
+            /** Id */
+            id: string;
+            /** Version */
+            version: number;
+        };
+        /** SampleStep */
+        SampleStep: {
+            /** Fields */
+            fields: components["schemas"]["SampleField"][];
+            /** Id */
+            id: string;
+            /** Installed */
+            installed: boolean;
+            /** Kind */
+            kind?: string | null;
+            /** Name */
+            name: string;
         };
         /**
          * SaveBase
@@ -33730,6 +33809,111 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_DefinitionView_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    workflows_definition_sample: {
+        parameters: {
+            query?: {
+                step?: string | null;
+            };
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_DefinitionSample_"];
                 };
             };
             /** @description Invalid request */

@@ -2026,6 +2026,19 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "workflows_definition_sample": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/workflows/definitions/{workflow_id}/sample",
+    "pathParams": [
+      "workflow_id"
+    ],
+    "query": [
+      "step"
+    ],
+    "stream": false
+  },
   "workflows_definition_shapes": {
     "body": null,
     "headers": [],

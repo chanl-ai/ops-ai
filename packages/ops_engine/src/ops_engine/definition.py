@@ -172,6 +172,11 @@ def _ancestors(d: WorkflowDefinition, node_id: str) -> set[str]:
     return found
 
 
+def ancestors(d: WorkflowDefinition, node_id: str) -> set[str]:
+    """Every step a run may have finished before `node_id` starts: the steps whose output it can read."""
+    return _ancestors(d, node_id)
+
+
 def _approval_order(d: WorkflowDefinition, known: set[str]) -> list[Json]:
     """A review approves a write's call as it stands when the review opens, so everything the write's input reads must
     have run before the review, and the review must run before the write. Otherwise a value read as nothing would be

@@ -170,6 +170,7 @@ async def test_a_member_without_the_workflows_view_cell_reads_no_workflow_defini
         "/v1/workflows/definitions/account-uses": {"app": "gmail", "name": "ops"},
         wf: {},
         f"{wf}/versions/{base['version']}/shapes": {},
+        f"{wf}/sample": {"step": "small"},
         f"{wf}/diff": {"from": "1", "to": "working-copy"},
         f"{wf}/publish-preview": {},
     }
