@@ -1,4 +1,4 @@
-# 58 access exceptions: decisions taken outside can() and policy defaults that hold something back
+# 59 access exceptions: decisions taken outside can() and policy defaults that hold something back
 # (scripts/check_access_exceptions.py). This number may only go down. Each line is `path kind key count row`; row is
 # the line of the Exceptions register in docs/architecture/roles-and-permissions.md that records the decision.
 # When the code changes, lower the count or delete the line. A new line needs a register row and a Standards-exception:
@@ -30,6 +30,7 @@ services/platform-service/src/ops_platform/auth.py refusal workspace_closed 1 E4
 services/tools-service/src/ops_tools/modules/service.py refusal plugin_module 1 E45  # keep tools: a plugin's module is changed by its plugin
 services/platform-service/src/ops_platform/teams.py refusal domain_not_allowed 1 E18  # keep platform: the workspace's allowed email domains, a setting
 services/platform-service/src/ops_platform/policies.py conflict approval_floor 1 E55  # keep platform: a team's approval rule stays at or above the Security team's floor
+services/platform-service/src/ops_platform/roles.py conflict privileged_for_group 1 E56  # keep platform: a privileged role goes to people only, never to a group
 services/platform-service/src/ops_platform/workspace_lifecycle.py conflict last_admin 1 E43  # keep platform: a team keeps one active admin
 services/platform-service/src/ops_platform/workspace_lifecycle.py conflict owner_must_transfer 1 E42  # keep platform: the owner leaves only by a transfer
 services/tools-service/src/ops_tools/gateway_calls.py lock SYSTEM_TOOLS 3 E06  # convert tools: the system lock becomes a grid cell or a policy
