@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """`make ci-local`: the jobs CI would run for this change, run here side by side, with one summary at the end.
 
-  ci_local.py [--base REF] [--jobs N] [--job NAME] [--plan] [--full]
+  ci_local.py [--base REF] [--jobs N] [--job A,B] [--plan] [--full]
+              [--out REPORT.json] [--rerun REPORT.json] [--shard I --shards N] [--uc ID[:LAYER] ...]
   ci_local.py --self-test
 
 The job list is not copied from anywhere: scripts/ci-plan.sh prints the plan CI's `plan` job prints, each job's `if:`
@@ -9,6 +10,12 @@ in .github/workflows/ci.yml is evaluated against it, and a matrix job takes its 
 `fromJSON(needs.plan.outputs.<key>)` does. A matrix job runs the step's own `run:` text with the matrix values
 substituted; every other job runs the local twins listed in scripts/ci_steps.json (which `ci_steps.py --check` keeps in
 step with ci.yml). A job with no twin (SQL Server, release proof, the maintainer review) is listed as skipped, with why.
+
+`--out` writes the result as JSON (per job: status, seconds, failing test ids, log, the last lines of a red one), so a
+caller reads that file and never the logs. `--job` takes job names or table labels, `--rerun` takes the red jobs of an
+earlier report (the others are carried over into the new one), `--shard I --shards N` runs every Nth planned job, and
+`--uc` adds `make usecase-test` runs as jobs of their own, so the branch tester, the epic driver and the release
+script share this one runner.
 
 Each job gets its own test database (OPS_TEST_DATABASE_URL plus a suffix, made from the migrated template by
 scripts/test_db.py) and its own service ports (the stack's ports plus 100 per job slot), so two jobs never share rows,
@@ -58,6 +65,9 @@ class Result:
     status: str  # passed | failed | skipped
     seconds: float = 0.0
     log: str = ""
+    failing: list[str] = field(default_factory=list)
+    tail: str = ""
+    carried: bool = False
 
 
 def slug(text: str) -> str:
@@ -104,10 +114,12 @@ def step_ids(job: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return {ci_steps.step_id(s): s for s in job.get("steps", []) if "run" in s}
 
 
-def build_jobs(workflow: dict[str, Any], listed: dict[str, Any], plan: dict[str, str], only: str | None) -> list[Job]:
+def build_jobs(
+    workflow: dict[str, Any], listed: dict[str, Any], plan: dict[str, str], only: set[str] | None = None
+) -> list[Job]:
     jobs: list[Job] = []
     for name, body in workflow["jobs"].items():
-        if name in NOT_CHECKS or (only and name != only):
+        if name in NOT_CHECKS:
             continue
         planned = condition(body.get("if"), plan)
         if planned is False:
@@ -142,7 +154,31 @@ def build_jobs(workflow: dict[str, Any], listed: dict[str, Any], plan: dict[str,
         if not job.commands:
             job.skipped = notes[0] if notes else "no local twin"
         jobs.append(job)
+    if only:
+        jobs = [j for j in jobs if j.name in only or j.label in only]
     return sorted(jobs, key=lambda j: (not any(h in j.label for h in HEAVY), j.skipped != ""))
+
+
+def usecase_jobs(items: list[str]) -> list[Job]:
+    """One job per `id` or `id:layer`; the command is the one a person types, so its slot guard and databases apply."""
+    jobs = []
+    for item in items:
+        uc, _, layer = item.partition(":")
+        jobs.append(
+            Job(
+                "usecase",
+                f"usecase: {item}",
+                commands=[f"make -s usecase-test UC={uc}" + (f" LAYER={layer}" if layer else "")],
+            )
+        )
+    return jobs
+
+
+def shard_of(jobs: list[Job], shard: int, shards: int) -> list[Job]:
+    """Every `shards`th job from `shard` (1-based), in the planned order, which puts the long suites first."""
+    if shards < 1 or not 1 <= shard <= shards:
+        raise ValueError(f"shard {shard} of {shards} does not exist")
+    return [j for i, j in enumerate(jobs) if i % shards == shard - 1]
 
 
 def job_env(job: Job, slot: int, base_env: dict[str, str], base_sha: str) -> dict[str, str]:
@@ -177,12 +213,27 @@ def run_job(
         children.add(proc.pid)
         code = proc.wait()
         children.discard(proc.pid)
-    return Result(
-        job,
-        "passed" if code == 0 else "failed",
-        time.monotonic() - started,
-        str(log.relative_to(ROOT) if log.is_relative_to(ROOT) else log),
-    )
+    shown = str(log.relative_to(ROOT) if log.is_relative_to(ROOT) else log)
+    result = Result(job, "passed" if code == 0 else "failed", time.monotonic() - started, shown)
+    if code != 0:
+        result.failing = failing_tests(log.read_text(errors="replace"))
+        result.tail = "\n".join(log.read_text(errors="replace").splitlines()[-15:])
+    return result
+
+
+# pytest's short summary (`FAILED path::test - why`, `ERROR path` for a collection error), vitest's `FAIL  file > name`.
+FAILED_LINE = re.compile(r"^(?:(?:FAILED|ERROR) (\S+)|\s*FAIL\s+(\S.*?))\s*(?: - .*)?$")
+
+
+def failing_tests(text: str, limit: int = 50) -> list[str]:
+    found: list[str] = []
+    for line in text.splitlines():
+        m = FAILED_LINE.match(line)
+        if m:
+            test = m.group(1) or m.group(2)
+            if test not in found:
+                found.append(test)
+    return found[:limit]
 
 
 def run_all(jobs: list[Job], width: int, logdir: Path, base_sha: str) -> list[Result]:
@@ -225,6 +276,41 @@ def table(results: list[Result], wall: float) -> str:
     return "\n".join(lines)
 
 
+def report(results: list[Result], base: str, head: str, wall: float, plan: dict[str, str]) -> dict[str, Any]:
+    return {
+        "base": base,
+        "head": head,
+        "plan": {k: plan.get(k, "") for k in ("full", "services")},
+        "wall_seconds": round(wall),
+        "summary": {s: sum(r.status == s for r in results) for s in ("passed", "failed", "skipped")},
+        "jobs": [
+            {
+                "label": r.job.label,
+                "job": r.job.name,
+                "status": r.status,
+                "seconds": round(r.seconds),
+                "log": r.log,
+                "failing_tests": r.failing,
+                "tail": r.tail,
+                "skipped": r.job.skipped,
+                "carried": r.carried,
+            }
+            for r in results
+        ],
+    }
+
+
+def red_labels(path: Path) -> tuple[set[str], list[dict[str, Any]]]:
+    """The labels of the jobs an earlier report marked failed, and the entries of every other job."""
+    jobs = json.loads(path.read_text())["jobs"]
+    return {j["label"] for j in jobs if j["status"] == "failed"}, [j for j in jobs if j["status"] != "failed"]
+
+
+def carried(entry: dict[str, Any]) -> Result:
+    job = Job(entry["job"], entry["label"], skipped=entry.get("skipped", ""))
+    return Result(job, entry["status"], entry.get("seconds", 0), entry.get("log", ""), carried=True)
+
+
 def tail(path: str, n: int = 15) -> str:
     try:
         return "\n".join((ROOT / path).read_text(errors="replace").splitlines()[-n:])
@@ -238,7 +324,12 @@ def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", default="origin/develop")
     ap.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) // 2))
-    ap.add_argument("--job")
+    ap.add_argument("--job", help="comma list of ci.yml job names or table labels")
+    ap.add_argument("--out", help="write the result as JSON to this file")
+    ap.add_argument("--rerun", help="run only the failed jobs of this earlier --out file; the rest are carried over")
+    ap.add_argument("--shard", type=int, default=1)
+    ap.add_argument("--shards", type=int, default=1)
+    ap.add_argument("--uc", nargs="*", default=[], help="use cases to run as jobs: id or id:layer")
     ap.add_argument("--plan", action="store_true")
     ap.add_argument("--full", action="store_true")
     args = ap.parse_args(argv)
@@ -252,7 +343,17 @@ def main(argv: list[str]) -> int:
     ).stdout
     plan = parse_plan(plan_text)
     workflow, listed = ci_steps.load()
-    jobs = build_jobs(workflow, listed, plan, args.job)
+    only = {x for x in (args.job or "").split(",") if x} or None
+    ucs = list(args.uc)
+    earlier: list[dict[str, Any]] = []
+    if args.rerun:
+        only, earlier = red_labels(Path(args.rerun))
+        ucs = [label.removeprefix("usecase: ") for label in only if label.startswith("usecase: ")]
+        if not only:
+            print(f"ci-local: nothing failed in {args.rerun}")
+    jobs = [] if args.rerun and not only else build_jobs(workflow, listed, plan, only)
+    jobs += [j for j in usecase_jobs(ucs) if not only or j.name in only or j.label in only]
+    jobs = shard_of(jobs, args.shard, args.shards)
     print(f"ci-local: plan from {args.base} ({base[:9]}): full={plan['full']} services={plan['services']}")
     if args.plan:
         for j in jobs:
@@ -263,7 +364,14 @@ def main(argv: list[str]) -> int:
     logdir = ROOT / ".run/ci-local" / time.strftime("%Y%m%d-%H%M%S")
     started = time.monotonic()
     results = run_all(jobs, args.jobs, logdir, base)
-    print(table(results, time.monotonic() - started))
+    wall = time.monotonic() - started
+    print(table(results, wall))
+    if args.out:
+        everything = results + [carried(e) for e in earlier if e["label"] not in {r.job.label for r in results}]
+        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True, check=True)
+        Path(args.out).write_text(
+            json.dumps(report(everything, base, head.stdout.strip(), wall, plan), indent=2) + "\n"
+        )
     for r in results:
         if r.status == "failed":
             print(f"\n--- {r.job.label}: last lines of {r.log}\n{tail(r.log)}")

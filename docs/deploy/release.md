@@ -12,7 +12,7 @@ something print what they would do unless `DRY=0`.
 | Step | Who | What happens |
 |---|---|---|
 | 1. Build | Builder | A feature pull request targets `release/current`. CI does not run on a pull request into it or a push to it (`ci.yml`), so a builder runs only the tests it touches |
-| 2. Take in | `ops-release` agent | Merges each finished pull request into the train with its own merge commit, merges `develop` in when it moves, fixes red tests on the train |
+| 2. Take in | `ops-release` agent | `make release-intake` (below) merges each finished pull request into the train with its own merge commit, merges `develop` in when it moves, runs `ci-local` and pushes when green; the agent resolves the conflicts and reds it reports |
 | 3. Try on staging | Owner | After telling the owner, `make stg-deploy-ci REF=release/current` deploys the train by hand. A push to the train deploys nothing; the owner sets `STAGING_HOLD` while trying it. Only fixes go on the train |
 | 4. Version | Maintainer | `make release-version V=X.Y.Z` (preview), then `DRY=0`: one commit on the train that sets `deploy/release/version`. `release-pr` refuses when the file says anything else |
 | 5. Open the PR | Maintainer | In a checkout at the train's head, `make release-pr V=X.Y.Z` (preview), then `DRY=0`: runs `make ci-local`, then opens `release/current` into `develop` titled `release: X.Y.Z into develop` |
@@ -21,6 +21,33 @@ something print what they would do unless `DRY=0`.
 | 8. Move main | Automatic | The same job runs `scripts/release-main.sh`: `git push origin <sha>:main`, which git refuses unless it is a fast-forward. With the deploy key the push passes; without it the job stops red and prints the owner's one command (below) |
 | 9. Publish | Automatic | The same job starts `sdk-publish.yml` and `release-images.yml` on the tag, since a tag pushed with the workflow token starts no workflow itself |
 | 10. Next train | Maintainer | `make release-cut` (preview), then `DRY=0`: fast-forwards `release/current` to `origin/develop`, or creates it when missing. It refuses when the train holds commits develop lacks |
+
+## Taking pull requests in: `make release-intake`
+
+One command does the mechanical work of step 2; a person or agent is needed only for a logic conflict or a red test.
+`DRY=1` (the default) prints the plan and changes nothing on the remote; `DRY=0` acts. `TRAIN` defaults to `release/current`
+when it exists, else `release/1.1.0`; `PRS=1,2` picks and orders the pull requests (default: oldest first).
+
+| Step | What it does |
+|---|---|
+| Stock | Lists open pull requests. Left alone, with the reason in the report: the release pull request, dependabot, drafts, a base other than develop or the train |
+| Retarget | `gh api -X PATCH .../pulls/N -f base=<train>`. GitHub's refusals "no new commits between" (already in the train) and "added to a merge queue" skip that pull request; they are not failures. Runs the old base started are cancelled, never a merge-queue run |
+| Merge | In a worktree `ops-ai-worktrees/intake-<train>` (`INTAKE_DIR`): develop first, then each branch with its own `--no-ff` merge commit. A branch already in the train is skipped |
+| Mechanical conflicts | Generated openapi and SDK files take our side and `make openapi` rewrites them; `deploy/database/golden/mssql` by `make db-ddl-golden`; `uv.lock` and `docs/architecture/dependencies.md` by `uv lock` and `make sbom`; `pnpm-lock.yaml` by `pnpm install --lockfile-only`; `roadmap.json`, `changelog/*.json` lists and `api-changes.md` keep both sides; two Alembic heads are joined by pointing the merged chain's first revision at the train's head. Any other conflict aborts that one merge, is recorded with its files, and the run goes on with the next pull request |
+| Prove | `make ci-local OUT=<dir>/ci-local.json` in the worktree |
+| Push | A plain push of the result, only when `ci-local` is green. The release pull request body is rebuilt |
+| Report | `REPORT` (default `.run/release-intake/<time>/report.json`): merged, skipped with reason, conflicts with files, red jobs with failing test ids and the last log lines, the worktree left for a person |
+
+Exit 0 is green, 1 is a red job or a refused push, 2 is a conflict a person has to resolve. After exit 1 or 2 the worktree
+is kept: fix and commit there, then `make release-intake RERUN=<report.json>` runs only the red jobs (the others are
+carried over from the report), pushes when green and removes the worktree; `RESUME=1` does the same with a full
+`ci-local`, after a conflicting pull request was merged by hand in that worktree.
+
+`make ci-local` takes the same options for the branch tester and the epic driver: `OUT=<file>.json` writes each job's
+status, seconds, failing test ids, log and the last lines of a red one; `JOB=a,b` names jobs or table labels;
+`RERUN=<file>.json` runs only that report's red jobs; `SHARDS=n SHARD=i` runs every nth planned job (one machine per
+shard); `UCS="uc-013:ui uc-607:api"` adds use cases to the plan as jobs of their own (`make usecase-test`, so its slot
+guard applies).
 
 ## Hotfix
 
