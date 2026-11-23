@@ -31,10 +31,12 @@ Run from the repo root.
 | After a route or DTO change: every service's `openapi.json`, then both SDKs | `make openapi` |
 | Regenerate only the SDKs from the committed documents | `make sdk` |
 | Generated layer matches the documents (no stack, seconds) | `uv run python sdk/generate.py --check` |
-| Python tests | `uv run --isolated --quiet --with pytest --with-editable sdk/python pytest -q sdk/python/tests` |
+| Python tests | `uv run --isolated --quiet --with pytest --with-editable sdk/python pytest -q sdk/python/tests` (or `make sdk-verify`) |
 | TypeScript build and tests (rewrites the TypeScript `dist` folder, which the console type-checks against) | `pnpm --filter @chanl-ai/ops-ai test` |
 | All three, as `make verify` runs them | `make sdk-verify` (`SDK_REF=HEAD` reads the documents as committed) |
 | The packages installed in an empty folder, then the examples on the live stack | `make sdk-check` (`SDK_LIVE=0` skips the stack part) |
+| Typed returns against local or staging (signs in as `AS=`, no secrets on argv) | `make sdk-typed-proof AS=builder`; `make sdk-typed-proof AS=builder ENV=staging` |
+| Failed-run `wait(check=True)` end to end (own stack) | `make usecase-test UC=uc-workflows-2 LAYER=sdk` |
 | One call as a seeded person on the stack | `make sdk-call CALL='ops.raw.platform.me_me()' AS=builder` ([Calling the API as a person](../CLAUDE.md#calling-the-api-as-a-person)) |
 | The command line from this checkout | `uv run opsai --help` |
 

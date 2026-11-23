@@ -34,7 +34,7 @@ no password. `make help` prints each target's arguments.
 
 | Area | Targets | Example |
 |---|---|---|
-| Any route | `api`, `sdk-call` | `make api GET /v1/me AS=viewer`; `make sdk-call CALL='ops.raw.platform.me_me()' AS=builder` |
+| Any route | `api`, `sdk-call`, `sdk-typed-proof` | `make api GET /v1/me AS=viewer`; `make sdk-call CALL='ops.raw.platform.me_me()' AS=builder`; typed returns smoke: `make sdk-typed-proof AS=builder` (or `ENV=staging`) |
 | Chat | `chat`, `chat-script`, `assistant-evals` (REAL=1: the real subset, at most MAX_CALLS model calls), `chat-show`, `chat-calls`, `chat-agents`, `chat-threads`, `chat-accounts`, `chat-kbs`, `chat-connected`, `chat-approve`, `chat-reject`, `chat-submit`, `chat-transcript`, `chat-transcripts` (Markdown to paste) | `make chat AS=james AGENT='Ops Assistant' SAY='What cases are open?'` |
 | Knowledge | `kb-bases`, `kb-show`, `kb-documents`, `kb-sources`, `kb-source`, `kb-items`, `kb-add-file`, `kb-add-text`, `kb-sync`, `kb-search`, `kb-changes`, `kb-change` | `make kb-search KB=kb_retail_products TEXT='overdraft fee' AS=james` |
 | Apps and connections | `apps-list`, `apps-show`, `apps-add-tool`, `apps-accounts`, `apps-mine`, `apps-connect` (prints the sign-in link), `apps-test`, `apps-auth-configs` | `make apps-connect APP=plugin:opsai.salesforce AS=james` |
@@ -51,7 +51,7 @@ no password. `make help` prints each target's arguments.
 | `TEAM`, `JSON` | The team to act in (default: the person's own team); `JSON=1` prints the answer as JSON (`opsai` targets) |
 | `SVC`, `Q`, `BODY` (`api` only) | The service (default: the one whose `openapi.json` holds the path; name it for `/v1/chat/*`, which no document holds), the query string (`Q='pageSize=5'`, since make reads any word holding `=` as a variable) and a JSON body |
 | `AGENT`, `THREAD`, `TEST`, `KB`, `CONNECTED` (`chat`) | The agent by id, slug or name (default: the team's default agent); an existing thread; `TEST=1` uses the agent page's Test panel, whose thread nothing remembers and the chat list leaves out; a knowledge base; `CONNECTED=<app>` sends the follow-up a Connect card sends once the person has signed in |
-| `ENV=staging` (`api`, `sdk-call`) | Calls the staging app named by `STG_APP`; `AS=admin` is the first admin; `team-admin`, `builder`, `approver`, `viewer` and `chat_user` are the role accounts in `~/.config/ops-ai/staging-roles.env` (`make seed-roles ENV=staging` makes a missing one; [docs/deploy/fly-staging.md](../docs/deploy/fly-staging.md)) |
+| `ENV=staging` (`api`, `sdk-call`, `sdk-typed-proof`) | Calls the staging app named by `STG_APP`; `AS=admin` is the first admin; `team-admin`, `builder`, `approver`, `viewer` and `chat_user` are the role accounts in `~/.config/ops-ai/staging-roles.env` (`make seed-roles ENV=staging` makes a missing one; [docs/deploy/fly-staging.md](../docs/deploy/fly-staging.md)) |
 
 A chat script is YAML or JSON: `agent`, `test`, `kb` and `turns`, each turn `say: …` or `connected: true` with an
 `expect` holding any of `tool` (a tool name called), `noTool`, `card` (true or false), `says` (texts the reply holds)
@@ -78,7 +78,7 @@ run records and knowledge pages have no delete route, so they stay. Code: `sdk/p
 | `python.mk` | `test` (T= honoured by every service), `test-impacted` (BASE=, PLAN=1), `agent-guard`, `python-install`, `python-verify`, `sbom` |
 | `git.mk` | `commit`, `commit-hunks`, `my-hunks`, `whats-mine`, `unstage`, `git-rules`, `review` ([Commits](../CLAUDE.md#commits)) |
 | `usecase.mk` | `usecase-test`, `usecase-report`, `usecase-list`, `usecase-show`, `usecase-coverage`, `usecase-new`, `usecase-reset`, `usecase-runner-test` |
-| `sdk.mk`, `docs.mk` | `openapi`, `sdk`, `sdk-verify`, `sdk-check`; `docs-verify`, `docs-guides-check` |
+| `sdk.mk`, `docs.mk` | `openapi`, `sdk`, `sdk-verify`, `sdk-check`, `sdk-typed-proof`; `docs-verify`, `docs-guides-check` |
 | `db.mk`, `db-scripts.mk` | `db-up`, `db-down`, `db-shell`, `db-sweep`, `migrate`, `migration`; the DBA scripts ([deploy/CLAUDE.md](../deploy/CLAUDE.md)); `mssql-remote-*`, the shared SQL Server on Fly for tests from a Mac |
 | `release.mk` (`release-cut`, `release-pr`, `release-version`, `release-tag`, `release-main`, `hotfix-cut`: [docs/deploy/release.md](../docs/deploy/release.md)), `staging.mk`, `deps.mk`, `setup.mk`, `experiments.mk` | Releases, staging, dependency locks and mirrors, machine setup, agents-service experiments |
 | `services.mk` | The generated `<verb>-<svc>` pass-throughs, for example `test-tools` runs `make -C services/tools-service test` |

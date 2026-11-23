@@ -12,7 +12,7 @@ from typing import Any
 
 import httpx
 import pytest
-from ops_ai import AsyncOpsAI, Conflict, NotFound, OpsAI, OpsError
+from ops_ai import AsyncOpsAI, Conflict, NotFound, OpsAI, OpsError, RunFailed
 from ops_ai.errors import EXIT_CODES
 
 BASE = "https://ops.test"
@@ -134,6 +134,70 @@ def test_wait_returns_at_a_human_task_with_its_id_then_decide_finishes_the_run()
     assert (run["status"], run["taskId"]) == ("waiting", "rv_1")
     c.tasks.decide(run["taskId"], "approve")
     assert c.runs.wait("run_1", interval=0)["status"] == "succeeded"
+
+
+def test_wait_check_true_raises_run_failed_for_a_failed_run() -> None:
+    """check=True raises RunFailed instead of returning a failed run."""
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return ok(
+            {
+                "id": "run_fail",
+                "status": "failed",
+                "failure": {
+                    "kind": "upstream",
+                    "code": "tool_failed",
+                    "message": "the tool refused",
+                    "userMessage": "Try again later.",
+                    "retryable": True,
+                    "nodeName": "Call bank",
+                },
+            }
+        )
+
+    with pytest.raises(RunFailed) as raised:
+        client(handler).runs.wait("run_fail", interval=0, check=True)
+    err = raised.value
+    assert (err.run_id, err.kind, err.code, err.retryable, err.step) == (
+        "run_fail",
+        "upstream",
+        "tool_failed",
+        True,
+        "Call bank",
+    )
+    assert err.user_message == "Try again later."
+
+
+def test_wait_check_false_returns_a_failed_run() -> None:
+    """Default check=False returns the failed run so the caller can read it."""
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return ok({"id": "run_fail", "status": "failed", "error": "step failed"})
+
+    run = client(handler).runs.wait("run_fail", interval=0)
+    assert run["status"] == "failed"
+    assert run["id"] == "run_fail"
+
+
+def test_async_wait_check_true_raises_run_failed() -> None:
+    def handler(_: httpx.Request) -> httpx.Response:
+        return ok(
+            {
+                "id": "run_fail",
+                "status": "failed",
+                "failure": {"kind": "internal", "code": "internal_error", "message": "boom"},
+            }
+        )
+
+    async def run() -> None:
+        async with AsyncOpsAI(
+            api_key="k", base_url=BASE, http=httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        ) as c:
+            with pytest.raises(RunFailed) as raised:
+                await c.runs.wait("run_fail", interval=0, check=True)
+            assert raised.value.code == "internal_error"
+
+    asyncio.run(run())
 
 
 def test_the_async_client_unwraps_and_raises_the_same_way() -> None:
