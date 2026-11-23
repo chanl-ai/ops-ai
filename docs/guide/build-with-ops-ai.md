@@ -16,39 +16,31 @@ Python and TypeScript SDKs. Each step links to an example folder you can run and
 
 ## Ask once
 
-Send one message to a published agent and read the reply.
-([`ask_once.py`](../../examples/chat/01-ask-once/ask_once.py))
+**Goal.** Send one message to a published agent and print the reply.
+
+**Why.** Prove sign-in, team and a published agent before you climb the rest of the ladder.
+
+### Steps
+
+1. Connect with `OpsAI()`.
+2. Take any published agent from `ops.agents.list()`.
+3. Call `ops.agents.chat` and print `reply`.
+
+```bash
+python examples/chat/01-ask-once/ask_once.py
+```
 
 ```python
 """Send one message to a published agent and print the reply."""
 
-from __future__ import annotations
-
-from typing import TypedDict, cast
-
 from ops_ai import OpsAI
-
-
-class AgentRow(TypedDict):
-    id: str
-    status: str
-
-
-class ChatReply(TypedDict):
-    reply: str
-    threadId: str
 
 
 def main() -> None:
     ops = OpsAI()
-    agent = cast(
-        AgentRow,
-        next(row for row in ops.agents.list() if row.get("status") == "published"),
-    )
-    answer = cast(
-        ChatReply,
-        ops.agents.chat(agent["id"], "What documents open a business account?"),
-    )
+    # Any published agent works; this path only needs a live reply.
+    agent = next(row for row in ops.agents.list() if row.get("status") == "published")
+    answer = ops.agents.chat(agent["id"], "What documents open a business account?")
     print(answer["reply"])
 
 
@@ -57,11 +49,12 @@ if __name__ == "__main__":
 ```
 
 ```bash
-python ask_once.py
-# or:
+# or on the CLI:
 AGENT=$(opsai agents list --json | jq -r '.[] | select(.status=="published") | .id' | head -1)
 opsai agents chat "$AGENT" --message "What documents open a business account?"
 ```
+
+**You should see.** A non-empty reply string from the agent (wording depends on the model).
 
 ## The ladder
 
@@ -82,8 +75,8 @@ opsai agents chat "$AGENT" --message "What documents open a business account?"
 
 Expected at each step: the command prints the record it made or the answer it got. A refused step prints why.
 
-The [workflows](workflows.md) and [agents](agents.md) pages list every further example: approvals, checklists,
-delegation, evaluations.
+Further agent and workflow jobs (approvals, checklists, delegation, evaluations) live on the
+[agents](agents.md) and [workflows](workflows.md) pages.
 
 ## How agents and workflows meet
 

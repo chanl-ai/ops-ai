@@ -1,6 +1,14 @@
 # Publish and pick a skill
 
-Publish a skill, give it to an agent, and pick it for one reply.
+**Goal.** Publish a return checklist, give it to an agent, and pick it for one reply so the reply records which skill ran and which inputs it used.
+
+**Why.** Several agents should handle returns the same way. A skill keeps that procedure in one place you can version and review, instead of copying it into each agent's instructions.
+
+## Steps
+
+1. Create the skill (`ops.skills.create`) and publish a version (`ops.skills.publish`).
+2. Create an agent, attach the skill with `add_reference`, and publish the agent — pick only works for skills the agent may use.
+3. Start a chat thread, call `ops.chat.say` with `skill=` and `inputs=`, and read `message.skills` on the `done` event.
 
 ```bash
 python publish_and_pick.py
@@ -9,83 +17,58 @@ python publish_and_pick.py
 ```python
 """Publish a skill, give it to an agent, and pick it for one reply."""
 
-from __future__ import annotations
-
-from typing import Any, TypedDict, cast
-
 from ops_ai import OpsAI
-
-
-class SkillRecord(TypedDict):
-    id: str
-
-
-class AgentRecord(TypedDict):
-    id: str
-
-
-class ThreadRecord(TypedDict):
-    id: str
-
-
-class ChatEvent(TypedDict, total=False):
-    type: str
-    message: dict[str, Any]
 
 
 def main() -> None:
     ops = OpsAI()
 
-    skill = cast(
-        SkillRecord,
-        ops.skills.create(
-            {
-                "name": "Return checklist",
-                "ownerTeam": "Customer Operations",
-                "useWhen": "A customer wants to return an item.",
-                "loading": "on_match",
-                "instructions": (
-                    "1. Ask for the order number.\n"
-                    "2. Check the purchase date is within 30 days.\n"
-                    "3. Ask whether the customer has the receipt.\n"
-                    "4. Never promise a refund for a sale item."
-                ),
-                "inputs": [
-                    {
-                        "name": "order_number",
-                        "description": "The order being returned",
-                    }
-                ],
-            }
-        ),
+    # Create a reusable procedure, then publish a version agents can attach.
+    skill = ops.skills.create(
+        {
+            "name": "Return checklist",
+            "ownerTeam": "Customer Operations",
+            "useWhen": "A customer wants to return an item.",
+            "loading": "on_match",
+            "instructions": (
+                "1. Ask for the order number.\n"
+                "2. Check the purchase date is within 30 days.\n"
+                "3. Ask whether the customer has the receipt.\n"
+                "4. Never promise a refund for a sale item."
+            ),
+            "inputs": [
+                {
+                    "name": "order_number",
+                    "description": "The order being returned",
+                }
+            ],
+        }
     )
     ops.skills.publish(skill["id"], note="First version")
 
-    agent = cast(
-        AgentRecord,
-        ops.agents.apply(
-            {
-                "name": "Returns helper",
-                "role": "Answer questions about returns",
-                "instructions": (
-                    "Help with returns. Keep answers short. Follow attached skills."
-                ),
-            }
-        ),
+    # The agent may only pick skills on its reference list.
+    agent = ops.agents.apply(
+        {
+            "name": "Returns helper",
+            "role": "Answer questions about returns",
+            "instructions": (
+                "Help with returns. Keep answers short. Follow attached skills."
+            ),
+        }
     )
     ops.agents.add_reference(agent["id"], "skill", skill["id"])
     ops.agents.publish(agent["id"], note="Uses the return checklist")
 
-    thread = cast(ThreadRecord, ops.chat.start(agent["id"]))
-    events = [
-        cast(ChatEvent, event)
-        for event in ops.chat.say(
+    # One chat turn: force this skill and supply its input.
+    thread = ops.chat.start(agent["id"])
+    events = list(
+        ops.chat.say(
             thread["id"],
             "I want to return my boots.",
             skill=skill["id"],
             inputs={"order_number": "1182"},
         )
-    ]
+    )
     done = next(
         event
         for event in reversed(events)
@@ -97,6 +80,10 @@ def main() -> None:
 if __name__ == "__main__":
     main()
 ```
+
+**You should see.** A `done` message whose `skills` list has `how: picked` and `order_number: 1182`.
+
+### TypeScript
 
 ```ts
 import { OpsAI } from '@chanl-ai/ops-ai';
@@ -134,6 +121,8 @@ const done = [...events].reverse().find((e) => e.type === 'done' && e.message);
 console.log(done.message.skills);
 ```
 
+### Command line
+
 ```bash
 SKILL=$(opsai skills apply resources/skill.yaml --note "First version" --json | jq -r .id)
 opsai skills publish "$SKILL" --note "First version"
@@ -144,8 +133,7 @@ opsai chat say --agent "$AGENT" --skill "$SKILL" --input order_number=1182 \
   -m "I want to return my boots."
 ```
 
-Files: `publish_and_pick.py`, `publish_and_pick.mjs`, `publish_and_pick.sh`. Lesson:
-[docs/guide/examples/skills.md](../../../docs/guide/examples/skills.md).
+Guide: [Write, publish and use a skill](../../../docs/guide/examples/skills.md).
 
 <details>
 <summary>Folder check (CI)</summary>
