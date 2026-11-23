@@ -193,16 +193,32 @@ class MemoryTools:
         return await self.runner.run(arguments)
 
 
+@dataclass(frozen=True)
+class Asker:
+    """The agent a turn runs as, read from the definition the turn runs: a draft under test, the version a widget
+    pins, or the live one. Who it may ask is decided from this and never from the live catalogue, which holds only
+    the published version and none for an agent never published."""
+
+    agent_id: str
+    version: int
+    # The ids of the agents its `agent:<id>` grants name.
+    grants: tuple[str, ...]
+
+    @classmethod
+    def of(cls, agent_id: str, version: int, tools: list[str]) -> Asker:
+        return cls(agent_id, version, tuple(t.removeprefix("agent:") for t in tools if t.startswith("agent:")))
+
+
 class AgentRunner(Protocol):
     """The API side of specialist agents as tools, so this layer does not import the API."""
 
-    async def offers(self, agent_id: str) -> list[ToolGrant]:
-        """`agent__<id>` grants for the agents `agent_id` may ask on this turn: its own `agent:<id>` grants, every
+    async def offers(self, asker: Asker) -> list[ToolGrant]:
+        """`agent__<id>` grants for the agents `asker` may ask on this turn: its own `agent:<id>` grants, every
         specialist for its team's default agent on a turn with a person, and none its chain refuses."""
         ...
 
     async def run(
-        self, *, agent: str, arguments: Json, key: str, parent_thread_id: str, parent_run_id: str | None
+        self, *, asker: Asker, agent: str, arguments: Json, key: str, parent_thread_id: str, parent_run_id: str | None
     ) -> ToolOutcome:
         """Runs `agent`'s own turn on the question for the turn's person and returns its reply."""
         ...
@@ -214,12 +230,14 @@ class AgentTools:
 
     inner: ToolExecutor
     runner: AgentRunner
+    asker: Asker
 
     async def execute(self, tool: str, arguments: Json, *, key: str, approval_token: str | None) -> ToolOutcome:
         if not tool.startswith(AGENT_TOOL_PREFIX):
             return await self.inner.execute(tool, arguments, key=key, approval_token=approval_token)
         configurable = get_config().get("configurable") or {}
         return await self.runner.run(
+            asker=self.asker,
             agent=tool.removeprefix(AGENT_TOOL_PREFIX),
             arguments=arguments,
             key=key,
@@ -229,17 +247,19 @@ class AgentTools:
 
 
 async def ports_with_workflows(
-    deps: GraphDeps, granted: list[str], *, agent_id: str | None = None
+    deps: GraphDeps, granted: list[str], *, agent_id: str | None = None, version: int = 0
 ) -> tuple[KernelPorts, list[ToolGrant]]:
-    """The ports and extra grants for an agent turn: workflow tools for its granted, published workflows, and for the
-    team's default agent the specialists the person may ask."""
+    """The ports and extra grants for an agent turn: workflow tools for its granted, published workflows, and the
+    specialists the person may ask. `granted` and `version` are those of the definition the turn runs, so a draft
+    under test is offered what the draft grants."""
     ports, offers = deps.ports, list[ToolGrant]()
     if deps.workflows is not None and (
         found := await deps.workflows.offers([g for g in granted if g.startswith("workflow:")])
     ):
         ports, offers = replace(ports, tools=WorkflowTools(ports.tools, deps.workflows)), found
-    if deps.agents is not None and agent_id and (specialists := await deps.agents.offers(agent_id)):
-        ports, offers = replace(ports, tools=AgentTools(ports.tools, deps.agents)), [*offers, *specialists]
+    asker = Asker.of(agent_id, version, granted) if agent_id else None
+    if deps.agents is not None and asker is not None and (specialists := await deps.agents.offers(asker)):
+        ports, offers = replace(ports, tools=AgentTools(ports.tools, deps.agents, asker)), [*offers, *specialists]
     if deps.memory is not None and agent_id and (search := await deps.memory.offers(agent_id)):
         ports, offers = replace(ports, tools=MemoryTools(ports.tools, deps.memory)), [*offers, *search]
     if deps.ops is not None and agent_id and (reads := await deps.ops.offers(agent_id)):

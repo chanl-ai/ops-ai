@@ -43,8 +43,8 @@ Per model call 3.2 ms p50, 5.5 ms p95, against about 1 s for the call itself (E8
 
 | Gotcha | Handling |
 |---|---|
-| The cap is checked before a call, so the crossing call completes | Spend can pass a cap by one call per concurrent task |
-| Fan-out tasks check the budget at once and can all pass | Overshoot up to the fan-out width (4); acceptable for a soft cap |
+| The cap is checked before a call, so the crossing call completes | A token or cost cap can be passed by the one call that crosses it; a call cap cannot be passed by a checked call |
+| Fan-out tasks check the budget at once | Each call is reserved on the budget's row before it runs (`store/usage.py` `UsageLedger.reserve`), so calls made at once queue and each counts the ones admitted before it. A reservation holds one call and the call's maximum output tokens at the alias's output price (4,096 tokens when the call sets none); input tokens are not estimated, so calls in flight can pass a token or cost cap by their input. A reservation whose call never returns stops counting after 15 minutes |
 | LangGraph restarts a node on resume | Calls the node made before the pause run again and are counted again |
 | An approval with no new cap pauses again at once | The person must send a higher `budget` |
 | Usage of a failed provider call is unknown | Counted as one call with zero tokens |

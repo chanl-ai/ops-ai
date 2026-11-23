@@ -197,6 +197,59 @@ async def test_a_turn_stopped_at_the_step_limit_says_so_not_the_tool_budget() ->
     assert "step limit" in result.text and "most tool calls" not in result.text
 
 
+async def test_an_agent_capped_at_one_model_call_a_reply_is_offered_no_tool_and_answers_in_text() -> None:
+    """One model call a reply leaves none to read a tool's result, so the only step offers no tool: the reply is the
+    model's own text, never a call followed by the bare step-limit notice."""
+    tools = RecordingTools()
+    ask = 'call place_wire_hold {"wireId": "W-1", "hours": 24, "reason": "x"}'
+    one = AgentSettings("ag_fraud", 7, [PromptFragment("You help Fraud Operations.")], "test-model", max_steps=1)
+    read = ToolGrant("place_wire_hold", "Payments Hub", "Hold a wire", "read", HOLD.input_schema)
+    _, result = await run(TurnRequest("t1", "th1", one, [read], user_turn=ask), ports(tools))
+    assert (result.stop_reason, tools.calls) == ("final", []), result
+    assert result.text and "step limit" not in result.text, result.text
+
+
+def at_once_model(tool: str, args: dict[str, Any], count: int) -> FunctionModel:
+    """A model whose first response calls `tool` `count` times at once and whose next answers in text: an agent asked
+    to do five things together that reaches for one kernel tool five times."""
+    said = "Here is what I found."
+
+    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        if len(messages) > 1:
+            return ModelResponse(parts=[TextPart(said)])
+        return ModelResponse(parts=[ToolCallPart(tool, args, tool_call_id=f"c{i}") for i in range(count)])
+
+    async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
+        if len(messages) > 1:
+            yield said
+            return
+        for i in range(count):
+            yield {i: DeltaToolCall(name=tool, json_args=json.dumps(args), tool_call_id=f"c{i}")}
+
+    return FunctionModel(respond, stream_function=stream)
+
+
+async def test_kernel_tools_called_together_past_their_cap_are_refused_and_the_turn_goes_on_to_answer() -> None:
+    """Calls made in one model response past a kernel-tool cap are each told to answer in text; the turn ends only
+    when the model calls again after reading that. It ended the reply at once, with the step-limit notice, after one
+    model call: the model had not yet been told anything."""
+    for tool, args, settings in (
+        ("search_tools", {"query": "dispute"}, SETTINGS),
+        (
+            "present",
+            {"shape": "rows", "data": [{"limit": "ATM", "amount": "1,000"}]},
+            replace(SETTINGS, widgets_per_turn=1),
+        ),
+    ):
+        req = TurnRequest("t1", "th1", settings, [], user_turn="Ask all five.")
+        model = KernelPorts(model=at_once_model(tool, args, 5), tools=RecordingTools(), knowledge=FixedKnowledge([]))
+        _, result = await run(req, model)
+        assert result.stop_reason == "final" and "step limit" not in result.text, (tool, result.text)
+        assert "Here is what I found." in result.text, (tool, result.text)
+        refused = [r for r in result.tool_calls if r.status == "error"]
+        assert refused and all("answer in text" in str(r.output) for r in refused), (tool, [r.output for r in refused])
+
+
 async def test_a_reply_cut_short_after_some_text_says_so() -> None:
     steps = AgentSettings("ag_policy", 1, [PromptFragment("You answer from the manual.")], "test-model", 0, 3)
     req = TurnRequest("t1", "th1", steps, [], user_turn="What is the daily ATM withdrawal limit?")

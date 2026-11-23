@@ -3,9 +3,11 @@ agent answers with its own turn: its knowledge, tools, guardrails and approvals,
 
 Who may be asked is decided per turn, for the turn's verified caller (`TURN_PERSON`: a person, or the service
 identity a run was started under): the agents the caller holds chat.run on, among the agent's own `agent:<id>` grants
-and, for the team's default agent, every specialist. A turn with no person follows the rule every such turn does
-(`child_runs.refused_with_no_person`): a scheduled run acts as its agent and asks the agents of its own team, a chat
-turn resumed after a decision asks no one, and the thread's event log says which grants were withheld.
+and, for the team's default agent, every specialist. The asking agent's grants and version are those of the definition
+the turn runs (`graphs.common.Asker`), so a draft under test asks what the draft grants; the agents asked are live.
+A turn with no person follows the rule every such turn does (`child_runs.refused_with_no_person`): a scheduled run
+acts as its agent and asks the agents of its own team, a chat turn resumed after a decision asks no one, and the
+thread's event log says which grants were withheld.
 
 Each call carries a chain record (`ops_contracts.chain.ChainRecord`), kept on the specialist's thread: who the chain
 runs for, the thread it started on, the agents on it and how deep it may go. The record decides who may be asked next,
@@ -33,6 +35,7 @@ from ops_service_kit.errors import Forbidden, NotFound
 from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.ids import new_id, now_iso
 
+from ..graphs.common import Asker
 from ..store.events import EventLog
 from ..store.graphs import StoredThread
 from ..store.team_defaults import TeamDefaults
@@ -70,28 +73,19 @@ class AgentCalls:
     def __init__(self, rt: Runtime) -> None:
         self.rt = rt
 
-    async def offers(self, agent_id: str) -> list[ToolGrant]:
+    async def offers(self, asker: Asker) -> list[ToolGrant]:
         try:
             configurable = get_config().get("configurable") or {}
         except RuntimeError:
             return []  # not inside a graph run, so there is no turn to offer specialists to
         thread_id = str(configurable.get("thread_id") or "")
         if TURN_PERSON.get() is None and thread_id:
-            await self._log_withheld(agent_id, thread_id, configurable.get("run_id"))
-        return await self.offers_in(agent_id, thread_id)
+            await self._log_withheld(asker, thread_id, configurable.get("run_id"))
+        return await self.offers_in(asker, thread_id)
 
-    def _granted(self, agent_id: str) -> list[str]:
-        """The agents `agent_id` holds as `agent:<id>` grants."""
-        caller = self.rt.catalog.agent(agent_id)
-        return [
-            str(t).removeprefix("agent:")
-            for t in (caller.tools if caller is not None else [])
-            if str(t).startswith("agent:")
-        ]
-
-    async def _log_withheld(self, agent_id: str, thread_id: str, run_id: object) -> None:
+    async def _log_withheld(self, asker: Asker, thread_id: str, run_id: object) -> None:
         """Records, on the turn's thread, the agent grants the rule for a turn with no person withheld, and why."""
-        granted = self._granted(agent_id)
+        agent_id, granted = asker.agent_id, list(asker.grants)
         thread = await graph_store(self.rt).thread_row(thread_id) if granted else None
         if thread is None:
             return
@@ -122,16 +116,16 @@ class AgentCalls:
             input_schema=QUESTION_SCHEMA,
         )
 
-    def _chain(self, thread: StoredThread, agent_id: str, run_id: str | None = None) -> ChainRecord:
-        """The chain the turn of `agent_id` on `thread` is on: the record written when its agent was asked, or, for a
-        thread nobody asked, a chain that starts here."""
+    def _chain(self, thread: StoredThread, asker: Asker, run_id: str | None = None) -> ChainRecord:
+        """The chain the turn of `asker` on `thread` is on: the record written when its agent was asked, or, for a
+        thread nobody asked, a chain that starts here on the version the turn runs."""
         meta = thread.meta_object()
+        agent_id = asker.agent_id
         if not meta.get("calledBy"):
-            asking = self.rt.catalog.agent(agent_id)
             person = TURN_PERSON.get()
             return ChainRecord.starting(
                 agent_id=agent_id,
-                version=asking.version if asking is not None else 0,
+                version=asker.version,
                 # Its person, the service identity it runs under or, with no person, the agent itself.
                 started_for=(person.email or caller_of(person).sub) if person is not None else f"agent:{agent_id}",
                 thread_id=thread.id,
@@ -147,19 +141,20 @@ class AgentCalls:
             depth=1,
         )
 
-    async def offers_in(self, agent_id: str, thread_id: str) -> list[ToolGrant]:
-        """Specialists `agent_id` may ask on this turn: its `agent:<id>` grants, and every specialist when it is the
+    async def offers_in(self, asker: Asker, thread_id: str) -> list[ToolGrant]:
+        """Specialists `asker` may ask on this turn: its `agent:<id>` grants, and every specialist when it is the
         team's default, less the ones its chain refuses (already on the path, or past its depth) and the ones the
         turn's caller may not chat with. A turn with no person follows `refused_with_no_person`."""
         thread = await graph_store(self.rt).thread_row(thread_id) if thread_id else None
         if thread is None:
             return []
+        agent_id = asker.agent_id
         person = TURN_PERSON.get()
         who = caller_of(person) if person is not None else None
-        on = self._chain(thread, agent_id)
+        on = self._chain(thread, asker)
         out: list[ToolGrant] = []
         seen: set[str] = set()
-        granted = self._granted(agent_id)
+        granted = list(asker.grants)
         # Every specialist is the default agent's to ask for a person only: with no person it holds its grants alone.
         if who is not None and await TeamDefaults(self.rt.db).agent(thread.team_id) == agent_id:
             granted = list(dict.fromkeys([*[a.id for a in self.rt.catalog.agents if a.id != agent_id], *granted]))
@@ -190,24 +185,22 @@ class AgentCalls:
         return out
 
     async def run(
-        self, *, agent: str, arguments: Json, key: str, parent_thread_id: str, parent_run_id: str | None
+        self, *, asker: Asker, agent: str, arguments: Json, key: str, parent_thread_id: str, parent_run_id: str | None
     ) -> ToolOutcome:
         store = graph_store(self.rt)
         parent = await store.thread_row(parent_thread_id)
         assert parent is not None, "a tool runs inside its parent's run"
         parent_meta = parent.meta_object()
-        caller = str(parent_meta.get("agentId") or "")
-        if not caller and (parent.graph or "").startswith("agent:"):
-            caller = parent.graph.removeprefix("agent:")
+        caller = asker.agent_id
         person = TURN_PERSON.get()
         callee = self.rt.catalog.agent(agent)
-        on = self._chain(parent, caller, parent_run_id)
+        on = self._chain(parent, asker, parent_run_id)
         try:
             chain = on.extended(agent, callee.version if callee is not None else 0)
         except ChainRefusedError as e:
             return ToolOutcome(ok=False, output={"error": e.message, "code": e.code, "path": [*on.path]})
         # Checked again here, not only when offered: a model may name a tool it was never given.
-        if called_as("agent", agent) not in {g.name for g in await self.offers_in(caller, parent_thread_id)}:
+        if called_as("agent", agent) not in {g.name for g in await self.offers_in(asker, parent_thread_id)}:
             message = "That agent cannot be asked on this turn."
             return ToolOutcome(ok=False, output={"error": message, "code": "specialist_not_offered"})
         assert callee is not None, "offered above"

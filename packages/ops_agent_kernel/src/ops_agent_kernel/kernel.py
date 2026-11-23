@@ -154,7 +154,8 @@ class _TurnState:
     # Widget parts present showed this turn, against the agent's widgets_per_turn.
     shown: int = 0
     # Set once present is refused for the cap: a further call ends the turn.
-    present_closed: bool = False
+    # The model step on which present was refused at the widget cap; None until then.
+    present_closed: int | None = None
     # Set when the model repeats a call it already made this reply: it is offered no system tool after that.
     tools_closed: bool = False
     # The step whose calls past max_tool_calls were told to stop and answer; a call in a later step ends the turn.
@@ -171,7 +172,7 @@ class _TurnState:
     step_limit: int = 0
     # Calls to the kernel's own tools this turn, against the agent's max_builtin_calls; set once one is refused.
     builtin_calls: int = 0
-    builtins_refused: bool = False
+    builtins_refused: int | None = None
     # Passages: the knowledge block's, then each a tool returned (search_knowledge), numbered on from the block's, so
     # the reply cites either with [n] and the chat draws each as a citation.
     passages: list[Passage] = field(default_factory=list[Passage])
@@ -313,23 +314,27 @@ class _TurnState:
         return f"The person wrote: {self.req.user_turn or ''}{tools}{inputs}"
 
     def last_step(self, step: int) -> bool:
-        """The last step of a turn with more than one offers no tool, so the turn always keeps a step to answer in."""
+        """The last step of a turn offers no tool, so the turn always keeps a step to answer in. A turn of one step
+        is all last step: no later step could read a tool's result, so it answers from what it was given."""
         steps = self.step_limit or self.req.settings.max_steps
-        return steps > 1 and step >= steps
+        return step >= steps
 
     def offered(self, ctx: RunContext[None], *, builtin: bool) -> bool:
         """Whether a tool is offered on the step about to run; `ctx.run_step` is that step's number."""
         return not self.last_step(ctx.run_step) and (builtin or not self.tools_closed)
 
-    def charge_builtin(self) -> str | None:
-        """Counts one call to a kernel tool. Past the cap the first call gets the instruction to answer in text; a call
-        after that ends the turn, as present's widget cap does. They stay offered: a withdrawn tool leaves the library
-        answering "unknown tool" and the model retrying until the turn fails."""
+    def charge_builtin(self, run_step: int) -> str | None:
+        """Counts one call to a kernel tool made on model step `run_step`. Past the cap a call gets the instruction to
+        answer in text; a call on a later step, after the model has read that, ends the turn, as present's widget cap
+        does. Calls a model makes together in one response are all on one step, so each past the cap is told and none
+        ends the turn. They stay offered: a withdrawn tool leaves the library answering "unknown tool" and the model
+        retrying until the turn fails."""
         cap = self.req.settings.max_builtin_calls
         if cap is not None and self.builtin_calls >= cap:
-            if self.builtins_refused:
+            if told_before(self.builtins_refused, run_step):
                 raise BuiltinLimitReached(f"A kernel tool was called again after the limit of {cap} a turn.")
-            self.builtins_refused = True
+            if self.builtins_refused is None:
+                self.builtins_refused = run_step
             return BUILTIN_LIMIT.format(cap=cap)
         self.builtin_calls += 1
         return None
@@ -378,16 +383,17 @@ def _present(state: _TurnState) -> Tool[None]:
 
     async def call(ctx: RunContext[None], **arguments: Any) -> Any:
         rec = state.record(ctx.tool_call_id or f"call_{len(state.order)}", present.NAME, arguments)
-        if (over := state.charge_builtin()) is not None:
+        if (over := state.charge_builtin(ctx.run_step)) is not None:
             rec.status, rec.output = "error", {"error": over}
             return {"error": over}
-        if state.present_closed:
+        if told_before(state.present_closed, ctx.run_step):
             # The model was told to stop and called again: end the turn with what it has shown, so a model that
             # ignores the refusal cannot spend the rest of the step limit.
             rec.status, rec.output = "error", {"error": "Stopped: present was called again after the widget limit."}
             raise WidgetLimitReached("present was called again after the per-answer widget limit.")
         if cap is not None and state.shown >= cap:
-            state.present_closed = True
+            if state.present_closed is None:
+                state.present_closed = ctx.run_step
             # Said as an instruction: a model told only the limit keeps retrying until the step limit ends the turn.
             why = f"This agent shows at most {cap} widgets in one answer. Do not call present again; answer in text."
             rec.status, rec.output = "error", {"error": why}
@@ -455,6 +461,12 @@ async def _closing_answer(
     except Exception:  # the reply then ends with the budget notice alone
         return ""
     return text
+
+
+def told_before(refused_on: int | None, run_step: int) -> bool:
+    """Whether the model had read a refusal made on step `refused_on` before it made a call on `run_step`: only then
+    is the call a repeat that ends the turn."""
+    return refused_on is not None and run_step > refused_on
 
 
 class WidgetLimitReached(UsageLimitExceeded):
@@ -600,7 +612,7 @@ def _load_skill(state: _TurnState, grant: ToolGrant) -> Tool[None]:
 
     async def call(ctx: RunContext[None], **arguments: Any) -> Any:
         rec = state.record(ctx.tool_call_id or f"call_{len(state.order)}", skillset.NAME, arguments)
-        if (over := state.charge_builtin()) is not None:
+        if (over := state.charge_builtin(ctx.run_step)) is not None:
             rec.status, rec.output = "error", {"error": over}
             return {"error": over}
         slug = str(arguments.get("slug") or "")
@@ -685,7 +697,7 @@ def _search(state: _TurnState) -> Tool[None]:
 
     async def call(ctx: RunContext[None], **arguments: Any) -> Any:
         rec = state.record(ctx.tool_call_id or f"call_{len(state.order)}", search.NAME, arguments)
-        if (over := state.charge_builtin()) is not None:
+        if (over := state.charge_builtin(ctx.run_step)) is not None:
             rec.status, rec.output = "error", {"error": over}
             return {"error": over}
         # A tool that may not be called now is not named either: its schema would be all the model needs to ask

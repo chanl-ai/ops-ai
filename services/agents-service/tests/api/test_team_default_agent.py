@@ -23,6 +23,7 @@ from ops_agents.api.child_runs import ChildRuns, acting_for
 from ops_agents.api.deps import Runtime
 from ops_agents.api.ops_tools import ops_assistant_id
 from ops_agents.api.run_person import person_of_thread
+from ops_agents.graphs.common import Asker
 from ops_agents.store.agent_registry import registry_agents
 from ops_agents.store.base import metadata
 from ops_agents.store.events import EventLog
@@ -70,6 +71,13 @@ async def stack() -> AsyncIterator[Stack]:
         AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c,
     ):
         yield c, cast(Runtime, app.state.runtime)
+
+
+def live(rt: Runtime, agent_id: str) -> Asker:
+    """The agent as a turn on its published version runs it."""
+    a = rt.catalog.agent(agent_id)
+    assert a is not None, agent_id
+    return Asker.of(a.id, a.version, list(a.tools))
 
 
 async def move(rt: Runtime, agent_id: str, team: str) -> None:
@@ -154,9 +162,10 @@ async def test_the_default_asks_only_specialists_the_person_may_chat_with_and_as
     calls_ = AgentCalls(rt)
     with tenant_scope(TENANT):
         with acting_for(viewer()):
-            offered = {g.name for g in await calls_.offers_in("ag_branch", thread)}
+            offered = {g.name for g in await calls_.offers_in(live(rt, "ag_branch"), thread)}
             assert "agent__ag_dispute" in offered and "agent__ag_fraud" not in offered, offered
             named = await calls_.run(
+                asker=live(rt, "ag_branch"),
                 agent="ag_fraud",
                 arguments={"question": "x"},
                 key="k-fraud",
@@ -164,10 +173,19 @@ async def test_the_default_asks_only_specialists_the_person_may_chat_with_and_as
                 parent_run_id=None,
             )
             assert not named.ok and named.output["code"] == "specialist_not_offered", named.output
-            assert await calls_.offers_in("ag_branch", children[0]["id"]) == [], "a specialist asks no other agent"
-            assert await calls_.offers_in("ag_dispute", thread) == [], "only the team default asks specialists"
+            assert await calls_.offers_in(live(rt, "ag_branch"), children[0]["id"]) == [], (
+                "a specialist asks no other agent"
+            )
+            assert await calls_.offers_in(live(rt, "ag_dispute"), thread) == [], (
+                "only the team default asks specialists"
+            )
         nobody = await calls_.run(
-            agent="ag_dispute", arguments={"question": "x"}, key="k-none", parent_thread_id=thread, parent_run_id=None
+            asker=live(rt, "ag_branch"),
+            agent="ag_dispute",
+            arguments={"question": "x"},
+            key="k-none",
+            parent_thread_id=thread,
+            parent_run_id=None,
         )
         assert not nobody.ok and nobody.output["code"] == "specialist_not_offered", "no person, no specialist"
 
@@ -230,7 +248,12 @@ async def test_an_agent_already_on_the_chain_is_not_asked_again(stack: Stack, mo
     second = next(tid for tid, m in threads if m.get("calledBy") == "ag_branch")
     with tenant_scope(TENANT), acting_for(viewer()):
         looped = await AgentCalls(rt).run(
-            agent="ag_branch", arguments={"question": "x"}, key="k-loop", parent_thread_id=second, parent_run_id=None
+            asker=live(rt, "ag_dispute"),
+            agent="ag_branch",
+            arguments={"question": "x"},
+            key="k-loop",
+            parent_thread_id=second,
+            parent_run_id=None,
         )
     assert not looped.ok and looped.output["code"] == "agent_on_path", looped.output
 
@@ -247,7 +270,12 @@ async def test_an_asked_agent_asks_no_one_at_the_default_depth(stack: Stack) -> 
     (asked,) = [r.id for r in await rt.graph_store.thread_rows("agent_wrapper") if r.meta_object().get("calledBy")]
     with tenant_scope(TENANT), acting_for(viewer()):
         deeper = await AgentCalls(rt).run(
-            agent="ag_fraud", arguments={"question": "x"}, key="k-deep", parent_thread_id=asked, parent_run_id=None
+            asker=live(rt, "ag_dispute"),
+            agent="ag_fraud",
+            arguments={"question": "x"},
+            key="k-deep",
+            parent_thread_id=asked,
+            parent_run_id=None,
         )
     assert not deeper.ok and deeper.output["code"] == "chain_too_deep", deeper.output
 
@@ -301,7 +329,7 @@ async def test_an_asked_agents_chain_is_the_same_after_an_approval_pause(stack: 
         # The resumed turn's model call is spent from the conversation the chain started on.
         assert (await rt.usage.totals(thread)).calls > spent
         with acting_for(viewer()):
-            assert await AgentCalls(rt).offers_in("ag_fraud", asked["threadId"]) == []
+            assert await AgentCalls(rt).offers_in(live(rt, "ag_fraud"), asked["threadId"]) == []
 
 
 async def test_a_run_with_no_person_reaches_only_its_own_teams_agents_and_workflows(stack: Stack) -> None:
@@ -354,7 +382,7 @@ async def test_a_run_with_no_person_reaches_only_its_own_teams_agents_and_workfl
         # A person's chat turn resumed with no person known still asks no one.
         chat = await c.post("/v1/chat/threads", json={"agentId": "ag_branch", "kbIds": []}, headers=VIEWER)
         assert chat.status_code == 201, chat.text
-        assert await AgentCalls(rt).offers_in("ag_branch", chat.json()["data"]["id"]) == []
+        assert await AgentCalls(rt).offers_in(live(rt, "ag_branch"), chat.json()["data"]["id"]) == []
 
 
 async def test_a_service_identity_is_offered_only_the_agents_its_scopes_reach(stack: Stack) -> None:
@@ -383,9 +411,11 @@ async def test_a_service_identity_is_offered_only_the_agents_its_scopes_reach(st
     calls_ = AgentCalls(rt)
     with tenant_scope(TENANT):
         with acting_for(service([])):
-            assert await calls_.offers_in("ag_branch", thread) == [], "a service without chat:run asked a specialist"
+            assert await calls_.offers_in(live(rt, "ag_branch"), thread) == [], (
+                "a service without chat:run asked a specialist"
+            )
         with acting_for(service(["chat:run"])):
-            offered = [g.name for g in await calls_.offers_in("ag_branch", thread)]
+            offered = [g.name for g in await calls_.offers_in(live(rt, "ag_branch"), thread)]
     assert offered == ["agent__ag_dispute"], offered
 
 
@@ -409,6 +439,7 @@ async def test_a_specialist_spends_the_callers_budget_and_stops_when_it_is_spent
         with acting_for(viewer()):
             again = (
                 await AgentCalls(rt).run(
+                    asker=live(rt, "ag_branch"),
                     agent="ag_dispute",
                     arguments={"question": "x"},
                     key=asked.external_key.removeprefix("tool:"),
@@ -421,6 +452,7 @@ async def test_a_specialist_spends_the_callers_budget_and_stops_when_it_is_spent
         with acting_for(viewer()):
             second = (
                 await AgentCalls(rt).run(
+                    asker=live(rt, "ag_branch"),
                     agent="ag_dispute",
                     arguments={"question": "x"},
                     key="k-2",
