@@ -13,9 +13,9 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, NotRequired, TypedDict, cast
 
-from ops_access import BY_KEY, Access
+from ops_access import Access, policy, requester_may_decide
 from ops_agent_kernel.ports import ToolOutcome
-from ops_identity import ActingForPerson, Principal
+from ops_identity import ActingForPerson, Principal, principal_of
 from ops_policy import input_hash
 from ops_service_kit.errors import ApiError, Forbidden
 from ops_service_kit.http import Json, JsonValue
@@ -382,10 +382,14 @@ class GatewayCalls:
         have changed after it was minted."""
         if req.acting_for is None:
             return None
+        # With no live reader (dev sign-in) the asker's own token decides, as `can` reads it everywhere else.
+        asker = principal_of(req.acting_for, tenant_id)
         may_decide = (
             await self.requester_may_decide(tenant_id, req.acting_for.team_id)
             if self.requester_may_decide is not None
-            else BY_KEY["requesterMayDecide"].default is True
+            else requester_may_decide(
+                policy(asker, "requesterMayDecide"), req.acting_for.team_id, "reviews", policy(asker, "approvalsFloor")
+            )
         )
         approvers = _approvers(req.approval_token)
         return asker_refusal(ACCESS, req.acting_for, tenant_id, approvers, may_decide=may_decide)

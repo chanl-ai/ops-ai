@@ -247,7 +247,8 @@ def workspace_step_up(me: Principal) -> bool:
 
 def require_not_own(me: Principal, requested_by: Iterable[str | None], *, team: str | None, what: str) -> None:
     """Separation of duties on a decision, decided by `can`: whoever asked for, saved or started what `me`
-    decides does not decide it while the tenant's requesterMayDecide policy is off. Runs after the role check; `team` is
+    decides does not decide it while the team's two-person rule is on (requesterMayDecide off), unless `me` is an Admin
+    of the team; `can` holds that one rule. Runs after the role check; `team` is
     a team the decision's role is held in, or None for one of the caller's reviewing teams. A workflow's own principal
     (`workflow:<id>`) asking is refused whatever the policy: no person holds that identity, so only a forged one could
     decide with it."""
@@ -317,7 +318,8 @@ def started_by(me: Principal) -> str:
 
 def approves_own_writes(me: Principal) -> bool:
     """Whether `me` is their own approver in the team they act in: reviews.decide there, while the
-    requesterMayDecide policy lets an asker decide. An API key never is: a key acts for nobody who could approve."""
+    requesterMayDecide policy lets an asker decide or they are an Admin of the team (`can`). An API key never is: a key
+    acts for nobody who could approve."""
     if me.is_key:
         return False
     return ACCESS.may(caller_of(me), "reviews", "decide", team=me.team_id, requested_by=(me.email,))

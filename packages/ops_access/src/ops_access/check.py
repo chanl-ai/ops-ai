@@ -13,8 +13,9 @@ A person's action is held in the team the record belongs to, which must be the t
 `team_forbidden` naming it otherwise), except the Security team's actions (`SECURITY_TEAM_ACTIONS`), held in the
 Security team whatever team the request acts in. Scope `own` passes only for a record whose `owner` is the caller.
 `not_by` names people who may never take the action, such as an earlier approver of a two-person decision (403
-`own_request`); `requested_by` names who asked for it (or saved or started it), refused the same way unless the
-team's `requesterMayDecide` is on for the area and the Security team's `approvalsFloor` does not lock it off. Both
+`own_request`); `requested_by` names who asked for it (or saved or started it), refused the same way only when the
+person is not an Admin of the team and the team turned the two-person rule on (`requesterMayDecide` false for the
+area, on by default) or the Security team's `approvalsFloor` locks it off. Both
 are separation of duties, not role rules, so they bind the dev header caller too. A token without the `access` claim
 maps `roles` through the membership mapping, which the grid test proved equal.
 
@@ -186,8 +187,11 @@ class Access:
             self._may_change_system(p, area, team=team, owner=owner, what=what, from_any_team=from_any_team)
         if p.kind == "service":
             return _service(p, area, action, team)
-        may_decide = requester_may_decide(
-            policy(p, "requesterMayDecide"), team or p.team_id, area, policy(p, "approvalsFloor")
+        deciding_in = team or p.team_id
+        # An Admin of the team decides their own request whatever the team's two-person rule or the floor say; `not_by`
+        # (an earlier approver of a two-person decision, a step's notDecidedBy) still binds them.
+        may_decide = (deciding_in is not None and ADMIN_ROLE in self.roles_in(p, deciding_in)) or requester_may_decide(
+            policy(p, "requesterMayDecide"), deciding_in, area, policy(p, "approvalsFloor")
         )
         refused = [*not_by, *(requested_by if not may_decide else ())]
         if any(n and n.lower() in (p.email.lower(), p.sub.lower()) for n in refused):

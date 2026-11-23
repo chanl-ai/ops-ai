@@ -72,10 +72,10 @@ export interface paths {
         };
         /**
          * Access Holders
-         * @description Which roles grant `area.action` in a team (the Security team for its actions), and who holds them there:
-         *     what a "View only" notice names. The team is `team`, the record's, when the page shows another team's
-         *     record, else the one the request acts in; a member of that team, or a workspace admin, may ask, holding
-         *     access.view where the request acts (a Chat user does not: 403 `admin_required`).
+         * @description Which roles grant `area.action` in a team (the Security team for its actions), and who holds them there
+         *     other than the caller: what a "View only" notice names. The team is `team`, the record's, when the page shows
+         *     another team's record, else the one the request acts in; a member of that team, or a workspace admin, may ask,
+         *     holding access.view where the request acts (a Chat user does not: 403 `admin_required`).
          */
         get: operations["access_access_holders"];
         put?: never;

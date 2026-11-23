@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Any, Literal, cast
 
 from ops_access import BY_KEY, Access, EffectiveAnswer, effective_answer, publish_mode, requester_may_decide, team_on
-from ops_identity import ActingForPerson, Principal, ServiceCallError, ServiceClient, ServiceUnreachable
+from ops_identity import ActingForPerson, Principal, ServiceCallError, ServiceClient, ServiceUnreachable, principal_of
 from ops_service_kit.errors import Forbidden
 from ops_service_kit.http import Json
 from ops_service_kit.narrow import json_object
@@ -182,17 +182,17 @@ def asker_refusal(
 ) -> Forbidden | None:
     """The refusal `can` gives when an approval names the person the call acts for and requesterMayDecide, read at the
     call (`may_decide`), does not let an asker decide; None when someone else approved or the policy allows it. Only
-    the separation-of-duties part counts here: the approver's role was checked when the approval was given."""
+    the separation-of-duties part counts here: the approver's role was checked when the approval was given. The asker
+    holds the roles their acting-for token carries, so an Admin of the team passes as `can` lets them."""
     return own_request_refusal(
         access,
         tenant_id,
         asker.email,
         approvers,
         may_decide=may_decide,
-        sub=asker.sub,
-        name=asker.name,
         team_id=asker.team_id,
         what="this write",
+        person=principal_of(asker, tenant_id),
     )
 
 
@@ -207,13 +207,15 @@ def own_request_refusal(
     name: str = "",
     team_id: str | None = None,
     what: str = "this",
+    person: Principal | None = None,
 ) -> Forbidden | None:
     """`can(requested_by=)`'s own_request refusal when one of `deciders` is `asker` (an email) and requesterMayDecide,
     read live by the caller (`may_decide`), does not let an asker decide; None otherwise. The decider's role is checked
-    where the decision is made, so any other refusal `can` gives here does not count."""
+    where the decision is made, so any other refusal `can` gives here does not count. `person` is the asker with the
+    roles a token says they hold (an Admin of the team decides their own request); without it they hold none."""
     if not asker or asker.casefold() not in {str(d).casefold() for d in deciders if d}:
         return None
-    person = Principal(
+    held = person or Principal(
         kind="person",
         sub=sub or asker,
         email=asker,
@@ -224,8 +226,8 @@ def own_request_refusal(
         roles={},
         scopes=[],
         auth_method="session",
-        policies={"requesterMayDecide": may_decide},
     )
+    person = held.model_copy(update={"policies": {**held.policies, "requesterMayDecide": may_decide}})
     try:
         access.can(person, "reviews", "decide", team=team_id, requested_by=[asker], what=what)
     except Forbidden as refused:

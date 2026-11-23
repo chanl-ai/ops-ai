@@ -57,13 +57,14 @@ async def test_can_decide_on_a_publish_matches_its_route(stack: tuple[AsyncClien
         f"/v1/agents/{made['id']}/publish-requests", json={"version": made["version"], "note": "go"}, headers=BUILDER
     )
     rid = req.json()["data"]["id"]
+    # The asker does not decide their own publish while the team's two-person rule is on (requesterMayDecide off).
+    strict_asker = person("james", "team_ops", "builder", policies={"requesterMayDecide": False})
     flags = {
         name: await flag(c, f"/reviews/{rid}", "canDecide", who)
-        for name, who in (("asker", BUILDER), ("viewer", VIEWER), ("reviewer", REVIEWER))
+        for name, who in (("asker", strict_asker), ("viewer", VIEWER), ("reviewer", REVIEWER))
     }
-    # The asker does not decide their own publish by default (requesterMayDecide off).
     assert flags == {"asker": False, "viewer": False, "reviewer": True}, flags
-    own = await c.post(f"/v1/publish-requests/{rid}/decision", json={"decision": "approved"}, headers=BUILDER)
+    own = await c.post(f"/v1/publish-requests/{rid}/decision", json={"decision": "approved"}, headers=strict_asker)
     assert own.status_code == 403, own.text
     refused = await c.post(f"/v1/publish-requests/{rid}/decision", json={"decision": "approved"}, headers=VIEWER)
     assert refused.status_code == 403, refused.text
@@ -117,7 +118,7 @@ async def test_can_decide_is_no_for_whoever_saved_the_version_of_any_saved_kind(
     stack: tuple[AsyncClient, AsyncEngine],  # noqa: F811
 ) -> None:
     """A tool module review the reviewer saved: the flag and the decision route read one list of saved kinds, and
-    both refuse the saver unless the tenant turned requesterMayDecide on."""
+    both refuse the saver while the team's two-person rule is on (requesterMayDecide off)."""
     c, engine = stack
     body: dict[str, Any] = {
         "moduleId": "mod_x",
@@ -138,8 +139,9 @@ async def test_can_decide_is_no_for_whoever_saved_the_version_of_any_saved_kind(
         )
     loose = person("maya", "team_ops", "approver", policies={"requesterMayDecide": True})
     assert await flag(c, f"/reviews/{req.id}", "canDecide", loose) is True
-    assert await flag(c, f"/reviews/{req.id}", "canDecide", REVIEWER) is False, "off by default"
-    decided = await c.post(f"/v1/publish-requests/{req.id}/decision", json={"decision": "approved"}, headers=REVIEWER)
+    strict = person("maya", "team_ops", "approver", policies={"requesterMayDecide": False})
+    assert await flag(c, f"/reviews/{req.id}", "canDecide", strict) is False, "refused with the rule on"
+    decided = await c.post(f"/v1/publish-requests/{req.id}/decision", json={"decision": "approved"}, headers=strict)
     assert decided.status_code == 403, decided.text
 
 
