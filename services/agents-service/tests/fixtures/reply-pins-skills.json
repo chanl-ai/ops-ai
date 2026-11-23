@@ -1617,7 +1617,7 @@
           "useWhenMaxChars": 1024
         },
         "teams": [
-          "Retail"
+          "team_ops"
         ],
         "tools": [
           {

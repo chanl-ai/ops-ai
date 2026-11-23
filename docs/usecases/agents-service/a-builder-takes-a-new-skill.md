@@ -54,11 +54,4 @@ services' response time with a script driving; a person reading and thinking add
 
 Check 1 fails when any step fails or the total is over 600 seconds (`UC771_BUDGET_SECONDS` lowers it for a try). Seen
 failing: with the budget at 3 seconds the run printed `FAIL 1 a new skill goes from the list to published in 3 s, under
-3 s`; before the seed skill existed, step 2 failed on the New skill dialog.
-
-## Open finding
-
-On a team that owns no skill yet, New skill cannot be completed. The Owner team select lists only the teams that
-already own a skill (`GET /v1/skills/options` builds `teams` from existing skills, `routers/skills.py`), so it shows
-"Choose a team", and Create skill answers "Choose the owner team." with no way to choose one. Generate skill and From a
-template are other ways to the first skill. This script seeds one skill through the API to get past it.
+3 s`; with the owner-team options built from existing skills, step 2 failed on the New skill dialog of a team with no skill.

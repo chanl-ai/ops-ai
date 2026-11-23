@@ -213,10 +213,16 @@ def reader_teams(me: Principal) -> list[str]:
 def review_teams(me: Principal) -> list[str]:
     """The teams whose reviews a person decides (`reviews.decide` held there); the dev header caller decides in the
     team it acts in, an API key in none."""
+    return teams_holding(me, "reviews", "decide")
+
+
+def teams_holding(me: Principal, area: str, action: str) -> list[str]:
+    """The teams of a person where `can` grants `area.action`, whichever team the request acts in; the dev header
+    caller holds it in the team it acts in, an API key in none."""
     if me.dev:
         return list(me.team_ids)
     who = caller_of(me)
-    return [t for t in me.team_ids if not me.is_key and _held(who, "reviews", "decide", t)]
+    return [t for t in me.team_ids if not me.is_key and _held(who, area, action, t)]
 
 
 def _held(who: Caller, area: str, action: str, team: str) -> Scope | None:
