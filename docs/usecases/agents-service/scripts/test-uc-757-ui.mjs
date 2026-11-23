@@ -305,10 +305,11 @@ await withUiStack(
       await page.getByRole('tab', { name: 'Settings' }).click();
       // The brief's editor draws after the tab opens; text typed before it is ready goes nowhere.
       await brief.locator('[contenteditable="true"]').first().waitFor({ timeout: 30_000 });
-      await brief.getByRole('group', { name: 'Job' }).click();
+      // The Job text itself: the group's middle can fall on its locked heading, which takes no cursor.
+      await brief.getByRole('group', { name: 'Job' }).locator('[data-node-view-content]').first().click();
       await page.keyboard.press('End');
       await page.keyboard.insertText(' By phone or chat.');
-      await brief.getByText('By phone or chat.').first().waitFor({ timeout: 10_000 }).catch(() => undefined);
+      const typed = await brief.getByText('By phone or chat.').first().waitFor({ timeout: 10_000 }).then(() => true, () => false);
       // Thinking sits in the same group of settings as the parallel reads she switched off, on the Limits tab; the
       // draft is kept across tabs.
       await page.getByRole('tab', { name: 'Limits' }).click();
@@ -322,7 +323,7 @@ await withUiStack(
       const resent = page.waitForResponse((r) => agentSave(r) && r.ok(), { timeout: 60_000 });
       await page.getByTestId('agent-stale-reload').click();
       const both = (await (await resent).json()).data;
-      check('20 reloading keeps his unsaved change and hers, in the brief and in a group of settings', / By phone or chat\.$/.test(both?.brief?.purpose ?? '') && both?.brief?.goal === herGoal && both?.patterns?.thinking === 'low' && both?.patterns?.parallelReads === false && both?.skillMenu === 'attached' && (await page.getByTestId('agent-stale-base').count()) === 0, { purpose: both?.brief?.purpose, goal: both?.brief?.goal, patterns: both?.patterns, skillMenu: both?.skillMenu });
+      check('20 reloading keeps his unsaved change and hers, in the brief and in a group of settings', / By phone or chat\.$/.test(both?.brief?.purpose ?? '') && both?.brief?.goal === herGoal && both?.patterns?.thinking === 'low' && both?.patterns?.parallelReads === false && both?.skillMenu === 'attached' && (await page.getByTestId('agent-stale-base').count()) === 0, { typed, purpose: both?.brief?.purpose, goal: both?.brief?.goal, patterns: both?.patterns, skillMenu: both?.skillMenu });
 
       // 21. His own save from elsewhere is no clash to tell him about: the page reads the agent again and saves.
       await page.locator('[data-testid="save-state"][data-state="saved"]').waitFor({ timeout: 30_000 });
@@ -386,7 +387,7 @@ await withUiStack(
       await maya.getByTestId('read-only-notice').waitFor({ timeout: 60_000 });
       check('18 a reviewer sees the agent page as view only, with no Edit as plain text link', (await maya.getByTestId('agent-prompt-mode').count()) === 0);
       // What the agent uses is a line of links under the brief; model and limits are on the Limits tab.
-      const sheet = await maya.getByTestId('agent-uses-link').isVisible();
+      const sheet = await maya.getByTestId('agent-uses-link').waitFor({ timeout: 30_000 }).then(() => true, () => false);
       await maya.getByRole('tab', { name: 'Limits' }).click();
       const limits = await maya.getByTestId('agent-model-limits').waitFor({ timeout: 15_000 }).then(() => true, () => false);
       check('18 a reviewer can open what the agent uses and its model and limits, with the fields off', sheet && limits && (await maya.locator('#ag-thinking').isDisabled()), { sheet, limits });
