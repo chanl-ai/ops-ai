@@ -1,4 +1,4 @@
-// uc-671 Connectors for people, ui layer: docs/usecases/tools-service/connectors-for-people.md, steps 8-12. A headless
+// uc-671 Connectors for people, ui layer: docs/usecases/tools-service/connectors-for-people.md, steps 8-13. A headless
 // walk of the integration console on the run's own stack (withUiStack, never the local dev stack) as Priya (Operations
 // admin, signed in to Salesforce there by the script), Ravi (Operations viewer) and Sam (Security admin, Salesforce off for Security). It changes
 // only one test chat's connectors. Screenshots at 1280 light and 390 dark go to
@@ -113,8 +113,8 @@ await withUiStack(
     const priya = await consoleSignIn(browser, CONSOLE, PRIYA, PASSWORD, errors);
     await priya.setViewportSize({ width: 1280, height: 900 });
 
-    await step('8 Connectors (Mine) at 1280: one GitHub card, +N accounts only when there are more, a can-do line per card, a switcher to Team setup', async () => {
-      await priya.goto(`${CONSOLE}/integrations/my-accounts`, { waitUntil: 'domcontentloaded' });
+    await step('8 My apps at 1280: one GitHub card, +N accounts only when there are more, a can-do line per card, search by name', async () => {
+      await priya.goto(`${CONSOLE}/work/apps`, { waitUntil: 'domcontentloaded' });
       await priya.getByTestId('connectors').waitFor({ timeout: 60_000 });
       const github = await priya.locator(`[data-testid="connector-${GITHUB}"]`).count();
       const more = await priya.getByTestId(`connector-more-${GITHUB}`).count();
@@ -122,79 +122,47 @@ await withUiStack(
       const rows = (await (await fetch(`${TOOLS}/v1/me/connections`, { headers: { Authorization: `Bearer ${await token(PRIYA)}`, 'X-Team-Id': 'team_ops' } })).json()).data;
       const several = (rows.find((r) => r.appId === GITHUB)?.accountCount ?? 0) > 1;
       const lines = await priya.locator('[data-testid^="connector-can-do-"]').allInnerTexts();
-      await priya.getByTestId('title-switcher').click();
-      const views = await priya.locator('[data-testid^="title-switcher-"][data-testid$="-connectors"]').allInnerTexts();
-      await priya.keyboard.press('Escape');
-      await priya.locator('[data-testid^="title-switcher-"][data-testid$="-connectors"]').first().waitFor({ state: 'hidden', timeout: 10_000 });
       await priya.screenshot({ path: join(SHOTS, 'mine-1280-light.png'), fullPage: true });
-      // My connectors is the user menu's row; Connectors (Team setup) is the Data area's sidebar row (lib/nav.ts).
-      await priya.goto(`${CONSOLE}/data/connectors`, { waitUntil: 'domcontentloaded' });
-      const sidebar = priya.locator('[data-sidebar="sidebar"]').first();
-      await sidebar.getByRole('link', { name: 'Apps', exact: true }).first().waitFor({ timeout: 30_000 }).catch(() => {});
-      const hub = await sidebar.getByRole('link', { name: 'Apps', exact: true }).count();
-      await sidebar.getByTestId('nav-user').click();
-      const top = await priya.getByTestId('nav-connections').filter({ hasText: 'My apps' }).count();
-      await priya.keyboard.press('Escape');
-      check('8c at 1280 the user menu reads My connectors and the Data area row Connectors', top === 1 && hub === 1, { top, hub });
-      await priya.goto(`${CONSOLE}/integrations/my-accounts`, { waitUntil: 'domcontentloaded' });
-      await priya.getByTestId('connectors').waitFor({ timeout: 60_000 });
-      // An app the install no longer loads (Ticket desk) is not a connector, so it is never offered Add key.
+      // An app the install no longer loads (Ticket desk) is not an app of the person's, so it is never offered Add key.
       const gone = await priya.locator('[data-testid="connectors"]').getByText('Ticket desk').count();
-      const search = priya.getByPlaceholder('Search connectors…');
+      const search = priya.getByPlaceholder('Search apps…');
       await search.fill('git');
       await priya.waitForTimeout(500);
       const found = await priya.locator('[data-testid^="connector-plugin:"]').count();
+      const only = await priya.locator(`[data-testid="connector-${GITHUB}"]`).count();
       await search.fill('jira');
       await priya.waitForTimeout(500);
       const none = await priya.locator('[data-testid^="connector-plugin:"]').count();
       await search.fill('');
-      check('8b search finds GitHub alone, "jira" finds none, and an app the install lacks is not listed', found === 1 && none === 0 && gone === 0, { found, none, gone });
-      check('8 Connectors (Mine) at 1280: one GitHub card, +N accounts only when there are more, a can-do line per card, a switcher to Team setup', github === 1 && more === (several ? 1 : 0) && lines.length > 0 && lines.every(Boolean) && views.map((v) => v.trim()).join('|') === 'Mine|Team setup', { github, more, several, lines, views });
+      check('8b search finds GitHub alone, "jira" finds none, and an app the install lacks is not listed', found === 1 && only === 1 && none === 0 && gone === 0, { found, only, none, gone });
+      check('8 My apps at 1280: one GitHub card, +N accounts only when there are more, a can-do line per card', github === 1 && more === (several ? 1 : 0) && lines.length > 0 && lines.every(Boolean), { github, more, several, lines });
     });
 
-    await step("9 a row's details: what it can do with Read, Write and Reviewed, Used by as links, Test now and Disconnect", async () => {
-      await priya.locator(`[data-testid="connector-${SALESFORCE}"]`).click();
-      const sheet = priya.getByTestId('connector-sheet');
-      await sheet.waitFor({ timeout: 30_000 });
-      const marks = await sheet.getByTestId('connector-tools').innerText();
-      const links = await sheet.getByTestId('connector-used-by').locator('a').count();
-      const lists = await sheet.getByTestId('connector-used-by').locator('ul, table').count();
-      const buttons = (await sheet.getByTestId('connector-test').count()) + (await sheet.getByTestId('connector-disconnect').count());
-      await priya.screenshot({ path: join(SHOTS, 'sheet-1280-light.png') });
-      await priya.keyboard.press('Escape');
-      check("9 a row's details: what it can do with Read, Write and Reviewed, Used by as links, Test now and Disconnect", /Read/.test(marks) && links === 3 && lists === 0 && buttons === 2, { marks: marks.slice(0, 200), links, lists, buttons });
+    await step("9 an app's own page: what it can do with Read, Write and Reviewed, Test now and Disconnect", async () => {
+      await priya.goto(`${CONSOLE}/work/apps`, { waitUntil: 'domcontentloaded' });
+      await priya.getByTestId('connectors').waitFor({ timeout: 60_000 });
+      await priya.getByTestId(`connector-open-${SALESFORCE}`).click();
+      await priya.waitForURL(/\/work\/apps\/.+/, { timeout: 30_000 });
+      const page = priya.getByTestId('my-app');
+      await page.waitFor({ timeout: 30_000 });
+      const marks = await page.getByTestId('connector-tools').innerText();
+      const buttons = (await page.getByTestId('connector-test').count()) + (await page.getByTestId('connector-disconnect').count());
+      await priya.screenshot({ path: join(SHOTS, 'app-1280-light.png') });
+      check("9 an app's own page: what it can do with Read, Write and Reviewed, Test now and Disconnect", /Read/.test(marks) && buttons === 2, { marks: marks.slice(0, 200), buttons });
     });
 
-    await step('10 at 390 in dark the state and action stay on screen, and no screen says Apps or My accounts', async () => {
+    await step('10 at 390 in dark the state and action stay on screen, and My apps never says My accounts', async () => {
       const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: 'dark', storageState: await priya.context().storageState() });
       const p = await phone.newPage();
       p.on('pageerror', (e) => errors.push(`390: ${e.message}`));
-      await p.goto(`${CONSOLE}/integrations/my-accounts`, { waitUntil: 'domcontentloaded' });
+      await p.goto(`${CONSOLE}/work/apps`, { waitUntil: 'domcontentloaded' });
       await p.getByTestId('connectors').waitFor({ timeout: 60_000 });
       const fits = await inside(p, '[data-testid^="connector-plugin:"] button, [data-testid^="connector-plugin:"] a');
       const scroll = await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
+      const words = /My accounts/.test(await p.locator('body').innerText());
       await p.screenshot({ path: join(SHOTS, 'mine-390-dark.png'), fullPage: true });
-      await p.goto(`${CONSOLE}/data/connectors`, { waitUntil: 'domcontentloaded' });
-      await p.getByRole('button', { name: 'Toggle Sidebar' }).first().click();
-      const drawer = p.locator('[data-mobile="true"]').first();
-      await drawer.waitFor({ timeout: 15_000 });
-      const hub390 = await drawer.getByRole('link', { name: 'Apps', exact: true }).count();
-      await drawer.getByTestId('nav-user').first().click();
-      const top390 = await p.getByTestId('nav-connections').filter({ hasText: 'My apps' }).count();
-      await p.keyboard.press('Escape');
-      check('10b at 390 the drawer\'s user menu reads My connectors and its Data area row Connectors', top390 === 1 && hub390 === 1, { top390, hub390 });
-      const words = [];
-      for (const path of ['/integrations/my-accounts', '/integrations', `/integrations/${encodeURIComponent(GITHUB)}`]) {
-        await p.goto(`${CONSOLE}${path}`, { waitUntil: 'domcontentloaded' });
-        await p.waitForTimeout(1500);
-        const text = await p.locator('body').innerText();
-        if (/My accounts|\bApps\b(?! that| your| whose)/.test(text)) words.push(path);
-      }
-      await p.goto(`${CONSOLE}/integrations`, { waitUntil: 'domcontentloaded' });
-      await p.waitForTimeout(1500);
-      await p.screenshot({ path: join(SHOTS, 'team-setup-390-dark.png'), fullPage: true });
       await phone.close();
-      check('10 at 390 in dark the state and action stay on screen, and no screen says Apps or My accounts', fits && scroll && words.length === 0, { fits, scroll, words });
+      check('10 at 390 in dark the state and action stay on screen, and My apps never says My accounts', fits && scroll && !words, { fits, scroll, words });
     });
 
     await step('11 the composer picker lists Salesforce checked, and unchecking it leaves its tools out of that chat only', async () => {
@@ -243,24 +211,21 @@ await withUiStack(
       check('11c on Chat\'s home the picker works before the first message, and the new chat takes its choice', off.length > 0 && off.every((t) => t.startsWith('salesforce_')), { tid, off });
     });
 
-    await step("13 with two GitHub accounts Mine marks the person's default plainly", async () => {
-      await priya.goto(`${CONSOLE}/integrations/my-accounts`, { waitUntil: 'domcontentloaded' });
-      await priya.getByTestId('connectors').waitFor({ timeout: 60_000 });
-      await priya.locator(`[data-testid="connector-${GITHUB}"]`).click();
-      const sheet = priya.getByTestId('connector-sheet');
-      await sheet.waitFor({ timeout: 30_000 });
-      const marks = await sheet.getByText('Default', { exact: true }).count();
-      await priya.screenshot({ path: join(SHOTS, 'sheet-github-default.png') });
-      await priya.keyboard.press('Escape');
-      check("13 with two GitHub accounts Mine marks the person's default plainly", marks <= 1, { marks });
+    await step("13 with two GitHub accounts the app's page marks the person's default plainly", async () => {
+      await priya.goto(`${CONSOLE}/work/apps/${encodeURIComponent(GITHUB)}`, { waitUntil: 'domcontentloaded' });
+      const app = priya.getByTestId('my-app');
+      await app.waitFor({ timeout: 60_000 });
+      const marks = await app.getByText('Default', { exact: true }).count();
+      await priya.screenshot({ path: join(SHOTS, 'app-github-default.png') });
+      check("13 with two GitHub accounts the app's page marks the person's default plainly", marks <= 1, { marks });
     });
 
-    await step("12 Ravi's Team setup has no Add custom app and no Connect; Sam's chat shows the off-for-team card", async () => {
+    await step("12 Ravi's Apps page has no Add custom app and no Connect; Sam's chat shows the off-for-team card", async () => {
       const ravi = await consoleSignIn(browser, CONSOLE, RAVI, PASSWORD, errors);
-      await ravi.goto(`${CONSOLE}/integrations`, { waitUntil: 'domcontentloaded' });
+      await ravi.goto(`${CONSOLE}/data/connectors`, { waitUntil: 'domcontentloaded' });
       await ravi.getByTestId('systems-grid').waitFor({ timeout: 60_000 });
       const add = await ravi.getByTestId('connect-system').count();
-      await ravi.goto(`${CONSOLE}/integrations/${encodeURIComponent(SALESFORCE)}`, { waitUntil: 'domcontentloaded' });
+      await ravi.goto(`${CONSOLE}/data/connectors/${encodeURIComponent(SALESFORCE)}`, { waitUntil: 'domcontentloaded' });
       await ravi.waitForTimeout(3000);
       const connect = await ravi.getByTestId('app-connect').count();
       await ravi.screenshot({ path: join(SHOTS, 'team-setup-app-viewer-1280.png') });
@@ -272,7 +237,7 @@ await withUiStack(
         card = await sam.getByTestId('app-off-card').first().innerText();
         await sam.screenshot({ path: join(SHOTS, 'chat-off-for-team-1280.png') });
       }
-      check("12 Ravi's Team setup has no Add custom app and no Connect; Sam's chat shows the off-for-team card", add === 0 && connect === 0 && (!process.env.SAM_THREAD || /off for Security/.test(card)), { add, connect, card: card.slice(0, 200) });
+      check("12 Ravi's Apps page has no Add custom app and no Connect; Sam's chat shows the off-for-team card", add === 0 && connect === 0 && (!process.env.SAM_THREAD || /off for Security/.test(card)), { add, connect, card: card.slice(0, 200) });
     });
   } finally {
     await browser.close();
