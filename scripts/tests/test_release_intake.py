@@ -62,7 +62,7 @@ esac
 exit 0
 """
 
-GREEN = {"summary": {"passed": 2, "failed": 0, "skipped": 0}, "jobs": []}
+GREEN: dict[str, Any] = {"summary": {"passed": 2, "failed": 0, "skipped": 0}, "jobs": []}
 RED = {
     "summary": {"passed": 1, "failed": 1, "skipped": 0},
     "jobs": [
@@ -198,7 +198,10 @@ def test_mechanical_conflicts_resolve_and_each_pull_request_gets_its_own_merge_c
         "Merge pull request #2 from origin/feat/b",
         "Merge pull request #1 from origin/feat/a",
     ]
-    show = lambda path: git(tmp_path / "remote.git", "show", f"{TRAIN}:{path}")  # noqa: E731
+
+    def show(path: str) -> str:
+        return git(tmp_path / "remote.git", "show", f"{TRAIN}:{path}")
+
     assert [e["title"] for e in json.loads(show("roadmap.json"))] == ["base", "a", "b"]
     assert json.loads(show("services/x/openapi.json")) == {"v": "regenerated"}
     assert 'down_revision = "0002a"' in show("services/x/migrations/versions/0002b.py")
