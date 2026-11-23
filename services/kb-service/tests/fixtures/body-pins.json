@@ -98,8 +98,10 @@
     "body": {
       "error": {
         "code": "validation_failed",
+        "kind": "input",
         "message": "Choose an AI step (likely questions) before approving it.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -344,8 +346,10 @@
     "body": {
       "error": {
         "code": "provisioner_only",
+        "kind": "refused",
         "message": "Only the provisioning service sets a template id or protection on knowledge.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -518,8 +522,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "No FAQ draft or held change chg_missing1.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -530,8 +536,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "No FAQ draft or held change chg_missing1.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -604,8 +612,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "No tombstone for item_missing1.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -1014,8 +1024,10 @@
     "body": {
       "error": {
         "code": "tools_unavailable",
+        "kind": "input",
         "message": "This service reads no tools, so a tool source cannot be made.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -1104,8 +1116,10 @@
     "body": {
       "error": {
         "code": "tools_unavailable",
+        "kind": "input",
         "message": "This service reads no tools, so a tool source cannot be made.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false

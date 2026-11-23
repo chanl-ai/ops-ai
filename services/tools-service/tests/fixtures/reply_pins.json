@@ -292,8 +292,10 @@
    "body": {
     "error": {
      "code": "not_found",
+     "kind": "input",
      "message": "App app_nobody was not found.",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 404
     },
     "success": false
@@ -776,8 +778,10 @@
    "body": {
     "error": {
      "code": "not_found",
+     "kind": "input",
      "message": "10.20.0.0/16 on the egress allow-list was not found.",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 404
     },
     "success": false
@@ -846,8 +850,10 @@
        "msg": "Field required"
       }
      ],
+     "kind": "input",
      "message": "tool: Field required",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 400
     },
     "success": false
@@ -864,8 +870,10 @@
      "details": {
       "scope": "tools:run"
      },
+     "kind": "refused",
      "message": "This service token does not hold the tools:run scope.",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 403
     },
     "success": false
@@ -880,8 +888,10 @@
    "body": {
     "error": {
      "code": "unauthorized",
+     "kind": "refused",
      "message": "Sign in, or send a valid API key.",
      "requestId": "<id:req>",
+     "retryable": true,
      "status": 401
     },
     "success": false
@@ -930,8 +940,10 @@
        "fence is at generation 2"
       ]
      },
+     "kind": "input",
      "message": "fence is at generation 2",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 409
     },
     "success": false
@@ -955,8 +967,10 @@
        "msg": "Input should be greater than or equal to 1"
       }
      ],
+     "kind": "input",
      "message": "generation: Input should be greater than or equal to 1",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 400
     },
     "success": false
@@ -980,8 +994,10 @@
        "msg": "Extra inputs are not permitted"
       }
      ],
+     "kind": "input",
      "message": "owner: Extra inputs are not permitted",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 400
     },
     "success": false
@@ -2031,8 +2047,10 @@
      "details": {
       "scope": "tools:view"
      },
+     "kind": "refused",
      "message": "This service token does not hold the tools:view scope.",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 403
     },
     "success": false
@@ -2095,8 +2113,10 @@
        "tool is not registered with the gateway"
       ]
      },
+     "kind": "refused",
      "message": "tool is not registered with the gateway",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 403
     },
     "success": false
@@ -2123,8 +2143,10 @@
        "msg": "Field required"
       }
      ],
+     "kind": "input",
      "message": "key: Field required",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 400
     },
     "success": false
@@ -2139,8 +2161,10 @@
    "body": {
     "error": {
      "code": "not_found",
+     "kind": "input",
      "message": "Call was not found.",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 404
     },
     "success": false
@@ -2335,8 +2359,10 @@
    "body": {
     "error": {
      "code": "conflict",
+     "kind": "input",
      "message": "A secret named LEDGER_KEY already exists. Rotate it to change its value.",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 409
     },
     "success": false
@@ -2356,8 +2382,10 @@
    "body": {
     "error": {
      "code": "not_found",
+     "kind": "input",
      "message": "Secret LEDGER_API_KEY was not found.",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 404
     },
     "success": false
@@ -2464,8 +2492,10 @@
    "body": {
     "error": {
      "code": "not_found",
+     "kind": "input",
      "message": "Secret NO_SUCH was not found.",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 404
     },
     "success": false
@@ -3145,8 +3175,10 @@
    "body": {
     "error": {
      "code": "validation_failed",
+     "kind": "input",
      "message": "There is no view 'nothing': ask for one of active, expiring, requested, expired, ended, all.",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 400
     },
     "success": false
@@ -5457,8 +5489,10 @@
    "body": {
     "error": {
      "code": "validation_failed",
+     "kind": "input",
      "message": "There is no view 'nothing': ask for one of all, needs_approval, expiring, expired, failing, security_review.",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 400
     },
     "success": false
@@ -5567,8 +5601,10 @@
    "body": {
     "error": {
      "code": "team_required",
+     "kind": "refused",
      "message": "A service token on this route names its team.",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 403
     },
     "success": false
@@ -5741,8 +5777,10 @@
    "body": {
     "error": {
      "code": "not_found",
+     "kind": "input",
      "message": "Module was not found.",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 404
     },
     "success": false
@@ -5832,8 +5870,10 @@
        "tool lookup_case is not registered with the gateway"
       ]
      },
+     "kind": "input",
      "message": "tool lookup_case is not registered with the gateway",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 404
     },
     "success": false
@@ -5850,8 +5890,10 @@
        "tool no_such_tool is not registered with the gateway"
       ]
      },
+     "kind": "input",
      "message": "tool no_such_tool is not registered with the gateway",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 404
     },
     "success": false

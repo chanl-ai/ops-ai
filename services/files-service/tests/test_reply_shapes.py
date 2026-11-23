@@ -109,7 +109,7 @@ def _error(r: httpx.Response, *ids: str) -> tuple[int, str, str]:
     body = r.json()
     assert body["success"] is False and set(body) == {"success", "error"}, r.text
     error = body["error"]
-    assert set(error) == {"code", "message", "status", "requestId"}, r.text
+    assert set(error) == {"code", "message", "status", "requestId", "kind", "retryable"}, r.text
     assert error["status"] == r.status_code and error["requestId"].startswith("req_"), r.text
     message = error["message"]
     for n, value in enumerate(ids):
