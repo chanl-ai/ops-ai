@@ -311,3 +311,5 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-767 | console | A person who only chats sees My apps in the sidebar and can chat | ui | `console/chat-only-person-my-apps.md` |
 | uc-768 | console | One create form holds a name to the same rule the server keeps | ui | `console/name-limits-on-a-form.md` |
 | uc-769 | console | My apps is a page of its own, the same for an admin and a member | ui | `console/my-apps-page.md` |
+| uc-770 | tools-service | Admins see people's app sign-ins and end one | ui | `tools-service/admins-see-people-s-app-sign.md` |
+| uc-771 | agents-service | A builder takes a new skill to its first publish in under ten minutes | ui | `agents-service/a-builder-takes-a-new-skill.md` |
