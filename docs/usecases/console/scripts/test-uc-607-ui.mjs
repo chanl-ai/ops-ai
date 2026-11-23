@@ -593,7 +593,6 @@ try {
           await failing.route('**/v1/apps', (r) => r.fulfill({ status: 500, contentType: 'application/json', body: '{"success":false,"error":{"message":"boom"}}' }));
           await failing.route(/\/v1\/secrets(\?|$)/, (r) => r.fulfill({ status: 500, contentType: 'application/json', body: '{"success":false,"error":{"message":"boom"}}' }));
           await failing.goto(`${consoleUrl}/data/connectors`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-          await cardsView(failing);
           out.appsRetry = await failing.getByRole('button', { name: /Try again|Retrying/ }).first().waitFor({ timeout: 20_000 }).then(() => true, () => false);
           await failing.goto(`${consoleUrl}/data/secrets`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           out.credsRetry = await failing.getByRole('button', { name: /Try again|Retrying/ }).first().waitFor({ timeout: 8_000 }).then(() => true, () => false);
