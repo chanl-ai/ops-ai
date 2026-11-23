@@ -23,11 +23,14 @@ import { serverPagination } from '@/components/shared/server-pagination';
 type Row = Item & { onRowClick: (i: Item) => void };
 
 
+/** The table's columns the server sorts by, each with its `sortBy` value. */
+const SORT_COLUMNS = { title: 'title', status: 'status', sizeBytes: 'sizeBytes', processedAt: 'processedAt' };
+
 /** Every item the source fetched. `?status=failed` presets the filter. */
 export function SourceItemsTab({ source, onSync }: { source: SourceDetail; onSync: () => void }) {
   const params = useSearchParams();
   const initialFilters = React.useMemo(() => (params.get('status') ? [{ id: 'status', value: [params.get('status')!] }] : []), []); // eslint-disable-line react-hooks/exhaustive-deps
-  const list = useListParams<ItemFilters>('title', 30);
+  const list = useListParams<ItemFilters>('title', 30, undefined, SORT_COLUMNS);
   const query = useSourceItems(source.id, list.params, !!source.running);
   const [openId, setOpenId] = React.useState<string | null>(null);
 
@@ -127,6 +130,7 @@ export function SourceItemsTab({ source, onSync }: { source: SourceDetail; onSyn
         ]}
         onColumnFiltersChange={list.onColumnFiltersChange}
         serverPagination={serverPagination(list, query)}
+        serverSorting={list.serverSort}
         emptyState={
           <ListEmpty
             icon={FileSearch}

@@ -28,6 +28,6 @@ def test_a_listed_step_ci_no_longer_has_is_refused() -> None:
 
 def test_plan_prints_the_twins_and_runs_nothing() -> None:
     out = subprocess.run(
-        ["make", "-s", "ci-local", "PLAN=1", "JOB=docs"], cwd=ROOT, capture_output=True, text=True, check=True
+        ["make", "-s", "ci-local", "PLAN=1", "FULL=1", "JOB=docs"], cwd=ROOT, capture_output=True, text=True, check=True
     ).stdout
-    assert out.strip() == "[docs] make -s docs-verify"
+    assert out.strip().splitlines()[-2:] == ["[docs]", "   make -s docs-verify"]

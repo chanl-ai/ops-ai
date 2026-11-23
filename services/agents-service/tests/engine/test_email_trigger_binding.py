@@ -148,9 +148,27 @@ async def test_publishing_without_deployments_create_is_refused(stack: tuple[Asy
 async def test_another_teams_mailbox_is_refused(stack: tuple[AsyncClient, AsyncEngine]) -> None:
     c, _ = stack
     await save(c, email_workflow("fraud_peek", "fraud@bank.example"), BUILDER)
+    # The publish dialog lists the refusal before Publish is pressed, on the trigger step, so the person can fix it.
+    preview = await c.get("/v1/workflows/definitions/fraud_peek/publish-preview", headers=BUILDER)
+    assert preview.status_code == 200, preview.text
+    blockers = preview.json()["data"]["blockers"]
+    assert [(b["code"], b["node"], b["field"]) for b in blockers] == [("mailbox_not_offered", "start", "mailbox")]
     r = await publish(c, "fraud_peek", BUILDER)
     assert r.status_code == 422, r.text
     assert r.json()["error"]["code"] == "mailbox_not_offered"
+    # Published from the editor's copy in one call, the refusal comes before any version is made, and the copy stays.
+    wf = "/v1/workflows/definitions/fraud_peek"
+    base = (await c.get(wf, headers=BUILDER)).json()["data"]["saveBase"]
+    edited = email_workflow("fraud_peek", "fraud@bank.example") | {"name": "Fraud intake, edited"}
+    body = {"definition": edited, "baseVersion": base["version"], "baseDigest": base["digest"]}
+    saved = await c.put(f"{wf}/working-copy", json=body, headers=BUILDER)
+    assert saved.status_code == 200, saved.text
+    copy_base = saved.json()["data"]["saveBase"]
+    one_call = {"baseVersion": copy_base["version"], "baseDigest": copy_base["digest"], "note": "n"}
+    refused = await c.post(f"{wf}/publish-requests", json=one_call, headers=BUILDER)
+    assert refused.status_code == 422 and refused.json()["error"]["code"] == "mailbox_not_offered", refused.text
+    after = (await c.get(wf, headers=BUILDER)).json()["data"]
+    assert [v["version"] for v in after["versions"]] == [1] and after["workingCopy"] is not None, after
 
 
 async def test_a_workflow_no_team_owns_cannot_bind_a_mailbox(stack: tuple[AsyncClient, AsyncEngine]) -> None:

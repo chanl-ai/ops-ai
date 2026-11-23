@@ -16,6 +16,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { useCan } from '@/hooks/me-queries';
 import { bytes } from '@/lib/format';
 import { modelRefusal } from '@/lib/model-refusals';
+import { failureKindWords } from '@/lib/failure-words';
+import { codeOf } from '@chanl-ai/ops-ai';
 import { foldedLine, orderReply } from '@/lib/reply-order';
 import type { ChatMessage, MessageFeedback, ToolCall, WidgetAction } from '@/lib/types/chat';
 import { isLayoutPart, type MessagePart } from '@/lib/types/widgets';
@@ -163,6 +165,12 @@ export function AssistantMessage({
   // A refused model call reads by its code, worded for whether this reader manages settings; live and on reload alike.
   const managesSettings = useCan('settings', 'manage') === true;
   const refusal = message.error ? modelRefusal(message.errorCode, managesSettings) : undefined;
+  // Kind and retryable from the stream's error event; on reload from the stored code, through the one code table.
+  const failed = message.error ? codeOf(message.errorCode) : undefined;
+  const failKind = message.errorKind ?? failed?.kind ?? 'internal';
+  const mayRetry = message.errorRetryable ?? failed?.retryable ?? false;
+  // A listed refusal has its own words for the reader; anything else is worded by its kind, never by its exception text.
+  const failText = refusal && !refusal.code ? refusal.text : `${failureKindWords(failKind, 'reply')}.`;
   // What the reply suggests keeping asks its own line; what it kept, or anyone else's suggestion, is told in one line.
   const suggested = (message.remembered ?? []).filter((r) => r.status === 'suggested' && !!r.value);
   const kept = (message.remembered ?? []).filter((r) => !suggested.includes(r));
@@ -285,7 +293,7 @@ export function AssistantMessage({
           <AlertTriangle className="size-4" />
           <AlertTitle>The answer stopped part-way</AlertTitle>
           <AlertDescription className="space-y-2">
-            <p data-testid="reply-error">{refusal?.text ?? message.error}</p>
+            <p data-testid="reply-error">{failText}</p>
             {refusal?.code && (
               <details className="text-xs text-muted-foreground">
                 <summary className="cursor-pointer">Details</summary>
@@ -298,7 +306,7 @@ export function AssistantMessage({
                   <Link href={refusal.fixAt}>Open Model providers</Link>
                 </Button>
               )}
-              {onRegenerate && !readOnly && (
+              {onRegenerate && !readOnly && mayRetry && (
                 <Button size="sm" variant="outline" className="border-destructive/40 text-foreground" onClick={onRegenerate}>
                   <RefreshCw className="size-3.5" /> Retry
                 </Button>

@@ -95,7 +95,9 @@ class CodeExecutor:
             "key": key,
             "environment": env,
             # The person the run's caller acts for, so a call the function makes acts for them too.
-            "acting_for": asdict(caller.acting_for) if caller.acting_for else None,
+            "acting_for": (
+                {k: v for k, v in asdict(caller.acting_for).items() if k != "access"} if caller.acting_for else None
+            ),
         }
         return mint(claims, self.signer, ttl_s=int(float(limits.get("timeS", 10)) + TOKEN_GRACE_S))
 
@@ -161,7 +163,10 @@ def run_claims(token: str | None, signer: HmacSigner) -> RunClaims:
 def run_acting_for(claims: RunClaims) -> ActingForPerson | None:
     """The person a code run's calls act for, from its signed call token; None when the run acted for nobody."""
     named = claims.get("acting_for")
-    return ActingForPerson(**named) if named else None
+    if not named:
+        return None
+    # Only who the person is: a run's calls never carry the person's roles, so a Workspace tool holds no cell there.
+    return ActingForPerson(sub=named["sub"], email=named["email"], name=named["name"], team_id=named["team_id"])
 
 
 def run_caller(claims: RunClaims) -> Principal:

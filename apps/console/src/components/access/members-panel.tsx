@@ -25,7 +25,8 @@ import { useCan } from '@/hooks/me-queries';
 import { useInviteMembers, useInvitesToCurrentTeam, useMembers, useRemoveMembers, useSetMemberRole } from '@/hooks/settings-queries';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { useSticky } from '@/hooks/use-sticky';
-import { useTeam } from '@/hooks/use-team';
+import { useTeam, useTeamsNamed } from '@/hooks/use-team';
+import { teamLabel } from '@/components/shared/team-name';
 import { initials, relativeTime } from '@/lib/format';
 import type { Member, MemberFilters } from '@/lib/types/settings';
 import { serverPagination } from '@/components/shared/server-pagination';
@@ -122,11 +123,12 @@ const STATUS_OPTIONS = [
 const SORT_COLUMNS = { name: 'name', role: 'role', status: 'status', teamId: 'teamId' };
 
 export function MembersPanel({ inviteOpen, onInviteOpenChange }: { inviteOpen: boolean; onInviteOpenChange: (open: boolean) => void }) {
-  const { team, teams } = useTeam();
+  const { team } = useTeam();
   const canManage = useCan('access', 'manage') === true;
   const list = useListParams<MemberFilters>('name', 20, undefined, SORT_COLUMNS);
   const query = useMembers(list.params);
   const facets = query.data?.facets ?? {};
+  const teams = useTeamsNamed(Object.keys(facets.teamId ?? {}));
   // A list from one team has one Team value on every row; the column and facet earn their width only when it varies.
   const showTeam = Object.keys(facets.teamId ?? {}).length > 1 || !!list.params.filters?.teamId?.length;
   const invite = useInviteMembers();
@@ -164,7 +166,7 @@ export function MembersPanel({ inviteOpen, onInviteOpenChange }: { inviteOpen: b
           filters={[
             { column: 'role', title: 'Role', options: withCounts('role', MEMBER_ROLES.map((r) => ({ value: r.value, label: r.label }))) },
             { column: 'status', title: 'Status', options: withCounts('status', STATUS_OPTIONS) },
-            ...(showTeam ? [{ column: 'teamId', title: 'Team', options: withCounts('teamId', teams.map((t) => ({ value: t.id, label: t.name }))) }] : []),
+            ...(showTeam ? [{ column: 'teamId', title: 'Team', options: withCounts('teamId', Object.keys(facets.teamId ?? {}).map((id) => ({ value: id, label: teamLabel(id, teams) }))) }] : []),
           ]}
           onColumnFiltersChange={list.onColumnFiltersChange}
           selectionResetKey={resetKey}
@@ -186,8 +188,8 @@ export function MembersPanel({ inviteOpen, onInviteOpenChange }: { inviteOpen: b
         open={inviteOpen}
         onOpenChange={onInviteOpenChange}
         teamName={team?.name ?? 'team'}
-        teams={team?.scope === 'all' && !currentTeamOnly ? teams.map((t) => ({ id: t.id, name: t.name })) : undefined}
-        defaultTeamId={team?.id}
+        pickTeam={team?.scope === 'all' && !currentTeamOnly}
+        defaultTeam={team ? { id: team.id, label: team.name } : undefined}
         roles={MEMBER_ROLES}
         isPending={invite.isPending}
         onSubmit={async (input) => {

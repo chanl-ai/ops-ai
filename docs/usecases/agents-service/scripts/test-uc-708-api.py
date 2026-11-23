@@ -12,7 +12,7 @@ from typing import Any
 
 from several_accounts import QUERY, SF, add_org, flow, retail_on, rig, save_and_publish
 from steps import required
-from usecase_harness import check, data, finish
+from usecase_harness import check, data, finish, save_agent
 
 FLOW = "uc708_eu"
 
@@ -73,8 +73,7 @@ with rig("uc-708", with_agents=True) as r:
     _, published = save_and_publish(r, flow(FLOW, {SF: "EU org"}))
     agent = required(r.api.post("/v1/agents", json={"name": "EU desk", "role": "Finds cases"}, headers=r.priya), "/v1/agents")
     aid = str(agent.get("id") or "ag_missing")
-    draft = r.api.patch(f"/v1/agents/{aid}", json={"toolIds": ["salesforce_query"], "accounts": {SF: "EU org"}},
-                        headers=r.priya)  # fmt: skip
+    draft = save_agent(r.api, aid, {"toolIds": ["salesforce_query"], "accounts": {SF: "EU org"}}, headers=r.priya)
     r.api.post(
         f"/v1/agents/{aid}/publish-requests", json={"version": (data(draft) or {}).get("version")}, headers=r.priya
     )

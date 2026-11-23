@@ -26,7 +26,7 @@ from .test_write_approval_gateway import TeamAsksReviewer
 class PolicyNowOff:
     """requesterMayDecide as the live read answers it after an admin turned it off."""
 
-    async def allowed(self, tenant_id: str) -> bool:
+    async def allowed(self, tenant_id: str, team_id: str | None = None) -> bool:
         return False
 
 

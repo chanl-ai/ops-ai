@@ -48,6 +48,7 @@ from .header_keys import move_at_start
 from .knowledge_tools import KnowledgeSearch
 from .mailboxes import MailboxSenders, mailboxes_router
 from .mcp_links import mcp_links_router
+from .mcp_server import platform_tools
 from .mock_routes import mocks_router
 from .modules.directory import Directory
 from .modules.policy import CheckBeforeSend, PublishPolicy, RequesterMayDecide, WriteApprovals
@@ -269,6 +270,8 @@ def main() -> None:
             ),
             # search_knowledge searches the calling team's knowledge bases through kb-service.
             knowledge=KnowledgeSearch(client("kb", settings.kb_url, ["knowledge:view"])) if settings.kb_url else None,
+            # The Workspace app's tools call the console's routes as the person (mcp_tools.WORKSPACE).
+            workspace=platform_tools(settings, agents_url),
         ),
         review_key=settings.review_key.get_secret_value(),
         auth=Auth.from_settings(settings, audience="tools"),

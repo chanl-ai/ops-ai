@@ -1,7 +1,9 @@
-"""Dataset-eval kinds and scoring. Check types are named constants; scoring is deterministic."""
+"""Dataset-eval kinds and scoring. Check types are named constants; the string checks score deterministically, and a
+judge check scores on the verdict it is given."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Final, cast
 
@@ -10,7 +12,9 @@ from ops_service_kit.http import Json
 CHECK_CALLS_TOOL: Final = "calls_tool"
 CHECK_REPLY_CONTAINS: Final = "reply_contains"
 CHECK_REFUSES: Final = "refuses"
-CHECK_TYPES: Final[frozenset[str]] = frozenset({CHECK_CALLS_TOOL, CHECK_REPLY_CONTAINS, CHECK_REFUSES})
+# Scored by a model judge on its rubric (ops_agent_kernel.judge), the verdict awaited in app/evals.py.
+CHECK_JUDGE: Final = "judge"
+CHECK_TYPES: Final[frozenset[str]] = frozenset({CHECK_CALLS_TOOL, CHECK_REPLY_CONTAINS, CHECK_REFUSES, CHECK_JUDGE})
 
 CHECK_STATUS_PASS: Final = "pass"
 CHECK_STATUS_FAIL: Final = "fail"
@@ -18,6 +22,7 @@ EVAL_STATUS_COMPLETE: Final = "complete"
 EVAL_RUN_PREFIX: Final = "evr"
 CHECK_UNKNOWN_CODE: Final = "unknown_check_type"
 CASES_EMPTY_CODE: Final = "empty_cases"
+RUBRIC_REQUIRED_CODE: Final = "rubric_required"
 
 # What a saved case set or a run belongs to. Workflows keep no cases: their runs are the structural test runs.
 ASSET_AGENT: Final = "agent"
@@ -27,6 +32,7 @@ CASE_ASSET_KINDS: Final[frozenset[str]] = frozenset({ASSET_AGENT, ASSET_SKILL})
 CASE_ACTIVE: Final = "active"
 CASE_DRAFT: Final = "draft"
 TRIGGER_MANUAL: Final = "manual"
+TRIGGER_CLI: Final = "cli"
 TRIGGER_PUBLISH_REQUEST: Final = "publish_request"
 # Until the model inventory holds a record, every asset is in this tier.
 DEFAULT_TIER: Final = "medium"
@@ -57,6 +63,7 @@ class EvalCheck:
     type: str
     tool: str | None = None
     text: str | None = None
+    rubric: str | None = None
 
 
 @dataclass(frozen=True)
@@ -79,6 +86,18 @@ class TurnView:
 class CheckResult:
     label: str
     status: str
+    # The judge's one-line reason and its confidence (not asked for yet, so None); None for the string checks.
+    reason: str | None = None
+    confidence: float | None = None
+
+
+@dataclass(frozen=True)
+class Judged:
+    """A judge's verdict on one check; `passed` None is a judge that did not answer, which scores as a fail."""
+
+    passed: bool | None
+    reason: str
+    confidence: float | None = None
 
 
 @dataclass(frozen=True)
@@ -96,10 +115,23 @@ def check_label(check: EvalCheck) -> str:
         return f"Reply contains “{check.text}”" if check.text else CHECK_REPLY_CONTAINS
     if check.type == CHECK_REFUSES:
         return f"Refuses: {check.text}" if check.text else CHECK_REFUSES
+    if check.type == CHECK_JUDGE:
+        return f"Judge: {check.rubric}" if check.rubric else CHECK_JUDGE
     return check.type
 
 
-def score_check(check: EvalCheck, turn: TurnView) -> CheckResult:
+def judge_evidence(turn: TurnView) -> str:
+    """What the judge is shown of a turn: the reply and the tools it called, never the agent's instructions."""
+    tools = ", ".join(turn.tool_names) or "none"
+    return f"Reply:\n{turn.reply}\n\nTools called: {tools}"
+
+
+def score_check(check: EvalCheck, turn: TurnView, judged: Judged | None = None) -> CheckResult:
+    if check.type == CHECK_JUDGE:
+        ok = judged is not None and judged.passed is True
+        reason = judged.reason if judged is not None else "The judge did not run."
+        confidence = judged.confidence if judged is not None else None
+        return CheckResult(check_label(check), CHECK_STATUS_PASS if ok else CHECK_STATUS_FAIL, reason, confidence)
     if check.type == CHECK_CALLS_TOOL:
         ok = bool(check.tool) and check.tool in turn.tool_names
     elif check.type == CHECK_REPLY_CONTAINS:
@@ -111,8 +143,10 @@ def score_check(check: EvalCheck, turn: TurnView) -> CheckResult:
     return CheckResult(label=check_label(check), status=CHECK_STATUS_PASS if ok else CHECK_STATUS_FAIL)
 
 
-def score_case(case: EvalCase, turn: TurnView) -> CaseOutcome:
-    checks = tuple(score_check(check, turn) for check in case.checks)
+def score_case(case: EvalCase, turn: TurnView, judged: Mapping[int, Judged] | None = None) -> CaseOutcome:
+    """`judged` holds the verdict for each judge check, by its index in `case.checks`."""
+    verdicts = judged or {}
+    checks = tuple(score_check(check, turn, verdicts.get(i)) for i, check in enumerate(case.checks))
     failed = any(item.status == CHECK_STATUS_FAIL for item in checks)
     return CaseOutcome(
         status=CHECK_STATUS_FAIL if failed else CHECK_STATUS_PASS,
@@ -120,6 +154,11 @@ def score_case(case: EvalCase, turn: TurnView) -> CaseOutcome:
         checks=checks,
         latency_ms=turn.latency_ms,
     )
+
+
+def rubric_missing(cases: list[EvalCase]) -> str | None:
+    """The first case with a judge check that has no rubric, by name."""
+    return next((c.name for c in cases for k in c.checks if k.type == CHECK_JUDGE and not k.rubric), None)
 
 
 def unknown_check_types(cases: list[EvalCase]) -> list[str]:

@@ -17,6 +17,7 @@ from tests.api.test_reply_pins import FIXTURES, compare
 from tests.api.test_widget_embed import BUILDER, OUTSIDER, VIEWER
 from tests.api.test_widget_route_pins import answer, client  # pyright: ignore[reportPrivateUsage]
 from tests.api.test_widgets_route_pins import _transactions  # pyright: ignore[reportPrivateUsage]
+from tests.saves import save_skill_draft
 
 __all__ = ["client"]
 
@@ -46,11 +47,12 @@ async def test_every_skills_route_keeps_its_reply_status_and_error_object(client
     seen["read.missing"] = answer(await c.get("/v1/skills/sk_missing", headers=BUILDER))
     seen["read.otherTeam"] = answer(await c.get(url, headers=OUTSIDER))
 
-    draft = {"instructions": "Steps: confirm, record {reason}, offer the form.", "baseVersion": 1}
-    seen["draft"] = answer(await c.put(f"{url}/draft", json=draft, headers=BUILDER))
-    seen["draft.stale"] = answer(await c.put(f"{url}/draft", json={**draft, "baseVersion": 9}, headers=BUILDER))
-    seen["draft.viewer"] = answer(await c.put(f"{url}/draft", json=draft, headers=VIEWER))
-    seen["draft.otherTeam"] = answer(await c.put(f"{url}/draft", json=draft, headers=OUTSIDER))
+    draft = {"instructions": "Steps: confirm, record {reason}, offer the form."}
+    seen["draft"] = answer(await save_skill_draft(c, sid, draft, headers=BUILDER))
+    # The refused callers cannot read the skill, and each save changes the newest copy, so the builder reads the base.
+    seen["draft.stale"] = answer(await save_skill_draft(c, sid, {**draft, "baseVersion": 9}, headers=BUILDER))
+    seen["draft.viewer"] = answer(await save_skill_draft(c, sid, draft, headers=VIEWER, read_as=BUILDER))
+    seen["draft.otherTeam"] = answer(await save_skill_draft(c, sid, draft, headers=OUTSIDER, read_as=BUILDER))
 
     seen["publish"] = answer(await c.post(f"{url}/publish-requests", json={"note": "first"}, headers=BUILDER))
     seen["publish.again"] = answer(await c.post(f"{url}/publish-requests", json={}, headers=BUILDER))
@@ -87,7 +89,7 @@ async def test_every_skills_route_keeps_its_reply_status_and_error_object(client
     seen["deprecate.noReason"] = answer(await c.post(f"{url}/deprecate", json={"reason": " "}, headers=BUILDER))
     seen["deprecate.viewer"] = answer(await c.post(f"{url}/deprecate", json={"reason": "Old"}, headers=VIEWER))
     seen["deprecate"] = answer(await c.post(f"{url}/deprecate", json={"reason": "Old"}, headers=BUILDER))
-    seen["draft.deprecated"] = answer(await c.put(f"{url}/draft", json={**draft, "baseVersion": 2}, headers=BUILDER))
+    seen["draft.deprecated"] = answer(await save_skill_draft(c, sid, {**draft, "baseVersion": 2}, headers=BUILDER))
     seen["delete.viewer"] = answer(await c.delete(url, headers=VIEWER))
     seen["delete"] = answer(await c.delete(url, headers=BUILDER))
     # The new skill's id is random; the scrubber hides it in ids but not inside a message.
@@ -102,12 +104,13 @@ async def test_each_skills_route_on_the_database_alone_holds_one_transaction(cli
     sid = (await c.post("/v1/skills", json=SKILL, headers=BUILDER)).json()["data"]["id"]
     await c.post(f"/v1/skills/{sid}/publish-requests", json={}, headers=BUILDER)
     url, agent = f"/v1/skills/{sid}", f"/v1/agents/{AGENT}/skills"
+    draft = {"instructions": "Steps {reason}."}
     steps: list[tuple[str, str, str, object]] = [
         ("create", "POST", "/v1/skills", {**SKILL, "name": "Second"}),
         ("list", "GET", "/v1/skills?page=1&pageSize=2", None),
         ("read", "GET", url, None),
         ("render", "POST", f"{url}/render", {"inputs": {"reason": "illness"}}),
-        ("draft", "PUT", f"{url}/draft", {"instructions": "Steps {reason}.", "baseVersion": 1}),
+        ("draft", "PUT", f"{url}/draft", draft),
         ("agent.options", "GET", f"{agent}/options", None),
         ("attach", "PUT", f"{agent}/{sid}", {}),
         ("agent.skills", "GET", agent, None),
@@ -118,8 +121,12 @@ async def test_each_skills_route_on_the_database_alone_holds_one_transaction(cli
     held = _transactions()
     counts: dict[str, int] = {}
     for name, method, path, body in steps:
+        sent = body
+        if name == "draft":  # the save names the copy just read
+            opened = (await c.get(url, headers=BUILDER)).json()["data"]
+            sent = {**draft, "baseVersion": opened["version"], "baseDigest": opened["digest"]}
         held[0] = 0
-        r = await c.request(method, path, json=body, headers=BUILDER)
+        r = await c.request(method, path, json=sent, headers=BUILDER)
         assert r.status_code in (200, 201, 204), (name, r.text)
         counts[name] = held[0]
     assert counts == {name: 1 for name, *_ in steps} | {"draft": 2}, counts
@@ -166,7 +173,7 @@ async def test_no_transaction_is_open_while_another_service_answers(
     tool = {"toolIds": ["lookup_account"]}
     made = await c.post("/v1/skills", json={**SKILL, **tool}, headers=BUILDER)
     sid = made.json()["data"]["id"]
-    saved = await c.put(f"/v1/skills/{sid}/draft", json={"baseVersion": 1, **tool}, headers=BUILDER)
+    saved = await save_skill_draft(c, sid, tool, headers=BUILDER)
     asked = await c.post(f"/v1/skills/{sid}/publish-requests", json={}, headers=BUILDER)
     options = await c.get("/v1/skills/options", headers=BUILDER)
     statuses = (made.status_code, saved.status_code, asked.status_code, options.status_code)

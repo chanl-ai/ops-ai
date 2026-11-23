@@ -79,8 +79,10 @@
     "body": {
       "error": {
         "code": "unprocessable",
+        "kind": "refused",
         "message": "Knowledge base kb_x does not exist or you cannot read it.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 422
       },
       "success": false
@@ -118,8 +120,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Conversation was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -682,8 +686,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Review was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -967,8 +973,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Run was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -1197,8 +1205,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Thread was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false

@@ -10,7 +10,18 @@ from urllib.parse import parse_qs, urlsplit
 
 import httpx
 from connection_calls import SECURITY, allow_bank, bank_control, call, clean
-from usecase_harness import AGENTS_PORT, TOOLS_PORT, agents, approve_tool_review, check, core_bank, data, finish, tools
+from usecase_harness import (
+    AGENTS_PORT,
+    TOOLS_PORT,
+    agents,
+    approve_tool_review,
+    check,
+    core_bank,
+    data,
+    discovered_operations,
+    finish,
+    tools,
+)
 
 CONSOLE = "https://console.bank.test"
 
@@ -71,7 +82,8 @@ with ExitStack() as stack:
     # 4. With the account, the tools are listed with their inputs.
     source = {"kind": "mcp", "url": server, "connectionId": conn.get("id")}
     found = gw.post("/v1/tool-modules/discover", json=source)
-    ops = {o["name"]: [f["name"] for f in o["input"]] for o in (data(found) or {}).get("operations", [])}
+    listed = discovered_operations(gw, data(found)["id"]) if found.status_code == 200 else []
+    ops = {o["name"]: [f["name"] for f in o["input"]] for o in listed}
     check(
         "4 the server's tools are listed with the inputs it declares",
         ops == {"check_sanctions": ["name", "country"], "get_sanctions_result": ["screeningId"]},

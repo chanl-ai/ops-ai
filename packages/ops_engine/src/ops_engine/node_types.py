@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, cast
 
 from ops_service_kit.http import Json, JsonValue
+from ops_store.retry import jittered
 
 from .starts import ONLY_FROM_WORKFLOWS, StartSpec, only_from_workflows, trigger_node
 from .store.definitions import ListColumns, watched_mailbox
@@ -60,18 +61,25 @@ class Port:
 @dataclass(frozen=True)
 class Retry:
     """`attempts` counts the first; `backoff` is the wait before the second and the cap, in seconds. `waits`, when
-    given, is the wait before each retry in turn instead (the last repeats)."""
+    given, is the wait before each retry in turn instead (the last repeats). Every wait is jittered (`jittered`).
+    `total_seconds` bounds the step's attempts and waits together: whichever of it and `attempts` runs out first ends
+    the retries."""
 
     attempts: int
     backoff: tuple[float, float] = (0.0, 0.0)
     waits: tuple[float, ...] = ()
+    total_seconds: float = 900.0
 
-    def wait(self, attempt: int) -> float:
-        """Seconds to wait before `attempt` (2 for the first retry)."""
+    def span(self, attempt: int) -> float:
+        """The longest wait before `attempt` (2 for the first retry)."""
         if self.waits:
             return self.waits[min(max(0, attempt - 2), len(self.waits) - 1)]
         base, cap = self.backoff
         return min(cap, base * 2 ** max(0, attempt - 2)) if base else 0.0
+
+    def wait(self, attempt: int, retry_after: float | None = None) -> float:
+        """Seconds to wait before `attempt`: jittered over its span, never shorter than `retry_after`."""
+        return jittered(self.span(attempt), retry_after)
 
     def view(self) -> Json:
         backoff: list[JsonValue] = list(self.waits) if self.waits else list(self.backoff)

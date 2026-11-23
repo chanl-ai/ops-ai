@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import Link from 'next/link';
 import { ArrowUpRight, Check, Loader2, Pencil } from 'lucide-react';
 
 import { FormField } from '@/components/shared/form-field';
@@ -13,6 +14,7 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useCardAppPage } from '@/hooks/systems-queries';
 import { titleWithoutCount } from '@/lib/format';
+import { consolePath } from '@/lib/safe-href';
 import type { Cell, KindAction, KindNode, KindStatus, Tone } from '@/lib/types/widgets';
 import { cn } from '@/lib/utils';
 
@@ -29,6 +31,17 @@ const TONE_BADGE: Record<Tone, string> = {
 };
 const ENTER = 'animate-in fade-in-0 slide-in-from-bottom-1 duration-300 motion-reduce:animate-none';
 const text = (v: Cell | undefined) => (v === null || v === undefined || v === '' ? '—' : typeof v === 'boolean' ? (v ? 'Yes' : 'No') : typeof v === 'number' ? v.toLocaleString() : v);
+
+/** A field's value, a console link when the card names where it opens (a case, a run). */
+function FieldValue({ field }: { field: { value: Cell; href?: string } }) {
+  const to = consolePath(field.href);
+  if (!to) return <>{text(field.value)}</>;
+  return (
+    <Link href={to} className="text-primary underline-offset-4 hover:underline" data-testid="field-link">
+      {text(field.value)}
+    </Link>
+  );
+}
 
 /** An app id's last word, for when the team's record of the app cannot be read: `plugin:opsai.salesforce` → Salesforce. */
 const nameOf = (app: string) => {
@@ -215,7 +228,7 @@ export function EntityKind({ node, onReply }: { node: Extract<KindNode, { type: 
                       </span>
                     </>
                   )}
-                  {text(f.value)}
+                  <FieldValue field={f} />
                 </span>
               </li>
             ))}

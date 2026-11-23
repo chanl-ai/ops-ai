@@ -687,7 +687,7 @@ export interface paths {
         };
         /**
          * People Names
-         * @description Every person's display name in the workspace by email, so a list naming who did something shows a name
+         * @description The display names of the people `emails` names, so a list naming who did something shows a name
          *     rather than an address. A person needs access.view where the request acts (no console screen calls it, a Chat
          *     user's none); a service token needs the `settings:view` scope.
          */
@@ -856,7 +856,8 @@ export interface paths {
         /**
          * Read Role
          * @description One role and its grid: every area and action in the catalogue, with the scope it grants or null, and
-         *     whether the caller may change it (`canEdit`: a workspace admin, for any role but Admin).
+         *     whether the caller may change it (`canEdit`: a workspace admin, for any role but Admin, Owner and Security
+         *     admin).
          */
         get: operations["roles_read_role"];
         put?: never;
@@ -876,6 +877,28 @@ export interface paths {
         patch: operations["roles_rename_role"];
         trace?: never;
     };
+    "/v1/roles/{role_id}/holder-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Role Holder Options
+         * @description Who the role can be given to in the team the request acts in: its active people and the workspace's groups,
+         *     one searched list by name; each value is `person:<user id>` or `group:<group id>`. Whoever may give roles there
+         *     (access.manage).
+         */
+        get: operations["roles_role_holder_options"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/roles/{role_id}/holders": {
         parameters: {
             query?: never;
@@ -890,7 +913,12 @@ export interface paths {
          */
         get: operations["roles_role_holders"];
         put?: never;
-        post?: never;
+        /**
+         * Give Role To Holder
+         * @description Gives a custom role to a person or a group in the team the request acts in: an admin of that team or a
+         *     workspace admin (access.manage there). Audited as `role.grant`; applies on each holder's next request.
+         */
+        post: operations["roles_give_role_to_holder"];
         delete?: never;
         options?: never;
         head?: never;
@@ -909,7 +937,9 @@ export interface paths {
          * Edit Role
          * @description Sets a role's cells, built-in or custom; every service decides from them once the holders' tokens refresh.
          *     A workspace admin's (access.manage in every team): roles apply in every team. Audited; 409
-         *     `admin_holds_every_cell` for Admin, 400 `unknown_cell` for a cell outside the catalogue.
+         *     `admin_holds_every_cell` for Admin, 409 `role_set_by_rule` for Owner and Security admin, 400 `owner_only` for
+         *     workspace.manage on another built-in role, 400 `builtin_role_empty` for an empty list on a built-in role (reset
+         *     it instead), 400 `unknown_cell` for a cell outside the catalogue.
          */
         put: operations["roles_edit_role"];
         post?: never;
@@ -1471,7 +1501,7 @@ export interface paths {
         };
         /**
          * Team Names
-         * @description Every team's display name in the workspace, so a page showing another team's record names its team. A
+         * @description The display names of the teams `ids` names, so a page showing another team's record names its team. A
          *     person needs access.view where the request acts (no console screen calls it, a Chat user's none); a service
          *     token needs the `settings:view` scope and reads its own tenant's.
          */
@@ -1493,7 +1523,9 @@ export interface paths {
         };
         /**
          * List Teams
-         * @description The teams the caller may switch to: their own, and every active team for a workspace admin.
+         * @description One page of the teams the caller may switch to, by name, on the shared list contract: their own, and every
+         *     active team for a workspace admin. `search` matches the name; `ids` names exact teams, as the switcher labels
+         *     the current one.
          */
         get: operations["teams_list_teams"];
         put?: never;
@@ -2137,6 +2169,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[ListResult[TeamOut]] */
+        Envelope_ListResult_TeamOut__: {
+            data: components["schemas"]["ListResult_TeamOut_"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[ListResult[WorkspaceTeamOut]] */
         Envelope_ListResult_WorkspaceTeamOut__: {
             data: components["schemas"]["ListResult_WorkspaceTeamOut_"];
@@ -2248,6 +2289,15 @@ export interface components {
         /** Envelope[RoleGrantOut] */
         Envelope_RoleGrantOut_: {
             data: components["schemas"]["RoleGrantOut"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[RoleHolderOut] */
+        Envelope_RoleHolderOut_: {
+            data: components["schemas"]["RoleHolderOut"];
             /**
              * Success
              * @constant
@@ -2442,16 +2492,6 @@ export interface components {
              */
             success: true;
         };
-        /** Envelope[list[TeamOut]] */
-        Envelope_list_TeamOut__: {
-            /** Data */
-            data: components["schemas"]["TeamOut"][];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
         /** Envelope[list[str]] */
         Envelope_list_str__: {
             /** Data */
@@ -2468,10 +2508,17 @@ export interface components {
             code: string;
             /** Details */
             details?: unknown;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "input" | "refused" | "upstream" | "timeout" | "internal";
             /** Message */
             message: string;
             /** Requestid */
             requestId: string;
+            /** Retryable */
+            retryable: boolean;
             /** Status */
             status: number;
         };
@@ -2535,7 +2582,7 @@ export interface components {
              * Via
              * @enum {string}
              */
-            via: "person" | "team";
+            via: "person" | "team" | "group";
         };
         /** GridRow */
         GridRow: {
@@ -2816,6 +2863,18 @@ export interface components {
             };
             pagination: components["schemas"]["Pagination"];
         };
+        /** ListResult[TeamOut] */
+        ListResult_TeamOut_: {
+            /** Data */
+            data: components["schemas"]["TeamOut"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
+        };
         /** ListResult[WorkspaceTeamOut] */
         ListResult_WorkspaceTeamOut_: {
             /** Data */
@@ -3077,7 +3136,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "bool" | "floor" | "days" | "hours" | "publish_modes" | "names" | "choice" | "app_changes" | "app_changes_by_app";
+            kind: "bool" | "floor" | "days" | "hours" | "publish_modes" | "names" | "choice" | "app_changes" | "app_changes_by_app" | "by_area" | "floor_rules";
             /** Note */
             note?: string | null;
             /** Title */
@@ -3274,6 +3333,19 @@ export interface components {
             /** Teamid */
             teamId: string;
         };
+        /**
+         * RoleHolderIn
+         * @description Who the role is given to, in the team the request acts in (X-Team-Id): a person by user id or a group.
+         */
+        RoleHolderIn: {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "person" | "group";
+        };
         /** RoleHolderOut */
         RoleHolderOut: {
             /** Email */
@@ -3284,7 +3356,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "person" | "team";
+            kind: "person" | "team" | "group";
             /** Name */
             name: string;
             /** Teamid */
@@ -7194,7 +7266,9 @@ export interface operations {
     };
     people_people_names: {
         parameters: {
-            query?: never;
+            query: {
+                emails: string[];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -8554,6 +8628,114 @@ export interface operations {
             };
         };
     };
+    roles_role_holder_options: {
+        parameters: {
+            query?: {
+                search?: string | null;
+                cursor?: string | null;
+                limit?: number;
+                ids?: string[] | null;
+            };
+            header?: never;
+            path: {
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_OptionsPage_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     roles_role_holders: {
         parameters: {
             query?: {
@@ -8579,6 +8761,113 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_ListResult_RoleHolderOut__"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    roles_give_role_to_holder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoleHolderIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_RoleHolderOut_"];
                 };
             };
             /** @description Invalid request */
@@ -9092,7 +9381,9 @@ export interface operations {
     members_invite_members: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-acting-for"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -9303,7 +9594,9 @@ export interface operations {
     members_change_roles: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-acting-for"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -12093,7 +12386,9 @@ export interface operations {
     };
     teams_team_names: {
         parameters: {
-            query?: never;
+            query: {
+                ids: string[];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -12194,7 +12489,14 @@ export interface operations {
     };
     teams_list_teams: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -12207,7 +12509,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_list_TeamOut__"];
+                    "application/json": components["schemas"]["Envelope_ListResult_TeamOut__"];
                 };
             };
             /** @description Invalid request */

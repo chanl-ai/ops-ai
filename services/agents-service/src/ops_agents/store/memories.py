@@ -14,8 +14,10 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_service_kit.http import Out
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.listing import ListParams
 from ops_store import Guarantee
 from ops_store.dialect import insert_ignore, lock_key
+from ops_store.listing import ListPage, list_page
 from ops_store.rows import one, rows
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, full_text
 from ops_store.team_scope import any_team, team_visible
@@ -408,6 +410,21 @@ class Memories:
             q = q.where(m.c.team_id == team_id)
         async with tenant_tx(self.engine) as c:
             return await rows(c, q.order_by(m.c.created_at.desc()).limit(limit), MemoryRecord)
+
+    async def page(self, person: str, params: ListParams, *, team_id: str | None) -> ListPage:
+        """One page of the person's memories in use, newest first, on the shared list contract: `search` matches the
+        key and the value; the `agentId` filter keeps what that agent may use (its own and every agent's) and `kind`
+        keeps those kinds. Both are read here rather than declared as list filters: every statement is first narrowed
+        to one person by ix_agent_memories_owner, so they filter a few rows and need no index of their own."""
+        m = agent_memories
+        agent_id = next(iter(params.filters.get("agentId", [])), None)
+        q = sa.select(m).where(*self._for(person, agent_id), team_visible(m), m.c.status == ACTIVE)
+        if team_id is not None:
+            q = q.where(m.c.team_id == team_id)
+        if kinds := params.filters.get("kind"):
+            q = q.where(m.c.kind.in_(kinds))
+        async with tenant_tx(self.engine) as c:
+            return await list_page(c, q, params, search=[m.c.key, m.c.value], default_sort=m.c.created_at.desc())
 
     async def in_use(
         self, person: str, team_id: str, agent_id: str, *, kinds: tuple[str, ...] = (), limit: int = 200

@@ -25,7 +25,8 @@ from ops_identity.fastapi import Tx
 from ops_service_kit.errors import Conflict, NotFound, ServiceUnavailable, Unprocessable, ValidationFailed
 from ops_service_kit.http import Envelope, In, Json, JsonList, ListResult, pagination
 from ops_service_kit.ids import new_id, now_iso
-from ops_service_kit.listing import ListParams
+from ops_service_kit.listing import IDS_MAX, ListParams
+from ops_service_kit.names import Name
 from ops_store import isolation
 from ops_store.listing import ListPage
 
@@ -89,7 +90,7 @@ MAX_TEST_PAUSES = 5
 
 
 class WorkflowInput(In):
-    name: str = Field(min_length=1, max_length=200)
+    name: Name
     trigger: str = "Manual"
     template: Literal["blank", "approval", "triage", "chat"] = "blank"
     agent_slug: str | None = None
@@ -112,7 +113,7 @@ class PublishInput(In):
 
 
 class SettingsInput(In):
-    name: str | None = Field(default=None, min_length=1, max_length=200)
+    name: Name | None = None
     description: str | None = None
     trigger: str | None = None
 
@@ -212,6 +213,8 @@ class WorkflowsQuery(BaseModel):
     # What Files offers to start with a file: those whose start form takes one.
     takesFiles: bool = False  # noqa: N815
     engine: Literal["all", "current"] = "all"
+    # Exact rows by id, whatever the search says: a picker labelling the workflow a form or trigger holds.
+    ids: list[str] | None = Field(default=None, max_length=IDS_MAX)
 
 
 @router.get("", response_model=Envelope[ListResult[Workflow]])
@@ -227,6 +230,7 @@ async def list_workflows(rt: Rt, me: Me, _: Tx, q: Annotated[WorkflowsQuery, Que
         search=q.search,
         sort_by=q.sortBy if q.sortBy in SORTS else "name",
         sort_order=q.sortOrder,
+        ids=q.ids or None,
         filters={"status": q.status} if q.status else {},
     )
     # This route's own page size (WorkflowsQuery, up to 200): the console's pickers read 100 and 200 at a time.

@@ -1,4 +1,5 @@
 import type { PublishPreview } from '@/lib/types/publish-preview';
+import type { SaveBase } from '@/lib/save-base';
 import type { CasesApi } from './cases-contract';
 import type { ChannelsApi } from './channels-contract';
 import type { EngineApi } from './engine-contract';
@@ -36,6 +37,7 @@ import type { ActivityApi } from './activity-contract';
 import type { CaseRecordsApi } from './case-records-contract';
 import type { AssuranceApi } from './assurance-contract';
 import type { McpLinksApi } from './mcp-links-contract';
+import type { AgentPrompt, AgentPublishCheck, BriefDraft } from '@/lib/types/references';
 import type { ReferencesApi } from './references-contract';
 import type { WikiApi } from './wiki-contract';
 import type {
@@ -107,7 +109,8 @@ export interface OpsApi {
     get(id: string): Promise<Agent>;
     create(input: AgentInput): Promise<Agent>;
     /** Saves a new draft version. Workflows keep pinning the published one until it is published and they republish. */
-    update(id: string, patch: AgentPatch): Promise<Agent>;
+    /** 409 `stale_base` when the base is not the newest copy; the details name who saved it and when. */
+    update(id: string, patch: AgentPatch & SaveBase): Promise<Agent>;
     remove(id: string): Promise<void>;
     versions(id: string): Promise<AgentVersion[]>;
     /** The agent's newest threads in the selected team, newest first. */
@@ -119,7 +122,13 @@ export interface OpsApi {
      * 422 when the version is not the newest draft. Approving it, by someone other than the requester and the
      * author, publishes the version (spec 04 5.11).
      */
-    requestPublish(id: string, version: number, note: string): Promise<Review>;
+    requestPublish(id: string, version: number, note: string, follows?: string): Promise<Review>;
+    /** The prompt a version gives the model (the newest when none is named), mentions as names and Never last. */
+    promptView(id: string, version?: number): Promise<AgentPrompt>;
+    /** A proposed text per brief heading from a description of the job; saves nothing. */
+    draftBrief(id: string, description: string): Promise<BriefDraft>;
+    /** What stops the newest draft from publishing, each with the field it is in; opens and changes nothing. */
+    publishCheck(id: string, version: number): Promise<AgentPublishCheck>;
     /** Whether publishing the newest draft would wait for review, and why; opens and changes nothing. */
     publishPreview(id: string, version: number): Promise<PublishPreview>;
     /** Pauses or resumes the agent for new runs. 409 when pausing an agent that has never been published. */
@@ -172,6 +181,8 @@ export interface OpsApi {
     place(id: string, opts?: { view?: string; group?: 'case' }): Promise<ReviewPlace>;
     decide(id: string, input: ReviewDecisionInput): Promise<Review>;
     assign(ids: string[], assignee?: string): Promise<BulkResult>;
+    /** The requester takes back a waiting publish request. 403 for anyone else, 409 once it is decided. */
+    withdraw(id: string): Promise<Review>;
     /** Approving calls that need two approvers needs `stepUpToken` from a re-authentication in the last 5 minutes; one covers the batch. */
     bulkDecide(ids: string[], decision: ReviewDecision, reason?: string, opts?: { stepUpToken?: string }): Promise<BulkResult>;
   };
@@ -269,7 +280,9 @@ export interface OpsApi {
   };
   /** Teams the user can switch between. The current team id is sent with every call (see team-context.ts). */
   teams: {
-    list(): Promise<Team[]>;
+    /** One page of the person's teams by name: `search` matches the name, `ids` names exact teams (the current one, a
+     * record's owning team) so a label never needs the whole list. */
+    list(p: ListParams): Promise<ListResult<Team>>;
     /** Absent under platform sign-in, where an admin creates teams in platform settings; the switcher then offers no Add team. */
     create?(input: TeamInput): Promise<Team>;
     /** The person's role on each team, read fresh from platform-service so a role change shows without signing in
@@ -291,6 +304,11 @@ export interface OpsApi {
     renameRole?(id: string, input: { name: string; description?: string }): Promise<RoleDetail>;
     deleteRole?(id: string, moveTo?: string): Promise<void>;
     roleHolders?(id: string, p: ListParams): Promise<ListResult<RoleHolder>>;
+    /** Who the role can be given to in the team the console acts in: its people and the workspace's groups, one
+     * searched list whose values are `person:<user id>` or `group:<group id>`. */
+    roleHolderOptions?(id: string, p: OptionsParams): Promise<OptionsPage>;
+    /** Gives the role to a person or a group in the team the console acts in; that team's admins. */
+    giveRoleTo?(id: string, holder: { kind: 'person' | 'group'; id: string }): Promise<RoleHolder>;
     /** The custom roles given to a person, each in one of their teams; given and taken by that team's admins. */
     roleGrants?(personId: string, p: ListParams): Promise<ListResult<RoleGrant>>;
     /** Gives the role in the team the console acts in. */

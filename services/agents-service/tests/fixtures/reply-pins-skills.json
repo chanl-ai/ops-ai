@@ -3,8 +3,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Agent ag_missing was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -44,6 +46,7 @@
         "agentId": "ag_fraud",
         "available": [],
         "limits": {
+          "instructionsMaxChars": 24000,
           "maxAttached": 12,
           "maxPerTurn": 2,
           "tokenBudget": 6000,
@@ -75,6 +78,7 @@
         "agentId": "ag_fraud",
         "available": [],
         "limits": {
+          "instructionsMaxChars": 24000,
           "maxAttached": 12,
           "maxPerTurn": 2,
           "tokenBudget": 6000,
@@ -104,8 +108,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Published skill sk_missing was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -128,8 +134,10 @@
           ],
           "teamId": "team_ops"
         },
+        "kind": "refused",
         "message": "Your role cannot edit agent wire-fraud-sentinel; a Builder or Admin can.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -165,6 +173,7 @@
           "tools": [],
           "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship."
         },
+        "digest": "<hex>",
         "draftVersion": 1,
         "id": "<sk>",
         "inputs": [
@@ -193,13 +202,15 @@
           "blockers": [],
           "canRequest": true,
           "editClass": "re_test",
-          "problems": []
+          "problems": [],
+          "warnings": []
         },
         "publishedVersion": null,
         "runs": [],
         "slug": "hardship-request-triage",
         "status": "draft",
         "tests": [],
+        "text": "Steps: confirm the customer, record the reason as {reason}, offer the hardship form.",
         "tokens": 21,
         "toolCount": 0,
         "updatedAt": "<timeZ>",
@@ -251,8 +262,10 @@
     "body": {
       "error": {
         "code": "no_use_when",
+        "kind": "input",
         "message": "An on-match skill needs a use-when line: it is what the model reads to load it.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -272,8 +285,10 @@
             "msg": "Extra inputs are not permitted"
           }
         ],
+        "kind": "input",
         "message": "x: Extra inputs are not permitted",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -296,8 +311,10 @@
           ],
           "teamId": "team_ops"
         },
+        "kind": "refused",
         "message": "Your role cannot create a skill; a Builder or Admin can.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -312,8 +329,10 @@
     "body": {
       "error": {
         "code": "skill_pinned",
+        "kind": "input",
         "message": "hardship-request-triage is attached to Wire Fraud Sentinel; detach it first.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 409
       },
       "success": false
@@ -330,8 +349,10 @@
           "scope": "own",
           "teamId": "team_ops"
         },
+        "kind": "refused",
         "message": "Your role lets you delete only your own; hardship-request-triage is someone else's.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -367,6 +388,7 @@
           "tools": [],
           "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship."
         },
+        "digest": "<hex>",
         "draftVersion": null,
         "id": "<sk>",
         "inputs": [
@@ -393,7 +415,13 @@
         "publishCheck": {
           "approversNeeded": 1,
           "blockers": [
-            "The skill is deprecated."
+            {
+              "code": "deprecated",
+              "field": null,
+              "level": "error",
+              "message": "The skill is deprecated.",
+              "node": null
+            }
           ],
           "canRequest": false,
           "editClass": "re_test",
@@ -404,13 +432,15 @@
               "message": "The skill is deprecated.",
               "position": null
             }
-          ]
+          ],
+          "warnings": []
         },
         "publishedVersion": 1,
         "runs": [],
         "slug": "hardship-request-triage",
         "status": "deprecated",
         "tests": [],
+        "text": "Steps: confirm, record {reason}, offer the form.",
         "tokens": 12,
         "toolCount": 0,
         "updatedAt": "<timeZ>",
@@ -421,6 +451,7 @@
         "version": 1,
         "versions": [
           {
+            "approvedBy": null,
             "changes": [
               "Changed instructions"
             ],
@@ -447,6 +478,7 @@
             "note": "",
             "publishedAt": "<timeZ>",
             "publishedBy": "auto-approve (dev)",
+            "requestedBy": "usr_b@harborpine.example",
             "reviewId": "<SKP>",
             "savedAt": "<timeZ>",
             "savedBy": "usr_b@harborpine.example",
@@ -465,8 +497,10 @@
     "body": {
       "error": {
         "code": "reason_required",
+        "kind": "input",
         "message": "Say why the skill is deprecated.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -489,8 +523,10 @@
           ],
           "teamId": "team_ops"
         },
+        "kind": "refused",
         "message": "Your role cannot edit skill hardship-request-triage; a Builder or Admin can.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -514,6 +550,7 @@
           }
         ],
         "limits": {
+          "instructionsMaxChars": 24000,
           "maxAttached": 12,
           "maxPerTurn": 2,
           "tokenBudget": 6000,
@@ -529,8 +566,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Skill <sk> on ag_fraud was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -566,6 +605,7 @@
           "tools": [],
           "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship."
         },
+        "digest": "<hex>",
         "draftVersion": 1,
         "id": "<sk>",
         "inputs": [
@@ -594,13 +634,15 @@
           "blockers": [],
           "canRequest": true,
           "editClass": "re_test",
-          "problems": []
+          "problems": [],
+          "warnings": []
         },
         "publishedVersion": null,
         "runs": [],
         "slug": "hardship-request-triage",
         "status": "draft",
         "tests": [],
+        "text": "Steps: confirm, record {reason}, offer the form.",
         "tokens": 12,
         "toolCount": 0,
         "updatedAt": "<timeZ>",
@@ -652,8 +694,10 @@
     "body": {
       "error": {
         "code": "skill_deprecated",
+        "kind": "input",
         "message": "The skill is deprecated; it takes no new versions.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 409
       },
       "success": false
@@ -664,8 +708,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Skill <sk> was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -676,8 +722,15 @@
     "body": {
       "error": {
         "code": "stale_base",
-        "message": "v1 was saved after v9; reload and edit again.",
+        "details": {
+          "savedAt": "<timeZ>",
+          "savedBy": "usr_b@harborpine.example",
+          "version": 1
+        },
+        "kind": "input",
+        "message": "The draft was saved after it was read; reload and try again.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 409
       },
       "success": false
@@ -700,8 +753,10 @@
           ],
           "teamId": "team_ops"
         },
+        "kind": "refused",
         "message": "Your role cannot edit skill hardship-request-triage; a Builder or Admin can.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -1555,6 +1610,7 @@
           "kb_support"
         ],
         "limits": {
+          "instructionsMaxChars": 24000,
           "maxAttached": 12,
           "maxPerTurn": 2,
           "tokenBudget": 6000,
@@ -1711,6 +1767,7 @@
           "tools": [],
           "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship."
         },
+        "digest": "<hex>",
         "draftVersion": null,
         "id": "<sk>",
         "inputs": [
@@ -1737,7 +1794,13 @@
         "publishCheck": {
           "approversNeeded": 1,
           "blockers": [
-            "v1 is already published; save a change to open a draft."
+            {
+              "code": "already_published",
+              "field": null,
+              "level": "error",
+              "message": "v1 is already published; save a change to open a draft.",
+              "node": null
+            }
           ],
           "canRequest": false,
           "editClass": "re_test",
@@ -1748,13 +1811,15 @@
               "message": "v1 is already published; save a change to open a draft.",
               "position": null
             }
-          ]
+          ],
+          "warnings": []
         },
         "publishedVersion": 1,
         "runs": [],
         "slug": "hardship-request-triage",
         "status": "published",
         "tests": [],
+        "text": "Steps: confirm, record {reason}, offer the form.",
         "tokens": 12,
         "toolCount": 0,
         "updatedAt": "<timeZ>",
@@ -1765,6 +1830,7 @@
         "version": 1,
         "versions": [
           {
+            "approvedBy": null,
             "changes": [
               "Changed instructions"
             ],
@@ -1791,6 +1857,7 @@
             "note": "",
             "publishedAt": "<timeZ>",
             "publishedBy": "auto-approve (dev)",
+            "requestedBy": "usr_b@harborpine.example",
             "reviewId": "<SKP>",
             "savedAt": "<timeZ>",
             "savedBy": "usr_b@harborpine.example",
@@ -1819,8 +1886,10 @@
             }
           ]
         },
+        "kind": "input",
         "message": "v1 is already published; save a change to open a draft.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -1843,8 +1912,10 @@
           ],
           "teamId": "team_ops"
         },
+        "kind": "refused",
         "message": "Your role cannot publish skill hardship-request-triage; a Builder or Admin can.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -1880,6 +1951,7 @@
           "tools": [],
           "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship."
         },
+        "digest": "<hex>",
         "draftVersion": 1,
         "id": "<sk>",
         "inputs": [
@@ -1908,13 +1980,15 @@
           "blockers": [],
           "canRequest": true,
           "editClass": "re_test",
-          "problems": []
+          "problems": [],
+          "warnings": []
         },
         "publishedVersion": null,
         "runs": [],
         "slug": "hardship-request-triage",
         "status": "draft",
         "tests": [],
+        "text": "Steps: confirm the customer, record the reason as {reason}, offer the hardship form.",
         "tokens": 21,
         "toolCount": 0,
         "updatedAt": "<timeZ>",
@@ -1966,8 +2040,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Skill sk_missing was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -1978,8 +2054,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Skill <sk> was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -2008,8 +2086,10 @@
             "reason"
           ]
         },
+        "kind": "refused",
         "message": "reason is required.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 422
       },
       "success": false
@@ -2020,8 +2100,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Skill <sk> was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false

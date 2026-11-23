@@ -6,7 +6,7 @@ import { Eye } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { useCan, useCanBuild, useHolders, useMe } from '@/hooks/me-queries';
-import { useTeam } from '@/hooks/use-team';
+import { useTeam, useTeamsNamed } from '@/hooks/use-team';
 
 /** Renders its children only for a person `can()` lets change the team's `area` records (agents by default). */
 export function BuilderOnly({ children, area }: { children: React.ReactNode; area?: string }) {
@@ -36,9 +36,11 @@ export function BuilderFieldset({ children, area, canEdit }: { children: React.R
 export function ReadOnlyNotice({ noun, area = 'agents', canEdit, teamId, teamName }: { noun: string; area?: string; canEdit?: boolean; teamId?: string | null; teamName?: string | null }) {
   const team = useCan(area, 'edit');
   const can = canEdit ?? team;
-  const { team: current, teams, switchTeam } = useTeam();
-  const other = teamId && current && teamId !== current.id ? (teams.find((t) => t.id === teamId) ?? { id: teamId, name: teamName ?? teamId }) : undefined;
-  const member = !!other && teams.some((t) => t.id === other.id);
+  const { team: current, switchTeam } = useTeam();
+  // The record's team read by id: absent when the person is not in it.
+  const held = useTeamsNamed([teamId && current && teamId !== current.id ? teamId : null]);
+  const other = teamId && current && teamId !== current.id ? (held.get(teamId) ?? { id: teamId, name: teamName ?? teamId }) : undefined;
+  const member = !!other && held.has(other.id);
   const me = useMe().data?.user.email?.toLowerCase();
   // The record's own team when it is another one the person belongs to; the holders route refuses a team they are not in.
   const holders = useHolders(area, 'edit', can === false && (!other || member), other?.id);

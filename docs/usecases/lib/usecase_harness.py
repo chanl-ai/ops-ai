@@ -27,8 +27,8 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
-
 from deployed_guard import STAGING_HOST_VAR, host_refusal, script_refusal
+
 from ops_service_kit.opa_server import opa_server
 from ops_signin.fake_idp import self_signed
 
@@ -990,6 +990,19 @@ def data(res: httpx.Response) -> Any:
     return body.get("data") if isinstance(body, dict) else None
 
 
+def save_agent(
+    client: httpx.Client, agent_id: Any, fields: dict[str, Any], *, headers: Any = None, read_headers: Any = None
+) -> httpx.Response:
+    """PATCH an agent as `headers`, naming the copy it just read (baseVersion, baseDigest) as the API requires.
+
+    The copy is read as `read_headers` (default `headers`), so a caller who may not read the agent can still reach
+    the refusal under test; returns the PATCH response."""
+    path = f"/v1/agents/{agent_id}"
+    seen: dict[str, Any] = data(client.get(path, headers=read_headers if read_headers is not None else headers)) or {}
+    body = {**fields, "baseVersion": seen.get("version"), "baseDigest": seen.get("digest")}
+    return client.patch(path, json=body, headers=headers)
+
+
 def every_page(client: httpx.Client, path: str, *, headers: Any = None, **params: Any) -> list[dict[str, Any]]:
     """Every row of a list on the shared list contract, page by page until `pagination.hasNext` is false; a page
     holds at most the install's maximum, so one read is not the whole list."""
@@ -1058,15 +1071,41 @@ def core_bank() -> Generator[dict[str, Any]]:
         _stop(proc)
 
 
+def discovered_operations(gw: httpx.Client, discovery_id: str) -> list[dict[str, Any]]:
+    """Every operation of a stored discovery, a page at a time (GET /v1/tool-modules/discoveries/{id}/operations)."""
+    ops: list[dict[str, Any]] = []
+    page = 1
+    while True:
+        listed = data(
+            gw.get(f"/v1/tool-modules/discoveries/{discovery_id}/operations", params={"page": page, "pageSize": 50})
+        )
+        ops += listed["data"]
+        if not listed["pagination"]["hasNext"]:
+            return ops
+        page += 1
+
+
+def discovered(gw: httpx.Client, source: dict[str, Any]) -> dict[str, Any]:
+    """POST /v1/tool-modules/discover, with the stored discovery's operations read back as `operations`."""
+    found: dict[str, Any] = data(gw.post("/v1/tool-modules/discover", json=source))
+    return {**found, "operations": discovered_operations(gw, found["id"])}
+
+
+def picks(found: dict[str, Any]) -> list[dict[str, str]]:
+    """Every discovered operation picked by name, a read for GET and a write otherwise, as an import body takes them."""
+    return [
+        {"name": o["name"], "access": "read" if (o.get("method") or "GET").upper() == "GET" else "write"}
+        for o in found["operations"]
+    ]
+
+
 def publish_bank_module(gw: httpx.Client, host: str) -> str:
     """The core bank's document imported as a published module, as reimport_bank_module.py leaves it, decided under
     dev auth: every operation, reads from GET, place_hold approved by one person of team_ops with a step-up."""
     security = {"X-Dev-User": "Nadia Petrov", "X-Team-Id": "team_security"}
     source = {"kind": "openapi", "specUrl": f"https://{host}/openapi.json"}
-    found = data(gw.post("/v1/tool-modules/discover", json=source))
-    ops = [
-        {**o, "access": "read" if (o.get("method") or "GET").upper() == "GET" else "write"} for o in found["operations"]
-    ]
+    found = discovered(gw, source)
+    ops = picks(found)
     made = data(
         gw.post(
             "/v1/tool-modules",

@@ -23,7 +23,7 @@ from ops_service_kit.http import Json, JsonValue, Out
 from .app_rows import AppCard, CardToolRow
 from .app_states import AppGroup, AppState
 from .connections.records import connection_base
-from .connections.service import MyAccountRow, own_key
+from .connections.service import OWN, MyAccountRow, own_key
 from .plugins.host import account_identity, own_and_registration
 from .store.connections import PERSON_ORIGIN, Account
 from .store.modules import IdentityRow
@@ -202,7 +202,8 @@ def _primary(accounts: list[MyAccountRow], team_default: str | None, saved: set[
 
 async def my_connectors(apps: Apps, who: Caller) -> list[Json]:
     """The caller's connectors in their team, one row per app, joined here so the page makes one call."""
-    cards = await apps.cards(who, listed=True, builtins=False)
+    # The team's app rows under the own-sign-in rule (chat.run), so every person signed in reads their own page.
+    cards = await apps.cards(who, listed=True, builtins=False, rights=OWN)
     mine = await apps.connections.mine(who, every=True)
     # Which account the person saved as their default, from their own sign-ins (the gateway reads the same).
     signed = await apps.connections.store.own_sign_ins(

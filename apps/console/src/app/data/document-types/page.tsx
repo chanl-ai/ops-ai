@@ -38,6 +38,7 @@ import type {
   DocumentType,
   DocumentTypeSummary,
 } from "@/lib/types/document-types";
+import { nameError } from '@/lib/validation/names';
 
 const ID = /^[a-z][a-z0-9_]{2,63}$/;
 
@@ -135,7 +136,7 @@ function NewTypeDialog({
     const id = typeId.trim();
     const e = {
       ...versionErrors(draft),
-      name: name.trim() ? undefined : "Name the document type.",
+      name: nameError(name, "Name the document type."),
       id:
         !id || ID.test(id)
           ? undefined

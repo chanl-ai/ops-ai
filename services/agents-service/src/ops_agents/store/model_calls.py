@@ -1,10 +1,11 @@
 """Model calls, one record each: what the budget sums, what replay answers from, and what the journal shows.
 
 A kernel model request in a graph run is recorded by the kernel's model wrapper (api/model_ledger.py) with its
-alias, tokens, latency, thread, run, step, the LangGraph task it ran in, the request's hash and its response. A
-workflow model call (classify, extract, draft, grade) is recorded by the metering wrapper with its usage and no
-response. Replay looks a response up by (thread, task, request hash): a node re-run after a crash keeps its task id
-and is answered from the record, while a new step (a regenerate) has a new task id and calls the model again.
+alias, tokens, latency, thread, run, step, its replay key (`task`), the request's hash and its response. The key is
+the LangGraph task for a chat turn and the step id (run:node:iteration) for a workflow step, whose thread is its run.
+A chat-graph model call outside the kernel (classify, extract, grade) is recorded by the metering wrapper with its
+usage and no response. Replay looks a response up by (thread, task, request hash): a re-run after a crash keeps its
+key and is answered from the record, while a new step (a regenerate) has a new key and calls the model again.
 
 Rows are written as each call returns and are not fenced: a call made by a node that later crashed was paid for.
 Cost is stored as integer millionths of the currency unit so sums are exact on SQLite and PostgreSQL alike.
@@ -46,7 +47,7 @@ model_call_records = sa.Table(
     sa.Column("thread_id", sa.String(64), nullable=False),
     sa.Column("run_id", sa.String(64)),
     sa.Column("step", sa.String(120), nullable=False),
-    # The LangGraph task the call ran in; with the request hash, the replay key.
+    # The replay key with the request hash: the chat turn's LangGraph task, or the workflow step's id.
     sa.Column("task", sa.String(200)),
     sa.Column("kind", sa.String(40), nullable=False),
     sa.Column("model_alias", sa.String(120), nullable=False),

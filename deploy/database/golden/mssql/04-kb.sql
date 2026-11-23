@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- kb-service, stamped at kb_0029
+-- kb-service, stamped at 20261122_2031_list_sort_indexes
 -- not on SQL Server yet: table kb_unit_vectors (PostgreSQL only)
 -- not on SQL Server yet: kb_units.tsv (TSVECTOR)
 CREATE TABLE kb_bases (
@@ -165,6 +165,14 @@ CREATE TABLE kb_items (
 GO
 CREATE INDEX ix_kb_items_content ON kb_items (tenant_id, content_digest);
 GO
+CREATE INDEX ix_kb_items_processed_at ON kb_items (tenant_id, team_id, processed_at);
+GO
+CREATE INDEX ix_kb_items_size ON kb_items (tenant_id, team_id, size);
+GO
+CREATE INDEX ix_kb_items_status ON kb_items (tenant_id, team_id, status);
+GO
+CREATE INDEX ix_kb_items_title ON kb_items (tenant_id, team_id, title);
+GO
 CREATE TABLE kb_runs (
 	tenant_id VARCHAR(64) NOT NULL, 
 	team_id VARCHAR(64) NOT NULL, 
@@ -185,6 +193,8 @@ CREATE TABLE kb_runs (
 );
 GO
 CREATE INDEX ix_kb_runs_source ON kb_runs (tenant_id, source_id, started_at);
+GO
+CREATE INDEX ix_kb_runs_started_at ON kb_runs (tenant_id, team_id, started_at);
 GO
 CREATE TABLE kb_item_versions (
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -326,5 +336,5 @@ CREATE TABLE alembic_version_kb (
     CONSTRAINT alembic_version_kb_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_kb (version_num) VALUES ('kb_0029');
+INSERT INTO alembic_version_kb (version_num) VALUES ('20261122_2031_list_sort_indexes');
 GO

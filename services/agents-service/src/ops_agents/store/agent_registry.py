@@ -4,7 +4,6 @@ workflows. `api/agent_registry.py` decides what is live and builds the console's
 from __future__ import annotations
 
 import hashlib
-import re
 from typing import ClassVar
 
 import sqlalchemy as sa
@@ -17,6 +16,8 @@ from ops_service_kit.errors import Conflict, NotFound
 from ops_service_kit.http import Json, JsonList, Out
 from ops_service_kit.ids import canonical_json, new_id, now_iso
 from ops_service_kit.listing import ListParams
+from ops_service_kit.names import SLUG_SUFFIX
+from ops_service_kit.names import slugify as kit_slugify
 from ops_store import Guarantee, isolation
 from ops_store.dialect import json_text
 from ops_store.listing import LISTED, ListPage, list_page
@@ -105,7 +106,7 @@ publish_requests = sa.Table(
     sa.Column("kind", sa.String(16), nullable=False),  # agent | workflow
     sa.Column("subject_id", sa.String(64), nullable=False),
     sa.Column("version", sa.Integer, nullable=False),
-    sa.Column("status", sa.String(16), nullable=False),  # pending | approved | rejected | returned
+    sa.Column("status", sa.String(16), nullable=False),  # pending | approved | rejected | returned | withdrawn
     sa.Column("note", sa.Text, nullable=False),
     sa.Column("requested_by", sa.String(200), nullable=False),
     sa.Column("created_at", sa.String(32), nullable=False),
@@ -149,6 +150,9 @@ SPEC_FIELDS = (
     "limits",
     "widgetPins",
     "widgets",
+    "brief",
+    "promptMode",
+    "patterns",
 )
 
 
@@ -171,8 +175,25 @@ def digest_of(spec: Json) -> str:
     return hashlib.sha256(canonical_json(spec).encode()).hexdigest()
 
 
+def refuse_stale(base: tuple[int, str], version: int, digest: str, *, saved_by: str, saved_at: str) -> None:
+    """Refuses a save built on `base` (the version and digest it read) once the newest version is no longer that one.
+    A draft is rewritten in place under one version number, so the digest is what tells two copies of it apart. The
+    details name who saved the newest copy and when, for a page to say so.
+
+    Raises:
+        Conflict: `stale_base`.
+    """
+    if base != (version, digest):
+        raise Conflict(
+            "The draft was saved after it was read; reload and try again.",
+            code="stale_base",
+            details={"version": version, "savedBy": saved_by, "savedAt": saved_at},
+        )
+
+
 def slugify(name: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "agent"
+    # Cut before `_unique_slug` adds "-n": the column is 120 wide and a name may be 200 long.
+    return kit_slugify(name, width=120, reserve=SLUG_SUFFIX, fallback="agent")
 
 
 def changes_between(old: Json | None, new: Json) -> list[str]:
@@ -186,6 +207,8 @@ def changes_between(old: Json | None, new: Json) -> list[str]:
         "limits": "caller limits",
         "widgetPins": "widgets",
         "widgets": "widget settings",
+        "promptMode": "prompt mode",
+        "patterns": "thinking and parallel reads",
     }
     out = [f"Changed {labels.get(k, k)}" for k in SPEC_FIELDS if old.get(k) != new.get(k)]
     # A guardrail switched off or on names itself, so the review says what stopped (or started) being checked.
@@ -598,10 +621,19 @@ class AgentRegistry(VersionedRegistry[AgentRow, AgentVersionRow]):
         await hold_pins(c, aid, team_id, spec.get("skillPins"))
         return aid
 
-    async def save(self, agent_id: str, spec: Json, *, by: str, note: str = "") -> int:
+    async def save(
+        self, agent_id: str, spec: Json, *, by: str, note: str = "", base: tuple[int, str] | None = None
+    ) -> int:
         """Saves `spec` as the agent's one draft: it rewrites the newest version while that version is
         unpublished and no publish request has named it; otherwise it opens the next version as the draft, so neither
-        what runs nor what a reviewer saw ever changes. The published pointer does not move."""
+        what runs nor what a reviewer saw ever changes. The published pointer does not move.
+
+        `base` is the version and digest `spec` was built from. A save that names it is refused when the newest
+        version is no longer that one, so a change saved in between is never written over.
+
+        Raises:
+            Conflict: `stale_base` when `base` is given and another save landed after it was read.
+        """
         at = now_iso()
         v = registry_agent_versions
         async with self.tx() as c:
@@ -610,6 +642,8 @@ class AgentRegistry(VersionedRegistry[AgentRow, AgentVersionRow]):
             row = await self.row(agent_id, c, lock=True)
             n = row.version
             newest = await self.newest(c, agent_id, n)
+            if base is not None:
+                refuse_stale(base, n, digest_of(newest.spec), saved_by=newest.saved_by, saved_at=newest.saved_at)
             asked = await publish_requested(c, "agent", agent_id, n)
             if newest.published_at is None and not asked:
                 # The draft keeps every change made to it, so its history entry reads as one change set.
@@ -798,6 +832,17 @@ class AgentRegistry(VersionedRegistry[AgentRow, AgentVersionRow]):
             await c.execute(
                 publish_requests.update().where(_mine(), publish_requests.c.id == request_id).values(body=body)
             )
+
+    async def withdraw_request(self, request_id: str, by: str) -> bool:
+        """Marks a pending request withdrawn by its requester, with no decider, so the review lists no approval; False
+        when a decision got there first."""
+        q = (
+            publish_requests.update()
+            .where(_mine(), publish_requests.c.id == request_id, publish_requests.c.status == "pending")
+            .values(status="withdrawn", decided_at=now_iso(), decision_reason=f"Withdrawn by {by}")
+        )
+        async with self.tx() as c:
+            return (await c.execute(q)).rowcount == 1
 
     async def decide_request(self, request_id: str, status: str, by: str, reason: str | None) -> bool:
         """Records the decision on a pending request; False when another decision got there first."""

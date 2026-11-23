@@ -29,8 +29,10 @@
     "body": {
       "error": {
         "code": "deployment_id_taken",
+        "kind": "input",
         "message": "A deployment dep_pin exists; choose another id.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 409
       },
       "success": false
@@ -50,8 +52,10 @@
             "msg": "Extra inputs are not permitted"
           }
         ],
+        "kind": "input",
         "message": "colour: Extra inputs are not permitted",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -62,8 +66,10 @@
     "body": {
       "error": {
         "code": "validation_failed",
+        "kind": "input",
         "message": "Unknown graph nowhere.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -86,8 +92,10 @@
           ],
           "teamId": "team_ops"
         },
+        "kind": "refused",
         "message": "Your role cannot create this deployment; a Builder or Admin can.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -120,8 +128,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Thread was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -146,8 +156,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Thread was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -158,8 +170,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Thread was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -177,8 +191,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Thread was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -199,8 +215,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Deployment dep_missing was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -211,8 +229,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Deployment dep_pin was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false

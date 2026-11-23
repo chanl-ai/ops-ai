@@ -17,6 +17,21 @@ zero=0000000000000000000000000000000000000000
 printf '%s\n' "$refs" | while read -r _local_ref local_sha remote_ref remote_sha; do
   [ -n "$local_sha" ] || continue
   [ "$local_sha" = "$zero" ] && continue  # a delete sends no commits
+  # A remote branch name says what changed, as <type>/<scope>-<what>: local lane branches may be named anything, and
+  # the name is checked where other people read it.
+  branch=${remote_ref#refs/heads/}
+  if [ "$branch" != "$remote_ref" ]; then
+    case "$branch" in
+      main | develop | release/* | hotfix/* | dependabot/*) ;;
+      *)
+        if ! printf '%s\n' "$branch" | grep -qE '^(feat|fix|chore|docs|refactor|perf|test|ci)/[a-z0-9]+(-[a-z0-9]+)+$' ||
+          printf '%s\n' "${branch#*/}" | grep -qE '(^|-)(wip|tmp|temp|new|old|final|v[0-9]+|misc|stuff|fixes|updates|changes|improvements|cleanup|feedback|lane)(-|$)'; then
+          echo "pre-push: remote branch '$branch' must be <type>/<scope>-<what-changed>: type one of feat fix chore docs refactor perf test ci, lowercase words joined by '-', naming the change (not wip, tmp, new, v2, fixes, updates, changes, cleanup, feedback, lane). Push under another name: git push origin HEAD:<type>/<scope>-<what>"
+          exit 1
+        fi
+        ;;
+    esac
+  fi
   since=$remote_sha
   if [ "$since" = "$zero" ] || ! git cat-file -e "$since^{commit}" 2>/dev/null; then
     since=$(git merge-base "$local_sha" origin/main 2>/dev/null || true)
@@ -24,6 +39,7 @@ printf '%s\n' "$refs" | while read -r _local_ref local_sha remote_ref remote_sha
   [ -n "$since" ] || continue
   files=$(git diff --name-only --diff-filter=ACMR "$since" "$local_sha" -- '*.py')
   console=$(git diff --name-only "$since" "$local_sha" -- apps/console apps/embed package.json pnpm-lock.yaml)
+  [ -n "${OPS_FULL_HOOK:-}" ] || console=  # the console suite runs in CI's merge queue; OPS_FULL_HOOK=1 runs it here
   # Skips only when rev-list succeeds and lists nothing: an unnamed remote, a URL or a failed lookup runs the suite.
   if [ -n "$console" ] && [ -n "$remote" ] && unsent=$(git rev-list -n 1 "$local_sha" --not "--remotes=$remote" 2>/dev/null) && [ -z "$unsent" ]; then
     echo "pre-push: every commit pushed to $remote_ref is already on $remote, so the console unit suite was skipped."

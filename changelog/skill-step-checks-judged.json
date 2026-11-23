@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-21",
+  "title": "Skill checks written in words are judged",
+  "description": "A step check written as a sentence is now decided by a separate model when the tool's result arrives, not by the agent. If it says no, or cannot answer, the step takes its 'if not' as a failed rule does, and the record keeps the judge's reason.",
+  "tag": "improved"
+}

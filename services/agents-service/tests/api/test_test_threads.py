@@ -26,6 +26,7 @@ from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 from tests.conftest import sse_events, structured
 from tests.engine.test_lifecycle_rights import BUILDER, VIEWER
 
+from ..saves import save_agent
 from .role_app import ok, role_app
 
 ADVISOR = "ag_branch"
@@ -92,11 +93,7 @@ async def _say(c: AsyncClient, who: dict[str, str], tid: str, text: str = "Hello
 async def _draft(c: AsyncClient, mark: str) -> None:
     """Edits the agent's instructions without publishing: the new version is a draft."""
     agent = ok(await c.get(f"/v1/agents/{ADVISOR}", headers=BUILDER))
-    ok(
-        await c.patch(
-            f"/v1/agents/{ADVISOR}", json={"instructions": f"{agent['instructions']} {mark}"}, headers=BUILDER
-        )
-    )
+    ok(await save_agent(c, ADVISOR, {"instructions": f"{agent['instructions']} {mark}"}, headers=BUILDER))
 
 
 async def test_a_test_thread_needs_the_right_to_test(stack: tuple[AsyncClient, Recorder]) -> None:

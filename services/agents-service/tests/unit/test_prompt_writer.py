@@ -12,8 +12,13 @@ import importlib
 from dataclasses import replace
 from typing import Any
 
+from pydantic import JsonValue
+
 from ops_agent_kernel.context import PLATFORM_RULES
+from ops_agent_kernel.prompt_writer import Brief
 from ops_agent_kernel.types import AgentSettings, PromptFragment, Skill, TurnRequest
+from ops_agents.app import agent_brief
+from ops_service_kit.http import Json
 from tests.unit.test_skill_steps_kernel import Script, program, reply, stepped
 
 NEVER = ["Never promise a refund date.", "Never name another customer."]
@@ -35,6 +40,8 @@ async def test_the_sections_keep_their_order_and_the_never_rules_come_last_in_bo
         purpose="Help customers dispute a card charge.",
         goal="Every dispute is opened with the right charge.",
         how_to_answer="Plain words, two short paragraphs at most.",
+        hand_off=["The person asks for a human."],
+        examples="Q: Is it a fraud charge?\nA: Tell me the amount and the date.",
         never=NEVER,
     )
     dispute = stepped(
@@ -60,6 +67,10 @@ async def test_the_sections_keep_their_order_and_the_never_rules_come_last_in_bo
         "Help customers dispute a card charge.",
         "# Goal",
         "# How to answer",
+        "# Hand off when",
+        "- The person asks for a human.",
+        "# Examples",
+        "A: Tell me the amount and the date.",
         PLATFORM_RULES,
         ADDED,
         DISCLOSURE.instructions,
@@ -85,3 +96,28 @@ async def test_the_sections_keep_their_order_and_the_never_rules_come_last_in_bo
     marks = [own, PLATFORM_RULES, "Skills you can load", "# Never", NEVER[0], NEVER[1]]
     assert in_order(sent, marks) == marks, sent
     assert "# Who you are" not in sent and sent.rstrip().endswith(NEVER[1]), sent
+
+
+def test_a_saved_brief_keeps_hand_off_and_examples_and_an_older_version_reads_as_stored() -> None:
+    brief = Brief(
+        purpose="Help customers dispute a card charge.",
+        how_to_answer="Plain words.",
+        hand_off=["The person asks for a human."],
+        examples="Q: Which charge?\nA: The 200 on the 3rd.",
+        never=NEVER,
+    )
+    saved = agent_brief.patched({"name": "Dispute Desk"}, brief=brief, mode=None, patterns=None, writes_prompt=False)
+    assert agent_brief.brief_of(saved) == brief
+    shown = agent_brief.prompt_view(saved)
+    marks = ["# How to answer", "# Hand off when", "- The person asks for a human.", "# Examples", "# Never"]
+    assert in_order(shown, marks) == marks, shown
+    assert shown.rstrip().endswith(NEVER[1]), shown
+
+    # Stored before the two fields: the brief reads with them empty and the prompt is the instructions it was saved
+    # with, the never rules after them.
+    rules: list[JsonValue] = list(NEVER)
+    old_brief: Json = {"purpose": "Answer fee questions.", "howToAnswer": "Short.", "never": rules, "success": []}
+    old: Json = {"name": "Fees", "promptMode": "brief", "brief": old_brief, "instructions": "You are Fees. Short."}
+    read = agent_brief.brief_of(old)
+    assert read is not None and read.hand_off == [] and read.examples == ""
+    assert agent_brief.prompt_view(old) == "You are Fees. Short.\n\n# Never\n- " + "\n- ".join(NEVER)

@@ -58,5 +58,38 @@
     "src/components/deployments/deployment-sheet.tsx",
     "src/components/document-types/tests-panel.tsx",
     "src/components/skills/generate-skill-dialog.tsx"
+  ],
+  "picker": [
+    "src/app/dev/chat-default-agent/page.tsx",
+    "src/app/dev/workflow-canvas/large-canvas.tsx",
+    "src/components/ai-elements/prompt-input.tsx",
+    "src/components/chat/composer.tsx",
+    "src/components/chat/connectors-picker.tsx",
+    "src/components/chat/skill-menu.tsx",
+    "src/components/data-table-faceted-filter.tsx",
+    "src/components/header/command-palette.tsx",
+    "src/components/shared/secret-picker.tsx",
+    "src/components/sources/add-source-wizard.tsx",
+    "src/components/sources/scope-picker.tsx",
+    "src/components/workflows/definition-editor/step-list.tsx"
+  ],
+  "listFilter": [
+    "src/components/knowledge/document-sheet.tsx",
+    "src/components/shared/instruction-document/instruction-document.tsx",
+    "src/components/shared/tag-input.tsx",
+    "src/components/skills/generate-skill-dialog.tsx",
+    "src/components/templates/templates-gallery.tsx"
+  ],
+  "nameRule": [
+    "src/lib/api/mock/auth/index.ts",
+    "src/lib/api/mock/files/index.ts",
+    "src/lib/api/mock/governance/catalog.ts",
+    "src/lib/api/mock/index.ts",
+    "src/lib/api/mock/knowledge/index.ts",
+    "src/lib/api/mock/knowledge/ingest.ts",
+    "src/lib/api/mock/skills/index.ts",
+    "src/lib/api/mock/templates/index.ts",
+    "src/lib/api/mock/tool-modules/index.ts",
+    "src/lib/api/mock/widgets/index.ts"
   ]
 }

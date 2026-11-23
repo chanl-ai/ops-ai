@@ -49,7 +49,7 @@ await withUiStack(
       await row.getByTestId('memory-value-input').fill('Pacific');
       await row.getByTestId('memory-save').click();
       await sheet.getByText('Corrected by you').waitFor({ timeout: 60_000 });
-      const kept = (await (await fetch(`${agentsUrl}/v1/me/memories?agentId=ag_branch`, { headers: J })).json()).data;
+      const kept = (await (await fetch(`${agentsUrl}/v1/me/memories?agentId=ag_branch`, { headers: J })).json()).data.data;
       check('3 a correction replaces the value', kept.length === 1 && kept[0].value === 'Pacific' && kept[0].source === 'person', kept);
 
       const download = page.waitForEvent('download', { timeout: 60_000 });
@@ -60,7 +60,7 @@ await withUiStack(
       await sheet.locator('[data-testid="memory-row"][data-key="timezone"]').getByTestId('memory-forget').click();
       await page.getByTestId('delete-memory-confirm-btn').click();
       await sheet.getByTestId('memory-empty').waitFor({ timeout: 60_000 });
-      const left = (await (await fetch(`${agentsUrl}/v1/me/memories?agentId=ag_branch`, { headers: J })).json()).data;
+      const left = (await (await fetch(`${agentsUrl}/v1/me/memories?agentId=ag_branch`, { headers: J })).json()).data.data;
       check('5 forget removes it at once', left.length === 0, left);
       check('no page errors', errors.length === 0, errors.slice(0, 3));
     } finally {

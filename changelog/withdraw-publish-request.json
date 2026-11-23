@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-21",
+  "title": "Withdraw a version sent for review",
+  "description": "The person who sent an agent, skill or workflow for review can withdraw it, change the draft and send it again. The new request links the earlier one.",
+  "tag": "new"
+}

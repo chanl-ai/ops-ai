@@ -4,7 +4,8 @@ re-implementing the adapters, nothing else."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Generator, Mapping
+from contextlib import contextmanager, suppress
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
@@ -13,6 +14,47 @@ from ops_agent_kernel.ports import KnowledgePort
 from ops_service_kit.http import Json
 
 Access = Literal["read", "write", "unknown"]
+# What a write does when its gateway died after claiming it, so no record says whether it ran. `idempotent`: the
+# system dedupes on the run-and-step key (`run:node:iteration`), so it is sent again. `checkable`: a read of the system
+# (ToolPort's optional `read_back`) says whether it ran. `unsafe`: a person decides; the run pauses as Stuck.
+WriteClass = Literal["idempotent", "checkable", "unsafe"]
+WRITE_CLASSES: tuple[WriteClass, ...] = ("idempotent", "checkable", "unsafe")
+
+# Marks an exception raised by a real outbound call: a tool, an app, a model or another service failing, which the
+# error model reads as upstream and retryable (`tool_failed`). Anything a step raises without it is our own fault
+# (`internal_error`), including a bug in a host's adapter, so an adapter marks only the call itself (`outside_call`).
+OUTSIDE = "_ops_engine_outside"
+
+
+class OutsideAnswerError(RuntimeError):
+    """An outside system answered something the step cannot use (a failed extraction, a state it does not know): its
+    failure, raised by the engine, so it reads as upstream like an error raised by the call itself."""
+
+    _ops_engine_outside = True
+
+
+@contextmanager
+def outside_call() -> Generator[None]:
+    """Wrap a port adapter's real outbound call (tools-service, an app, a model): whatever it raises is marked as the
+    outside system failing and raised again unchanged, so callers still catch its own types and read its `code`."""
+    try:
+        yield
+    except Exception as e:
+        # An exception type without a __dict__ cannot carry the mark and reads as ours.
+        with suppress(AttributeError, TypeError):
+            setattr(e, OUTSIDE, True)
+        raise
+
+
+def is_outside(e: BaseException) -> bool:
+    """Whether `e`, or an exception it was explicitly raised from, came from an outside call. Only `__cause__` is
+    followed: a bug of ours inside an `except` block keeps the outside error as `__context__`, still ours."""
+    seen: BaseException | None = e
+    while seen is not None:
+        if getattr(seen, OUTSIDE, False):
+            return True
+        seen = seen.__cause__
+    return False
 
 
 @dataclass(frozen=True)
@@ -68,6 +110,10 @@ class ToolPort(Protocol):
         """The gateway's record of the write sent under `key`, for reconciling it after a crash; None when the gateway
         has none, in which case the key is abandoned there so a call still in flight cannot run later."""
         ...
+
+    # Two optional methods, read with getattr so a port without them reads every write as `unsafe`:
+    # `write_class(operation) -> WriteClass`, the class the operation declares, and `read_back(operation, input) ->
+    # ToolResult | None` for a `checkable` one: the system's answer when the write ran, None when it did not.
 
 
 class ExpressionPort(Protocol):

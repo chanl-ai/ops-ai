@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-22",
+  "title": "Sort any list by its columns",
+  "description": "Clicking a column header on a list that pages, such as cases, roles, keys, sources or tool calls, now sorts the whole list on the server, not only the rows on the page you are looking at.",
+  "tag": "improved"
+}

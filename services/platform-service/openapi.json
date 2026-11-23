@@ -1535,6 +1535,25 @@
         "title": "Envelope[ListResult[RoleOut]]",
         "type": "object"
       },
+      "Envelope_ListResult_TeamOut__": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ListResult_TeamOut_"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[ListResult[TeamOut]]",
+        "type": "object"
+      },
       "Envelope_ListResult_WorkspaceTeamOut__": {
         "additionalProperties": false,
         "properties": {
@@ -1780,6 +1799,25 @@
           "data"
         ],
         "title": "Envelope[RoleGrantOut]",
+        "type": "object"
+      },
+      "Envelope_RoleHolderOut_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/RoleHolderOut"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[RoleHolderOut]",
         "type": "object"
       },
       "Envelope_SessionOut_": {
@@ -2194,29 +2232,6 @@
         "title": "Envelope[list[TeamName]]",
         "type": "object"
       },
-      "Envelope_list_TeamOut__": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/TeamOut"
-            },
-            "title": "Data",
-            "type": "array"
-          },
-          "success": {
-            "const": true,
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "data"
-        ],
-        "title": "Envelope[list[TeamOut]]",
-        "type": "object"
-      },
       "Envelope_list_str__": {
         "additionalProperties": false,
         "properties": {
@@ -2250,6 +2265,17 @@
           "details": {
             "title": "Details"
           },
+          "kind": {
+            "enum": [
+              "input",
+              "refused",
+              "upstream",
+              "timeout",
+              "internal"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
           "message": {
             "title": "Message",
             "type": "string"
@@ -2257,6 +2283,10 @@
           "requestId": {
             "title": "Requestid",
             "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
           },
           "status": {
             "title": "Status",
@@ -2267,7 +2297,9 @@
           "code",
           "message",
           "status",
-          "requestId"
+          "requestId",
+          "kind",
+          "retryable"
         ],
         "title": "ErrorBody",
         "type": "object"
@@ -2414,7 +2446,8 @@
           "via": {
             "enum": [
               "person",
-              "team"
+              "team",
+              "group"
             ],
             "title": "Via",
             "type": "string"
@@ -3223,6 +3256,38 @@
           "facets"
         ],
         "title": "ListResult[RoleOut]",
+        "type": "object"
+      },
+      "ListResult_TeamOut_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/TeamOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "facets": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Facets",
+            "type": "object"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        },
+        "required": [
+          "data",
+          "pagination",
+          "facets"
+        ],
+        "title": "ListResult[TeamOut]",
         "type": "object"
       },
       "ListResult_WorkspaceTeamOut_": {
@@ -4060,7 +4125,9 @@
               "names",
               "choice",
               "app_changes",
-              "app_changes_by_app"
+              "app_changes_by_app",
+              "by_area",
+              "floor_rules"
             ],
             "title": "Kind",
             "type": "string"
@@ -4726,6 +4793,31 @@
         "title": "RoleGrantOut",
         "type": "object"
       },
+      "RoleHolderIn": {
+        "additionalProperties": false,
+        "description": "Who the role is given to, in the team the request acts in (X-Team-Id): a person by user id or a group.",
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "person",
+              "group"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id"
+        ],
+        "title": "RoleHolderIn",
+        "type": "object"
+      },
       "RoleHolderOut": {
         "additionalProperties": false,
         "properties": {
@@ -4747,7 +4839,8 @@
           "kind": {
             "enum": [
               "person",
-              "team"
+              "team",
+              "group"
             ],
             "title": "Kind",
             "type": "string"
@@ -11234,9 +11327,23 @@
     },
     "/v1/people-names": {
       "get": {
-        "description": "Every person's display name in the workspace by email, so a list naming who did something shows a name\nrather than an address. A person needs access.view where the request acts (no console screen calls it, a Chat\nuser's none); a service token needs the `settings:view` scope.",
+        "description": "The display names of the people `emails` names, so a list naming who did something shows a name\nrather than an address. A person needs access.view where the request acts (no console screen calls it, a Chat\nuser's none); a service token needs the `settings:view` scope.",
         "operationId": "people_people_names",
         "parameters": [
+          {
+            "in": "query",
+            "name": "emails",
+            "required": true,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 1000,
+              "minItems": 1,
+              "title": "Emails",
+              "type": "array"
+            }
+          },
           {
             "in": "header",
             "name": "x-team-id",
@@ -13267,7 +13374,7 @@
         "x-ops-public": "sdk"
       },
       "get": {
-        "description": "One role and its grid: every area and action in the catalogue, with the scope it grants or null, and\nwhether the caller may change it (`canEdit`: a workspace admin, for any role but Admin).",
+        "description": "One role and its grid: every area and action in the catalogue, with the scope it grants or null, and\nwhether the caller may change it (`canEdit`: a workspace admin, for any role but Admin, Owner and Security\nadmin).",
         "operationId": "roles_read_role",
         "parameters": [
           {
@@ -13571,6 +13678,226 @@
         "x-ops-public": "sdk"
       }
     },
+    "/v1/roles/{role_id}/holder-options": {
+      "get": {
+        "description": "Who the role can be given to in the team the request acts in: its active people and the workspace's groups,\none searched list by name; each value is `person:<user id>` or `group:<group id>`. Whoever may give roles there\n(access.manage).",
+        "operationId": "roles_role_holder_options",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "role_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "title": "Role Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_OptionsPage_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Role Holder Options",
+        "tags": [
+          "roles"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
     "/v1/roles/{role_id}/holders": {
       "get": {
         "description": "Who holds the role and in which team, on the shared list contract by name, searched on name and email:\nwhat deleting it would take from them. A workspace admin's.",
@@ -13804,11 +14131,176 @@
           "roles"
         ],
         "x-ops-public": "sdk"
+      },
+      "post": {
+        "description": "Gives a custom role to a person or a group in the team the request acts in: an admin of that team or a\nworkspace admin (access.manage there). Audited as `role.grant`; applies on each holder's next request.",
+        "operationId": "roles_give_role_to_holder",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "role_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "title": "Role Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoleHolderIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_RoleHolderOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Give Role To Holder",
+        "tags": [
+          "roles"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/roles/{role_id}/permissions": {
       "put": {
-        "description": "Sets a role's cells, built-in or custom; every service decides from them once the holders' tokens refresh.\nA workspace admin's (access.manage in every team): roles apply in every team. Audited; 409\n`admin_holds_every_cell` for Admin, 400 `unknown_cell` for a cell outside the catalogue.",
+        "description": "Sets a role's cells, built-in or custom; every service decides from them once the holders' tokens refresh.\nA workspace admin's (access.manage in every team): roles apply in every team. Audited; 409\n`admin_holds_every_cell` for Admin, 409 `role_set_by_rule` for Owner and Security admin, 400 `owner_only` for\nworkspace.manage on another built-in role, 400 `builtin_role_empty` for an empty list on a built-in role (reset\nit instead), 400 `unknown_cell` for a cell outside the catalogue.",
         "operationId": "roles_edit_role",
         "parameters": [
           {
@@ -14560,6 +15052,22 @@
           },
           {
             "in": "header",
+            "name": "x-acting-for",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Acting-For"
+            }
+          },
+          {
+            "in": "header",
             "name": "authorization",
             "required": false,
             "schema": {
@@ -14922,6 +15430,22 @@
                 }
               ],
               "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-acting-for",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Acting-For"
             }
           },
           {
@@ -19015,9 +19539,23 @@
     },
     "/v1/team-names": {
       "get": {
-        "description": "Every team's display name in the workspace, so a page showing another team's record names its team. A\nperson needs access.view where the request acts (no console screen calls it, a Chat user's none); a service\ntoken needs the `settings:view` scope and reads its own tenant's.",
+        "description": "The display names of the teams `ids` names, so a page showing another team's record names its team. A\nperson needs access.view where the request acts (no console screen calls it, a Chat user's none); a service\ntoken needs the `settings:view` scope and reads its own tenant's.",
         "operationId": "teams_team_names",
         "parameters": [
+          {
+            "in": "query",
+            "name": "ids",
+            "required": true,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 1000,
+              "minItems": 1,
+              "title": "Ids",
+              "type": "array"
+            }
+          },
           {
             "in": "header",
             "name": "x-team-id",
@@ -19162,9 +19700,103 @@
     },
     "/v1/teams": {
       "get": {
-        "description": "The teams the caller may switch to: their own, and every active team for a workspace admin.",
+        "description": "One page of the teams the caller may switch to, by name, on the shared list contract: their own, and every\nactive team for a workspace admin. `search` matches the name; `ids` names exact teams, as the switcher labels\nthe current one.",
         "operationId": "teams_list_teams",
         "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",
@@ -19187,7 +19819,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_list_TeamOut__"
+                  "$ref": "#/components/schemas/Envelope_ListResult_TeamOut__"
                 }
               }
             },

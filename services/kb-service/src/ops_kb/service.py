@@ -38,6 +38,7 @@ from ops_service_kit.http import Json, JsonValue, OptionsJSON, PageJSON, options
 from ops_service_kit.ids import new_id
 from ops_service_kit.listing import ListParams
 from ops_service_kit.logging import get_logger
+from ops_service_kit.names import slugify
 from ops_service_kit.narrow import json_list, json_object
 from ops_service_kit.settings import Settings
 from ops_store import documents, isolation
@@ -312,7 +313,8 @@ def _iso(v: datetime | None) -> str | None:
 
 
 def _slug(name: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
+    # Cut to the slug column (200) so a long name saves; the unbounded slug a name alone made was a 500.
+    return slugify(name, width=200, sep="_")
 
 
 def pagination(total: int, page: int, page_size: int) -> PageJSON:

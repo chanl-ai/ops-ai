@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { Plus } from 'lucide-react';
 
-import { CheckRow, checkComplete } from '@/components/evals/eval-case-dialog';
+import { SkillCheckRow, checkComplete } from '@/components/skills/skill-check-row';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import type { SkillTestCaseInput } from '@/lib/types/skills';
+import { nameError } from '@/lib/validation/names';
 
 /**
  * Add or edit one skill test case: the input and the checks, which are the agent eval checks (expected tool calls,
@@ -48,7 +49,7 @@ export function SkillTestDialog({
 
   const submit = async () => {
     const e = {
-      name: v.name.trim() ? undefined : 'Name the case so a failure is recognisable.',
+      name: nameError(v.name, 'Name the case so a failure is recognisable.'),
       input: v.input.trim() ? undefined : 'Add the message this case sends.',
       checks: !v.checks.length ? 'Add at least one check.' : v.checks.some((c) => !checkComplete(c)) ? 'Fill in every check, or remove the empty ones.' : undefined,
     };
@@ -97,11 +98,11 @@ export function SkillTestDialog({
             </Button>
           </div>
           {v.checks.map((c, i) => (
-            <CheckRow
+            <SkillCheckRow
               key={i}
               index={i}
               check={c}
-              options={{ tools, collections: knowledgeBases, documents: [] }}
+              options={{ tools, collections: knowledgeBases }}
               onChange={(next) => (setV({ ...v, checks: v.checks.map((x, j) => (j === i ? next : x)) }), setErrors({ ...errors, checks: undefined }))}
               onRemove={() => setV({ ...v, checks: v.checks.filter((_, j) => j !== i) })}
             />

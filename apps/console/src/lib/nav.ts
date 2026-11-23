@@ -95,8 +95,8 @@ export const NAV: NavGroup[] = [
       { title: 'Cases', url: '/work/cases', icon: IconMail, needs: cell('cases', 'view') },
       // Reviews is daily work for reviewers, so it sits with Cases and Chat rather than with configuration.
       { title: 'Human Tasks', url: '/work/tasks', icon: IconUserCheck, needs: cell('reviews', 'view') },
-      // Connectors, Mine: a person's own sign-ins. Its row is in the user menu; the entry stays so the page has an area.
-      { title: MY_CONNECTORS, url: '/settings/account/connectors', icon: IconUserCheck, hidden: true, views: CONNECTOR_VIEWS },
+      // A person's own app sign-ins, for everyone who can chat (owner, 20 November): a sidebar row, not only the user menu.
+      { title: MY_CONNECTORS, url: '/settings/account/connectors', icon: IconPlugConnected, needs: cell('chat', 'run'), views: CONNECTOR_VIEWS },
       // The sidebar draws this as New chat and the Chats group; All chats lists every conversation the person has had.
       { title: 'Chat', url: '/chat', icon: IconMessages, tabIcon: IconMessage, hidden: true, needs: cell('chat', 'run'), children: [{ title: 'All chats', url: '/chat/conversations', icon: IconHistory }] },
     ],

@@ -1,8 +1,9 @@
-"""/v1/assurance: the Evals page's suites, runs and publish checks, and the saved cases on an agent or a skill.
+"""/v1/assurance: the Evals page's suites, runs and publish checks; the saved cases on an agent or a skill; and an
+agent's kept runs, which its Evals tab reads.
 
-The saved-case routes answer in one request transaction (`Tx`), so a replace and the cases read back are one moment.
-The three lists take none: each pages in SQL in its own transaction (`api/assurance.py`), then names the page's teams
-through platform-service (`team_name`) with no connection held.
+The saved-case and agent-run routes answer in one request transaction (`Tx`), so a change and the cases read back are
+one moment. The three assurance lists take none: each pages in SQL in its own transaction (`api/assurance.py`), then
+names the page's teams through platform-service (`team_name`) with no connection held.
 """
 
 from __future__ import annotations
@@ -10,15 +11,16 @@ from __future__ import annotations
 from typing import Annotated, Any, TypeAlias
 
 from fastapi import APIRouter, Depends, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import Field
 
 from ops_access import can
-from ops_agents.app.evals import parse_cases
+from ops_agents.app.evals import parse_cases, stored_run
 from ops_agents.domain.evals import ASSET_AGENT, ASSET_SKILL, CASE_ACTIVE
 from ops_identity.fastapi import Tx
-from ops_service_kit.http import Envelope, In, Out
-from ops_service_kit.listing import ListParams
+from ops_service_kit.errors import NotFound
+from ops_service_kit.http import Envelope, In, ListResult, Out
+from ops_service_kit.listing import ListParams, ListQuery
 
 from ...store.evals import EvalStore
 from ...store.skills import SkillRegistry
@@ -28,6 +30,7 @@ from ..assurance_schemas import GateList, RunList, SuiteList
 from ..auth import Principal, caller_of, principal, reader_of
 from ..deps import Runtime, runtime
 from ..envelope import ok
+from ..schemas import EvalRunRecord, EvalRunRow
 from .agents import EvalCaseInput
 
 router = APIRouter(dependencies=[Depends(principal)])
@@ -114,6 +117,7 @@ class SavedCaseCheck(Out):
     type: str
     tool: str | None = None
     text: str | None = None
+    rubric: str | None = None
 
 
 class SavedCase(Out):
@@ -177,6 +181,51 @@ async def save_agent_cases(rt: Rt, me: Me, _: Tx, agent_id: str, body: EvalCases
     """Replaces the agent's active cases with these. An unknown check type is 422 and nothing changes."""
     row = await agent_registry(rt).row(agent_id)
     return await _save(rt, me, ASSET_AGENT, agent_id, team_id=row.team_id, body=body)
+
+
+@router.post("/v1/agents/{agent_id}/eval-cases", status_code=201, response_model=Envelope[SavedCases])
+async def add_agent_cases(rt: Rt, me: Me, _: Tx, agent_id: str, body: EvalCasesInput) -> JSONResponse:
+    """Adds these cases after the agent's last one and leaves the others, so two people adding at once each keep
+    theirs; answers the saved set. No cases, or an unknown check type, is 422 and nothing changes."""
+    row = await agent_registry(rt).row(agent_id)
+    can(caller_of(me), "evals", "run", team=row.team_id, what=f"the eval cases of agent {agent_id}")
+    raw = [c.model_dump(by_alias=True) for c in body.cases]
+    parse_cases(raw)
+    store = EvalStore(rt.db)
+    await store.add_cases(ASSET_AGENT, agent_id, row.team_id, raw, by=me.email)
+    return ok(_view(await store.cases(ASSET_AGENT, agent_id)), status=201)
+
+
+@router.delete("/v1/eval-cases/{case_id}", status_code=204, response_class=Response)
+async def delete_eval_case(rt: Rt, me: Me, _: Tx, case_id: str) -> Response:
+    """Deletes one active case of an agent or a skill. Another team's case, a draft or one already gone is 404."""
+    store = EvalStore(rt.db)
+    row = await store.case(case_id)
+    if row is None:
+        raise NotFound("Eval case")
+    asset = f"{row['kind']} {row['asset_id']}"
+    can(caller_of(me), "evals", "run", team=str(row["team_id"]), what=f"the eval cases of {asset}")
+    if not await store.remove_cases([case_id]):
+        raise NotFound("Eval case")
+    return Response(status_code=204)
+
+
+@router.get("/v1/agents/{agent_id}/eval-runs", response_model=Envelope[ListResult[EvalRunRow]])
+async def agent_eval_runs(rt: Rt, _: Reader, __: Tx, agent_id: str, q: ListQuery) -> JSONResponse:
+    """The agent's kept runs on the shared list contract, newest first, then by id. A row leaves out the case
+    results; `GET /v1/eval-runs/{id}` carries them."""
+    await agent_registry(rt).row(agent_id)
+    page = await EvalStore(rt.db).runs_page(ASSET_AGENT, agent_id, q)
+    return ok({**page, "data": [stored_run(r, results=False) for r in page["data"]]})
+
+
+@router.get("/v1/eval-runs/{run_id}", response_model=Envelope[EvalRunRecord])
+async def eval_run(rt: Rt, _: Reader, __: Tx, run_id: str) -> JSONResponse:
+    """One kept run of an agent with each case's result. Another team's run is 404."""
+    row = await EvalStore(rt.db).run(run_id)
+    if row is None or row["kind"] != ASSET_AGENT:
+        raise NotFound("Eval run")
+    return ok(stored_run(row))
 
 
 @router.get("/v1/skills/{skill_id}/eval-cases", response_model=Envelope[SavedCases])

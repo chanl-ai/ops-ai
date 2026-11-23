@@ -219,3 +219,17 @@ async def test_an_apps_card_says_the_callers_own_sign_in_beside_the_teams(
     assert await own(viewer) == "none"
     await _signed_in(store, tenant, first, "priya@live.example")
     assert await own(admin(tenant)) == "connected" and await own(viewer) == "none"
+
+
+async def test_a_chat_only_person_reads_their_own_connectors(
+    desk_rig: tuple[Any, TokenDesk],  # noqa: F811
+    tenant: str,
+) -> None:
+    # The avatar menu links My apps for everyone signed in: a chat user holds no connections cell, only chat.
+    (c, _, _, _), _ = desk_rig
+    await _sites_on(c, tenant)
+    rows = await _mine(c, person(tenant, "Lena Brandt", {TEAM: "chat_user"}))
+    row = next(r for r in rows if r["appId"] == SITES)
+    # Offered to sign in to as herself, never to manage.
+    assert (row["accountCount"], row["mayManage"]) == (0, False), row
+    assert [a["state"] for a in row["accounts"]] == ["not_connected"], row["accounts"]

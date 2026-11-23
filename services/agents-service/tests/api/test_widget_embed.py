@@ -25,6 +25,8 @@ from tests.api import test_write_approval_policy as platform_stub
 from tests.api.test_write_approval_policy import PLATFORM, _client  # pyright: ignore[reportPrivateUsage]
 from tests.conftest import SEED, sse_events
 
+from ..saves import save_agent
+
 INTRANET = "https://intranet.bank.example"
 PORTAL = "https://portal.bank.example"
 LOOKUP = "Look up CHQ-2219"
@@ -129,7 +131,7 @@ async def test_an_embed_keeps_serving_its_pinned_version_after_a_newer_one_goes_
     dep = await deploy(client)
     token = await session(client, dep["id"])
     agent = (await client.get("/v1/agents/ag_fraud", headers=BUILDER)).json()["data"]
-    saved = await client.patch("/v1/agents/ag_fraud", json={"toolIds": [], "note": "no lookups"}, headers=BUILDER)
+    saved = await save_agent(client, "ag_fraud", {"toolIds": [], "note": "no lookups"}, headers=BUILDER)
     assert saved.status_code == 200, saved.text
     published = await client.post(
         "/v1/agents/ag_fraud/publish-requests",

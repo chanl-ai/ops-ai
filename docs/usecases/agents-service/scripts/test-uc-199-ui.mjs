@@ -4,6 +4,7 @@
 // mailbox on Channels > Email, tests it, opens its page, then connects a second mailbox from a workflow's Email
 // received trigger and saves the version, which names the new mailbox.
 import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { versionFromEditor } from '../../lib/workflow_ui.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
@@ -152,7 +153,7 @@ await withUiStack(
         await pickSecret(page, 'connect-dialog-secret');
         await page.getByTestId('connect-mailbox-submit').click();
         await page.getByRole('dialog', { name: 'Connect a mailbox' }).waitFor({ state: 'detached', timeout: 30_000 });
-        await page.getByTestId('definition-save').click();
+        await versionFromEditor(page, WORKFLOW.id, J);
         let mailbox = null;
         for (let i = 0; i < 30; i++) {
           const latest = await (await fetch(`${agents}/v1/workflows/definitions/${WORKFLOW.id}`, { headers: J })).json();

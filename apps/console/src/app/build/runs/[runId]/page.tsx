@@ -27,7 +27,8 @@ import { StartedBy } from '@/components/workflows/started-by';
 import { RunStatus } from '@/components/workflows/run-journal/run-status';
 import { StepSheet } from '@/components/workflows/run-journal/step-sheet';
 import { StepsTable } from '@/components/workflows/run-journal/steps-table';
-import { TERMINAL_RUN, useCancelEngineRun, useDefinition, useEngineRun, useNodeTypes, useRetryEngineRun } from '@/hooks/engine-queries';
+import { TERMINAL_RUN, useCancelEngineRun, useDefinition, useEngineRun, useNodeTypes, useRedriveEngineRun, useRetryEngineRun } from '@/hooks/engine-queries';
+import { failureTitle, failureWhere } from '@/lib/failure-words';
 import { relativeTime } from '@/lib/format';
 
 /** An engine word ("not_matched", "approve") as a person reads it ("Not matched", "Approve"). */
@@ -57,6 +58,7 @@ export default function EngineRunPage() {
   const [cancelOpen, setCancelOpen] = React.useState(false);
   const [cancelError, setCancelError] = React.useState<string>();
   const retry = useRetryEngineRun();
+  const redrive = useRedriveEngineRun();
   const [retryError, setRetryError] = React.useState<string>();
   // The run that started it (`run:<id>`). The runs it started and the files it was given come with the run.
   const parentRun = run?.createdBy.startsWith('run:') ? run.createdBy.slice(4) : undefined;
@@ -110,6 +112,25 @@ export default function EngineRunPage() {
               <RotateCcw /> Retry
             </LoadingButton>
           )}
+          {/* No confirm, as Retry: finished steps keep their record and a write that ran is not sent again. */}
+          {run.status === 'failed' && run.canRedrive && (
+            <LoadingButton
+              isLoading={redrive.isPending}
+              loadingText="Redriving…"
+              data-testid="run-redrive"
+              title="Go on from the failed step"
+              onClick={async () => {
+                setRetryError(undefined);
+                try {
+                  await redrive.mutateAsync(run.id);
+                } catch (e) {
+                  setRetryError(e instanceof Error ? e.message : 'The run was not redriven');
+                }
+              }}
+            >
+              <RotateCcw /> Redrive
+            </LoadingButton>
+          )}
         </>
       }
     >
@@ -145,9 +166,9 @@ export default function EngineRunPage() {
         >
           <div className="flex flex-col gap-6">
             {/* A refused Retry refetches the run; once it has moved on, the page shows where it is and the error goes. */}
-            {retryError && run.status === 'stuck' && (
+            {retryError && (run.status === 'stuck' || run.status === 'failed') && (
               <Alert variant="destructive" data-testid="run-retry-error">
-                <AlertTitle>Could not retry</AlertTitle>
+                <AlertTitle>{run.status === 'failed' ? 'Could not redrive' : 'Could not retry'}</AlertTitle>
                 <AlertDescription>{retryError}</AlertDescription>
               </Alert>
             )}
@@ -160,9 +181,12 @@ export default function EngineRunPage() {
               </Alert>
             )}
             {run.error && run.status !== 'stuck' && (
-              <Alert variant="destructive">
-                <AlertTitle>The run failed</AlertTitle>
-                <AlertDescription>{run.error}</AlertDescription>
+              <Alert variant="destructive" data-testid="run-failed" data-kind={run.failure?.kind}>
+                <AlertTitle>{failureTitle(run.failure)}</AlertTitle>
+                <AlertDescription>
+                  <p>{run.failure?.message ?? run.error}</p>
+                  {run.failure && <p className="text-muted-foreground">{failureWhere(run.failure)}</p>}
+                </AlertDescription>
               </Alert>
             )}
             {run.status === 'cancelled' && (

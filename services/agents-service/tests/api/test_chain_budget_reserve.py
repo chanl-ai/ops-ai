@@ -33,6 +33,7 @@ from tests.api.test_action_roles import ADMIN, VIEWER, introspect
 from tests.api.test_team_default_agent import URL, say, start
 from tests.conftest import SEED, FakeGraphModels, empty_engine, fixture_knowledge, structured
 from tests.engine.test_lifecycle_rights import TENANT, jwks
+from tests.saves import save_agent
 
 ASKS = 5
 CLOSING = "Closing answer from what came back."
@@ -107,7 +108,7 @@ async def test_five_asks_at_once_spend_no_more_than_the_cap_and_the_asking_agent
     cap = 8
     assert (await c.put(URL, json={"agentId": "ag_branch"}, headers=ADMIN)).status_code == 200
     # Room for five tool calls a reply, so the budget is the only thing that stops an ask.
-    saved = await c.patch("/v1/agents/ag_branch", json={"guardrails": {"maxToolCallsPerTurn": 10}}, headers=ADMIN)
+    saved = await save_agent(c, "ag_branch", {"guardrails": {"maxToolCallsPerTurn": 10}}, headers=ADMIN)
     assert saved.status_code == 200, saved.text
     body = {"version": saved.json()["data"]["version"], "note": "go"}
     live = await c.post("/v1/agents/ag_branch/publish-requests", json=body, headers=ADMIN)

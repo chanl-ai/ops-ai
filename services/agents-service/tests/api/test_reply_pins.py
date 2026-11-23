@@ -17,6 +17,7 @@ import httpx
 
 from tests.conftest import sse_events
 
+from ..saves import save_agent
 from .test_guardrails import RULE
 from .test_skills import HARDSHIP
 from .test_widget_registry import LIMIT_CARD
@@ -92,7 +93,7 @@ async def test_the_registry_replies_keep_every_key_value_and_error_object(client
     seen["agents.create"] = answer(made)
     aid = _id(made)
     seen["agents.createRefused"] = answer(await c.post("/v1/agents", json={"role": "No name"}))
-    seen["agents.update"] = answer(await c.patch(f"/v1/agents/{aid}", json={"role": "Answers branch hours"}))
+    seen["agents.update"] = answer(await save_agent(c, aid, {"role": "Answers branch hours"}))
     seen["agents.versions"] = answer(await c.get(f"/v1/agents/{aid}/versions"))
     seen["agents.publish"] = answer(
         await c.post(f"/v1/agents/{aid}/publish-requests", json={"version": 1, "note": "first"})

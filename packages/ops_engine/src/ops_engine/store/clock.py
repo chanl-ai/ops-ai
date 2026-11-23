@@ -5,14 +5,14 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncConnection
+
+from ops_store.dialect import db_epoch
 
 
 def db_now(conn: AsyncConnection) -> Any:
-    if conn.dialect.name == "postgresql":
-        return sa.func.extract("epoch", sa.func.now())
-    return (sa.func.julianday("now") - 2440587.5) * 86400.0
+    """Epoch seconds on the database's clock, on every database ops_store supports."""
+    return db_epoch()
 
 
 def now_iso() -> str:

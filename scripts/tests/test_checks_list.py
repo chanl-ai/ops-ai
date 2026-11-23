@@ -139,8 +139,9 @@ def test_the_both_database_run_and_the_release_proof_are_required_with_their_tri
     jobs = CI["jobs"]
     assert {"store-mssql", "release-proof"} <= set(jobs["ci-ok"]["needs"])
     assert "pull_request" in TRIGGERS
-    # On every pull request and push: no `if`; the run names SQL Server and fails on a skip.
-    assert "if" not in jobs["store-mssql"]
+    # On every change to a service, a package or the database scripts (ci-plan.sh's mssql), and on every full plan;
+    # the run names SQL Server and fails on a skip.
+    assert jobs["store-mssql"]["if"] == "needs.plan.outputs.mssql == 'true'"
     steps = "\n".join(str(step.get("run", "")) for step in jobs["store-mssql"]["steps"])
     assert "OPS_MSSQL_SERVER" in steps and "mssql/server:2025-latest@sha256:" in steps and "SKIPPED" in steps
     for package in ("ops_store", "ops_service_kit", "ops_identity", "models-service", "documents-service"):

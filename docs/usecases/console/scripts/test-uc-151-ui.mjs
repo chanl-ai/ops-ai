@@ -3,6 +3,7 @@
 // settings. A draft whose trigger is Email received is saved through the API; James opens its trigger in the canvas,
 // picks the mailbox the server offers, sets the folder and filters, and saves a version that keeps them.
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { versionFromEditor } from '../../lib/workflow_ui.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const JAMES = 'j.richardson@harborpine.example';
@@ -78,7 +79,7 @@ await withUiStack(
         await page.locator('[data-field="node-start-fromContains"]').fill('@court.example');
         await page.locator('[data-field="node-start-subjectContains"]').fill('garnishment');
         await page.locator('#node-start-hasAttachment').click();
-        await page.getByTestId('definition-save').click();
+        await versionFromEditor(page, WORKFLOW.id, J);
         let params = {};
         for (let i = 0; i < 30; i++) {
           const latest = await (await fetch(`${agents}/v1/workflows/definitions/${WORKFLOW.id}`, { headers: J })).json();

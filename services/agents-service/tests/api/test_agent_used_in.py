@@ -13,6 +13,11 @@ from typing import Any
 
 from httpx import AsyncClient
 
+from tests.api.test_run_tables_team import OUTSIDER, OWNER
+from tests.api.test_write_approval_policy import (
+    dev_platform,  # noqa: F401  # pyright: ignore[reportUnusedImport] - a fixture
+)
+
 ENGINE_SEED = Path(__file__).resolve().parents[2] / "seed" / "engine_workflows.json"
 
 
@@ -69,3 +74,28 @@ async def test_settings_and_deployments_agree_on_where_an_agent_runs(client: Asy
     assert published.status_code in (200, 201), published.text
     live = await agent(client, made["id"])
     assert live["wrapperWorkflowId"] in [u["workflowId"] for u in live["usedIn"]], live["usedIn"]
+
+
+def email_summary_on(agent_id: str, workflow_id: str, name: str) -> dict[str, Any]:
+    """The seed summary started by an email instead of a request."""
+    d = summary_on(agent_id)
+    d["id"], d["name"] = workflow_id, name
+    d["nodes"][0] = {"id": "start", "type": "ops.trigger.email", "typeVersion": 1, "parameters": {}}
+    return d
+
+
+async def test_used_in_names_email_workflows_of_the_acting_team_only(dev_platform: AsyncClient) -> None:  # noqa: F811
+    """The Channels tab lists Email from `usedIn`: a workflow of another team that names the agent never shows."""
+    client = dev_platform
+    for who, wid, name in ((OWNER, "fraud_by_email", "Fraud by email"), (OUTSIDER, "fraud_elsewhere", "Elsewhere")):
+        made = await client.post(
+            "/v1/workflows/definitions", json={"definition": email_summary_on("ag_fraud", wid, name)}, headers=who
+        )
+        assert made.status_code == 201, made.text
+        live = await client.post(f"/v1/workflows/definitions/{wid}/publish-requests", json={}, headers=who)
+        assert live.status_code == 201, live.text
+    uses = (await client.get("/v1/agents/ag_fraud", headers=OWNER)).json()["data"]["usedIn"]
+    by_id = {u["workflowId"]: u for u in uses}
+    assert by_id["fraud_by_email"]["channel"] == "email", uses
+    assert "fraud_elsewhere" not in by_id, "another team's workflow is listed on this team's agent"
+    assert all("channel" not in u for u in uses if u["workflowId"] != "fraud_by_email"), uses

@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { Bot, Cable, Link2, Mail, MessageSquarePlus, Route, Sparkles, Users } from 'lucide-react';
+import { Bot, Cable, Save, Link2, Mail, MessageSquarePlus, Route, Sparkles, Users } from 'lucide-react';
 import { IconShieldCheck } from '@tabler/icons-react';
 import { toast } from 'sonner';
 
@@ -10,6 +10,8 @@ import { CommandPalette, type PaletteAction, type PalettePage, SearchButton } fr
 import { useFlagged } from '@/hooks/flag-queries';
 import { useNavAllows } from '@/hooks/me-queries';
 import { useRecentSearches, useSearch, useVisitSearchHit } from '@/hooks/search-queries';
+import { comboLabel, usePageShortcuts } from '@/hooks/use-shortcut';
+import { teamOptions } from '@/hooks/options-queries';
 import { useTeam } from '@/hooks/use-team';
 import { AREA_LABEL, childrenOffered, itemOffered, NAV, SETTINGS_VIEW } from '@/lib/nav';
 import type { NavNeed } from '@/lib/nav';
@@ -17,6 +19,8 @@ import type { FlagName } from '@/lib/types/flags';
 import type { SearchHit } from '@/lib/types/search';
 
 /** Sub-pages that are not in the sidebar but are worth jumping to; one with a `flag` shows only while the install turns it on. */
+const TEAMS = teamOptions();
+
 const EXTRA_PAGES: (PalettePage & { flag?: FlagName; needs?: NavNeed })[] = [
   // Connecting an assistant is the MCP channel of Deployments, so the page entry opens that tab.
   { title: 'MCP links', href: '/build/channels/mcp', area: 'Build', section: 'Channels', icon: Link2, keywords: 'MCP URL Claude Cursor Copilot ChatGPT connect', flag: 'mcp_gateway', needs: { area: 'deployments', action: 'view' } },
@@ -36,8 +40,9 @@ export function HeaderSearch() {
   const search = useSearch(query, open);
   const recents = useRecentSearches(open);
   const visit = useVisitSearchHit();
-  const { teams, teamId, switchTeam } = useTeam();
+  const { teamId, switchTeam } = useTeam();
   const extraPages = useFlagged(EXTRA_PAGES);
+  const pageShortcuts = usePageShortcuts();
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -73,6 +78,8 @@ export function HeaderSearch() {
   const pages: PalettePage[] = [...navPages, ...chatPages, ...allowedExtra.filter((e) => ![...navPages, ...chatPages].some((p) => p.href === e.href))];
   const newChat: PaletteAction = { id: 'new-chat', label: 'New chat', icon: MessageSquarePlus, keywords: 'ask conversation start', run: () => go('/chat') };
   const listed: (PaletteAction & { flag?: FlagName })[] = [
+    // What the open page binds to keys (Save on an edit page), first, so it is found without typing.
+    ...pageShortcuts.map((s) => ({ id: `page-${s.id}`, label: s.label, icon: Save, shortcut: comboLabel(s.combo), run: () => (setOpen(false), s.run()) })),
     ...(pathname.startsWith('/chat') ? [newChat] : []),
     { id: 'mcp-links', label: 'MCP links', flag: 'mcp_gateway', icon: Link2, keywords: 'connect assistant claude cursor copilot chatgpt mcp url address', run: () => go('/build/channels/mcp') },
     { id: 'new-workflow', label: 'New workflow', icon: Route, keywords: 'create add', run: () => go('/build/workflows?create=1') },
@@ -106,11 +113,12 @@ export function HeaderSearch() {
           go(hit.href);
         }}
         onNavigate={go}
-        teams={teams.map((t) => ({ id: t.id, name: t.name, current: t.id === teamId }))}
-        onSwitchTeam={(id) => {
+        teamSource={TEAMS}
+        currentTeamId={teamId}
+        onSwitchTeam={(id, name) => {
           setOpen(false);
           switchTeam(id);
-          toast.success(`Switched to ${teams.find((t) => t.id === id)?.name ?? 'team'}`);
+          toast.success(`Switched to ${name}`);
         }}
       />
     </>

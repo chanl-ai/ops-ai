@@ -3,7 +3,7 @@
 Status: current. Proven by `make skills-proof`.
 
 skill: wf-builder
-description: Draw a workflow from what a developer describes, check it with the engine, create it on the profile they name and start a test run. Use when someone asks to build, sketch or draft a workflow, or types /wf-builder.
+description: Draw a workflow from what a developer describes, check it with the engine, create it on the profile they name and start a test run. Use to build or draft a workflow.
 targets: python3 scripts/wf_builder.py, python3 scripts/wf_builder_examples.py --check, make usecase-test UC=uc-568 LAYER=cli
 
 ## What it does

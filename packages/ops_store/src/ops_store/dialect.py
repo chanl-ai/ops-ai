@@ -62,8 +62,9 @@ def locked[S: sa.Select[Any]](query: S, table: sa.FromClause) -> S:
 
 def claim[S: sa.Select[Any]](query: S, table: sa.FromClause) -> S:
     """A queue claim: like `locked`, and rows another transaction holds are skipped rather than waited for (SKIP
-    LOCKED, READPAST). `query` orders and limits its rows itself, so the oldest due row is taken first everywhere."""
-    return query.with_for_update(skip_locked=True).with_hint(table, _CLAIM_LOCK, "mssql")
+    LOCKED, READPAST). `query` orders and limits its rows itself, so the oldest due row is taken first everywhere.
+    Only `table`'s rows are locked, so `query` may join a grouped subquery (PostgreSQL refuses FOR UPDATE on one)."""
+    return query.with_for_update(skip_locked=True, of=table).with_hint(table, _CLAIM_LOCK, "mssql")
 
 
 _PG_KEY_LOCK = sa.select(

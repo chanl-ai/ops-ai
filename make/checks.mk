@@ -2,7 +2,7 @@
 # check in verify-changed.sh and pre-commit (`make checks STAGED=1`) all run `make checks`, so a check added here runs
 # in every one of them and none can run a shorter list. A check is a name in CHECKS, the command that runs it and, for
 # pre-commit, the staged paths that can change its result. Each is proven red by its own test or `--self-test`.
-.PHONY: checks checks-list checks-history ci-local
+.PHONY: checks checks-list checks-history ci-local merge-ready
 
 ##@ Checks
 
@@ -29,8 +29,8 @@ CHECKS = \
   isolation-markings isolation-sites \
   store-inventory roles-matrix sbom k8s-base \
   ratchet-history lint-imports sdk-drift api-changelog api-changes-gap changelog-entries console-standards \
-  downgrades token-lifetime cross-service standards service-standards service-standards-self-test \
-  ci-steps ci-steps-self-test usecase-outputs
+  downgrades migration-heads token-lifetime cross-service standards service-standards service-standards-self-test \
+  ci-steps ci-steps-self-test ci-local-self-test new-migration-self-test builder-watch-self-test usecase-outputs
 
 # Access decided outside can(), the exceptions each lane may still hold, and the trailer a new line needs.
 CHECK_ACCESS_PATHS = ^(services|packages)/[^/]+/src/.*\.py$$|^apps/(console|embed)/src/|^access-exceptions-allowlist\.txt$$|^docs/architecture/roles-and-permissions\.md$$|^scripts/(check_access_exceptions\.py|access-baselines/)
@@ -112,6 +112,9 @@ check-paths.console-standards = ^apps/console/
 # A migration whose downgrade() does nothing, beyond scripts/downgrades-waiting.txt, which only shrinks.
 check-run.downgrades = $(PY) scripts/check_downgrades.py --all
 check-paths.downgrades = /migrations/versions/.*\.py$$|^scripts/(check_downgrades\.py|downgrades-waiting\.txt)$$
+# A migration chain with two heads (two revisions after the same one), which Alembic refuses at the deploy.
+check-run.migration-heads = $(PY) scripts/check_migration_heads.py
+check-paths.migration-heads = /migrations/versions/.*\.py$$|^scripts/check_migration_heads\.py$$
 # A use-case script that writes outside the one output root (evidenceDir / evidence_dir, or a temp dir).
 check-run.usecase-outputs = $(PY) scripts/check_usecase_outputs.py
 check-paths.usecase-outputs = ^docs/usecases/.*\.(mjs|js|ts|py|sh)$$|^scripts/check_usecase_outputs\.py$$
@@ -171,8 +174,21 @@ check-paths.ci-steps = ^\.github/workflows/ci\.yml$$|^scripts/ci_steps\.(py|json
 check-run.ci-steps-self-test = $(PY) scripts/ci_steps.py --self-test
 check-paths.ci-steps-self-test = ^scripts/ci_steps\.py$$
 
-ci-local: ## The local twin of each CI step (scripts/ci_steps.json), all failures listed at the end (JOB=<job> one job, PLAN=1 print only)
-	@uv run python scripts/ci_steps.py --run $(if $(JOB),--job $(JOB)) $(if $(PLAN),--plan)
+# The jobs CI would run for this change (scripts/ci-plan.sh + ci.yml), side by side, each on its own database and ports.
+check-run.ci-local-self-test = $(PY) scripts/ci_local.py --self-test
+check-paths.ci-local-self-test = ^scripts/ci_local\.py$$|^\.github/workflows/ci\.yml$$
+
+check-run.new-migration-self-test = $(PY) scripts/new_migration.py --self-test
+check-paths.new-migration-self-test = ^scripts/new_migration\.py$$
+check-run.builder-watch-self-test = bash scripts/builder-watch.sh --self-test
+check-paths.builder-watch-self-test = ^scripts/builder-watch\.sh$$
+
+ci-local: db-up ## CI's planned jobs run here in parallel (BASE=origin/develop, JOBS=<cores/2>, JOB=<ci.yml job>, FULL=1 every job, PLAN=1 print only); one summary table, exit 1 on any failure
+	@uv run python scripts/ci_local.py --base "$(or $(BASE),origin/develop)" $(if $(JOBS),--jobs $(JOBS)) $(if $(JOB),--job $(JOB)) $(if $(FULL),--full) $(if $(PLAN),--plan)
 
 checks-list: ## Print each check on the list with the command it runs
 	@$(foreach c,$(CHECKS),printf '%s\t%s\n' '$(c)' '$(check-run.$(c))';)
+
+merge-ready: ## Pull request PR=N: ci-local on its head against origin/develop, then into the merge queue when green (not merged while develop has no queue rule)
+	@test -n "$(PR)" || { echo "usage: make merge-ready PR=<number>"; exit 2; }
+	@BASE=$(or $(BASE),origin/develop) bash $(ROOT)/scripts/merge_ready.sh "$(PR)"

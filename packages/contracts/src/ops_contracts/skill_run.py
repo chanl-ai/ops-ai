@@ -38,9 +38,36 @@ class RunModel(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
 
 
+# An agent or a workflow an agent may use is spelled three ways, all owned here: a reference names it by its bare id
+# (`@agent:ag_x`), an agent's grant and the tools directory store it as `agent:ag_x`, and the model calls the tool
+# `agent__ag_x` (a tool name allows no colon). The service builds its grants with `called_as` and the kernel reads
+# them with `hands_to_agent` and `grant_token`, so the two never spell a name apart.
+AGENT_TOOL_PREFIX = "agent__"
+WORKFLOW_TOOL_PREFIX = "workflow__"
+_CALLED: dict[str, str] = {"agent": AGENT_TOOL_PREFIX, "workflow": WORKFLOW_TOOL_PREFIX}
+
+
+def called_as(kind: str, ref_id: str) -> str:
+    """The name of the tool the model calls to ask agent `ref_id` or start workflow `ref_id`."""
+    return f"{_CALLED[kind]}{ref_id}"
+
+
+def hands_to_agent(tool_name: str) -> bool:
+    """Whether a called tool asks another agent."""
+    return tool_name.startswith(AGENT_TOOL_PREFIX)
+
+
+def grant_token(tool_name: str) -> str | None:
+    """The reference a text writes for an agent's or a workflow's tool (`@agent:ag_x`); None for any other tool."""
+    for kind, prefix in _CALLED.items():
+        if tool_name.startswith(prefix):
+            return f"@{kind}:{tool_name.removeprefix(prefix)}"
+    return None
+
+
 class Ref(RunModel):
     """Something a text or a step names: a tool, a knowledge base, a skill, an agent or a workflow, by its id. An
-    agent or a workflow is named by its bare id; a grant stores them as `agent:<id>` and `workflow:<id>`."""
+    agent or a workflow is named by its bare id; `grant` and `tool_name` are its two other spellings."""
 
     kind: RefKind
     id: str = Field(pattern=rf"^{REF_ID}$")
@@ -52,6 +79,14 @@ class Ref(RunModel):
     @property
     def tool_name(self) -> str | None:
         """The name of the tool a step calls for this reference; None for a skill or a knowledge base."""
+        if self.kind == "tool":
+            return self.id
+        return called_as(self.kind, self.id) if self.kind in _CALLED else None
+
+    @property
+    def grant(self) -> str | None:
+        """What an agent's grant and the tools directory store for this reference; None for a skill or a knowledge
+        base."""
         if self.kind == "tool":
             return self.id
         return f"{self.kind}:{self.id}" if self.kind in ("agent", "workflow") else None
@@ -72,7 +107,7 @@ class Ref(RunModel):
 
 class StepCheck(RunModel):
     """What must hold before a step is done. `by` is set when the skill is saved: a rule is run on the step's result
-    in code, a sentence is confirmed by the model."""
+    in code, a sentence is decided by the judge model (`ops_agent_kernel.judge`)."""
 
     text: str = Field(min_length=1, max_length=300)
     by: Literal["rule", "model"] | None = None
@@ -98,11 +133,51 @@ class IfNot(RunModel):
         return self
 
 
+class Jump(RunModel):
+    """Where a skill goes from a step: a step further on, or an exit that ends it. Exactly one of the two."""
+
+    step: int | None = Field(default=None, ge=1, le=MAX_STEPS)
+    exit: str | None = Field(default=None, pattern=EXIT_NAME)
+
+    @model_validator(mode="after")
+    def _one_target(self) -> Self:
+        if (self.step is None) == (self.exit is None):
+            raise ValueError("a jump names a step or an exit, not both")
+        return self
+
+
+class Branch(RunModel):
+    """A path, written `if <test>:` in a skill's text. Once the step is done its test decides: when it holds the
+    skill goes on (to the step's `next`, or the step after it); when it does not, to `otherwise`. A test that does
+    not hold is a path the author wrote, not a failed check: it counts no attempt and takes no hold, unless
+    `otherwise` ends the skill with an exit other than done, which is how a guard is written
+    (`if not ...: stop "..."`). A stop that a rule test's path reaches takes the hold on either side
+    (`if found: stop "..."` as much as `else: stop "..."`); one a sentence test's path reaches takes none, since the
+    model decided it. A rule test runs in code on the step's result; a sentence is decided by the model,
+    which says which way it went (`step_done` with `holds`)."""
+
+    test: StepCheck
+    otherwise: Jump
+
+
 class SkillStep(RunModel):
     do: str = Field(min_length=1, max_length=600)
     use: Ref | None = None
     check: StepCheck | None = None
     if_not: IfNot | None = None
+    branch: Branch | None = None
+    # Where the skill goes once this step is done (and its branch held), when that is not the step after it.
+    next: Jump | None = None
+    # The builder's lock on the step's tool: it is reachable only as this step even when it is a read. A tool that
+    # changes something is kept to its step with or without it. Stored only when on, and only on a step that runs a
+    # tool.
+    locked: bool | None = None
+
+    @model_validator(mode="after")
+    def _lock_needs_a_tool(self) -> SkillStep:
+        if not self.locked or self.use is None or self.use.tool_name is None:
+            self.locked = None
+        return self
 
 
 class ReturnField(RunModel):
@@ -147,14 +222,21 @@ class SkillProgram(RunModel):
         """The tools this program's steps call, by the name each is granted under."""
         return {name for s in self.steps if s.use is not None and (name := s.use.tool_name) is not None}
 
+    def locked(self) -> set[str]:
+        """The tools a builder locked to their step (`SkillStep.locked`), by the name each is granted under."""
+        return {name for s in self.steps if s.locked and s.use is not None and (name := s.use.tool_name) is not None}
+
 
 class StepResult(RunModel):
-    """How a step came out. `passed` is None while a step's tool has run and the model has yet to confirm its
-    sentence check."""
+    """How a step came out. `passed` is None while a step's check written as a sentence waits for the judge.
+    `judged_by` says what decided the check (a rule in code, or the judge model) and `reason` is the judge's one
+    line; both are None on a step with no check, and on records written before the judge."""
 
     passed: bool | None = None
     value: JsonValue | None = None
     truncated: bool = False
+    judged_by: Literal["rule", "judge"] | None = None
+    reason: str | None = None
 
 
 class SubRun(RunModel):
@@ -175,6 +257,9 @@ class SubRun(RunModel):
     return_to: int
     program: SkillProgram
     rules: str = ""
+    # A path reached done before the last step and the skill still owes its results: it waits for exit. Written only
+    # when on, so a record of a skill that never owes reads the same to a build without the field.
+    owing: bool | None = Field(default=None, exclude_if=lambda v: v is None)
 
 
 class RunningSkill(RunModel):
@@ -197,9 +282,22 @@ class RunningSkill(RunModel):
     # The steps and shared notes of the version that started, which the skill finishes on.
     program: SkillProgram
     rules: str = ""
+    # A path reached done before the last step and the skill still owes its results: it waits for exit. Written only
+    # when on, so a record of a skill that never owes reads the same to a build without the field.
+    owing: bool | None = Field(default=None, exclude_if=lambda v: v is None)
+
+
+# Why a skill ended when it did not finish: a check did not pass, a person rejected its action, a step could not be
+# done (its tool failed, or the skill it runs could not start), another skill holds its step's tool, or the model
+# called the exit itself.
+# `stop` is a `stop "..."` line of the skill's text that the skill reached.
+EndedWhy = Literal["check", "denied", "error", "held", "exit", "stop"]
 
 
 class EndedSkill(RunModel):
+    """How a skill ended, and why: the one record of it. The kernel writes it; the chat draws the ending from it and
+    the kernel reads it to keep a skill it ended from starting again in the same reply."""
+
     skill_id: str
     version: int
     name: str
@@ -212,6 +310,15 @@ class EndedSkill(RunModel):
     tools: list[str] = Field(default_factory=list[str])
     # The results it was ended with, by name.
     returns: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
+    # Set while the record is the one of the reply the skill ended in; cleared when the next reply starts. None of
+    # the four fields below is on a record written before endings carried a reason.
+    in_reply: bool = False
+    # None when it ended as done or switched.
+    why: EndedWhy | None = None
+    # The text of the check that did not pass, when that is why.
+    check: str | None = None
+    # What the skill's author wrote that this exit means; None for done, failed and switched.
+    meaning: str | None = None
 
 
 class Hold(RunModel):

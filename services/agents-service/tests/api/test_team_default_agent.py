@@ -39,6 +39,7 @@ from ops_store.isolation import scope
 from tests.api.test_action_roles import ADMIN, OUTSIDER, REVIEWER, VIEWER, introspect
 from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model, sse_events
 from tests.engine.test_lifecycle_rights import TENANT, jwks, person
+from tests.saves import save_agent
 
 URL = "/v1/chat/default-agent"
 EMAIL: dict[str, Any] = {"sender": "a@b.example", "subject": "Dispute", "body": "I did not make this payment."}
@@ -202,7 +203,7 @@ async def called(rt: Runtime) -> list[str]:
 async def grant(c: AsyncClient, holder: str, asked: str) -> None:
     """Publishes `holder` holding `agent:<asked>`, as a builder grants one agent another."""
     held: list[str] = (await c.get(f"/v1/agents/{holder}", headers=ADMIN)).json()["data"]["toolIds"]
-    saved = await c.patch(f"/v1/agents/{holder}", json={"toolIds": [*held, f"agent:{asked}"]}, headers=ADMIN)
+    saved = await save_agent(c, holder, {"toolIds": [*held, f"agent:{asked}"]}, headers=ADMIN)
     assert saved.status_code == 200, saved.text
     body = {"version": saved.json()["data"]["version"], "note": "go"}
     live = await c.post(f"/v1/agents/{holder}/publish-requests", json=body, headers=ADMIN)
@@ -289,7 +290,7 @@ async def test_a_guarded_agent_asked_at_the_cap_makes_no_model_call_for_its_guar
     live = await c.post(f"/v1/guardrails/{gid}/publish-requests", json={"version": 1}, headers=ADMIN)
     assert live.status_code == 201, live.text
     pins = {"guardrailPins": [{"guardrailId": gid, "version": 1}]}
-    saved = await c.patch("/v1/agents/ag_dispute", json=pins, headers=ADMIN)
+    saved = await save_agent(c, "ag_dispute", pins, headers=ADMIN)
     assert saved.status_code == 200, saved.text
     body = {"version": saved.json()["data"]["version"], "note": "go"}
     assert (await c.post("/v1/agents/ag_dispute/publish-requests", json=body, headers=ADMIN)).status_code == 201

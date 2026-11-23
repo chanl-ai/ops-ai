@@ -2,9 +2,10 @@
 
 import * as React from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Copy, Pencil, ShieldCheck, Trash2 } from 'lucide-react';
+import { Copy, Pencil, ShieldCheck, Trash2, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { GiveRoleToDialog } from '@/components/access/give-role-to-dialog';
 import { RoleDialog } from '@/components/access/role-dialog';
 import { RoleGrid } from '@/components/access/role-grid';
 import { PageLayout } from '@/components/page-layout';
@@ -19,7 +20,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { RoleSelect } from '@/components/access/role-select';
-import { useCreateRole, useEditRole, useManagesRoles, useRole, useRoleChanges, useRoleHolders, rolesWhere } from '@/hooks/me-queries';
+import { useCreateRole, useEditRole, useGiveRoleTo, useManagesRoles, useRole, useRoleChanges, useRoleHolders, rolesWhere } from '@/hooks/me-queries';
+import { useTeam } from '@/hooks/use-team';
 import { plural } from '@/lib/format';
 import type { RoleCell, RoleDetail } from '@/lib/types/settings';
 
@@ -32,7 +34,8 @@ const cellsOf = (grid: Grid): RoleCell[] =>
  * A role's grid: one row per area, one column per action, each cell All, Own or empty. A workspace admin ticks and
  * unticks cells and saves them; every service follows on each holder's next request. A built-in role can go back to
  * its default; Admin holds every cell and is not edited. A workspace admin copies any role, and renames or deletes a
- * custom one, moving the people who hold it to another role.
+ * custom one, moving the people who hold it to another role, and gives a custom one to a person or a group in the team
+ * the console acts in.
  */
 export default function RolePage() {
   const { id } = useParams<{ id: string }>();
@@ -43,7 +46,9 @@ export default function RolePage() {
   const create = useCreateRole();
   const manages = useManagesRoles();
   const r = role.data;
-  const [dialog, setDialog] = React.useState<'copy' | 'rename' | 'delete' | null>(null);
+  const [dialog, setDialog] = React.useState<'copy' | 'rename' | 'delete' | 'give' | null>(null);
+  const give = useGiveRoleTo(id);
+  const { team } = useTeam();
   const holders = useRoleHolders(id, dialog === 'delete');
   const [moveTo, setMoveTo] = React.useState('');
   // The role being deleted is not a place its holders can move to.
@@ -97,6 +102,10 @@ export default function RolePage() {
             )}
             {!r.builtin && (
               <>
+                <Button variant="outline" size="sm" onClick={() => setDialog('give')} data-testid="role-give">
+                  <UserPlus className="size-4" />
+                  Give role
+                </Button>
                 <Button variant="outline" size="sm" onClick={() => setDialog('rename')} data-testid="role-rename">
                   <Pencil className="size-4" />
                   Rename
@@ -160,6 +169,17 @@ export default function RolePage() {
                   router.push(`/govern/access/roles/${encodeURIComponent(made.id)}`);
                 })
           }
+        />
+      )}
+      {r && !r.builtin && (
+        <GiveRoleToDialog
+          open={dialog === 'give'}
+          onOpenChange={(o) => !o && setDialog(null)}
+          roleId={r.id}
+          roleName={r.name}
+          teamName={team?.name ?? 'this team'}
+          pending={give.isPending}
+          onSubmit={(holder) => give.mutateAsync(holder).then((h) => toast.success(`Gave ${r.name} to ${h.name}`))}
         />
       )}
       {r && !r.builtin && (

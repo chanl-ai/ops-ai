@@ -308,6 +308,37 @@ class DecisionIn(TypedDict, closed=True):
     reason: NotRequired[str | None]
 
 
+class DiscoverIn(TypedDict, closed=True):
+    connectionId: NotRequired[str | None]
+    fileId: NotRequired[str | None]
+    fileName: NotRequired[str | None]
+    kind: Literal["mcp", "openapi"]
+    moduleId: NotRequired[str | None]
+    specUrl: NotRequired[str | None]
+    url: NotRequired[str | None]
+
+
+class DiscoveredName(TypedDict, closed=True):
+    access: Literal["read", "write"]
+    name: str
+
+
+class DiscoveredNames(TypedDict, closed=True):
+    data: list[DiscoveredName]
+
+
+class DiscoveryResult(TypedDict, closed=True):
+    endpoint: str
+    id: str
+    noAuth: NotRequired[bool]
+    operationTotal: int
+    suggestedName: str
+    system: str
+    type: Literal["mcp", "openapi", "http", "code"]
+    version: str
+    warnings: list[str]
+
+
 class EntryIn(TypedDict, closed=True):
     note: NotRequired[str]
     protection: NotRequired[Literal["system", "managed"] | None]
@@ -335,11 +366,23 @@ class EnvelopeCredentialDeleted(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeDiscoveredNames(TypedDict, closed=True):
+    data: DiscoveredNames
+    success: Literal[True]
+
+
+class EnvelopeDiscoveryResult(TypedDict, closed=True):
+    data: DiscoveryResult
+    success: Literal[True]
+
+
 class ErrorBody(TypedDict, closed=True):
     code: str
     details: NotRequired[Any]
+    kind: Literal["input", "refused", "upstream", "timeout", "internal"]
     message: str
     requestId: str
+    retryable: bool
     status: int
 
 
@@ -1204,6 +1247,13 @@ class ToolTeamStateChanged(TypedDict, closed=True):
     waits: NotRequired[list[str]]
 
 
+class ToolTryIn(TypedDict, closed=True):
+    accounts: NotRequired[dict[str, str]]
+    input: NotRequired[dict[str, JsonValue]]
+    planId: NotRequired[str | None]
+    tool: str
+
+
 class ToolUser(TypedDict, closed=True):
     id: str
     name: str
@@ -1211,6 +1261,12 @@ class ToolUser(TypedDict, closed=True):
 
 class ToolsAddIn(TypedDict, closed=True):
     tools: list[str]
+
+
+class TryPlanRequest(TypedDict, closed=True):
+    body: NotRequired[str | None]
+    method: str
+    url: str
 
 
 class ValidationError(TypedDict):
@@ -1451,35 +1507,25 @@ class CredentialField(TypedDict, closed=True):
     required: NotRequired[bool]
 
 
-class DiscoveredOperation(TypedDict, closed=True):
+class DiscoveredOperationIn(TypedDict, closed=True):
     access: Literal["read", "write"]
+    description: NotRequired[str]
+    group: NotRequired[str]
+    input: NotRequired[list[SchemaFieldIn]]
+    method: NotRequired[Literal["GET", "POST", "PUT", "PATCH", "DELETE"] | None]
+    name: str
+    path: NotRequired[str | None]
+
+
+class DiscoveredOperationRow(TypedDict, closed=True):
+    access: Literal["read", "write"]
+    added: bool
     description: str
     group: str
     input: list[SchemaField]
     method: NotRequired[Literal["GET", "POST", "PUT", "PATCH", "DELETE"] | None]
     name: str
     path: NotRequired[str | None]
-
-
-class DiscoveredOperationIn(TypedDict, closed=True):
-    access: Literal["read", "write"]
-    description: str
-    group: str
-    input: list[SchemaFieldIn]
-    method: NotRequired[Literal["GET", "POST", "PUT", "PATCH", "DELETE"] | None]
-    name: str
-    path: NotRequired[str | None]
-
-
-class DiscoveryResult(TypedDict, closed=True):
-    endpoint: str
-    noAuth: NotRequired[bool]
-    operations: list[DiscoveredOperation]
-    suggestedName: str
-    system: str
-    type: Literal["mcp", "openapi", "http", "code"]
-    version: str
-    warnings: list[str]
 
 
 class EnvelopeBulkResult(TypedDict, closed=True):
@@ -1499,11 +1545,6 @@ class EnvelopeCatalogPage(TypedDict, closed=True):
 
 class EnvelopeConnectionKinds(TypedDict, closed=True):
     data: ConnectionKinds
-    success: Literal[True]
-
-
-class EnvelopeDiscoveryResult(TypedDict, closed=True):
-    data: DiscoveryResult
     success: Literal[True]
 
 
@@ -2014,6 +2055,16 @@ class ToolUsedBy(TypedDict, closed=True):
     workflows: list[ToolUser]
 
 
+class TryPlan(TypedDict, closed=True):
+    access: str
+    connectionId: NotRequired[str | None]
+    input: JsonValue
+    request: NotRequired[TryPlanRequest | None]
+    system: NotRequired[str | None]
+    testAccount: NotRequired[bool]
+    tool: str
+
+
 class AbandonResult(TypedDict, closed=True):
     abandoned: bool
     call: AbandonedCall | None
@@ -2179,6 +2230,13 @@ class Change(TypedDict, closed=True):
     value: str
 
 
+class DiscoveredOperationList(TypedDict, closed=True):
+    addedTotal: int
+    data: list[DiscoveredOperationRow]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
 class EnvelopeAbandonResult(TypedDict, closed=True):
     data: AbandonResult
     success: Literal[True]
@@ -2211,6 +2269,11 @@ class EnvelopeAppTool(TypedDict, closed=True):
 
 class EnvelopeChange(TypedDict, closed=True):
     data: Change
+    success: Literal[True]
+
+
+class EnvelopeDiscoveredOperationList(TypedDict, closed=True):
+    data: DiscoveredOperationList
     success: Literal[True]
 
 
@@ -2362,6 +2425,23 @@ class SystemCardList(TypedDict, closed=True):
     viewCounts: AppViewCounts
 
 
+class ToolTryResult(TypedDict, closed=True):
+    access: Literal["read", "write"]
+    account: NotRequired[str | None]
+    callId: str
+    kind: Literal["ran", "planned", "sent", "refused"]
+    live: bool
+    log: NotRequired[list[TestLogLine]]
+    ok: NotRequired[bool | None]
+    output: NotRequired[JsonValue]
+    plan: NotRequired[TryPlan | None]
+    planId: NotRequired[str | None]
+    reasons: NotRequired[list[str]]
+    replayOf: NotRequired[str | None]
+    request: NotRequired[TestRequestOut | None]
+    status: NotRequired[int | None]
+
+
 class AppPage(TypedDict, closed=True):
     accounts: NotRequired[list[AppAccount]]
     authConfigs: NotRequired[list[AuthConfig]]
@@ -2401,4 +2481,9 @@ class EnvelopeSystemCardList(TypedDict, closed=True):
 
 class EnvelopeSystemCard(TypedDict, closed=True):
     data: SystemCard
+    success: Literal[True]
+
+
+class EnvelopeToolTryResult(TypedDict, closed=True):
+    data: ToolTryResult
     success: Literal[True]

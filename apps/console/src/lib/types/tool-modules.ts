@@ -1,6 +1,7 @@
 import type { ToolAccess } from './domain';
 import type { ToolCallRow } from './governance';
 import type { ConnectionRef } from './integrations';
+import type { ListResult } from './query';
 
 /**
  * Tool modules (spec 03 §4.1): one system connected once, holding the operations agents call. A module version is
@@ -367,14 +368,39 @@ export interface DiscoveredOperation {
   input: SchemaField[];
 }
 
+/** A source as discovery read it: its operations are kept 24 hours for the caller and read a page at a time. */
 export interface DiscoveryResult {
+  id: string;
   type: ModuleType;
   system: string;
   suggestedName: string;
   version: string;
   endpoint: string;
-  operations: DiscoveredOperation[];
   warnings: string[];
+  noAuth?: boolean;
+  operationTotal: number;
+}
+
+/** One operation of a stored discovery; `added` when the module it was made for already has it. */
+export interface DiscoveredOperationRow extends DiscoveredOperation {
+  added: boolean;
+}
+
+/** A page of a stored discovery: `addedTotal` counts the matching operations the module already has. */
+export interface DiscoveredOperationPage extends ListResult<DiscoveredOperationRow> {
+  addedTotal: number;
+}
+
+/** What a picked operation sends: the service reads every other field from the source again. */
+export interface OperationPick {
+  name: string;
+  access: ToolAccess;
+}
+
+/** The picker's search and filter over a stored discovery. */
+export interface DiscoveryAsk {
+  search?: string;
+  access?: ToolAccess[];
 }
 
 export interface HttpOperationInput {
@@ -403,7 +429,7 @@ export interface ModuleInput {
    */
   source?: ModuleSource;
   /** Selected operations from discovery, with the access class the owner confirmed. */
-  operations?: DiscoveredOperation[];
+  operations?: OperationPick[];
   http?: HttpOperationInput;
   /** Import without a naming step: a taken name gets a numeric suffix instead of a 409. */
   uniqueName?: boolean;
@@ -427,5 +453,5 @@ export interface ModuleDetailsPatch {
 /** Operations chosen from an MCP server or OpenAPI document, appended to an existing module. */
 export interface ImportOperationsInput {
   source: ModuleSource;
-  operations: DiscoveredOperation[];
+  operations: OperationPick[];
 }

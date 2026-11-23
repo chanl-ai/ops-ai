@@ -330,9 +330,33 @@ export interface paths {
         head?: never;
         /**
          * Update Agent
-         * @description Saves the patched spec as a new draft version; what is live does not change until it is published.
+         * @description Saves the patched spec as the agent's draft; what is live does not change until it is published.
+         *
+         *     409 `stale_base` when `baseVersion` and `baseDigest` are not the newest copy (its details name who saved it and
+         *     when): read the agent again and repeat the change.
          */
         patch: operations["agents_update_agent"];
+        trace?: never;
+    };
+    "/v1/agents/{agent_id}/brief-draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Draft Agent Brief
+         * @description A proposed text per brief heading from a description, written by the deployment's model and naming only the
+         *     tools and knowledge the newest version holds. Nothing is saved; 503 `model_unavailable` with no model.
+         */
+        post: operations["agents_draft_agent_brief"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/agents/{agent_id}/eval-cases": {
@@ -352,7 +376,12 @@ export interface paths {
          * @description Replaces the agent's active cases with these. An unknown check type is 422 and nothing changes.
          */
         put: operations["assurance_save_agent_cases"];
-        post?: never;
+        /**
+         * Add Agent Cases
+         * @description Adds these cases after the agent's last one and leaves the others, so two people adding at once each keep
+         *     theirs; answers the saved set. No cases, or an unknown check type, is 422 and nothing changes.
+         */
+        post: operations["assurance_add_agent_cases"];
         delete?: never;
         options?: never;
         head?: never;
@@ -366,14 +395,19 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Agent Eval Runs
+         * @description The agent's kept runs on the shared list contract, newest first, then by id. A row leaves out the case
+         *     results; `GET /v1/eval-runs/{id}` carries them.
+         */
+        get: operations["assurance_agent_eval_runs"];
         put?: never;
         /**
          * Create Eval Run
          * @description Scores cases on the newest version through the same one-turn test path. With no cases in the body it runs the
-         *     agent's saved cases, also on the live version when that is another one, and keeps the run, so repeating it makes a
-         *     second run. With cases in the body it scores them and keeps nothing. Empty cases and an unknown check type are
-         *     422.
+         *     agent's saved cases, also on the live version when that is another one, and keeps the run (`EvalRunRecord`), so
+         *     repeating it makes a second run. With cases in the body it scores them and keeps nothing (`AgentEvalRun`). Empty
+         *     cases and an unknown check type are 422.
          */
         post: operations["agents_create_eval_run"];
         delete?: never;
@@ -443,6 +477,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/agents/{agent_id}/prompt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Agent Prompt
+         * @description The prompt a version gives the model (the newest when none is named), with each mention as the name the model
+         *     knows it under and the never rules last. Nothing is changed.
+         */
+        get: operations["agents_agent_prompt"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agents/{agent_id}/publish-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Publish Check
+         * @description What stops the newest draft from being published, each with the field it is in (`position`): a reference the
+         *     brief names that the agent does not hold. Nothing is opened or changed; the publish refuses the same list
+         *     (422 `cannot_publish`). 422 `not_newest_draft` for any other version.
+         */
+        get: operations["agents_publish_check"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/agents/{agent_id}/publish-preview": {
         parameters: {
             query?: never;
@@ -478,6 +555,33 @@ export interface paths {
          *     needs no review (`publish_preview` says which beforehand): its definition goes live and its graph compiles.
          */
         post: operations["agents_request_publish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agents/{agent_id}/references": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Reference
+         * @description Grants the agent what its brief mentions, as one new draft version: a tool, an agent or a workflow joins its
+         *     tools, a knowledge base its knowledge, a skill its skills. A skill brings the tools and knowledge bases it names
+         *     and the skills its steps run. `added` lists everything granted; repeating the call answers `added: []` and saves
+         *     nothing.
+         *
+         *     403 `forbidden` without agents: edit in the agent's team or the view right of the reference's area; 422
+         *     `unknown_reference` for something the team does not offer; 422 `not_published` for a skill, agent or workflow
+         *     that is not live; 409 `stale_base` when the draft was saved while this ran (read the agent again and repeat).
+         */
+        post: operations["agents_add_reference"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1233,6 +1337,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/eval-cases/{case_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Eval Case
+         * @description Deletes one active case of an agent or a skill. Another team's case, a draft or one already gone is 404.
+         */
+        delete: operations["assurance_delete_eval_case"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/eval-runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Eval Run
+         * @description One kept run of an agent with each case's result. Another team's run is 404.
+         */
+        get: operations["assurance_eval_run"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/events": {
         parameters: {
             query?: never;
@@ -1569,7 +1713,8 @@ export interface paths {
         };
         /**
          * List Memories
-         * @description What agents remember about the caller, newest first; `agentId` keeps one agent's.
+         * @description One page of what agents remember about the caller, newest first, on the shared list contract: `search` matches
+         *     the key and the value, `agentId` keeps what that agent uses (its own and every agent's) and `kind` those kinds.
          */
         get: operations["memory_list_memories"];
         put?: never;
@@ -1822,6 +1967,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/publish-requests/{request_id}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Withdraw Publish Request
+         * @description The requester takes back their waiting request, so the version can be changed and sent again (a new request
+         *     with `follows` naming this one). 403 `not_requester` for anyone else; 409 `already_decided` once decided.
+         */
+        post: operations["reviews_withdraw_publish_request"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/references": {
         parameters: {
             query?: never;
@@ -1981,6 +2147,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/runs/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk Engine Runs
+         * @description Redrives every Failed or Stuck run, or cancels every unfinished one, of the acting team that the filter
+         *     matches, oldest first and at most BULK_LIMIT in one call. Each run is checked as its single route checks it: one
+         *     the caller may not cancel is skipped and listed, never acted on.
+         *     No request transaction: each run is changed in its own, as the single routes change it.
+         */
+        post: operations["workflows_bulk_engine_runs"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/runs/set-aside-emails/{event_id}/run": {
         parameters: {
             query?: never;
@@ -2092,6 +2281,29 @@ export interface paths {
         get: operations["workflows_engine_run_events"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/runs/{run_id}/redrive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Redrive Engine Run
+         * @description Queues a Failed or Stuck run again from its failed step, on the version the run pinned: steps it recorded are
+         *     not run again and a write with a record at the gateway is never sent again. Who may cancel the run may redrive
+         *     it; a run neither Failed nor Stuck is refused (409 run_not_redrivable).
+         *     No request transaction: the masking policy (platform-service) is asked after the write, with none open.
+         */
+        post: operations["workflows_redrive_engine_run"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2251,10 +2463,10 @@ export interface paths {
         get?: never;
         /**
          * Save Skill Draft
-         * @description Edits the newest draft, or opens the next version on top of the published one. 409 when `baseVersion` is
-         *     not the newest version, or the skill is deprecated or in review. The checks run again in the transaction that
-         *     writes, after the tools are checked against tools-service with nothing open, so a save landing in between answers
-         *     `stale_base`.
+         * @description Edits the newest draft, or opens the next version on top of the published one. 409 `stale_base` when
+         *     `baseVersion` and `baseDigest` are not the newest copy (its details name who saved it and when); 409 too when the
+         *     skill is deprecated or in review. The checks run again in the transaction that writes, after the tools are checked
+         *     against tools-service with nothing open, so a save landing in between answers `stale_base`.
          */
         put: operations["agents_save_skill_draft"];
         post?: never;
@@ -2321,6 +2533,28 @@ export interface paths {
          *     `unknown_input` or `missing_input`.
          */
         post: operations["agents_render_skill"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/skills/{skill_id}/text": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Read Skill Text
+         * @description How a text reads as this skill's steps, without saving it: the hints on its lines, the mentions of things
+         *     that no longer exist, what it uses, how each condition is decided and what each mentioned tool returns. The same
+         *     reader a save runs. skills: view in the skill's team (403 `forbidden`).
+         */
+        post: operations["agents_read_skill_text"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2842,6 +3076,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/try-targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Try Targets
+         * @description The paths a builder can try: `skill` for a skill's paths, or `workflow` and `step` for one tool step of a
+         *     workflow. A builder of the skill's or workflow's team only (403); the samples are that team's own runs' answers.
+         */
+        get: operations["agents_try_targets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/widgets": {
         parameters: {
             query?: never;
@@ -3018,7 +3273,7 @@ export interface paths {
          * @description The team's v2 workflows on the shared list contract, each at its latest version: search over name and id,
          *     `status` facets (draft, in review, live, paused, archived) under the search and before the status filter, sorted
          *     by `sortBy` then by the key, a page at a time; an archived workflow is listed only when `status` asks for it.
-         *     v1 workflows stay on /v1/workflows.
+         *     v1 workflows stay on /v1/workflows. 403 unless the caller may view the team's workflows.
          */
         get: operations["workflows_list_definitions"];
         put?: never;
@@ -3046,7 +3301,8 @@ export interface paths {
         };
         /**
          * Account Uses
-         * @description The team's workflow drafts and published versions, and agents, that name the account `name` of `app`.
+         * @description The team's workflow drafts and published versions, and agents, that name the account `name` of `app`. 403 unless
+         *     the caller may view the team's workflows.
          */
         get: operations["workflows_account_uses"];
         put?: never;
@@ -3089,7 +3345,8 @@ export interface paths {
         };
         /**
          * Get Definition
-         * @description One definition at a version (its newest when left out), its versions and its open review.
+         * @description One definition at a version (its newest when left out), its versions, its open review and its working copy.
+         *     403 unless the caller may view the team's workflows; an API key reads it without its working copy.
          */
         get: operations["workflows_get_definition"];
         put?: never;
@@ -3126,6 +3383,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/workflows/definitions/{workflow_id}/diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Diff Definitions
+         * @description The steps added, removed, changed (every setting that differs, old and new) and moved between two versions of
+         *     a workflow, its live version or its working copy. 403 unless the caller may view the team's workflows.
+         */
+        get: operations["workflows_diff_definitions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/workflows/definitions/{workflow_id}/pause": {
         parameters: {
             query?: never;
@@ -3147,6 +3425,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/workflows/definitions/{workflow_id}/publish-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Publish Preview
+         * @description What a publish of the working copy would change, what stops it (each error check), and whether the team's
+         *     publish policy would wait for a review; a change of step positions alone needs none. Nothing is made or opened.
+         *     No request transaction: the policy is read from platform-service.
+         */
+        get: operations["workflows_publish_preview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/workflows/definitions/{workflow_id}/publish-requests": {
         parameters: {
             query?: never;
@@ -3161,7 +3461,10 @@ export interface paths {
          * @description Opens a publish request for a draft in Reviews; the version goes live when a second person approves it (at once
          *     under the dev auto-approve setting). 409 when the version is not a draft or a request is already open, 422 when it
          *     no longer passes its checks, 403 unless the caller is a builder or admin of the owning team (an admin for a
-         *     workflow no team owns). The request lists what each step acts on: its operation, agent and approver.
+         *     workflow no team owns). With `baseVersion` and `baseDigest` it publishes the working copy: every blocker the
+         *     publish preview lists refuses it (422, or 403 for a mailbox the caller may not watch) before any version is made,
+         *     then the next version is made and its request opened. The request lists what each step acts on: its operation,
+         *     agent and approver.
          *     No request transaction: the team's accounts (tools-service) and the review deadline (platform-service) are asked
          *     with none open.
          */
@@ -3222,11 +3525,35 @@ export interface paths {
         /**
          * Definition Shapes
          * @description What each step of a saved version outputs, by port, before it has run: fixed by its type, built from
-         *     its settings, or read from its document type or operation. A mapping picker reads it.
+         *     its settings, or read from its document type or operation. A mapping picker reads it. 403 unless the caller may
+         *     view the team's workflows.
          *     No request transaction: the version is read, then documents-service is asked with none open.
          */
         get: operations["workflows_definition_shapes"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/workflows/definitions/{workflow_id}/working-copy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Save Working Copy
+         * @description Saves the editor's working copy as it is, failing checks and all, and answers with its checks. It makes no
+         *     version: publishing does. 409 `stale_base` when `baseVersion` and `baseDigest` are not the newest copy, with who
+         *     saved it and when: read the workflow again and repeat the change. No request transaction: documents-service is
+         *     asked for field shapes before the write.
+         */
+        put: operations["workflows_save_working_copy"];
         post?: never;
         delete?: never;
         options?: never;
@@ -3268,6 +3595,7 @@ export interface paths {
          * @description The choices a node form offers for a field with an option source (`ui.fields.*.source`): published agents,
          *     registry operations, live v2 workflows, the acting team's mailboxes (Channels > Email). `steps` comes from
          *     the definition being edited; `knowledge` is not served yet, since no built node type reads a knowledge base.
+         *     403 for agents, tools or workflows without that area's view cell, as its own list answers.
          *     No request transaction: the tools source is asked of tools-service.
          */
         get: operations["workflows_option_sources"];
@@ -3679,6 +4007,16 @@ export interface components {
             /** Area */
             area: string;
         };
+        /** AddReference */
+        AddReference: {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "tool" | "knowledge" | "skill" | "agent" | "workflow";
+        };
         /** Agent */
         Agent: {
             /** Accounts */
@@ -3697,6 +4035,7 @@ export interface components {
              * @enum {string}
              */
             availability: "published" | "not_published" | "paused";
+            brief?: components["schemas"]["BriefView"] | null;
             /** Candelete */
             canDelete?: boolean | null;
             /** Canedit */
@@ -3708,6 +4047,8 @@ export interface components {
             /** Collections */
             collections: string[];
             controls: components["schemas"]["AgentControls"];
+            /** Digest */
+            digest?: string | null;
             /** Guardrailpins */
             guardrailPins: components["schemas"]["GuardrailPin"][];
             guardrails: components["schemas"]["Guardrails-Output"];
@@ -3721,8 +4062,11 @@ export interface components {
             model: string;
             /** Name */
             name: string;
+            patterns?: components["schemas"]["PatternsView"];
             /** Paused */
             paused: boolean;
+            /** Promptmode */
+            promptMode?: ("brief" | "full") | null;
             /** Protection */
             protection?: ("system" | "managed") | null;
             /** Publishedversion */
@@ -3753,6 +4097,7 @@ export interface components {
             updatedAt: string;
             /** Usedin */
             usedIn: components["schemas"]["UsedIn"][];
+            uses?: components["schemas"]["AgentUses"];
             /** Version */
             version: number;
             /** Widgetpins */
@@ -3775,10 +4120,15 @@ export interface components {
             /** Guardrails */
             guardrails: ("redactPii" | "maxToolCallsPerTurn" | "maxModelCallsPerTurn" | "maxModelCallsPerConversation" | "maxCostPerConversation" | "whenUnsure" | "blockedTopics")[];
         };
-        /** AgentEvalRun */
+        /**
+         * AgentEvalRun
+         * @description Cases sent in the body, scored and not kept.
+         */
         AgentEvalRun: {
             /** Agentid */
             agentId: string;
+            /** Costusd */
+            costUsd: number;
             /** Id */
             id: string;
             /** Results */
@@ -3789,6 +4139,8 @@ export interface components {
              */
             status: "complete";
             summary: components["schemas"]["EvalSummary"];
+            /** Unpriced */
+            unpriced: boolean;
         };
         /** AgentInput */
         AgentInput: {
@@ -3840,6 +4192,11 @@ export interface components {
             } | null;
             /** Allteamknowledgebases */
             allTeamKnowledgeBases?: boolean | null;
+            /** Basedigest */
+            baseDigest: string;
+            /** Baseversion */
+            baseVersion: number;
+            brief?: components["schemas"]["Brief"] | null;
             /** Channels */
             channels?: ("voice" | "chat" | "email" | "api")[] | null;
             /** Collections */
@@ -3857,6 +4214,9 @@ export interface components {
             name?: string | null;
             /** Note */
             note?: string | null;
+            patterns?: components["schemas"]["Patterns"] | null;
+            /** Promptmode */
+            promptMode?: ("brief" | "full") | null;
             /** Protection */
             protection?: ("system" | "managed") | null;
             /** Role */
@@ -3870,6 +4230,28 @@ export interface components {
             /** Widgetpins */
             widgetPins?: components["schemas"]["WidgetPinInput"][] | null;
             widgets?: components["schemas"]["WidgetSettings"] | null;
+        };
+        /**
+         * AgentPrompt
+         * @description The prompt one version of an agent gives the model, read only: its instructions, then the never rules last.
+         */
+        AgentPrompt: {
+            /** Text */
+            text: string;
+            /** Version */
+            version: number;
+        };
+        /**
+         * AgentPublishCheck
+         * @description Whether the newest draft can be published, and each thing that stops it with the field it is in.
+         */
+        AgentPublishCheck: {
+            /** Blockers */
+            blockers?: components["schemas"]["Blocker"][];
+            /** Canrequest */
+            canRequest: boolean;
+            /** Problems */
+            problems?: components["schemas"]["PublishBlocker"][];
         };
         /** AgentPublishRequest */
         AgentPublishRequest: {
@@ -4026,7 +4408,39 @@ export interface components {
             toolCalls: components["schemas"]["ToolCallView"][];
             /** Tools */
             tools?: components["schemas"]["HeldTool"][];
+            usage: components["schemas"]["TurnUsage"];
             wouldPause?: components["schemas"]["WouldPause"] | null;
+        };
+        /**
+         * AgentUses
+         * @description How many of each kind the agent holds, for the page's one-line summary.
+         */
+        AgentUses: {
+            /**
+             * Agents
+             * @default 0
+             */
+            agents: number;
+            /**
+             * Knowledgebases
+             * @default 0
+             */
+            knowledgeBases: number;
+            /**
+             * Skills
+             * @default 0
+             */
+            skills: number;
+            /**
+             * Tools
+             * @default 0
+             */
+            tools: number;
+            /**
+             * Workflows
+             * @default 0
+             */
+            workflows: number;
         };
         /** AgentUsing */
         AgentUsing: {
@@ -4420,9 +4834,30 @@ export interface components {
             when: "before" | "after";
         };
         /**
+         * Blocker
+         * @description One reason a publish is refused, in the one shape the agent, skill and workflow publish checks return: the
+         *     workflow step (`node`) or the field it is in, its level and code, and the sentence the publish dialog shows.
+         */
+        Blocker: {
+            /** Code */
+            code: string;
+            /** Field */
+            field?: string | null;
+            /**
+             * Level
+             * @default error
+             * @enum {string}
+             */
+            level: "error" | "warning";
+            /** Message */
+            message: string;
+            /** Node */
+            node?: string | null;
+        };
+        /**
          * BlockerPosition
-         * @description Where a publish problem is: the field (`steps`, `notWhen`, `useWhen`, `brief.never`), and the step (from 1)
-         *     or list index when it has one.
+         * @description Where a publish problem is: the field (`steps`, `notWhen`, `useWhen`, `brief.never`, `source`), and the step
+         *     (from 1) or list index when it has one; for `source`, `index` is the line (from 1).
          */
         BlockerPosition: {
             /** Field */
@@ -4440,6 +4875,112 @@ export interface components {
             name: string;
             /** Version */
             version: number;
+        };
+        /**
+         * Branch
+         * @description A path, written `if <test>:` in a skill's text. Once the step is done its test decides: when it holds the
+         *     skill goes on (to the step's `next`, or the step after it); when it does not, to `otherwise`. A test that does
+         *     not hold is a path the author wrote, not a failed check: it counts no attempt and takes no hold, unless
+         *     `otherwise` ends the skill with an exit other than done, which is how a guard is written
+         *     (`if not ...: stop "..."`). A stop that a rule test's path reaches takes the hold on either side
+         *     (`if found: stop "..."` as much as `else: stop "..."`); one a sentence test's path reaches takes none, since the
+         *     model decided it. A rule test runs in code on the step's result; a sentence is decided by the model,
+         *     which says which way it went (`step_done` with `holds`).
+         */
+        Branch: {
+            otherwise: components["schemas"]["Jump"];
+            test: components["schemas"]["StepCheck"];
+        };
+        /**
+         * BranchOut
+         * @description A path written `if <test>:`: when the test does not hold, the skill goes to `otherwise`.
+         */
+        BranchOut: {
+            otherwise: components["schemas"]["JumpOut"];
+            test: components["schemas"]["StepCheckOut"];
+        };
+        /**
+         * Brief
+         * @description What a builder writes instead of one block of instructions. Persona, tone and glossary are text inside
+         *     `how_to_answer`. `purpose` is the Job; `goal` is kept on agents that already have one and is not asked for on
+         *     new ones. `success` is kept readable on old versions and is never sent to the model. `hand_off` and `examples`
+         *     default to empty, so a version stored before them reads and runs as it did.
+         */
+        Brief: {
+            /**
+             * Examples
+             * @default
+             */
+            examples: string;
+            /**
+             * Goal
+             * @default
+             */
+            goal: string;
+            /** Handoff */
+            handOff?: string[];
+            /**
+             * Howtoanswer
+             * @default
+             */
+            howToAnswer: string;
+            /** Never */
+            never?: string[];
+            /** Purpose */
+            purpose: string;
+            /** Success */
+            success?: string[];
+        };
+        /**
+         * BriefDraft
+         * @description A proposed text per brief heading, drafted from a description. Nothing is saved: each heading is accepted or
+         *     skipped in the console, and an accepted one saves as an ordinary edit of the brief.
+         */
+        BriefDraft: {
+            /** Examples */
+            examples: string;
+            /** Handoff */
+            handOff: string[];
+            /** Howtoanswer */
+            howToAnswer: string;
+            /** Job */
+            job: string;
+            /** Never */
+            never: string[];
+        };
+        /** BriefDraftInput */
+        BriefDraftInput: {
+            /** Description */
+            description: string;
+        };
+        /**
+         * BriefView
+         * @description An agent's brief as replied (`ops_agent_kernel.prompt_writer.Brief` is the request form).
+         */
+        BriefView: {
+            /**
+             * Examples
+             * @default
+             */
+            examples: string;
+            /**
+             * Goal
+             * @default
+             */
+            goal: string;
+            /** Handoff */
+            handOff?: string[];
+            /**
+             * Howtoanswer
+             * @default
+             */
+            howToAnswer: string;
+            /** Never */
+            never?: string[];
+            /** Purpose */
+            purpose: string;
+            /** Success */
+            success?: string[];
         };
         /** BudgetCaps */
         BudgetCaps: {
@@ -4489,6 +5030,24 @@ export interface components {
             skipped: components["schemas"]["BulkSkip"][];
             /** Updated */
             updated: string[];
+        };
+        /** BulkRunsRequest */
+        BulkRunsRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "redrive" | "cancel";
+            filter?: components["schemas"]["RunsFilter"];
+        };
+        /** BulkRunsResult */
+        BulkRunsResult: {
+            /** Action */
+            action: string;
+            /** Changed */
+            changed: string[];
+            /** Skipped */
+            skipped: string[];
         };
         /** BulkSkip */
         BulkSkip: {
@@ -5273,6 +5832,23 @@ export interface components {
             /** Suggestion */
             suggestion?: string | null;
         };
+        /** DefinitionDiffView */
+        DefinitionDiffView: {
+            /** Added */
+            added: components["schemas"]["StepRefView"][];
+            /** Changed */
+            changed: components["schemas"]["StepChangeView"][];
+            /** Connected */
+            connected: string[];
+            /** Disconnected */
+            disconnected: string[];
+            /** Moved */
+            moved: components["schemas"]["StepRefView"][];
+            /** Removed */
+            removed: components["schemas"]["StepRefView"][];
+            /** Workflow */
+            workflow: components["schemas"]["FieldChangeView"][];
+        };
         /**
          * DefinitionInput
          * @description Exactly one of `yaml` (YAML or JSON text) and `definition` (the parsed object).
@@ -5287,6 +5863,10 @@ export interface components {
         };
         /** DefinitionPublishInput */
         DefinitionPublishInput: {
+            /** Basedigest */
+            baseDigest?: string | null;
+            /** Baseversion */
+            baseVersion?: number | null;
             /**
              * Note
              * @default
@@ -5388,9 +5968,11 @@ export interface components {
             liveVersion: number | null;
             /** Name */
             name: string;
+            outdatedCopy?: components["schemas"]["OutdatedCopyView"] | null;
             /** Paused */
             paused: boolean;
             review: components["schemas"]["OpenPublishRequest"] | null;
+            saveBase: components["schemas"]["SaveBase"];
             /**
              * Stage
              * @enum {string}
@@ -5403,6 +5985,7 @@ export interface components {
             versions: components["schemas"]["DefinitionVersion"][];
             /** Workflowid */
             workflowId: string;
+            workingCopy?: components["schemas"]["WorkingCopyView"] | null;
         };
         /** DefinitionWarning */
         DefinitionWarning: {
@@ -5660,9 +6243,18 @@ export interface components {
              */
             success: true;
         };
-        /** Envelope[AgentEvalRun] */
-        Envelope_AgentEvalRun_: {
-            data: components["schemas"]["AgentEvalRun"];
+        /** Envelope[AgentPrompt] */
+        Envelope_AgentPrompt_: {
+            data: components["schemas"]["AgentPrompt"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[AgentPublishCheck] */
+        Envelope_AgentPublishCheck_: {
+            data: components["schemas"]["AgentPublishCheck"];
             /**
              * Success
              * @constant
@@ -5741,9 +6333,27 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[BriefDraft] */
+        Envelope_BriefDraft_: {
+            data: components["schemas"]["BriefDraft"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[BulkResult] */
         Envelope_BulkResult_: {
             data: components["schemas"]["BulkResult"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[BulkRunsResult] */
+        Envelope_BulkRunsResult_: {
+            data: components["schemas"]["BulkRunsResult"];
             /**
              * Success
              * @constant
@@ -5840,6 +6450,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[DefinitionDiffView] */
+        Envelope_DefinitionDiffView_: {
+            data: components["schemas"]["DefinitionDiffView"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[DefinitionPublished] */
         Envelope_DefinitionPublished_: {
             data: components["schemas"]["DefinitionPublished"];
@@ -5888,6 +6507,15 @@ export interface components {
         /** Envelope[DeploymentView] */
         Envelope_DeploymentView_: {
             data: components["schemas"]["DeploymentView"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[EvalRunRecord] */
+        Envelope_EvalRunRecord_: {
+            data: components["schemas"]["EvalRunRecord"];
             /**
              * Success
              * @constant
@@ -6047,9 +6675,27 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[ListResult[EvalRunRow]] */
+        Envelope_ListResult_EvalRunRow__: {
+            data: components["schemas"]["ListResult_EvalRunRow_"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[ListResult[FormView]] */
         Envelope_ListResult_FormView__: {
             data: components["schemas"]["ListResult_FormView_"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[ListResult[MemoryView]] */
+        Envelope_ListResult_MemoryView__: {
+            data: components["schemas"]["ListResult_MemoryView_"];
             /**
              * Success
              * @constant
@@ -6201,6 +6847,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[PublishPreview] */
+        Envelope_PublishPreview_: {
+            data: components["schemas"]["PublishPreview"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[PublishReview] */
         Envelope_PublishReview_: {
             data: components["schemas"]["PublishReview"];
@@ -6222,6 +6877,15 @@ export interface components {
         /** Envelope[Received] */
         Envelope_Received_: {
             data: components["schemas"]["Received"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[ReferenceAdded] */
+        Envelope_ReferenceAdded_: {
+            data: components["schemas"]["ReferenceAdded"];
             /**
              * Success
              * @constant
@@ -6381,6 +7045,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[SkillTextReading] */
+        Envelope_SkillTextReading_: {
+            data: components["schemas"]["SkillTextReading"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[StepUpToken] */
         Envelope_StepUpToken_: {
             data: components["schemas"]["StepUpToken"];
@@ -6498,10 +7171,29 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[TryTargets] */
+        Envelope_TryTargets_: {
+            data: components["schemas"]["TryTargets"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[Union[DryRun, BatchStarted]] */
         Envelope_Union_DryRun__BatchStarted__: {
             /** Data */
             data: components["schemas"]["DryRun"] | components["schemas"]["BatchStarted"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[Union[EvalRunRecord, AgentEvalRun]] */
+        Envelope_Union_EvalRunRecord__AgentEvalRun__: {
+            /** Data */
+            data: components["schemas"]["EvalRunRecord"] | components["schemas"]["AgentEvalRun"];
             /**
              * Success
              * @constant
@@ -6608,6 +7300,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[WorkingCopySaved] */
+        Envelope_WorkingCopySaved_: {
+            data: components["schemas"]["WorkingCopySaved"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[dict[str, list[ToolUser]]] */
         Envelope_dict_str__list_ToolUser___: {
             /** Data */
@@ -6684,16 +7385,6 @@ export interface components {
         Envelope_list_MailboxView__: {
             /** Data */
             data: components["schemas"]["MailboxView"][];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
-        /** Envelope[list[MemoryView]] */
-        Envelope_list_MemoryView__: {
-            /** Data */
-            data: components["schemas"]["MemoryView"][];
             /**
              * Success
              * @constant
@@ -6786,10 +7477,17 @@ export interface components {
             code: string;
             /** Details */
             details?: unknown;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "input" | "refused" | "upstream" | "timeout" | "internal";
             /** Message */
             message: string;
             /** Requestid */
             requestId: string;
+            /** Retryable */
+            retryable: boolean;
             /** Status */
             status: number;
         };
@@ -6836,12 +7534,22 @@ export interface components {
             /** Casename */
             caseName: string;
             draft: components["schemas"]["EvalCaseOutcome"];
+            /**
+             * Judgeunpriced
+             * @default false
+             */
+            judgeUnpriced: boolean;
             live?: components["schemas"]["EvalCaseOutcome"] | null;
             /**
              * Regression
              * @default false
              */
             regression: boolean;
+            /**
+             * Unpriced
+             * @default false
+             */
+            unpriced: boolean;
         };
         /** EvalCasesInput */
         EvalCasesInput: {
@@ -6850,6 +7558,8 @@ export interface components {
         };
         /** EvalCheckInput */
         EvalCheckInput: {
+            /** Rubric */
+            rubric?: string | null;
             /** Text */
             text?: string | null;
             /** Tool */
@@ -6859,18 +7569,105 @@ export interface components {
         };
         /** EvalCheckResult */
         EvalCheckResult: {
+            /** Confidence */
+            confidence?: number | null;
             /** Label */
             label: string;
+            /** Reason */
+            reason?: string | null;
             /**
              * Status
              * @enum {string}
              */
             status: "pass" | "fail";
         };
+        /**
+         * EvalGate
+         * @description Whether the version a run scored may publish on its evals, and each step, as a publish check reads it.
+         */
+        EvalGate: {
+            /** Blocked */
+            blocked: boolean;
+            /** Steps */
+            steps: components["schemas"]["GateStep"][];
+        };
+        /** EvalGateDetails */
+        EvalGateDetails: {
+            /** Steps */
+            steps: components["schemas"]["GateStep"][];
+        };
         /** EvalRunInput */
         EvalRunInput: {
             /** Cases */
             cases?: components["schemas"]["EvalCaseInput"][] | null;
+            /** Trigger */
+            trigger?: string | null;
+        };
+        /**
+         * EvalRunRecord
+         * @description One kept run with each case's result.
+         */
+        EvalRunRecord: {
+            /** Agentid */
+            agentId: string;
+            /** Costusd */
+            costUsd: number;
+            gate?: components["schemas"]["EvalGate"] | null;
+            /** Id */
+            id: string;
+            /** Liveversion */
+            liveVersion: number | null;
+            /** Ranat */
+            ranAt: string;
+            /** Results */
+            results: components["schemas"]["EvalCaseResult"][];
+            /** Startedby */
+            startedBy: string;
+            /**
+             * Status
+             * @constant
+             */
+            status: "complete";
+            summary: components["schemas"]["EvalSummary"];
+            /** Trigger */
+            trigger: string;
+            /** Unpriced */
+            unpriced: boolean;
+            /** Version */
+            version: number;
+        };
+        /**
+         * EvalRunRow
+         * @description A kept run as a row of an agent's runs list (`app.evals.stored_run`): everything but the case results, which
+         *     the single read (`EvalRunRecord`) carries. `version` is the newest version it ran on and `live_version` the live
+         *     one it was compared with, when that was another. `trigger` is manual or publish_request; `started_by` is a
+         *     person's email or `key:<id>`.
+         */
+        EvalRunRow: {
+            /** Agentid */
+            agentId: string;
+            /** Costusd */
+            costUsd: number;
+            /** Id */
+            id: string;
+            /** Liveversion */
+            liveVersion: number | null;
+            /** Ranat */
+            ranAt: string;
+            /** Startedby */
+            startedBy: string;
+            /**
+             * Status
+             * @constant
+             */
+            status: "complete";
+            summary: components["schemas"]["EvalSummary"];
+            /** Trigger */
+            trigger: string;
+            /** Unpriced */
+            unpriced: boolean;
+            /** Version */
+            version: number;
         };
         /** EvalSummary */
         EvalSummary: {
@@ -6909,6 +7706,13 @@ export interface components {
             kind: string;
             /** Label */
             label: string;
+        };
+        /** FieldChangeView */
+        FieldChangeView: {
+            after?: components["schemas"]["JsonValue"];
+            before?: components["schemas"]["JsonValue"];
+            /** Field */
+            field: string;
         };
         /**
          * FieldRead
@@ -7599,6 +8403,23 @@ export interface components {
             message: string;
         };
         JsonValue: unknown;
+        /**
+         * Jump
+         * @description Where a skill goes from a step: a step further on, or an exit that ends it. Exactly one of the two.
+         */
+        Jump: {
+            /** Exit */
+            exit?: string | null;
+            /** Step */
+            step?: number | null;
+        };
+        /** JumpOut */
+        JumpOut: {
+            /** Exit */
+            exit?: string | null;
+            /** Step */
+            step?: number | null;
+        };
         /** KindRow */
         KindRow: {
             /** Active */
@@ -7738,10 +8559,34 @@ export interface components {
             };
             pagination: components["schemas"]["Pagination"];
         };
+        /** ListResult[EvalRunRow] */
+        ListResult_EvalRunRow_: {
+            /** Data */
+            data: components["schemas"]["EvalRunRow"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
+        };
         /** ListResult[FormView] */
         ListResult_FormView_: {
             /** Data */
             data: components["schemas"]["FormView"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
+        };
+        /** ListResult[MemoryView] */
+        ListResult_MemoryView_: {
+            /** Data */
+            data: components["schemas"]["MemoryView"][];
             /** Facets */
             facets: {
                 [key: string]: {
@@ -8240,6 +9085,32 @@ export interface components {
             /** Nextcursor */
             nextCursor?: string | null;
         };
+        /**
+         * OutdatedCopyView
+         * @description A working copy made on an older version than the newest, kept so its change is not lost.
+         */
+        OutdatedCopyView: {
+            /** Baseversion */
+            baseVersion: number;
+            /** Checks */
+            checks: components["schemas"]["DefinitionCheck"][];
+            /** Definition */
+            definition: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Digest */
+            digest: string;
+            /** Newerat */
+            newerAt: string | null;
+            /** Newerby */
+            newerBy: string | null;
+            /** Newerversion */
+            newerVersion: number;
+            /** Updatedat */
+            updatedAt: string;
+            /** Updatedby */
+            updatedBy: string;
+        };
         /** OverviewCaseRow */
         OverviewCaseRow: {
             /** Customername */
@@ -8323,6 +9194,40 @@ export interface components {
             total: number;
             /** Totalpages */
             totalPages: number;
+        };
+        /**
+         * Patterns
+         * @description How the agent's turn runs: how hard the model thinks, and whether reads may run side by side.
+         */
+        Patterns: {
+            /**
+             * Parallelreads
+             * @default true
+             */
+            parallelReads: boolean;
+            /**
+             * Thinking
+             * @default default
+             * @enum {string}
+             */
+            thinking: "default" | "low" | "medium" | "high";
+        };
+        /**
+         * PatternsView
+         * @description How the agent's turn runs, as replied (`Patterns` is the request form).
+         */
+        PatternsView: {
+            /**
+             * Parallelreads
+             * @default true
+             */
+            parallelReads: boolean;
+            /**
+             * Thinking
+             * @default default
+             * @enum {string}
+             */
+            thinking: "default" | "low" | "medium" | "high";
         };
         /** PauseInput */
         PauseInput: {
@@ -8468,13 +9373,14 @@ export interface components {
          * @description One thing that blocks a publish. `id` names the reference for a reference problem, as `<kind>:<id>`.
          */
         PublishBlocker: {
+            details?: components["schemas"]["EvalGateDetails"] | null;
             /** Id */
             id?: string | null;
             /**
              * Kind
              * @enum {string}
              */
-            kind: "missing_field" | "missing_reference" | "unavailable_reference" | "bad_step" | "bad_check" | "bad_exit" | "sub_skill_not_held" | "prompt_rule_in_text" | "review_open" | "already_published" | "deprecated" | "too_long";
+            kind: "missing_field" | "missing_reference" | "unavailable_reference" | "bad_step" | "bad_check" | "bad_exit" | "sub_skill_not_held" | "prompt_rule_in_text" | "review_open" | "already_published" | "deprecated" | "too_long" | "mention" | "hint" | "eval_failed" | "eval_not_run" | "eval_no_cases" | "eval_setting_unread";
             /** Message */
             message: string;
             position?: components["schemas"]["BlockerPosition"] | null;
@@ -8515,6 +9421,25 @@ export interface components {
             /** Version */
             version: number;
         };
+        /**
+         * PublishPreview
+         * @description What publishing the working copy (or the newest draft, without one) would do.
+         */
+        PublishPreview: {
+            /** Blockers */
+            blockers: components["schemas"]["DefinitionCheck"][];
+            changes: components["schemas"]["DefinitionDiffView"];
+            /** Liveversion */
+            liveVersion: number | null;
+            /** Majorchange */
+            majorChange?: boolean | null;
+            /** Policy */
+            policy?: ("always" | "major" | "never") | null;
+            /** Reviewreason */
+            reviewReason?: ("policy_always" | "security_change" | "policy_never" | "major_change" | "dev_auto_approve" | "minor_change") | null;
+            /** Reviewrequired */
+            reviewRequired?: boolean | null;
+        };
         /** PublishRequestInfo */
         PublishRequestInfo: {
             /** Changes */
@@ -8543,6 +9468,8 @@ export interface components {
         };
         /** PublishRequestInput */
         PublishRequestInput: {
+            /** Follows */
+            follows?: string | null;
             /**
              * Note
              * @default
@@ -8586,13 +9513,15 @@ export interface components {
             egressHost?: components["schemas"]["EgressHostRef"] | null;
             /** Evidence */
             evidence: components["schemas"]["Evidence"][];
+            /** Follows */
+            follows?: string | null;
             /** Id */
             id: string;
             /**
              * Kind
              * @enum {string}
              */
-            kind: "agent_publish" | "publish_request" | "egress_host";
+            kind: "agent_publish" | "publish_request" | "skill_publish" | "egress_host";
             policy: components["schemas"]["ReviewPolicy"];
             /** Proposal */
             proposal: string;
@@ -8604,13 +9533,14 @@ export interface components {
              * @enum {string}
              */
             risk: "critical" | "high" | "medium" | "low";
+            skillPublish?: components["schemas"]["SkillPublishInfo"] | null;
             /** Slaminutes */
             slaMinutes?: number | null;
             /**
              * Status
              * @enum {string}
              */
-            status: "pending" | "in_review" | "approved" | "rejected" | "returned";
+            status: "pending" | "in_review" | "approved" | "rejected" | "returned" | "withdrawn";
             /** Title */
             title: string;
             toolModule?: components["schemas"]["ToolModuleReviewRef"] | null;
@@ -8693,7 +9623,7 @@ export interface components {
         /**
          * Ref
          * @description Something a text or a step names: a tool, a knowledge base, a skill, an agent or a workflow, by its id. An
-         *     agent or a workflow is named by its bare id; a grant stores them as `agent:<id>` and `workflow:<id>`.
+         *     agent or a workflow is named by its bare id; `grant` and `tool_name` are its two other spellings.
          */
         "Ref-Input": {
             /** Id */
@@ -8723,6 +9653,17 @@ export interface components {
              * @enum {string}
              */
             kind: "tool" | "knowledge" | "skill" | "agent" | "workflow";
+        };
+        /**
+         * ReferenceAdded
+         * @description What an insert granted the agent: the reference and anything it brought with it (a skill's tools, knowledge
+         *     bases and the skills its steps run). Empty when the agent already held it; `agent_version` is then unchanged.
+         */
+        ReferenceAdded: {
+            /** Added */
+            added: components["schemas"]["ReferenceItem"][];
+            /** Agentversion */
+            agentVersion: number;
         };
         /** ReferenceGroup */
         ReferenceGroup: {
@@ -9125,6 +10066,8 @@ export interface components {
         RunDetail: {
             /** Cancancel */
             canCancel?: boolean | null;
+            /** Canredrive */
+            canRedrive?: boolean | null;
             /** Canretry */
             canRetry?: boolean | null;
             /** Children */
@@ -9176,25 +10119,41 @@ export interface components {
         };
         /**
          * RunFailure
-         * @description The failing step as a builder reads it: the same sentence as `error`, plus where and whether a retry helps.
+         * @description Why a run failed, in the one error model (ops_contracts.errors): a kind, a stable code, the builder's
+         *     message, a sentence safe for a customer and whether a retry helps, with the failing step and attempt.
          */
         RunFailure: {
             /** Attempt */
             attempt?: number | null;
             /** Code */
-            code?: string | null;
-            /** Field */
-            field?: string | null;
+            code: string;
+            /** Details */
+            details?: {
+                [key: string]: string | number | boolean | null;
+            };
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "input" | "refused" | "upstream" | "timeout" | "internal";
             /** Message */
             message: string;
             /** Nodeid */
             nodeId?: string | null;
             /** Nodename */
             nodeName?: string | null;
+            /** Of */
+            of?: number | null;
+            /** Retryafterseconds */
+            retryAfterSeconds?: number | null;
             /** Retryable */
-            retryable?: boolean | null;
+            retryable: boolean;
             /** Suggestion */
             suggestion?: string | null;
+            /** Traceid */
+            traceId?: string | null;
+            /** Usermessage */
+            userMessage: string;
         };
         /** RunFile */
         RunFile: {
@@ -9276,6 +10235,8 @@ export interface components {
         RunRow: {
             /** Cancancel */
             canCancel?: boolean | null;
+            /** Canredrive */
+            canRedrive?: boolean | null;
             /** Canretry */
             canRetry?: boolean | null;
             /** Createdat */
@@ -9373,6 +10334,34 @@ export interface components {
                 [key: string]: components["schemas"]["JsonValue"];
             };
         };
+        /**
+         * RunsFilter
+         * @description Which runs a bulk action takes: each given field narrows it. `kind` and `code` are the run's recorded error
+         *     (ops_contracts.errors); `createdFrom` and `createdTo` bound when the run started, ISO times, the end excluded.
+         */
+        RunsFilter: {
+            /** Code */
+            code?: string | null;
+            /** Createdfrom */
+            createdFrom?: string | null;
+            /** Createdto */
+            createdTo?: string | null;
+            /** Kind */
+            kind?: string | null;
+            /** Workflowid */
+            workflowId?: string | null;
+        };
+        /**
+         * SaveBase
+         * @description The copy a save is made on: its version and digest (save-base.ts `baseOf` reads it as `baseVersion` and
+         *     `baseDigest`).
+         */
+        SaveBase: {
+            /** Digest */
+            digest: string;
+            /** Version */
+            version: number;
+        };
         /** SavedCase */
         SavedCase: {
             /** Checks */
@@ -9397,6 +10386,8 @@ export interface components {
         };
         /** SavedCaseCheck */
         SavedCaseCheck: {
+            /** Rubric */
+            rubric?: string | null;
             /** Text */
             text?: string | null;
             /** Tool */
@@ -9580,6 +10571,8 @@ export interface components {
             returns?: components["schemas"]["ReturnFieldOut"][];
             /** Slug */
             slug: string;
+            /** Source */
+            source?: string | null;
             /** Steps */
             steps?: components["schemas"]["SkillStepOut"][];
             /** Success */
@@ -9645,6 +10638,8 @@ export interface components {
             reviewNote: string;
             /** Slug */
             slug?: string | null;
+            /** Source */
+            source?: string | null;
             /** Steps */
             steps?: components["schemas"]["SkillStep"][];
             /** Success */
@@ -9661,6 +10656,8 @@ export interface components {
         SkillDetail: {
             activity: components["schemas"]["SkillActivity"];
             content: components["schemas"]["SkillContent"];
+            /** Digest */
+            digest: string;
             /** Draftversion */
             draftVersion: number | null;
             /** Id */
@@ -9711,6 +10708,8 @@ export interface components {
             status: "draft" | "in_review" | "published" | "deprecated";
             /** Tests */
             tests: components["schemas"]["JsonValue"][];
+            /** Text */
+            text: string;
             /** Tokens */
             tokens: number;
             /** Toolcount */
@@ -9732,6 +10731,8 @@ export interface components {
         };
         /** SkillDraftPatch */
         SkillDraftPatch: {
+            /** Basedigest */
+            baseDigest: string;
             /** Baseversion */
             baseVersion: number;
             /** Exit */
@@ -9763,6 +10764,8 @@ export interface components {
             refusal?: string | null;
             /** Returns */
             returns?: components["schemas"]["ReturnField"][] | null;
+            /** Source */
+            source?: string | null;
             /** Steps */
             steps?: components["schemas"]["SkillStep"][] | null;
             /** Success */
@@ -9939,12 +10942,19 @@ export interface components {
             /** Origin */
             origin: string;
         };
+        /** SkillPublishAgent */
+        SkillPublishAgent: {
+            /** Name */
+            name: string;
+            /** Pinnedversion */
+            pinnedVersion: number | null;
+        };
         /** SkillPublishCheck */
         SkillPublishCheck: {
             /** Approversneeded */
             approversNeeded: number;
             /** Blockers */
-            blockers: string[];
+            blockers: components["schemas"]["Blocker"][];
             /** Canrequest */
             canRequest: boolean;
             /**
@@ -9954,6 +10964,53 @@ export interface components {
             editClass: "free" | "re_test" | "re_approval";
             /** Problems */
             problems?: components["schemas"]["PublishBlocker"][];
+            /** Warnings */
+            warnings?: components["schemas"]["PublishBlocker"][];
+        };
+        /**
+         * SkillPublishInfo
+         * @description A skill publish request as its reviewer reads it, kept as it was when the request opened: the published
+         *     version it replaces, both texts, the hints on the new text and what it adds.
+         */
+        SkillPublishInfo: {
+            /** Agents */
+            agents: components["schemas"]["SkillPublishAgent"][];
+            /** Approvalsneeded */
+            approvalsNeeded: number;
+            /** Changes */
+            changes: string[];
+            /** Editclass */
+            editClass: string;
+            /** Failing */
+            failing: string[];
+            /** Fromversion */
+            fromVersion: number | null;
+            /** Guardrails */
+            guardrails: string[];
+            /** Hints */
+            hints: components["schemas"]["TextHint"][];
+            /** Kbsadded */
+            kbsAdded: string[];
+            /** Note */
+            note: string;
+            /** Ownerteam */
+            ownerTeam: string;
+            /** Requestedby */
+            requestedBy: string;
+            /** Skillid */
+            skillId: string;
+            /** Skillname */
+            skillName: string;
+            /** Testrun */
+            testRun?: null;
+            /** Textafter */
+            textAfter?: string | null;
+            /** Textbefore */
+            textBefore?: string | null;
+            /** Toversion */
+            toVersion: number;
+            /** Toolsadded */
+            toolsAdded: string[];
         };
         /** SkillRenderInput */
         SkillRenderInput: {
@@ -10015,10 +11072,14 @@ export interface components {
         };
         /** SkillStep */
         SkillStep: {
+            branch?: components["schemas"]["Branch"] | null;
             check?: components["schemas"]["StepCheck"] | null;
             /** Do */
             do: string;
             ifNot?: components["schemas"]["IfNot"] | null;
+            /** Locked */
+            locked?: boolean | null;
+            next?: components["schemas"]["Jump"] | null;
             use?: components["schemas"]["Ref-Input"] | null;
         };
         /**
@@ -10026,11 +11087,132 @@ export interface components {
          * @description One step: what to do, what it runs, what must hold after it and what happens when it does not.
          */
         SkillStepOut: {
+            branch?: components["schemas"]["BranchOut"] | null;
             check?: components["schemas"]["StepCheckOut"] | null;
             /** Do */
             do: string;
             ifNot?: components["schemas"]["IfNotOut"] | null;
+            /**
+             * Locked
+             * @description True when the builder locked the step's tool to this step: the agent reaches it only as the step, even when it is a read. Absent otherwise; a tool that changes something is kept to its step either way.
+             */
+            locked?: boolean | null;
+            next?: components["schemas"]["JumpOut"] | null;
             use?: components["schemas"]["RefOut"] | null;
+        };
+        /** SkillTextError */
+        SkillTextError: {
+            /** Id */
+            id: string;
+            /** Line */
+            line: number;
+            /** Message */
+            message: string;
+        };
+        /** SkillTextInput */
+        SkillTextInput: {
+            /** Exit */
+            exit?: {
+                [key: string]: string;
+            };
+            /**
+             * Hasparts
+             * @default false
+             */
+            hasParts: boolean;
+            /**
+             * Loading
+             * @default on_match
+             * @enum {string}
+             */
+            loading: "on_match" | "always";
+            /** Text */
+            text: string;
+        };
+        /**
+         * SkillTextKeyword
+         * @description The keyword a line is written with (`if`, `else` for else or otherwise, `stop`) and where it sits in the line
+         *     after its indent, past any list marker. Set whether or not the line reads as one: the editor highlights it only on
+         *     a line whose kind is that keyword, and indents after an `if` or `else` it is typing.
+         */
+        SkillTextKeyword: {
+            /** End */
+            end: number;
+            /** Start */
+            start: number;
+            /**
+             * Word
+             * @enum {string}
+             */
+            word: "if" | "else" | "stop";
+        };
+        /**
+         * SkillTextLine
+         * @description One line of the text: its kind, the step (from 1) it is part of, how its condition is decided (an `if`
+         *     line: `checked` on the tool's result, or `agent`, decided from the conversation) and the tool its line runs.
+         */
+        SkillTextLine: {
+            /**
+             * Depth
+             * @default 0
+             */
+            depth: number;
+            /** How */
+            how?: ("checked" | "agent") | null;
+            keyword?: components["schemas"]["SkillTextKeyword"] | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "text" | "step" | "if" | "else" | "stop" | "blank";
+            /** Line */
+            line: number;
+            /** Step */
+            step?: number | null;
+            /** Tool */
+            tool?: string | null;
+        };
+        /** SkillTextNote */
+        SkillTextNote: {
+            /** Line */
+            line: number;
+            /** Message */
+            message: string;
+        };
+        /**
+         * SkillTextReading
+         * @description POST /v1/skills/{id}/text: how a skill's text reads, as a save will read it. Hints never block anything;
+         *     `errors` (a mention of something that no longer exists) block a publish, never a save.
+         */
+        SkillTextReading: {
+            /** Errors */
+            errors: components["schemas"]["SkillTextError"][];
+            /** Hints */
+            hints: components["schemas"]["SkillTextNote"][];
+            /** Lines */
+            lines: components["schemas"]["SkillTextLine"][];
+            /** Phrases */
+            phrases: {
+                [key: string]: string[];
+            };
+            /** Steplines */
+            stepLines: number[];
+            /** Steps */
+            steps: number;
+            uses: components["schemas"]["SkillTextUses"];
+        };
+        /** SkillTextUses */
+        SkillTextUses: {
+            /** Agents */
+            agents: number;
+            /** Knowledge */
+            knowledge: number;
+            /** Skills */
+            skills: number;
+            /** Tools */
+            tools: number;
+            /** Workflows */
+            workflows: number;
         };
         /** SkillToolRef */
         SkillToolRef: {
@@ -10101,6 +11283,8 @@ export interface components {
         };
         /** SkillVersion */
         SkillVersion: {
+            /** Approvedby */
+            approvedBy?: string | null;
             /** Changes */
             changes: string[];
             content: components["schemas"]["SkillContent"];
@@ -10115,6 +11299,8 @@ export interface components {
             publishedAt?: string | null;
             /** Publishedby */
             publishedBy?: string | null;
+            /** Requestedby */
+            requestedBy?: string | null;
             /** Reviewid */
             reviewId?: string | null;
             /** Savedat */
@@ -10241,10 +11427,21 @@ export interface components {
             /** Status */
             status: string;
         };
+        /** StepChangeView */
+        StepChangeView: {
+            /** Fields */
+            fields: components["schemas"]["FieldChangeView"][];
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Type */
+            type: string;
+        };
         /**
          * StepCheck
          * @description What must hold before a step is done. `by` is set when the skill is saved: a rule is run on the step's result
-         *     in code, a sentence is confirmed by the model.
+         *     in code, a sentence is decided by the judge model (`ops_agent_kernel.judge`).
          */
         StepCheck: {
             /** By */
@@ -10258,6 +11455,15 @@ export interface components {
             by?: ("rule" | "model") | null;
             /** Text */
             text: string;
+        };
+        /** StepRefView */
+        StepRefView: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Type */
+            type: string;
         };
         /** StepUpInput */
         StepUpInput: {
@@ -10777,6 +11983,16 @@ export interface components {
             /** Steps */
             steps: components["schemas"]["TestStepView"][];
         };
+        /**
+         * TextHint
+         * @description A hint the reader put on one line of a skill's text (from 1).
+         */
+        TextHint: {
+            /** Line */
+            line: number;
+            /** Message */
+            message: string;
+        };
         /** ThreadCreated */
         ThreadCreated: {
             /** Created */
@@ -10916,7 +12132,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "pending" | "in_review" | "approved" | "rejected" | "returned";
+            status: "pending" | "in_review" | "approved" | "rejected" | "returned" | "withdrawn";
             /** Stepname */
             stepName?: string | null;
             /** Stepup */
@@ -11216,6 +12432,80 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** TryPath */
+        TryPath: {
+            /** Ends */
+            ends: string;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Steps */
+            steps: components["schemas"]["TryStep"][];
+        };
+        /** TryStep */
+        TryStep: {
+            /** Access */
+            access?: string | null;
+            /** Accounts */
+            accounts?: {
+                [key: string]: string;
+            };
+            /** Do */
+            do: string;
+            /** Holds */
+            holds?: boolean | null;
+            /** Input */
+            input?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Key */
+            key: string;
+            /** Number */
+            number: number;
+            sample?: components["schemas"]["JsonValue"];
+            /**
+             * Samplefrom
+             * @default none
+             * @enum {string}
+             */
+            sampleFrom: "last_run" | "schema" | "none";
+            /** Test */
+            test?: string | null;
+            /** Tool */
+            tool?: string | null;
+        };
+        /** TryTargets */
+        TryTargets: {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "skill" | "workflow_step";
+            /**
+             * More
+             * @default false
+             */
+            more: boolean;
+            /** Name */
+            name: string;
+            /** Paths */
+            paths: components["schemas"]["TryPath"][];
+        };
+        /**
+         * TurnUsage
+         * @description Tokens one test turn spent, on the alias it ran on.
+         */
+        TurnUsage: {
+            /** Inputtokens */
+            inputTokens: number;
+            /** Model */
+            model: string;
+            /** Outputtokens */
+            outputTokens: number;
+        };
         /** TypeRef */
         TypeRef: {
             /** Id */
@@ -11322,6 +12612,8 @@ export interface components {
         };
         /** UsedIn */
         UsedIn: {
+            /** Channel */
+            channel?: "email" | null;
             /** Own */
             own?: boolean | null;
             /** Pinnedversion */
@@ -11740,6 +13032,44 @@ export interface components {
             status: "completed" | "stopped";
             /** Visited */
             visited: string[];
+        };
+        /**
+         * WorkingCopyInput
+         * @description The definition as the editor holds it, and the copy it was made on (`saveBase` of the view last read).
+         */
+        WorkingCopyInput: {
+            /** Basedigest */
+            baseDigest: string;
+            /** Baseversion */
+            baseVersion: number;
+            /** Definition */
+            definition: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Replacesdigest */
+            replacesDigest?: string | null;
+        };
+        /** WorkingCopySaved */
+        WorkingCopySaved: {
+            saveBase: components["schemas"]["SaveBase"];
+            workingCopy: components["schemas"]["WorkingCopyView"];
+        };
+        /** WorkingCopyView */
+        WorkingCopyView: {
+            /** Baseversion */
+            baseVersion: number;
+            /** Checks */
+            checks: components["schemas"]["DefinitionCheck"][];
+            /** Definition */
+            definition: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Digest */
+            digest: string;
+            /** Updatedat */
+            updatedAt: string;
+            /** Updatedby */
+            updatedBy: string;
         };
         /** WouldPause */
         WouldPause: {
@@ -13578,7 +14908,9 @@ export interface operations {
     agents_create_agent: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-acting-for"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -13991,6 +15323,113 @@ export interface operations {
             };
         };
     };
+    agents_draft_agent_brief: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BriefDraftInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_BriefDraft_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     assurance_agent_cases: {
         parameters: {
             query?: never;
@@ -14201,6 +15640,223 @@ export interface operations {
             };
         };
     };
+    assurance_add_agent_cases: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EvalCasesInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SavedCases_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    assurance_agent_eval_runs: {
+        parameters: {
+            query?: {
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
+            };
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ListResult_EvalRunRow__"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     agents_create_eval_run: {
         parameters: {
             query?: never;
@@ -14222,7 +15878,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_AgentEvalRun_"];
+                    "application/json": components["schemas"]["Envelope_Union_EvalRunRecord__AgentEvalRun__"];
                 };
             };
             /** @description Invalid request */
@@ -14625,6 +16281,216 @@ export interface operations {
             };
         };
     };
+    agents_agent_prompt: {
+        parameters: {
+            query?: {
+                version?: number | null;
+            };
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_AgentPrompt_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    agents_publish_check: {
+        parameters: {
+            query: {
+                version: number;
+            };
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_AgentPublishCheck_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     agents_publish_preview: {
         parameters: {
             query: {
@@ -14752,6 +16618,113 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_PublishReview_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    agents_add_reference: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddReference"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ReferenceAdded_"];
                 };
             };
             /** @description Invalid request */
@@ -19277,6 +21250,210 @@ export interface operations {
             };
         };
     };
+    assurance_delete_eval_case: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    assurance_eval_run: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_EvalRunRecord_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     threads_team_stream: {
         parameters: {
             query?: {
@@ -21492,6 +23669,13 @@ export interface operations {
         parameters: {
             query?: {
                 agentId?: string | null;
+                kind?: string[] | null;
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -21505,7 +23689,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_list_MemoryView__"];
+                    "application/json": components["schemas"]["Envelope_ListResult_MemoryView__"];
                 };
             };
             /** @description Invalid request */
@@ -23044,6 +25228,109 @@ export interface operations {
             };
         };
     };
+    reviews_withdraw_publish_request: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_PublishReview_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     agents_references_search: {
         parameters: {
             query?: {
@@ -23918,6 +26205,111 @@ export interface operations {
             };
         };
     };
+    workflows_bulk_engine_runs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkRunsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_BulkRunsResult_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     workflows_run_set_aside_email: {
         parameters: {
             query?: never;
@@ -24363,6 +26755,109 @@ export interface operations {
                 content: {
                     "application/json": unknown;
                     "text/event-stream": string;
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    workflows_redrive_engine_run: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_RunRow_"];
                 };
             };
             /** @description Invalid request */
@@ -25738,6 +28233,113 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_SkillRendered_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    agents_read_skill_text: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                skill_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SkillTextInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SkillTextReading_"];
                 };
             };
             /** @description Invalid request */
@@ -28679,6 +31281,111 @@ export interface operations {
             };
         };
     };
+    agents_try_targets: {
+        parameters: {
+            query?: {
+                skill?: string | null;
+                workflow?: string | null;
+                step?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_TryTargets_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     agents_list_widgets: {
         parameters: {
             query?: {
@@ -29536,6 +32243,7 @@ export interface operations {
                 startable?: boolean;
                 takesFiles?: boolean;
                 engine?: "all" | "current";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -30481,6 +33189,112 @@ export interface operations {
             };
         };
     };
+    workflows_diff_definitions: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+            };
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_DefinitionDiffView_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     workflows_pause_definition: {
         parameters: {
             query?: never;
@@ -30499,6 +33313,109 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_DefinitionView_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    workflows_publish_preview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_PublishPreview_"];
                 };
             };
             /** @description Invalid request */
@@ -30916,6 +33833,113 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_DefinitionShapes_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    workflows_save_working_copy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkingCopyInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_WorkingCopySaved_"];
                 };
             };
             /** @description Invalid request */

@@ -15,7 +15,7 @@ readable zoom, with its controls, checks and minimap floating over it, instead o
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | Open the ten-step workflow at 1440px | The sidebar collapses; the canvas is wider than 1200px; Save version is in the page header; no settings column |
+| 1 | Open the ten-step workflow at 1440px | The sidebar collapses; the canvas is wider than 1200px; the problems count is in the page header; no settings column |
 | 2 | Read the zoom | At least 0.65, with the trigger inside the canvas |
 | 3 | Fullscreen, then Escape | The canvas takes 1440 by 900, then returns; every canvas button has a name |
 | 3b | Click the hold step once | Its settings sheet is in the page by the next frame |

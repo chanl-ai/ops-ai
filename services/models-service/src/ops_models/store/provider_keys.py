@@ -56,7 +56,14 @@ class ProviderKeyStore(Store):
         """One page of the account's keys by name; `search` matches the name and `ids` names keys by name."""
         async with self.tx() as c:
             query = sa.select(*META).where(t.c.tenant_id == tenant_id)
-            page = await list_page(c, query, params, search=(t.c.name,), default_sort=t.c.name.asc())
+            page = await list_page(
+                c,
+                query,
+                params,
+                search=(t.c.name,),
+                sortable={"name": t.c.name, "createdAt": t.c.created_at, "rotatedAt": t.c.rotated_at},
+                default_sort=t.c.name.asc(),
+            )
         return ListResult[ProviderKeyRow].model_validate(page)
 
     async def save(self, tenant_id: str, name: str, value: str, *, by: str) -> tuple[ProviderKeyRow, bool]:

@@ -261,7 +261,6 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-410 | tools-service | An assistant lists and runs a team's read tools over MCP with an API key; writes, other teams and production are refused | api, ui | current |
 | uc-267 | console | Admins see roles, a person's effective access and why an action is refused | ui | current |
 | uc-233 | console | Start run is a form generated from the trigger's input schema; a file input uploads or picks files and the run gets their ids | ui | passing |
-| uc-234 | console | A Human Task opens as its own page: the question, the document beside the read values, Details folded, and the decision in a footer row that never covers the body | ui | passing |
 | uc-257 | console | Tables size each column by what it holds: names trimmed to one line with the whole value on hover, numbers right-aligned, a dash for an empty cell, and the name pinned on a phone | ui | passing |
 | uc-248 | agents-service | A hold on a customer's account: matched, worked out, approved in time or by a supervisor after the deadline, placed, noted on a case, and the outside system told | ui | passing |
 | uc-249 | agents-service | A complaint email: each attachment recognised and its read kept, the complaint read and triaged by an agent, a case by urgency, a hold started, and an approved reply | ui | passing |
@@ -382,6 +381,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-723 | console | The console lists every area as an open sidebar section, offered only by what the person may open: admin, builder, reviewer, viewer, a chat-only person and a person in two teams; with the area_tabs flag on, the area tabs come back | ui | passing |
 | uc-722 | console | The areas rest on server facts: the seeded people hold the cells the areas are built from, and the tool-call list shows one call by its id | api | failing |
 | uc-workflows-1 | agents-service | A Schedule trigger starts one run when its tick is due, the same tick key starts no second run, and a tick due later stays queued | api, sdk | failing |
+| uc-workflows-2 | agents-service | A builder reads why a test run failed: its kind, code, the failed step, a sentence for an end user and the End it stopped at | api, sdk, cli | passing |
 | uc-platform-1 | platform-service | A team's running work is counted for that team only, and the delete check names it and stops the deletion | api | passing |
 | uc-751 | agents-service | Evals keep saved cases and runs for the team | api, sdk, ui | draft |
 | uc-752 | agents-service | An agent answers from a knowledge source with a citation, in mock and real mode | api, sdk, ui | works |
@@ -389,3 +389,12 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-754 | tools-service | Approval fails closed: when the approval rules cannot be read, a write that needs approval is refused and never runs | api | works |
 | uc-755 | tools-service | A team holding only a workflow grant on another team's tool module uses it through the workflow and cannot edit, publish, run, revoke or delete it | api, ui | works |
 | uc-756 | agents-service | A shared form filled in signed out starts a workflow with knowledge and a tool, a person approves a step, and the run finishes with a record | api, ui | works |
+| uc-757 | agents-service | A builder writes a skill with steps and an agent brief, and a chat follows the steps | api, sdk, cli, ui | draft |
+| uc-761 | console | A builder edits a workflow that saves itself, publishes it past its problems and compares its versions | ui | current |
+| uc-762 | agents-service | A builder tries one path of a skill: reads run, a write is planned and sent once only when confirmed, and nothing is stored | api, ui | current |
+| uc-763 | agents-service | A run outlives a killed worker and redrives from its failed step | api | works |
+| uc-764 | console | An agent page shows its save state, its model, knowledge, tools and skills on the main page, and a channels tab | ui | draft |
+| uc-765 | console | A builder asks two versions of an agent one question and reads the replies side by side | ui | passing |
+| uc-766 | console | A role given to a group, and the approvals cell on the role's page | ui | draft |
+| uc-767 | console | A person who only chats sees My apps in the sidebar and can chat | ui | draft |
+| uc-768 | console | One create form holds a name to the same rule the server keeps | ui | draft |

@@ -26,6 +26,7 @@ from tests.conftest import fixture_knowledge
 
 from ..conftest import SEED, FakeGraphModels, scripted_model
 from ..contract import response_checker
+from ..saves import save_agent
 from .test_agent_registry import _models_service  # pyright: ignore[reportPrivateUsage]
 
 FRAUD = "ag_fraud"
@@ -97,10 +98,7 @@ async def test_a_version_saved_before_limits_gets_the_owners_defaults(tmp_path: 
 async def test_limits_go_live_only_through_a_reviewed_publish(tmp_path: Path) -> None:
     async with _app(tmp_path, models_url="http://models") as (c, app):
         before = served(app, FRAUD)
-        await c.patch(
-            f"/v1/agents/{FRAUD}",
-            json={"model": "bank-standard", "limits": {**LIMITS, "allowedModels": ["bank-standard"]}},
-        )
+        await save_agent(c, FRAUD, {"model": "bank-standard", "limits": {**LIMITS, "allowedModels": ["bank-standard"]}})
         draft = _data(await c.get(f"/v1/agents/{FRAUD}"))
         assert draft["limits"]["temperature"] == {"min": 0, "max": 0.7, "default": 0.2}
         assert served(app, FRAUD) == before, "a draft's limits are not what callers get"
@@ -128,7 +126,7 @@ async def test_a_limit_that_disagrees_with_itself_or_its_version_is_refused_nami
         fraud = _data(await c.get(f"/v1/agents/{FRAUD}"))
         assert fraud["model"] == model
         for change, field in cases:
-            r = await c.patch(f"/v1/agents/{FRAUD}", json={"limits": {**good, **change}})
+            r = await save_agent(c, FRAUD, {"limits": {**good, **change}})
             assert r.status_code == 422, (change, r.text)
             assert r.json()["error"]["code"] == "invalid_limits" and r.json()["error"]["message"].startswith(field), (
                 change,
@@ -136,19 +134,19 @@ async def test_a_limit_that_disagrees_with_itself_or_its_version_is_refused_nami
             )
         assert _data(await c.get(f"/v1/agents/{FRAUD}"))["version"] == fraud["version"], "nothing was saved"
 
-        _data(await c.patch(f"/v1/agents/{FRAUD}", json={"limits": good}))
-        moved = await c.patch(f"/v1/agents/{FRAUD}", json={"model": "bank-mini"})
+        _data(await save_agent(c, FRAUD, {"limits": good}))
+        moved = await save_agent(c, FRAUD, {"model": "bank-mini"})
         assert moved.status_code == 422 and moved.json()["error"]["message"].startswith("limits.defaultModel"), (
             moved.text
         )
-        dropped = await c.patch(f"/v1/agents/{FRAUD}", json={"toolIds": ["lookup_account"]})
+        dropped = await save_agent(c, FRAUD, {"toolIds": ["lookup_account"]})
         assert dropped.status_code == 422 and "switchableToolIds" in dropped.json()["error"]["message"], dropped.text
 
 
 async def test_an_allowed_model_models_service_does_not_serve_is_not_published(tmp_path: Path) -> None:
     async with _app(tmp_path, models_url="http://models") as (c, _):
         limits = {**LIMITS, "allowedModels": ["bank-standard", "bank-embed"]}
-        agent = _data(await c.patch(f"/v1/agents/{FRAUD}", json={"model": "bank-standard", "limits": limits}))
+        agent = _data(await save_agent(c, FRAUD, {"model": "bank-standard", "limits": limits}))
         r = await c.post(f"/v1/agents/{FRAUD}/publish-requests", json={"version": agent["version"]})
         assert r.status_code == 422 and r.json()["error"]["code"] == "unknown_model_alias", r.text
         assert "bank-embed" in r.json()["error"]["message"]

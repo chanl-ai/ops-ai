@@ -19,6 +19,30 @@ export const agentsOperations = {
     ],
     "stream": false
   },
+  "agents_add_reference": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/agents/{agent_id}/references",
+    "pathParams": [
+      "agent_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "agents_agent_prompt": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/agents/{agent_id}/prompt",
+    "pathParams": [
+      "agent_id"
+    ],
+    "query": [
+      "version"
+    ],
+    "stream": false
+  },
   "agents_agent_skill_options": {
     "body": null,
     "headers": [],
@@ -50,7 +74,9 @@ export const agentsOperations = {
   },
   "agents_create_agent": {
     "body": "json",
-    "headers": [],
+    "headers": [
+      "x-acting-for"
+    ],
     "method": "POST",
     "path": "/v1/agents",
     "pathParams": [],
@@ -170,6 +196,17 @@ export const agentsOperations = {
     "pathParams": [
       "agent_id",
       "skill_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "agents_draft_agent_brief": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/agents/{agent_id}/brief-draft",
+    "pathParams": [
+      "agent_id"
     ],
     "query": [],
     "stream": false
@@ -401,6 +438,19 @@ export const agentsOperations = {
     ],
     "stream": false
   },
+  "agents_publish_check": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/agents/{agent_id}/publish-check",
+    "pathParams": [
+      "agent_id"
+    ],
+    "query": [
+      "version"
+    ],
+    "stream": false
+  },
   "agents_publish_preview": {
     "body": null,
     "headers": [],
@@ -412,6 +462,17 @@ export const agentsOperations = {
     "query": [
       "version"
     ],
+    "stream": false
+  },
+  "agents_read_skill_text": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/skills/{skill_id}/text",
+    "pathParams": [
+      "skill_id"
+    ],
+    "query": [],
     "stream": false
   },
   "agents_recent_runs": {
@@ -601,6 +662,19 @@ export const agentsOperations = {
     ],
     "stream": false
   },
+  "agents_try_targets": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/try-targets",
+    "pathParams": [],
+    "query": [
+      "skill",
+      "workflow",
+      "step"
+    ],
+    "stream": false
+  },
   "agents_update_agent": {
     "body": "json",
     "headers": [],
@@ -638,6 +712,17 @@ export const agentsOperations = {
     ],
     "stream": false
   },
+  "assurance_add_agent_cases": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/agents/{agent_id}/eval-cases",
+    "pathParams": [
+      "agent_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "assurance_agent_cases": {
     "body": null,
     "headers": [],
@@ -645,6 +730,46 @@ export const agentsOperations = {
     "path": "/v1/agents/{agent_id}/eval-cases",
     "pathParams": [
       "agent_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "assurance_agent_eval_runs": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/agents/{agent_id}/eval-runs",
+    "pathParams": [
+      "agent_id"
+    ],
+    "query": [
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
+    ],
+    "stream": false
+  },
+  "assurance_delete_eval_case": {
+    "body": null,
+    "headers": [],
+    "method": "DELETE",
+    "path": "/v1/eval-cases/{case_id}",
+    "pathParams": [
+      "case_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "assurance_eval_run": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/eval-runs/{run_id}",
+    "pathParams": [
+      "run_id"
     ],
     "query": [],
     "stream": false
@@ -1356,7 +1481,14 @@ export const agentsOperations = {
     "path": "/v1/me/memories",
     "pathParams": [],
     "query": [
-      "agentId"
+      "agentId",
+      "kind",
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -1649,6 +1781,17 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "reviews_withdraw_publish_request": {
+    "body": null,
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/publish-requests/{request_id}/withdraw",
+    "pathParams": [
+      "request_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "templates_list_templates": {
     "body": null,
     "headers": [],
@@ -1845,6 +1988,15 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "workflows_bulk_engine_runs": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/runs/bulk",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
   "workflows_cancel_engine_run": {
     "body": null,
     "headers": [],
@@ -1906,6 +2058,20 @@ export const agentsOperations = {
       "workflow_id"
     ],
     "query": [],
+    "stream": false
+  },
+  "workflows_diff_definitions": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/workflows/definitions/{workflow_id}/diff",
+    "pathParams": [
+      "workflow_id"
+    ],
+    "query": [
+      "from",
+      "to"
+    ],
     "stream": false
   },
   "workflows_discard_draft": {
@@ -2078,7 +2244,8 @@ export const agentsOperations = {
       "status",
       "startable",
       "takesFiles",
-      "engine"
+      "engine",
+      "ids"
     ],
     "stream": false
   },
@@ -2120,6 +2287,28 @@ export const agentsOperations = {
     "path": "/v1/workflows/definitions/{workflow_id}/pause",
     "pathParams": [
       "workflow_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "workflows_publish_preview": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/workflows/definitions/{workflow_id}/publish-preview",
+    "pathParams": [
+      "workflow_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "workflows_redrive_engine_run": {
+    "body": null,
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/runs/{run_id}/redrive",
+    "pathParams": [
+      "run_id"
     ],
     "query": [],
     "stream": false
@@ -2239,6 +2428,17 @@ export const agentsOperations = {
     "headers": [],
     "method": "PUT",
     "path": "/v1/workflows/{workflow_id}/draft",
+    "pathParams": [
+      "workflow_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "workflows_save_working_copy": {
+    "body": "json",
+    "headers": [],
+    "method": "PUT",
+    "path": "/v1/workflows/definitions/{workflow_id}/working-copy",
     "pathParams": [
       "workflow_id"
     ],

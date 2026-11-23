@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from pydantic import JsonValue
 from sqlalchemy.ext.asyncio import AsyncConnection
 
-from ops_access import BY_KEY, POLICIES, check_value
+from ops_access import BY_KEY, POLICIES, below_floor, check_value
 from ops_access.platform_events import POLICY_CHANGED
 from ops_access.policies import PUBLISH_AREAS
 from ops_service_kit.http import Json, Out
@@ -31,6 +31,10 @@ OLD_KEYS = ("toolWritesNeedApproval", "appWritesNeedApproval", "appsChangeWithou
 # Each policy's value is free-form JSON (a switch, a number, a list, or a per-team object), keyed by policy: the shape a
 # token carries in `Principal.policies` and `ops_access.policy()` reads.
 PolicyValues = Json
+
+
+class BelowFloorError(Exception):
+    """A team's approval rule looser than the Security team's floor (`approvalsFloor`); the message says why."""
 
 
 class PolicyRow(Out):
@@ -70,6 +74,13 @@ class PolicyStore(TenantDb):
             row = (await c.execute(sa.select(policies.c.value).where(policies.c.key == key))).first()
             whole = row.value if row else spec.default
             after_of_team: Any = None
+            if spec.per_team and key in ("requesterMayDecide", "appChanges", "appChangesByApp"):
+                # Read in this transaction, so a floor set at the same moment is never missed.
+                floor = (await c.execute(sa.select(policies.c.value).where(policies.c.key == "approvalsFloor"))).first()
+                if (why := below_floor(key, value, floor.value if floor else None)) is not None:
+                    raise BelowFloorError(why)
+            if spec.per_team:
+                whole = _by_team(whole, stored=row is not None)
             if spec.per_team:
                 before = dict(whole).get(team_id)
                 value = {**dict(whole), str(team_id): value}
@@ -165,6 +176,15 @@ class PolicyStore(TenantDb):
                 await c.execute(
                     policies.update().where(policies.c.key == old).values(value=whole, updated_by=by, updated_at=at)
                 )
+
+
+def _by_team(whole: Any, *, stored: bool) -> Any:
+    """A per-team key's whole value as {team: part}. A value stored before the key was per team (requesterMayDecide
+    true or false) held for every team, so it becomes the workspace's own part (`*`) and the teams that set nothing
+    keep it; a catalogue default names no team."""
+    if isinstance(whole, dict):
+        return cast(Any, whole)
+    return {"*": whole} if stored else {}
 
 
 def new_workspace_values() -> PolicyValues:

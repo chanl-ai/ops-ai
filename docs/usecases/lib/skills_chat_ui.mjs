@@ -44,8 +44,11 @@ export async function seedChat() {
   const call = await adminCalls();
   const made = await call('POST', '/v1/skills', { ownerTeam: 'team_ops', name: 'Salesforce', useWhen: "Use for anything about a client's Salesforce record.", instructions: 'Work only from Salesforce. Say what you read.', parts: [PREPARE, UPDATE] });
   await call('POST', `/v1/skills/${made.id}/publish-requests`, { note: 'use case' });
+  const notes = await call('POST', '/v1/skills', { ownerTeam: 'team_ops', name: 'Weekly summary', useWhen: 'Use to summarise the week.', instructions: 'Summarise what the team did this week.', inputs: [] });
+  await call('POST', `/v1/skills/${notes.id}/publish-requests`, { note: 'use case' });
   const agent = await call('POST', '/v1/agents', { name: 'Desk', role: 'Answers the team' });
-  const draft = await call('PATCH', `/v1/agents/${agent.id}`, { toolIds: [] });
+  // The create reply is the copy the save names.
+  const draft = await call('PATCH', `/v1/agents/${agent.id}`, { toolIds: [], baseVersion: agent.version, baseDigest: agent.digest });
   await call('POST', `/v1/agents/${agent.id}/publish-requests`, { version: draft.version });
   return { skill: made.id, newThread: async () => (await call('POST', '/chat/threads', { agentId: agent.id, kbIds: [] })).id };
 }
@@ -58,23 +61,35 @@ export async function openChat(browser, consoleUrl, thread, width, errors) {
   return page;
 }
 
-/** Types /, picks `part` from the menu, fills the client, adds it to the message and sends; resolves when the reply ends. */
-export async function pickPartAndSend(page, partName, client, words) {
+/** Types /, picks `part` from the menu; the skill becomes a chip and no form opens. */
+export async function pickPart(page, partName) {
   const box = page.getByRole('textbox', { name: 'Message' });
   await box.click();
   await box.pressSequentially('/');
   const menu = page.getByTestId('skill-menu');
   await menu.waitFor({ timeout: 30_000 });
   await menu.getByRole('option', { name: new RegExp(partName) }).click();
-  const form = page.getByTestId('skill-inputs');
-  await form.waitFor({ timeout: 15_000 });
-  await form.getByLabel(/^Client/).fill(client);
-  await form.getByRole('button', { name: 'Add to message' }).click();
-  const chip = page.getByTestId('skill-chip');
-  await chip.waitFor({ timeout: 15_000 });
+  await page.getByTestId('skill-chip').last().waitFor({ timeout: 15_000 });
+}
+
+/** Types `words` and presses Send; resolves with the message POST's response. */
+export async function sendWords(page, words) {
   await page.getByRole('textbox', { name: 'Message' }).fill(words);
   const sent = page.waitForResponse((r) => r.request().method() === 'POST' && /\/chat\/threads\/[^/]+\/messages$/.test(r.url()), { timeout: 120_000 });
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await page.getByRole('button', { name: 'Send', exact: true }).first().click();
+  return sent;
+}
+
+/** Picks `partName`, sends with the required client missing, fills it in the dialog; resolves when the reply ends. */
+export async function pickPartAndSend(page, partName, client, words) {
+  await pickPart(page, partName);
+  await page.getByRole('textbox', { name: 'Message' }).fill(words);
+  await page.getByRole('button', { name: 'Send', exact: true }).first().click();
+  const dialog = page.getByTestId('skill-inputs');
+  await dialog.waitFor({ timeout: 15_000 });
+  await dialog.getByLabel(/^Client/).fill(client);
+  const sent = page.waitForResponse((r) => r.request().method() === 'POST' && /\/chat\/threads\/[^/]+\/messages$/.test(r.url()), { timeout: 120_000 });
+  await dialog.getByRole('button', { name: 'Send', exact: true }).click();
   const res = await sent;
   await page.getByRole('button', { name: 'Stop', exact: true }).waitFor({ state: 'hidden', timeout: 120_000 }).catch(() => undefined);
   return res;

@@ -144,7 +144,8 @@ def test_cli_run_prints_the_schema_path(monkeypatch: Any, capsys: Any) -> None:
         )()
 
     monkeypatch.setattr("ops_ai._cli.workflows.client", lambda ns: Fake())
-    assert main(["workflows", "run", "normalize_support_request", "--input", "{}", "--test"]) == 1
+    # An invalid input is kind `input`, which exits 2 (ops_ai.errors.EXIT_CODES).
+    assert main(["workflows", "run", "normalize_support_request", "--input", "{}", "--test"]) == 2
     assert "customerEmail" in capsys.readouterr().err
 
 

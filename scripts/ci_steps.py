@@ -3,9 +3,7 @@
 
   ci_steps.py --check              fail when a `run:` step in ci.yml has no twin and no no_local_twin reason, or the
                                    list names a job or step ci.yml no longer has
-  ci_steps.py --run [--job J] [--plan]
-                                   run each job's twins in ci.yml order (an identical command once), keep going past a
-                                   failure and list them all at the end; --plan prints the commands and runs nothing
+                                   (running them is scripts/ci_local.py, `make ci-local`, which reads this list)
   ci_steps.py --self-test          plants one unlisted step and one stale entry and sees both refused
 
 A step is named by its `name:`, else by the first line of its command.
@@ -14,7 +12,6 @@ A step is named by its `name:`, else by the first line of its command.
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -67,47 +64,6 @@ def load() -> tuple[dict[str, Any], dict[str, list[dict[str, str]]]]:
     return yaml.safe_load(WORKFLOW.read_text()), json.loads(LIST.read_text())["jobs"]
 
 
-def commands(listed: dict[str, list[dict[str, str]]], only: str | None) -> list[tuple[str, str, str | None]]:
-    """(job, command, None) for a twin, (job, step, reason) for a step with none; a command is listed once."""
-    out: list[tuple[str, str, str | None]] = []
-    seen: set[str] = set()
-    for job, entries in listed.items():
-        if only and job != only:
-            continue
-        for e in entries:
-            if e.get("twin"):
-                if e["twin"] not in seen:
-                    seen.add(e["twin"])
-                    out.append((job, e["twin"], None))
-            else:
-                out.append((job, e["step"], e.get("no_local_twin", "")))
-    return out
-
-
-def run(only: str | None, plan: bool) -> int:
-    _, listed = load()
-    if only and only not in listed:
-        print(f"ci-local: no job {only!r}; jobs: {', '.join(listed)}")
-        return 2
-    failed: list[str] = []
-    for job, cmd, reason in commands(listed, only):
-        if reason is not None:
-            print(f"[{job}] no local twin: {cmd[:50]} ({reason[:70]})")
-        elif plan:
-            print(f"[{job}] {cmd}")
-        else:
-            print(f"== [{job}] {cmd}", flush=True)
-            if subprocess.run(["bash", "-c", cmd], cwd=ROOT, check=False).returncode != 0:
-                failed.append(f"[{job}] {cmd}")
-    if failed:
-        print(f"ci-local: {len(failed)} failed:")
-        print("\n".join(f"  - {f}" for f in failed))
-        return 1
-    if not plan:
-        print("ci-local: every twin passed")
-    return 0
-
-
 def self_test() -> int:
     workflow, listed = load()
     assert check(workflow, listed) == [], check(workflow, listed)
@@ -124,9 +80,6 @@ def self_test() -> int:
 def main(argv: list[str]) -> int:
     if "--self-test" in argv:
         return self_test()
-    if "--run" in argv:
-        job = argv[argv.index("--job") + 1] if "--job" in argv else None
-        return run(job or None, "--plan" in argv)
     problems = check(*load())
     print("\n".join(problems) if problems else "ci steps: every ci.yml run step has a twin or a reason")
     return 1 if problems else 0

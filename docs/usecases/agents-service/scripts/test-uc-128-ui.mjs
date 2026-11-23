@@ -67,7 +67,7 @@ await withUiStack(
       await priya.waitForURL(/\/chat\/th_/, { timeout: 60_000 });
       await priya.getByText('I could not find that.').first().waitFor({ timeout: 60_000 }).catch(() => undefined);
       await box.fill('@Card');
-      await priya.getByTestId('mention-list').getByText('Card Dispute Resolver').click();
+      await priya.getByTestId('caret-menu').getByText('Card Dispute Resolver').click();
       const notice = priya.getByTestId('handover-notice');
       const noticeText = await notice.innerText({ timeout: 30_000 }).catch(() => '');
       check('4 @ hands the chat over, with Back', /talking to Card Dispute Resolver/.test(noticeText) && /Back to Branch Concierge/.test(noticeText), { thread: thread?.id, noticeText });

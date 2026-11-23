@@ -115,3 +115,9 @@ its number is not reused.
 | 19 | Does Security accept policy approval tokens for the write classes a gate policy names? | First workflow's approval rules |
 | 20 | Does the network review allow Graph change notifications for mailboxes and SharePoint? | Phase 2 |
 | 21 | Who names the Model Risk second-line approver group, and when? | First `high` workflow |
+
+## What a pull request runs
+
+A pull request runs fast feedback for the areas it changed: the plan, `checks` (without the script tests), the touched services' and packages' tests, the console and docs jobs when touched, and the maintainer review. The slow jobs (`repo`, `store-mssql`, `release-proof` and the script tests) have `needs.plan.outputs.heavy == 'true'` in their `if:`; `scripts/ci-plan.sh` prints `heavy=false` for a `pull_request` event unless the pull request is titled `[ci full]` or labelled `ci:full`. The merge queue (`merge_group`), pushes to develop and pushes to `release/*` or `hotfix/*` run them, so every change passes them before it reaches develop. `ci-ok` counts a skipped job as passed. `scripts/tests/test_ci_plan.py` fails when `store-mssql` or `repo` is planned on a pull request.
+
+The `repo` job is one matrix entry per `repo_jobs` item of the plan: each suite of the full plan outside the services (`pool-pyright`, `pool-store`, `pool-engine`, `pool-packages`, `pool-deploy`), `checks` (ruff on `packages/`, the check list, the maintainer-review history), `scripts` (the script tests on `pytest -n auto --dist loadfile`) and `sdk` (`sdk-verify`, `changelog-verify`), all in parallel.

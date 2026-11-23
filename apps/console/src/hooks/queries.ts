@@ -8,6 +8,7 @@ import { sdk } from '@/lib/api/ops-sdk';
 import type { OpsAI } from '@chanl-ai/ops-ai';
 import type { ToolRowFilters } from '@/lib/types/tool-directory';
 import type {
+  Agent,
   AgentInput,
   AgentPatch,
   GatePolicyInput,
@@ -24,6 +25,8 @@ import type {
   WorkflowSettingsInput,
 } from '@/lib/types/domain';
 import type { AgentFilters, DeploymentFilters, ListParams, ListResult, PolicyFilters, ReviewListParams, RunFilters, ToolFilters, WorkflowFilters } from '@/lib/types/query';
+import { knowledgeChange, toolChange } from '@/lib/agent-tools';
+import { baseOf, staleSave } from '@/lib/save-base';
 import { teamKey, useTeamQuery } from './team-query';
 
 export const qk = {
@@ -77,7 +80,7 @@ export type WorkflowRow = Awaited<ReturnType<OpsAI['raw']['agents']['workflows_l
 };
 
 /** One page of the current engine's workflows; the filters, search and sort go to the route. */
-export const fetchWorkflows = (p: ListParams<WorkflowFilters>): Promise<ListResult<WorkflowRow>> =>
+export const fetchWorkflows = (p: ListParams<WorkflowFilters> & { ids?: string[] }): Promise<ListResult<WorkflowRow>> =>
   sdk((ops) =>
     ops.raw.agents.workflows_list_workflows({
       query: {
@@ -86,6 +89,7 @@ export const fetchWorkflows = (p: ListParams<WorkflowFilters>): Promise<ListResu
         search: p.search || undefined,
         sortBy: p.sortBy,
         sortOrder: p.sortOrder,
+        ids: p.ids?.length ? p.ids : undefined,
         status: p.filters?.status?.length ? p.filters.status : undefined,
         startable: p.filters?.startable?.includes('true') || undefined,
         takesFiles: p.filters?.takesFiles?.includes('true') || undefined,
@@ -129,27 +133,56 @@ function useWrite<A, R>(fn: (a: A) => Promise<R>, roots: string[]) {
 }
 
 export const useCreateAgent = () => useWrite((i: AgentInput) => api.agents.create(i), ['agents', 'overview']);
+/** Saves fields on the agent's draft, made on `base`: the agent as the page last read it. */
 export const useUpdateAgent = (id: string) =>
-  useWrite((p: AgentPatch) => api.agents.update(id, p), ['agents', 'agent', 'tools', 'kbs']);
+  useWrite(({ base, ...fields }: AgentPatch & { base: Agent }) => api.agents.update(id, { ...fields, ...baseOf(base) }), ['agents', 'agent', 'tools', 'kbs']);
 /**
- * Grants one tool to an agent from the tool's side: the same save as the agent page's Grant tools, with the tool added
- * to the agent's grants, so it lands as a new draft version. The app page's and Tools page's Used by refresh too.
+ * The one way the console changes an agent's tool list or knowledge list outside an @ insert: the stored agent is
+ * read, `change` is made on it and saved naming the copy it was read from, so a change made from a list the page
+ * showed a moment ago never drops an item saved since. A save that lands in between is refused, and the change is
+ * made once more on the newer copy.
  */
-export const useGrantToolToAgent = () =>
-  useWrite(async ({ agentId, toolId }: { agentId: string; toolId: string }) => {
+async function changeStoredAgent(agentId: string, change: (stored: Agent) => AgentPatch | null): Promise<Agent> {
+  const once = async () => {
     const agent = await api.agents.get(agentId);
-    return agent.toolIds.includes(toolId) ? agent : api.agents.update(agentId, { toolIds: [...agent.toolIds, toolId] });
-  }, ['agents', 'agent', 'tools', 'apps']);
+    const fields = change(agent);
+    return fields ? api.agents.update(agentId, { ...fields, ...baseOf(agent) }) : agent;
+  };
+  return once().catch((e: unknown) => (staleSave(e) ? once() : Promise.reject(e)));
+}
+type ListChange = { add?: string[]; remove?: string[] };
+const changeAgentTools = (agentId: string, change: ListChange) => changeStoredAgent(agentId, (a) => toolChange(a, change));
+/** Reads the open agent again, after a save was refused because a newer copy exists. */
+export function useReadAgentAgain() {
+  const qc = useQueryClient();
+  return () => qc.invalidateQueries({ queryKey: ['agent'] });
+}
+/** Grants and removes tools on the agent page; lands in the agent's draft. */
+export const useChangeAgentTools = (agentId: string) => useWrite((change: ListChange) => changeAgentTools(agentId, change), ['agents', 'agent', 'tools', 'kbs']);
+/** Adds and removes knowledge bases on the agent page; lands in the agent's draft. */
+export const useChangeAgentKnowledge = (agentId: string) =>
+  useWrite((change: ListChange) => changeStoredAgent(agentId, (a) => knowledgeChange(a, change)), ['agents', 'agent', 'kbs']);
+/** Grants one tool to an agent from the tool's side. The app page's and Tools page's Used by refresh too. */
+export const useGrantToolToAgent = () =>
+  useWrite(({ agentId, toolId }: { agentId: string; toolId: string }) => changeAgentTools(agentId, { add: [toolId] }), ['agents', 'agent', 'tools', 'apps']);
 export const useDeleteAgent = () => useWrite((id: string) => api.agents.remove(id), ['agents', 'overview']);
 export const useAgentVersions = (id: string) => useTeamQuery({ queryKey: qk.agentVersions(id), queryFn: () => api.agents.versions(id) });
 export const useAgentRuns = (id: string) => useTeamQuery({ queryKey: qk.agentRuns(id), queryFn: () => api.agents.runs(id) });
 export const useRestoreAgent = (id: string) => useWrite((v: number) => api.agents.restore(id, v), ['agents', 'agent']);
 /** Opens an `agent_publish` review, so Reviews, Overview and Assurance refresh too. */
 export const useRequestAgentPublish = (id: string) =>
-  useWrite(({ version, note }: { version: number; note: string }) => api.agents.requestPublish(id, version, note), ['agents', 'agent', 'reviews', 'overview', 'assurance', 'notifications']);
+  useWrite(({ version, note, follows }: { version: number; note: string; follows?: string }) => api.agents.requestPublish(id, version, note, follows), ['agents', 'agent', 'reviews', 'overview', 'assurance', 'notifications']);
 /** Asked when the publish dialog opens, so it says whether the publish waits for review before anyone presses it. */
 export const useAgentPublishPreview = (id: string, version: number, enabled: boolean) =>
   useTeamQuery({ queryKey: ['agent', id, 'publish-preview', version], queryFn: () => api.agents.publishPreview(id, version), enabled, staleTime: 0 });
+/** The prompt the model reads for a version, for View prompt; asked only while the dialog is open. */
+export const useAgentPrompt = (id: string, version: number, enabled: boolean) =>
+  useTeamQuery({ queryKey: ['agent', id, 'prompt', version], queryFn: () => api.agents.promptView(id, version), enabled, staleTime: 0 });
+/** A proposed text per brief heading for the Draft dialog; writes nothing, so nothing is refetched after it. */
+export const useDraftBrief = (id: string) => useMutation({ mutationFn: (description: string) => api.agents.draftBrief(id, description) });
+/** What stops the newest draft from publishing and where; read when the publish dialog opens and after each save. */
+export const useAgentPublishCheck = (id: string, version: number, enabled = true) =>
+  useTeamQuery({ queryKey: ['agent', id, 'publish-check', version], queryFn: () => api.agents.publishCheck(id, version), enabled, staleTime: 0 });
 export const useAgentPaused = (id: string) => useWrite((paused: boolean) => api.agents.setPaused(id, paused), ['agents', 'agent', 'overview']);
 /** The tools an agent may be granted; the catalogue changes only with the runtime. */
 /**
@@ -215,6 +248,8 @@ export const workflowsBulkSupported = !!api.workflows.bulkUpdate;
 
 export const useDecideReview = () =>
   useWrite(({ id, ...i }: ReviewDecisionInput & { id: string }) => api.reviews.decide(id, i), ['reviews', 'cases', 'overview', 'model-risk', 'logs', 'skills', 'templates', 'notifications', 'assurance', 'agent', 'agents']);
+/** Takes back the person's own waiting publish request; the version reads as a draft again. */
+export const useWithdrawReview = () => useWrite((id: string) => api.reviews.withdraw(id), ['reviews', 'agent', 'agents', 'skill', 'skills', 'workflow', 'workflows', 'engine', 'overview', 'notifications']);
 export const useAssignReviews = () => useWrite(({ ids, assignee }: { ids: string[]; assignee?: string }) => api.reviews.assign(ids, assignee), ['reviews']);
 export const useBulkDecideReviews = () =>
   useWrite(({ ids, decision, reason, stepUpToken }: { ids: string[]; decision: ReviewDecision; reason?: string; stepUpToken?: string }) => api.reviews.bulkDecide(ids, decision, reason, { stepUpToken }), ['reviews', 'overview']);

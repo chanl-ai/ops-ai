@@ -11,6 +11,7 @@ from httpx import AsyncClient
 
 from tests.conftest import scripted_model, sse_events
 from tests.engine.test_lifecycle_rights import BUILDER
+from tests.saves import save_agent
 
 from .role_app import ok, role_app
 
@@ -28,7 +29,7 @@ async def _draft(c: AsyncClient) -> int:
     """Saves the asker holding `agent:ag_dispute` and does not publish it; the draft's version."""
     held: list[str] = ok(await c.get(f"/v1/agents/{ASKER}", headers=BUILDER))["toolIds"]
     body = {"toolIds": [*held, "agent:ag_dispute"]}
-    return int(ok(await c.patch(f"/v1/agents/{ASKER}", json=body, headers=BUILDER))["version"])
+    return int(ok(await save_agent(c, ASKER, body, headers=BUILDER))["version"])
 
 
 async def _turn(c: AsyncClient, *, test: bool) -> tuple[list[dict[str, Any]], str]:

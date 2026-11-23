@@ -1,7 +1,7 @@
 """A model call is reserved against its budget before it runs
 
 Revision ID: 0120_model_call_reservations
-Revises: 0119_unattributed_side_tables
+Revises: 0125_engine_work_fair_claim
 
 A budget check summed the recorded rows of model_call_records, and a call's row was written only after its provider
 answered, so calls made at once each read the same total and passed together. `reserved_until` lets a call be in the
@@ -19,7 +19,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0120_model_call_reservations"
-down_revision = "0119_unattributed_side_tables"
+down_revision = "0125_engine_work_fair_claim"
 branch_labels = None
 depends_on = None
 

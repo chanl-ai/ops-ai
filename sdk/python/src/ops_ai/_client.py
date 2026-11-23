@@ -19,11 +19,11 @@ import hashlib
 import time
 from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
-from ._agents import Agents, AsyncAgents
+from ._agents import Agents, AsyncAgents, based
 from ._chat import AsyncChat, Chat
 from ._config import Config, Session
 from ._generated.agents.operations import AsyncOperations as AsyncAgentsOps
@@ -63,7 +63,7 @@ from ._words import (
     Usage,
 )
 from ._workflows import AsyncWorkflows, Workflows
-from .errors import OpsError
+from .errors import OpsError, RunFailed
 from .templates import AsyncTemplates, Templates
 
 # A run is over in these states; `waiting` means it stopped at a step that waits on a person or another system.
@@ -82,7 +82,7 @@ class Noun:
 
 
 NOUNS: dict[str, Noun] = {
-    "teams": Noun("platform", list="teams_list_teams", paged=False),
+    "teams": Noun("platform", list="teams_list_teams"),
     "agents": Noun("agents", list="agents_list_agents", get="agents_get_agent", create="agents_create_agent"),
     "workflows": Noun("agents", list="workflows_list_workflows", get="workflows_get_workflow"),
     "threads": Noun("agents", list="threads_list_threads", get="threads_thread_state", create="threads_create_thread"),
@@ -110,6 +110,12 @@ def _with_task(run: dict[str, Any]) -> dict[str, Any]:
     waiting = run.get("waiting") or {}
     task = (waiting.get("payload") or {}).get("review_id")
     return {**run, "taskId": task} if task else run
+
+
+def _ended(run: dict[str, Any], check: bool) -> dict[str, Any]:
+    if check and run["status"] == "failed":
+        raise RunFailed(run)
+    return _with_task(run)
 
 
 def _upload_meta(name: str, content: bytes, mime: str, purpose: str) -> tuple[dict[str, Any], str]:
@@ -219,12 +225,13 @@ def _reference_query(search: str, **query: Any) -> dict[str, Any]:
 
 
 class Skills(Resource):
-    def save_draft(self, id: str, fields: dict[str, Any], *, note: str = "", base_version: int | None = None) -> Any:
-        """Saves `fields` (any of SKILL_KEYS) as the skill's draft. `base_version` is the version the change was made
-        on; left out, it is the newest, read first."""
-        base = base_version if base_version is not None else self.get(id)["version"]
+    def save_draft(self, id: str, fields: dict[str, Any], *, note: str = "", base: dict[str, Any] | None = None) -> Any:
+        """Saves `fields` (any of SKILL_KEYS) as the skill's draft. `base` is the skill as last read, naming the copy
+        the change was made on; left out, the skill is read first. A save from an older copy is refused with
+        `stale_base`."""
+        read = base if base and base.get("digest") else self.get(id)
         body = {k: fields[k] for k in SKILL_KEYS if k in fields}
-        return self._raw.agents.agents_save_skill_draft(id, {**body, "note": note, "baseVersion": base})
+        return self._raw.agents.agents_save_skill_draft(id, based({**body, "note": note}, read))
 
     def publish(self, id: str, *, note: str = "") -> Any:
         """Asks to publish the newest draft. A skill that cannot be published is refused with `cannot_request`, and
@@ -239,11 +246,11 @@ class Skills(Resource):
 
 class AsyncSkills(AsyncResource):
     async def save_draft(
-        self, id: str, fields: dict[str, Any], *, note: str = "", base_version: int | None = None
+        self, id: str, fields: dict[str, Any], *, note: str = "", base: dict[str, Any] | None = None
     ) -> Any:
-        base = base_version if base_version is not None else (await self.get(id))["version"]
+        read = base if base and base.get("digest") else await self.get(id)
         body = {k: fields[k] for k in SKILL_KEYS if k in fields}
-        return await self._raw.agents.agents_save_skill_draft(id, {**body, "note": note, "baseVersion": base})
+        return await self._raw.agents.agents_save_skill_draft(id, based({**body, "note": note}, read))
 
     async def publish(self, id: str, *, note: str = "") -> Any:
         return await self._raw.agents.agents_request_skill_publish(id, {"note": note})
@@ -257,13 +264,16 @@ class Runs(Resource):
         """Starts a run of the workflow's current version; `fields` takes `version`, `runKey` and `mode`."""
         return self._raw.agents.workflows_start_engine_run({"workflowId": workflow_id, "input": input or {}, **fields})
 
-    def wait(self, run_id: str, *, timeout: float = 600.0, interval: float = 1.0) -> dict[str, Any]:
-        """The run once it has ended or stopped at a human task (then `taskId` names the task)."""
+    def wait(
+        self, run_id: str, *, timeout: float = 600.0, interval: float = 1.0, check: bool = False
+    ) -> dict[str, Any]:
+        """The run once it has ended or stopped at a human task (then `taskId` names the task). `check=True` raises
+        RunFailed for a failed run instead of returning it."""
         deadline = time.monotonic() + timeout
         while True:
             run = self._raw.agents.workflows_get_engine_run(run_id)
             if run["status"] in TERMINAL or run["status"] == "waiting":
-                return _with_task(run)
+                return _ended(run, check)
             if time.monotonic() > deadline:
                 raise TimeoutError(f"run {run_id} is still {run['status']} after {timeout:.0f}s")
             time.sleep(interval)
@@ -279,6 +289,15 @@ class Runs(Resource):
         """Queues a Stuck run again from its last recorded step; nothing it sent is sent again."""
         return self._raw.agents.workflows_retry_engine_run(run_id)
 
+    def redrive(self, run_id: str) -> Any:
+        """Queues a Failed or Stuck run again from its failed step, on the version it started on."""
+        return self._raw.agents.workflows_redrive_engine_run(run_id)
+
+    def bulk(self, action: str, **filter: Any) -> Any:
+        """Redrives (`action="redrive"`) or cancels (`"cancel"`) every run the filter matches: workflowId, kind, code,
+        createdFrom, createdTo. Returns the runs changed and those skipped."""
+        return self._raw.agents.workflows_bulk_engine_runs(cast(Any, {"action": action, "filter": filter}))
+
     def run_set_aside_email(self, event_id: str) -> Any:
         """Starts the run of an email the mailbox listener set aside, under the email's own run key."""
         return self._raw.agents.workflows_run_set_aside_email(event_id)
@@ -289,12 +308,14 @@ class AsyncRuns(AsyncResource):
         body = {"workflowId": workflow_id, "input": input or {}, **fields}
         return await self._raw.agents.workflows_start_engine_run(body)
 
-    async def wait(self, run_id: str, *, timeout: float = 600.0, interval: float = 1.0) -> dict[str, Any]:
+    async def wait(
+        self, run_id: str, *, timeout: float = 600.0, interval: float = 1.0, check: bool = False
+    ) -> dict[str, Any]:
         deadline = time.monotonic() + timeout
         while True:
             run = await self._raw.agents.workflows_get_engine_run(run_id)
             if run["status"] in TERMINAL or run["status"] == "waiting":
-                return _with_task(run)
+                return _ended(run, check)
             if time.monotonic() > deadline:
                 raise TimeoutError(f"run {run_id} is still {run['status']} after {timeout:.0f}s")
             await asyncio.sleep(interval)
@@ -308,6 +329,15 @@ class AsyncRuns(AsyncResource):
     async def retry(self, run_id: str) -> Any:
         """Queues a Stuck run again from its last recorded step; nothing it sent is sent again."""
         return await self._raw.agents.workflows_retry_engine_run(run_id)
+
+    async def redrive(self, run_id: str) -> Any:
+        """Queues a Failed or Stuck run again from its failed step, on the version it started on."""
+        return await self._raw.agents.workflows_redrive_engine_run(run_id)
+
+    async def bulk(self, action: str, **filter: Any) -> Any:
+        """Redrives (`action="redrive"`) or cancels (`"cancel"`) every run the filter matches: workflowId, kind, code,
+        createdFrom, createdTo. Returns the runs changed and those skipped."""
+        return await self._raw.agents.workflows_bulk_engine_runs(cast(Any, {"action": action, "filter": filter}))
 
     async def run_set_aside_email(self, event_id: str) -> Any:
         """Starts the run of an email the mailbox listener set aside, under the email's own run key."""

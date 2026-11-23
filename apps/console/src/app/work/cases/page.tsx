@@ -25,6 +25,9 @@ const EMPTY: Record<View, { noun: string; description: string }> = {
   all: { noun: 'cases', description: 'Cases appear here when a person, an agent or a workflow opens one for a customer.' },
 };
 
+/** The table's columns the server sorts by, each with its `sortBy` value. */
+const SORT_COLUMNS = { subject: 'subject', status: 'status', assignee: 'assignee', priority: 'priority' };
+
 /**
  * Cases: the team's customer issues (agents-service /v1/cases), each with who it is for, who owns it and the
  * time left to its two deadlines. The server filters and orders them, soonest resolution deadline first. Workflow runs
@@ -35,7 +38,7 @@ export default function CasesPage() {
   const search = useSearchParams();
   const me = useMe().data?.user.email;
   const [view, setView] = React.useState<View>('open');
-  const list = useListParams<{ status?: string[]; priority?: string[] }>('subject');
+  const list = useListParams<{ status?: string[]; priority?: string[] }>('subject', undefined, undefined, SORT_COLUMNS);
 
   const legacy = search.get('run') ?? search.get('parent');
   React.useEffect(() => {
@@ -50,7 +53,7 @@ export default function CasesPage() {
     assignee: view === 'mine' ? me : undefined,
     overdue: view === 'overdue' || undefined,
   };
-  const query = useCaseRecords({ page: list.pagination.page, pageSize: list.pagination.pageSize, ...filters });
+  const query = useCaseRecords({ page: list.pagination.page, pageSize: list.pagination.pageSize, sortBy: list.params.sortBy, sortOrder: list.params.sortOrder, ...filters });
   const rows = query.data?.data ?? [];
 
   if (legacy) return <PageLayout icon={Mail} title="Cases"><PageSkeleton statCards={0} tableRows={4} /></PageLayout>;
@@ -98,6 +101,7 @@ export default function CasesPage() {
             onColumnFiltersChange={list.onColumnFiltersChange}
             hideViewSwitcher
             serverPagination={serverPagination(list, query)}
+            serverSorting={list.serverSort}
             emptyState={<ListEmpty icon={Mail} noun={EMPTY[view].noun} filtered={!!(list.params.search || chosen?.length || filters.priority?.length)} onClear={list.reset} description={EMPTY[view].description} />}
           />
         </div>

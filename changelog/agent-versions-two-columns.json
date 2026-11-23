@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-21",
+  "title": "Versions shows one version at a time",
+  "description": "An agent's Versions tab lists its versions on the left and shows the selected one's details and prompt on the right, with Restore, Compare and Publish in one footer.",
+  "tag": "improved"
+}

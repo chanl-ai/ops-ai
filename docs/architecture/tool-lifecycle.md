@@ -50,6 +50,23 @@ whatever module the operation is on. An `approverTeam` an older caller still sen
 The gateway and OPA read these fields from the registry, never from the caller. The two-approver rule that "Moves
 money" carried today becomes `approvers: 2`.
 
+## Trying a skill path or a workflow step
+
+A builder tries one path of a skill, or one workflow step, from its side panel without any write running unasked.
+The gateway has one dry-run seam, `GatewayCalls.call(plan_only=True)` (`services/tools-service/src/ops_tools/gateway_calls.py`):
+a write that passes the team, input and limit checks comes back as what it would send (`Executor.plan`: tool, values,
+system, account, and an http operation's method, address and body with secret references unresolved), before any
+approval, claim, rate spend, sign-in or send, and no call row is logged. Reads are not affected.
+
+| Route | Owner | Does |
+|---|---|---|
+| `GET /v1/try-targets?skill=` or `?workflow=&step=` | agents-service (`api/routers/tries.py`) | The paths (one per way the skill's `if`s go, `app/try_paths.py`), each tool step's access, values and sample: the tool's last answer in the team's own live runs (`RunStore.last_tool_output`), else a skeleton of its output schema |
+| `POST /v1/tool-modules/tries` | tools-service (`modules/tries.py`) | A read runs as the tool page's Real run does. A write answers a plan and a `planId`; the same values with `planId` send it as a confirmed test run, which a team's reviewer rule still refuses. Edited values answer 409 `plan_stale`; the plan id is the write's key, so a second confirm replays the first |
+
+The account picked decides the run: the app's test account makes a test run, any other account a live run on it, and
+no pick a test run (the app's test account when it has one). A plan says `live` whenever a live account would sign in.
+Nothing is stored as a version, a run or a plan. Use case `uc-762`.
+
 ## Reviews holds every decision
 
 | Item | Raised by | Decided by |

@@ -20,8 +20,9 @@ rules: [../../CLAUDE.md](../../CLAUDE.md#folder-guides).
 | `models`, `aliases` | `build_model(settings)` (direct provider key; an alias starting `claude-` selects Anthropic) or `ModelsServiceModels` by alias; a job's own alias (`guardrail-check`, memory extraction) falls back to the turn's model only on "no such alias" |
 | `guard` | Blocked-topic guardrails: one structured classification before and after the answer; a failed check raises `GuardrailUnavailable` and the turn fails closed |
 | `skills` | The skill index, always-on bodies and the `load_skill` built-in, with per-turn caps; loading a skill replaces the one carried from an earlier reply |
-| `steps` | Skills that run step by step: the program a skill version stores (models in `ops_contracts.skill_run`), the problems that stop one from running, and the running-skill record's moves (start, pass, fail, exit, sub-skill) |
-| `expr` | A step's rule check: a whitelist walk over `ast.parse`, reading `result` and `inputs`; nothing is compiled or executed |
+| `steps` | Skills that run step by step: the program a skill version stores (models in `ops_contracts.skill_run`), the problems that stop one from running, and the running-skill record's moves (start, pass, fail, exit, sub-skill, a verdict) |
+| `judge` | One structured model call that says whether evidence meets a check written in words, on the `judge` alias; fails closed. Eval checks and skill step checks use it |
+| `expr` | A step's rule check: a whitelist walk over `ast.parse`, reading `result` and `inputs`; nothing is compiled or executed. A rule holds only when it is known true: a comparison with a missing value has no answer, and neither has its `not` |
 | `step_tools` | The built-ins `switch_skill`, `step_done` and `exit`, counted apart from the cap on kernel tools |
 | `prompt_writer` | `Brief`, `Patterns`, `head(name, brief)` (the agent's stable instructions) and `tail`, written before every model request: the current step, the skill's rules, the never rules last |
 | `search` | `search_tools`: finds only tools the agent is granted |
@@ -40,8 +41,24 @@ rules: [../../CLAUDE.md](../../CLAUDE.md#folder-guides).
 - The running-skill record is returned on `TurnResult.run` whichever way a turn ends, and on `Interrupt.run` at a pause;
   the caller hands it back as `TurnRequest.carried_run`. A rule check runs once on the tool result as it arrives; the
   returned record is masked with the rest of the result, the one on an interrupt is not.
-- While a skill's step names a tool, that tool and knowledge search are the only systems offered; tools other steps
-  name wait for their step.
+- One function, `steps.barred`, answers whether a granted tool may be used now. The kernel asks it when tools are
+  offered, when they are searched and again when one is called (before a person is asked to approve), so a call sent
+  in the model step that starts or leaves a skill is refused. Its rules, in order:
+  - A tool a skill stopped in this reply keeps, or another skill holds, stays out even as the current step's tool.
+  - The current step's tool may be called; a tool of another step of the running skill waits for its step.
+  - A tool a skill owns (`steps.owned`) runs only as that skill's step. A skill owns every tool its steps run that
+    is not a read, every tool that asks another agent (`agent__<id>`, spelled once in `ops_contracts.skill_run`), and
+    every read its builder locked to the step (`SkillStep.locked`), for as long as it is attached. Any other read,
+    and a write no step runs, are free.
+  - While a step names a tool, that tool and knowledge search are the only systems offered.
+- The record owns how a skill ended (`EndedSkill`): the exit, the step, `why` (`check`, `denied`, `error`, `held`,
+  or `exit` when the model called it), the text of the check that did not pass, the author's meaning for the exit,
+  and `in_reply` while the record is the one of the reply it ended in (cleared when a new reply starts, kept across
+  a pause). The console draws endings from it and adds nothing.
+- An ending the kernel made (every `why` but `exit`) is final for its reply: `switch_skill` and `load_skill` refuse
+  that skill until the person's next message (`steps.final`). A menu pick starts it as usual.
+  The record keeps the newest five endings and every ending of the current reply (`steps.trim`), so a final
+  ending is never forgotten inside its reply.
 - Holds (`SkillRunState.holds`, outside the capped history; the rule is written out above `_key` in `steps.py`):
   - A hold is taken the moment a step's check fails or a person denies its call, whatever retries are left and
     however the skill is then left (exit, switch, end of the reply).
@@ -49,7 +66,8 @@ rules: [../../CLAUDE.md](../../CLAUDE.md#folder-guides).
     the tool of the step whose check failed. It is per tool, not per argument: a refund held for one charge is held
     for every charge.
   - It keeps those tools from every other skill and from a call with no skill running. A skill whose step names a
-    held tool ends as failed at once, takes no hold, and the model is told which skill to start. The holder is
+    held tool ends as failed at once, takes no hold, and the model is told which skill to start (or, when the
+    kernel ended that skill in this reply, that it can start after the person's next message). The holder is
     never kept from its own holds; its own if-not jump to a later step is the author's path.
   - It ends only when the holder passes that same step, or when the agent no longer has that version of the holder
     (dropped when a turn starts; it does not come back if the skill is put back).
@@ -64,6 +82,14 @@ rules: [../../CLAUDE.md](../../CLAUDE.md#folder-guides).
     fails the step takes none. A tool error, a
     skill a step could not start, and an exit the model calls take none. An escalate, refuse or failed exit still
     keeps the skill's tools from the rest of that reply.
+- A check written as a sentence (a step's check, or a branch test) is decided by the judge (`judge.verdict`, run by
+  `_TurnState.judge` in `kernel.py`), never by the answering model. The kernel asks it when the step's tool result
+  arrives, given only the sentence, the raw result and the skill's inputs; for a step with no tool `step_done` is a
+  claim and the judge reads the reply's person message and tool results; for a step that runs a skill, the skill's
+  handed-back result. `steps.to_judge` says what waits, `steps.decided` takes the verdict, and both rules and the
+  judge go through `steps._verdict`: no, or no verdict, is a failed check (if-not, hold, ending). `step_done` with
+  `holds` on a judged step is refused, an exit as done needs the last step's check passed, the result keeps
+  `judged_by` and `reason`, and the judge's tokens join the turn's `usage`. A rule is never sent to the judge.
 - A step that runs a skill hands it the inputs it declares, from the running skill's inputs and then the result of
   the step before; a required one missing fails the step.
 

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-20",
+  "title": "An agent's Evals tab shows its real saved cases and runs",
+  "description": "The Evals tab lists the cases saved on the agent and the runs kept, adds a case with a judge check, and runs them from the tab, with each run's pass rate and cost. The sample cases and the preview badge are gone.",
+  "tag": "new"
+}

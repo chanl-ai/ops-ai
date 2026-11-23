@@ -2,8 +2,9 @@
 #   - ci.yml calls it after ci-ok passes on a push to develop, with that commit;
 #   - anyone with write access runs it by hand (Actions, deploy-staging, Run workflow, or `make stg-deploy-ci REF=`)
 #     with a branch, tag or commit.
-# A merge to develop is not deployed while staging is frozen: a release/* or hotfix/* branch exists on origin (a release
-# under test must not be overwritten) or the repository variable STAGING_HOLD is set (its value is the reason). A push
+# A merge to develop is not deployed while staging is frozen: a release/X.Y.Z or hotfix/* branch exists on origin (a
+# release under test must not be overwritten; the permanent train, release/current, does not freeze it, and the owner
+# sets STAGING_HOLD while a hand-started deploy of the train is under test) or the repository variable STAGING_HOLD is set (its value is the reason). A push
 # to a release or hotfix branch is deployed, and so is a hand-started run, which says in the summary what it overrode.
 #
 # The deploy is .github/actions/stg-deploy (`make stg-deploy REF=<sha>`): build once per commit, migrate, grants, every
@@ -67,6 +68,7 @@ jobs:
       STG_APP_PREFIX: ${{ vars.STG_APP_PREFIX }}
       STAGING_DB_URL: ${{ secrets.STAGING_DB_URL }}
       STAGING_ADMIN_ENV: ${{ secrets.STAGING_ADMIN_ENV }}
+      STAGING_ROLES_ENV: ${{ secrets.STAGING_ROLES_ENV }}
       SKIP_WALK: ${{ inputs.skip_walk && '1' || '0' }}
       # Inside a called workflow event_name is the caller's (push), so only a hand-started run is manual.
       MANUAL: ${{ github.event_name == 'workflow_dispatch' }}
@@ -90,7 +92,7 @@ jobs:
           case "$GITHUB_REF" in
             refs/heads/release/* | refs/heads/hotfix/*) ;;
             *)
-              branches=$(git ls-remote --heads origin 'refs/heads/release/*' 'refs/heads/hotfix/*' | sed 's|.*refs/heads/||' | tr '\n' ' ')
+              branches=$(git ls-remote --heads origin 'refs/heads/release/[0-9]*' 'refs/heads/hotfix/*' | sed 's|.*refs/heads/||' | tr '\n' ' ')
               [ -z "$branches" ] || pin="staging is frozen for ${branches% }"
               ;;
           esac

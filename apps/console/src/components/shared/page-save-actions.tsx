@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { RotateCcw } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { SaveState, type SaveStatus } from '@/components/shared/save-state';
 import { LoadingButton } from '@/components/shared/loading-button';
 
 /** The page header's place for Save and Discard, set by `PageLayout`; null outside one. */
@@ -25,6 +26,7 @@ export function PageSaveActions({
   form,
   save,
   testId,
+  status,
 }: {
   dirty: boolean;
   saving: boolean;
@@ -36,10 +38,13 @@ export function PageSaveActions({
   form?: string;
   save?: React.ReactNode;
   testId?: string;
+  /** Shows the page's SaveState before the buttons; a form that saves on a button press passes one too. */
+  status?: SaveStatus;
 }) {
   const slot = React.useContext(PageSaveSlot);
   const actions = (
     <>
+      {status && <SaveState status={status} />}
       {dirty && (
         <Button type="button" variant="ghost" size="sm" onClick={onDiscard} disabled={saving}>
           <RotateCcw className="size-3.5" /> Discard

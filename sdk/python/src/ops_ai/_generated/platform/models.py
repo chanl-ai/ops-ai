@@ -161,8 +161,10 @@ class EnvelopeListStr(TypedDict, closed=True):
 class ErrorBody(TypedDict, closed=True):
     code: str
     details: NotRequired[Any]
+    kind: Literal["input", "refused", "upstream", "timeout", "internal"]
     message: str
     requestId: str
+    retryable: bool
     status: int
 
 
@@ -196,7 +198,7 @@ class GrantOut(TypedDict, closed=True):
 class GrantingRole(TypedDict, closed=True):
     id: str
     name: str
-    via: Literal["person", "team"]
+    via: Literal["person", "team", "group"]
 
 
 class GridRow(TypedDict, closed=True):
@@ -436,6 +438,8 @@ class PolicyOut(TypedDict, closed=True):
         "choice",
         "app_changes",
         "app_changes_by_app",
+        "by_area",
+        "floor_rules",
     ]
     note: NotRequired[str | None]
     title: str
@@ -508,10 +512,15 @@ class RoleGrantOut(TypedDict, closed=True):
     teamId: str
 
 
+class RoleHolderIn(TypedDict, closed=True):
+    id: str
+    kind: Literal["person", "group"]
+
+
 class RoleHolderOut(TypedDict, closed=True):
     email: NotRequired[str | None]
     id: str
-    kind: Literal["person", "team"]
+    kind: Literal["person", "team", "group"]
     name: str
     teamId: str
 
@@ -897,6 +906,11 @@ class EnvelopeRoleGrantOut(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeRoleHolderOut(TypedDict, closed=True):
+    data: RoleHolderOut
+    success: Literal[True]
+
+
 class EnvelopeSignInSecretOut(TypedDict, closed=True):
     data: SignInSecretOut
     success: Literal[True]
@@ -982,11 +996,6 @@ class EnvelopeListTeamName(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeListTeamOut(TypedDict, closed=True):
-    data: list[TeamOut]
-    success: Literal[True]
-
-
 class HoldersOut(TypedDict, closed=True):
     holders: list[Holder]
     roles: list[RoleRef]
@@ -1030,6 +1039,12 @@ class ListResultRoleHolderOut(TypedDict, closed=True):
 
 class ListResultRoleOut(TypedDict, closed=True):
     data: list[RoleOut]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
+class ListResultTeamOut(TypedDict, closed=True):
+    data: list[TeamOut]
     facets: dict[str, dict[str, int]]
     pagination: Pagination
 
@@ -1139,6 +1154,11 @@ class EnvelopeListResultRoleHolderOut(TypedDict, closed=True):
 
 class EnvelopeListResultRoleOut(TypedDict, closed=True):
     data: ListResultRoleOut
+    success: Literal[True]
+
+
+class EnvelopeListResultTeamOut(TypedDict, closed=True):
+    data: ListResultTeamOut
     success: Literal[True]
 
 

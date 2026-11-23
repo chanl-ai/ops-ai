@@ -11,6 +11,7 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useEngineOptions } from '@/hooks/engine-queries';
 import { AccountSelect } from '@/components/connections/account-select';
+import { JsonInput } from '@/components/shared/json-input';
 
 import type { EngineOption, NodeForm, NodeFormField, OptionSource } from '@/lib/types/engine';
 
@@ -161,7 +162,7 @@ function SourceSelect({ id, source, value, steps, onChange }: { id: string; sour
   return (
     <Select value={current || NONE} onValueChange={(v) => onChange(v === NONE ? undefined : v)}>
       <SelectTrigger id={id} className="w-full" data-field={id} aria-busy={remote.isFetching || undefined}>
-        <SelectValue placeholder={remote.isPending && source !== 'steps' ? 'Loading…' : 'Choose'} />
+        <SelectValue placeholder={remote.isLoading ? 'Loading…' : 'Choose'} />
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={NONE}>Not set</SelectItem>
@@ -221,7 +222,7 @@ export function MappingInput({ id, value, steps, onChange }: { id: string; value
         ) : (
           <Input
             id={id}
-            className="min-w-0 flex-1 font-mono text-xs"
+            className="min-w-0 flex-1 font-mono"
             inputMode={kind === 'number' ? 'decimal' : undefined}
             value={text}
             placeholder={kind === 'path' ? 'e.g. $.input.amount' : kind === 'number' ? 'e.g. 100' : 'e.g. Refund over limit'}
@@ -236,7 +237,7 @@ export function MappingInput({ id, value, steps, onChange }: { id: string; value
       </div>
       {kind === 'path' && (
         <Select value={NONE} onValueChange={(v) => v !== NONE && onChange(v)}>
-          <SelectTrigger className="h-8 w-full text-xs" aria-label="Insert a step output">
+          <SelectTrigger className="w-full" aria-label="Insert a step output">
             <SelectValue placeholder="Insert a step output" />
           </SelectTrigger>
           <SelectContent>
@@ -269,8 +270,8 @@ function MappingsInput({ id, value, steps, onChange }: { id: string; value: Para
       {entries.map(([key, v], i) => (
         <div key={i} className="flex min-w-0 flex-col gap-1.5 rounded-md border p-2">
           <div className="flex items-center gap-1.5">
-            <Input aria-label="Name" className="h-8 min-w-0 flex-1 font-mono text-xs" value={key} onChange={(e) => e.target.value && !(e.target.value in value) && rename(key, e.target.value)} />
-            <Button type="button" variant="ghost" size="icon" className="size-8" aria-label={`Remove ${key}`} onClick={() => onChange(Object.fromEntries(entries.filter(([k]) => k !== key)))}>
+            <Input aria-label="Name" className="min-w-0 flex-1 font-mono" value={key} onChange={(e) => e.target.value && !(e.target.value in value) && rename(key, e.target.value)} />
+            <Button type="button" variant="ghost" size="icon" aria-label={`Remove ${key}`} onClick={() => onChange(Object.fromEntries(entries.filter(([k]) => k !== key)))}>
               <X />
             </Button>
           </div>
@@ -292,7 +293,7 @@ function ListInput({ id, item, schema, value, steps, onChange }: { id: string; i
         <div key={i} className="flex flex-col gap-2 rounded-md border p-2">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">{i + 1}</span>
-            <Button type="button" variant="ghost" size="icon" className="size-7" aria-label={`Remove ${i + 1}`} onClick={() => onChange(value.filter((_, j) => j !== i))}>
+            <Button type="button" variant="ghost" size="icon" aria-label={`Remove ${i + 1}`} onClick={() => onChange(value.filter((_, j) => j !== i))}>
               <X />
             </Button>
           </div>
@@ -320,14 +321,14 @@ function OptionsInput({ id, value, steps, onChange }: { id: string; value: unkno
     <div className="flex flex-col gap-2" data-testid={`${id}-rows`}>
       {options.map((o, i) => (
         <div key={i} className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-1.5 rounded-md border p-2">
-          <Input aria-label="Port name" className="h-8 font-mono text-xs" value={o.name} placeholder="e.g. approve" onChange={(e) => set(i, { name: e.target.value })} />
-          <Input aria-label="Label" className="h-8" value={o.label ?? ''} placeholder="e.g. Approve" onChange={(e) => set(i, { label: e.target.value || undefined })} />
-          <Button type="button" variant="ghost" size="icon" className="size-8" aria-label={`Remove ${o.name || i + 1}`} onClick={() => onChange(options.filter((_, j) => j !== i).map(fromOption))}>
+          <Input aria-label="Port name" className="font-mono" value={o.name} placeholder="e.g. approve" onChange={(e) => set(i, { name: e.target.value })} />
+          <Input aria-label="Label" value={o.label ?? ''} placeholder="e.g. Approve" onChange={(e) => set(i, { label: e.target.value || undefined })} />
+          <Button type="button" variant="ghost" size="icon" aria-label={`Remove ${o.name || i + 1}`} onClick={() => onChange(options.filter((_, j) => j !== i).map(fromOption))}>
             <X />
           </Button>
           <div className="col-span-3">
             <Select value={o.call?.node ?? NONE} onValueChange={(v) => set(i, { call: v === NONE ? undefined : { node: v } })}>
-              <SelectTrigger className="h-8 w-full text-xs" aria-label="Authorises the write of">
+              <SelectTrigger className="w-full" aria-label="Authorises the write of">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -351,37 +352,3 @@ function OptionsInput({ id, value, steps, onChange }: { id: string; value: unkno
 }
 
 /** A JSON value the type keeps as a schema of its own (an input or answer schema); a parse error stays in the field. */
-function JsonInput({ id, value, onChange }: { id: string; value: unknown; onChange: (v: unknown) => void }) {
-  const show = (v: unknown) => (v === undefined ? '' : JSON.stringify(v, null, 2));
-  const [text, setText] = React.useState(() => show(value));
-  const [error, setError] = React.useState<string>();
-  return (
-    <div className="flex flex-col gap-1">
-      <Textarea
-        id={id}
-        value={text}
-        rows={5}
-        spellCheck={false}
-        className="font-mono text-xs"
-        placeholder='e.g. {"type": "object"}'
-        aria-invalid={error ? true : undefined}
-        onChange={(e) => {
-          setText(e.target.value);
-          if (!e.target.value.trim()) {
-            setError(undefined);
-            onChange(undefined);
-            return;
-          }
-          try {
-            onChange(JSON.parse(e.target.value));
-            setError(undefined);
-          } catch {
-            setError('Not valid JSON yet');
-          }
-        }}
-        data-field={id}
-      />
-      {error && <p className="text-xs text-destructive-text">{error}</p>}
-    </div>
-  );
-}

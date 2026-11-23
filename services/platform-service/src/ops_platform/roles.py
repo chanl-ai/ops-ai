@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import NotRequired, TypedDict
 
 from ops_access import ACTIONS, ANY_TEAM, AREAS, BUILTIN_GRIDS, SECURITY_TEAM_ACTIONS, Grant, Granted, effective
-from ops_access.catalogue import ADMIN
+from ops_access.catalogue import ADMIN, FIXED_ROLES
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
 from ops_service_kit.http import Json
 from ops_service_kit.ids import now_iso
@@ -21,10 +21,12 @@ from ops_store.listing import ListPage
 from .store.roles import (
     AlreadyGrantedError,
     Holdings,
+    PrivilegedForGroupError,
     RoleInUseError,
     RoleNameTakenError,
     RoleRow,
     RoleStore,
+    UnknownGroupError,
 )
 
 
@@ -70,6 +72,10 @@ class TeamCells(TypedDict):
     permissions: list[EffectiveCell]
 
 
+# Transfers, closes and restores the workspace: on Owner and no other role, moved only by a transfer (E42).
+OWNER_CELL = ("workspace", "manage")
+
+
 class PermissionsView(TypedDict):
     """What a person may do, as `PermissionsOut` sends it; the person route adds their name and address."""
 
@@ -83,8 +89,8 @@ class PermissionsView(TypedDict):
 
 def custom_role_refuses(area: str, action: str) -> bool:
     """D40: a custom role holds no secrets or egress cell and no Security-team cell, which only the built-in roles
-    give."""
-    return area == "secrets_egress" or (area, action) in SECURITY_TEAM_ACTIONS
+    give; nor `workspace.manage`, which only Owner holds (E42)."""
+    return area == "secrets_egress" or (area, action) in SECURITY_TEAM_ACTIONS or (area, action) == OWNER_CELL
 
 
 def _checked(cells: list[Grant]) -> None:
@@ -118,22 +124,43 @@ class Roles:
             "grid": [
                 {"area": area, "actions": {action: held.get((area, action)) for action in ACTIONS}} for area in AREAS
             ],
-            # The cells this role may never hold: a custom role's secrets, egress and Security-team ones (D40).
+            # The cells a custom role may never hold: secrets, egress, Security-team and Owner ones (D40, E42).
             "notHeld": []
             if role.builtin
             else [f"{a}.{x}" for a in AREAS for x in ACTIONS if custom_role_refuses(a, x)],
         }
 
     async def edit(self, tenant_id: str, role_id: str, cells: list[Grant], *, by: str, request_id: str) -> RoleView:
-        """Sets a role's cells, built-in or custom. Admin keeps every cell: 409
-        `admin_holds_every_cell`. A cell outside the catalogue is 400 `unknown_cell`. The caller's right to change roles
-        is checked by the route."""
+        """Sets a role's cells, built-in or custom. Admin keeps every cell: 409 `admin_holds_every_cell`; Owner and
+        Security admin are not edited either (`FIXED_ROLES`), 409 `role_set_by_rule`, refused before the cells are
+        read so an empty list is refused too. A cell outside the catalogue is 400 `unknown_cell`; `workspace.manage`
+        on another built-in role is 400 `owner_only`; an empty list on any other built-in role is 400
+        `builtin_role_empty` (reset puts it back to its seed).
+        The caller's right to change roles is checked by the route."""
         if role_id == ADMIN.id:
             raise Conflict("Admin holds every permission in its team; it is not edited.", code="admin_holds_every_cell")
+        if role_id in FIXED_ROLES:
+            raise Conflict(
+                "Owner and Security admin come with the workspace's owner and the Security team's admins; their "
+                "permissions are not edited.",
+                code="role_set_by_rule",
+            )
         _checked(cells)
         role = await self.store.role_by_id(tenant_id, role_id)
+        if role is not None and role.builtin and not cells:
+            # A built-in role with no rows reads as its seed, so an empty list would remove nothing.
+            raise ValidationFailed(
+                "A built-in role keeps at least one permission; reset it to go back to the cells it ships with.",
+                code="builtin_role_empty",
+            )
         if role is not None and not role.builtin:
             self._custom_cells(cells)
+        elif any((a, x) == OWNER_CELL for a, x, _ in cells):
+            raise ValidationFailed(
+                "Only Owner holds workspace.manage; it moves from person to person by a transfer.",
+                code="owner_only",
+                details={"cells": ["workspace.manage"]},
+            )
         if not await self.store.set_grid(tenant_id, role_id, cells, by=by, request_id=request_id, action="role.edit"):
             raise NotFound("No role with that id.")
         return await self.get(tenant_id, role_id)
@@ -143,7 +170,7 @@ class Roles:
         if refused:
             raise ValidationFailed(
                 f"A custom role cannot hold {', '.join(refused)}: secrets, egress and Security-team permissions come "
-                "only with a built-in role.",
+                "only with a built-in role, and workspace.manage only with Owner.",
                 code="not_for_custom_roles",
                 details={"cells": refused},
             )
@@ -231,6 +258,36 @@ class Roles:
             raise Conflict(f"They hold {role.name} in that team already.", code="already_granted") from e
         [given] = (await self.store.grants_of(tenant_id, person_id, ListParams(ids=[grant_id])))["data"]
         return given
+
+    async def give(
+        self, tenant_id: str, role_id: str, kind: str, subject_id: str, team_id: str, *, by: str, request_id: str
+    ) -> Json:
+        """Gives a person or a group a custom role in a team, from the role's page, and answers the new holder row. A
+        person goes through `grant` (its 409s apply); a group the workspace lacks is 404, and a group is never given a
+        role holding a privileged cell (409 `privileged_for_group` naming the cells) or one it holds (409
+        `already_granted`). The store writes the `role.grant` audit entry either way."""
+        if kind == "person":
+            await self.grant(tenant_id, subject_id, role_id, team_id, by=by, request_id=request_id)
+        else:
+            role = await self._custom(tenant_id, role_id, "given to a group")
+            try:
+                await self.store.assign(
+                    tenant_id, subject_kind="group", subject_id=subject_id, role_id=role_id, team_id=team_id, by=by,
+                    request_id=request_id,
+                )  # fmt: skip
+            except UnknownGroupError as e:
+                raise NotFound("No group with that id.") from e
+            except PrivilegedForGroupError as e:
+                raise Conflict(
+                    f"{role.name} holds permissions a group is never given: {', '.join(e.cells)}. "
+                    "Give it to each person.",
+                    code="privileged_for_group",
+                    details={"cells": e.cells},
+                ) from e
+            except AlreadyGrantedError as e:
+                raise Conflict(f"That group holds {role.name} in this team already.", code="already_granted") from e
+        rows = (await self.store.holders(tenant_id, role_id, ListParams(ids=[subject_id])))["data"]
+        return next(r for r in rows if r["kind"] == kind and r["teamId"] == team_id)
 
     async def _custom(self, tenant_id: str, role_id: str, verb: str) -> RoleRow:
         role = await self.store.role_by_id(tenant_id, role_id)

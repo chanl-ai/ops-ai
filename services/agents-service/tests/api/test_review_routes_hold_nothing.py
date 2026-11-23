@@ -70,7 +70,7 @@ class WatchedPlatform:
 
         return count
 
-    async def get(self, path: str) -> Any:
+    async def get(self, path: str, params: Any = None) -> Any:
         self.asked.append((path, self.open))
         if self.mode == "down":
             raise ServiceUnreachable("platform-service is down")

@@ -47,6 +47,7 @@ from ops_service_kit.errors import (
 )
 from ops_service_kit.http import Envelope, In, Json, JsonList, Out
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.names import Name
 from ops_service_kit.narrow import json_object
 from ops_store import isolation
 
@@ -109,7 +110,7 @@ limits = RateLimit()
 
 
 class WidgetDeploymentInput(In):
-    name: str = Field(min_length=1, max_length=200)
+    name: Name
     agent_id: str
     origins: list[str] = Field(min_length=1, max_length=20)
 
@@ -118,7 +119,7 @@ class SessionInput(In):
     """A session the bank's server mints for one person on one page."""
 
     email: str = Field(min_length=3, max_length=320)
-    name: str = Field(min_length=1, max_length=200)
+    name: Name
     origin: str
 
 
@@ -309,7 +310,7 @@ async def _owned(rt: Runtime, me: Principal, deployment_id: str) -> Json:
 
 
 class MintKeyInput(In):
-    name: str = Field(min_length=1, max_length=200)
+    name: Name
     # As platform keys: every mint key ends; 90 days unless the builder picks another span up to a year.
     expires_in_days: int = Field(default=90, ge=1, le=365)
 

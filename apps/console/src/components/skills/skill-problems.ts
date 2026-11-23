@@ -1,4 +1,4 @@
-import type { PublishBlocker } from '@/lib/types/references';
+import type { PublishBlocker, PublishWarning } from '@/lib/types/references';
 
 /** The key of the skill document's notes block: the stored `instructions`. */
 export const NOTES = 'instructions';
@@ -15,7 +15,7 @@ export interface PlacedProblem {
  * row. A step with several problems reads them as one line, since the editor shows one line per step. A problem that
  * names neither a step nor the notes is the page's to show.
  */
-export function placeProblems(problems: readonly PublishBlocker[]): PlacedProblem[] {
+export function placeProblems(problems: readonly (PublishBlocker | PublishWarning)[]): PlacedProblem[] {
   const lines = new Map<string, { field: string; step?: number; messages: string[] }>();
   for (const p of problems) {
     if (p.kind === 'missing_reference' || !p.position) continue;
