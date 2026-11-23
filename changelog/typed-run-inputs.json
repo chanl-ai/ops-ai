@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-19",
+  "title": "Run inputs are checked against their declared types",
+  "description": "A workflow no longer starts with an input of the wrong type or a required field missing: the start is refused and names the field and the reason. A number typed as text, in a form, a spreadsheet or on the command line, is read as the number.",
+  "tag": "fix"
+}

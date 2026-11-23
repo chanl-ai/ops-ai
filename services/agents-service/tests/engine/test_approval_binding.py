@@ -16,12 +16,13 @@ from ops_agents.api.engine_host import ApprovalMinter
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.reviews import ReviewStore
 from ops_agents.store.tenancy import tenant_scope
-from ops_engine.store import DefinitionStore, RunStore
+from ops_engine.store import DefinitionStore
 from ops_policy import input_hash
 from ops_policy.approval import binding_of
 from ops_service_kit.http import Json
 from ops_service_kit.ids import new_id
 from tests.engine.test_not_decided_by import FLOW
+from tests.run_rows import write_run
 
 KEY = "k" * 40
 
@@ -48,7 +49,7 @@ async def token_for(engine: AsyncEngine, tenant: str, wid: str, *, team: str | N
         )
         run_id = new_id("wfrun")
         base = {"id": run_id, "team_id": "team_a", "workflow_id": wid, "version": version, "digest": wid.ljust(64, "d")}
-        await RunStore(tx).create(base | {"run_key": run_id, "mode": "live", "input": {}, "created_by": "a@x"})
+        await write_run(tx, base | {"run_key": run_id, "mode": "live", "input": {}, "created_by": "a@x"})
         call: dict[str, Any] = {"step": "s1", "tool": "apply_tool_access_approved", "input": {"module": "m"}}
         approval: Json = {"approvers": ["r@x"], "step": "s1", "inputHash": input_hash(call["input"])}
         token = await ApprovalMinter(engine, KEY, 60).mint(run_id, call, approval)

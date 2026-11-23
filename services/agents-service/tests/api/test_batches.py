@@ -120,8 +120,9 @@ async def test_a_row_another_worker_started_is_adopted_and_retry_starts_only_the
         stored = await DefinitionStore(EngineTransactions(rt.db)).row(WID, 1)
         assert stored is not None
         other, _ = await start_run(
-            RunStore(EngineTransactions(rt.db)), stored, team_id="team_ops", mode="live", input={},
-            run_key=run_key(bid, 1, 1), created_by="james@harborpine.example", started_via="start:batch",
+            RunStore(EngineTransactions(rt.db)), stored, team_id="team_ops", mode="live",
+            input={"claim_ref": "HM-23000"}, run_key=run_key(bid, 1, 1), created_by="james@harborpine.example",
+            started_via="start:batch",
         )  # fmt: skip
     await tick(rt)
     await tick(rt)

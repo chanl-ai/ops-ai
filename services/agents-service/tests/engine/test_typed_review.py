@@ -20,9 +20,10 @@ from ops_agents.api.task_type_seeds import StoredTaskTypes, seeded_store
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.tenancy import tenant_scope
 from ops_engine.definition import parse
-from ops_engine.store import DefinitionStore, RunStore
+from ops_engine.store import DefinitionStore
 from ops_service_kit.ids import new_id
 from tests.engine.test_worker import CountingTools, drain, worker
+from tests.run_rows import write_run
 
 FLOW = parse(
     {
@@ -86,8 +87,9 @@ async def test_an_open_task_keeps_its_version_when_the_type_moves_on(engine: Asy
         run_id = new_id("wfrun")
         facts = [{"label": "New account", "value": "****4410"}]
         run = {"id": run_id, "team_id": "team_a", "workflow_id": FLOW.id, "version": version, "digest": FLOW.digest()}
-        await RunStore(tx).create(
-            run | {"run_key": run_id, "mode": "live", "input": {"vendor": "Acme", "facts": facts}, "created_by": "a@x"}
+        await write_run(
+            tx,
+            run | {"run_key": run_id, "mode": "live", "input": {"vendor": "Acme", "facts": facts}, "created_by": "a@x"},
         )
     w = worker(engine, CountingTools(), InMemorySaver())
     w.host.ports.task_types = StoredTaskTypes(engine)

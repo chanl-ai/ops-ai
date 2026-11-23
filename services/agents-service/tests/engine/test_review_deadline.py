@@ -21,6 +21,7 @@ from ops_engine.definition import parse
 from ops_engine.store import DefinitionStore, RunStore
 from ops_service_kit.ids import new_id
 from tests.engine.test_worker import CountingTools, M, drain, worker
+from tests.run_rows import write_run
 
 # About a second and a half: long enough to decide inside it, short enough to wait out.
 SLA_HOURS = 1.5 / 3600
@@ -65,7 +66,8 @@ async def start(engine: AsyncEngine, tenant: str) -> str:
             FLOW.id, name="Deadline", definition=FLOW.wire(), digest=FLOW.digest(), now="now", by="a@x", stage="live"
         )
         run_id = new_id("wfrun")
-        await RunStore(tx).create(
+        await write_run(
+            tx,
             {
                 "id": run_id,
                 "team_id": "team_a",
@@ -76,7 +78,7 @@ async def start(engine: AsyncEngine, tenant: str) -> str:
                 "mode": "live",
                 "input": {},
                 "created_by": "a@x",
-            }
+            },
         )
         return run_id
 

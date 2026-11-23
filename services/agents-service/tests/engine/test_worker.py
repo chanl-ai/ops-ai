@@ -31,6 +31,7 @@ from ops_engine.store import DefinitionStore, RunStore, WorkQueue
 from ops_engine.worker import Worker, WorkerHost
 from ops_service_kit.ids import new_id
 from ops_store import isolation
+from tests.run_rows import write_run
 
 # The dev caller in team_a, the team the engine tests run their workflows in: it decides only that team's reviews.
 M = Principal(name="m@x", email="m@x", team_id="team_a", tenant_id="local", team_ids=("team_a",), dev=True)
@@ -89,7 +90,8 @@ async def start(engine: AsyncEngine, tenant: str, payload: dict[str, Any], key: 
             BASIC.id, name="Refund", definition=BASIC.wire(), digest=BASIC.digest(), now="now", by="a@x", stage="live"
         )
         run_id = new_id("wfrun")
-        run, _ = await RunStore(tx).create(
+        run, _ = await write_run(
+            tx,
             {
                 "id": run_id,
                 "team_id": "team_a",
@@ -100,7 +102,7 @@ async def start(engine: AsyncEngine, tenant: str, payload: dict[str, Any], key: 
                 "mode": "live",
                 "input": payload,
                 "created_by": "a@x",
-            }
+            },
         )
         return run.id
 

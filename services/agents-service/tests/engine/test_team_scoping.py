@@ -18,6 +18,7 @@ from ops_agents.store.tenancy import current_tenant, tenant_scope
 from ops_engine.store import DefinitionStore, RunStore, WorkflowOwnedError
 from ops_service_kit.errors import NotFound
 from ops_store import isolation
+from tests.run_rows import write_run
 
 # The dev header caller, which decides for any team.
 B = Principal(name="b@x", email="b@x", team_id="team_ops", tenant_id="local", team_ids=("team_ops",), dev=True)
@@ -39,7 +40,7 @@ async def test_another_teams_workflow_and_run_are_not_found(engine: AsyncEngine)
         )
         rid = f"wfrun_{uuid4().hex[:10]}"
         row: dict[str, Any] = {"id": rid, "team_id": "team_cards", "workflow_id": wf, "version": 1, "digest": "d" * 64}
-        await RunStore(tx).create(row | {"run_key": rid, "mode": "live", "input": {}, "created_by": "a"})
+        await write_run(tx, row | {"run_key": rid, "mode": "live", "input": {}, "created_by": "a"})
         assert wf not in [d.workflow_id for d in await store.summaries(team="team_lending")]
         assert await store.get(wf, team="team_lending") is None
         assert await store.delete_draft(wf, team="team_lending") == "missing"
@@ -60,7 +61,7 @@ async def test_another_teams_review_cannot_be_read_or_decided(engine: AsyncEngin
             wf, name="W", definition={}, digest="d" * 64, now="n", by="a", team="team_cards", stage="live"
         )
         row: dict[str, Any] = {"id": rid, "team_id": "team_cards", "workflow_id": wf, "version": 1, "digest": "d" * 64}
-        await RunStore(tx).create(row | {"run_key": rid, "mode": "live", "input": {}, "created_by": "a"})
+        await write_run(tx, row | {"run_key": rid, "mode": "live", "input": {}, "created_by": "a"})
         payload = {"node": "review", "step_id": f"{rid}:review:1", "iteration": 1}
         waiting = {"node": "review", "iteration": 1, "interruptId": "i", "payload": payload}
         await RunStore(tx).update(rid, status="waiting", waiting=waiting)

@@ -44,7 +44,17 @@ schemaVersion: 2
 id: uc081_refund_check
 name: Refund check (uc-081)
 nodes:
-  - {id: start, type: ops.trigger.request, typeVersion: 1, name: Request}
+  - id: start
+    type: ops.trigger.request
+    typeVersion: 1
+    name: Request
+    parameters:
+      inputSchema:
+        type: object
+        required: [customerId, amount]
+        properties:
+          customerId: {type: string, title: Customer}
+          amount: {type: number, title: Amount}
   - id: fields
     type: ops.data.set
     typeVersion: 1
@@ -80,7 +90,8 @@ connections:
   - {from: {node: review, port: approve}, to: {node: approved, port: in}}
   - {from: {node: review, port: reject}, to: {node: rejected, port: in}}
 """
-PAYLOAD = {"customerId": "CUS-1001", "amount": 250}
+# The amount as text, as a CLI flag, a form field or a spreadsheet cell sends it: the trigger declares it a number.
+PAYLOAD = {"customerId": "CUS-1001", "amount": "250"}
 LEASE_TTL = "3"
 
 
@@ -160,16 +171,40 @@ def main() -> None:
         live = api.post("/v1/workflows/definitions/uc081_refund_check/publish-requests", json={}, headers=OPS)
         check("its publish request is approved and the version is live", data(live)["status"] == "approved", live.text)
 
+        # An amount that is no number starts nothing: left as text it would read as not over 100 and end Small.
+        wordy = api.post(
+            "/v1/runs",
+            json={"workflowId": "uc081_refund_check", "input": {**PAYLOAD, "amount": "a lot"}, "runKey": "uc081-x"},
+            headers=OPS,
+        )
+        refusal = (wordy.json().get("error") or {}) if wordy.status_code == 422 else {}
+        check(
+            "an amount that is not a number is refused (422) naming the field and the reason",
+            refusal.get("code") == "invalid_input"
+            and (refusal.get("details") or {}).get("path") == "amount"
+            and "number" in str((refusal.get("details") or {}).get("reason")),
+            wordy.text[:300],
+        )
+
         # 1. No worker: the run is queued and stays queued.
         first = start_run(api, "uc081-a")
         time.sleep(2.0)
         queued = run_of(api, first)
         check("with no worker running the run stays queued", queued.get("status") == "queued", queued)
+        check(
+            "the amount sent as text is stored as the number the trigger declares",
+            (queued.get("input") or {}).get("amount") == 250,
+            queued.get("input"),
+        )
 
         # 2. A worker starts: the run reaches the review; the decision ends it.
         with worker("a"):
             waiting = until(status_is(api, first, "waiting"))
-            check("a worker runs it to the human review", waiting is not None, run_of(api, first))
+            check(
+                "a worker takes the over-100 branch to the human review, not the Small end",
+                waiting is not None,
+                run_of(api, first),
+            )
             events = sse(api.get(f"/v1/runs/{first}/events", params={"follow": "false"}, headers=OPS).text)
             types = [e["type"] for e in events]
             check(

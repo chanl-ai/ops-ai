@@ -35,6 +35,8 @@ def needs_reconnect_event(
             "app": str(conn.name),
             "appId": conn.app_id,
             "sandbox": bool(conn.sandbox),
+            # The notice workflow's input schema requires it and shows it to the admins.
+            "environment": "sandbox" if conn.sandbox else "production",
             "state": state,
             "reason": reason,
             "at": at.isoformat(),

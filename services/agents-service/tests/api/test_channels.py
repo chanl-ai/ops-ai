@@ -27,6 +27,7 @@ from tests.api.test_activity import email
 from tests.api.test_case_routes import started_run
 from tests.api.test_team_default_agent import Stack, stack  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from tests.engine.test_lifecycle_rights import BUILDER, TENANT, VIEWER, person
+from tests.run_rows import write_run
 
 from .connections import Request, connections
 from .test_reply_pins import FIXTURES, answer, compare
@@ -335,7 +336,7 @@ async def test_an_api_key_is_a_channel_with_its_traffic_and_health(stack: Stack)
         base = await RunStore(tx).get(parent)
         assert base is not None
         same = {k: base[k] for k in ("team_id", "workflow_id", "version", "digest", "mode", "input")}
-        await RunStore(tx).create(same | {"id": "wfrun_bykey", "run_key": "kk", "created_by": "key:key_ci"})
+        await write_run(tx, same | {"id": "wfrun_bykey", "run_key": "kk", "created_by": "key:key_ci"})
     rows = {r["id"]: r for r in (await channels(c, BUILDER, type="api"))["data"]}
     assert set(rows) == {"key_ci", "key_soon", "key_gone"}, rows
     ci = rows["key_ci"]

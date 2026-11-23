@@ -15,6 +15,7 @@ from ops_engine.store import RunStore
 from tests.api.test_case_routes import started_run
 from tests.api.test_team_default_agent import Stack, stack  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from tests.engine.test_lifecycle_rights import BUILDER, TENANT
+from tests.run_rows import write_run
 
 
 async def started_by(s: Stack, run_id: str) -> dict[str, Any]:
@@ -46,9 +47,9 @@ async def test_each_starter_is_named(stack: Stack) -> None:  # noqa: F811
         base = await RunStore(tx).get(parent)
         assert base is not None
         same = {k: base[k] for k in ("team_id", "workflow_id", "version", "digest", "mode", "input")}
-        await RunStore(tx).create(same | {"id": "wfrun_child", "run_key": "k1", "created_by": f"run:{parent}"})
-        await RunStore(tx).create(
-            same | {"id": "wfrun_mail", "run_key": "k2", "created_by": "trigger:email:levy@harborpine.example"}
+        await write_run(tx, same | {"id": "wfrun_child", "run_key": "k1", "created_by": f"run:{parent}"})
+        await write_run(
+            tx, same | {"id": "wfrun_mail", "run_key": "k2", "created_by": "trigger:email:levy@harborpine.example"}
         )
     assert await started_by(stack, parent) == {
         "kind": "person",
@@ -98,7 +99,7 @@ async def test_a_run_an_api_key_started_is_named_by_its_label(stack: Stack) -> N
         summary |= {"createdAt": "2026-10-01T00:00:00.000Z"}
         await ApiKeyCopies(rt.db).apply([listed_event(KeySummary.model_validate(summary), tenant_id=TENANT)])
         same = {k: base[k] for k in ("team_id", "workflow_id", "version", "digest", "mode", "input")}
-        await RunStore(EngineTransactions(rt.db)).create(
-            same | {"id": "wfrun_bykey", "run_key": "kk", "created_by": "key:key_sync"}
+        await write_run(
+            EngineTransactions(rt.db), same | {"id": "wfrun_bykey", "run_key": "kk", "created_by": "key:key_sync"}
         )
     assert await started_by(stack, "wfrun_bykey") == {"kind": "key", "id": "key_sync", "name": "billing-sync"}
