@@ -4,7 +4,7 @@
 // drafted action. James, who started it, cannot approve it himself; Maya follows that link, approves on the task page, and the case then reads nothing left and the
 // action approved. Platform sign-in; no model call is made.
 import { check, chromium, consoleSignIn, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
-import { JAMES, MAYA, PASSWORD, agents, as, decideOpenTask, saveAndPublish, start, until } from '../../lib/workflow_ui.mjs';
+import { JAMES, MAYA, PASSWORD, agents, as, decideOpenTask, saveAndPublish, start, twoPersonRuleOn, until } from '../../lib/workflow_ui.mjs';
 
 const ID = `uc251_fee_dispute_${Math.random().toString(36).slice(2, 6)}`;
 const DEFINITION = `
@@ -84,6 +84,9 @@ await withUiStack(
     });
     const caseId = waiting?.steps?.find((s) => s.nodeId === 'open')?.output?.caseId;
     if (!caseId) throw new Error(`setup: the run opened no case: ${JSON.stringify(waiting ?? null).slice(0, 300)}`);
+    // James is a Builder, so with the team's two-person rule on he does not approve his own run's write. Turned on once
+    // the workflow is live: with it on, his own publish would wait for someone else too.
+    await twoPersonRuleOn('team_ops');
 
     const browser = await chromium.launch();
     const errors = [];
@@ -103,8 +106,8 @@ await withUiStack(
         before,
       );
 
-      // James started the run, so he may not approve its write himself (requesterMayDecide is off by default): the task
-      // page offers him no decision and the action stays pending. With the policy on, his Decide button is enabled.
+      // James started the run, so with the two-person rule on he may not approve its write himself: the task page offers
+      // him no decision and the action stays pending. With the rule off, or for an Admin of the team, Decide is enabled.
       await james.goto(`${consoleUrl}${before.task}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await james.getByTestId('decision-panel').waitFor({ timeout: 60_000 }).catch(() => undefined);
       const ownPage = (await james.getByTestId('decision-panel').innerText().catch(() => '')).replace(/\s+/g, ' ');

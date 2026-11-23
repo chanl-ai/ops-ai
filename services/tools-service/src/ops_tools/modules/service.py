@@ -2750,10 +2750,13 @@ class ModuleService:
         by: str | None,
         team_id: str | None = None,
         deciders: Sequence[str] = (),
+        acting_for: Principal | None = None,
     ) -> ApprovalView:
         """A tool access review's decision from Human Tasks, applied to the module's approval: approved grants
         it, anything else ends the request. Applying the same decision again changes nothing; a request already ended
-        another way (revoked, or decided otherwise) is refused, so a late approval never revives a revoked grant."""
+        another way (revoked, or decided otherwise) is refused, so a late approval never revives a revoked grant.
+        `acting_for` is the person the call acts for, with the roles their acting-for token holds in the deciding team:
+        when that person is the asker, `can` reads those roles, so an Admin of the team decides their own request."""
         m = await self.store.get_any(tenant_id, module_id)
         if m is None:
             raise NotFound("Tool module")
@@ -2778,6 +2781,9 @@ class ModuleService:
                 may_decide=may_decide,
                 team_id=a.get("decider_team"),
                 what="this access",
+                person=acting_for
+                if acting_for is not None and acting_for.email.casefold() == asker.casefold()
+                else None,
             )
             if refused is not None:
                 raise refused

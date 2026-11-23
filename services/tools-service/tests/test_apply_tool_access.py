@@ -13,7 +13,7 @@ import httpx
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from ops_identity import dev_service_signer, mint_service_token
+from ops_identity import ActingForPerson, dev_service_signer, mint_service_token, principal_of
 from ops_policy import input_hash
 from ops_policy.approval import Binding
 from ops_policy.approval import mint_approval as mint
@@ -186,3 +186,30 @@ async def test_with_no_platform_service_the_requester_policy_is_the_dev_policy_a
     as the dev caller's own identity does for every other decision."""
     assert await RequesterMayDecide(None).allowed("t") is True, "the asker decides by default"
     assert await RequesterMayDecide(None, dev={"requesterMayDecide": False}).allowed("t") is False
+
+
+async def test_an_admin_of_the_deciding_team_applies_her_own_request_while_the_two_person_rule_is_on(
+    gateway: Gateway,  # noqa: F811
+    engine: AsyncEngine,
+    seed: dict[str, Any],
+) -> None:
+    """The call acts for the asker with her acting-for roles; an Admin there decides her own request, as `can` says."""
+    approval = await _ask(gateway)
+    m = await ModuleStore(engine).get(gateway.tenant, "mod_core_banking")
+    assert m is not None
+    asked = next(a for a in m["approvals"] if a["id"] == approval["id"])
+    asker, team = asked["requested_by_email"], asked.get("decider_team")
+    assert asker and team, asked
+    admin = principal_of(
+        ActingForPerson(sub="usr_asker", email=asker, name=asker, team_id=team, access={"access": {team: ["admin"]}}),
+        gateway.tenant,
+    )
+    strict = ModuleService(
+        ModuleStore(engine),
+        Directory.from_seed(seed, datetime.now(UTC)),
+        CallLog(engine),
+        requester_policy=RequesterPolicy(False),
+    )
+    kw: dict[str, Any] = {"approval_id": approval["id"], "decision": "approved", "reason": None, "by": asker}
+    applied = await strict.apply_access_decision(gateway.tenant, "mod_core_banking", acting_for=admin, **kw)
+    assert applied["status"] == "approved", applied

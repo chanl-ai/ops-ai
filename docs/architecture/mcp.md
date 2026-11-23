@@ -70,7 +70,7 @@ console's MCP page (`apps/console/src/app/channels/mcp/page.tsx`) reads `/connec
 | `readOnlyHint` and `destructiveHint` come per tool from the access class and the approval policy | Not built yet |
 | Every outside-assistant call is a test run, using an app's sandbox account when the team has one | Built (`T/mcp_server.py:121-125`) |
 | A write without an approval is refused | Built (`T/gateway_calls.py:405-438`) |
-| A write from a signed-in person is held: a pending result with a review link that expires after 24 hours; an approver other than the requester decides in Reviews (the requester too where `requesterMayDecide` is on); it runs once as the requester; `get_call` reads the outcome | Not built yet |
+| A write from a signed-in person is held: a pending result with a review link that expires after 24 hours; an approver other than the requester decides in Reviews (the requester too, unless the team's two-person rule is on and they are not an Admin of the team); it runs once as the requester; `get_call` reads the outcome | Not built yet |
 | An API key runs reads only; a write waits for a person (register row E28) | Built (`KEY_GRANTS` in `packages/ops_access/src/ops_access/check.py`) |
 | Above 20 tools an endpoint serves `search_tools`, `get_tool`, `run_tool` over the same set; an empty set denies all | Not built yet (the threshold is `types.py:74`) |
 | The model never picks the account; the endpoint's account map does | Built for agents (`T/plugins/host.py:916`); endpoints not built yet |
@@ -132,7 +132,7 @@ The MCP mount stays out of OpenAPI. Every other route is generated into the SDKs
 | A token for one team or endpoint is refused on another, and a test token on production | Dropping the audience check |
 | A key's write waits for a person (register row E28) | Letting a key's write run without a person |
 | `search_tools` on an endpoint of 25 tools returns only those tools | Searching the whole team |
-| A held write runs once as the requester after another person approves, and never after 24 hours | Accepting the requester as approver while `requesterMayDecide` is off |
+| A held write runs once as the requester after another person approves, and never after 24 hours | Accepting a requester who is not an Admin of the team as approver while the two-person rule is on (`requesterMayDecide` off) |
 | An imported MCP tool whose schema changed is refused | Skipping the drift check |
 
 ## Open questions

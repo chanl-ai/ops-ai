@@ -11,7 +11,7 @@ from ops_agent_kernel.ports import ToolOutcome
 from ops_agents.activities.catalog import Catalog
 from ops_agents.activities.tools import LocalToolExecutor
 from ops_email import MailNotConfiguredError, MailSender, OutboundMessage
-from ops_identity import ActingForPerson, ServiceCallError, ServiceClient, ServiceUnreachable, principal_of
+from ops_identity import ActingForPerson, Principal, ServiceCallError, ServiceClient, ServiceUnreachable, principal_of
 from ops_service_kit.errors import ApiError
 from ops_service_kit.http import Json, JsonValue
 
@@ -73,6 +73,7 @@ class AccessDecisions(Protocol):
         by: str | None,
         team_id: str | None = None,
         deciders: Sequence[str] = (),
+        acting_for: Principal | None = None,
     ) -> ApprovalView | Mapping[str, JsonValue]: ...
 
 
@@ -173,6 +174,7 @@ class LocalToolRunner:
                 by=caller.approvers[0],
                 team_id=caller.team_id,
                 deciders=caller.approvers,
+                acting_for=principal_of(caller.acting_for, caller.tenant_id) if caller.acting_for else None,
             )
         except ApiError as e:
             return ToolOutcome(False, {"error": str(e), "code": e.code})

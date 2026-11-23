@@ -263,7 +263,7 @@ Every tree, composed or filled, is rebuilt from the closed field lists before a 
 
 | Control | Rule | Status |
 |---|---|---|
-| Who defines named widgets | Builders, in their team. Publishing needs someone who neither requested nor saved the version while `requesterMayDecide` is off (`publish_reviews.py:95-98`) | built |
+| Who defines named widgets | Builders, in their team. Publishing needs someone who neither requested nor saved the version while the team's two-person rule is on (`requesterMayDecide` off), unless that person is an Admin of the team (`publish_reviews.py:95-98`) | built |
 | Who may compose | The model, only for agents that allow it; a caller can switch composition off | built |
 | Clicks | A click only sends a message. The named action is a request the agent weighs against its grants and the operation's approval policy. Reply text is untrusted input to the agent | built |
 | Prompt injection | A tool result cannot draw a fake approval: the approval card is not a primitive, composed parts are labelled, images are blocked, and no links exist | built |
@@ -299,7 +299,7 @@ The design questions, all answered:
 
 | # | Question | Answer |
 |---|---|---|
-| Q1 | Who may define a widget? | Builders author named widgets from the catalogue; a widget goes live after a second person approves it (the requester may approve only where the team turned `requesterMayDecide` on) |
+| Q1 | Who may define a widget? | Builders author named widgets from the catalogue; a widget goes live once someone who may decide approves it (the requester too, unless the team turned the two-person rule on and they are not an Admin of the team) |
 | Q2 | May the model invent UI? | It may compose from the catalogue now, as well as fill named widgets. MCP-app HTML stays last |
 | Q3 | What does a click do? | It sends a message back to the agent. Widgets take no direct actions |
 | Q4 | What limits apply? | No fixed caps; the agent's own settings set them, and callers only narrow |
