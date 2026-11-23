@@ -91,6 +91,11 @@
    "pluginId": "test.fields",
    "sandboxId": null,
    "signIn": null,
+   "signIns": {
+    "connected": 0,
+    "expired": 0,
+    "refused": 0
+   },
    "state": null,
    "status": null,
    "toolsAdded": 5,
@@ -178,6 +183,7 @@
       "pluginId": "test.fields",
       "sandboxId": null,
       "signIn": null,
+      "signIns": null,
       "state": null,
       "status": null,
       "toolsAdded": 5,
@@ -360,6 +366,11 @@
    "pluginId": "test.fields",
    "sandboxId": null,
    "signIn": "team",
+   "signIns": {
+    "connected": 0,
+    "expired": 0,
+    "refused": 0
+   },
    "state": "not_signed_in",
    "status": "draft",
    "toolsAdded": 1,
@@ -498,6 +509,7 @@
       "pluginId": "test.fields",
       "sandboxId": null,
       "signIn": "team",
+      "signIns": null,
       "state": "not_signed_in",
       "status": "draft",
       "toolsAdded": 1,
@@ -750,6 +762,11 @@
    "pluginId": "test.fields",
    "sandboxId": null,
    "signIn": null,
+   "signIns": {
+    "connected": 0,
+    "expired": 0,
+    "refused": 0
+   },
    "state": null,
    "status": null,
    "toolsAdded": 5,
@@ -837,6 +854,7 @@
       "pluginId": "test.fields",
       "sandboxId": null,
       "signIn": null,
+      "signIns": null,
       "state": null,
       "status": null,
       "toolsAdded": 5,

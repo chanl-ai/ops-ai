@@ -198,6 +198,11 @@
        "pluginId": null,
        "sandboxId": null,
        "signIn": "team",
+       "signIns": {
+        "connected": 0,
+        "expired": 0,
+        "refused": 0
+       },
        "state": "not_signed_in",
        "status": "draft",
        "toolsAdded": null,
@@ -228,6 +233,11 @@
        "pluginId": null,
        "sandboxId": null,
        "signIn": "team",
+       "signIns": {
+        "connected": 0,
+        "expired": 0,
+        "refused": 0
+       },
        "state": "not_signed_in",
        "status": "draft",
        "toolsAdded": null,
@@ -390,6 +400,7 @@
       "pluginId": null,
       "sandboxId": null,
       "signIn": "team",
+      "signIns": null,
       "state": "not_signed_in",
       "status": "draft",
       "toolsAdded": null,
