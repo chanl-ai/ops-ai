@@ -117,7 +117,7 @@ export function AppPageView({ appId }: { appId: string }) {
       case 'own_sign_in':
         return (
           <Button size="sm" variant="outline" asChild data-testid="app-own-sign-in">
-            <Link href="/settings/account/connectors">Sign in from Mine</Link>
+            <Link href="/work/apps">Sign in from My apps</Link>
           </Button>
         );
       case 'connect':

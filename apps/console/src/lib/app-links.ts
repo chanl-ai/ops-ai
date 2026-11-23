@@ -7,3 +7,6 @@ export function appPageHref(id: string, tab?: string): string {
   const path = `/data/connectors/${encodeURIComponent(id)}`;
   return tab ? `${path}?tab=${encodeURIComponent(tab)}` : path;
 }
+
+/** A person's own page of an app in My apps (src/app/work/apps/[id]): the card opens it. */
+export const myAppHref = (id: string): string => `/work/apps/${encodeURIComponent(id)}`;

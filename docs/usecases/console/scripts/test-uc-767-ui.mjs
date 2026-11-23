@@ -42,7 +42,7 @@ await withUiStack(
 
       await step('2 My apps opens her own sign-ins page', async () => {
         await page.locator('[data-sidebar=content] a', { hasText: /^My apps$/ }).first().click();
-        await page.waitForURL((u) => u.pathname === '/settings/account/connectors', { timeout: 30_000 });
+        await page.waitForURL((u) => u.pathname === '/work/apps', { timeout: 30_000 });
         const title = (await page.getByTestId('page-title').first().innerText()).trim();
         check('2 My apps opens her own sign-ins page', title === 'My apps', { url: page.url(), title });
       });
