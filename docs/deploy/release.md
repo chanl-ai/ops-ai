@@ -18,7 +18,7 @@ something print what they would do unless `DRY=0`.
 | 5. Open the PR | Maintainer | In a checkout at the train's head, `make release-pr V=X.Y.Z` (preview), then `DRY=0`: runs `make ci-local`, then opens `release/current` into `develop` titled `release: X.Y.Z into develop` |
 | 6. Queue | Owner | Queues the pull request after approving it. A push to it while queued drops it from the queue, so the train stays frozen until it lands. The queue merges with a merge commit |
 | 7. Tag | Automatic | `release-tag.yml` runs on the push to `develop`. When the merge subject, or the first body line of the merge commit, is `release: X.Y.Z into develop`, it tags that commit `vX.Y.Z` |
-| 8. Move main | Automatic | The same job runs `scripts/release-main.sh`: `git push origin <sha>:main`, which git refuses unless it is a fast-forward. When `main`'s protection refuses the workflow token, the job stops red and prints the owner's one command (below) |
+| 8. Move main | Automatic | The same job runs `scripts/release-main.sh`: `git push origin <sha>:main`, which git refuses unless it is a fast-forward. With the deploy key the push passes; without it the job stops red and prints the owner's one command (below) |
 | 9. Publish | Automatic | The same job starts `sdk-publish.yml` and `release-images.yml` on the tag, since a tag pushed with the workflow token starts no workflow itself |
 | 10. Next train | Maintainer | `make release-cut` (preview), then `DRY=0`: fast-forwards `release/current` to `origin/develop`, or creates it when missing. It refuses when the train holds commits develop lacks |
 
@@ -60,17 +60,27 @@ them from the commit into a registry inside the runner (`make install-proof BUIL
 after the tag, below. Upgrades from a release before 874530fa use the online path (migrations at start-up), not the
 offline SQL; `docs/deploy/database.md` explains why.
 
-## When `main` refuses the push
+## The deploy key that moves main
 
-`main` is protected: a pull request is required and the rule applies to administrators (`enforce_admins`), so the
-workflow token's push is refused as things stand. The job prints this, and exits red:
+`main` is protected by ruleset 27865407: no deletion, no force push, a pull request required, `scan` and `ci-ok`
+required. GitHub does not accept the Actions app as a bypass actor, so the workflow token cannot push to `main`. A
+write deploy key can bypass the ruleset, and the workflow pushes over SSH with it. The owner sets it up once:
 
-| Output | Meaning |
+| Step | Command |
 |---|---|
-| `git push origin <sha>:main` | The one command the owner runs from a checkout of the repository. It works only once the owner has exempted the push in `main`'s protection |
-| Re-run the failed job | The tag exists and `main` is at the commit, so the rerun skips both and starts the publish and the image build |
+| Make the key | `ssh-keygen -t ed25519 -N '' -f k` |
+| Register it with write access | `gh repo deploy-key add k.pub --allow-write -t release-main` |
+| Store the private half | `gh secret set RELEASE_MAIN_DEPLOY_KEY < k` |
+| Remove the files | `rm k k.pub` |
 
-The script never forces: `main` must be an ancestor of the commit, or it stops with exit 1.
+The deploy key must be listed as a bypass actor in the `main` ruleset. The push is still plain, so git refuses
+anything that is not a fast-forward, and the script never forces.
+
+| Case | Result |
+|---|---|
+| The secret is set | The job pushes `<sha>:main` over SSH to `git@github.com:<repo>.git`, trusting GitHub's published host keys |
+| The secret is missing, or the key is not allowed to bypass | The push is refused, the job stops red and prints `git push origin <sha>:main`, the one command the owner runs. Re-running the job then skips the tag and `main` and starts the publish and the image build |
+| `main` is not an ancestor of the commit | Exit 1, nothing pushed |
 
 ## What each push or tag starts
 
@@ -114,7 +124,7 @@ For the owner to apply in the repository settings; nothing here changes them.
 | Rule | Setting |
 |---|---|
 | `develop` ruleset (27847271) | Merge queue on, merge method merge commit. A release pull request needs no other rule |
-| `main` | Today: a pull request is required and applies to administrators, with `scan` and `ci-ok` as required checks. The fast-forward push of step 8 is refused until the owner exempts the workflow, or runs the printed command with a bypass. Force pushes and deletion stay blocked |
+| `main` | Ruleset 27865407: no deletion, no force, pull request required, `scan` and `ci-ok` required, the `release-main` deploy key bypasses it (section above) |
 | Tags `v*` | Creation limited to maintainers; update and deletion blocked |
-| `release/current` | Deletion blocked: open pull requests would go back to `develop` if it were deleted |
+| `release/current` and `release/1.1.0` | Ruleset 27865389 blocks deleting and force-pushing them: open pull requests would go back to `develop` if the train were deleted |
 | Auto-delete head branches | Today on, which deletes `release/current` when the release pull request merges and sends every open pull request into it back to `develop`. Turn it off, or protect `release/current`; `make release-cut` recreates a missing train but cannot retarget pull requests |

@@ -3,7 +3,8 @@
 # and a release needs no pull request to main and no back-merge (docs/deploy/release.md). Run by
 # .github/workflows/release-tag.yml after the tag, and by hand with the same command it prints when the push is refused.
 #   REF=<commit>   the develop commit main moves to (default HEAD)
-#   REMOTE=<name>  default origin
+#   REMOTE=<name>  where main is read from (default origin)
+#   PUSH_URL=<url> where main is pushed to when that differs from REMOTE (the workflow sets the SSH URL its deploy key signs in to)
 #   DRY=1          print what would happen and stop
 # Never forced: main must be an ancestor of REF. When main's protection refuses the push (the workflow token may not
 # push there), this prints the one command the owner runs and exits 3, so a rerun of the job finishes the release.
@@ -19,7 +20,7 @@ if ! git merge-base --is-ancestor "$main" "$sha"; then
   exit 1
 fi
 if [ "${DRY:-0}" = 1 ]; then echo "release-main: git push $remote $sha:main (dry run)"; exit 0; fi
-if git push --quiet "$remote" "$sha:refs/heads/main"; then
+if git push --quiet "${PUSH_URL:-$remote}" "$sha:refs/heads/main"; then
   echo "release-main: main is now at $sha"
   exit 0
 fi

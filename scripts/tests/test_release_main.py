@@ -68,3 +68,13 @@ def test_a_refused_push_prints_the_one_command_for_the_owner_and_exits_3(tmp_pat
     assert done.returncode == 3
     assert f"git push origin {head}:main" in done.stderr
     assert git(remote, "rev-parse", "main") != head
+
+
+def test_the_push_goes_to_push_url_when_one_is_set(tmp_path: Path) -> None:
+    remote, work = clone_pair(tmp_path)
+    head = commit(work, "b")
+    other = tmp_path / "other.git"
+    subprocess.run(["git", "clone", "-q", "--bare", str(remote), str(other)], check=True)
+    done = main_script(work, PUSH_URL=str(other))
+    assert done.returncode == 0 and git(other, "rev-parse", "main") == head
+    assert git(remote, "rev-parse", "main") != head

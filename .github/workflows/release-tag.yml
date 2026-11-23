@@ -1,6 +1,7 @@
 # A merge into develop of the pull request `release: X.Y.Z into develop` (or `hotfix: X.Y.Z into develop`) is tagged
 # `vX.Y.Z` with `make release-tag`, which runs the same way locally (DRY=1 prints the name). Then main is fast-forwarded to
-# that commit with a plain push (`make release-main`); main's protection may refuse the workflow token, and then the
+# that commit with a plain push over SSH with the deploy key in RELEASE_MAIN_DEPLOY_KEY (`make release-main`); with no
+# key main's rules refuse the workflow token, and then the
 # job stops red and prints the one command the owner runs, after which re-running the job starts the publish below. A
 # push to develop that is no release gets no tag. The tag push made with the workflow token starts no workflow of its
 # own, so this one starts sdk-publish.yml and release-images.yml on the new tag with workflow_dispatch, which the token
@@ -43,12 +44,25 @@ jobs:
         if: steps.tag.outputs.tag != ''
         env:
           REF: ${{ github.sha }}
+          # A write deploy key that main's ruleset lets bypass the pull request rule; the workflow token cannot. With no
+          # key the push goes over the token and is refused, which prints the owner's command (docs/deploy/release.md).
+          DEPLOY_KEY: ${{ secrets.RELEASE_MAIN_DEPLOY_KEY }}
+          REPO: ${{ github.repository }}
         run: |
+          if [ -n "$DEPLOY_KEY" ]; then
+            ssh_dir=$RUNNER_TEMP/release-main-ssh
+            mkdir -p "$ssh_dir" && chmod 700 "$ssh_dir"
+            printf '%s\n' "$DEPLOY_KEY" > "$ssh_dir/key" && chmod 600 "$ssh_dir/key"
+            # GitHub's published host keys, so the first connection trusts nothing it was not told.
+            curl -fsS https://api.github.com/meta | jq -r '.ssh_keys[] | "github.com " + .' > "$ssh_dir/known_hosts"
+            export GIT_SSH_COMMAND="ssh -i $ssh_dir/key -o IdentitiesOnly=yes -o UserKnownHostsFile=$ssh_dir/known_hosts -o StrictHostKeyChecking=yes"
+            export PUSH_URL="git@github.com:$REPO.git"
+          fi
           rc=0
           # The script, not make: make turns the script's exit 3 (push refused) into its own exit 2.
           sh scripts/release-main.sh || rc=$?
           if [ "$rc" = 3 ]; then
-            echo "::error title=main not moved::main's protection refused the token. The owner runs the command above, then re-runs this job."
+            echo "::error title=main not moved::main refused the push (no RELEASE_MAIN_DEPLOY_KEY secret, or the key is not allowed). The owner runs the command above, then re-runs this job."
           fi
           exit "$rc"
       - name: Publish the SDKs and build the images for the new tag
