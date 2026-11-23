@@ -622,8 +622,16 @@ def merge_in(wt: Path, ref: str, subject: str, body: str) -> dict[str, Any]:
     )
     with tempfile.NamedTemporaryFile("w", suffix=".msg", delete=False) as f:
         f.write(message)
-    run("git", "commit", "-q", "-F", f.name, cwd=wt)
-    os.unlink(f.name)
+    # The repo's own hooks, as install-hooks.sh links them: a core.hooksPath that adds a trailer to every message would
+    # make the public-view check refuse a merge commit this script has no way to reword.
+    hooks = Path(run("git", "rev-parse", "--path-format=absolute", "--git-common-dir", cwd=wt).strip()) / "hooks"
+    try:
+        run("git", "-c", f"core.hooksPath={hooks}", "commit", "-q", "-F", f.name, cwd=wt)
+    except Refusal as why:
+        attempt("git", "merge", "--abort", cwd=wt)
+        return {"status": "conflict", "files": [], "reason": f"the commit was refused: {str(why)[-300:]}"}
+    finally:
+        os.unlink(f.name)
     return {"status": "merged", "sha": run("git", "rev-parse", "HEAD", cwd=wt).strip(), "resolved": resolved}
 
 
