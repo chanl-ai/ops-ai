@@ -160,6 +160,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/apps/people": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List App People
+         * @description Apps > People: one page of the people holding their own sign-ins on the team's apps, by name, each with the
+         *     apps they signed in to, their sign-ins counted by state (connected, expired, refused), the last call any of
+         *     them signed, and every sign-in. `search` matches the name; `app` and `state` repeat; `facets` counts people per
+         *     app (`labels` names each app) and per state. Needs connections.manage. The filters are read from the shared
+         *     list query; they are named here for the document.
+         */
+        get: operations["apps_list_app_people"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/apps/{app_id}": {
         parameters: {
             query?: never;
@@ -261,6 +285,29 @@ export interface paths {
          */
         put: operations["apps_pin_default"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/apps/{app_id}/accounts/{account_id}/people/{person_id}/sign-out": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * End Sign In
+         * @description End sign-in: ends another person's own sign-in on the account, so their next call asks them to connect.
+         *     The row is kept, refused with "ended_by_admin" and who ended it, and one audit row is written; a second End
+         *     changes nothing (`changed` false). 404 sign_in_not_found when the person holds none. Needs
+         *     connections.manage.
+         */
+        post: operations["apps_end_sign_in"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2165,6 +2212,50 @@ export interface components {
             /** Usage */
             usage: components["schemas"]["ToolCallRow"][];
         };
+        /**
+         * AppPeopleList
+         * @description A page of Apps > People, with the name of each app the `app` facet counts.
+         */
+        AppPeopleList: {
+            /** Data */
+            data: components["schemas"]["AppPerson"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            /** Labels */
+            labels: {
+                [key: string]: {
+                    [key: string]: string;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
+        };
+        /**
+         * AppPerson
+         * @description One person on Apps > People: the apps they signed in to, their sign-ins counted by state (connected, expired,
+         *     refused), the last call any of them signed, and each sign-in.
+         */
+        AppPerson: {
+            /** Apps */
+            apps: components["schemas"]["PersonAppView"][];
+            /** Connected */
+            connected: number;
+            /** Expired */
+            expired: number;
+            /** Lastusedat */
+            lastUsedAt?: string | null;
+            /** Name */
+            name: string;
+            /** Personid */
+            personId: string;
+            /** Refused */
+            refused: number;
+            /** Signins */
+            signIns: components["schemas"]["PersonAppSignInView"][];
+        };
         /** AppResource */
         AppResource: {
             /** Canadd */
@@ -3166,6 +3257,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[AppPeopleList] */
+        Envelope_AppPeopleList_: {
+            data: components["schemas"]["AppPeopleList"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[AppTool] */
         Envelope_AppTool_: {
             data: components["schemas"]["AppTool"];
@@ -3439,6 +3539,15 @@ export interface components {
         /** Envelope[SendPolicyView] */
         Envelope_SendPolicyView_: {
             data: components["schemas"]["SendPolicyView"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[SignInEnded] */
+        Envelope_SignInEnded_: {
+            data: components["schemas"]["SignInEnded"];
             /**
              * Success
              * @constant
@@ -4969,6 +5078,51 @@ export interface components {
             required: boolean;
         };
         /**
+         * PersonAppSignInView
+         * @description One of a person's own sign-ins on Apps > People: the app and account, its state, when a call last signed with
+         *     it, and, for one an admin ended, who ended it.
+         */
+        PersonAppSignInView: {
+            /** Account */
+            account?: string | null;
+            /** Accountid */
+            accountId: string;
+            /** Accountname */
+            accountName: string;
+            /** Appid */
+            appId: string;
+            /** Appname */
+            appName: string;
+            /** Endedby */
+            endedBy?: string | null;
+            /** Expiresat */
+            expiresAt?: string | null;
+            /** Lastusedat */
+            lastUsedAt?: string | null;
+            /** Logo */
+            logo?: string | null;
+            /** Refusedat */
+            refusedAt?: string | null;
+            /** Refusedreason */
+            refusedReason?: string | null;
+            /** Since */
+            since?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "connected" | "expired" | "refused";
+        };
+        /** PersonAppView */
+        PersonAppView: {
+            /** Appid */
+            appId: string;
+            /** Logo */
+            logo?: string | null;
+            /** Name */
+            name: string;
+        };
+        /**
          * PersonCredentialsIn
          * @description A person's own key, password or token on an account each person signs in to: the kind's person
          *     fields, each a value of at most 2,000 characters.
@@ -5458,6 +5612,48 @@ export interface components {
             /** State */
             state: string;
         };
+        /** SignInCounts */
+        SignInCounts: {
+            /**
+             * Connected
+             * @default 0
+             */
+            connected: number;
+            /**
+             * Expired
+             * @default 0
+             */
+            expired: number;
+            /**
+             * Refused
+             * @default 0
+             */
+            refused: number;
+        };
+        /**
+         * SignInEnded
+         * @description A person's sign-in after End sign-in: refused with "ended_by_admin" and who ended it. `changed` is False when an
+         *     admin had ended it already, so a second End writes nothing.
+         */
+        SignInEnded: {
+            /** Accountid */
+            accountId: string;
+            /** Appid */
+            appId: string;
+            /** Changed */
+            changed: boolean;
+            /** Endedby */
+            endedBy?: string | null;
+            /** Personid */
+            personId: string;
+            /** Refusedreason */
+            refusedReason: string;
+            /**
+             * State
+             * @constant
+             */
+            state: "refused";
+        };
         /**
          * SignInFinished
          * @description A finished sign-in, as the return page tells the window that started it: the account and its app, and either
@@ -5664,6 +5860,7 @@ export interface components {
             sandboxId?: string | null;
             /** Signin */
             signIn?: ("team" | "person" | "person_or_team") | null;
+            signIns?: components["schemas"]["SignInCounts"] | null;
             /** State */
             state?: ("connected" | "not_signed_in" | "expired" | "refused" | "revoked") | null;
             /** Status */
@@ -7587,6 +7784,136 @@ export interface operations {
             };
         };
     };
+    apps_list_app_people: {
+        parameters: {
+            query?: {
+                /** @description an app id: their sign-ins to these apps */
+                app?: string[] | null;
+                /** @description the people with a sign-in in any of these states */
+                state?: ("connected" | "expired" | "refused")[] | null;
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_AppPeopleList_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not available on this service yet */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The source could not be reached */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     apps_get_app: {
         parameters: {
             query?: never;
@@ -8537,6 +8864,111 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_AccountDetail_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    apps_end_sign_in: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                app_id: string;
+                account_id: string;
+                person_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SignInEnded_"];
                 };
             };
             /** @description Invalid request */
