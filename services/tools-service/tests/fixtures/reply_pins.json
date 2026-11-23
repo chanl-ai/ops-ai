@@ -2917,8 +2917,8 @@
      ],
      "facets": {
       "view": {
-       "active": 19,
-       "all": 22,
+       "active": 20,
+       "all": 23,
        "ended": 0,
        "expired": 1,
        "expiring": 2,
@@ -2930,7 +2930,7 @@
       "hasPrev": false,
       "page": 1,
       "pageSize": 20,
-      "total": 22,
+      "total": 23,
       "totalPages": 2
      }
     },
@@ -2965,8 +2965,8 @@
      ],
      "facets": {
       "view": {
-       "active": 19,
-       "all": 22,
+       "active": 20,
+       "all": 23,
        "ended": 0,
        "expired": 1,
        "expiring": 2,
@@ -3010,8 +3010,8 @@
      ],
      "facets": {
       "view": {
-       "active": 19,
-       "all": 22,
+       "active": 20,
+       "all": 23,
        "ended": 0,
        "expired": 1,
        "expiring": 2,
@@ -3023,8 +3023,8 @@
       "hasPrev": true,
       "page": 2,
       "pageSize": 1,
-      "total": 22,
-      "totalPages": 22
+      "total": 23,
+      "totalPages": 23
      }
     },
     "success": true
@@ -3035,25 +3035,6 @@
    "body": {
     "data": {
      "data": [
-      {
-       "decidedAt": "<datetime>",
-       "decidedBy": "James Richardson",
-       "environment": "production",
-       "expiresAt": "<datetime>",
-       "id": "mod_knowledge_apr3",
-       "justification": "Cite bank knowledge",
-       "major": 1,
-       "moduleId": "mod_knowledge",
-       "moduleName": "Knowledge search",
-       "operations": [
-        "search_knowledge"
-       ],
-       "requestedAt": "<datetime>",
-       "requestedBy": "Anika Singh",
-       "status": "approved",
-       "workflowId": "wf_dispute",
-       "workflowName": "Card dispute resolution"
-      },
       {
        "decidedAt": "<datetime>",
        "decidedBy": "James Richardson",
@@ -3076,8 +3057,8 @@
      ],
      "facets": {
       "view": {
-       "active": 19,
-       "all": 22,
+       "active": 20,
+       "all": 23,
        "ended": 0,
        "expired": 1,
        "expiring": 2,
@@ -3087,10 +3068,10 @@
      "pagination": {
       "hasNext": false,
       "hasPrev": true,
-      "page": 11,
+      "page": 12,
       "pageSize": 2,
-      "total": 22,
-      "totalPages": 11
+      "total": 23,
+      "totalPages": 12
      }
     },
     "success": true
@@ -3157,12 +3138,32 @@
        "status": "approved",
        "workflowId": "wf_dispute",
        "workflowName": "Card dispute resolution"
+      },
+      {
+       "constraints": "Fee reversals up to $100",
+       "decidedAt": "<datetime>",
+       "decidedBy": "Grace Liu",
+       "environment": "production",
+       "expiresAt": "<datetime>",
+       "id": "mod_card_platform_apr3",
+       "justification": "Operations settles fee complaints it receives, with a second person approving each waiver",
+       "major": 2,
+       "moduleId": "mod_card_platform",
+       "moduleName": "Card platform",
+       "operations": [
+        "waive_fee"
+       ],
+       "requestedAt": "<datetime>",
+       "requestedBy": "Anika Singh",
+       "status": "approved",
+       "workflowId": "wf_ops_fee_disputes",
+       "workflowName": "Fee disputes"
       }
      ],
      "facets": {
       "view": {
-       "active": 19,
-       "all": 22,
+       "active": 20,
+       "all": 23,
        "ended": 0,
        "expired": 1,
        "expiring": 2,
@@ -3174,7 +3175,7 @@
       "hasPrev": false,
       "page": 1,
       "pageSize": 20,
-      "total": 3,
+      "total": 4,
       "totalPages": 1
      }
     },
@@ -3394,6 +3395,10 @@
         {
          "id": "wf_card_inbox",
          "name": "Card services inbox"
+        },
+        {
+         "id": "wf_ops_fee_disputes",
+         "name": "Fee disputes"
         }
        ]
       },
@@ -3728,6 +3733,10 @@
         {
          "id": "wf_card_inbox",
          "name": "Card services inbox"
+        },
+        {
+         "id": "wf_ops_fee_disputes",
+         "name": "Fee disputes"
         }
        ]
       }
@@ -4798,6 +4807,10 @@
         {
          "id": "wf_card_inbox",
          "name": "Card services inbox"
+        },
+        {
+         "id": "wf_ops_fee_disputes",
+         "name": "Fee disputes"
         }
        ]
       },
@@ -5100,6 +5113,10 @@
         {
          "id": "wf_card_inbox",
          "name": "Card services inbox"
+        },
+        {
+         "id": "wf_ops_fee_disputes",
+         "name": "Fee disputes"
         }
        ]
       },
