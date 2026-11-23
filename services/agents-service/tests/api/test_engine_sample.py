@@ -129,6 +129,7 @@ async def test_earlier_steps_only_from_the_working_copy_and_a_deleted_step_is_le
     got = (await c.get(f"{WF}/sample", params={"step": "big"}, headers=BUILDER)).json()["data"]
     assert [s["id"] for s in got["steps"]] == ["start", "fields", "extra"]
     assert _fields(got, "extra")["why"]["sample"] is None
+    assert got["given"]["id"] == "big" and got["given"]["fields"]
     assert got["saved"] is True
     # The first step has nothing before it; a step only the browser holds is not saved yet.
     assert (await c.get(f"{WF}/sample", params={"step": "start"}, headers=BUILDER)).json()["data"]["steps"] == []

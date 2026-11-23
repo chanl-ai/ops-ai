@@ -12,7 +12,7 @@ from typing import Any, cast
 
 from ops_agent_kernel.pii import masked
 from ops_engine import default_registry
-from ops_engine.definition import WorkflowDefinition, ancestors
+from ops_engine.definition import NodeInstance, WorkflowDefinition, ancestors
 from ops_engine.shapes import Ports
 from ops_engine.store.runs import RunRow, RunStep
 from ops_service_kit.http import Json
@@ -73,10 +73,8 @@ def sample_view(
     for s in steps:
         last[s.node_id] = s.output
     registry = default_registry()
-    listed: list[dict[str, Any]] = []
-    for n in d.nodes:
-        if n.id not in before or not saved:
-            continue
+
+    def entry(n: NodeInstance) -> dict[str, Any]:
         t = registry.find(n.type, n.type_version)
         output = last.get(n.id)
         trigger = t is not None and t.group == TRIGGER
@@ -91,19 +89,17 @@ def sample_view(
             }
             for name, schema in _field_names(shapes.get(n.id, {}), output)
         ]
-        listed.append(
-            {
-                "id": n.id,
-                "name": n.name or (t.label if t else n.id),
-                "kind": t.label if t else None,
-                "installed": t is not None,
-                "fields": fields,
-            }
-        )
+        name = n.name or (t.label if t else n.id)
+        return {"id": n.id, "name": name, "kind": t.label if t else None, "installed": t is not None, "fields": fields}
+
+    listed = [entry(n) for n in d.nodes if saved and n.id in before]
+    own = next((n for n in d.nodes if n.id == step), None)
     return {
         "workflowId": workflow_id,
         "step": step,
         "saved": saved,
         "run": run and {"id": run.id, "version": run.version, "createdAt": run.created_at},
         "steps": listed,
+        # What the step itself gives the steps after it, with its own last value.
+        "given": entry(own) if own is not None else None,
     }

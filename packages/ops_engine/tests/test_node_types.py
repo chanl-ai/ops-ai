@@ -3,6 +3,7 @@ and a review's options become its out ports."""
 
 from __future__ import annotations
 
+import re
 from dataclasses import replace
 from typing import Any, cast
 
@@ -72,3 +73,22 @@ def test_what_a_step_acts_on_cannot_be_read_from_the_run(type_id: str, field: st
     assert [list(e.path) for e in errors] == [[field]], errors
     literal = {k: ("get_customer" if k == "operation" else "review") for k in params}
     assert not list(cast(Any, Draft202012Validator(dict(t.parameters))).iter_errors(literal))
+
+
+_NOT_FOR_BUILDERS = re.compile(r"ops\.|`|\$\.|Effects:|-service|gateway|\bports?\b", re.IGNORECASE)
+
+
+def test_every_type_explains_itself_to_a_builder_in_plain_words() -> None:
+    """The step sheet shows summary and how to people who build workflows; type ids, paths, port names and service
+    names there read as code."""
+    problems: list[str] = []
+    for t in default_registry().all():
+        if not t.summary.strip() or not t.how.strip():
+            problems.append(f"{t.id}: summary or how is empty")
+            continue
+        if len(t.summary) > 120 or not t.summary.endswith(".") or len(re.findall(r"[.!?](?:\s|$)", t.summary)) != 1:
+            problems.append(f"{t.id}: summary is not one sentence under 120 characters")
+        for name, text in (("summary", t.summary), ("how", t.how)):
+            if found := _NOT_FOR_BUILDERS.search(text):
+                problems.append(f"{t.id}: {name} contains {found.group(0)!r}")
+    assert not problems, "\n".join(problems)

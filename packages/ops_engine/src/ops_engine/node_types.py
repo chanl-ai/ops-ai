@@ -150,6 +150,10 @@ class NodeType:
     ui: Mapping[str, JsonValue] = field(default_factory=lambda: {"order": [], "fields": {}})
     # How a person starts a workflow this trigger begins by hand (starts.py); None for a trigger only its source starts.
     start: StartSpec | None = None
+    # What the console's step sheet tells a person building a workflow: one plain sentence, then how it works, fails,
+    # waits and what it hands on. `description` stays the precise text models and docs read.
+    summary: str = ""
+    how: str = ""
 
     @property
     def key(self) -> tuple[str, int]:
@@ -176,6 +180,8 @@ class NodeType:
             "group": self.group,
             "label": self.label,
             "description": self.description,
+            "summary": self.summary,
+            "how": self.how,
             "inputs": [p.view() for p in self.inputs],
             "outputs": [p.view() for p in self.outputs],
             "outputsFrom": self.outputs_from,
@@ -354,6 +360,8 @@ def _ai_step(
     outputs: tuple[Port, ...] = (Port("ok"), Port("error")),
     outputs_from: str | None = None,
     extra_outputs: tuple[str, ...] = (),
+    summary: str = "",
+    how: str = "",
 ) -> NodeType:
     """An AI step: one model call with no tools through EnginePorts.prompts (executor ai.prompt); ai_steps.JOBS holds
     what its answer looks like and which port it leaves by."""
@@ -362,6 +370,8 @@ def _ai_step(
         version=1,
         group="ai",
         label=label,
+        summary=summary,
+        how=how,
         description=description,
         executor="ai.prompt",
         effects="model",
@@ -411,6 +421,13 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="trigger",
         label="Request",
+        summary=(
+            "Starts the workflow when another app, another workflow or a person starts it with the details it needs."
+        ),
+        how=(
+            "The caller must be signed in, and what they send becomes the workflow's input. If you set an input form, "
+            "a start that does not fit it is refused. The first step can read everything the caller sent."
+        ),
         description="Starts a run from an authenticated API call or a system event; the run's input is the payload.",
         executor="trigger.payload",
         effects="none",
@@ -439,6 +456,12 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="trigger",
         label="Email received",
+        summary="Starts the workflow when a new email arrives in a mailbox you choose.",
+        how=(
+            "It watches one folder of the mailbox and starts only for emails that match your filters. Each attachment "
+            "is saved to Files first, so later steps can read it. Past the daily cap, an email is noted on Activity "
+            "and starts nothing. The next step gets the sender, subject, body and attachments."
+        ),
         description=(
             "Starts a run when an email arrives in a watched mailbox folder and matches the filters; the run's input "
             "is the email, with each attachment stored in Files first."
@@ -490,6 +513,11 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="trigger",
         label="Service event",
+        summary="Starts a system workflow when something happens in the platform, such as a file being deleted.",
+        how=(
+            "Only workflows the platform maintains start this way. The details of what happened become the workflow's "
+            "input. If you set an input form, the same form appears when someone starts the workflow by hand."
+        ),
         description=(
             "Starts a run when a service reports an event, such as a file deleted or a tool access request; the run's "
             "input is the event's payload. Only a system workflow, which the platform maintains, is started by one. "
@@ -534,6 +562,11 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="trigger",
         label="Schedule",
+        summary="Starts the workflow when its scheduled time comes.",
+        how=(
+            "When the clock reaches the due time, the workflow starts with the details saved with the schedule. A "
+            "scheduled start with the same key never runs twice, even if it fires again."
+        ),
         description="Starts a run when the platform clock reaches the due time. The same key fires once.",
         executor="trigger.payload",
         effects="none",
@@ -562,6 +595,12 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="data",
         label="Combine facts",
+        summary="Merges the same facts from several sources, trusting the sources in the order you set.",
+        how=(
+            "Each field takes its value from the first source that has it, and the step records where each value came "
+            "from. Where sources disagree, it lists the differences instead of choosing quietly, and can send the run "
+            "down a Disagree path for a closer look. No AI is involved."
+        ),
         description=(
             "Merges the same fields from several sources by a precedence per field, keeps which source each value "
             "came from, and lists the fields the sources disagree on instead of picking silently. No model."
@@ -647,6 +686,14 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="data",
         label="Calculate",
+        summary=(
+            "Works out new values with formulas, such as the smaller of two amounts or a date twenty business days on."
+        ),
+        how=(
+            "You name the values the formulas read, then write each formula; a later formula can use an earlier "
+            "result. No AI is involved. A formula that cannot be worked out goes on to the Error path; otherwise the "
+            "next step gets every result by name."
+        ),
         description=(
             "Works out new values from the step's values with formulas, such as min(levy.amount, balance) or "
             "business_days(levy.served, 20), evaluated in the tool gateway's sandbox; no model."
@@ -698,6 +745,11 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="data",
         label="Set fields",
+        summary="Puts values under the names you choose, so later steps can use them.",
+        how=(
+            "Each value can be fixed text, a number, or something taken from the input or an earlier step. No AI is "
+            "involved, so it is quick and gives the same result every time. The next step gets every field you set."
+        ),
         description="Maps and renames values from the input and earlier nodes; no model.",
         executor="data.set",
         effects="none",
@@ -726,6 +778,12 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="data",
         label="Match",
+        summary="Finds the records in a list that match one record, by rules on their fields.",
+        how=(
+            "A candidate matches when every All rule holds and, if you add any, at least one Any rule. Text is "
+            "compared without regard to capitals or extra spaces, and an empty value never matches. Matches go on by "
+            "the Matched path; with none, the step goes on by the None path."
+        ),
         description=(
             "Finds the candidates that match a record by rules on their fields: every All rule and, when any are "
             "given, at least one Any rule. Text is compared without case or extra spaces, an empty value never "
@@ -757,6 +815,11 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="data",
         label="Transform",
+        summary="Copies one value from the workflow and gives it a new name.",
+        how=(
+            "You pick the value from the input or an earlier step and name where it goes. If that value is not there, "
+            "the step goes on to the Error path instead. Otherwise the next step gets the value under its new name."
+        ),
         description="Reads one path from the run and writes it under a name. A missing path takes the error port.",
         executor="data.transform",
         effects="none",
@@ -780,6 +843,11 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="data",
         label="Filter",
+        summary="Keeps the items of a list that meet your conditions and sets the rest aside.",
+        how=(
+            "Each item is checked against the conditions you set, all of them or any one. The kept items go on by the "
+            "Kept path and the others by the Dropped path. A list that cannot be read goes on to the Error path."
+        ),
         description="Keeps or drops items of a list by field predicates. Not a second If.",
         executor="data.filter",
         effects="none",
@@ -817,6 +885,11 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="flow",
         label="If",
+        summary="Sends the workflow one of two ways, depending on whether your conditions hold.",
+        how=(
+            "The conditions are checked against any earlier step's results, all of them or any one. When they hold "
+            "the workflow takes the True path, otherwise the False path."
+        ),
         description="Routes by rules over any earlier node's output.",
         executor="flow.if",
         effects="none",
@@ -852,6 +925,12 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="flow",
         label="Repeat",
+        summary="Runs a part of the workflow again until a condition holds, up to a limit you set.",
+        how=(
+            "Each time round, the step checks your Done when conditions. Until they hold, the workflow goes back by "
+            "the Again path; once they hold it goes on by the Done path. When the limit is reached first it takes the "
+            "Exhausted path, so a loop can never run forever."
+        ),
         description="Leaves by again until a predicate holds or the cap is hit, so a loop cannot spin.",
         executor="flow.repeat",
         effects="none",
@@ -889,6 +968,11 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="flow",
         label="Ask",
+        summary="Asks a person a question in the conversation and waits for their reply.",
+        how=(
+            "The workflow pauses until the reply arrives, then goes on by the Replied path with what they said. If no "
+            "reply comes in time it goes on by the Timed out path; a time limit of zero times out at once."
+        ),
         description="Pauses for a reply on a conversation key, then resumes. A zero deadline times out.",
         executor="flow.ask",
         effects="human",
@@ -913,6 +997,11 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="flow",
         label="Switch",
+        summary="Sends the workflow down the first of several named ways whose rules hold.",
+        how=(
+            "Each way out has its own rules over earlier steps' results, checked from top to bottom. The first way "
+            "that fits wins; when none fits, the workflow takes the Otherwise path. No AI is involved."
+        ),
         description=(
             "Several named ways out, each a set of rules over earlier steps' output; the first way whose rules hold "
             "wins, and otherwise takes the rest. No model and no code."
@@ -977,6 +1066,13 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="action",
         label="Call a tool",
+        summary="Reads from or writes to a connected app.",
+        how=(
+            "You pick what to do in the app, which team account to use, and the values to send. A change to the app "
+            "can require a person's approval from an earlier review step first. If the app refuses, the workflow goes "
+            "on to the Refused path; if it fails or does not answer, to the Error path or a Timeout path of its own. "
+            "Otherwise the next step gets the app's answer."
+        ),
         description=(
             "Calls a registry operation through the tool gateway with mapped inputs. Its effects are the operation's "
             "access class at run time; an operation the registry does not know counts as a write."
@@ -1034,6 +1130,12 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="action",
         label="Send a message",
+        summary="Replies to the person who started the workflow, on the same channel they used.",
+        how=(
+            "By default it answers the original sender and keeps the original subject. It sends once and is not "
+            "retried, so a person never gets the same message twice. If sending fails, the workflow goes on to the "
+            "Error path."
+        ),
         description="Replies on the channel that started the run, through the existing send_reply path. One attempt.",
         executor="action.send",
         effects="write",
@@ -1058,6 +1160,12 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="ai",
         label="Agent",
+        summary="Hands the work to one of your published agents, with its own tools and knowledge.",
+        how=(
+            "The agent reads the prompt and the values you pass, and can use its tools within the limits you set. If "
+            "you give an answer format, an answer that does not fit goes on to the Error path. Otherwise the next "
+            "step gets the agent's answer."
+        ),
         description=(
             "Runs a published agent's turn on the step's prompt and mapped input, with the agent's own tools and "
             "knowledge; with an output schema its answer must match it, or the step takes the error port."
@@ -1104,6 +1212,12 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="ai",
         label="Retrieve from knowledge",
+        summary="Searches your team's knowledge bases for passages that answer a question.",
+        how=(
+            "It searches the knowledge bases you pick, the same way an agent that cites its sources does. When it "
+            "finds passages it goes on by the Found path with them and where they came from; otherwise by the Not "
+            "found path."
+        ),
         description="Searches the team's knowledge bases the same way a citing agent does. Citations leave by found.",
         executor="ai.knowledge",
         effects="read",
@@ -1129,6 +1243,13 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="ai",
         label="Extract from file",
+        summary="Uses AI to read the fields you define from an uploaded file, such as an invoice or a court notice.",
+        how=(
+            "Each value is checked against the page and quote it came from, and gets a confidence score from those "
+            "checks. When any field is below its threshold the workflow goes on by the Review path for a person to "
+            "check. A file it cannot read goes on by the Unreadable path. It can also read several records from one "
+            "document, scoring each the same way."
+        ),
         description=(
             "Reads a file from files-service into the fields you define; each field gets a confidence from checks on "
             "its quote, page and value, never the model's own, and the run takes the review port when any field is "
@@ -1287,6 +1408,12 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         outputs=(),
         outputs_from="categories",
         extra_outputs=("otherwise", "error"),
+        summary="Uses AI to sort text into one of the categories you define.",
+        how=(
+            "Each category is its own path out, and the workflow follows the one the text fits. When the AI is not "
+            "sure enough, or nothing fits, it takes the Otherwise path. It uses no saved agent and no tools; a "
+            "failure goes on to the Error path."
+        ),
     ),
     _ai_step(
         "ops.ai.summarise",
@@ -1294,6 +1421,11 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         "Summarises the text, keeping names, amounts and dates as written. No saved agent, no tools.",
         {"maxWords": {"type": "integer", "minimum": 10, "maximum": 1000, "default": 120}},
         (("maxWords", _f("Words at most", "number", "120 when empty")),),
+        summary="Uses AI to write a short summary of the text, keeping names, amounts and dates exactly as written.",
+        how=(
+            "You can set how many words the summary may use and add instructions. The next step gets the summary. It "
+            "uses no saved agent and no tools; a failure goes on to the Error path."
+        ),
     ),
     _ai_step(
         "ops.ai.extractText",
@@ -1320,6 +1452,11 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             ("documentType", _f("Document type", "json", '{"id": ...}: its fields; its newest version when none')),
             ("fields", _f("Fields", "json", "Fields of its own, as a document type declares them")),
         ),
+        summary="Uses AI to pull named fields out of text, such as an email body or a note.",
+        how=(
+            "It reads the fields of a document type you pick, or fields you list yourself. A field the text does not "
+            "state is left empty, never guessed. The next step gets the fields; a failure goes on to the Error path."
+        ),
     ),
     _ai_step(
         "ops.ai.draft",
@@ -1329,12 +1466,23 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         {},
         (),
         required=("instructions",),
+        summary="Uses AI to write a draft, such as a reply or a note, from the text and your instructions.",
+        how=(
+            "It sends nothing itself: a later step or a person does that. The next step gets the draft. It uses no "
+            "saved agent and no tools; a failure goes on to the Error path."
+        ),
     ),
     NodeType(
         id="ops.flow.humanReview",
         version=1,
         group="human",
         label="Human review",
+        summary="Pauses the workflow until a person decides, from Reviews, which way it goes.",
+        how=(
+            "The reviewer reads the summary, can correct values you allow, and picks one of the options, Approve and "
+            "Reject by default. Each option is its own path out. Past the deadline the review shows as overdue, or, "
+            "if you choose, expires and goes on by the Timeout path. Reminders can be sent while it waits."
+        ),
         description="Pauses for a person in Reviews; each option is an out port. Approve and Reject are the defaults.",
         executor="review.open",
         effects="human",
@@ -1464,6 +1612,12 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="action",
         label="Save data on file",
+        summary="Saves what an earlier Extract from file step read onto the file itself.",
+        how=(
+            "The file then shows its document type, how many fields still wait for a person, and what was read, and "
+            "the files list can filter on it. It saves as your team, so a file your team cannot see goes on to the "
+            "Error path."
+        ),
         description=(
             "Records on the file what an Extract from file step read: the document type and version, template or "
             "model, how many fields wait for a person, and the extraction. The files list shows and filters it. Writes "
@@ -1497,6 +1651,11 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="action",
         label="Purge what was read from a file",
+        summary="Removes everything that was read from a file after the file is deleted.",
+        how=(
+            "It clears the extracted values and examples kept for that file. Running it again removes nothing more, "
+            "so a retry is safe. A failure goes on to the Error path."
+        ),
         description=(
             "Removes the extractions and document type samples documents-service holds for a file that was deleted. "
             "Repeating it removes nothing more."
@@ -1519,6 +1678,13 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="action",
         label="Start workflow",
+        summary="Starts another of your team's workflows, once or once for each item in a list.",
+        how=(
+            "Each started workflow gets its own input, and a retry never starts the same one twice. Without waiting, "
+            "this workflow goes on straight away. With Wait for them on, it pauses until every one has finished, then "
+            "goes on with each one's outcome and result in list order, or by the Timeout path if you set a time to "
+            "give up."
+        ),
         description=(
             "Starts another workflow of the team, once or once for each item of a list, in this run's mode; each child "
             "is keyed by this run, step and item, so a retry never starts a second. In the input, `$.item` reads the "
@@ -1578,6 +1744,12 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="action",
         label="Open case",
+        summary="Opens a case for a customer issue in your team, with this run as its first entry.",
+        how=(
+            "You set the subject, priority, customer and who it is assigned to. If the step is retried it finds the "
+            "case it already opened instead of opening another. The next step gets the new case's id; a failure goes "
+            "on to the Error path."
+        ),
         description=(
             "Opens a case for a customer issue in this run's team, with the run as its first entry. Keyed by this run "
             "and step, so a retry finds the case instead of opening another; `caseId` is on the step's output."
@@ -1628,6 +1800,11 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="action",
         label="Add to case",
+        summary="Adds this run to an existing case of your team and can move the case on.",
+        how=(
+            "It adds a note and values to the case, and can mark it waiting on the customer or resolved. Only a "
+            "person closes a case. A case that belongs to another team, or does not exist, goes on to the Error path."
+        ),
         description=(
             "Adds this run to an existing case of this run's team, by its id from an earlier step or the run's input, "
             "and can move it on: waiting on the customer, or resolved when the run has done the work. Closing a case "
@@ -1668,6 +1845,11 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="flow",
         label="Join",
+        summary="Waits for parallel branches to finish, then goes on once with all of their results.",
+        how=(
+            "It waits for every step of the workflow that can still run, not only its own branches. The next step "
+            "gets each branch's last result; a branch that an earlier choice sent elsewhere shows as empty."
+        ),
         description=(
             "Waits for the branches connected to it, then goes on once with each branch's last step output under that "
             "step's id; a branch an earlier If or Switch sent elsewhere is null. It waits for every step of the run "
@@ -1700,6 +1882,11 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="flow",
         label="Wait",
+        summary="Pauses the workflow for a while, or until a date taken from an earlier step.",
+        how=(
+            "When the time is up the workflow goes on by itself. A date already past goes on at once. A value that is "
+            "not a date goes on to the Error path, naming the value. A date with no time means midnight UTC."
+        ),
         description=(
             "Pauses the run for a number of seconds, or until a date or date and time read from an earlier step, then "
             "goes on by `out`. A date already past goes on at once; a value that is not a date leaves by `error` with "
@@ -1733,6 +1920,12 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="flow",
         label="Wait for",
+        summary="Waits for another system to finish its work, then goes on with the result.",
+        how=(
+            "The workflow pauses without holding anything up. It wakes when the other system sends its answer back, "
+            "or when the event you named arrives, whichever comes first, and the next step gets that answer. With no "
+            "answer in time, it goes on by the Timeout path."
+        ),
         description=(
             "Waits for work another system finishes, holding no worker: an outside system posts its result to the "
             "step's resume URL with the step's token, or a service event `event` arrives carrying correlation key "
@@ -1789,6 +1982,11 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="flow",
         label="End",
+        summary="Ends the workflow with an outcome you name.",
+        how=(
+            "You choose whether the run counts as succeeded or failed, and what its result is. Nothing runs after "
+            "this step."
+        ),
         description="Ends the run with a named outcome.",
         executor="flow.end",
         effects="none",

@@ -6569,6 +6569,16 @@
       "DefinitionSample": {
         "additionalProperties": false,
         "properties": {
+          "given": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SampleStep"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "run": {
             "anyOf": [
               {
@@ -14606,6 +14616,10 @@
             "title": "Group",
             "type": "string"
           },
+          "how": {
+            "title": "How",
+            "type": "string"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -14663,6 +14677,10 @@
           "retry": {
             "$ref": "#/components/schemas/RetryView"
           },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
           "timeoutSeconds": {
             "title": "Timeoutseconds",
             "type": "number"
@@ -14696,6 +14714,8 @@
           "group",
           "label",
           "description",
+          "summary",
+          "how",
           "inputs",
           "outputs",
           "outputsFrom",

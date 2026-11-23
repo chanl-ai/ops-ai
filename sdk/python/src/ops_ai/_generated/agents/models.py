@@ -3072,6 +3072,7 @@ class DefinitionPublished(TypedDict, closed=True):
 
 
 class DefinitionSample(TypedDict, closed=True):
+    given: NotRequired[SampleStep | None]
     run: NotRequired[SampleRun | None]
     saved: bool
     step: NotRequired[str | None]
@@ -3648,6 +3649,7 @@ class NodeTypeView(TypedDict, closed=True):
     executor: str
     extraOutputs: NotRequired[list[str]]
     group: str
+    how: str
     id: str
     inputs: list[PortView]
     label: str
@@ -3657,6 +3659,7 @@ class NodeTypeView(TypedDict, closed=True):
     outputsUnless: NotRequired[list[OptionalPortView]]
     parameters: dict[str, JsonValue]
     retry: RetryView
+    summary: str
     timeoutSeconds: float
     ui: dict[str, JsonValue]
     unavailable: NotRequired[str | None]

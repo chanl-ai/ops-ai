@@ -154,6 +154,9 @@ class NodeTypeView(Out):
     group: str
     label: str
     description: str
+    # Plain words for the step sheet: one sentence, then how it works, fails or waits and what it hands on.
+    summary: str
+    how: str
     inputs: list[PortView]
     outputs: list[PortView]
     # The list parameter whose entries become the out ports (a review's options); the declared outputs are its default.
@@ -786,6 +789,8 @@ class DefinitionSample(Out):
     saved: bool
     run: SampleRun | None = None
     steps: list[SampleStep]
+    # The step's own fields: what it gives the steps after it. Null when `step` is left out or not saved yet.
+    given: SampleStep | None = None
 
 
 @router.get("/definitions/{workflow_id}/sample", response_model=Envelope[DefinitionSample])

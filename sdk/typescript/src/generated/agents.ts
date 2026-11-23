@@ -5940,6 +5940,7 @@ export interface components {
         };
         /** DefinitionSample */
         DefinitionSample: {
+            given?: components["schemas"]["SampleStep"] | null;
             run?: components["schemas"]["SampleRun"] | null;
             /** Saved */
             saved: boolean;
@@ -9018,6 +9019,8 @@ export interface components {
             extraOutputs?: string[];
             /** Group */
             group: string;
+            /** How */
+            how: string;
             /** Id */
             id: string;
             /** Inputs */
@@ -9037,6 +9040,8 @@ export interface components {
                 [key: string]: components["schemas"]["JsonValue"];
             };
             retry: components["schemas"]["RetryView"];
+            /** Summary */
+            summary: string;
             /** Timeoutseconds */
             timeoutSeconds: number;
             /** Ui */
