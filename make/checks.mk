@@ -183,8 +183,8 @@ check-paths.new-migration-self-test = ^scripts/new_migration\.py$$
 check-run.builder-watch-self-test = bash scripts/builder-watch.sh --self-test
 check-paths.builder-watch-self-test = ^scripts/builder-watch\.sh$$
 
-ci-local: db-up ## CI's planned jobs run here in parallel (BASE=origin/develop, JOBS=<cores/2>, JOB=<ci.yml job>, FULL=1 every job, PLAN=1 print only); one summary table, exit 1 on any failure
-	@uv run python scripts/ci_local.py --base "$(or $(BASE),origin/develop)" $(if $(JOBS),--jobs $(JOBS)) $(if $(JOB),--job $(JOB)) $(if $(FULL),--full) $(if $(PLAN),--plan)
+ci-local: db-up ## CI's planned jobs run here in parallel (BASE=origin/develop, JOBS=<cores/2>, JOB=a,b job names or labels, FULL=1, PLAN=1; OUT=<file>.json result; RERUN=<file>.json only its red jobs; SHARDS=n SHARD=i; UCS="uc-1:api uc-2" adds use cases); exit 1 on any failure
+	@uv run python scripts/ci_local.py --base "$(or $(BASE),origin/develop)" $(if $(JOBS),--jobs $(JOBS)) $(if $(JOB),--job "$(JOB)") $(if $(FULL),--full) $(if $(PLAN),--plan) $(if $(OUT),--out "$(OUT)") $(if $(RERUN),--rerun "$(RERUN)") $(if $(SHARDS),--shards $(SHARDS) --shard $(or $(SHARD),1)) $(if $(UCS),--uc $(UCS))
 
 checks-list: ## Print each check on the list with the command it runs
 	@$(foreach c,$(CHECKS),printf '%s\t%s\n' '$(c)' '$(check-run.$(c))';)
