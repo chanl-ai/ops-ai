@@ -1576,8 +1576,6 @@ class ConnectionStore(Store):
             t.tenant_id == tenant_id,
             t.team_id == team_id,
             t.person_id != SHARED,
-            team_visible(connection_tokens),
-            team_visible(connections),
         ]
         if apps:
             where.append(k.app_id.in_(list(apps)))
@@ -1603,7 +1601,11 @@ class ConnectionStore(Store):
                 sa.func.max(t.last_used_at).label("last_used_at"),
             )
             .select_from(connection_tokens.join(connections, on))
-            .where(*self._team_sign_ins(tenant_id, team_id, apps))
+            .where(
+                *self._team_sign_ins(tenant_id, team_id, apps),
+                team_visible(connection_tokens),
+                team_visible(connections),
+            )
             .group_by(t.person_id)
             .subquery("people")
         )
@@ -1628,7 +1630,11 @@ class ConnectionStore(Store):
         name for each app, which names a custom app."""
         t, k = connection_tokens.c, connections.c
         on = sa.and_(k.tenant_id == t.tenant_id, k.id == t.connection_id)
-        where = self._team_sign_ins(tenant_id, team_id, ())
+        where = [
+            *self._team_sign_ins(tenant_id, team_id, ()),
+            team_visible(connection_tokens),
+            team_visible(connections),
+        ]
         if search:
             where.append(sa.or_(contains(t.person_name, search), contains(t.person_id, search)))
         frm = connection_tokens.join(connections, on)
@@ -1662,7 +1668,11 @@ class ConnectionStore(Store):
         q = (
             sa.select(k.app_id, sa.func.sum(connected), sa.func.sum(expired), sa.func.sum(refused))
             .select_from(connection_tokens.join(connections, on))
-            .where(*self._team_sign_ins(tenant_id, team_id, app_ids))
+            .where(
+                *self._team_sign_ins(tenant_id, team_id, app_ids),
+                team_visible(connection_tokens),
+                team_visible(connections),
+            )
             .group_by(k.app_id)
         )
         async with self.tx() as c:
@@ -1693,7 +1703,12 @@ class ConnectionStore(Store):
                 sa.case((t.refresh_ct.is_not(None), 1), else_=0).label("renews"),
             )
             .select_from(connection_tokens.join(connections, on))
-            .where(*self._team_sign_ins(tenant_id, team_id, ()), t.person_id.in_(list(people)))
+            .where(
+                *self._team_sign_ins(tenant_id, team_id, ()),
+                team_visible(connection_tokens),
+                team_visible(connections),
+                t.person_id.in_(list(people)),
+            )
             .order_by(k.app_id, k.name, t.connection_id)
         )
         async with self.tx() as c:

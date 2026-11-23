@@ -19,7 +19,7 @@ import secrets as random
 import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
-from typing import Any, Literal, NoReturn, NotRequired, Required, TypedDict
+from typing import Any, Literal, NoReturn, NotRequired, Required, TypedDict, cast
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
 import httpx
@@ -1944,7 +1944,7 @@ class ConnectionService:
             raise ValidationFailed(f"Sign in to {conn.name} first.", code="not_signed_in")
         return await self.detail(who, connection_id)
 
-    async def people(self, who: Caller, q: ListParams) -> dict[str, Any]:
+    async def people(self, who: Caller, q: ListParams) -> Json:
         """Apps > People: one page of the people holding their own sign-ins on the team's accounts, each with the apps
         they signed in to, their sign-ins counted by state, the last call any signed and every sign-in, grouped and
         paged in SQL. Filters `app` (an app id) and `state` (connected, expired, refused) repeat; the facets count
@@ -1958,7 +1958,7 @@ class ConnectionService:
         )
         rows = page["data"]
         ids = [str(r["person_id"]) for r in rows]
-        held: dict[str, list[dict[str, Any]]] = {}
+        held: dict[str, list[Json]] = {}
         for t in await self.store.people_sign_ins(who.tenant_id, who.team.id, ids):
             if apps and t.app_id not in apps:
                 continue
@@ -1981,27 +1981,28 @@ class ConnectionService:
                     "lastUsedAt": _iso(t.last_used_at),
                 }
             )
-        data: list[dict[str, Any]] = []
+        data: list[JsonValue] = []
         for r in rows:
             person = str(r["person_id"])
             mine = held.get(person, [])
-            seen: dict[str, dict[str, Any]] = {}
+            seen: dict[str, Json] = {}
             for s in mine:
                 seen.setdefault(str(s["appId"]), {"appId": s["appId"], "name": s["appName"], "logo": s["logo"]})
             data.append(
                 {
                     "personId": person,
                     "name": r["person_name"] or person,
-                    "apps": list(seen.values()),
+                    "apps": [*seen.values()],
                     "connected": r["connected"],
                     "expired": r["expired"],
                     "refused": r["refused"],
                     "lastUsedAt": _iso(r["last_used_at"]),
-                    "signIns": mine,
+                    "signIns": [*mine],
                 }
             )
         labels = {"app": {a: self._display(a, names.get(a, a))[0] for a in facets["app"]}}
-        return {**page, "data": data, "facets": facets, "labels": labels}
+        # The counts are plain ints and strings; the nested dicts only miss JsonValue's invariance.
+        return cast(Json, {**page, "data": data, "facets": facets, "labels": labels})
 
     def _display(self, app_id: str, fallback: str) -> tuple[str, str | None]:
         """An app's name and logo as the Apps page shows them: a plugin's title and logo, else the account's name."""
