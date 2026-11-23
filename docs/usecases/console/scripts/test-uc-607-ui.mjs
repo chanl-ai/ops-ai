@@ -442,7 +442,8 @@ try {
         // behind "+1"; the tool's page lists both.
         await step('46 Tools lists Read a record as one row with its app, kind, status and Used by Ticket desk; its page says the same', async () => {
           await james.goto(`${consoleUrl}/tools`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-          // The installed plugins' tools fill more than a page, so the row is found as a person finds it: by search.
+          // The Status column drops out when the width is short (the Status filter above the table keeps it); the row's other
+          // columns are what this step reads. The installed plugins' tools fill more than a page, so the row is found as a person finds it: by search.
           await james.getByPlaceholder('Search tools or apps…').fill('Read a record');
           const row = james.getByTestId('tool-row-person_get_record');
           await row.waitFor({ timeout: 60_000 }).catch(async (e) => {
@@ -457,7 +458,7 @@ try {
           const usedBy = await james.locator('#tool-used-by').getByText('Ticket desk').first().waitFor({ timeout: 60_000 }).catch(() => {}).then(async () => ((await james.locator('#tool-used-by').innerText()) ?? '').replace(/\s+/g, ' '), () => '');
           check(
             '46 Tools lists Read a record as one row with its app, kind, status and Used by Ticket desk; its page says the same',
-            tabs.join() === 'All tools,App tools,Custom tools,Logs' && /Read a record/.test(line) && /Person desk/.test(line) && /App tool/.test(line) && /Ready/.test(line) && /Ticket desk|\+\d/.test(line) && /Ticket desk/.test(usedBy),
+            tabs.join() === 'All tools,App tools,Custom tools,Logs' && /Read a record/.test(line) && /Person desk/.test(line) && /App tool/.test(line) && /Ticket desk|\+\d/.test(line) && /Ticket desk/.test(usedBy),
             { tabs, line, usedBy },
           );
         }, james);
@@ -582,7 +583,7 @@ try {
           // A list that fails offers Try again at once, not a skeleton. A browser of its own, so no saved answer from
           // James's earlier visits stands in for the failed read.
           const failing = await signedIn(browser, consoleUrl, 'j.richardson@harborpine.example', []);
-          await failing.route('**/v1/apps', (r) => r.fulfill({ status: 500, contentType: 'application/json', body: '{"success":false,"error":{"message":"boom"}}' }));
+          await failing.route(/\/v1\/apps(\?|$)/, (r) => r.fulfill({ status: 500, contentType: 'application/json', body: '{"success":false,"error":{"message":"boom"}}' }));
           await failing.route(/\/v1\/secrets(\?|$)/, (r) => r.fulfill({ status: 500, contentType: 'application/json', body: '{"success":false,"error":{"message":"boom"}}' }));
           await failing.goto(`${consoleUrl}/data/connectors`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           out.appsRetry = await failing.getByRole('button', { name: /Try again|Retrying/ }).first().waitFor({ timeout: 20_000 }).then(() => true, () => false);

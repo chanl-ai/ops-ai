@@ -207,7 +207,7 @@ try {
         await step('14 My connectors, from the person menu, lists his Salesforce sign-in', async () => {
           await page.getByTestId('nav-user').click();
           await page.getByTestId('nav-connections').click();
-          await page.waitForURL(/\/settings\/account\/connectors$/, { timeout: 60_000 });
+          await page.waitForURL(/\/work\/apps$/, { timeout: 60_000 });
           const row = card(conn.appId);
           await row.waitFor({ timeout: 30_000 });
           const text = (await row.textContent()) ?? '';
