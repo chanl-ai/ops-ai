@@ -2398,8 +2398,9 @@ export interface paths {
         };
         /**
          * Skill Options
-         * @description What a skill may name: the tools the directory offers, the knowledge bases agents hold, and owner teams. The
-         *     directory is read from tools-service first, with nothing open, then the rows in one transaction.
+         * @description What a skill may name: the tools the directory offers, the knowledge bases agents hold, and the teams the
+         *     caller may create skills in (`skills.create` held there). The directory is read from tools-service first, with
+         *     nothing open, then the rows in one transaction.
          */
         get: operations["agents_skill_options"];
         put?: never;

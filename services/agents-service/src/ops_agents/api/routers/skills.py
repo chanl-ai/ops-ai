@@ -35,7 +35,7 @@ from ...store.skills import SkillRow, SkillVersionRow
 from ...store.template_copies import TemplateCopies
 from ..agent_registry import AgentSpec, require_owner_or_admin
 from ..agent_registry import registry as agent_registry
-from ..auth import Principal, caller_in, caller_of, principal, reader_of, require_builder
+from ..auth import Principal, caller_in, caller_of, principal, reader_of, require_builder, teams_holding
 from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..publish_policy import decide
@@ -224,9 +224,10 @@ async def list_skills(
 
 
 @router.get("/v1/skills/options", response_model=Envelope[SkillOptions])
-async def skill_options(rt: Rt, _: Annotated[Principal, Depends(reader_of("skills"))]) -> JSONResponse:
-    """What a skill may name: the tools the directory offers, the knowledge bases agents hold, and owner teams. The
-    directory is read from tools-service first, with nothing open, then the rows in one transaction."""
+async def skill_options(rt: Rt, me: Annotated[Principal, Depends(reader_of("skills"))]) -> JSONResponse:
+    """What a skill may name: the tools the directory offers, the knowledge bases agents hold, and the teams the
+    caller may create skills in (`skills.create` held there). The directory is read from tools-service first, with
+    nothing open, then the rows in one transaction."""
     directory = await directory_tools(rt)
     async with isolation.request_transaction():
         tools = [
@@ -234,7 +235,7 @@ async def skill_options(rt: Rt, _: Annotated[Principal, Depends(reader_of("skill
             for t in await known_tools(rt, listed=directory)
         ]
         specs = await newest_specs(rt.db)
-        teams = sorted({r.owner_team for r in await skills(rt).rows()})
+    teams = sorted(teams_holding(me, "skills", "create"))
     held = [k for s in specs for k in cast(JsonList, s.get("collections") or [])]
     kbs = sorted({str(k) for k in held})
     return ok({"teams": teams, "tools": tools, "knowledgeBases": kbs, "limits": LIMITS})

@@ -4,8 +4,7 @@
 // skill shows as published. Each step's wall-clock seconds and the clicks and typing a person needed are printed; the
 // run fails if any step fails or the total is over BUDGET_SECONDS. Platform sign-in, the scripted model, 1440 wide.
 import { check, chromium, consoleSignIn, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
-import { AGENTS_PORT } from '@ops-ai/usecase-runner/harness';
-import { JAMES, MAYA, PASSWORD, as, publishReviewOn } from '../../lib/workflow_ui.mjs';
+import { JAMES, MAYA, PASSWORD, publishReviewOn } from '../../lib/workflow_ui.mjs';
 
 const BUDGET_SECONDS = Number(process.env.UC771_BUDGET_SECONDS ?? 600);
 const RUN = Math.random().toString(36).slice(2, 6);
@@ -49,10 +48,6 @@ await withUiStack(
   async (consoleUrl) => {
     // Setup, not timed: the team's admin has turned publish review on for skills, as a team that wants a reviewer does.
     await publishReviewOn({ skills: 'always' });
-    // New skill offers only the owner teams that already own a skill (GET /v1/skills/options), so on an empty team the
-    // dialog cannot be completed: see the finding in the doc. One existing skill, made through the API, gets past it.
-    const seeded = await fetch(`http://127.0.0.1:${AGENTS_PORT}/v1/skills`, { method: 'POST', headers: await as(JAMES), body: JSON.stringify({ name: `Team seed ${RUN}`, ownerTeam: 'team_ops', useWhen: 'Never, it only names the team.', instructions: 'Say hello.' }) });
-    if (!seeded.ok) throw new Error(`seeding the team's first skill: ${seeded.status} ${(await seeded.text()).slice(0, 200)}`);
     const browser = await chromium.launch();
     const errors = [];
     try {

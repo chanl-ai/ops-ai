@@ -55329,7 +55329,7 @@
     },
     "/v1/skills/options": {
       "get": {
-        "description": "What a skill may name: the tools the directory offers, the knowledge bases agents hold, and owner teams. The\ndirectory is read from tools-service first, with nothing open, then the rows in one transaction.",
+        "description": "What a skill may name: the tools the directory offers, the knowledge bases agents hold, and the teams the\ncaller may create skills in (`skills.create` held there). The directory is read from tools-service first, with\nnothing open, then the rows in one transaction.",
         "operationId": "agents_skill_options",
         "parameters": [
           {
