@@ -213,3 +213,11 @@ def test_a_remote_branch_named_for_the_process_is_refused_and_a_named_change_pus
     assert all(r.returncode == 1 and "must be <type>/<scope>" in r.stdout for r in refused), [r.stdout for r in refused]
     ok = push_to(repo, base, base, "fix/console-slash-skill-chip")
     assert ok.returncode == 0, ok.stdout
+
+
+def test_the_train_and_a_hotfix_branch_push_under_their_own_names(tmp_path: Path) -> None:
+    # release/current and hotfix/<what> do not follow <type>/<scope>-<what>; a hotfix is named for its fix.
+    repo, base = make_repo(tmp_path)
+    ok = [push_to(repo, base, base, b) for b in ("release/current", "hotfix/login-loop", "hotfix/1.2.1")]
+    assert all(r.returncode == 0 for r in ok), [r.stdout for r in ok]
+    assert push_to(repo, base, base, "hotfixes/login").returncode == 1

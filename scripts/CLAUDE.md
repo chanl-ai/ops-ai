@@ -25,7 +25,7 @@ scripts are reached through a make target; run them that way so ports and env ma
 | Setup and dependencies | `setup/` (`make setup`), `deps_doctor.py`, `deps_relock.sh`, `deps_audit.py`, `deps_smoke.sh`, `install_via_mirror.sh` | `make setup`, `make deps-*`, `make qa-mirror`, `make install-mirror` |
 | Docs builds | `docs/build_guide.mjs`, `docs/mermaid_svg.mjs`, `docs/screens.mjs` | run by hand with `node` |
 | Agent scripts | `agents/review_context.py` (the reviewer's bundle), `agents/test_audit.py` (mutation on changed lines, tests that cannot fail, failure modes with no test), `agents/ui_walk.mjs` (routes as each role at each width), `agents/seed_canaries.py` (planted bugs and the finder score), `agents/project_profile.py` and `.mjs` (the profile reader) | `make agent-*` (`make/agents.mk`), `CONTRIBUTING.md` "Agents and their scripts" |
-| Proofs and probes | `disk_proof.sh`, `skills_proof.sh` (`make skills-proof`), `team_isolation_probe.py`, `perf/time_routes.py`, `proof-*.sh`, `release-tag.sh` (`make release-tag`), `qa.sh` (asks a QA runner for a verdict on a commit; needs one set up through `QA_DIR`) | by hand or their make target |
+| Proofs and probes | `disk_proof.sh`, `skills_proof.sh` (`make skills-proof`), `team_isolation_probe.py`, `perf/time_routes.py`, `proof-*.sh`, `release-tag.sh` (`make release-tag`), `release-main.sh` (`make release-main`), `release.py` (`make release-cut`, `release-pr`, `release-version`, `hotfix-cut`), `qa.sh` (asks a QA runner for a verdict on a commit; needs one set up through `QA_DIR`) | by hand or their make target |
 
 ## Tests
 
