@@ -13,6 +13,7 @@ from collections.abc import AsyncIterator, Iterator
 from typing import Any, cast
 
 from ._transport import PAGE_MAX, Operation, iter_rows, iter_rows_async, page_items
+from ._types import ChatEvent, ChatThread
 
 SERVICE = "agents"
 LINKED = "CONNECTION_NOT_LINKED"
@@ -109,10 +110,10 @@ def connect_card(call: dict[str, Any]) -> dict[str, Any] | None:
     return {**(error.get("details") or {}), **reason, "message": error.get("message", "")}
 
 
-def _data(events: Any) -> Iterator[dict[str, Any]]:
+def _data(events: Any) -> Iterator[ChatEvent]:
     for e in events:
         if isinstance(e.get("data"), dict):
-            yield cast(dict[str, Any], e["data"])
+            yield cast(ChatEvent, e["data"])
 
 
 class Chat:
@@ -140,13 +141,13 @@ class Chat:
 
     def start(
         self, agent: str | None = None, *, kb_ids: list[str] | None = None, test: bool = False, title: str | None = None
-    ) -> dict[str, Any]:
+    ) -> ChatThread:
         body = thread_body(agent, kb_ids=kb_ids, test=test, title=title)
-        return cast(dict[str, Any], self._call("create", body=body))
+        return cast(ChatThread, self._call("create", body=body))
 
-    def get(self, thread: str) -> dict[str, Any]:
+    def get(self, thread: str) -> ChatThread:
         """The conversation as the chat reads it: its messages, each with its tool calls and widgets."""
-        return cast(dict[str, Any], self._call("get", {"thread_id": thread}))
+        return cast(ChatThread, self._call("get", {"thread_id": thread}))
 
     def say(
         self,
@@ -156,7 +157,7 @@ class Chat:
         skill: str | None = None,
         part: str | None = None,
         inputs: dict[str, str] | None = None,
-    ) -> Iterator[dict[str, Any]]:
+    ) -> Iterator[ChatEvent]:
         """Sends a message and yields the reply's events as they stream. `skill` (a published skill's id), `part` and
         `inputs` pick a skill for this reply only."""
         body = send_body(text, skill=skill, part=part, inputs=inputs)
@@ -207,12 +208,12 @@ class AsyncChat:
 
     async def start(
         self, agent: str | None = None, *, kb_ids: list[str] | None = None, test: bool = False, title: str | None = None
-    ) -> dict[str, Any]:
+    ) -> ChatThread:
         body = thread_body(agent, kb_ids=kb_ids, test=test, title=title)
-        return cast(dict[str, Any], await self._call("create", body=body))
+        return cast(ChatThread, await self._call("create", body=body))
 
-    async def get(self, thread: str) -> dict[str, Any]:
-        return cast(dict[str, Any], await self._call("get", {"thread_id": thread}))
+    async def get(self, thread: str) -> ChatThread:
+        return cast(ChatThread, await self._call("get", {"thread_id": thread}))
 
     async def say(
         self,
@@ -222,11 +223,11 @@ class AsyncChat:
         skill: str | None = None,
         part: str | None = None,
         inputs: dict[str, str] | None = None,
-    ) -> AsyncIterator[dict[str, Any]]:
+    ) -> AsyncIterator[ChatEvent]:
         body = send_body(text, skill=skill, part=part, inputs=inputs)
         async for e in await self._call("send", {"thread_id": thread}, body):
             if isinstance(e.get("data"), dict):
-                yield cast(dict[str, Any], e["data"])
+                yield cast(ChatEvent, e["data"])
 
     async def act(self, thread: str, message: str, widget: str, action: dict[str, Any]) -> dict[str, Any]:
         path = {"thread_id": thread, "message_id": message, "widget_id": widget}

@@ -5,12 +5,14 @@ from __future__ import annotations
 import asyncio
 import threading
 import uuid
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Iterator, Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
+from ._generated.agents.models import Agent, AgentInput, PublishReview, ReferenceAdded
 from ._io import Definition, load_definition
 from ._transport import iter_pages, iter_pages_async, iter_rows, iter_rows_async
+from ._types import AgentBackgroundRun, AgentChatReply
 from .errors import NotFound, OpsError
 
 _BACKGROUND: set[asyncio.Task[None]] = set()
@@ -50,13 +52,13 @@ def _update_body(data: dict[str, Any]) -> dict[str, Any]:
     return {key: data[key] for key in UPDATE_KEYS if key in data}
 
 
-def based(fields: dict[str, Any], read: dict[str, Any]) -> dict[str, Any]:
+def based(fields: dict[str, Any], read: Mapping[str, Any]) -> dict[str, Any]:
     """`fields` naming the copy they were made on: the `version` and `digest` of the agent or skill as `read`. The
     service refuses a save made from an older copy (`stale_base`), so it never writes over a change saved since."""
     return {**fields, "baseVersion": read["version"], "baseDigest": read["digest"]}
 
 
-def _read(base: dict[str, Any] | None) -> bool:
+def _read(base: Mapping[str, Any] | None) -> bool:
     # A list row carries no digest, so it cannot name a copy.
     return bool(base and base.get("digest"))
 
@@ -75,13 +77,13 @@ class Agents:
     def __init__(self, raw: Any) -> None:
         self._raw = raw
 
-    def list(self, **query: Any) -> Iterator[Any]:
-        return iter_pages(self._raw.agents.agents_list_agents, **query)
+    def list(self, **query: Any) -> Iterator[Agent]:
+        return cast(Iterator[Agent], iter_pages(self._raw.agents.agents_list_agents, **query))
 
-    def get(self, id: str) -> Any:
+    def get(self, id: str) -> Agent:
         return self._raw.agents.agents_get_agent(id)
 
-    def create(self, body: Any) -> Any:
+    def create(self, body: AgentInput | dict[str, Any]) -> Agent:
         return self._raw.agents.agents_create_agent(body)
 
     def validate(self, definition: Definition) -> dict[str, Any]:
@@ -99,7 +101,7 @@ class Agents:
         ]
         return {"ok": not checks, "checks": checks}
 
-    def _named(self, name: str) -> Any:
+    def _named(self, name: str) -> Agent | None:
         try:
             for agent in self.list(search=name, page_size=50):
                 if agent.get("name") == name:
@@ -108,12 +110,17 @@ class Agents:
             return None
         return None
 
-    def update(self, id: str, fields: dict[str, Any], *, base: dict[str, Any] | None = None) -> Any:
+    def update(self, id: str, fields: dict[str, Any], *, base: Mapping[str, Any] | None = None) -> Agent:
         """Saves `fields` on the agent's draft. `base` is the agent as last read, naming the copy the change was made
         on; left out, the agent is read first. A save from an older copy is refused with `stale_base`."""
-        return self._raw.agents.agents_update_agent(id, based(fields, base if _read(base) else self.get(id)))
+        if _read(base):
+            assert base is not None
+            read: Mapping[str, Any] = base
+        else:
+            read = self.get(id)
+        return self._raw.agents.agents_update_agent(id, based(fields, read))
 
-    def apply(self, definition: Definition) -> Any:
+    def apply(self, definition: Definition) -> Agent:
         data = load_definition(definition)
         current = None
         wanted = data.get("id") or data.get("slug")
@@ -133,7 +140,7 @@ class Agents:
             return self.update(str(created["id"]), extra, base=created)
         return created
 
-    def publish(self, id: str, *, note: str = "", version: int | None = None) -> Any:
+    def publish(self, id: str, *, note: str = "", version: int | None = None) -> PublishReview:
         agent = self.get(id)
         pin = version if version is not None else agent.get("version")
         return self._raw.agents.agents_request_publish(id, {"note": note, "version": pin})
@@ -156,7 +163,7 @@ class Agents:
         asked = {k: v for k, v in {"search": search or None, **query}.items() if v is not None}
         return self._raw.agents.agents_references_search(for_agent=for_agent, **asked)
 
-    def add_reference(self, id: str, kind: str, ref_id: str) -> Any:
+    def add_reference(self, id: str, kind: str, ref_id: str) -> ReferenceAdded:
         """Grants the agent a tool, knowledge base, skill, agent or workflow its brief mentions, as a new draft. A
         skill brings the tools and knowledge bases it names. `added` is empty when the agent already held it."""
         return self._raw.agents.agents_add_reference(id, {"kind": kind, "id": ref_id})
@@ -172,12 +179,12 @@ class Agents:
     def resume(self, id: str) -> Any:
         return self._raw.agents.agents_set_paused(id, {"paused": False})
 
-    def export(self, id: str) -> Any:
+    def export(self, id: str) -> Agent:
         return self.get(id)
 
-    def chat(self, id: str, message: str, *, thread_id: str | None = None) -> Any:
+    def chat(self, id: str, message: str, *, thread_id: str | None = None) -> AgentChatReply:
         """Starts or continues a chat thread on the published agent and returns the collected reply."""
-        return self.run(id, message, mode="wait", thread_id=thread_id)
+        return cast(AgentChatReply, self.run(id, message, mode="wait", thread_id=thread_id))
 
     def run(
         self,
@@ -187,7 +194,7 @@ class Agents:
         mode: str = "wait",
         thread_id: str | None = None,
         run_id: str | None = None,
-    ) -> Any:
+    ) -> AgentChatReply | AgentBackgroundRun:
         """Starts the published agent on the existing thread routes. wait drains the stream, stream keeps events,
         background returns a run id and drains in another thread so the caller can re-attach."""
         if thread_id is None:
@@ -206,7 +213,7 @@ class Agents:
         collected["runId"] = rid
         collected["mode"] = mode
         collected["chunks"] = events
-        return collected
+        return cast(AgentChatReply, collected)
 
     def eval(self, id: str, cases: Any = None, *, trigger: str | None = None) -> Any:
         """With `cases=None` runs the agent's saved cases on its newest version and keeps the run; the reply carries
@@ -256,13 +263,13 @@ class AsyncAgents:
     def __init__(self, raw: Any) -> None:
         self._raw = raw
 
-    def list(self, **query: Any) -> AsyncIterator[Any]:
-        return iter_pages_async(self._raw.agents.agents_list_agents, **query)
+    def list(self, **query: Any) -> AsyncIterator[Agent]:
+        return cast(AsyncIterator[Agent], iter_pages_async(self._raw.agents.agents_list_agents, **query))
 
-    async def get(self, id: str) -> Any:
+    async def get(self, id: str) -> Agent:
         return await self._raw.agents.agents_get_agent(id)
 
-    async def create(self, body: Any) -> Any:
+    async def create(self, body: AgentInput | dict[str, Any]) -> Agent:
         return await self._raw.agents.agents_create_agent(body)
 
     async def validate(self, definition: Definition) -> dict[str, Any]:
@@ -279,7 +286,7 @@ class AsyncAgents:
         ]
         return {"ok": not checks, "checks": checks}
 
-    async def _named(self, name: str) -> Any:
+    async def _named(self, name: str) -> Agent | None:
         try:
             async for agent in self.list(search=name, page_size=50):
                 if agent.get("name") == name:
@@ -288,11 +295,15 @@ class AsyncAgents:
             return None
         return None
 
-    async def update(self, id: str, fields: dict[str, Any], *, base: dict[str, Any] | None = None) -> Any:
-        read = base if _read(base) else await self.get(id)
+    async def update(self, id: str, fields: dict[str, Any], *, base: Mapping[str, Any] | None = None) -> Agent:
+        if _read(base):
+            assert base is not None
+            read: Mapping[str, Any] = base
+        else:
+            read = await self.get(id)
         return await self._raw.agents.agents_update_agent(id, based(fields, read))
 
-    async def apply(self, definition: Definition) -> Any:
+    async def apply(self, definition: Definition) -> Agent:
         data = load_definition(definition)
         current = None
         wanted = data.get("id") or data.get("slug")
@@ -312,7 +323,7 @@ class AsyncAgents:
             return await self.update(str(created["id"]), extra, base=created)
         return created
 
-    async def publish(self, id: str, *, note: str = "", version: int | None = None) -> Any:
+    async def publish(self, id: str, *, note: str = "", version: int | None = None) -> PublishReview:
         agent = await self.get(id)
         pin = version if version is not None else agent.get("version")
         return await self._raw.agents.agents_request_publish(id, {"note": note, "version": pin})
@@ -333,7 +344,7 @@ class AsyncAgents:
         asked = {k: v for k, v in {"search": search or None, **query}.items() if v is not None}
         return await self._raw.agents.agents_references_search(for_agent=for_agent, **asked)
 
-    async def add_reference(self, id: str, kind: str, ref_id: str) -> Any:
+    async def add_reference(self, id: str, kind: str, ref_id: str) -> ReferenceAdded:
         return await self._raw.agents.agents_add_reference(id, {"kind": kind, "id": ref_id})
 
     async def publish_check(self, id: str, *, version: int | None = None) -> Any:
@@ -346,11 +357,11 @@ class AsyncAgents:
     async def resume(self, id: str) -> Any:
         return await self._raw.agents.agents_set_paused(id, {"paused": False})
 
-    async def export(self, id: str) -> Any:
+    async def export(self, id: str) -> Agent:
         return await self.get(id)
 
-    async def chat(self, id: str, message: str, *, thread_id: str | None = None) -> Any:
-        return await self.run(id, message, mode="wait", thread_id=thread_id)
+    async def chat(self, id: str, message: str, *, thread_id: str | None = None) -> AgentChatReply:
+        return cast(AgentChatReply, await self.run(id, message, mode="wait", thread_id=thread_id))
 
     async def run(
         self,
@@ -360,7 +371,7 @@ class AsyncAgents:
         mode: str = "wait",
         thread_id: str | None = None,
         run_id: str | None = None,
-    ) -> Any:
+    ) -> AgentChatReply | AgentBackgroundRun:
         if thread_id is None:
             created = await self._raw.agents.threads_create_thread({"graph": _agent_graph(id)})
             thread_id = created.get("threadId") or created.get("id")
@@ -383,7 +394,7 @@ class AsyncAgents:
         collected["runId"] = rid
         collected["mode"] = mode
         collected["chunks"] = items
-        return collected
+        return cast(AgentChatReply, collected)
 
     async def eval(self, id: str, cases: Any = None, *, trigger: str | None = None) -> Any:
         return await self._raw.agents.agents_create_eval_run(id, _eval_body(cases, trigger))
@@ -444,7 +455,7 @@ def _unwrap_event(event: Any) -> tuple[str, Any]:
     return str(event.get("event") or ""), inner if "data" in event else event
 
 
-def _collect_chat(events: Any, thread_id: str) -> dict[str, Any]:
+def _collect_chat(events: Any, thread_id: str) -> AgentChatReply:
     items = list(events) if not isinstance(events, dict) else [events]
     parts: list[str] = []
     reply = ""

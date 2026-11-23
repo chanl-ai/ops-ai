@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import csv
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Iterator, Mapping
 from contextlib import suppress
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from ._agents import based
 from ._io import (
@@ -19,6 +19,15 @@ from ._io import (
     load_definition,
 )
 from ._transport import iter_pages, iter_pages_async
+from ._types import (
+    DefinitionPublished,
+    DefinitionRow,
+    DefinitionView,
+    FormView,
+    PublishReview,
+    RunStarted,
+    WaitedRun,
+)
 from .errors import NotFound
 
 PLANNED = "This command is planned; the public API for it is not shipped."
@@ -51,7 +60,7 @@ class WorkflowCheck(dict[str, Any]):
         raise ValueError(f"{where}: {first.get('message')}")
 
 
-def _diff(next_def: dict[str, Any], current: dict[str, Any] | None) -> list[str]:
+def _diff(next_def: Mapping[str, Any], current: Mapping[str, Any] | None) -> list[str]:
     if current is None:
         return [f"create {next_def.get('id')}"]
     held = current.get("definition") or {}
@@ -89,12 +98,15 @@ class Workflows:
         self._raw = raw
         self._runs = runs
 
-    def list(self, **query: Any) -> Iterator[Any]:
-        return iter_pages(self._raw.agents.workflows_list_definitions, **query)
+    def list(self, **query: Any) -> Iterator[DefinitionRow]:
+        return cast(Iterator[DefinitionRow], iter_pages(self._raw.agents.workflows_list_definitions, **query))
 
-    def forms(self, workflow_id: str, **query: Any) -> Iterator[Any]:
+    def forms(self, workflow_id: str, **query: Any) -> Iterator[FormView]:
         """The workflow's forms, every page (`search`, `ids`)."""
-        return iter_pages(lambda **q: self._raw.agents.forms_workflow_forms(workflow_id, **q), **query)
+        return cast(
+            Iterator[FormView],
+            iter_pages(lambda **q: self._raw.agents.forms_workflow_forms(workflow_id, **q), **query),
+        )
 
     def start_batch(
         self, workflow_id: str, file_id: str, *, mode: str | None = None, dry_run: bool | None = None
@@ -102,7 +114,7 @@ class Workflows:
         """Starts a batch over the rows of an uploaded file. The API refuses a field it does not name."""
         return self._raw.agents.batches_start_batch(workflow_id, _batch_body(file_id, mode, dry_run))
 
-    def get(self, id: str, version: int | None = None) -> Any:
+    def get(self, id: str, version: int | None = None) -> DefinitionView:
         return self.get_definition(id, version=version)
 
     def types(self, group: str | None = None) -> list[dict[str, Any]]:
@@ -127,11 +139,11 @@ class Workflows:
             current = self.get_definition(str(parsed["id"]))
         return {"check": check, "current": current, "changes": _diff(parsed, current)}
 
-    def apply(self, definition: Definition) -> Any:
+    def apply(self, definition: Definition) -> DefinitionPublished:
         """Stores the next draft, or returns the existing digest when the definition is unchanged."""
         return self._raw.agents.workflows_create_definition(definition_body(definition))
 
-    def get_definition(self, id: str, version: int | None = None) -> Any:
+    def get_definition(self, id: str, version: int | None = None) -> DefinitionView:
         return self._raw.agents.workflows_get_definition(id, version=version)
 
     def export(self, id: str, *, format: str = "json", version: int | None = None) -> str:
@@ -155,7 +167,7 @@ class Workflows:
         """What publishing the working copy would change, what stops it, and whether it waits for a review."""
         return self._raw.agents.workflows_publish_preview(id)
 
-    def publish(self, id: str, *, note: str = "", working_copy: bool = False) -> Any:
+    def publish(self, id: str, *, note: str = "", working_copy: bool = False) -> PublishReview:
         """Requests the publish of the newest draft or, with `working_copy`, makes the next version from the working
         copy and requests its publish in one call, refused before any version is made while the publish preview
         lists a blocker."""
@@ -181,7 +193,7 @@ class Workflows:
         mode: str = "test",
         wait: bool = False,
         **fields: Any,
-    ) -> Any:
+    ) -> RunStarted | WaitedRun:
         started = self._runs.start(id, input=load_data(input) or {}, mode=mode, **fields)
         return self._runs.wait(started["runId"]) if wait else started
 
@@ -252,18 +264,22 @@ class AsyncWorkflows:
         self._raw = raw
         self._runs = runs
 
-    def list(self, **query: Any) -> AsyncIterator[Any]:
-        return iter_pages_async(self._raw.agents.workflows_list_definitions, **query)
+    def list(self, **query: Any) -> AsyncIterator[DefinitionRow]:
+        rows = iter_pages_async(self._raw.agents.workflows_list_definitions, **query)
+        return cast(AsyncIterator[DefinitionRow], rows)
 
-    def forms(self, workflow_id: str, **query: Any) -> AsyncIterator[Any]:
-        return iter_pages_async(lambda **q: self._raw.agents.forms_workflow_forms(workflow_id, **q), **query)
+    def forms(self, workflow_id: str, **query: Any) -> AsyncIterator[FormView]:
+        return cast(
+            AsyncIterator[FormView],
+            iter_pages_async(lambda **q: self._raw.agents.forms_workflow_forms(workflow_id, **q), **query),
+        )
 
     async def start_batch(
         self, workflow_id: str, file_id: str, *, mode: str | None = None, dry_run: bool | None = None
     ) -> Any:
         return await self._raw.agents.batches_start_batch(workflow_id, _batch_body(file_id, mode, dry_run))
 
-    async def get(self, id: str, version: int | None = None) -> Any:
+    async def get(self, id: str, version: int | None = None) -> DefinitionView:
         return await self.get_definition(id, version=version)
 
     async def types(self, group: str | None = None) -> list[dict[str, Any]]:
@@ -287,10 +303,10 @@ class AsyncWorkflows:
             current = await self.get_definition(str(parsed["id"]))
         return {"check": check, "current": current, "changes": _diff(parsed, current)}
 
-    async def apply(self, definition: Definition) -> Any:
+    async def apply(self, definition: Definition) -> DefinitionPublished:
         return await self._raw.agents.workflows_create_definition(definition_body(definition))
 
-    async def get_definition(self, id: str, version: int | None = None) -> Any:
+    async def get_definition(self, id: str, version: int | None = None) -> DefinitionView:
         return await self._raw.agents.workflows_get_definition(id, version=version)
 
     async def export(self, id: str, *, format: str = "json", version: int | None = None) -> str:
@@ -308,7 +324,7 @@ class AsyncWorkflows:
     async def publish_preview(self, id: str) -> Any:
         return await self._raw.agents.workflows_publish_preview(id)
 
-    async def publish(self, id: str, *, note: str = "", working_copy: bool = False) -> Any:
+    async def publish(self, id: str, *, note: str = "", working_copy: bool = False) -> PublishReview:
         body: dict[str, Any] = {"note": note}
         if working_copy:
             body = based(body, (await self.get_definition(id))["saveBase"])
@@ -323,7 +339,9 @@ class AsyncWorkflows:
     async def archive(self, id: str) -> Any:
         return await self._raw.agents.workflows_archive_definition(id)
 
-    async def run(self, id: str, *, input: Any = None, mode: str = "test", wait: bool = False, **fields: Any) -> Any:
+    async def run(
+        self, id: str, *, input: Any = None, mode: str = "test", wait: bool = False, **fields: Any
+    ) -> RunStarted | WaitedRun:
         started = await self._runs.start(id, input=load_data(input) or {}, mode=mode, **fields)
         return await self._runs.wait(started["runId"]) if wait else started
 
@@ -405,7 +423,7 @@ def _cases(folder: Path, name: str | None) -> list[dict[str, Any]]:
     return cases
 
 
-def _outcome_matches(run: dict[str, Any], expected: dict[str, Any]) -> bool:
+def _outcome_matches(run: Mapping[str, Any], expected: Mapping[str, Any]) -> bool:
     if not expected:
         return run.get("status") in {"succeeded", "waiting"}
     return all(run.get(key) == expected[key] for key in ("status", "outcome") if key in expected)
