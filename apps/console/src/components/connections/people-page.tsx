@@ -210,7 +210,6 @@ export function PeoplePage() {
             hideViewSwitcher
             searchColumn="name"
             searchPlaceholder="Search people"
-            rowNoun="person"
             filters={[
               { column: 'app', title: 'App', options: appOptions },
               { column: 'state', title: 'State', options: stateOptions },

@@ -132,6 +132,7 @@ async def test_an_admin_ends_a_persons_sign_in_once_and_their_next_call_asks_the
     with pytest.raises(AuthFailed) as e:
         await bearer(auth, tenant, conn, DANA)
     assert e.value.code == "CONNECTION_NOT_LINKED" and e.value.details["reason"] == "refused", e.value.details
+    assert e.value.details["endedBy"] == "Priya Shah", e.value.details
 
     again = await client.post(url, headers=admin(tenant))
     assert again.status_code == 200 and again.json()["data"]["changed"] is False, again.text
