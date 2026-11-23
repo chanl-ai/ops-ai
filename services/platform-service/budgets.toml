@@ -98,6 +98,9 @@ queries = 10   # one more: each role's cells are read through named_grids (the o
 ["GET /v1/roles/{role_id}"]
 queries = 14
 
+["GET /v1/roles/{role_id}/holder-options"]
+queries = 9
+
 ["GET /v1/roles/{role_id}/holders"]
 queries = 9
 

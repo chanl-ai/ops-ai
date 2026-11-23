@@ -12345,8 +12345,10 @@
     {
       "error": {
         "code": "unauthorized",
+        "kind": "refused",
         "message": "Sign in again.",
         "requestId": "<req>",
+        "retryable": true,
         "status": 401
       },
       "success": false
