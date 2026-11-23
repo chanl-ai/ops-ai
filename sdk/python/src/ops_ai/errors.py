@@ -3,6 +3,7 @@ branch on the class and quote the request id to support."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any, Literal
 
 from ._generated.codes import CODES, STATUSES
@@ -50,9 +51,9 @@ class RunFailed(Exception):
     """A run that failed, raised by `runs.wait(check=True)`: the run's `failure` in the one error model. `message` is
     for the builder, `user_message` is safe to show an end user, `retryable` says whether trying again can help."""
 
-    def __init__(self, run: dict[str, Any]) -> None:
+    def __init__(self, run: Mapping[str, Any]) -> None:
         f: dict[str, Any] = run.get("failure") or {}
-        self.run = run
+        self.run = dict(run)
         self.run_id = str(run.get("id") or "")
         self.kind: Kind = f.get("kind") or "internal"
         self.code = str(f.get("code") or "internal_error")

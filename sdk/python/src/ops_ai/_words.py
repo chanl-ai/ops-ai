@@ -8,11 +8,12 @@ account a test run uses); an account method left without `account` acts on the a
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from typing import Any, cast
 
 from ._transport import every_page as _every
 from ._transport import every_page_async as _every_async
+from ._types import ToolModule, ToolModuleDetail
 
 PLUGIN = "plugin:"
 # Where a resource's copy is made: document types in documents-service, everything else (agents, skills, workflows)
@@ -392,13 +393,13 @@ class Tools:
     def __init__(self, raw: Any, apps: Apps, modules: Any) -> None:
         self._raw, self._apps, self._modules = raw, apps, modules
 
-    def list(self, app: str | None = None, **query: Any) -> Iterator[Any]:
+    def list(self, app: str | None = None, **query: Any) -> Iterator[ToolModule | dict[str, Any]]:
         if app is None:
-            return iter(self._modules.list(**query))
+            return cast(Iterator[ToolModule | dict[str, Any]], self._modules.list(**query))
         return iter(cast(list[dict[str, Any]], self._apps.get(app).get("tools") or []))
 
-    def get(self, id: str) -> Any:
-        return self._modules.get(id)
+    def get(self, id: str) -> ToolModuleDetail:
+        return cast(ToolModuleDetail, self._modules.get(id))
 
     def run(
         self,
@@ -705,13 +706,13 @@ class AsyncTools:
     def __init__(self, raw: Any, apps: AsyncApps, modules: Any) -> None:
         self._raw, self._apps, self._modules = raw, apps, modules
 
-    async def list(self, app: str | None = None, **query: Any) -> list[Any]:
+    async def list(self, app: str | None = None, **query: Any) -> list[ToolModule | dict[str, Any]]:
         if app is None:
-            return [m async for m in self._modules.list(**query)]
+            return [m async for m in cast(AsyncIterator[ToolModule], self._modules.list(**query))]
         return list(cast(list[dict[str, Any]], (await self._apps.get(app)).get("tools") or []))
 
-    async def get(self, id: str) -> Any:
-        return await self._modules.get(id)
+    async def get(self, id: str) -> ToolModuleDetail:
+        return cast(ToolModuleDetail, await self._modules.get(id))
 
     async def run(
         self,
