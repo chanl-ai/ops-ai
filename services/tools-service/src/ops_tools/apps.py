@@ -2435,12 +2435,14 @@ def apps_router(apps: Apps, directory: Directory) -> APIRouter:
         return ok({**page, "viewCounts": counts})
 
     @r.get("/v1/me/connections", response_model=Envelope[list[MyConnector]])
-    async def my_connections(who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """The caller's connectors, Connectors (Mine): one row per app that acts as them, with what it can do, who it
+    async def my_connections(  # pyright: ignore[reportUnusedFunction]
+        who: Annotated[Caller, Depends(caller)], app: Annotated[str | None, Query(max_length=200)] = None
+    ) -> JSONResponse:
+        """The caller's connectors, My apps: one row per app that acts as them, with what it can do, who it
         signs in as, its appState and appGroup, and where it is used; an app the team has off is listed when each
-        person signs in to it. No request transaction: the team's write approval policies and who uses each tool are
-        asked of the platform and agents-service."""
-        return ok(await my_connectors(apps, who))
+        person signs in to it. `app` keeps that one app, for its page. No request transaction: the team's write
+        approval policies and who uses each tool are asked of the platform and agents-service."""
+        return ok(await my_connectors(apps, who, app))
 
     @r.post("/v1/apps", response_model=Envelope[AccountDetail], status_code=201)
     async def add_app(body: NewAppIn, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

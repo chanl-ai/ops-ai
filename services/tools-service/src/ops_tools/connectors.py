@@ -200,8 +200,9 @@ def _primary(accounts: list[MyAccountRow], team_default: str | None, saved: set[
     )
 
 
-async def my_connectors(apps: Apps, who: Caller) -> list[Json]:
-    """The caller's connectors in their team, one row per app, joined here so the page makes one call."""
+async def my_connectors(apps: Apps, who: Caller, only: str | None = None) -> list[Json]:
+    """The caller's connectors in their team, one row per app, joined here so the page makes one call; `only` keeps
+    the one app, for its own page."""
     # The team's app rows under the own-sign-in rule (chat.run), so every person signed in reads their own page.
     cards = await apps.cards(who, listed=True, builtins=False, rights=OWN)
     mine = await apps.connections.mine(who, every=True)
@@ -216,6 +217,8 @@ async def my_connectors(apps: Apps, who: Caller) -> list[Json]:
     may = apps.connections.may_manage(who)
     rows: list[Json] = []
     for card in cards:
+        if only is not None and str(card["id"]) != only:
+            continue
         plugin = card.get("plugin")
         if card["kind"] == "plugin" and plugin is None:
             continue  # the install no longer loads it, so nothing of it can run

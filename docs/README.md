@@ -655,3 +655,4 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/console/role-for-a-group-and-approvals.md` | uc-766: A role given to a group, and the approvals cell on the role's page |
 | `usecases/console/chat-only-person-my-apps.md` | uc-767: A person who only chats sees My apps in the sidebar and can chat |
 | `usecases/console/name-limits-on-a-form.md` | uc-768: One create form holds a name to the same rule the server keeps |
+| `usecases/console/my-apps-page.md` | uc-769: My apps is a page of its own, the same for an admin and a member |

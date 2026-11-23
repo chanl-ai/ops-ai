@@ -18,7 +18,7 @@
     "src/app/govern/access/people/[id]/page.tsx": 1,
     "src/app/govern/access/roles/[id]/page.tsx": 1,
     "src/app/govern/policies/page.tsx": 1,
-    "src/app/settings/account/connectors/page.tsx": 2,
+    "src/app/work/apps/page.tsx": 2,
     "src/app/settings/account/security/page.tsx": 1,
     "src/app/settings/workspace/model-providers/page.tsx": 1,
     "src/app/settings/workspace/storage/page.tsx": 1,

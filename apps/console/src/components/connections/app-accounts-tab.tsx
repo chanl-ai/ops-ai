@@ -231,8 +231,8 @@ export function AccountsTab({
     {!seesConfigs && signIns > 0 && (
       <p className="text-sm text-muted-foreground" data-testid="app-accounts-mine">
         {`You are signed in on ${signIns} ${signIns === 1 ? 'account' : 'accounts'} of ${name}. `}
-        <Link href="/settings/account/connectors" className="underline underline-offset-4">
-          Your own accounts are on Connectors › Mine
+        <Link href="/work/apps" className="underline underline-offset-4">
+          Your own accounts are in My apps
         </Link>
       </p>
     )}

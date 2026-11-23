@@ -18,7 +18,7 @@ the builder pages.
 | # | Step | Expected |
 |---|---|---|
 | 1 | Lena opens Chat | The sidebar lists Chat and My apps, and none of Agents, Workflows, Cases, Activity or Settings |
-| 2 | She presses My apps | The page at `/settings/account/connectors` opens, titled My apps |
+| 2 | She presses My apps | The page at `/work/apps` opens, titled My apps |
 | 3 | She asks a question in Chat | A thread opens and the agent answers |
 | 4 | She opens the Agents page by its address | The sidebar still offers no Agents row |
 

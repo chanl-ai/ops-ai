@@ -310,3 +310,4 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-766 | console | A role given to a group, and the approvals cell on the role's page | ui | `console/role-for-a-group-and-approvals.md` |
 | uc-767 | console | A person who only chats sees My apps in the sidebar and can chat | ui | `console/chat-only-person-my-apps.md` |
 | uc-768 | console | One create form holds a name to the same rule the server keeps | ui | `console/name-limits-on-a-form.md` |
+| uc-769 | console | My apps is a page of its own, the same for an admin and a member | ui | `console/my-apps-page.md` |

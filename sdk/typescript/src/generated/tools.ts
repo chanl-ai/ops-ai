@@ -887,10 +887,10 @@ export interface paths {
         };
         /**
          * My Connections
-         * @description The caller's connectors, Connectors (Mine): one row per app that acts as them, with what it can do, who it
+         * @description The caller's connectors, My apps: one row per app that acts as them, with what it can do, who it
          *     signs in as, its appState and appGroup, and where it is used; an app the team has off is listed when each
-         *     person signs in to it. No request transaction: the team's write approval policies and who uses each tool are
-         *     asked of the platform and agents-service.
+         *     person signs in to it. `app` keeps that one app, for its page. No request transaction: the team's write
+         *     approval policies and who uses each tool are asked of the platform and agents-service.
          */
         get: operations["apps_my_connections"];
         put?: never;
@@ -12524,7 +12524,9 @@ export interface operations {
     };
     apps_my_connections: {
         parameters: {
-            query?: never;
+            query?: {
+                app?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
