@@ -2,12 +2,45 @@
 
 Send one message to a published agent and read the reply.
 
+```bash
+python ask_once.py
+```
+
 ```python
+"""Send one message to a published agent and print the reply."""
+
+from __future__ import annotations
+
+from typing import TypedDict, cast
+
 from ops_ai import OpsAI
 
-ops = OpsAI()
-agent = next(a for a in ops.agents.list() if a.get("status") == "published")
-print(ops.agents.chat(agent["id"], "What documents open a business account?")["reply"])
+
+class AgentRow(TypedDict):
+    id: str
+    status: str
+
+
+class ChatReply(TypedDict):
+    reply: str
+    threadId: str
+
+
+def main() -> None:
+    ops = OpsAI()
+    agent = cast(
+        AgentRow,
+        next(row for row in ops.agents.list() if row.get("status") == "published"),
+    )
+    answer = cast(
+        ChatReply,
+        ops.agents.chat(agent["id"], "What documents open a business account?"),
+    )
+    print(answer["reply"])
+
+
+if __name__ == "__main__":
+    main()
 ```
 
 ```ts
@@ -30,12 +63,11 @@ AGENT=$(opsai agents list --json | jq -r '.[] | select(.status=="published") | .
 opsai agents chat "$AGENT" --message "What documents open a business account?"
 ```
 
-Same files in this folder: `ask_once.py`, `ask_once.mjs`, `ask_once.sh`.
-
-Lesson: [docs/guide/build-with-ops-ai.md](../../../docs/guide/build-with-ops-ai.md).
+Files: `ask_once.py`, `ask_once.mjs`, `ask_once.sh`. Lesson:
+[docs/guide/build-with-ops-ai.md](../../../docs/guide/build-with-ops-ai.md).
 
 <details>
-<summary>Run the folder check</summary>
+<summary>Folder check (CI)</summary>
 
 ```bash
 uv run python examples/chat/01-ask-once/setup.py

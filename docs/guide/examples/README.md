@@ -12,18 +12,12 @@ Short paths that show the same job in Python, TypeScript and on the command line
 - **[Write, publish and use a skill](skills.md)** — publish a skill, give it to an agent, pick it once.
   Folder: [`examples/skills/01-publish-and-pick/`](../../../examples/skills/01-publish-and-pick/).
 
-```python
-from ops_ai import OpsAI
-
-ops = OpsAI()
-agent = next(a for a in ops.agents.list() if a.get("status") == "published")
-print(ops.agents.chat(agent["id"], "What documents open a business account?")["reply"])
-```
-
 ```bash
-AGENT=$(opsai agents list --json | jq -r '.[] | select(.status=="published") | .id' | head -1)
-opsai agents chat "$AGENT" --message "What documents open a business account?"
+python examples/chat/01-ask-once/ask_once.py
 ```
+
+Typed module: [`ask_once.py`](../../../examples/chat/01-ask-once/ask_once.py). Skills path:
+[`publish_and_pick.py`](../../../examples/skills/01-publish-and-pick/publish_and_pick.py).
 
 ## Paths by job
 

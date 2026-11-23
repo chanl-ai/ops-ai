@@ -27,8 +27,9 @@ A built capability’s `example.yaml` must list the same capability `id`. Deep-l
 | `fixtures/`, `expected/` | Inputs and the outputs a run must match |
 | `setup.py` | Installs the resources into a team on a running stack and writes `.bindings.json` and `.ops-profile.json` (both ignored by git) |
 | `test_example.py`, `test_example.mjs` | The same check through the Python and the TypeScript SDK |
-| `README.md` | Complete copy-paste Py / TS / CLI first; setup, pytest and capability id stay behind a fold. Link once to the lesson under `docs/` |
-| `*.py` / `*.mjs` / `*.sh` | Same happy-path scripts as the README, runnable from the folder |
+| `README.md` | Typed happy-path script first (`python ask_once.py`); setup/pytest behind a fold. Link once to `docs/` |
+| `*.py` (typed) | End-user copy-paste module: type hints / TypedDict, `main()`, no `_lib` imports |
+| `*.mjs` / `*.sh` | Same happy path on TypeScript and the CLI |
 
 Shared setup is `_lib/folder.py`; a helper there is named for the example it serves (`CITE_HANDBOOK_FOLDER`).
 

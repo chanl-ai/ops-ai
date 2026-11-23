@@ -2,54 +2,101 @@
 
 Status: current.
 
-Publish a skill, give it to an agent, and pick it for one reply. Copyable files:
-[`examples/skills/01-publish-and-pick/`](../../../examples/skills/01-publish-and-pick/).
+Publish a skill, give it to an agent, and pick it for one reply. Runnable file:
+[`examples/skills/01-publish-and-pick/publish_and_pick.py`](../../../examples/skills/01-publish-and-pick/publish_and_pick.py).
 
 ## Python
 
 ```python
+"""Publish a skill, give it to an agent, and pick it for one reply."""
+
+from __future__ import annotations
+
+from typing import Any, TypedDict, cast
+
 from ops_ai import OpsAI
 
-ops = OpsAI()
 
-skill = ops.skills.create(
-    {
-        "name": "Return checklist",
-        "ownerTeam": "Customer Operations",
-        "useWhen": "A customer wants to return an item.",
-        "loading": "on_match",
-        "instructions": (
-            "1. Ask for the order number.\n"
-            "2. Check the purchase date is within 30 days.\n"
-            "3. Ask whether the customer has the receipt.\n"
-            "4. Never promise a refund for a sale item."
+class SkillRecord(TypedDict):
+    id: str
+
+
+class AgentRecord(TypedDict):
+    id: str
+
+
+class ThreadRecord(TypedDict):
+    id: str
+
+
+class ChatEvent(TypedDict, total=False):
+    type: str
+    message: dict[str, Any]
+
+
+def main() -> None:
+    ops = OpsAI()
+
+    skill = cast(
+        SkillRecord,
+        ops.skills.create(
+            {
+                "name": "Return checklist",
+                "ownerTeam": "Customer Operations",
+                "useWhen": "A customer wants to return an item.",
+                "loading": "on_match",
+                "instructions": (
+                    "1. Ask for the order number.\n"
+                    "2. Check the purchase date is within 30 days.\n"
+                    "3. Ask whether the customer has the receipt.\n"
+                    "4. Never promise a refund for a sale item."
+                ),
+                "inputs": [
+                    {
+                        "name": "order_number",
+                        "description": "The order being returned",
+                    }
+                ],
+            }
         ),
-        "inputs": [{"name": "order_number", "description": "The order being returned"}],
-    }
-)
-ops.skills.publish(skill["id"], note="First version")
-
-agent = ops.agents.apply(
-    {
-        "name": "Returns helper",
-        "role": "Answer questions about returns",
-        "instructions": "Help with returns. Keep answers short. Follow attached skills.",
-    }
-)
-ops.agents.add_reference(agent["id"], "skill", skill["id"])
-ops.agents.publish(agent["id"], note="Uses the return checklist")
-
-thread = ops.chat.start(agent["id"])
-events = list(
-    ops.chat.say(
-        thread["id"],
-        "I want to return my boots.",
-        skill=skill["id"],
-        inputs={"order_number": "1182"},
     )
-)
-done = next(e for e in reversed(events) if e.get("type") == "done" and e.get("message"))
-print(done["message"]["skills"])
+    ops.skills.publish(skill["id"], note="First version")
+
+    agent = cast(
+        AgentRecord,
+        ops.agents.apply(
+            {
+                "name": "Returns helper",
+                "role": "Answer questions about returns",
+                "instructions": (
+                    "Help with returns. Keep answers short. Follow attached skills."
+                ),
+            }
+        ),
+    )
+    ops.agents.add_reference(agent["id"], "skill", skill["id"])
+    ops.agents.publish(agent["id"], note="Uses the return checklist")
+
+    thread = cast(ThreadRecord, ops.chat.start(agent["id"]))
+    events = [
+        cast(ChatEvent, event)
+        for event in ops.chat.say(
+            thread["id"],
+            "I want to return my boots.",
+            skill=skill["id"],
+            inputs={"order_number": "1182"},
+        )
+    ]
+    done = next(
+        event
+        for event in reversed(events)
+        if event.get("type") == "done" and event.get("message")
+    )
+    print(done["message"]["skills"])
+
+
+if __name__ == "__main__":
+    main()
 ```
 
 ## TypeScript
@@ -92,9 +139,9 @@ console.log(done.message.skills);
 
 ## Command line
 
-From `examples/skills/01-publish-and-pick/` (or copy `resources/skill.yaml` and `resources/agent.yaml`):
-
 ```bash
+python publish_and_pick.py
+# or:
 SKILL=$(opsai skills apply resources/skill.yaml --note "First version" --json | jq -r .id)
 opsai skills publish "$SKILL" --note "First version"
 AGENT=$(opsai agents --json apply resources/agent.yaml | jq -r .id)
@@ -122,15 +169,7 @@ Connect once: [Before you start](README.md#before-you-start).
 | Give a skill to an agent | built | built | built (`opsai agents add-reference`) |
 | Pick a skill for one reply | built | built | built |
 
-To change a skill after create: `ops.skills.save_draft` then `ops.skills.publish` again (CLI: `opsai skills apply` on
-the same file, then `publish`).
-
 Capability id: `skill.publish-and-pick`. Catalog: [`examples/capabilities.yaml`](../../../examples/capabilities.yaml).
-
-## Escape hatch
-
-Prefer the verbs above. OpenAPI names under `ops.raw` (`agents_create_skill`, `agents_request_skill_publish`,
-`agents_attach_skill`) are for generated clients only.
 
 ## Next
 

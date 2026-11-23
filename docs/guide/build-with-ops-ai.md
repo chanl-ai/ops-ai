@@ -17,17 +17,48 @@ Python and TypeScript SDKs. Each step links to an example folder you can run and
 ## Ask once
 
 Send one message to a published agent and read the reply.
-([`examples/chat/01-ask-once/`](../../examples/chat/01-ask-once/))
+([`ask_once.py`](../../examples/chat/01-ask-once/ask_once.py))
 
 ```python
+"""Send one message to a published agent and print the reply."""
+
+from __future__ import annotations
+
+from typing import TypedDict, cast
+
 from ops_ai import OpsAI
 
-ops = OpsAI()
-agent = next(a for a in ops.agents.list() if a.get("status") == "published")
-print(ops.agents.chat(agent["id"], "What documents open a business account?")["reply"])
+
+class AgentRow(TypedDict):
+    id: str
+    status: str
+
+
+class ChatReply(TypedDict):
+    reply: str
+    threadId: str
+
+
+def main() -> None:
+    ops = OpsAI()
+    agent = cast(
+        AgentRow,
+        next(row for row in ops.agents.list() if row.get("status") == "published"),
+    )
+    answer = cast(
+        ChatReply,
+        ops.agents.chat(agent["id"], "What documents open a business account?"),
+    )
+    print(answer["reply"])
+
+
+if __name__ == "__main__":
+    main()
 ```
 
 ```bash
+python ask_once.py
+# or:
 AGENT=$(opsai agents list --json | jq -r '.[] | select(.status=="published") | .id' | head -1)
 opsai agents chat "$AGENT" --message "What documents open a business account?"
 ```
