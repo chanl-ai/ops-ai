@@ -9,8 +9,8 @@ from __future__ import annotations
 import hashlib
 import time
 from collections.abc import Awaitable, Callable, Iterable
-from dataclasses import dataclass, field
-from typing import Literal
+from dataclasses import dataclass, field, replace
+from typing import Annotated, Literal
 
 from fastapi import Depends
 
@@ -19,6 +19,7 @@ from ops_access import reader_of as shared_reader_of
 from ops_access.check import DEFAULT as ACCESS
 from ops_identity import CurrentCaller, CurrentPrincipal, CurrentService
 from ops_identity import Principal as Caller
+from ops_identity.fastapi import ActingPerson
 from ops_policy import STEP_UP_TTL_S, HmacSigner, TokenError, header_of, verify, verify_step_up
 from ops_policy.step_up import STEP_UP_TYPE
 from ops_service_kit.errors import Forbidden, StepUpRequired
@@ -59,6 +60,15 @@ async def caller(p: CurrentCaller) -> Principal:
     """A person, an API key, or a service token scoped to one team, for the routes the provisioning service calls; every
     check on them goes through `can`, which reads a service's scopes."""
     return _principal(p)
+
+
+async def maker(me: Annotated[Principal, Depends(caller)], acting: ActingPerson) -> Principal:
+    """The caller, named as the person a service's call acts for (X-Acting-For, verified by ops_identity), so a copy
+    tools-service makes over MCP records that person as its maker. The rights checked stay the service token's, which
+    carries only the cells the person holds."""
+    if acting is None or me.identity is None or me.identity.kind != "service":
+        return me
+    return replace(me, email=acting.email, name=acting.name or acting.email, sub=acting.sub)
 
 
 def caller_in(area: str) -> Callable[..., Awaitable[Principal]]:

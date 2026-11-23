@@ -380,22 +380,23 @@ def platform_tools(settings: Settings, agents_url: str | None = None) -> Platfor
         signer = service_signer(settings)
     except ValueError:
         signer = None
-    return PlatformTools(
-        {"agents": agents_url or settings.agents_url or ""}, signer, people=_acting_for(settings, signer)
-    )
+    bases = {"agents": agents_url or settings.agents_url or "", "platform": settings.platform_url or ""}
+    people = {s: p for s in bases if (p := _acting_for(settings, signer, s)) is not None}
+    return PlatformTools(bases, signer, people=people)
 
 
-def _acting_for(settings: Settings, signer: Any) -> ActingForTokens | None:
-    """Whom an operation that makes a record acts for, as agents-service's tool calls name theirs
-    (ops_agents.api.acting_for): minted by platform-service on a platform stack, self-signed in dev."""
+def _acting_for(settings: Settings, signer: Any, audience: str) -> ActingForTokens | None:
+    """Whom an operation that makes a record in `audience` acts for, as agents-service's tool calls name theirs
+    (ops_agents.api.acting_for): minted by platform-service on a platform stack, self-signed in dev. A dev token
+    carries no role, so a Workspace tool that needs a cell is refused in dev."""
     if signer is None:
         return None
     if settings.auth_mode != "platform":
-        return ActingForTokens.for_dev(signer, service="tools", audience="agents")
+        return ActingForTokens.for_dev(signer, service="tools", audience=audience)
     internal = settings.endpoint("platform_internal").base
     platform = httpx.AsyncClient(base_url=internal, timeout=10)
     return ActingForTokens.from_platform(
-        ServiceClient.for_settings(settings, platform, service="tools", audience="platform")
+        ServiceClient.for_settings(settings, platform, service="tools", audience="platform"), audience=audience
     )
 
 

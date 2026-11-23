@@ -314,7 +314,7 @@ OPERATIONS: dict[str, Operation] = {
     },
     "members_change_roles": {
         "body": "json",
-        "headers": [],
+        "headers": ["x-acting-for"],
         "method": "POST",
         "path": "/v1/settings/members/role",
         "pathParams": [],
@@ -323,7 +323,7 @@ OPERATIONS: dict[str, Operation] = {
     },
     "members_invite_members": {
         "body": "json",
-        "headers": [],
+        "headers": ["x-acting-for"],
         "method": "POST",
         "path": "/v1/settings/members/invite",
         "pathParams": [],
@@ -1265,9 +1265,9 @@ class Operations:
         "Remove Members"
         return self._t.call(SERVICE, OPERATIONS["members_remove_members"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
-    def members_invite_members(self, body: InviteIn) -> InviteBulkOut:
+    def members_invite_members(self, body: InviteIn, *, x_acting_for: str | None = None) -> InviteBulkOut:
         "Invite Members"
-        return self._t.call(SERVICE, OPERATIONS["members_invite_members"], {}, {}, {}, body)  # type: ignore[no-any-return]
+        return self._t.call(SERVICE, OPERATIONS["members_invite_members"], {}, {}, {"x-acting-for": x_acting_for}, body)  # type: ignore[no-any-return]
 
     def members_member_options(
         self,
@@ -1287,9 +1287,9 @@ class Operations:
             None,
         )  # type: ignore[no-any-return]
 
-    def members_change_roles(self, body: RoleIn) -> BulkOut:
+    def members_change_roles(self, body: RoleIn, *, x_acting_for: str | None = None) -> BulkOut:
         "Change Roles"
-        return self._t.call(SERVICE, OPERATIONS["members_change_roles"], {}, {}, {}, body)  # type: ignore[no-any-return]
+        return self._t.call(SERVICE, OPERATIONS["members_change_roles"], {}, {}, {"x-acting-for": x_acting_for}, body)  # type: ignore[no-any-return]
 
     def sign_in_providers_list_break_glass(self) -> list[BreakGlassOut]:
         "List Break Glass"
@@ -1907,9 +1907,11 @@ class AsyncOperations:
         "Remove Members"
         return await self._t.call(SERVICE, OPERATIONS["members_remove_members"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
-    async def members_invite_members(self, body: InviteIn) -> InviteBulkOut:
+    async def members_invite_members(self, body: InviteIn, *, x_acting_for: str | None = None) -> InviteBulkOut:
         "Invite Members"
-        return await self._t.call(SERVICE, OPERATIONS["members_invite_members"], {}, {}, {}, body)  # type: ignore[no-any-return]
+        return await self._t.call(
+            SERVICE, OPERATIONS["members_invite_members"], {}, {}, {"x-acting-for": x_acting_for}, body
+        )  # type: ignore[no-any-return]
 
     async def members_member_options(
         self,
@@ -1929,9 +1931,11 @@ class AsyncOperations:
             None,
         )  # type: ignore[no-any-return]
 
-    async def members_change_roles(self, body: RoleIn) -> BulkOut:
+    async def members_change_roles(self, body: RoleIn, *, x_acting_for: str | None = None) -> BulkOut:
         "Change Roles"
-        return await self._t.call(SERVICE, OPERATIONS["members_change_roles"], {}, {}, {}, body)  # type: ignore[no-any-return]
+        return await self._t.call(
+            SERVICE, OPERATIONS["members_change_roles"], {}, {}, {"x-acting-for": x_acting_for}, body
+        )  # type: ignore[no-any-return]
 
     async def sign_in_providers_list_break_glass(self) -> list[BreakGlassOut]:
         "List Break Glass"

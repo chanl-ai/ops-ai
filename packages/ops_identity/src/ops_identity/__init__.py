@@ -21,7 +21,7 @@ from .fastapi import (
 from .http import http_current_version, http_introspect, http_jwks
 from .jwks import JwksCache
 from .principal import Principal
-from .resolve import Identity, ServiceAuth, mint_service_token
+from .resolve import Identity, ServiceAuth, mint_service_token, principal_of
 from .service_keys import dev_service_signer, service_signer, service_verifiers
 
 __all__ = [
@@ -51,6 +51,7 @@ __all__ = [
     "http_jwks",
     "install_auth",
     "mint_service_token",
+    "principal_of",
     "segment",
     "service_signer",
     "service_verifiers",

@@ -19,8 +19,10 @@ from ops_access import ACTIONS, ANY_TEAM, AREAS, SECURITY_TEAM_ACTIONS
 from ops_access.catalogue import ADMIN, FIXED_ROLES, Grant
 from ops_identity import Principal as Caller
 from ops_identity import ServiceAuth, ServiceClient, service_verifiers
+from ops_identity.acting_for import person_of as acting_person_of
+from ops_identity.acting_for import refused as acting_for_refused
 from ops_identity.fastapi import Tx
-from ops_policy import STEP_UP_TTL_S, CredentialStore, Ed25519Signer
+from ops_policy import STEP_UP_TTL_S, CredentialStore, Ed25519Signer, TokenError, verify
 from ops_service_kit import narrow
 from ops_service_kit.background import BackgroundHealthOut
 from ops_service_kit.client_address import client_address
@@ -175,6 +177,8 @@ KEY_ID = r"^key_[A-Za-z0-9_-]{1,60}$"
 ISO_TIME = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$"
 INVITE_TOKEN = r"^inv_[A-Za-z0-9_-]{8,64}$"
 RECORD_ID = r"^[A-Za-z0-9_-]{1,64}$"
+# The audience of an acting-for token sent to the members routes (acting_for.AUDIENCES: tools-service only).
+PLATFORM_AUDIENCE = "platform"
 
 
 def _bearer(authorization: Annotated[str | None, Header()] = None) -> str:
@@ -557,6 +561,44 @@ def create_public_app(
             return Actor(str(claims["tenant_id"]), "*", str(claims["sub"]), new_id("req"))
         return await acting(claims, x_team_id)
 
+    readers = services or ServiceAuth(
+        audience="platform", verifiers=service_verifiers(settings, "platform"), scopes=settings.service_scopes
+    )
+
+    async def service_of(token: str) -> Any:
+        """A service token's caller, refused with `workspace_closed` when it names a closed workspace."""
+        svc = readers.resolve(token)
+        await lifecycle.open_or_refuse(svc.tenant_id)
+        return svc
+
+    async def acting_as_person(
+        request: Request,
+        token: Annotated[str, Depends(_bearer)],
+        x_team_id: Annotated[str | None, Header()] = None,
+        x_acting_for: Annotated[str | None, Header()] = None,
+    ) -> Actor:
+        """`acting`, or tools-service's call for a person (a platform tool such as invite_people): its service token
+        names the tenant and team, and the acting-for token this service signed for platform names the person, in
+        that same tenant and team. The person's rights are read from the database by the route, never from either
+        token, so the call can do only what the person may. 403 `acting_for_refused` for any other service, a missing
+        or forged token, or one for another team or service."""
+        if not readers.signs(token):
+            return await acting(await claims_of(request, token), x_team_id)
+        svc = await service_of(token)
+        # Which service may call is the proof's: only tools-service may have one minted for this audience
+        # (acting_for.AUDIENCES), and `act` must name the service token's own service.
+        if not svc.team_id:
+            raise acting_for_refused("the service token names no team")
+        if not x_acting_for:
+            raise acting_for_refused("the call names no person")
+        try:
+            claims = verify(x_acting_for, signer.verifier(PLATFORM_AUDIENCE))
+        except TokenError as e:
+            raise acting_for_refused("it does not verify") from e
+        person = acting_person_of(claims, service=svc.sub, tenant_id=svc.tenant_id, team_id=svc.team_id)
+        note_caller(svc.tenant_id, svc.team_id)
+        return Actor(svc.tenant_id, svc.team_id, person.sub, new_id("req"))
+
     policy_store = PolicyStore(store.db)
     me_store = MeStore(store.db)
 
@@ -646,7 +688,7 @@ def create_public_app(
         return ok(options_page([r.model_dump(by_alias=True) for r in rows], offset, limit))
 
     @app.post("/v1/settings/members/invite", tags=["members"], response_model=Envelope[InviteBulkOut], responses=ERRORS)
-    async def invite_members(_: Tx, body: InviteIn, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def invite_members(_: Tx, body: InviteIn, actor: Annotated[Actor, Depends(acting_as_person)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         return ok(await people.invite(actor, body.emails, body.role))
 
     async def users_of(actor: Actor, member_ids: list[str]) -> list[str]:
@@ -654,7 +696,7 @@ def create_public_app(
         return [m.user_id for m in rows if m.id in member_ids and m.user_id]
 
     @app.post("/v1/settings/members/role", tags=["members"], response_model=Envelope[BulkOut], responses=ERRORS)
-    async def change_roles(_: Tx, body: RoleIn, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def change_roles(_: Tx, body: RoleIn, actor: Annotated[Actor, Depends(acting_as_person)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """The owner is never demoted here: 409 `owner_must_transfer`."""
         if body.role != ADMIN.id:
             await lifecycle.refuse_owner(actor.tenant_id, await users_of(actor, body.ids))
@@ -1031,16 +1073,6 @@ def create_public_app(
         (every membership role but Chat user: 403 `admin_required`)."""
         await people.require_admin(actor, "access", "view")
         return ok(await policies.list(actor))
-
-    readers = services or ServiceAuth(
-        audience="platform", verifiers=service_verifiers(settings, "platform"), scopes=settings.service_scopes
-    )
-
-    async def service_of(token: str) -> Any:
-        """A service token's caller, refused with `workspace_closed` when it names a closed workspace."""
-        svc = readers.resolve(token)
-        await lifecycle.open_or_refuse(svc.tenant_id)
-        return svc
 
     @app.get("/v1/policies/{key}", tags=["policies"], response_model=Envelope[PolicyOut], responses=ERRORS)
     async def get_policy(  # pyright: ignore[reportUnusedFunction]
@@ -1738,7 +1770,7 @@ def create_internal_app(store: IdentityStore, *, services: ServiceAuth, signer: 
         return ok({"id": body.key, "written": written})
 
     if signer is not None:
-        acting = ActingFor(store, signer)
+        acting = ActingFor(store, signer, workspace=WorkspaceStore(store.db))
 
         @app.post(
             "/v1/acting-for-tokens",
@@ -1754,7 +1786,11 @@ def create_internal_app(store: IdentityStore, *, services: ServiceAuth, signer: 
             if not caller.tenant_id or not caller.team_id:
                 raise Forbidden("The service token names no tenant or team.", code="tenant_required")
             issued = await acting.mint(
-                service=caller.sub, tenant_id=caller.tenant_id, email=body.email, team_id=caller.team_id
+                service=caller.sub,
+                tenant_id=caller.tenant_id,
+                email=body.email,
+                team_id=caller.team_id,
+                audience=body.audience,
             )
             return ok({"token": issued.token, "expiresAt": issued.expires_at})
 

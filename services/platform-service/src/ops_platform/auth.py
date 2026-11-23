@@ -49,6 +49,17 @@ def _refused() -> Unauthorized:
     return Unauthorized("Sign in again.")
 
 
+class AccessClaims(TypedDict, total=False):
+    """What a token says the person may do (`access_claims`); absent `security_team` when the workspace names none."""
+
+    roles: dict[str, str]
+    perm_version: int
+    access: dict[str, list[str]]
+    grids: dict[str, dict[str, str]]
+    policies: Json
+    security_team: str
+
+
 class Claims(TypedDict, total=False):
     """A session token's claims as `Auth._claims` writes them; `mint` adds `iat` and `exp`. Read back from a token
     this service signed, the signature vouches for the shape, so it is not checked again."""
@@ -117,6 +128,39 @@ class StepUpIssued:
 
 # The methods an SSO session has; its step-up goes back to its identity provider, never to a password.
 SSO_METHODS = frozenset({"oidc", "saml"})
+
+
+async def access_claims(
+    store: IdentityStore, workspace: WorkspaceStore | None, user: User, now: datetime, *, team: str | None = None
+) -> AccessClaims:
+    """What a token says the person may do, as ops_access reads it: roles, role ids per team, the role grids, the
+    permission version, the access policies and the security team. With `team`, only the roles that apply there. One
+    owner for a session, an assistant's token and an acting-for token, so a service decides the same from each."""
+    roles = await store.roles(user.tenant_id, user.id)
+    version = await store.permission_version(user.tenant_id)
+    access = await store.access(user.tenant_id, user.id, now=_iso(now))
+    policies = await PolicyStore(store.db).token_values(user.tenant_id)
+    if team is not None:
+        roles = {t: r for t, r in roles.items() if t == team}
+        access = {t: r for t, r in access.items() if t in (team, ANY_TEAM)}
+    # The stored cells of every role the person holds, so an admin's edit of a role decides in every service, and of
+    # every built-in role, so a refusal names who holds a cell in this workspace.
+    held = {r for roles in access.values() for r in roles}
+    builtin = sorted({r.id for r in BUILTIN_ROLES} - held)
+    grids = await store.grids(user.tenant_id, builtin, stored_only=True)
+    grids |= await store.grids(user.tenant_id, sorted(held))
+    out: AccessClaims = {
+        "roles": roles,
+        "perm_version": version,
+        "access": access,
+        "grids": grids,
+        "policies": policies,
+    }
+    # Which team holds the Security-team actions in this workspace, for ops_access; absent when it names none.
+    security = await workspace.security_team(user.tenant_id) if workspace else None
+    if security:
+        out["security_team"] = security
+    return out
 
 
 @dataclass
@@ -281,23 +325,11 @@ class Auth:
         team: str | None = None,
         client_id: str | None = None,
     ) -> Claims:
-        roles = await self.store.roles(user.tenant_id, user.id)
-        version = await self.store.permission_version(user.tenant_id)
-        access = await self.store.access(user.tenant_id, user.id, now=_iso(now))
-        policies = await PolicyStore(self.store.db).token_values(user.tenant_id)
-        # The stored cells of every role the person holds, so an admin's edit of a role decides in every service, and of
-        # every built-in role, so a refusal names who holds a cell in this workspace.
-        held = {r for roles in access.values() for r in roles}
-        builtin = sorted({r.id for r in BUILTIN_ROLES} - held)
-        grids = await self.store.grids(user.tenant_id, builtin, stored_only=True)
-        grids |= await self.store.grids(user.tenant_id, sorted(held))
-        security = await self.workspace.security_team(user.tenant_id) if self.workspace else None
+        found = await access_claims(self.store, self.workspace, user, now, team=team)
         team_ids = await self.store.acting_teams(user.tenant_id, user.id, now=_iso(now))
         if team is not None:
             # An assistant's token names the one team its address names, and only the roles that apply there.
             team_ids = [team]
-            roles = {t: r for t, r in roles.items() if t == team}
-            access = {t: r for t, r in access.items() if t in (team, ANY_TEAM)}
         claims: Claims = {
             "sub": user.id,
             "sid": session_id,
@@ -305,11 +337,7 @@ class Auth:
             "name": user.name,
             "tenant_id": user.tenant_id,
             "team_ids": team_ids,
-            "roles": roles,
-            "perm_version": version,
-            "access": access,
-            "grids": grids,
-            "policies": policies,
+            **found,
             "kind": "person",
             "auth_method": method,
             # Unique per token: a refresh in the same second as the last one would otherwise repeat it exactly.
@@ -318,10 +346,6 @@ class Auth:
             "amr": [],
             "auth_time": int(now.timestamp()),
         }
-        # Which team holds the Security-team actions in this workspace, for ops_access; absent when it names none.
-        # The order of keys is not kept: `mint` signs them sorted.
-        if security:
-            claims["security_team"] = security
         if client_id:
             claims["client_id"] = client_id
         return claims
