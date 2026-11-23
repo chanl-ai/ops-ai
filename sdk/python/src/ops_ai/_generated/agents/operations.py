@@ -57,7 +57,7 @@ OPERATIONS: dict[str, Operation] = {
     },
     "agents_create_agent": {
         "body": "json",
-        "headers": [],
+        "headers": ["x-acting-for"],
         "method": "POST",
         "path": "/v1/agents",
         "pathParams": [],
@@ -2195,9 +2195,9 @@ class Operations:
             None,
         )  # type: ignore[no-any-return]
 
-    def agents_create_agent(self, body: AgentInput) -> Agent:
+    def agents_create_agent(self, body: AgentInput, *, x_acting_for: str | None = None) -> Agent:
         "Create Agent"
-        return self._t.call(SERVICE, OPERATIONS["agents_create_agent"], {}, {}, {}, body)  # type: ignore[no-any-return]
+        return self._t.call(SERVICE, OPERATIONS["agents_create_agent"], {}, {}, {"x-acting-for": x_acting_for}, body)  # type: ignore[no-any-return]
 
     def agents_get_agent(self, agent_id: str) -> Agent:
         "Get Agent"
@@ -3896,9 +3896,11 @@ class AsyncOperations:
             None,
         )  # type: ignore[no-any-return]
 
-    async def agents_create_agent(self, body: AgentInput) -> Agent:
+    async def agents_create_agent(self, body: AgentInput, *, x_acting_for: str | None = None) -> Agent:
         "Create Agent"
-        return await self._t.call(SERVICE, OPERATIONS["agents_create_agent"], {}, {}, {}, body)  # type: ignore[no-any-return]
+        return await self._t.call(
+            SERVICE, OPERATIONS["agents_create_agent"], {}, {}, {"x-acting-for": x_acting_for}, body
+        )  # type: ignore[no-any-return]
 
     async def agents_get_agent(self, agent_id: str) -> Agent:
         "Get Agent"

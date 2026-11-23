@@ -14908,7 +14908,9 @@ export interface operations {
     agents_create_agent: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-acting-for"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };

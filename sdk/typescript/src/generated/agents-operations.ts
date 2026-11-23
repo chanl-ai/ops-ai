@@ -74,7 +74,9 @@ export const agentsOperations = {
   },
   "agents_create_agent": {
     "body": "json",
-    "headers": [],
+    "headers": [
+      "x-acting-for"
+    ],
     "method": "POST",
     "path": "/v1/agents",
     "pathParams": [],
