@@ -336,6 +336,9 @@ class Authenticator:
         prepared.credential = "person" if person != SHARED else ("team" if kind.holds_token else None)
         prepared.person = person if person != SHARED else None
         SIGNED_WITH.set(prepared.credential)
+        if prepared.credential is not None:
+            # Apps > People's "last used": the row this call signs with, at most one write a minute (the store's WHERE).
+            await self.connections.used(tenant_id, str(connection_id), person, at=datetime.now(UTC))
         prepared.certificate = certificate_of(settings, values)
         return prepared
 
