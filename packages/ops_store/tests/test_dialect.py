@@ -68,7 +68,8 @@ def test_a_row_lock_renders_on_both_databases() -> None:
 
 def test_a_claim_skips_held_rows_and_takes_the_oldest_on_both_databases() -> None:
     q = claim(sa.select(work).order_by(work.c.due).limit(1), work)
-    assert sql(q, PG).endswith("LIMIT %(param_1)s::INTEGER FOR UPDATE SKIP LOCKED")
+    # `OF <table>`: a claim that joins another table locks only the rows it takes (dialect.claim).
+    assert sql(q, PG).endswith("LIMIT %(param_1)s::INTEGER FOR UPDATE OF store_test_dialect_work SKIP LOCKED")
     ms = sql(q, MS)
     assert (
         ms.startswith("SELECT TOP")

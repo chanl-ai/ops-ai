@@ -52,7 +52,7 @@ def upgrade() -> None:
         sa.column("run_id"),
         sa.column("status"),
         sa.column("team_id"),
-        sa.column("priority"),
+        sa.column("priority", sa.Integer()),
     )
     runs = sa.table("engine_runs", sa.column("tenant_id"), sa.column("id"), sa.column("team_id"))
     team = (

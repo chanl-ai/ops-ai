@@ -174,7 +174,9 @@ if [ "${#py[@]}" -gt 0 ]; then
   mapfile -t typed < <(cd "$root" && "$root/.venv/bin/python" -c 'import sys, tomllib; c = tomllib.load(open("pyproject.toml", "rb"))["tool"]["pyright"]; inc = c["include"] + [e["root"] for e in c.get("executionEnvironments", [])]; [print(f) for f in sys.argv[1:] if any(f == i or f.startswith(i.rstrip("/") + "/") for i in inc)]' "${py[@]}")
   if [ "${#typed[@]}" -eq 0 ]; then :
   elif [ -x "$root/.venv/bin/pyright" ]; then
-    (cd "$root" && "$root/.venv/bin/pyright" "${typed[@]}") || { echo "verify-staged: pyright refused the staged files above"; exit 1; }
+    # In the export, so the staged content is what is checked (a file staged in a private index is not in the checkout);
+    # imports resolve through the checkout's interpreter.
+    (cd "$tmp" && "$root/.venv/bin/pyright" --venvpath "$root" "${typed[@]}") || { echo "verify-staged: pyright refused the staged files above"; exit 1; }
   else
     echo "verify-staged: WARNING pyright is not installed in $root/.venv, so the staged Python was not type-checked; run uv sync"
   fi

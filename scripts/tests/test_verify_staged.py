@@ -19,7 +19,9 @@ CONSOLE_RAN = "\N{INFORMATION SOURCE} tests"  # node --test's summary line, prin
 
 def gate(tmp_path: Path, changes: dict[str, str], search_path: str | None = None) -> subprocess.CompletedProcess[str]:
     """verify-staged.sh on HEAD plus `changes` (path to full content), each written as a blob into a private index."""
-    env = {**os.environ, "GIT_INDEX_FILE": str(tmp_path / "index")} | ({"PATH": search_path} if search_path else {})
+    env = {**os.environ, "GIT_INDEX_FILE": str(tmp_path / "index"), "OPS_FULL_HOOK": "1"} | (
+        {"PATH": search_path} if search_path else {}
+    )
     subprocess.run(["git", "read-tree", "HEAD"], cwd=ROOT, env=env, check=True)
     for path, content in changes.items():
         blob = subprocess.run(
@@ -73,7 +75,8 @@ def test_a_clean_typed_file_passes_with_its_imports_read_once(tmp_path: Path) ->
 def test_a_gate_still_runs_when_many_files_follow_its_match(tmp_path: Path) -> None:
     # A path a gate matches, then thousands more: `printf | grep -q` under pipefail stopped writing at the first match,
     # read the broken pipe as no match and skipped the gate. A changed dependencies page must still fail its check.
-    env = {**os.environ, "GIT_INDEX_FILE": str(tmp_path / "index")}
+    # The check list (sbom, k8s) runs under OPS_FULL_HOOK=1; a plain commit leaves it to CI's checks job.
+    env = {**os.environ, "GIT_INDEX_FILE": str(tmp_path / "index"), "OPS_FULL_HOOK": "1"}
     subprocess.run(["git", "read-tree", "HEAD"], cwd=ROOT, env=env, check=True)
     page = "docs/architecture/dependencies.md"
     blob = subprocess.run(

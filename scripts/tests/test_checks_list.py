@@ -80,9 +80,9 @@ def test_the_checks_job_runs_the_list_on_a_one_file_service_change(tmp_path: Pat
 
 
 def test_every_other_place_that_checks_runs_the_same_list(tmp_path: Path) -> None:
-    # A full plan: the repo job runs python-verify, whose body calls the list.
+    # A full plan: the repo job's `checks` part runs python-checks, a piece of python-verify whose body calls the list.
     assert plan(tmp_path, "make/env.mk")["full"] == "true"
-    assert "run: make python-verify" in (ROOT / ".github/workflows/ci.yml").read_text()
+    assert "checks) make -k python-lint python-checks" in (ROOT / ".github/workflows/ci.yml").read_text()
     assert "$(KEEP) $(MAKE) -s checks" in (ROOT / "make/python.mk").read_text()
     # What changed since a base, and the commit being made.
     assert "\nmake -s checks\n" in (ROOT / "scripts/verify-changed.sh").read_text()
@@ -141,7 +141,8 @@ def test_the_both_database_run_and_the_release_proof_are_required_with_their_tri
     assert "pull_request" in TRIGGERS
     # On every change to a service, a package or the database scripts (ci-plan.sh's mssql), and on every full plan;
     # the run names SQL Server and fails on a skip.
-    assert jobs["store-mssql"]["if"] == "needs.plan.outputs.mssql == 'true'"
+    # (a pull request leaves the run to the merge queue: heavy is false there)
+    assert jobs["store-mssql"]["if"] == "needs.plan.outputs.mssql == 'true' && needs.plan.outputs.heavy == 'true'"
     steps = "\n".join(str(step.get("run", "")) for step in jobs["store-mssql"]["steps"])
     assert "OPS_MSSQL_SERVER" in steps and "mssql/server:2025-latest@sha256:" in steps and "SKIPPED" in steps
     for package in ("ops_store", "ops_service_kit", "ops_identity", "models-service", "documents-service"):

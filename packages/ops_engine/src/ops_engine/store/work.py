@@ -23,6 +23,7 @@ from ops_service_kit.http import Json
 from ops_store import Guarantee
 from ops_store.dialect import claim as claim_rows
 from ops_store.dialect import lock_key
+from ops_store.team_scope import any_team
 
 from .clock import db_now, now_iso
 from .tables import ENGINE_BUILD, engine_runs, engine_work
@@ -299,7 +300,11 @@ class WorkQueue:
                         team_id=team_id
                         if team_id is not None
                         else sa.select(engine_runs.c.team_id)
-                        .where(engine_runs.c.tenant_id == self.tx.tenant(), engine_runs.c.id == run_id)
+                        .where(
+                            engine_runs.c.tenant_id == self.tx.tenant(),
+                            engine_runs.c.id == run_id,
+                            any_team(engine_runs, "a queued row takes its run's team, whoever enqueues it"),
+                        )
                         .scalar_subquery(),
                     )
                 )
