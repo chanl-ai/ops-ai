@@ -648,11 +648,15 @@ class SsoStartIn(In):
     email: str | None = Field(default=None, min_length=3, max_length=320, pattern=EMAIL)
     provider: str | None = Field(default=None, min_length=1, max_length=40, pattern=r"^[A-Za-z0-9_-]+$")
     next: str | None = Field(default=None, pattern=NEXT_PATH)
+    # The invite link's token, when the person signs in from their invite: the sign-in may then link them.
+    invite: str | None = Field(default=None, pattern=r"^inv_[A-Za-z0-9_-]{8,64}$")
 
     @model_validator(mode="after")
     def _one_of(self) -> SsoStartIn:
         if (self.email is None) == (self.provider is None):
             raise ValueError("give either email or provider")
+        if self.invite is not None and self.email is None:
+            raise ValueError("an invite signs in with its email")
         return self
 
 
@@ -663,6 +667,13 @@ class StepUpSsoStartIn(In):
 class SsoStarted(Out):
     redirect_url: str
     flow_key: str
+
+
+class SsoLinked(Out):
+    """The provider the session's person can now sign in with."""
+
+    provider_id: str
+    kind: str
 
 
 class SsoCompleteIn(In):

@@ -151,6 +151,7 @@ from .schemas import (
     SignInTestOut,
     SignInTestStartOut,
     SsoCompleteIn,
+    SsoLinked,
     SsoStarted,
     SsoStartIn,
     StepUpIn,
@@ -410,7 +411,7 @@ def create_public_app(
         if body.provider is not None:
             started = await sso.start_tile(body.provider, next_path=body.next)
         else:
-            started = await sso.start(body.email or "", next_path=body.next)
+            started = await sso.start(body.email or "", next_path=body.next, invite=body.invite)
         return ok({"redirectUrl": started.redirect_url, "flowKey": started.flow_key})
 
     @app.get("/v1/auth/oidc/callback", tags=["auth"], status_code=303, responses=ERRORS)
@@ -493,6 +494,23 @@ def create_public_app(
     ) -> Any:
         issued = await sso.step_up_complete(token, code=body.code, flow_key=body.flow_key, request_id=new_id("req"))
         return ok({"token": issued.token, "expiresAt": issued.expires_at})
+
+    @app.post("/v1/auth/sso/link/start", tags=["auth"], response_model=Envelope[SsoStarted], responses=ERRORS)
+    async def sso_link_start(  # pyright: ignore[reportUnusedFunction]
+        body: StepUpSsoStartIn, token: Annotated[str, Depends(_bearer)]
+    ) -> Any:
+        """A signed-in person's round trip to their workspace's provider, to sign in with their account there."""
+        started = await sso.link_start(token, next_path=body.next)
+        return ok({"redirectUrl": started.redirect_url, "flowKey": started.flow_key})
+
+    @app.post("/v1/auth/sso/link/complete", tags=["auth"], response_model=Envelope[SsoLinked], responses=ERRORS)
+    async def sso_link_complete(  # pyright: ignore[reportUnusedFunction]
+        body: SsoCompleteIn, token: Annotated[str, Depends(_bearer)]
+    ) -> Any:
+        """Links the provider account the round trip answered with, for the session that started it; 409
+        `already_linked` when that account is someone's or the person has one there already."""
+        p = await sso.link_complete(token, code=body.code, flow_key=body.flow_key, request_id=new_id("req"))
+        return ok({"providerId": p.id, "kind": p.kind})
 
     @app.post("/v1/auth/password/forgot", tags=["auth"], status_code=204, responses=ERRORS)
     async def forgot_password(body: ForgotIn) -> Response:  # pyright: ignore[reportUnusedFunction]

@@ -625,6 +625,11 @@ class SsoCompleteIn(TypedDict, closed=True):
     flowKey: str
 
 
+class SsoLinked(TypedDict, closed=True):
+    kind: str
+    providerId: str
+
+
 class SsoOption(TypedDict, closed=True):
     kind: Literal["oidc", "saml"]
     label: str
@@ -632,6 +637,7 @@ class SsoOption(TypedDict, closed=True):
 
 class SsoStartIn(TypedDict, closed=True):
     email: NotRequired[str | None]
+    invite: NotRequired[str | None]
     next: NotRequired[str | None]
     provider: NotRequired[str | None]
 
@@ -923,6 +929,11 @@ class EnvelopeSignInTestOut(TypedDict, closed=True):
 
 class EnvelopeSignInTestStartOut(TypedDict, closed=True):
     data: SignInTestStartOut
+    success: Literal[True]
+
+
+class EnvelopeSsoLinked(TypedDict, closed=True):
+    data: SsoLinked
     success: Literal[True]
 
 

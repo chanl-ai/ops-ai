@@ -213,6 +213,24 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "auth_sso_link_complete": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/auth/sso/link/complete",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "auth_sso_link_start": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/auth/sso/link/start",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
     "auth_sso_start": {
         "body": "json",
         "headers": [],
@@ -1008,6 +1026,14 @@ class Operations:
         "Sso Complete"
         return self._t.call(SERVICE, OPERATIONS["auth_sso_complete"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
+    def auth_sso_link_complete(self, body: SsoCompleteIn) -> SsoLinked:
+        "Sso Link Complete"
+        return self._t.call(SERVICE, OPERATIONS["auth_sso_link_complete"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def auth_sso_link_start(self, body: StepUpSsoStartIn) -> SsoStarted:
+        "Sso Link Start"
+        return self._t.call(SERVICE, OPERATIONS["auth_sso_link_start"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
     def auth_sso_start(self, body: SsoStartIn) -> SsoStarted:
         "Sso Start"
         return self._t.call(SERVICE, OPERATIONS["auth_sso_start"], {}, {}, {}, body)  # type: ignore[no-any-return]
@@ -1647,6 +1673,14 @@ class AsyncOperations:
     async def auth_sso_complete(self, body: SsoCompleteIn) -> SessionOut:
         "Sso Complete"
         return await self._t.call(SERVICE, OPERATIONS["auth_sso_complete"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def auth_sso_link_complete(self, body: SsoCompleteIn) -> SsoLinked:
+        "Sso Link Complete"
+        return await self._t.call(SERVICE, OPERATIONS["auth_sso_link_complete"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def auth_sso_link_start(self, body: StepUpSsoStartIn) -> SsoStarted:
+        "Sso Link Start"
+        return await self._t.call(SERVICE, OPERATIONS["auth_sso_link_start"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def auth_sso_start(self, body: SsoStartIn) -> SsoStarted:
         "Sso Start"

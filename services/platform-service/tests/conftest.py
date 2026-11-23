@@ -485,17 +485,26 @@ class SignInRig:
         assert r.status_code == 200, r.text
         return provider
 
-    async def answer(self, redirect_url: str, *, user: str, stale: bool = False, idp_path: str | None = None) -> str:
+    async def answer(
+        self,
+        redirect_url: str,
+        *,
+        user: str,
+        stale: bool = False,
+        idp_path: str | None = None,
+        at_idp: dict[str, str] | None = None,
+    ) -> str:
         """Signs `user` in at the identity provider and hands its answer to platform-service; returns the console URL
-        platform-service sent the browser to. `idp_path` sends the request to another provider than the one asked."""
+        platform-service sent the browser to. `idp_path` sends the request to another provider than the one asked;
+        `at_idp` adds the fake provider's own knobs (`subject`, `verified`)."""
         url = httpx.URL(redirect_url)
-        params = dict(url.params) | {"user": user} | ({"stale": "1"} if stale else {})
-        at_idp = await self.idp.get(idp_path or url.path, params=params)
-        if at_idp.status_code == 302:
-            back = httpx.URL(at_idp.headers["location"])
+        params = dict(url.params) | {"user": user} | ({"stale": "1"} if stale else {}) | (at_idp or {})
+        page = await self.idp.get(idp_path or url.path, params=params)
+        if page.status_code == 302:
+            back = httpx.URL(page.headers["location"])
             r = await self.public.get(back.path, params=dict(back.params))
         else:
-            r = await self.post_form(at_idp.text)
+            r = await self.post_form(page.text)
         assert r.status_code == 303, r.text
         return r.headers["location"]
 
@@ -511,11 +520,20 @@ class SignInRig:
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
 
-    async def sign_in_sso(self, email: str, *, user: str | None = None, stale: bool = False) -> Round:
-        r = await self.public.post("/v1/auth/sso/start", json={"email": email})
+    async def sign_in_sso(
+        self,
+        email: str,
+        *,
+        user: str | None = None,
+        stale: bool = False,
+        invite: str | None = None,
+        at_idp: dict[str, str] | None = None,
+    ) -> Round:
+        body = {"email": email} | ({"invite": invite} if invite else {})
+        r = await self.public.post("/v1/auth/sso/start", json=body)
         assert r.status_code == 200, r.text
         start = r.json()["data"]
-        location = await self.answer(start["redirectUrl"], user=user or email, stale=stale)
+        location = await self.answer(start["redirectUrl"], user=user or email, stale=stale, at_idp=at_idp)
         query = dict(httpx.URL(location).params)
         completed = None
         if "code" in query:

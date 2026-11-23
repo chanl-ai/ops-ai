@@ -225,6 +225,24 @@ export const platformOperations = {
     "query": [],
     "stream": false
   },
+  "auth_sso_link_complete": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/auth/sso/link/complete",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "auth_sso_link_start": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/auth/sso/link/start",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
   "auth_sso_start": {
     "body": "json",
     "headers": [],
