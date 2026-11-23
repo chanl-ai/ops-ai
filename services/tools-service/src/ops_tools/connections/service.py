@@ -31,6 +31,7 @@ from ops_policy import CredentialStore
 from ops_service_kit.errors import Conflict, NotFound, ServiceUnavailable, Unprocessable, ValidationFailed
 from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.ids import new_id
+from ops_service_kit.listing import ListParams
 from ops_service_kit.logging import get_logger
 from ops_service_kit.narrow import Malformed, an_object, json_list, json_object
 from ops_store import background
@@ -48,6 +49,7 @@ from ..modules.directory import Directory
 from ..modules.service import Caller
 from ..secrets import SecretResolver
 from ..store.connections import (
+    ENDED_BY_ADMIN,
     PERSON_ORIGIN,
     SHARED,
     Account,
@@ -69,7 +71,7 @@ from ..store.connections import (
 from ..store.modules import ModuleRef
 from ..store.secrets import SecretMeta
 from .account_events import connected_event
-from .records import PackageCheckRow, PluginAccountView, status_of
+from .records import PackageCheckRow, PluginAccountView, person_state, status_of
 
 # Where the identity provider sends the browser back: a console page, which hands the code and state to
 # `complete_sign_in` under the person's own token.
@@ -1705,6 +1707,8 @@ class ConnectionService:
         mine = own_key(who)
         values = {f: given[f] for f in kind.person_fields}
         await self.tokens.store_own(who.tenant_id, str(conn.id), mine, values)
+        # Named as a sign-in names its row, so Apps > People and the account's people list show who it is.
+        await self.store.name_person(who.tenant_id, str(conn.id), mine, who.name)
         detail = {"own": True, "method": kind.id}
         event = self._event(who, "signed_in", detail)
         await self.store.note(who.tenant_id, str(conn.id), event, report=connected_event(conn, mine))
@@ -1939,6 +1943,94 @@ class ConnectionService:
         if not await self.store.pin(who.tenant_id, own_key(who), connection_id, ids):
             raise ValidationFailed(f"Sign in to {conn.name} first.", code="not_signed_in")
         return await self.detail(who, connection_id)
+
+    async def people(self, who: Caller, q: ListParams) -> dict[str, Any]:
+        """Apps > People: one page of the people holding their own sign-ins on the team's accounts, each with the apps
+        they signed in to, their sign-ins counted by state, the last call any signed and every sign-in, grouped and
+        paged in SQL. Filters `app` (an app id) and `state` (connected, expired, refused) repeat; the facets count
+        people per app (labelled with the app's name) and per state. Only whoever manages the team's apps
+        (connections.manage), as an account's own people list shows everyone's to them alone."""
+        self._can(who, "manage", what="people's sign-ins to the team's apps")
+        now = self.clock()
+        apps, states = q.filters.get("app", []), q.filters.get("state", [])
+        page, facets, names = await self.store.people_page(
+            who.tenant_id, who.team.id, q, apps=apps, states=states, now=now
+        )
+        rows = page["data"]
+        ids = [str(r["person_id"]) for r in rows]
+        held: dict[str, list[dict[str, Any]]] = {}
+        for t in await self.store.people_sign_ins(who.tenant_id, who.team.id, ids):
+            if apps and t.app_id not in apps:
+                continue
+            name, logo = self._display(t.app_id, t.connection_name)
+            state = person_state(t.refused_at, t.expires_at, t.renews, now)
+            held.setdefault(t.person_id, []).append(
+                {
+                    "appId": t.app_id,
+                    "appName": name,
+                    "logo": logo,
+                    "accountId": t.connection_id,
+                    "accountName": t.account_name or t.connection_name,
+                    "account": t.account,
+                    "state": state,
+                    "refusedReason": t.refused_reason,
+                    "refusedAt": _iso(t.refused_at),
+                    "endedBy": t.ended_by,
+                    "since": _iso(t.refreshed_at),
+                    "expiresAt": _iso(t.expires_at),
+                    "lastUsedAt": _iso(t.last_used_at),
+                }
+            )
+        data: list[dict[str, Any]] = []
+        for r in rows:
+            person = str(r["person_id"])
+            mine = held.get(person, [])
+            seen: dict[str, dict[str, Any]] = {}
+            for s in mine:
+                seen.setdefault(str(s["appId"]), {"appId": s["appId"], "name": s["appName"], "logo": s["logo"]})
+            data.append(
+                {
+                    "personId": person,
+                    "name": r["person_name"] or person,
+                    "apps": list(seen.values()),
+                    "connected": r["connected"],
+                    "expired": r["expired"],
+                    "refused": r["refused"],
+                    "lastUsedAt": _iso(r["last_used_at"]),
+                    "signIns": mine,
+                }
+            )
+        labels = {"app": {a: self._display(a, names.get(a, a))[0] for a in facets["app"]}}
+        return {**page, "data": data, "facets": facets, "labels": labels}
+
+    def _display(self, app_id: str, fallback: str) -> tuple[str, str | None]:
+        """An app's name and logo as the Apps page shows them: a plugin's title and logo, else the account's name."""
+        shown = self.app_display(app_id) if self.app_display is not None else None
+        return shown if shown is not None else (fallback, None)
+
+    async def end_sign_in(self, who: Caller, connection_id: str, person: str) -> Json:
+        """End sign-in: an admin ends another person's own sign-in on the account. Their row is kept, refused with
+        ENDED_BY_ADMIN and the admin's name, so their next call asks them to connect and My apps says an admin ended
+        it; one audit row names who ended whose. A second End changes nothing and writes nothing. Only whoever manages
+        the team's apps (connections.manage)."""
+        self._can(who, "manage", what="another person's sign-in")
+        conn = await self._get(who, connection_id)
+        event = self._event(who, "sign_in_ended", {"person": person})
+        ended = await self.store.end_sign_in(
+            who.tenant_id, str(conn.id), person, by=who.name, at=self.clock(), event=event
+        )
+        if ended is None:
+            raise _not_found("That person's sign-in", "sign_in_not_found")
+        row = await self.store.token(who.tenant_id, str(conn.id), person)
+        return {
+            "personId": person,
+            "appId": str(conn.app_id),
+            "accountId": str(conn.id),
+            "state": "refused",
+            "refusedReason": ENDED_BY_ADMIN,
+            "endedBy": row.ended_by if row is not None else who.name,
+            "changed": ended,
+        }
 
     async def sign_out(self, who: Caller, connection_id: str) -> AccountView:
         await self._signs_in(who, connection_id)

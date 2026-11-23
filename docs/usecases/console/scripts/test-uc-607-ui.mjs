@@ -111,6 +111,8 @@ const everyCard = async (base, headers, query = '') => {
 };
 
 // A card's own testid; the state badge inside it ends in -state and also carries data-state.
+/** The Apps list opens as a table; these steps read its cards, so each switches it to the grid. */
+const cardsView = (p) => p.getByTestId('view-toggle-grid').click({ timeout: 120_000 });
 const CARDS = '[data-testid^="system-"][data-state]:not([data-testid$="-state"])';
 /** One story; on a failure the page it was on is kept as `failed-<n>.png` beside the evidence. */
 async function step(name, body, page) {
@@ -206,6 +208,7 @@ try {
         await step('2 the catalog shows Person desk once with its tools and Connect, read in one call, and search finds it', async () => {
           page.lists = [];
           await page.goto(`${consoleUrl}/data/connectors`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await cardsView(page);
           const cardEl = page.getByTestId(`system-${APP}`);
           await cardEl.waitFor({ timeout: 90_000 });
           const text = (await cardEl.innerText()).replace(/\s+/g, ' ');
@@ -314,6 +317,7 @@ try {
           const rowReconnect = await page.getByTestId('account-reconnect-Person desk').isVisible().catch(() => false);
           await shoot(page, 'app-test-failed');
           await page.goto(`${consoleUrl}/data/connectors`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await cardsView(page);
           const card = await page.getByTestId(`system-${APP}-test-failed`).waitFor({ timeout: 5_000 }).then(async () => ((await page.getByTestId(`system-${APP}-test-failed`).innerText()) ?? '').trim(), () => '');
           const cardState = await page.getByTestId(`system-${APP}`).getAttribute('data-state');
           await shoot(page, 'catalog-test-failed');
@@ -345,6 +349,7 @@ try {
             open.onerror = () => done(null);
           }));
           await page.goto(`${consoleUrl}/data/connectors`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await cardsView(page);
           await page.getByTestId('systems-grid').waitFor({ timeout: 60_000 });
           // The Connected view holds the app that is signed in, with no button and its accounts named.
           // Person desk signs in as each person, so Team setup shows the viewer's own state: Priya has not signed in as
@@ -374,6 +379,7 @@ try {
           const narrowedHasOurs = await page.getByTestId('system-plugin:test.person-key').count();
           await shoot(page, 'catalog-category');
           await page.goto(`${consoleUrl}/data/connectors`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await cardsView(page);
           await ours.waitFor({ timeout: 60_000 });
           const href = await page.getByTestId(`card-link-${APP}`).getAttribute('href');
           // A click anywhere on the card, away from its name, opens the app's page.
@@ -484,6 +490,7 @@ try {
 
         await step('7b the Apps menu: Apps, Secrets and Tools in the sidebar with My accounts in its top rows, no tab row; the old My connections, Secrets and call log addresses land in it', async () => {
           await james.goto(`${consoleUrl}/data/connectors`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await cardsView(james);
           await james.getByTestId('systems-grid').waitFor({ timeout: 60_000 });
           // The four places are sidebar items under Data Hub, side by side; no page repeats them as a tab row.
           const sidebar = (await james.locator('[data-sidebar="menu-button"]').allInnerTexts()).map((t) => t.trim());
@@ -558,6 +565,7 @@ try {
           const out = {};
           // Connected on the grid reads the app's state, as the app page does.
           await james.goto(`${consoleUrl}/data/connectors`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await cardsView(james);
           await james.getByTestId('systems-grid').waitFor({ timeout: 60_000 });
           // A person's card is their own state, so the grid is compared with James's answer, not Priya's.
           const jamesToken = as(await tokenFor('j.richardson@harborpine.example'), 'team_ops');
@@ -881,6 +889,7 @@ try {
           const res = await put;
           // Off for the team: the catalog offers Turn on for it.
           await page.goto(`${consoleUrl}/data/connectors`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await cardsView(page);
           const offered = await page.getByTestId(`connect-${APP}`).waitFor({ timeout: 60_000 }).then(async () => /Turn on/.test(await page.getByTestId(`connect-${APP}`).innerText()), () => false);
           const offState = await page.getByTestId(`system-${APP}`).getAttribute('data-state');
           // Turn on puts back what was turned off, its account and app credential with it: no window, no sign-in.
@@ -988,6 +997,7 @@ await withUiStack(
       const page = await adminPage(browser, consoleUrl, 'p.shah@harborpine.example');
       await step('14 Add custom app: a refused key tests Failed with the 401, the right one Working with 200, and Save keeps it sealed', async () => {
         await page.goto(`${consoleUrl}/data/connectors`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await cardsView(page);
         await page.getByTestId('connect-system').click();
         const window_ = page.getByTestId('connect-dialog');
         await window_.waitFor({ timeout: 30_000 });
@@ -1075,6 +1085,7 @@ try {
           // made first: until the team has one, the app's card asks for an auth config instead of offering Connect.
           const entraCredential = (await call(tools, 'POST', '/v1/app-credentials', priya, { app: 'plugin:test.entra', clientId: entraFake.entra.clientId })).data?.id;
           await page.goto(`${consoleUrl}/data/connectors`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await cardsView(page);
           await page.getByTestId('connect-plugin:test.entra').click();
           const window_ = page.getByTestId('connect-dialog');
           await window_.waitFor({ timeout: 30_000 });
@@ -1238,6 +1249,7 @@ try {
           const liveCredential = await credentialFor('ops-ai-acme', 'acme-connected-app-secret', loginUrl);
           const sandboxCredential = await credentialFor('acme-sandbox-app', 'acme-sandbox-secret', sf.sandbox_login_url);
           await page.goto(`${consoleUrl}/data/connectors`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await cardsView(page);
           await page.getByTestId('connect-plugin:opsai.salesforce').click();
           const live = await ownWindow({ credential: liveCredential, login_url: loginUrl }, 'priya.live');
           // A test account is the same Connect window from the Accounts tab's Add account, with Test account ticked; its name is suggested.
@@ -1308,6 +1320,7 @@ try {
           await shoot(page, 'app-account-expired');
           // The catalog card says the same: an expired sign-in offers Reconnect, not Connect.
           await page.goto(`${consoleUrl}/data/connectors`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await cardsView(page);
           await page.getByPlaceholder('Search apps').fill('Salesforce');
           const cardReconnect = await page.getByTestId(`reconnect-${SF}`).waitFor({ timeout: 30_000 }).then(() => true, () => false);
           await openAccounts(page, consoleUrl, SF);

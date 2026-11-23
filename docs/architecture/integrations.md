@@ -282,6 +282,8 @@ Designed routes. Every new route is generated into the Python and TypeScript SDK
 | `GET /v1/plugins`, `GET /v1/plugins/{id}` (version, capabilities, locked settings, dependencies) | `connections.view` | tools |
 | `POST /v1/apps/{app}/team/plan` | `connections.manage` | tools |
 | `PUT /v1/apps/{app}/team` with `{enabled, capabilities, settings}` | `connections.manage` | tools (route built, body grows) |
+| `GET /v1/apps` leaves out content packs (a plugin with no endpoint and nothing it runs on: core, starters), which have no tools and no sign-in, and gives each card its people's sign-ins counted by state (`signIns`) | `connections.view` | tools (built, `apps.py` `cards`, `page`) |
+| `GET /v1/apps/people`; `POST /v1/apps/{app}/accounts/{id}/people/{person}/sign-out` (Apps › People and End sign-in, [several accounts per app](app-accounts.md#api)) | `connections.manage` | tools (built) |
 | `GET /v1/apps?kind=provider`; `GET /v1/apps/{provider}` lists its plugins | `connections.view` | tools (routes built, `apps.py:2078`, `:2162`) |
 | `GET /v1/apps/{provider}/accounts/{id}/access` (granted vs needed scopes per plugin) | `connections.view` | tools |
 | `GET`, `POST /v1/triggers`; `GET`, `PATCH`, `DELETE /v1/triggers/{id}`; `POST …/pause`, `/resume`, `/test`; `GET …/deliveries`; `POST …/deliveries/{key}/run-again` | `webhooks` view, create, edit, run, delete, plus run access on the target | agents |

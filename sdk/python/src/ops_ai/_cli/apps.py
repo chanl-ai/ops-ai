@@ -1,7 +1,7 @@
 """`opsai apps`: the Apps area. The catalog, one app's page, turning an app on as the Turn on window does, adding its
 tools to the team, its accounts and your own sign-ins,
-the sign-in link to connect an account (printed, for a browser to open), an account's test, and the auth configs
-(the team's own app credentials)."""
+the sign-in link to connect an account (printed, for a browser to open), an account's test, the auth configs
+(the team's own app credentials), and each person's sign-ins with End sign-in."""
 
 from __future__ import annotations
 
@@ -50,6 +50,16 @@ def main(argv: list[str]) -> int:
         p.add_argument("--team-account", action="store_true", help="the team account, not your own")
     configs = sub.add_parser("auth-configs", parents=common, help="the team's app credentials")
     configs.add_argument("--app")
+    people = sub.add_parser("people", parents=common, help="each person's sign-ins to the team's apps, by state")
+    people.add_argument("--app", action="append", help="only sign-ins to this app (repeatable)")
+    people.add_argument(
+        "--state", action="append", choices=["connected", "expired", "refused"], help="people with one in this state"
+    )
+    people.add_argument("--search", help="only people whose name has this text")
+    end = sub.add_parser("end-sign-in", parents=common, help="end a person's sign-in to an app; they connect again")
+    end.add_argument("app")
+    end.add_argument("person", help="the person's id, as `opsai apps people` lists it")
+    end.add_argument("--account", help="one of the app's accounts; every one the person signed in to when left out")
     ns = ap.parse_args(argv)
     try:
         return _dispatch(ns, client(ns))
@@ -101,6 +111,16 @@ def _dispatch(ns: argparse.Namespace, ops: OpsAI) -> int:
     if ns.verb == "test":
         done = ops.accounts.test(ns.app, account=ns.account, team=ns.team_account)
         return emit(ns, done, text=f"{done.get('status')} {done.get('message') or ''}".strip())
+    if ns.verb == "people":
+        rows = [
+            {**p, "apps": ", ".join(str(a["name"]) for a in p["apps"])}
+            for p in ops.apps.people(app=ns.app, state=ns.state, search=ns.search)
+        ]
+        return table(ns, rows, "personId", "name", "apps", "connected", "expired", "refused", "lastUsedAt")
+    if ns.verb == "end-sign-in":
+        ended = ops.apps.end_sign_in(ns.app, ns.person, account=ns.account)
+        said = [f"{e['accountId']}: {'ended' if e['changed'] else 'already ended'}" for e in ended]
+        return emit(ns, ended, text="\n".join(said))
     if ns.verb == "auth-configs":
         rows = ops.raw.tools.apps_list_app_credentials(app=ns.app)
         return table(ns, rows, "id", "name", "appName", "type", "status", "accounts")

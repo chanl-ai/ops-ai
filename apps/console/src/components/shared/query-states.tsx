@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation';
 import { AlertCircle, LogIn, SearchX, ShieldOff, Users, type LucideIcon } from 'lucide-react';
 
+import { actionLabel, areaLabel } from '@/components/access/access-words';
 import { EmptyState } from '@/components/shared/empty-state';
 import { SearchSelect } from '@/components/shared/search-select';
 import { teamOptions } from '@/hooks/options-queries';
@@ -140,6 +141,8 @@ export function ListEmpty({
  * The person's roles do not open `what`: shown by a page that checks the cell before asking, so no refused request is
  * made, and by QueryError when a service refuses one anyway. One wording for both.
  */
-export function NoAccess({ what, back }: { what: string; back?: { label: string; href: string } }) {
-  return <EmptyState icon={ShieldOff} title="You don’t have access here" description={`Your role in this team doesn’t let you see ${what}. A team admin can change that.`} action={back} testId="query-forbidden" />;
+export function NoAccess({ what, back, needs }: { what: string; back?: { label: string; href: string }; needs?: { area: string; action: string } }) {
+  // The permission the page needs, in the roles page's words ("Manage on Connections"), when the page names one.
+  const named = needs ? ` It needs ${actionLabel(needs.action)} on ${areaLabel(needs.area)}.` : '';
+  return <EmptyState icon={ShieldOff} title="You don’t have access here" description={`Your role in this team doesn’t let you see ${what}.${named} A team admin can change that.`} action={back} testId="query-forbidden" />;
 }

@@ -1932,6 +1932,112 @@
         "title": "AppPage",
         "type": "object"
       },
+      "AppPeopleList": {
+        "additionalProperties": false,
+        "description": "A page of Apps > People, with the name of each app the `app` facet counts.",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/AppPerson"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "facets": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Facets",
+            "type": "object"
+          },
+          "labels": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Labels",
+            "type": "object"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        },
+        "required": [
+          "data",
+          "pagination",
+          "facets",
+          "labels"
+        ],
+        "title": "AppPeopleList",
+        "type": "object"
+      },
+      "AppPerson": {
+        "additionalProperties": false,
+        "description": "One person on Apps > People: the apps they signed in to, their sign-ins counted by state (connected, expired,\nrefused), the last call any of them signed, and each sign-in.",
+        "properties": {
+          "apps": {
+            "items": {
+              "$ref": "#/components/schemas/PersonAppView"
+            },
+            "title": "Apps",
+            "type": "array"
+          },
+          "connected": {
+            "title": "Connected",
+            "type": "integer"
+          },
+          "expired": {
+            "title": "Expired",
+            "type": "integer"
+          },
+          "lastUsedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastusedat"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "personId": {
+            "title": "Personid",
+            "type": "string"
+          },
+          "refused": {
+            "title": "Refused",
+            "type": "integer"
+          },
+          "signIns": {
+            "items": {
+              "$ref": "#/components/schemas/PersonAppSignInView"
+            },
+            "title": "Signins",
+            "type": "array"
+          }
+        },
+        "required": [
+          "personId",
+          "name",
+          "apps",
+          "connected",
+          "expired",
+          "refused",
+          "signIns"
+        ],
+        "title": "AppPerson",
+        "type": "object"
+      },
       "AppResource": {
         "additionalProperties": false,
         "properties": {
@@ -4716,6 +4822,25 @@
         "title": "Envelope[AppPage]",
         "type": "object"
       },
+      "Envelope_AppPeopleList_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AppPeopleList"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[AppPeopleList]",
+        "type": "object"
+      },
       "Envelope_AppTool_": {
         "additionalProperties": false,
         "properties": {
@@ -5303,6 +5428,25 @@
           "data"
         ],
         "title": "Envelope[SendPolicyView]",
+        "type": "object"
+      },
+      "Envelope_SignInEnded_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SignInEnded"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[SignInEnded]",
         "type": "object"
       },
       "Envelope_SignInFinished_": {
@@ -9886,6 +10030,164 @@
         "title": "Permission",
         "type": "object"
       },
+      "PersonAppSignInView": {
+        "additionalProperties": false,
+        "description": "One of a person's own sign-ins on Apps > People: the app and account, its state, when a call last signed with\nit, and, for one an admin ended, who ended it.",
+        "properties": {
+          "account": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account"
+          },
+          "accountId": {
+            "title": "Accountid",
+            "type": "string"
+          },
+          "accountName": {
+            "title": "Accountname",
+            "type": "string"
+          },
+          "appId": {
+            "title": "Appid",
+            "type": "string"
+          },
+          "appName": {
+            "title": "Appname",
+            "type": "string"
+          },
+          "endedBy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endedby"
+          },
+          "expiresAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expiresat"
+          },
+          "lastUsedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastusedat"
+          },
+          "logo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo"
+          },
+          "refusedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refusedat"
+          },
+          "refusedReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refusedreason"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          },
+          "state": {
+            "enum": [
+              "connected",
+              "expired",
+              "refused"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "appId",
+          "appName",
+          "accountId",
+          "accountName",
+          "state"
+        ],
+        "title": "PersonAppSignInView",
+        "type": "object"
+      },
+      "PersonAppView": {
+        "additionalProperties": false,
+        "properties": {
+          "appId": {
+            "title": "Appid",
+            "type": "string"
+          },
+          "logo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "appId",
+          "name"
+        ],
+        "title": "PersonAppView",
+        "type": "object"
+      },
       "PersonCredentialsIn": {
         "additionalProperties": false,
         "description": "A person's own key, password or token on an account each person signs in to: the kind's person\nfields, each a value of at most 2,000 characters.",
@@ -11387,6 +11689,80 @@
         "title": "SignInCompleteIn",
         "type": "object"
       },
+      "SignInCounts": {
+        "additionalProperties": false,
+        "properties": {
+          "connected": {
+            "default": 0,
+            "title": "Connected",
+            "type": "integer"
+          },
+          "expired": {
+            "default": 0,
+            "title": "Expired",
+            "type": "integer"
+          },
+          "refused": {
+            "default": 0,
+            "title": "Refused",
+            "type": "integer"
+          }
+        },
+        "title": "SignInCounts",
+        "type": "object"
+      },
+      "SignInEnded": {
+        "additionalProperties": false,
+        "description": "A person's sign-in after End sign-in: refused with \"ended_by_admin\" and who ended it. `changed` is False when an\nadmin had ended it already, so a second End writes nothing.",
+        "properties": {
+          "accountId": {
+            "title": "Accountid",
+            "type": "string"
+          },
+          "appId": {
+            "title": "Appid",
+            "type": "string"
+          },
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "endedBy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endedby"
+          },
+          "personId": {
+            "title": "Personid",
+            "type": "string"
+          },
+          "refusedReason": {
+            "title": "Refusedreason",
+            "type": "string"
+          },
+          "state": {
+            "const": "refused",
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "personId",
+          "appId",
+          "accountId",
+          "state",
+          "refusedReason",
+          "changed"
+        ],
+        "title": "SignInEnded",
+        "type": "object"
+      },
       "SignInFinished": {
         "additionalProperties": false,
         "description": "A finished sign-in, as the return page tells the window that started it: the account and its app, and either\nthe account signed in or, for Test with my account (`check`), the check's outcome.",
@@ -12048,6 +12424,16 @@
               }
             ],
             "title": "Signin"
+          },
+          "signIns": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SignInCounts"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "state": {
             "anyOf": [
@@ -16762,6 +17148,346 @@
         "x-ops-public": "sdk"
       }
     },
+    "/v1/apps/people": {
+      "get": {
+        "description": "Apps > People: one page of the people holding their own sign-ins on the team's apps, by name, each with the\napps they signed in to, their sign-ins counted by state (connected, expired, refused), the last call any of\nthem signed, and every sign-in. `search` matches the name; `app` and `state` repeat; `facets` counts people per\napp (`labels` names each app) and per state. Needs connections.manage. The filters are read from the shared\nlist query; they are named here for the document.",
+        "operationId": "apps_list_app_people",
+        "parameters": [
+          {
+            "description": "an app id: their sign-ins to these apps",
+            "in": "query",
+            "name": "app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "an app id: their sign-ins to these apps",
+              "title": "App"
+            }
+          },
+          {
+            "description": "the people with a sign-in in any of these states",
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "enum": [
+                      "connected",
+                      "expired",
+                      "refused"
+                    ],
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "the people with a sign-in in any of these states",
+              "title": "State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_AppPeopleList_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not available on this service yet"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The source could not be reached"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "List App People",
+        "tags": [
+          "apps"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
     "/v1/apps/{app_id}": {
       "delete": {
         "description": "Deletes a custom app with its accounts and their secrets; 409 app_in_use naming the tools and accounts\nwhile a tool still uses it. No request transaction: agents-service is asked whether a workflow or agent names\neach account.",
@@ -18634,6 +19360,212 @@
           }
         },
         "summary": "Pin Default",
+        "tags": [
+          "apps"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/apps/{app_id}/accounts/{account_id}/people/{person_id}/sign-out": {
+      "post": {
+        "description": "End sign-in: ends another person's own sign-in on the account, so their next call asks them to connect.\nThe row is kept, refused with \"ended_by_admin\" and who ended it, and one audit row is written; a second End\nchanges nothing (`changed` false). 404 sign_in_not_found when the person holds none. Needs\nconnections.manage.",
+        "operationId": "apps_end_sign_in",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "app_id",
+            "required": true,
+            "schema": {
+              "title": "App Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "person_id",
+            "required": true,
+            "schema": {
+              "title": "Person Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SignInEnded_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "End Sign In",
         "tags": [
           "apps"
         ],

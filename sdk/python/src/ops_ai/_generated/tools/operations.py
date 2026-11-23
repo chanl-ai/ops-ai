@@ -145,6 +145,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "apps_end_sign_in": {
+        "body": None,
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/apps/{app_id}/accounts/{account_id}/people/{person_id}/sign-out",
+        "pathParams": ["app_id", "account_id", "person_id"],
+        "query": [],
+        "stream": False,
+    },
     "apps_finish_sign_in": {
         "body": "json",
         "headers": [],
@@ -224,6 +233,15 @@ OPERATIONS: dict[str, Operation] = {
         "path": "/v1/app-credentials",
         "pathParams": [],
         "query": ["app"],
+        "stream": False,
+    },
+    "apps_list_app_people": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/apps/people",
+        "pathParams": [],
+        "query": ["app", "state", "page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "apps_list_apps": {
@@ -993,6 +1011,37 @@ class Operations:
         "Add App"
         return self._t.call(SERVICE, OPERATIONS["apps_add_app"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
+    def apps_list_app_people(
+        self,
+        *,
+        app: list[str] | None = None,
+        state: list[str] | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> AppPeopleList:
+        "List App People"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["apps_list_app_people"],
+            {},
+            {
+                "app": app,
+                "state": state,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
     def apps_get_app(self, app_id: str) -> AppPage:
         "Get App"
         return self._t.call(SERVICE, OPERATIONS["apps_get_app"], {"app_id": app_id}, {}, {}, None)  # type: ignore[no-any-return]
@@ -1044,6 +1093,17 @@ class Operations:
         "Pin Default"
         return self._t.call(
             SERVICE, OPERATIONS["apps_pin_default"], {"app_id": app_id, "account_id": account_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    def apps_end_sign_in(self, app_id: str, account_id: str, person_id: str) -> SignInEnded:
+        "End Sign In"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["apps_end_sign_in"],
+            {"app_id": app_id, "account_id": account_id, "person_id": person_id},
+            {},
+            {},
+            None,
         )  # type: ignore[no-any-return]
 
     def apps_start_sign_in(self, app_id: str, account_id: str, body: SignInIn) -> SignInStart:
@@ -1755,6 +1815,37 @@ class AsyncOperations:
         "Add App"
         return await self._t.call(SERVICE, OPERATIONS["apps_add_app"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
+    async def apps_list_app_people(
+        self,
+        *,
+        app: list[str] | None = None,
+        state: list[str] | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> AppPeopleList:
+        "List App People"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["apps_list_app_people"],
+            {},
+            {
+                "app": app,
+                "state": state,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
     async def apps_get_app(self, app_id: str) -> AppPage:
         "Get App"
         return await self._t.call(SERVICE, OPERATIONS["apps_get_app"], {"app_id": app_id}, {}, {}, None)  # type: ignore[no-any-return]
@@ -1806,6 +1897,17 @@ class AsyncOperations:
         "Pin Default"
         return await self._t.call(
             SERVICE, OPERATIONS["apps_pin_default"], {"app_id": app_id, "account_id": account_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def apps_end_sign_in(self, app_id: str, account_id: str, person_id: str) -> SignInEnded:
+        "End Sign In"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["apps_end_sign_in"],
+            {"app_id": app_id, "account_id": account_id, "person_id": person_id},
+            {},
+            {},
+            None,
         )  # type: ignore[no-any-return]
 
     async def apps_start_sign_in(self, app_id: str, account_id: str, body: SignInIn) -> SignInStart:
