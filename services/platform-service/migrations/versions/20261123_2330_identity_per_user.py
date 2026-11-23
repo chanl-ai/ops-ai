@@ -4,8 +4,9 @@ A first sign-in linked a new provider subject to whichever person had the email,
 subjects at the same provider, each a way into their account. `uq_signin_identities_person` allows one subject per
 person per provider. Where a person already holds more than one, the oldest link is kept (earliest `created_at`, then
 the lowest id) and the later ones are deleted: a subject attached by email after the person's own is the one this
-rule exists to remove. The person whose later subject goes signs in with the kept one, or links again from their
-session after an admin removes the kept one.
+rule exists to remove. The person whose later subject goes signs in with the kept one. A single link made by email
+before this rule stays as it is. The delete runs with the table's isolation policy set aside (`backfill_ddl`), so it
+sees every tenant's rows, not none.
 
 `signin_flows.subject` keeps a link flow's provider subject until the session that started it completes the link;
 `signin_flows.invite_hash` names the invite a sign-in started from. The downgrade drops all three.
@@ -19,10 +20,14 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
+from ops_store.schema import TENANT_SCOPED, backfill_ddl
+
 revision = "20261123_2330_identity_per_user"
 down_revision = "20261122_2022_list_sort_indexes"
 branch_labels = None
 depends_on = None
+
+CHAIN = "platform"
 
 # Every link with an older link for the same person at the same provider; the same statement on both dialects.
 LATER_LINKS = (
@@ -35,7 +40,11 @@ LATER_LINKS = (
 
 
 def upgrade() -> None:
-    op.execute(LATER_LINKS)
+    dialect = op.get_bind().dialect.name
+    table = sa.Table("signin_identities", sa.MetaData(), sa.Column("tenant_id", sa.String(64)), info=TENANT_SCOPED)
+    before, after = backfill_ddl([table], dialect, chain=CHAIN, kind="tenant")
+    for statement in (*before, LATER_LINKS, *after):
+        op.execute(statement)
     op.create_unique_constraint(
         "uq_signin_identities_person", "signin_identities", ["tenant_id", "provider_id", "user_id"]
     )
