@@ -79,19 +79,49 @@ A dangling write is reconciled by its key, never attempted twice.
 | Effects class | Attempts | On crash mid-node |
 |---|---|---|
 | none | 3 | Runs again; deterministic |
-| read | 3, backoff 1 to 30 s | New attempt row |
-| model | 2 | New attempt; the model ledger replays recorded responses |
-| write | 1, then a reconciliation read | Found by key means done; absent means the error port |
+| read | 3, waits up to 5 s and 30 s | New attempt row |
+| model | 2 | New attempt; the model ledger replays recorded responses by step id and request hash |
+| write | 3, only when the gateway proves the write never ran, each under a new key; otherwise a reconciliation read | Found by key means done; absent means the error port |
 | human | not retried | The upsert finds the same review |
 
 Runs keep `durability="sync"` because the fence must refuse a stale owner before its next step. Leases and fencing are
-unchanged. Checkpoints are deleted when a run ends; the journal is the record the console reads. A run whose resume
-fails three times goes to failed with the error and a manual step.
+unchanged. Checkpoints are deleted when a run ends; the journal is the record the console reads.
+Only a failure whose kind is retryable in `ops_contracts.errors.CODES` is tried again, at the step and at the pass;
+a non-retryable kind fails at once. Every wait is drawn over its whole span (full jitter) and is never shorter than
+the error's retry-after. A step's attempts also stop at its total duration (900 s by default), whichever runs out
+first. A run gets four passes (waits up to 5, 30 and 120 s); one whose passes are used pauses as Stuck with its last
+error, and Retry continues it from its last recorded step. A busy lease, a shutdown or a deploy gives the claim back
+without using an attempt, and the heartbeat keeps renewing through a database blip, so a long tool call is not
+reclaimed as lost (`ops_engine/worker.py`). Tests: `packages/ops_engine/tests/test_retry_classes.py`,
+`services/agents-service/tests/engine/test_retry_accounting.py`.
 
 A failed run's `error` is a sentence for people that names the step (`plain_failure`, `ops_engine/compiler.py`); the
 exception's text is kept on the failed step's row and in the run's `failed` event as `detail`. A review that cannot
 open, because the write it approves reads nothing from the run, is a failed step like any other. Test:
 `services/agents-service/tests/engine/test_step_failure_message.py`.
+
+### One error model
+
+Every failure is recorded once, as `ops_contracts.errors.RunError` (`packages/contracts/src/ops_contracts/errors.py`):
+a kind, a stable code, the builder's `message`, a `userMessage` safe for a customer, `retryable`, `retryAfterSeconds`,
+the step and attempt, and a trace id. `CODES` in that file is the only table of codes, kinds and whether a retry helps.
+The worker stores the record on `engine_runs.failure` beside `error` (agents migration 0124); the run route returns it
+as `failure`; a run that failed before 0124 reads as `internal_error`, or `stuck` when it is Stuck.
+
+| Kind | Means | Retryable |
+|---|---|---|
+| `input` | What was sent cannot run as it is (a step's own refusal is `input_invalid`) | No |
+| `refused` | A rule said no (`forbidden`, `budget_reached`, `ended_as_failure`) | No, except `team_at_capacity` and `sign_in_needed` |
+| `upstream` | An app, tool or model failed (`tool_failed`, `model_rate_limited`) | Yes, except `write_uncertain` |
+| `timeout` | A clock ran out (`step_too_long`, `queued_too_long`) | `step_too_long`, `reply_too_long` and `heartbeat_lost` |
+| `internal` | Our fault (`stuck`, `internal_error`) | By Retry or a redrive only |
+
+| Reader | What they get |
+|---|---|
+| Run page | The failure heading by kind, the message, the step, the attempt and whether retrying helps |
+| Chat and widget | An error frame with `kind` and `retryable`; a failure with no code streams its `userMessage`, never the exception |
+| Python and TypeScript SDKs | `runs.wait(id, check=True)` raises `RunFailed` with the fields above; HTTP errors keep their classes and gain `.kind` |
+| CLI | One line, `failed · upstream/tool_failed at "Find customer" · attempt 3 of 3 · retryable`, and an exit status per kind: input 2, refused 3, upstream 4, timeout 5, internal 6 |
 
 ## 5 Scale
 
@@ -99,7 +129,9 @@ open, because the write it approves reads nothing from the run, is a failed step
 |---|---|
 | Runs leave the request | `POST /v1/runs` writes the run and a start row in one transaction and returns 202 |
 | Run input | Every start path (API, start form, hosted form, batch row, agent tool call, Start workflow step, service event, email) writes its run through `ops_engine.starts.start`, which holds the input to the trigger's `inputSchema`: the rules are under "Run input" below. A refusal is 422 `invalid_input` with `details.path` and `details.reason`. An Email received trigger declares no input schema, because the service builds its envelope. The write itself, `ops_engine.store.new_runs.write_run`, may be imported by `ops_engine.starts` alone: the import contract `runs-written-by-the-start-entry` (`.importlinter`, run by `uv run lint-imports`) fails on any other importer, and `packages/ops_engine/tests/test_run_entry.py` fails on an insert into the runs table anywhere else |
-| Queue | `engine_work`: start, resume (review decision, timer, child end, sweeper), retry, cancel; claimed with `FOR UPDATE SKIP LOCKED`, then the thread lease |
+| Queue | `engine_work`: start, resume (review decision, timer, child end, sweeper), retry, cancel; claimed through `ops_store.dialect.claim` (SKIP LOCKED on PostgreSQL, READPAST on SQL Server), then the thread lease |
+| Fairness | Each row carries its run's `team_id`, a `priority` and a `concurrency_key` (the team when unset); agents migration 0125. With `OPS_ENGINE_TEAM_CAP` set, a key with that many live claims is skipped, so one team at its cap never holds back another, and the key with the fewest rows running is claimed first. Only live claims count: a run waiting for a person, an event or a timer takes no slot. The last check runs under a lock on the key, so the cap is exact (`ops_engine/store/work.py`). `rate_key` is stored for the per-account and per-model-key limits that follow; nothing reads it yet |
+| Run reconciler | Reads open runs 500 at a time by id, so no statement passes SQL Server's 2,100 parameters (`ops_engine/store/reconciler.py`) |
 | Workers | N processes, each running several runs; sweeper and timer poller live here |
 | Tenancy | Each claimed run gets a tenant-scoped saver; per-tenant running cap; 429 with retry-after past the queued limit |
 | Stream | Workers append to `thread_events`; the console re-attaches with `after=seq` |

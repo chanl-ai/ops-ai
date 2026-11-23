@@ -15,7 +15,7 @@ from ops_service_kit.ids import new_id
 from ops_service_kit.listing import ListParams
 from ops_store import Guarantee
 from ops_store.dialect import dialect_of, insert_ignore, lock_key
-from ops_store.listing import ListPage, list_page
+from ops_store.listing import LISTED, ListPage, list_page
 from ops_store.rows import one, rows
 from ops_store.schema import TENANT_SCOPED
 from ops_store.store import Store
@@ -48,10 +48,10 @@ gateway_calls = sa.Table(
     sa.Column("effect_scope", sa.String(80), nullable=False),
     sa.Column("output", sa.JSON),
     sa.Column("view", sa.JSON),
-    sa.Column("created_at", sa.String(32), nullable=False),
+    sa.Column("created_at", sa.String(32), nullable=False, info=LISTED),
     # The registry module the tool belongs to; null for a tool the registry does not know.
     sa.Column("module_id", sa.String(64)),
-    sa.Column("latency_ms", sa.Integer),
+    sa.Column("latency_ms", sa.Integer, info=LISTED),
     # {code, message} when the call was refused or failed; never secret material.
     sa.Column("error", sa.JSON),
     # A fingerprint of the approval token that allowed a write, never the token itself.
@@ -85,6 +85,9 @@ gateway_calls = sa.Table(
     sa.Index("ix_gateway_calls_link_created", "link_id", "created_at"),
     sa.Index("ix_gateway_calls_module_created", "module_id", "created_at"),
     sa.Index("ix_gateway_calls_thread_id", "thread_id"),
+    # The call log sorts by time and by latency.
+    sa.Index("ix_gateway_calls_created_at", "tenant_id", "created_at"),
+    sa.Index("ix_gateway_calls_latency_ms", "tenant_id", "latency_ms"),
     # An approved write acts once per effect scope (tools migration 0017).
     sa.Index("ux_gateway_calls_effect_scope", "tenant_id", "effect_scope", "step", "tool", "input_hash", unique=True),
     # Held to its tenant by the database (tools_0080); the team a call acted in is a filter of the reads, since a run's
@@ -525,6 +528,7 @@ class CallLog(Store):
                 q,
                 params,
                 search=[gateway_calls.c.tool],
+                sortable={"at": gateway_calls.c.created_at, "latencyMs": gateway_calls.c.latency_ms},
                 default_sort=gateway_calls.c.created_at.desc(),
                 filters={"result": RESULT, "assistant": ASSISTANT},
                 facets={"result": RESULT, "assistant": ASSISTANT} if counted else {},

@@ -10,7 +10,6 @@ load adds to a turn: the whole body, or the shared instructions plus the longest
 
 from __future__ import annotations
 
-import re
 from typing import ClassVar
 
 import sqlalchemy as sa
@@ -20,14 +19,16 @@ from ops_service_kit import narrow
 from ops_service_kit.errors import Conflict
 from ops_service_kit.http import Json, JsonList, Out
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.names import slugify
 from ops_store import Guarantee
+from ops_store.dialect import json_text
 from ops_store.listing import LISTED
 from ops_store.rows import rows as read_rows
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, team_owned_via
 from ops_store.search import contains
 from ops_store.team_scope import any_team, team_visible
 
-from .agent_registry import digest_of
+from .agent_registry import digest_of, refuse_stale
 from .base import metadata
 from .tenancy import OWNER, current_tenant
 from .versioned import VersionedRegistry
@@ -48,7 +49,7 @@ registry_skills = sa.Table(
     # Set once with a reason; terminal. Pins already on agents keep working; new pins are refused.
     sa.Column("deprecated_reason", sa.Text),
     sa.Column("created_at", sa.String(32), nullable=False),
-    sa.Column("updated_at", sa.String(32), nullable=False),
+    sa.Column("updated_at", sa.String(32), nullable=False, info=LISTED),
     sa.Column("updated_by", sa.String(200), nullable=False),
     # Who created the skill, written once; delete rights read it (version 1's saved_by changes with each draft save).
     sa.Column("created_by", sa.String(200), nullable=False, server_default=""),
@@ -61,6 +62,8 @@ registry_skills = sa.Table(
     # The skills list filters one team's skills by owner team and by origin (agents 0113).
     sa.Index("ix_registry_skills_team_owner", "tenant_id", "team_id", "owner_team"),
     sa.Index("ix_registry_skills_team_origin", "tenant_id", "team_id", "origin"),
+    # The skills list sorts by update time.
+    sa.Index("ix_registry_skills_team_updated", "tenant_id", "team_id", "updated_at"),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
@@ -86,7 +89,7 @@ registry_skill_versions = sa.Table(
 
 
 def slug_of(name: str) -> str:
-    return (re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "skill")[:64].rstrip("-")
+    return slugify(name, width=64, fallback="skill")
 
 
 LABELS = {
@@ -102,6 +105,11 @@ LABELS = {
     "refusal": "refusal",
     "inputs": "inputs",
     "parts": "parts",
+    "notWhen": "not-when line",
+    "steps": "steps",
+    "exit": "exits",
+    "returns": "results",
+    "success": "success checks",
 }
 
 
@@ -111,12 +119,18 @@ def changes_between(old: Json, new: Json) -> list[str]:
 
 def tokens_of(content: Json) -> int:
     """What the body adds to a turn, at four characters a token: the instructions plus the guardrail lines, and with
-    parts the longest part on top, since a part is always read with the shared instructions. A count that is billed,
-    so a part that is not an object, or a list that is a number, fails the save."""
+    parts the longest part on top, since a part is always read with the shared instructions. With steps the longest
+    step is added the same way: one step is in the prompt at a time. A count that is billed, so a part that is not an
+    object, or a list that is a number, fails the save."""
     lines = narrow.entries(content.get("guardrails"))
     text = str(content.get("instructions") or "") + "".join(str(g) for g in lines)
     parts = [narrow.an_object(p, "part") for p in narrow.entries(content.get("parts"))]
     longest = max((len(str(p.get("instructions") or "")) for p in parts), default=0)
+    steps = [narrow.an_object(s, "step") for s in narrow.entries(content.get("steps"))]
+    longest += max(
+        (len(str(s.get("do") or "")) + len(str(narrow.json_object(s.get("check")).get("text") or "")) for s in steps),
+        default=0,
+    )
     return max(1, (len(text) + longest + 3) // 4)
 
 
@@ -196,6 +210,35 @@ class SkillRegistry(VersionedRegistry[SkillRow, SkillVersionRow]):
         q = q.order_by(t.slug).offset(offset).limit(limit)
         async with self.tx() as c:
             return await read_rows(c, q, SkillRow)
+
+    async def search_team(
+        self, team: str, search: str, offset: int, limit: int, *, ids: list[str] | None = None, skip: str | None = None
+    ) -> list[tuple[str, str, str]]:
+        """(id, name, use-when) of `team`'s published, live skills whose published name or slug holds every word of
+        `search`, by name, cut in the query; `ids` answers exactly those of them. `skip` leaves one skill out (the
+        one being edited). Another team's skill is never answered, whatever team the caller acts in."""
+        t, v = registry_skills.c, registry_skill_versions.c
+        name = json_text(v.content, "name")
+        q = (
+            sa.select(t.id, name.label("name"), json_text(v.content, "useWhen").label("use_when"))
+            .select_from(registry_skills)
+            .join(registry_skill_versions, sa.and_(t.id == v.skill_id, t.published_version == v.version))
+            .where(
+                t.team_id == team,
+                t.deprecated_reason.is_(None),
+                t.id != skip if skip else sa.true(),
+                team_visible(registry_skills),
+                team_visible(registry_skill_versions),
+            )
+        )
+        if ids is not None:
+            q = q.where(t.id.in_(ids))
+        else:
+            q = q.where(*(sa.or_(contains(name, w), contains(t.slug, w)) for w in search.split()))
+        q = q.order_by(name, t.id).offset(offset).limit(limit)
+        async with self.tx() as c:
+            found = (await c.execute(q)).all()
+        return [(str(i), str(n or ""), str(u or "")) for i, n, u in found]
 
     async def owner_team(self, skill_id: str, conn: AsyncConnection | None = None) -> str | None:
         """The team that owns it, whoever is acting; None when there is none. Only for deciding a refusal by the
@@ -283,13 +326,25 @@ class SkillRegistry(VersionedRegistry[SkillRow, SkillVersionRow]):
             )
         return sid
 
-    async def save_draft(self, skill_id: str, content: Json, *, by: str, note: str) -> int:
+    async def save_draft(
+        self, skill_id: str, content: Json, *, by: str, note: str, base: tuple[int, str] | None = None
+    ) -> int:
         """Edits the newest version while it is an unpublished draft, or opens the next version on top of a published
-        one. Published versions never change."""
+        one. Published versions never change.
+
+        `base` is the version and stored digest `content` was built from. A save that names it is refused when the
+        newest version is no longer that one, so another builder's save to the same draft is never written over.
+
+        Raises:
+            Conflict: `stale_base` when `base` is given and another save landed after it was read.
+        """
         at = now_iso()
         async with self.tx() as c:
-            n = (await self.row(skill_id, c)).version
+            # Locked so two saves at once take turns: unlocked, both read the same newest version and both pass.
+            n = (await self.row(skill_id, c, lock=True)).version
             newest = await self.newest(c, skill_id, n)
+            if base is not None:
+                refuse_stale(base, n, newest.digest, saved_by=newest.saved_by, saved_at=newest.saved_at)
             values = {
                 "content": content,
                 "digest": digest_of(content),

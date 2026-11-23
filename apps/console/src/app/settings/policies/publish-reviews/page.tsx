@@ -1,17 +1,17 @@
 'use client';
 
 import * as React from 'react';
-import { Info, Lock } from 'lucide-react';
+import { Info } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { PublishModeEditor } from '@/components/settings/publish-mode-editor';
 import { SettingsPageLayout } from '@/components/settings/settings-page-layout';
-import { EmptyState } from '@/components/shared/empty-state';
-import { QueryError } from '@/components/shared/query-states';
+import { NoAccess, QueryError } from '@/components/shared/query-states';
 import { Note } from '@/components/shared/setting/note';
 import { SettingCard } from '@/components/shared/setting/setting-card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { usePolicyEditor, useSetWorkspacePolicy, useWorkspacePolicies } from '@/hooks/policy-queries';
+import { useCan } from '@/hooks/me-queries';
 import { useTeam } from '@/hooks/use-team';
 import { ApiError } from '@/lib/api/contract';
 
@@ -26,6 +26,7 @@ export default function PublishReviewsPage() {
   const editor = usePolicyEditor();
   const set = useSetWorkspacePolicy();
   const refusedRead = policies.error instanceof ApiError && policies.error.status === 403;
+  const mayRead = useCan('access', 'view');
   const [stored, setStored] = React.useState<Record<string, string> | null>(null);
   const policy = policies.data?.find((p) => p.key === 'publishReview');
   const saved = React.useMemo(() => stored ?? (() => { const v = policy?.value as Record<string, Record<string, string>> | null | undefined; return { ...(v?.['*'] ?? {}), ...(v?.[teamId] ?? {}) } as Record<string, string>; })(), [policy, teamId, stored]);
@@ -47,11 +48,11 @@ export default function PublishReviewsPage() {
   };
   return (
     <SettingsPageLayout section="Publish reviews" description={`Which publishes in ${team?.name ?? 'this team'} need a second person to approve them.`}>
-      {policies.isPending || editor.isPending ? (
+      {/* platform-service reads the policies to whoever holds access.view where the request acts. */}
+      {mayRead === false || refusedRead ? (
+        <NoAccess what="publish reviews" />
+      ) : policies.isPending || editor.isPending ? (
         <Skeleton className="h-64 w-full" aria-busy="true" />
-      ) : refusedRead ? (
-        // Reading policies needs settings.view; the server's refusal names the role and who holds it.
-        <EmptyState icon={Lock} title="You can’t see publish reviews" description={(policies.error as Error).message} testId="publish-reviews-refused" />
       ) : (policies.isError && !refusedRead) || !policy ? (
         <QueryError what="publish reviews" error={policies.error} onRetry={() => policies.refetch()} retrying={policies.isFetching} />
       ) : (

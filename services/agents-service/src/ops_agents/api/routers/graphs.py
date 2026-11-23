@@ -103,7 +103,6 @@ class ThreadInput(In):
     # Channels: the key of what started the case. A thread with this key is returned instead of a new one (E6).
     external_key: str | None = None
     deployment_id: str | None = None
-    parent_thread_id: str | None = None
     # Pauses the thread for a person when spent (E12); a deployment's default applies when left out.
     budget: BudgetInput | None = None
 
@@ -241,7 +240,6 @@ async def create_thread(rt: Rt, me: Me, _: Tx, body: ThreadInput) -> JSONRespons
         now_iso(),
         external_key=body.external_key,
         deployment_id=body.deployment_id,
-        parent_thread_id=body.parent_thread_id,
         version=version,
         digest=digest,
     )
@@ -571,7 +569,8 @@ async def publish_version(rt: Rt, me: Me, name: str, body: PublishInput) -> JSON
 
 
 # Thread metadata the server writes and later trusts: who started it, its budget allotment, its chat and widget
-# state, its child-run links and its routing flag. A caller's copy of any of these is dropped, never stored.
+# state, its child-run links, the agent that asked it with its chain record, and its routing flag. A caller's copy
+# of any of these is dropped, never stored.
 SERVER_META = frozenset(
     {
         "startedBy",
@@ -582,6 +581,9 @@ SERVER_META = frozenset(
         "attachments",
         "budget",
         "budgetAllotment",
+        "calledBy",
+        "calledByName",
+        "chain",
         "channel",
         "chat",
         "children",

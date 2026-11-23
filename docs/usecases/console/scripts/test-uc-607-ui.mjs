@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { AGENTS_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack, required } from '@ops-ai/usecase-runner/harness';
 
 import { allowBank, openSignIn } from '../../lib/connection_ui.mjs';
+import { agentBase } from '../../lib/agent_save.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
@@ -410,7 +411,7 @@ try {
 
         await step('7 a tool the agent calls runs with James’s account, and the app’s Logs list it by its title', async () => {
           const toolIds = ['person_get_record'];
-          const patched = await call(agents, 'PATCH', `/v1/agents/${agent.id}`, priya, { toolIds });
+          const patched = await call(agents, 'PATCH', `/v1/agents/${agent.id}`, priya, { toolIds, ...(await agentBase(agents, priya, agent.id)) });
           const asked = await call(agents, 'POST', `/v1/agents/${agent.id}/publish-requests`, priya, { version: patched.data?.version, note: 'uc-607' });
           const live = asked.data?.status === 'pending' ? await call(agents, 'POST', `/v1/publish-requests/${asked.data.id}/decision`, maya, { decision: 'approved' }) : asked;
           await james.goto(`${consoleUrl}/chat?agent=${agent.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });

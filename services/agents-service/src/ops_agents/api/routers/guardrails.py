@@ -18,6 +18,7 @@ from ops_service_kit.errors import Conflict
 from ops_service_kit.http import Envelope, In, Json, OptionsPage, options_page, options_window, page_window, paged
 from ops_service_kit.listing import ListQuery
 from ops_service_kit.logging import get_logger
+from ops_service_kit.names import Name
 
 from ...store.guardrails import GuardrailRow
 from ..agent_registry import registry as agent_registry
@@ -37,7 +38,7 @@ Reader: TypeAlias = Annotated[Principal, Depends(reader_of("guardrails"))]  # no
 
 
 class GuardrailInput(In):
-    name: str
+    name: Name
     kind: Literal["blocked_topics"] = "blocked_topics"
     topics: list[str] = Field(default_factory=list[str])
     message: str = ""

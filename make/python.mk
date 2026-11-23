@@ -1,5 +1,5 @@
 # The uv workspace: packages/ plus the services.
-.PHONY: python-install python-verify sbom test test-impacted agent-guard
+.PHONY: python-install python-verify python-lint python-pool python-checks python-scripts sbom test test-impacted agent-guard
 
 ##@ Python
 
@@ -40,20 +40,56 @@ agent-guard: ## Check the agent wait guard and print the hook entry that registe
 	@python3 scripts/agent-guard.py --self-test
 	@echo 'register: {"matcher":"Bash","hooks":[{"type":"command","command":"python3 \"$$CLAUDE_PROJECT_DIR\"/scripts/agent-guard.py"}]} under hooks.PreToolUse'
 
-python-verify: ## Lint and type-check packages, then verify each service with model keys unset
-	@rm -f $(VERIFY_FAILED)
+# The steps of python-verify as canned recipes, so the pieces can run alone: the repo job in ci.yml runs each of
+# python-lint, python-pool (one pool entry per run), python-checks and python-scripts as its own job in parallel.
+define PY_LINT
 	$(KEEP) uv run ruff format --check packages
 	$(KEEP) uv run ruff check packages
+endef
+define PY_POOL
 	@mkdir -p $(VERIFY_LOGS)
 	@# The suites side by side; each writes its own log, printed below in a fixed order once all have ended.
 	-@$(MAKE) -s -k -j$(VERIFY_JOBS) $(VERIFY_POOL) VERIFY_FAILED=$(VERIFY_FAILED) VERIFY_LOGS=$(VERIFY_LOGS)
 	@for job in $(VERIFY_POOL); do echo "== $$job"; cat $(VERIFY_LOGS)/$$job.log 2>/dev/null; done; rm -rf $(VERIFY_LOGS)
-	@# The one list of checks (make/checks.mk): the standards ratchets, the files written from code, import directions
-	@# and the SDK drift check. The pull-request checks job and pre-commit run the same list.
+endef
+# The one list of checks (make/checks.mk): the standards ratchets, the files written from code, import directions
+# and the SDK drift check, which the pull-request checks job and pre-commit run too. The rises the pull request made
+# need a maintainer's approval, read from GitHub; red until it exists.
+define PY_CHECKS
 	$(KEEP) $(MAKE) -s checks
-	@# The rises the pull request made need a maintainer's approval, read from GitHub; red until it exists.
 	$(KEEP) $(MAKE) -s checks-history
-	$(KEEP) uv run pytest -q scripts/tests
+endef
+# Test files run whole on one worker (--dist loadfile), as PAR does for the services.
+define PY_SCRIPTS
+	$(KEEP) uv run pytest -q -n auto --dist loadfile scripts/tests
+endef
+
+python-verify: ## Lint and type-check packages, then verify each service with model keys unset
+	@rm -f $(VERIFY_FAILED)
+	$(PY_LINT)
+	$(PY_POOL)
+	$(PY_CHECKS)
+	$(PY_SCRIPTS)
+	@$(ROOT)/scripts/keep_going.sh --report $(VERIFY_FAILED)
+
+python-lint: ## python-verify's lint and format of packages alone
+	@rm -f $(VERIFY_FAILED)
+	$(PY_LINT)
+	@$(ROOT)/scripts/keep_going.sh --report $(VERIFY_FAILED)
+
+python-pool: ## python-verify's suites alone; VERIFY_POOL="pool-store ..." picks them (CI runs one per job)
+	@rm -f $(VERIFY_FAILED)
+	$(PY_POOL)
+	@$(ROOT)/scripts/keep_going.sh --report $(VERIFY_FAILED)
+
+python-checks: ## python-verify's check list and maintainer-review history alone
+	@rm -f $(VERIFY_FAILED)
+	$(PY_CHECKS)
+	@$(ROOT)/scripts/keep_going.sh --report $(VERIFY_FAILED)
+
+python-scripts: ## The script tests alone, on pytest-xdist workers
+	@rm -f $(VERIFY_FAILED)
+	$(PY_SCRIPTS)
 	@$(ROOT)/scripts/keep_going.sh --report $(VERIFY_FAILED)
 
 # The suites share nothing but the machine, so they run side by side: one after another they used one of 14

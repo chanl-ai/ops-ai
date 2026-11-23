@@ -690,7 +690,10 @@ export interface components {
              */
             ocr: boolean;
         };
-        /** CopyRef */
+        /**
+         * CopyRef
+         * @description A team's copy of a template: where it came from and the record it made.
+         */
         CopyRef: {
             /** Detachedat */
             detachedAt: string | null;
@@ -698,9 +701,9 @@ export interface components {
             id: string;
             /**
              * Kind
-             * @constant
+             * @enum {string}
              */
-            kind: "document_type";
+            kind: "agent" | "skill" | "workflow" | "document_type" | "case_type" | "task_type" | "guardrail" | "knowledge_source";
             /** Recordid */
             recordId: string;
             /** Source */
@@ -1128,10 +1131,17 @@ export interface components {
             code: string;
             /** Details */
             details?: unknown;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "input" | "refused" | "upstream" | "timeout" | "internal";
             /** Message */
             message: string;
             /** Requestid */
             requestId: string;
+            /** Retryable */
+            retryable: boolean;
             /** Status */
             status: number;
         };
@@ -1420,7 +1430,10 @@ export interface components {
                 [key: string]: string;
             }[];
         };
-        /** Installed */
+        /**
+         * Installed
+         * @description The live copies a team holds of one template. A copy never changes by itself.
+         */
         Installed: {
             /**
              * Changed
@@ -1846,7 +1859,10 @@ export interface components {
             /** Version */
             version: string;
         };
-        /** TemplateRequires */
+        /**
+         * TemplateRequires
+         * @description What a copy of a template needs before it can run.
+         */
         TemplateRequires: {
             /** Bind */
             bind: {

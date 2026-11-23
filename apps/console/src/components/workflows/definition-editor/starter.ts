@@ -1,11 +1,12 @@
 import type { EngineDefinition } from '@/lib/types/engine';
+import { slugify } from '@/lib/validation/names';
 
 /**
  * The smallest definition every check passes: a request trigger wired to an end. The id is the name as a slug plus a
  * random suffix, because publishing under an id that exists adds a version to that workflow instead of creating one.
  */
 export function starterDefinition(name: string, description: string, suffix = Math.random().toString(36).slice(2, 8)): EngineDefinition {
-  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 48);
+  const slug = slugify(name, { width: 48, sep: '_' });
   const id = `${/^[a-z]/.test(slug) ? slug : `wf_${slug}`}_${suffix}`.replace(/_+/g, '_');
   return {
     schemaVersion: 2,

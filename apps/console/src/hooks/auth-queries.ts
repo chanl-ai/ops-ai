@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { api, demoSignInOffered } from '@/lib/api';
+import { api, demoSignInOffered, readShellSignInPolicy } from '@/lib/api';
 
 import { authProvider, isExpired, type ReauthInput, type Session } from '@/lib/auth';
 import { wipeSavedQueries } from '@/lib/query-cache';
@@ -32,8 +32,9 @@ export function useSession(): { session: Session | null; status: SessionStatus }
   return state;
 }
 
-/** What the workspace allows at sign-in (methods, SSO domains, MFA, session length). Policy comes from the API, not the adapter. */
-export const useSignInPolicy = () => useSessionQuery({ queryKey: ['sign-in-policy'], queryFn: () => api.signInPolicy.get(), staleTime: 5 * 60_000 });
+/** What the workspace allows at sign-in (methods, SSO domains, MFA, session length), for the app shell; null on a stack
+ * whose sign-in service decides each of these itself (lib/api/index.ts). */
+export const useSignInPolicy = () => useSessionQuery({ queryKey: ['sign-in-policy'], queryFn: readShellSignInPolicy, staleTime: 5 * 60_000 });
 
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 

@@ -333,7 +333,9 @@ export const platformOperations = {
   },
   "members_change_roles": {
     "body": "json",
-    "headers": [],
+    "headers": [
+      "x-acting-for"
+    ],
     "method": "POST",
     "path": "/v1/settings/members/role",
     "pathParams": [],
@@ -342,7 +344,9 @@ export const platformOperations = {
   },
   "members_invite_members": {
     "body": "json",
-    "headers": [],
+    "headers": [
+      "x-acting-for"
+    ],
     "method": "POST",
     "path": "/v1/settings/members/invite",
     "pathParams": [],
@@ -445,7 +449,9 @@ export const platformOperations = {
     "method": "GET",
     "path": "/v1/people-names",
     "pathParams": [],
-    "query": [],
+    "query": [
+      "emails"
+    ],
     "stream": false
   },
   "people_person_permissions": {
@@ -553,6 +559,17 @@ export const platformOperations = {
     "query": [],
     "stream": false
   },
+  "roles_give_role_to_holder": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/roles/{role_id}/holders",
+    "pathParams": [
+      "role_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "roles_list_roles": {
     "body": null,
     "headers": [],
@@ -602,6 +619,22 @@ export const platformOperations = {
       "role_id"
     ],
     "query": [],
+    "stream": false
+  },
+  "roles_role_holder_options": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/roles/{role_id}/holder-options",
+    "pathParams": [
+      "role_id"
+    ],
+    "query": [
+      "search",
+      "cursor",
+      "limit",
+      "ids"
+    ],
     "stream": false
   },
   "roles_role_holders": {
@@ -825,7 +858,14 @@ export const platformOperations = {
     "method": "GET",
     "path": "/v1/teams",
     "pathParams": [],
-    "query": [],
+    "query": [
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
+    ],
     "stream": false
   },
   "teams_list_workspace_teams": {
@@ -902,7 +942,9 @@ export const platformOperations = {
     "method": "GET",
     "path": "/v1/team-names",
     "pathParams": [],
-    "query": [],
+    "query": [
+      "ids"
+    ],
     "stream": false
   },
   "workspace_close_workspace": {

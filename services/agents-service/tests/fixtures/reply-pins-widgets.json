@@ -70,8 +70,10 @@
     "body": {
       "error": {
         "code": "invalid_widget",
+        "kind": "refused",
         "message": ": type 'html' is not in the catalogue (card, row, column, title, text, caption, badge, metric, table, chart, keyValue, list, button, divider, image, timeline, tracker, entity, brief, comparison, checklist, form, confirm, document, quote, plan, reasoning, slots, receipt, contact).",
         "requestId": "<req>",
+        "retryable": false,
         "status": 422
       },
       "success": false
@@ -82,8 +84,10 @@
     "body": {
       "error": {
         "code": "widget_taken",
+        "kind": "input",
         "message": "hold-review is taken by a platform widget; rename yours.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 409
       },
       "success": false
@@ -106,8 +110,10 @@
           ],
           "teamId": "team_ops"
         },
+        "kind": "refused",
         "message": "Your role cannot create a widget; a Builder or Admin can.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -2029,8 +2035,10 @@
     "body": {
       "error": {
         "code": "already_published",
+        "kind": "input",
         "message": "v1 is already published; save a change to make a new version.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 409
       },
       "success": false
@@ -2041,8 +2049,10 @@
     "body": {
       "error": {
         "code": "widget_retired",
+        "kind": "input",
         "message": "The widget is retired.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 409
       },
       "success": false
@@ -2065,8 +2075,10 @@
           ],
           "teamId": "team_ops"
         },
+        "kind": "refused",
         "message": "Your role cannot publish this widget; a Builder or Admin can.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -2148,8 +2160,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Widget wd_missing was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -2160,8 +2174,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Widget wire-limit-card was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -2449,8 +2465,10 @@
     "body": {
       "error": {
         "code": "reason_required",
+        "kind": "input",
         "message": "Say why the widget is retired.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -2473,8 +2491,10 @@
           ],
           "teamId": "team_ops"
         },
+        "kind": "refused",
         "message": "Your role cannot edit this widget; a Builder or Admin can.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -2552,8 +2572,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Widget wire-limit-card was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -2564,8 +2586,10 @@
     "body": {
       "error": {
         "code": "widget_retired",
+        "kind": "input",
         "message": "The widget is retired; it takes no new versions.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 409
       },
       "success": false
@@ -2576,8 +2600,10 @@
     "body": {
       "error": {
         "code": "seeded_widget",
+        "kind": "input",
         "message": "hold-review is a platform widget from the seeded library; it cannot be edited here.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 409
       },
       "success": false
@@ -2597,8 +2623,10 @@
             "msg": "Extra inputs are not permitted"
           }
         ],
+        "kind": "input",
         "message": "x: Extra inputs are not permitted",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -2621,8 +2649,10 @@
           ],
           "teamId": "team_ops"
         },
+        "kind": "refused",
         "message": "Your role cannot edit this widget; a Builder or Admin can.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false

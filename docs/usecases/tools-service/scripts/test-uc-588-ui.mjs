@@ -15,6 +15,7 @@ import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 
 import { AGENTS_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack, required } from '@ops-ai/usecase-runner/harness';
+import { agentBase } from '../../lib/agent_save.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
@@ -130,8 +131,8 @@ try {
       const agent = required(await call(agents, 'POST', '/v1/agents', priya, { name: 'Ticket desk', role: 'Reads tickets from Person desk' }), 'create the agent');
       // agents-service keeps the grantable tools for 30 s, so the plugin's operation is offered within that.
       const toolIds = ['person_get_record', 'person_key_get_record'];
-      let patched = await call(agents, 'PATCH', `/v1/agents/${agent.id}`, priya, { toolIds });
-      for (let i = 0; i < 40 && patched.status === 400; i++) await new Promise((r) => setTimeout(r, 1000)), (patched = await call(agents, 'PATCH', `/v1/agents/${agent.id}`, priya, { toolIds }));
+      let patched = await call(agents, 'PATCH', `/v1/agents/${agent.id}`, priya, { toolIds, ...(await agentBase(agents, priya, agent.id)) });
+      for (let i = 0; i < 40 && patched.status === 400; i++) await new Promise((r) => setTimeout(r, 1000)), (patched = await call(agents, 'PATCH', `/v1/agents/${agent.id}`, priya, { toolIds, ...(await agentBase(agents, priya, agent.id)) }));
       const asked = await call(agents, 'POST', `/v1/agents/${agent.id}/publish-requests`, priya, { version: patched.data?.version, note: 'uc-588' });
       const live = asked.data?.status === 'pending' ? await call(agents, 'POST', `/v1/publish-requests/${asked.data.id}/decision`, maya, { decision: 'approved' }) : asked;
       check(

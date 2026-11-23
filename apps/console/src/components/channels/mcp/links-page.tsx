@@ -21,7 +21,7 @@ import { useCan } from '@/hooks/me-queries';
 import { type McpLinkRow, useDeleteMcpLink, useMcpLinks, useSetMcpLinkPaused } from '@/hooks/mcp-link-queries';
 import { useCreatedRows } from '@/hooks/use-created-rows';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
-import { useTeam } from '@/hooks/use-team';
+import { useTeam, useTeamsNamed } from '@/hooks/use-team';
 import { serverPagination } from '@/components/shared/server-pagination';
 import { plural, relativeTime } from '@/lib/format';
 
@@ -39,12 +39,14 @@ export function McpLinksPage() {
   const [filterResetKey, setFilterResetKey] = React.useState(0);
   const remove = useDeleteMcpLink();
   const setPaused = useSetMcpLinkPaused();
-  const { teams, teamId, switchTeam } = useTeam();
+  const { teamId, switchTeam } = useTeam();
+  // The rows' and the Team filter's teams, named by id in one read.
+  const teams = useTeamsNamed([...(q.data?.data ?? []).map((l) => l.teamId), ...Object.keys(q.data?.facets?.teamId ?? {})]);
   const canEdit = useCan('deployments', 'edit') === true;
   const canDelete = useCan('deployments', 'delete') === true;
   const [open, setOpen] = React.useState(false);
   const [deleting, setDeleting] = React.useState<McpLinkRow | null>(null);
-  const teamName = (id: string) => teams.find((t) => t.id === id)?.name ?? id;
+  const teamName = (id: string) => teams.get(id)?.name ?? id;
   // A link's page, keys and calls are read in its own team, so opening another team's link works in that team.
   const openLink = (l: McpLinkRow, href: string) => {
     if (l.teamId !== teamId) switchTeam(l.teamId);

@@ -81,7 +81,7 @@ export function AgentToolsTable({
                 </TableCell>
                 <TableCell className="text-right tabular-nums">{count(t.calls24h)}</TableCell>
                 <TableCell>
-                  <Button variant="ghost" size="icon" className="size-8" aria-label={`Revoke ${t.name}`} disabled={revoking} onClick={() => onRevoke(t)}>
+                  <Button variant="ghost" size="icon" aria-label={`Revoke ${t.name}`} disabled={revoking} onClick={() => onRevoke(t)}>
                     <X className="size-4" />
                   </Button>
                 </TableCell>

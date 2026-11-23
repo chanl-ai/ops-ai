@@ -62,7 +62,7 @@ Walks and probes act in a test team and remove what they make where a route allo
 
 | Walk | Team | Cleanup |
 |---|---|---|
-| `deploy/fly/smoke.mjs` | `OPS_SMOKE_TEAM` (use `team_security`); default the admin's first team | Deletes its agent, workflow (archived when it has runs), files, chat and approver |
+| `deploy/fly/smoke.mjs` (run by `make stg-deploy` after the click walk; `SKIP_SMOKE=1` leaves it out) | `OPS_SMOKE_TEAM` (`team_security` in a deploy); default the admin's first team | Deletes its agent, workflow (archived when it has runs), files, chat and approver |
 | `docs/usecases/lib/stg_click_walk.mjs` | The first admin's first team; it only reads | None needed |
 | `scripts/team_isolation_probe.py --seed` | The team given as B (use `team_319b708e5de1`) | Deletes what it seeded; a case has no delete route and stays |
 
@@ -81,6 +81,27 @@ The env file names the first admin (`OPS_BOOTSTRAP_ADMIN_*`), `OPS_DEMO_PASSWORD
 `OPS_DEMO_LIVE_MODEL_ALIAS=default`, so the agents answer people on the real model once the install ends
 (`scripts/sample-team/admin.env.example`). `scripts/check_demo_team.py` proves each login's role in the team and that
 a test team's record is absent from it. `--tool-access` grants the team's workflows the Security team's bank module; the platform tools need no grant, since no team owns them.
+
+### Role accounts
+
+Staging runs with `OPS_ENVIRONMENT = "production"` (`deploy/fly/fly.toml`), so platform-service seeds no people and
+accepts no shared password: the dev people of `services/platform-service/seed/dev-roles.json` do not exist here and
+answer 401. Staging has its own account for each member role (admin, builder, approver, viewer, chat_user) in one team,
+kept in `~/.config/ops-ai/staging-roles.env` (template `deploy/fly/staging-roles.env.example`; the GitHub secret
+`STAGING_ROLES_ENV` on a runner). Emails and passwords are never printed.
+
+| To | Do |
+|---|---|
+| Make the accounts the install lacks and sign in as each | `make seed-roles ENV=staging` (safe to run again; `make stg-deploy` runs the same seed and check after the signed-in request, and fails the deploy on any FAIL line) |
+| Only check, changing nothing | `make roles-check ENV=staging` |
+| Call the API as a role | `make api GET /v1/me ENV=staging AS=builder` (`team-admin`, `builder`, `approver`, `viewer`, `chat_user`; `admin` stays the first admin) |
+| Walk the console as roles | `node scripts/agents/ui_walk.mjs --origin https://<your-app>.fly.dev --as admin,builder,viewer,chat_user --routes /agents` (runs the seed first; `member` names the viewer) |
+| Change an account's password | Reset it in the console, put the new one in the file, then update the `STAGING_ROLES_ENV` secret with the file's contents |
+
+A deploy never invents an account: a role with no lines in the file fails the deploy before the walk, naming
+`make seed-roles ENV=staging`, which on a person's machine makes the address and password and appends them. After that,
+copy the file into the `STAGING_ROLES_ENV` secret. The same targets with no `ENV` check a local or preview stack, whose
+people platform-service seeds at boot; `make up` runs it.
 
 Records with no delete route stay in the test teams (cases, chats, runs, reviews, document types).
 
@@ -110,6 +131,7 @@ non-zero on any failure:
 | OCR | `deploy/fly/check_ocr.py` on the machine: fails unless Tesseract has English data and documents-service's `/health` does not report OCR missing | not measured |
 | Plugins | `deploy/images/bake_plugins.py --check` against the app's `OPS_PLUGINS_DIR`: fails unless the plugins match `deploy/plugins.json` by id and version | not measured |
 | Signed in | The first admin signs in through the origin and lists agents: platform issues the session, agents-service verifies it | not measured |
+| Role accounts | `deploy/fly/role_accounts.py seed`: invites the member-role accounts the install lacks, then signs in as each and checks the role it holds | 4 of 5 signed in on the first read-only check; the chat user is made by the first deploy |
 | Walk | `docs/usecases/lib/stg_click_walk.mjs` with the first admin from `<private-dir>/staging-admin.env`; `SKIP_WALK=1` leaves it out | 136 s, 41 OK |
 
 The image installs Tesseract with English data (`tesseract-ocr`, `tesseract-ocr-eng`), and `fly.toml` sets
@@ -135,8 +157,8 @@ is replaced by a newer one, a running one finishes). It starts two ways:
 |---|---|
 | Put another commit, tag or branch on staging | `make stg-deploy-ci REF=<ref>`; it starts the run and watches it to the end |
 | Keep it there through later merges | Set the repository variable `STAGING_HOLD` to the reason; merges are still checked but not deployed |
-| Test a release on staging | Cut `release/X.Y.Z` (`make release-cut`, `docs/deploy/release.md`); each push to it deploys, and while it exists merges to `develop` skip the deploy with a notice |
-| Go back to `develop` | Delete the release or hotfix branch (after the back-merge) and clear `STAGING_HOLD`; the next merge to `develop` deploys, or `make stg-deploy-ci` now |
+| Test a release on staging | After telling the owner, `make stg-deploy-ci REF=release/current`; a push to the train deploys nothing, so set `STAGING_HOLD` for as long as the owner tries it. A numbered `release/X.Y.Z` or any `hotfix/*` branch on origin still freezes merges to `develop` (`docs/deploy/release.md`) |
+| Go back to `develop` | Delete the hotfix branch after its merge and clear `STAGING_HOLD`; the next merge to `develop` deploys, or `make stg-deploy-ci` now |
 
 `REF` is what is deployed; the workflow file runs from `develop` (`WORKFLOW_REF=` changes that). GitHub offers a
 hand-started run only for a workflow that is also on the default branch, `main`, so the button and `make stg-deploy-ci`
@@ -146,7 +168,7 @@ process, OCR, plugins and one signed-in request (the first admin signs in and li
 `skip_walk` leaves out. If a step fails after the machine was replaced, the job runs `make stg-rollback TO=<the release
 before>` without the walk and fails either way; a failure before that point leaves staging as it was. The job summary
 shows the commit, the trigger, the reason, any pin it overrode, the URL, each step's seconds, the walk's counts and the
-rollback's result. A push to `main` (a release) is only tagged, by `release-tag.yml`.
+rollback's result. A release is only tagged, by `release-tag.yml`, on the merge into `develop`.
 
 The local pin (`staging-pin` in the config folder, written by `repo.sh snapshot`) still stops `make stg-deploy` on the
 owner's machine; the runner has no such file, so it lists the release and hotfix branches on origin (`git ls-remote`) and reads `STAGING_HOLD` instead.
@@ -163,6 +185,7 @@ the files `stg_deploy.sh` reads and never printed:
 | `FLY_API_TOKEN` | Two deploy tokens joined by a comma: `<your-app>` (build, deploy, ssh, releases) and `<app-prefix>-db` (the grants proxy) |
 | `STAGING_DB_URL` | The contents of `<private-dir>/staging-db-url.txt` |
 | `STAGING_ADMIN_ENV` | The contents of `<private-dir>/staging-admin.env` |
+| `STAGING_ROLES_ENV` | The contents of `<private-dir>/staging-roles.env` (one account per member role) |
 
 The runner installs Chromium (`playwright install --with-deps chromium`) for the click walk.
 
@@ -177,7 +200,7 @@ runs after merge.
 
 ### Production on GitHub: not built yet
 
-No workflow deploys production. A tag `vX.Y.Z` is made by `release-tag.yml` on the merge of a release or hotfix branch into `main`; nothing deploys
+No workflow deploys production. A tag `vX.Y.Z` is made by `release-tag.yml` on the develop merge of a release or hotfix pull request; nothing deploys
 it. A workflow that read a repository variable could not prove that a person approves each deploy, since the
 environment's reviewers and the place the deploy token lives are invisible to it. Before one returns, the owner sets up:
 

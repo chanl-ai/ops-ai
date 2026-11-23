@@ -20,6 +20,8 @@ from ops_identity import Auth, Identity, ServiceAuth, dev_service_signer, mint_s
 from ops_service_kit.settings import Settings
 from tests.engine.test_lifecycle_rights import ADMIN, BUILDER, BUILDER_WITHOUT_MANAGE, TENANT, jwks
 
+from ..saves import save_agent
+
 # The provisioner acts in the people's tenant: an agent is read only in its own.
 # Signed-in people: a builder of team_ops, and its admin, who also holds agents.manage.
 PERSON = BUILDER
@@ -87,24 +89,24 @@ async def test_only_the_provisioner_sets_template_fields(client: AsyncClient) ->
     unscoped = await client.post("/v1/agents", json=body, headers=provisioner(["agents:create"]))
     assert unscoped.status_code == 403, unscoped.text
     own = _data(await client.post("/v1/agents", json={"name": "Mine", "role": "Mine"}, headers=PERSON), 201)
-    locked = await client.patch(f"/v1/agents/{own['id']}", json={"protection": "system"}, headers=PERSON)
+    locked = await save_agent(client, own["id"], {"protection": "system"}, headers=PERSON)
     assert (locked.status_code, locked.json()["error"]["code"]) == (403, "provisioner_only"), locked.text
 
 
 async def test_a_system_agent_is_changed_by_manage_or_the_provisioner_not_by_edit_alone(client: AsyncClient) -> None:
     made = await _provisioned(client, "system")
     # A builder whose role lost agents.manage edits agents but not a system one (builders hold manage since D59).
-    edit = await client.patch(f"/v1/agents/{made['id']}", json={"role": "Changed"}, headers=BUILDER_WITHOUT_MANAGE)
+    edit = await save_agent(client, made["id"], {"role": "Changed"}, headers=BUILDER_WITHOUT_MANAGE)
     assert (edit.status_code, edit.json()["error"]["code"]) == (403, "system_record"), edit.text
     gone = await client.delete(f"/v1/agents/{made['id']}", headers=BUILDER_WITHOUT_MANAGE)
     assert (gone.status_code, gone.json()["error"]["code"]) == (403, "system_record"), gone.text
-    _data(await client.patch(f"/v1/agents/{made['id']}", json={"role": "Synced"}, headers=provisioner()))
-    _data(await client.patch(f"/v1/agents/{made['id']}", json={"role": "Admin's"}, headers=ADMIN))
+    _data(await save_agent(client, made["id"], {"role": "Synced"}, headers=provisioner()))
+    _data(await save_agent(client, made["id"], {"role": "Admin's"}, headers=ADMIN))
 
 
 async def test_a_managed_agent_is_edited_and_keeps_its_template(client: AsyncClient) -> None:
     made = await _provisioned(client, "managed")
-    after = _data(await client.patch(f"/v1/agents/{made['id']}", json={"role": "Team's own"}, headers=PERSON))
+    after = _data(await save_agent(client, made["id"], {"role": "Team's own"}, headers=PERSON))
     assert (after["role"], after["templateId"], after["protection"]) == (
         "Team's own",
         "banking/branch-assistant",
@@ -115,4 +117,4 @@ async def test_a_managed_agent_is_edited_and_keeps_its_template(client: AsyncCli
 async def test_an_agent_made_without_a_template_reads_as_neither(client: AsyncClient) -> None:
     own = _data(await client.post("/v1/agents", json={"name": "Plain", "role": "Plain"}, headers=PERSON), 201)
     assert (own["templateId"], own["protection"]) == (None, None)
-    _data(await client.patch(f"/v1/agents/{own['id']}", json={"role": "Edited"}, headers=PERSON))
+    _data(await save_agent(client, own["id"], {"role": "Edited"}, headers=PERSON))

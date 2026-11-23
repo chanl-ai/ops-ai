@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-22",
+  "title": "The skill page opens on its instructions",
+  "description": "A skill opens on one editor with an Insert menu, with its tools and knowledge beside it as the same lists the agent page uses. Name, loading and guardrails move to a Settings tab, and a skill's parts are listed read-only under the instructions.",
+  "tag": "improved"
+}

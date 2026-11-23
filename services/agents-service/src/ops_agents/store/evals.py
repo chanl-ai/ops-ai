@@ -1,6 +1,7 @@
 """Saved eval cases and the runs of them, for agents and skills: one row per case in the asset's team, and one row
-per run, kept so a run can be repeated and compared. A case set is replaced whole by the person who saves it; a run
-is only ever added. A workflow's test runs are `registry_validations` and are read beside these, never copied."""
+per run, kept so a run can be repeated and compared. A case set is replaced whole by the person who saves it, or
+added to and removed from one case at a time; a run is only ever added. A workflow's test runs are
+`registry_validations` and are read beside these, never copied."""
 
 from __future__ import annotations
 
@@ -10,7 +11,9 @@ import sqlalchemy as sa
 
 from ops_service_kit.http import Json
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.listing import ListParams
 from ops_store import Guarantee
+from ops_store.listing import LISTED, ListPage, list_page
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.team_scope import team_visible
 
@@ -50,7 +53,7 @@ eval_runs = sa.Table(
     sa.Column("asset_id", sa.String(64), nullable=False),
     sa.Column("version", sa.Integer, nullable=False),
     sa.Column("live_version", sa.Integer),
-    sa.Column("trigger", sa.String(24), nullable=False),
+    sa.Column("trigger", sa.String(24), nullable=False, info=LISTED),
     sa.Column("passed", sa.Integer, nullable=False),
     sa.Column("total", sa.Integer, nullable=False),
     sa.Column("live_passed", sa.Integer),
@@ -59,10 +62,39 @@ eval_runs = sa.Table(
     sa.Column("cost_usd", sa.Float(), nullable=False, default=0.0),
     sa.Column("results", sa.JSON, nullable=False),
     sa.Column("started_by", sa.String(320), nullable=False),
-    sa.Column("ran_at", sa.String(32), nullable=False),
+    sa.Column("ran_at", sa.String(32), nullable=False, info=LISTED),
+    # The digest of the version's content when the run started (agents 0121). A draft is rewritten under one version
+    # number, so the publish gate counts a run only while this still equals the version's own digest; null on runs
+    # kept before, which count for nothing.
+    sa.Column("digest", sa.String(64)),
     sa.Index("ix_eval_runs_asset", "tenant_id", "team_id", "kind", "asset_id", "ran_at"),
+    # The runs list filters and counts by what started a run (agents 0121).
+    sa.Index("ix_eval_runs_trigger", "tenant_id", "team_id", "trigger"),
+    # An asset's runs sort by when each ran.
+    sa.Index("ix_eval_runs_ran_at", "tenant_id", "team_id", "ran_at"),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
+
+
+def _case_rows(kind: str, asset_id: str, team_id: str, cases: list[Json], *, by: str, start: int) -> list[Json]:
+    now = now_iso()
+    return [
+        {
+            "id": new_id("evc"),
+            "team_id": team_id,
+            "kind": kind,
+            "asset_id": asset_id,
+            "position": start + i,
+            "name": str(case["name"]),
+            "status": "active",
+            "source": "manual",
+            "reason": "",
+            "body": case,
+            "created_by": by,
+            "created_at": now,
+        }
+        for i, case in enumerate(cases)
+    ]
 
 
 class EvalStore(RuntimeStore):
@@ -71,36 +103,43 @@ class EvalStore(RuntimeStore):
     async def replace_cases(self, kind: str, asset_id: str, team_id: str, cases: list[Json], *, by: str) -> None:
         """Makes `cases` the asset's active set in one transaction; its draft cases are left."""
         t = eval_cases
-        now = now_iso()
         async with self.tx() as c:
             await c.execute(
                 t.delete().where(t.c.kind == kind, t.c.asset_id == asset_id, t.c.status == "active", team_visible(t))
             )
             if cases:
-                await c.execute(
-                    t.insert(),
-                    [
-                        {
-                            "id": new_id("evc"),
-                            "team_id": team_id,
-                            "kind": kind,
-                            "asset_id": asset_id,
-                            "position": i,
-                            "name": str(case["name"]),
-                            "status": "active",
-                            "source": "manual",
-                            "reason": "",
-                            "body": case,
-                            "created_by": by,
-                            "created_at": now,
-                        }
-                        for i, case in enumerate(cases)
-                    ],
-                )
+                await c.execute(t.insert(), _case_rows(kind, asset_id, team_id, cases, by=by, start=0))
+
+    async def add_cases(self, kind: str, asset_id: str, team_id: str, cases: list[Json], *, by: str) -> None:
+        """Adds `cases` after the asset's last case in one transaction and leaves every other case as it is, so two
+        people adding at once each keep theirs (two adds may share a position; the id breaks the tie)."""
+        t = eval_cases
+        last = sa.select(sa.func.max(t.c.position)).where(t.c.kind == kind, t.c.asset_id == asset_id, team_visible(t))
+        async with self.tx() as c:
+            top = (await c.execute(last)).scalar()
+            start = 0 if top is None else int(top) + 1
+            await c.execute(t.insert(), _case_rows(kind, asset_id, team_id, cases, by=by, start=start))
+
+    async def case(self, case_id: str) -> Json | None:
+        """One case of the acting team, or None: another team's case is not there."""
+        t = eval_cases
+        async with self.tx() as c:
+            row = (await c.execute(sa.select(t).where(t.c.id == case_id, team_visible(t)))).mappings().first()
+        return dict(row) if row is not None else None
+
+    async def remove_cases(self, ids: list[str]) -> int:
+        """Deletes these of the acting team's active cases and answers how many went; a draft or another team's case
+        is left."""
+        t = eval_cases
+        if not ids:
+            return 0
+        async with self.tx() as c:
+            done = await c.execute(t.delete().where(t.c.id.in_(ids), t.c.status == "active", team_visible(t)))
+        return int(done.rowcount)
 
     async def cases(self, kind: str | None = None, asset_id: str | None = None) -> list[Json]:
         t = eval_cases
-        q = sa.select(t).where(team_visible(t)).order_by(t.c.kind, t.c.asset_id, t.c.position)
+        q = sa.select(t).where(team_visible(t)).order_by(t.c.kind, t.c.asset_id, t.c.position, t.c.id)
         if kind:
             q = q.where(t.c.kind == kind)
         if asset_id:
@@ -112,13 +151,37 @@ class EvalStore(RuntimeStore):
         async with self.tx() as c:
             await c.execute(eval_runs.insert().values(**row))
 
-    async def runs(self, kind: str | None = None, asset_id: str | None = None) -> list[Json]:
-        """The acting team's runs, newest first."""
+    async def runs_page(self, kind: str, asset_id: str, params: ListParams) -> ListPage:
+        """One page of the asset's runs in the acting team, newest first, then by id; `trigger` filters and counts."""
         t = eval_runs
-        q = sa.select(t).where(team_visible(t)).order_by(t.c.ran_at.desc(), t.c.id.desc())
-        if kind:
-            q = q.where(t.c.kind == kind)
-        if asset_id:
-            q = q.where(t.c.asset_id == asset_id)
+        q = sa.select(t).where(t.c.kind == kind, t.c.asset_id == asset_id, team_visible(t))
         async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await list_page(
+                c,
+                q,
+                params,
+                sortable={"ranAt": t.c.ran_at, "trigger": t.c.trigger},
+                default_sort=t.c.ran_at.desc(),
+                filters={"trigger": t.c.trigger},
+                facets={"trigger": t.c.trigger},
+            )
+
+    async def run(self, run_id: str) -> Json | None:
+        """One run of the acting team, or None: another team's run is not there."""
+        t = eval_runs
+        async with self.tx() as c:
+            row = (await c.execute(sa.select(t).where(t.c.id == run_id, team_visible(t)))).mappings().first()
+        return dict(row) if row is not None else None
+
+    async def version_run(self, kind: str, asset_id: str, version: int) -> Json | None:
+        """The newest run of one version of the asset in the acting team, or None when that version has not run."""
+        t = eval_runs
+        q = (
+            sa.select(t)
+            .where(t.c.kind == kind, t.c.asset_id == asset_id, t.c.version == version, team_visible(t))
+            .order_by(t.c.ran_at.desc(), t.c.id.desc())
+            .limit(1)
+        )
+        async with self.tx() as c:
+            row = (await c.execute(q)).mappings().first()
+        return dict(row) if row is not None else None

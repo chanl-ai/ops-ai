@@ -28,6 +28,8 @@ from ops_store import isolation
 from ops_store.team_scope import acting_as
 from ops_store.testing import DATABASES, NO_SQL_SERVER, sql_server_schema
 
+from ..conftest import emptied
+
 AT = "2026-11-16T09:00:00.000Z"
 ROOT = Path(__file__).resolve().parents[2]
 TEAM, OTHER = "team_cards", "team_lending"
@@ -49,6 +51,9 @@ def url(request: pytest.FixtureRequest) -> Iterator[str]:
 @pytest.fixture
 async def engine(url: str) -> AsyncIterator[AsyncEngine]:
     e = create_async_engine(url)
+    if url.startswith("postgresql"):
+        # The Postgres database outlives one test, and these rows use fixed ids another store test also inserts.
+        await emptied(e)
     yield e
     await e.dispose()
 
@@ -110,6 +115,9 @@ async def test_unreadable_threads_are_not_counted_and_equal_update_times_page_by
         pages = [await _listed(engine, page=p, page_size=2) for p in (1, 2, 3)]
     # A page past the end answers the last page (`page_window`).
     assert pages == [(["th_vera", "th_c"], 4), (["th_b", "th_a"], 4), (["th_b", "th_a"], 4)]
+    # The search box narrows the page and its total in SQL rather than being dropped.
+    with isolation.scope(tenant, TEAM):
+        assert await _listed(engine, search="th_b") == (["th_b"], 1)
 
 
 # id -> (meta, owner column written, read by the team, by vera at chat.view own); a reader of every chat reads each.

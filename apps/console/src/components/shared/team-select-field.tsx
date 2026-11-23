@@ -1,24 +1,20 @@
 'use client';
 
 import { FormField } from '@/components/shared/form-field';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SearchSelect } from '@/components/shared/search-select';
+import { teamOptions } from '@/hooks/options-queries';
 
-/** Team picker for forms opened in Platform scope, where a new record has no team of its own. */
-export function TeamSelectField({ id, teams, value, onChange, hint }: { id: string; teams: { id: string; name: string }[]; value: string; onChange: (id: string) => void; hint?: string }) {
+/** A team as a form holds it: its id and the name its trigger shows. */
+export type PickedTeam = { id: string; label: string };
+
+/**
+ * Team picker for forms opened in Platform scope, where a new record has no team of its own: the person's teams,
+ * searched on the server. `allowed` names the teams the form may act in; the others show why they cannot be picked.
+ */
+export function TeamSelectField({ id, value, onChange, hint, allowed, reason }: { id: string; value: PickedTeam | null; onChange: (team: PickedTeam) => void; hint?: string; allowed?: string[]; reason?: string }) {
   return (
     <FormField id={id} label="Team" hint={hint}>
-      <Select value={value} onValueChange={onChange}>
-        <SelectTrigger id={id} className="w-full">
-          <SelectValue placeholder="Choose a team" />
-        </SelectTrigger>
-        <SelectContent>
-          {teams.map((t) => (
-            <SelectItem key={t.id} value={t.id}>
-              {t.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <SearchSelect id={id} source={teamOptions(allowed, reason)} value={value} onChange={(teamId, o) => onChange({ id: teamId, label: o?.label ?? teamId })} placeholder="Choose a team" searchPlaceholder="Search teams…" emptyText="No team matches." className="w-full" />
     </FormField>
   );
 }

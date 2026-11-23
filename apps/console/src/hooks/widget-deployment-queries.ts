@@ -2,7 +2,7 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { api } from '@/lib/api';
+import { agentsApiUrl, api } from '@/lib/api';
 import type { WidgetDeploymentInput, WidgetDeploymentPatch } from '@/lib/types/widget-deployments';
 import { useTeamQuery } from './team-query';
 
@@ -50,6 +50,8 @@ export function useRevokeWidgetMintKey() {
 
 /** Where pages load the widget script from; the snippet names it. */
 export const useWidgetScriptUrl = () => api.widgetDeployments.scriptUrl();
+/** The agents service's public address, as the Channels tab's API snippets name it. */
+export const useAgentsApiUrl = () => agentsApiUrl;
 
 /** A preview session for the signed-in builder, bound to the console's origin (Preview as a person). */
 export const useWidgetPreviewSession = () => useMutation({ mutationFn: (id: string) => api.widgetDeployments.previewSession(id) });

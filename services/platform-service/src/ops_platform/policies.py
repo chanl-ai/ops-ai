@@ -10,11 +10,11 @@ from typing import Any, NotRequired, TypedDict
 
 from ops_access import BY_KEY, POLICIES
 from ops_service_kit import narrow
-from ops_service_kit.errors import Unprocessable, ValidationFailed
+from ops_service_kit.errors import Conflict, Unprocessable, ValidationFailed
 from ops_service_kit.http import Json, JsonValue
 
 from .store.members import Actor
-from .store.policies import OLD_KEYS, PolicyStore
+from .store.policies import OLD_KEYS, BelowFloorError, PolicyStore
 from .store.roles import RoleStore
 from .teams import Members
 
@@ -60,8 +60,8 @@ class Policies:
         return self._rows(await self.store.values(tenant_id))
 
     async def set(self, actor: Actor, key: str, value: Any) -> PolicyView:
-        # The cell the policy names: settings.manage in the security team for most (in the acting team for a team's
-        # approval rule, `held_in`), chat.manage for memory retention.
+        # The cell the policy names: settings.manage in the security team for most, approvals.manage in the acting team
+        # for a team's approval rule (`held_in`), chat.manage for memory retention.
         # An old key lands in appChanges / appChangesByApp (the store moves it), so the cell checked is that key's:
         # otherwise a holder of the old key's cell could change what its cell never covered.
         landing = {"toolWritesNeedApproval": "appChanges"}.get(key, "appChangesByApp") if key in OLD_KEYS else key
@@ -77,6 +77,9 @@ class Policies:
             await self.store.set(
                 actor.tenant_id, key, value, by=actor.user_id, request_id=actor.request_id, team_id=actor.team_id
             )
+        except BelowFloorError as e:
+            # The Security team's floor (approvalsFloor, row E55): a team's approval rule may be stricter, never looser.
+            raise Conflict(str(e), code="approval_floor") from e
         except ValueError as e:
             raise ValidationFailed(str(e), code="policy_value") from e
         return next(r for r in self._rows(await self.store.values(actor.tenant_id)) if r["key"] == key)

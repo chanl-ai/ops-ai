@@ -23,16 +23,16 @@ from __future__ import annotations
 
 import copy as deep
 import json
-from dataclasses import replace
 from typing import Annotated, Literal, TypeAlias, cast
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from pydantic import Field, ValidationError
 
+from ops_contracts.templates import CopyRef, Installed, TemplateRequires
 from ops_documents_client import DocumentsClient, DocumentsRefused
 from ops_identity import ServiceCallError, ServiceUnreachable
-from ops_identity.fastapi import ActingPerson, Tx
+from ops_identity.fastapi import Tx
 from ops_service_kit.errors import (
     ApiError,
     Conflict,
@@ -44,6 +44,7 @@ from ops_service_kit.errors import (
 )
 from ops_service_kit.http import Envelope, In, Json, JsonList, JsonValue, Out
 from ops_service_kit.ids import new_id
+from ops_service_kit.names import Name
 from ops_service_kit.template_merge import Choice, FieldOutcome, Strictness, apply, merge
 
 from ...store.agent_registry import SPEC_FIELDS
@@ -52,7 +53,7 @@ from ...store.skills import LABELS as SKILL_LABELS
 from ...store.template_copies import TemplateCopies, TemplateCopyRow
 from ...store.tenancy import current_team
 from ..agent_registry import GUARDRAILS, AgentCaps, AgentSpec, registry
-from ..auth import Principal, caller, reader_of, require_builder
+from ..auth import Principal, caller, maker, reader_of, require_builder
 from ..child_runs import team_workflows
 from ..deps import Runtime, runtime
 from ..envelope import ok
@@ -75,15 +76,6 @@ router = APIRouter(prefix="/v1/templates", tags=["templates"])
 resources = APIRouter(prefix="/v1/resources", tags=["resources"])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(caller)]  # noqa: UP040
-
-
-async def maker(me: Annotated[Principal, Depends(caller)], acting: ActingPerson) -> Principal:
-    """The caller, named as the person a service's call acts for (X-Acting-For, verified by ops_identity), so a copy
-    tools-service makes over MCP records that person as its maker. The rights checked stay the service token's, which
-    carries only the cells the person holds."""
-    if acting is None or me.identity is None or me.identity.kind != "service":
-        return me
-    return replace(me, email=acting.email, name=acting.name or acting.email, sub=acting.sub)
 
 
 Maker: TypeAlias = Annotated[Principal, Depends(maker)]  # noqa: UP040
@@ -148,34 +140,6 @@ class TemplatePlugin(Out):
     version: str
 
 
-class TemplateRequires(Out):
-    tools: list[str]
-    bind: list[dict[str, str]]
-    # The plugin's other resources a copy cannot run without, each `<source>:<template id>`.
-    resources: list[str] = Field(default_factory=list[str])
-
-
-class Installed(Out):
-    # Live copies the team holds of this template, the newest version among them, and whether the source ships a
-    # newer one. A copy never changes by itself.
-    copies: int
-    version: int | None
-    newer_available: bool
-    # The newest live copy was made from a body other than the template's current one (its digest differs).
-    changed: bool = False
-
-
-class CopyRef(Out):
-    id: str
-    kind: Kind
-    record_id: str
-    source: str
-    template_id: str
-    version: int
-    # Set once the team detached the copy: it is the team's own and takes no updates.
-    detached_at: str | None = None
-
-
 class AddCell(Out):
     # The roles grid cell a person needs to add this resource, so another service listing it says the same.
     area: str
@@ -217,7 +181,7 @@ class InstallInput(In):
     # The version listed now when left out; another one is 404 template_version_not_found.
     version: int | None = Field(default=None, ge=1)
     # The copy's name; the template's when left out. A name the team already uses for the kind is 409 name_taken.
-    name: str | None = Field(default=None, min_length=1, max_length=200)
+    name: Name | None = None
     # The team's own knowledge bases and model alias for the template's bindings; a binding left out is named in
     # `needs` and the copy is made without it.
     knowledge_bases: list[str] = Field(default_factory=list[str], max_length=20)

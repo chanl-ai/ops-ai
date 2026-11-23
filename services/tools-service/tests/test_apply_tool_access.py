@@ -155,7 +155,7 @@ class RequesterPolicy(RequesterMayDecide):
         super().__init__(cast(Any, None))
         self.on = on
 
-    async def allowed(self, tenant_id: str) -> bool:
+    async def allowed(self, tenant_id: str, team_id: str | None = None) -> bool:
         return self.on
 
 

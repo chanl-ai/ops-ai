@@ -42,6 +42,13 @@ async def test_provider_connections_are_listed_by_name(models: Models) -> None:
 
     assert [n for n in listed if n.startswith(prefix)] == [f"{prefix}-a", f"{prefix}-b", f"{prefix}-c"]
     assert listed == sorted(listed)
+    # `sortBy` orders the whole list on the server, across pages, not just the page the caller holds.
+    backwards = await every_row(models.client, "/v1/models/providers", sortBy="name", sortOrder="desc")
+    assert [p["name"] for p in backwards if p["name"].startswith(prefix)] == [
+        f"{prefix}-c",
+        f"{prefix}-b",
+        f"{prefix}-a",
+    ]
     searched = await every_row(models.client, "/v1/models/providers", search=prefix.upper())
     assert [p["name"] for p in searched] == [f"{prefix}-a", f"{prefix}-b", f"{prefix}-c"]
     picked = await every_row(models.client, "/v1/models/providers", ids=made["b"], search="no-such-connection")

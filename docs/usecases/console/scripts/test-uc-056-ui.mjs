@@ -2,6 +2,7 @@
 // docs/usecases/console/stale-grants-removed.md. Signed in through platform-service; agents-service reads the tool
 // catalogue from this run's tools-service.
 import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, approveToolReview, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { saveAgent } from '../../lib/agent_save.mjs';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
 const agentsUrl = `http://127.0.0.1:${AGENTS_PORT}`;
@@ -40,7 +41,7 @@ await withUiStack(
     const kept = catalogue.find((t) => t.name === KEPT);
     if (!tool || !kept) throw new Error(`setup: ${OP} or ${KEPT} is not in agents-service's catalogue (${catalogue.length} tools)`);
     const created = await json(await fetch(`${agentsUrl}/v1/agents`, { method: 'POST', headers: J, body: JSON.stringify({ name: `Statements desk ${TAG}`, role: 'Reads statements' }) }));
-    const granted = await fetch(`${agentsUrl}/v1/agents/${created.id}`, { method: 'PATCH', headers: J, body: JSON.stringify({ toolIds: [tool.id, kept.id] }) });
+    const granted = await saveAgent(agentsUrl, J, created.id, { toolIds: [tool.id, kept.id] });
     if (!granted.ok) throw new Error(`setup: granting answered ${granted.status}: ${await granted.text()}`);
     const agent = await json(granted);
     // The module goes away, so its operation is no longer offered.

@@ -10,6 +10,7 @@ from typing import Annotated, Literal
 from pydantic import Field
 
 from ops_service_kit.http import In, JsonValue, ListResult, Out
+from ops_service_kit.names import Name, Name120
 
 from ..environments import ModuleEnvironment, RunKind
 
@@ -426,13 +427,16 @@ class SubjectBindingIn(In):
 
 
 class DiscoveredOperationIn(In):
-    name: str
-    description: str
+    """An operation picked from a source, by name with its confirmed access class. With a source, every other field is
+    read from the source again, so a pick made by select-all (a name and access only) is enough."""
+
+    name: Name120
+    description: str = ""
     access: Access
     method: Method | None = None
     path: str | None = None
-    group: str
-    input: list[SchemaFieldIn]
+    group: str = ""
+    input: list[SchemaFieldIn] = Field(default_factory=list[SchemaFieldIn])
 
 
 class HeaderIn(In):
@@ -441,7 +445,7 @@ class HeaderIn(In):
 
 
 class HttpOperationIn(In):
-    name: str
+    name: Name120
     description: str
     access: Access
     method: Method
@@ -481,8 +485,8 @@ class CodeOperationIn(In):
 
 
 class ModuleIn(In):
-    name: str
-    display_name: str
+    name: Name120
+    display_name: Name
     system: str = ""
     # Optional: the kind follows its operations (http, a source's kind, or code for a function).
     type: ModuleType | None = None
@@ -506,8 +510,8 @@ class ModuleIn(In):
 
 
 class BlankModuleIn(In):
-    display_name: str
-    name: str
+    display_name: Name
+    name: Name120
     # Optional: the kind follows the operations added; http until then.
     type: ModuleType | None = None
     description: str | None = None
@@ -519,7 +523,7 @@ class BlankModuleIn(In):
 
 
 class ModuleDetailsPatchIn(In):
-    display_name: str | None = None
+    display_name: Name | None = None
     description: str | None = None
     sign_in: ModuleSignInIn | None = None
     # Set only by the provisioner: the template slot this record fills and what a person may change of it.
@@ -630,6 +634,56 @@ class ToolRunIn(In):
     confirmed: bool = False
 
 
+class ToolTryIn(In):
+    """One tool tried from a skill path or a workflow step: a read runs, a write comes back as a plan and is sent only
+    when the same values come back with the plan's id."""
+
+    tool: Name120
+    input: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
+    # App id to account name, as the account picker writes it; none uses the app's test account when it has one.
+    accounts: dict[str, str] = Field(default_factory=dict[str, str], max_length=1)
+    # The id of the plan the person confirmed; the values must be the ones planned.
+    plan_id: str | None = Field(default=None, max_length=80)
+
+
+class TryPlanRequest(Out):
+    method: str
+    url: str
+    body: str | None = None
+
+
+class TryPlan(Out):
+    """What a write would send: the tool, the values, the system and account, and an http operation's request."""
+
+    tool: str
+    access: str
+    input: JsonValue
+    system: str | None = None
+    connection_id: str | None = None
+    test_account: bool = False
+    request: TryPlanRequest | None = None
+
+
+class ToolTryResult(Out):
+    # ran: a read ran; planned: a write was shown, not sent; sent: a confirmed write ran; refused: the gateway refused.
+    kind: Literal["ran", "planned", "sent", "refused"]
+    access: Access
+    call_id: str
+    # Whether the try runs on a live account, which the confirm says plainly.
+    live: bool
+    account: str | None = None
+    plan_id: str | None = None
+    plan: TryPlan | None = None
+    ok: bool | None = None
+    output: JsonValue = None
+    status: int | None = None
+    reasons: list[str] = Field(default_factory=list[str])
+    # A confirm sent again: the first send's call, whose answer this is; nothing was sent twice.
+    replay_of: str | None = None
+    request: TestRequestOut | None = None
+    log: list[TestLogLine] = Field(default_factory=list[TestLogLine])
+
+
 class ToolRunResult(ModuleTestResult):
     # True when the answer came from a mock, never the system: every Mock run, and a Real one the test environment's
     # mock answers for this input.
@@ -729,15 +783,40 @@ class DiscoveredOperation(Out):
 
 
 class DiscoveryResult(Out):
+    """A source as discovery read it: its meta and how many operations it lists. The operations are stored for 24
+    hours for the person who asked, and read a page at a time from GET /v1/tool-modules/discoveries/{id}/operations."""
+
+    id: str
     type: ModuleType
     system: str
     suggested_name: str
     version: str
     endpoint: str
-    operations: list[DiscoveredOperation]
     warnings: list[str]
     # No operation carries an auth header: imported as is, calls go out with no credentials.
     no_auth: bool = False
+    operation_total: int
+
+
+class DiscoveredOperationRow(DiscoveredOperation):
+    # The module the discovery was made for already has an operation of this name: an import skips it.
+    added: bool
+
+
+class DiscoveredOperationList(ListResult[DiscoveredOperationRow]):
+    # How many operations matching the search and filters the module already has, for the picker's count.
+    added_total: int
+
+
+class DiscoveredName(Out):
+    name: str
+    access: Access
+
+
+class DiscoveredNames(Out):
+    """Every operation matching the search and filters that the module does not have yet, for select-all."""
+
+    data: list[DiscoveredName]
 
 
 class ModuleSourceIn(In):
@@ -749,6 +828,13 @@ class ModuleSourceIn(In):
     file_name: str | None = None
     file_id: str | None = None
     connection_id: str | None = None
+
+
+class DiscoverIn(ModuleSourceIn):
+    """A source to read, and the module its operations are for (`moduleId`): none while a new module is drafted. A
+    module the caller may not change is refused."""
+
+    module_id: str | None = None
 
 
 class ImportOperationsIn(In):

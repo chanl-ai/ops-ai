@@ -22,6 +22,9 @@ import type {
   OperationPatch,
   ToolModule,
   ToolModuleDetail,
+  DiscoveredOperationPage,
+  DiscoveryAsk,
+  OperationPick,
 } from '@/lib/types/tool-modules';
 
 /** Tool modules behind the data gateway (spec 03 §4–5). Lists are scoped to the current team. */
@@ -30,8 +33,15 @@ export interface ToolModulesApi {
   grants(params: { view: GrantView; search?: string; page: number; pageSize: number }): Promise<ListResult<ToolGrant>>;
   list(params: ListParams<ModuleFilters> & { view: ModuleView }): Promise<ListResult<ToolModule> & { stats: ModuleStats; viewCounts: ModuleViewCounts }>;
   get(id: string): Promise<ToolModuleDetail>;
-  /** Reads an MCP server's tool list or an OpenAPI document without saving anything. */
-  discover(source: ModuleSource): Promise<DiscoveryResult>;
+  /**
+   * Reads an MCP server's tool list or an OpenAPI document and keeps what it found 24 hours for the caller, for the
+   * module named (none for a new one). Saves no module; the operations are read with `discoveredOperations`.
+   */
+  discover(source: ModuleSource, moduleId?: string): Promise<DiscoveryResult>;
+  /** One page of a stored discovery's operations, searched on the server. */
+  discoveredOperations(discoveryId: string, ask: DiscoveryAsk & { page: number; pageSize: number }): Promise<DiscoveredOperationPage>;
+  /** Select-all: every matching operation the module does not have yet, by name and access as found. */
+  discoveredNames(discoveryId: string, ask: DiscoveryAsk): Promise<OperationPick[]>;
   /** Saves a draft module; it needs a security review before any workflow can be approved for it. */
   create(input: ModuleInput): Promise<ToolModuleDetail>;
   /** Saves a draft with a name and a type only: no operations, no connection. Drafts skip review gates until publish. */

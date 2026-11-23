@@ -53,14 +53,14 @@ cases = sa.Table(
     sa.Column("team_id", sa.String(64), nullable=False),
     # The producer's own key (a run's or chat's), unique in the team: opening the case again finds it.
     sa.Column("producer_key", sa.String(200)),
-    sa.Column("subject", sa.String(300), nullable=False),
+    sa.Column("subject", sa.String(300), nullable=False, info=LISTED),
     sa.Column("customer_id", sa.String(200), info=LISTED),
     sa.Column("customer_name", sa.String(300)),
     sa.Column("status", sa.String(32), nullable=False, info=LISTED),
     sa.Column("assignee", sa.String(320), info=LISTED),
     sa.Column("priority", sa.String(16), nullable=False, info=LISTED),
     sa.Column("response_due_at", sa.String(32), nullable=False),
-    sa.Column("resolution_due_at", sa.String(32), nullable=False),
+    sa.Column("resolution_due_at", sa.String(32), nullable=False, info=LISTED),
     sa.Column("responded_at", sa.String(32)),
     # Set while the case waits on the customer; leaving that status moves both deadlines on by the pause.
     sa.Column("paused_since", sa.String(32)),
@@ -74,6 +74,8 @@ cases = sa.Table(
     sa.Column("updated_at", sa.String(32), nullable=False),
     sa.UniqueConstraint("tenant_id", "team_id", "producer_key", name="uq_cases_producer_key"),
     sa.Index("ix_cases_team_due", "tenant_id", "team_id", "resolution_due_at"),
+    # The cases list sorts by subject.
+    sa.Index("ix_cases_team_subject", "tenant_id", "team_id", "subject"),
     # The cases list's filters, each within one team (agents 0111).
     sa.Index("ix_cases_team_status", "tenant_id", "team_id", "status"),
     sa.Index("ix_cases_team_priority", "tenant_id", "team_id", "priority"),
@@ -302,6 +304,13 @@ class CaseStore:
                 c,
                 q,
                 params,
+                sortable={
+                    "subject": c_.subject,
+                    "status": c_.status,
+                    "priority": c_.priority,
+                    "assignee": c_.assignee,
+                    "resolutionDueAt": c_.resolution_due_at,
+                },
                 default_sort=c_.resolution_due_at.asc(),
                 filters={
                     "status": c_.status,

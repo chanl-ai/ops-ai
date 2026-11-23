@@ -5,7 +5,7 @@ second transaction or checks out a second connection without its row saying so. 
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -25,6 +25,7 @@ from ops_tools.plugins.host import PluginHost
 from ops_tools.plugins.templates import plugin_templates_router
 from ops_tools.store import CallLog
 from ops_tools.store.connections import ConnectionStore
+from ops_tools.store.discoveries import Discoveries, FoundOperation
 from ops_tools.store.egress import EgressStore
 from ops_tools.store.mcp_links import LinkedTool, McpLinks
 from ops_tools.store.modules import ModuleStore
@@ -117,6 +118,17 @@ def seed_team(database_url: str, client: httpx.AsyncClient) -> SeedTeam:
             await logged(CallLog(engine), module["id"], op["name"], outcome="ok", latency=5, at=at, tenant=tenant)
             for _ in range(n)
         ]
+        # A discovery of `n` operations for the module, as POST /discover stores one for the admin.
+        found: list[FoundOperation] = [
+            {"name": f"op_{i:03d}", "description": "d", "access": "read", "method": "GET", "path": f"/v1/r/{i}",
+             "group": f"g{i % 3}", "input": []}
+            for i in range(n)
+        ]  # fmt: skip
+        with isolation.scope(tenant, TEAM):
+            await Discoveries(engine).save(
+                tenant_id=tenant, team_id=TEAM, id=f"disc_{n}", person="usr_priya", module_id=module["id"], meta={},
+                operations=found, now=at, expires_at=at + timedelta(hours=1),
+            )  # fmt: skip
         await engine.dispose()
         made_credentials: list[str] = []
         for i in range(n):
@@ -132,6 +144,7 @@ def seed_team(database_url: str, client: httpx.AsyncClient) -> SeedTeam:
             "name": op["name"],
             "call_id": calls[0],
             "credential_id": made_credentials[0],
+            "discovery_id": f"disc_{n}",
         }
         return Seeded(headers=admin, ids=ids, service_headers=service_headers(tenant))
 

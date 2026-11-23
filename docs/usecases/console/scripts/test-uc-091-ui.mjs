@@ -5,6 +5,7 @@
 import { fileURLToPath } from 'node:url';
 
 import { AGENTS_PORT, check, chromium, finish, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
+import { agentBase } from '../../lib/agent_save.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const TEAM = { 'X-Team-Id': 'team_ops' };
@@ -21,7 +22,7 @@ await withUiStack(async (consoleUrl) => {
   const created = (await api('/v1/agents', { method: 'POST', body: JSON.stringify({ name: NAME, role: 'Answers account questions' }) })).data;
   const model = (await api(`/v1/agents/${created.id}`)).data.model ?? '';
   const limits = { allowedModels: [model], defaultModel: model, temperature: { min: 0, max: 1, default: 0.3 }, callersMayAddInstructions: true, switchableToolIds: ['lookup_account'], allowedKnowledgeBaseIds: [] };
-  const saved = await raw(`/v1/agents/${created.id}`, { method: 'PATCH', body: JSON.stringify({ toolIds: ['lookup_account'], limits, note: 'limits' }) });
+  const saved = await raw(`/v1/agents/${created.id}`, { method: 'PATCH', body: JSON.stringify({ toolIds: ['lookup_account'], limits, note: 'limits', ...(await agentBase(agents, TEAM, created.id)) }) });
   if (!saved.ok) throw new Error(`setup: limits answered ${saved.status}: ${await saved.text()}`);
   const published = await raw(`/v1/agents/${created.id}/publish-requests`, { method: 'POST', body: JSON.stringify({ version: (await saved.json()).data.version, note: 'first' }) });
   if (!published.ok) throw new Error(`setup: publish answered ${published.status}: ${await published.text()}`);

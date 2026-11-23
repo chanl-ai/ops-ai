@@ -53,9 +53,9 @@
       "lastUsedAt": null,
       "name": "ci",
       "prefix": "<key>",
+      "revision": 1,
       "status": "active",
       "target": null,
-      "revision": 1,
       "teamId": "<team>"
     }
   ],
@@ -1640,6 +1640,110 @@
             {
               "action": "manage",
               "area": "reviews",
+              "roles": [
+                {
+                  "id": "admin",
+                  "name": "Admin",
+                  "via": "person"
+                }
+              ],
+              "scope": "all",
+              "securityTeamOnly": false
+            },
+            {
+              "action": "view",
+              "area": "approvals",
+              "roles": [
+                {
+                  "id": "admin",
+                  "name": "Admin",
+                  "via": "person"
+                }
+              ],
+              "scope": "all",
+              "securityTeamOnly": false
+            },
+            {
+              "action": "create",
+              "area": "approvals",
+              "roles": [
+                {
+                  "id": "admin",
+                  "name": "Admin",
+                  "via": "person"
+                }
+              ],
+              "scope": "all",
+              "securityTeamOnly": false
+            },
+            {
+              "action": "edit",
+              "area": "approvals",
+              "roles": [
+                {
+                  "id": "admin",
+                  "name": "Admin",
+                  "via": "person"
+                }
+              ],
+              "scope": "all",
+              "securityTeamOnly": false
+            },
+            {
+              "action": "publish",
+              "area": "approvals",
+              "roles": [
+                {
+                  "id": "admin",
+                  "name": "Admin",
+                  "via": "person"
+                }
+              ],
+              "scope": "all",
+              "securityTeamOnly": false
+            },
+            {
+              "action": "delete",
+              "area": "approvals",
+              "roles": [
+                {
+                  "id": "admin",
+                  "name": "Admin",
+                  "via": "person"
+                }
+              ],
+              "scope": "all",
+              "securityTeamOnly": false
+            },
+            {
+              "action": "run",
+              "area": "approvals",
+              "roles": [
+                {
+                  "id": "admin",
+                  "name": "Admin",
+                  "via": "person"
+                }
+              ],
+              "scope": "all",
+              "securityTeamOnly": false
+            },
+            {
+              "action": "decide",
+              "area": "approvals",
+              "roles": [
+                {
+                  "id": "admin",
+                  "name": "Admin",
+                  "via": "person"
+                }
+              ],
+              "scope": "all",
+              "securityTeamOnly": false
+            },
+            {
+              "action": "manage",
+              "area": "approvals",
               "roles": [
                 {
                   "id": "admin",
@@ -4128,6 +4232,110 @@
         },
         {
           "action": "view",
+          "area": "approvals",
+          "roles": [
+            {
+              "id": "admin",
+              "name": "Admin",
+              "via": "person"
+            }
+          ],
+          "scope": "all",
+          "securityTeamOnly": false
+        },
+        {
+          "action": "create",
+          "area": "approvals",
+          "roles": [
+            {
+              "id": "admin",
+              "name": "Admin",
+              "via": "person"
+            }
+          ],
+          "scope": "all",
+          "securityTeamOnly": false
+        },
+        {
+          "action": "edit",
+          "area": "approvals",
+          "roles": [
+            {
+              "id": "admin",
+              "name": "Admin",
+              "via": "person"
+            }
+          ],
+          "scope": "all",
+          "securityTeamOnly": false
+        },
+        {
+          "action": "publish",
+          "area": "approvals",
+          "roles": [
+            {
+              "id": "admin",
+              "name": "Admin",
+              "via": "person"
+            }
+          ],
+          "scope": "all",
+          "securityTeamOnly": false
+        },
+        {
+          "action": "delete",
+          "area": "approvals",
+          "roles": [
+            {
+              "id": "admin",
+              "name": "Admin",
+              "via": "person"
+            }
+          ],
+          "scope": "all",
+          "securityTeamOnly": false
+        },
+        {
+          "action": "run",
+          "area": "approvals",
+          "roles": [
+            {
+              "id": "admin",
+              "name": "Admin",
+              "via": "person"
+            }
+          ],
+          "scope": "all",
+          "securityTeamOnly": false
+        },
+        {
+          "action": "decide",
+          "area": "approvals",
+          "roles": [
+            {
+              "id": "admin",
+              "name": "Admin",
+              "via": "person"
+            }
+          ],
+          "scope": "all",
+          "securityTeamOnly": false
+        },
+        {
+          "action": "manage",
+          "area": "approvals",
+          "roles": [
+            {
+              "id": "admin",
+              "name": "Admin",
+              "via": "person"
+            }
+          ],
+          "scope": "all",
+          "securityTeamOnly": false
+        },
+        {
+          "action": "view",
           "area": "cases",
           "roles": [
             {
@@ -5070,11 +5278,13 @@
       "appChanges": {},
       "appChangesByApp": {},
       "appWritesNeedApproval": {},
+      "approvalsFloor": {},
       "appsChangeWithoutAsking": {},
       "chatThreadsOwnerOnly": true,
       "checkBeforeSend": {},
       "companySignInRequired": false,
       "egressNewHosts": "ask_security",
+      "evalsRequired": {},
       "extractionFloor": 0.8,
       "mcpConnectionHours": 8,
       "memoryRetentionDays": null,
@@ -5083,6 +5293,7 @@
       "requesterMayDecide": false,
       "reviewSlaHours": 8,
       "securityTeamAddsSecrets": false,
+      "skillPublishStrict": {},
       "stepUp": false,
       "taskAssist": {},
       "toolWritesNeedApproval": {}
@@ -6699,6 +6910,110 @@
           {
             "action": "manage",
             "area": "reviews",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "view",
+            "area": "approvals",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "create",
+            "area": "approvals",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "edit",
+            "area": "approvals",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "publish",
+            "area": "approvals",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "delete",
+            "area": "approvals",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "run",
+            "area": "approvals",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "decide",
+            "area": "approvals",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "manage",
+            "area": "approvals",
             "roles": [
               {
                 "id": "admin",
@@ -9187,6 +9502,110 @@
       },
       {
         "action": "view",
+        "area": "approvals",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "create",
+        "area": "approvals",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "edit",
+        "area": "approvals",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "publish",
+        "area": "approvals",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "delete",
+        "area": "approvals",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "run",
+        "area": "approvals",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "decide",
+        "area": "approvals",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "manage",
+        "area": "approvals",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "view",
         "area": "cases",
         "roles": [
           {
@@ -10131,6 +10550,7 @@
       "kind": "person",
       "name": "Ana Ops",
       "policies": {
+        "approvalsFloor": {},
         "chatThreadsOwnerOnly": true,
         "companySignInRequired": false,
         "extractionFloor": 0.8,
@@ -10179,6 +10599,7 @@
             "access": "cxdemprv",
             "activity": "cxdemprv",
             "agents": "cxdemprv",
+            "approvals": "cxdemprv",
             "audit": "cxdemprv",
             "cases": "cxdemprv",
             "chat": "cxdemprv",
@@ -10205,6 +10626,7 @@
             "access": "v",
             "activity": "cxdemprv",
             "agents": "cxdemprv",
+            "approvals": "v",
             "audit": "cxdemprv",
             "cases": "cxdemprv",
             "chat": "cxdemprv",
@@ -10235,6 +10657,7 @@
             "access": "v",
             "activity": "v",
             "agents": "xv",
+            "approvals": "v",
             "cases": "cemv",
             "chat": "xrV",
             "connections": "v",
@@ -10261,6 +10684,7 @@
           "viewer": {
             "access": "v",
             "agents": "v",
+            "approvals": "v",
             "cases": "ceMv",
             "chat": "rV",
             "connections": "v",
@@ -10286,6 +10710,7 @@
         "name": "Ana Ops",
         "perm_version": 3,
         "policies": {
+          "approvalsFloor": {},
           "chatThreadsOwnerOnly": true,
           "companySignInRequired": false,
           "extractionFloor": 0.8,
@@ -10513,6 +10938,19 @@
       },
       {
         "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": "all"
+        },
+        "area": "approvals"
+      },
+      {
+        "actions": {
           "create": "all",
           "decide": "all",
           "delete": "all",
@@ -10646,7 +11084,7 @@
     "lockedReason": null,
     "name": "Builder",
     "notHeld": [],
-    "permissionCount": 147,
+    "permissionCount": 148,
     "permissions": [
       {
         "action": "view",
@@ -10731,6 +11169,11 @@
       {
         "action": "view",
         "area": "agents",
+        "scope": "all"
+      },
+      {
+        "action": "view",
+        "area": "approvals",
         "scope": "all"
       },
       {
@@ -11597,6 +12040,19 @@
           "run": null,
           "view": null
         },
+        "area": "approvals"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": null
+        },
         "area": "cases"
       },
       {
@@ -11730,7 +12186,8 @@
       "secrets_egress.decide",
       "secrets_egress.manage",
       "settings.view",
-      "settings.manage"
+      "settings.manage",
+      "workspace.manage"
     ],
     "permissionCount": 1,
     "permissions": [
@@ -11793,7 +12250,7 @@
         "description": "Everything in the team: every area and action. Actions held in the Security team still need a role there.",
         "id": "admin",
         "name": "Admin",
-        "permissionCount": 192
+        "permissionCount": 200
       },
       {
         "assignmentCount": 0,
@@ -11801,7 +12258,7 @@
         "description": "Everything in the team except people and access and the workspace's settings.",
         "id": "builder",
         "name": "Builder",
-        "permissionCount": 147
+        "permissionCount": 148
       },
       {
         "assignmentCount": 0,
@@ -11809,7 +12266,7 @@
         "description": "Reads the team's work and decides its reviews; in the Security team, decides module security reviews.",
         "id": "reviewer",
         "name": "Reviewer",
-        "permissionCount": 39
+        "permissionCount": 40
       },
       {
         "assignmentCount": 1,
@@ -11817,7 +12274,7 @@
         "description": "Reads the team's work and chats with its agents.",
         "id": "viewer",
         "name": "Viewer",
-        "permissionCount": 29
+        "permissionCount": 30
       },
       {
         "assignmentCount": 0,
@@ -11860,6 +12317,7 @@
     "kind": "person",
     "name": "Ana Ops",
     "policies": {
+      "approvalsFloor": {},
       "chatThreadsOwnerOnly": true,
       "companySignInRequired": false,
       "extractionFloor": 0.8,
@@ -11902,6 +12360,7 @@
       "kind": "person",
       "name": "Ana Ops",
       "policies": {
+        "approvalsFloor": {},
         "chatThreadsOwnerOnly": true,
         "companySignInRequired": false,
         "extractionFloor": 0.8,
@@ -11950,6 +12409,7 @@
             "access": "cxdemprv",
             "activity": "cxdemprv",
             "agents": "cxdemprv",
+            "approvals": "cxdemprv",
             "audit": "cxdemprv",
             "cases": "cxdemprv",
             "chat": "cxdemprv",
@@ -11976,6 +12436,7 @@
             "access": "v",
             "activity": "cxdemprv",
             "agents": "cxdemprv",
+            "approvals": "v",
             "audit": "cxdemprv",
             "cases": "cxdemprv",
             "chat": "cxdemprv",
@@ -12006,6 +12467,7 @@
             "access": "v",
             "activity": "v",
             "agents": "xv",
+            "approvals": "v",
             "cases": "cemv",
             "chat": "xrV",
             "connections": "v",
@@ -12032,6 +12494,7 @@
           "viewer": {
             "access": "v",
             "agents": "v",
+            "approvals": "v",
             "cases": "ceMv",
             "chat": "rV",
             "connections": "v",
@@ -12057,6 +12520,7 @@
         "name": "Ana Ops",
         "perm_version": 3,
         "policies": {
+          "approvalsFloor": {},
           "chatThreadsOwnerOnly": true,
           "companySignInRequired": false,
           "extractionFloor": 0.8,
@@ -12082,22 +12546,33 @@
     }
   },
   "signOut": null,
-  "teams": [
-    {
-      "id": "<team>",
-      "memberCount": 1,
-      "name": "Team admin <team>",
-      "ownerGroups": [],
-      "role": "admin",
-      "scope": "owned"
-    },
-    {
-      "id": "<team>",
-      "memberCount": 1,
-      "name": "Team viewer <team>",
-      "ownerGroups": [],
-      "role": "admin",
-      "scope": "owned"
+  "teams": {
+    "data": [
+      {
+        "id": "<team>",
+        "memberCount": 1,
+        "name": "Team admin <team>",
+        "ownerGroups": [],
+        "role": "admin",
+        "scope": "owned"
+      },
+      {
+        "id": "<team>",
+        "memberCount": 1,
+        "name": "Team viewer <team>",
+        "ownerGroups": [],
+        "role": "admin",
+        "scope": "owned"
+      }
+    ],
+    "facets": {},
+    "pagination": {
+      "hasNext": false,
+      "hasPrev": false,
+      "page": 1,
+      "pageSize": 20,
+      "total": 2,
+      "totalPages": 1
     }
-  ]
+  }
 }

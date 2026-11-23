@@ -23,6 +23,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { useAiEstimate, useDecideAiSteps, useSourceKinds, useUpdateSource } from '@/hooks/knowledge-queries';
+import { useLeaveGuard } from '@/hooks/use-leave-guard';
 import { count, dateTime, plural, relativeTime } from '@/lib/format';
 import type { CleaningSettings, OcrMode, Rule, Sensitivity, SourceDetail, SourcePatch, SyncRun } from '@/lib/types/knowledge';
 import type { IngestSettings, IngestStrategy } from '@/lib/types/knowledge-ingest';
@@ -112,12 +113,7 @@ export function SourceSettingsTab({ source, onDelete }: { source: SourceDetail; 
   const valuesErrors = Object.keys(ruleInputs).length ? valueErrors(ruleInputs, d.values) : {};
   const invalid = !!nameError || Object.values(sizeErrors).some(Boolean) || Object.keys(valuesErrors).length > 0;
 
-  React.useEffect(() => {
-    if (!dirty) return;
-    const guard = (e: BeforeUnloadEvent) => e.preventDefault();
-    window.addEventListener('beforeunload', guard);
-    return () => window.removeEventListener('beforeunload', guard);
-  }, [dirty]);
+  useLeaveGuard(dirty);
 
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setEdits((x) => ({ ...x, [k]: v }));
   const setIngest = (p: Partial<IngestSettings>) => set('ingest', { ...d.ingest, ...p });

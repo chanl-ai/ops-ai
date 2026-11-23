@@ -91,7 +91,7 @@ custom app's connection id); an account is a connection id.
 | `secrets` | `list()`, `create(name, value)`, `rotate(name, value)`, `rename(name, new_name)`, `delete(name)`; no answer carries a value |
 | `policies` | `get(key)`, `set(key, value)`: the team's policies a Security admin changes, such as `toolWritesNeedApproval` (use `with_team` to act in another team) |
 | `egress` | `list()`, `allow_host(host)`, `allow_range(cidr)`, `remove_host`, `remove_range`; Security admins only |
-| `agents` | `tool_options(search)` (what may be granted), `grant_tools(id, tool_ids)` (kept beside the ones it holds) |
+| `agents` | `update(id, fields, base=)` (saves fields on the draft, naming the copy last read; refused with `stale_base` when it has been saved since), `tool_options(search)` (what may be granted), `grant_tools(id, tool_ids)` (kept beside the ones it holds), `references(search, for_agent=)` (what a brief can mention with `@`), `add_reference(id, kind, ref_id)` (grants it as a new draft; a skill brings its tools and knowledge bases), `publish_check(id)` (what stops the draft from publishing, each with its field). `apply` carries `brief`, `promptMode` and `patterns`: a file with a `brief` has its role and instructions written from it |
 | `resources` | `list(app)`, `add(resource)` (a copy in the team) |
 | `usage` | `list(**filters)`: this team's tool calls |
 
@@ -126,7 +126,12 @@ Moving from 0.1.0: see [Upgrading to 1.0.0](upgrading.md).
 A refused call raises a subclass of `OpsError` with `status`, `code`, `message`, `request_id` and `details`: `BadRequest` (400,
 422), `Unauthorized` (401), `Forbidden` (403), `NotFound` (404), `Conflict` (409), `RateLimited` (429) and
 `ServerError` (5xx). The fields come from the API's one error body, described on the [HTTP API](../reference/http-api.md#how-it-works) page. Branch on `code`, and quote
-`request_id` when asking for help.
+`request_id` when asking for help. Each also has `.kind` (`input`, `refused`, `upstream`, `timeout` or `internal`).
+
+A run that failed raises `RunFailed` from `ops.runs.wait(run_id, check=True)`, with `kind`, `code`, `message` (for the
+builder), `user_message` (safe to show a customer), `retryable`, `retry_after`, `trace_id`, `step`, `attempt` and `of`.
+Without `check=True` the failed run is returned and its `failure` holds the same fields. The `opsai` command prints one
+line for either and exits with a status per kind: input 2, refused 3, upstream 4, timeout 5, internal 6.
 
 ```python
 from ops_ai import NotFound

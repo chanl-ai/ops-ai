@@ -32,6 +32,7 @@ from ops_service_kit.http import (
     paged,
 )
 from ops_service_kit.listing import ListQuery
+from ops_service_kit.names import Name
 from ops_store import isolation
 
 from ...store.widgets import WidgetRow
@@ -62,7 +63,7 @@ Reader: TypeAlias = Annotated[Principal, Depends(reader_of("widgets"))]  # noqa:
 
 
 class WidgetInput(In):
-    name: str
+    name: Name
     use_when: str
     tree: dict[str, Any]
     data_schema: dict[str, Any]

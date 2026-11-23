@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import Field
 
 from ops_access import can
+from ops_agent_kernel.steps import ReturnField, SkillStep
 from ops_identity.fastapi import Tx
 from ops_service_kit import narrow
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
@@ -26,8 +27,11 @@ from ops_service_kit.listing import ListQuery
 from ops_service_kit.logging import get_logger
 from ops_store import isolation
 
+from ...app import skill_text
+from ...app.skill_content import runs_of
+from ...store.agent_registry import digest_of, refuse_stale
 from ...store.skill_list import View, menu_versions, newest_specs, offered_by, skills_page
-from ...store.skills import SkillRow
+from ...store.skills import SkillRow, SkillVersionRow
 from ...store.template_copies import TemplateCopies
 from ..agent_registry import AgentSpec, require_owner_or_admin
 from ..agent_registry import registry as agent_registry
@@ -35,8 +39,9 @@ from ..auth import Principal, caller_in, caller_of, principal, reader_of, requir
 from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..publish_policy import decide
-from ..schemas import AgentSkills, SkillDetail, SkillList, SkillOptions, SkillRendered
+from ..schemas import AgentSkills, SkillDetail, SkillList, SkillOptions, SkillRendered, SkillTextReading
 from ..skills import (
+    INSTRUCTIONS_MAX,
     LIMITS,
     agent_skills,
     check_content,
@@ -47,8 +52,10 @@ from ..skills import (
     pin,
     pinned_by,
     publish,
+    read_text,
     render_published,
     require_unpinned,
+    review_record,
     skills,
 )
 from .agents import changeable as agent_changeable
@@ -60,6 +67,9 @@ log = get_logger("ops_agents.skills")
 router = APIRouter(dependencies=[Depends(caller_in("skills"))])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
+
+
+SuccessLine = Annotated[str, Field(min_length=1, max_length=300)]
 
 
 class SkillInput(In):
@@ -107,6 +117,15 @@ class SkillCreateInput(In):
     review_note: str = ""
     inputs: list[SkillInput] = Field(default_factory=list[SkillInput], max_length=20)
     parts: list[SkillPartInput] = Field(default_factory=list[SkillPartInput], max_length=8)
+    # A skill that runs step by step: when not to use it, its steps, the exits it may end with beside done and
+    # failed (name to meaning), the results it hands back and the lines that say it went well.
+    not_when: str = Field(default="", max_length=1024)
+    steps: list[SkillStep] = Field(default_factory=list[SkillStep], max_length=30)
+    exit: dict[str, str] = Field(default_factory=dict[str, str], max_length=8)
+    returns: list[ReturnField] = Field(default_factory=list[ReturnField], max_length=12)
+    success: list[SuccessLine] = Field(default_factory=list[SuccessLine], max_length=8)
+    # The skill written as text (app/skill_text.py): its steps are read from it, and `instructions` is set to it.
+    source: str | None = None
 
 
 class SkillDraftPatch(In):
@@ -120,8 +139,26 @@ class SkillDraftPatch(In):
     refusal: str | None = Field(default=None, max_length=500)
     inputs: list[SkillInput] | None = Field(default=None, max_length=20)
     parts: list[SkillPartInput] | None = Field(default=None, max_length=8)
+    not_when: str | None = Field(default=None, max_length=1024)
+    steps: list[SkillStep] | None = Field(default=None, max_length=30)
+    exit: dict[str, str] | None = Field(default=None, max_length=8)
+    returns: list[ReturnField] | None = Field(default=None, max_length=12)
+    success: list[SuccessLine] | None = Field(default=None, max_length=8)
+    # The skill written as text: its steps are read from it at this save, and `instructions` is set to it.
+    source: str | None = None
     note: str = ""
+    # The copy the change was made on: the skill's `version` and `digest` as last read. A draft is rewritten in place
+    # under one version number, so the digest is what tells an old copy of it from the newest.
     base_version: int
+    base_digest: str
+
+
+class SkillTextInput(In):
+    text: str = Field(max_length=INSTRUCTIONS_MAX)
+    loading: Literal["on_match", "always"] = "on_match"
+    has_parts: bool = False
+    # The endings the form declares beside the text: a bare `stop <name>` ends the skill only with one of them.
+    exit: dict[str, str] = Field(default_factory=dict[str, str])
 
 
 class ReviewInput(In):
@@ -214,6 +251,22 @@ async def get_skill(
     return ok(await detail(rt, skill_id))
 
 
+@router.post("/v1/skills/{skill_id}/text", response_model=Envelope[SkillTextReading])
+async def read_skill_text(
+    rt: Rt, skill_id: str, body: SkillTextInput, caller: Annotated[Principal, Depends(caller_in("skills"))]
+) -> JSONResponse:
+    """How a text reads as this skill's steps, without saving it: the hints on its lines, the mentions of things
+    that no longer exist, what it uses, how each condition is decided and what each mentioned tool returns. The same
+    reader a save runs. skills: view in the skill's team (403 `forbidden`)."""
+    async with isolation.request_transaction():
+        row = await skills(rt).row(skill_id)
+        can(caller_of(caller), "skills", "view", team=row.team_id, what=row.slug, code="forbidden")
+    reading = await read_text(
+        rt, body.text, team_id=row.team_id, loading=body.loading, has_parts=body.has_parts, exits=body.exit
+    )
+    return ok(reading.json())
+
+
 @router.post("/v1/skills/{skill_id}/render", response_model=Envelope[SkillRendered])
 async def render_skill(
     rt: Rt, skill_id: str, body: SkillRenderInput, caller: Annotated[Principal, Depends(caller_in("skills"))], _: Tx
@@ -227,7 +280,17 @@ async def render_skill(
     return ok(await render_published(rt, skill_id, body.part, body.inputs))
 
 
-async def _request_review(rt: Runtime, skill_id: str, version: int, note: str, by: str) -> None:
+async def _request_review(rt: Runtime, skill_id: str, note: str, by: str) -> None:
+    """Opens a publish request for the newest draft once its publish check passes, read fresh from the tools
+    directory; both the publish route and a create with `requestReview` come through here (422 `cannot_request`)."""
+    d = await detail(rt, skill_id, fresh=True)
+    if not d["publishCheck"]["canRequest"]:
+        raise ValidationFailed(
+            " ".join(b["message"] for b in d["publishCheck"]["blockers"]),
+            code="cannot_request",
+            details={"problems": d["publishCheck"]["problems"]},
+        )
+    version = int(d["version"])
     reg = skills(rt)
     v = await reg.version(skill_id, version)
     assert v is not None
@@ -246,8 +309,10 @@ async def _request_review(rt: Runtime, skill_id: str, version: int, note: str, b
             "skillName": v.content["name"],
             "savedBy": v.saved_by,
             **decision.record(),
-            **decision.record(),
             "changes": v.changes,
+            # What the reviewer approves, kept as it was when the request opened: a returned draft is saved over in
+            # place, and once approved the published version is this one.
+            **review_record(live, v, d["publishCheck"]["warnings"]),
         },
         approved=approved,
     )
@@ -274,51 +339,60 @@ async def create_skill(rt: Rt, me: Me, body: SkillCreateInput) -> JSONResponse:
     """The tools the body names are checked against tools-service's directory before the transaction opens. With
     `requestReview` the publish request follows the commit, as `POST .../publish-requests` does."""
     require_builder(me, area="skills", team_id=me.team_id, action="create", what="a skill")
-    content = await check_content(rt, body.model_dump(by_alias=True))
+    content = await check_content(rt, body.model_dump(by_alias=True), team_id=me.team_id or "")
     async with isolation.request_transaction():
         sid = await skills(rt).create(
             content, owner_team=body.owner_team, team_id=me.team_id or "", origin=body.origin, by=me.email
         )
         if not body.request_review:
             return ok(await detail(rt, sid), 201)
-    await _request_review(rt, sid, 1, body.review_note, me.email)
+    await _request_review(rt, sid, body.review_note, me.email)
     return ok(await detail(rt, sid), 201)
 
 
-async def _editable(rt: Runtime, me: Principal, skill_id: str, base_version: int) -> int:
-    """The newest version once a draft save may write it: 409 when the skill is deprecated, `base_version` is not
-    the newest version, or the newest is in review."""
+async def _editable(rt: Runtime, me: Principal, skill_id: str, base: tuple[int, str]) -> SkillVersionRow:
+    """The newest version once a draft save may write it: 409 when the skill is deprecated, `base` (the version and
+    digest the change was made on) is not the newest version, or the newest is in review."""
     row = await changeable(rt, me, skill_id, "edit")
     if row.deprecated_reason:
         raise Conflict("The skill is deprecated; it takes no new versions.", code="skill_deprecated")
-    if base_version != row.version:
-        raise Conflict(f"v{row.version} was saved after v{base_version}; reload and edit again.", code="stale_base")
+    newest = await skills(rt).version(skill_id, row.version)
+    assert newest is not None
+    refuse_stale(base, row.version, newest.digest, saved_by=newest.saved_by, saved_at=newest.saved_at)
     if any(r.status == "pending" for r in await agent_registry(rt).requests("skill", skill_id)):
         raise Conflict("The newest version is in review; decide the review first.", code="review_open")
-    return row.version
+    return newest
 
 
 @router.put("/v1/skills/{skill_id}/draft", response_model=Envelope[SkillDetail])
 async def save_skill_draft(rt: Rt, me: Me, skill_id: str, body: SkillDraftPatch) -> JSONResponse:
-    """Edits the newest draft, or opens the next version on top of the published one. 409 when `baseVersion` is
-    not the newest version, or the skill is deprecated or in review. The checks run again in the transaction that
-    writes, after the tools are checked against tools-service with nothing open, so a save landing in between answers
-    `stale_base`."""
+    """Edits the newest draft, or opens the next version on top of the published one. 409 `stale_base` when
+    `baseVersion` and `baseDigest` are not the newest copy (its details name who saved it and when); 409 too when the
+    skill is deprecated or in review. The checks run again in the transaction that writes, after the tools are checked
+    against tools-service with nothing open, so a save landing in between answers `stale_base`."""
     reg = skills(rt)
+    base = (body.base_version, body.base_digest)
     async with isolation.request_transaction():
-        newest = await reg.version(skill_id, await _editable(rt, me, skill_id, body.base_version))
-    assert newest is not None
+        newest = await _editable(rt, me, skill_id, base)
+        owner = (await reg.row(skill_id)).team_id
     tools = narrow.a_list(newest.content["tools"], "tools")
     merged: dict[str, JsonValue] = {
         **newest.content,
         "toolIds": [narrow.an_object(t, "tool")["toolId"] for t in tools],
     }
-    merged |= body.model_dump(by_alias=True, exclude_none=True, exclude={"note", "base_version"})
+    merged |= body.model_dump(by_alias=True, exclude_none=True, exclude={"note", "base_version", "base_digest"})
+    if body.source is not None and isinstance(before := newest.content.get("source"), str):
+        # The endings sent back include those the stored text's stop lines made; the new text says its own again.
+        made = skill_text.stop_exits(before)
+        merged["exit"] = {k: v for k, v in narrow.json_object(merged.get("exit")).items() if k not in made}
     merged.pop("slug", None)
-    content = await check_content(rt, merged)
+    if body.source is None and (body.steps is not None or body.instructions is not None):
+        # Steps or instructions sent without a text replace the text: the stored one would be read over them.
+        merged.pop("source", None)
+    content = await check_content(rt, merged, skill_id=skill_id, team_id=owner)
     async with isolation.request_transaction():
-        await _editable(rt, me, skill_id, body.base_version)
-        await reg.save_draft(skill_id, content, by=me.email, note=body.note)
+        await _editable(rt, me, skill_id, base)
+        await reg.save_draft(skill_id, content, by=me.email, note=body.note, base=base)
         return ok(await detail(rt, skill_id))
 
 
@@ -328,10 +402,7 @@ async def request_skill_publish(rt: Rt, me: Me, skill_id: str, body: ReviewInput
     or saved it); approved at once under the dev auto-approve setting. Off the request transaction: the team's
     publish-review policy is read from platform-service between the reads and the writes."""
     await changeable(rt, me, skill_id, "publish")
-    d = await detail(rt, skill_id)
-    if not d["publishCheck"]["canRequest"]:
-        raise ValidationFailed(" ".join(d["publishCheck"]["blockers"]), code="cannot_request")
-    await _request_review(rt, skill_id, int(d["version"]), body.note, me.email)
+    await _request_review(rt, skill_id, body.note, me.email)
     return ok(await detail(rt, skill_id), 201)
 
 
@@ -405,6 +476,8 @@ async def attach_skill(rt: Rt, me: Me, _: Tx, agent_id: str, skill_id: str, body
     reg = agent_registry(rt)
     row = await agent_changeable(rt, me, agent_id, "attach a skill to")
     spec = dict((await reg.version(agent_id, row.version)).spec)
+    # The copy the pin is added to: a save landing before the one below is never written over (409 `stale_base`).
+    base = (row.version, digest_of(spec))
     version = body.version
     if version is None:
         found = await skills(rt).find(skill_id)
@@ -413,7 +486,7 @@ async def attach_skill(rt: Rt, me: Me, _: Tx, agent_id: str, skill_id: str, body
         version = found.published_version
     pins = await pin(rt, cast(AgentSpec, spec), skill_id, version, by=me.email, at=now_iso())
     spec["skillPins"] = cast(JsonList, [*pins])
-    await reg.save(agent_id, spec, by=me.email, note=f"Attached {skill_id} v{version}")
+    await reg.save(agent_id, spec, by=me.email, note=f"Attached {skill_id} v{version}", base=base)
     return ok(await agent_skills(rt, agent_id))
 
 
@@ -422,11 +495,23 @@ async def detach_skill(rt: Rt, me: Me, _: Tx, agent_id: str, skill_id: str) -> J
     reg = agent_registry(rt)
     row = await agent_changeable(rt, me, agent_id, "detach a skill from")
     spec = dict((await reg.version(agent_id, row.version)).spec)
+    base = (row.version, digest_of(spec))
     # A pin that is not an object, or names no skill, raises as indexing it did.
     held = narrow.a_list(spec.get("skillPins") or [], "skill pins")
     pins: JsonList = [p for p in held if narrow.an_object(p, "skill pin")["skillId"] != skill_id]
     if len(pins) == len(held):
         raise NotFound(f"Skill {skill_id} on {agent_id}")
+    # A skill another attached skill runs as a step stays while that one is attached.
+    users = [
+        str(p.get("name") or p["skillId"])
+        for p in (narrow.an_object(p, "skill pin") for p in pins)
+        if skill_id in runs_of(p)
+    ]
+    if users:
+        raise Conflict(
+            f"{', '.join(users)} runs this skill as a step; detach {'it' if len(users) == 1 else 'them'} first.",
+            code="skill_in_use_by_skill",
+        )
     spec["skillPins"] = pins
-    await reg.save(agent_id, spec, by=me.email, note=f"Detached {skill_id}")
+    await reg.save(agent_id, spec, by=me.email, note=f"Detached {skill_id}", base=base)
     return ok(await agent_skills(rt, agent_id))

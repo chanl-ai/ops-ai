@@ -3,10 +3,10 @@
 import * as React from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
-import { FileText, Lock, Sparkles, X } from 'lucide-react';
+import { FileText, Lock, X } from 'lucide-react';
 import { z } from 'zod';
 
-import { Badge } from '@/components/ui/badge';
+import { DialogShell } from '@/components/shared/dialog-shell';
 import { Button } from '@/components/ui/button';
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from '@/components/ui/command';
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
@@ -133,8 +133,18 @@ export function SkillMenu({
   );
 }
 
-/** The picked skill's inputs, required ones checked before it is added to the message. */
-export function SkillInputsForm({ picked, onDone, onBack }: { picked: PickedSkill; onDone: (inputs: Record<string, string>) => void; onBack: () => void }) {
+/** The inputs a skill needs before it can run that the person has not filled: required ones with no value. */
+export const missingInputs = (p: PickedSkill) => p.fields.filter((f) => f.required && !p.inputs[f.name]?.trim());
+
+/**
+ * Opens on send when the picked skill has required inputs still empty. It asks only for those; the skill's optional
+ * inputs sit behind "More". Submitting hands back every value filled, which the composer sends with the message.
+ */
+export function SkillInputsDialog({ picked, onDone, onCancel }: { picked: PickedSkill; onDone: (inputs: Record<string, string>) => void; onCancel: () => void }) {
+  const missing = missingInputs(picked);
+  const optional = picked.fields.filter((f) => !f.required && !picked.inputs[f.name]?.trim());
+  const [more, setMore] = React.useState(false);
+  const shown = [...missing, ...(more ? optional : [])];
   const schema = React.useMemo(
     () => z.object(Object.fromEntries(picked.fields.map((f) => [f.name, f.required ? z.string().trim().min(1, `${words(f.name)} is required.`) : z.string()]))),
     [picked.fields],
@@ -145,20 +155,25 @@ export function SkillInputsForm({ picked, onDone, onBack }: { picked: PickedSkil
   });
   const submit = form.handleSubmit((values) => onDone(Object.fromEntries(Object.entries(values).filter(([, v]) => v.trim()).map(([k, v]) => [k, v.trim()]))));
   return (
-    <form
-      onSubmit={(e) => void submit(e)}
-      onKeyDown={(e) => e.key === 'Escape' && onBack()}
-      className="absolute inset-x-0 bottom-full z-10 mb-2 rounded-lg border bg-popover p-4 shadow-md"
+    <DialogShell
+      open
+      onOpenChange={(o) => !o && onCancel()}
+      size="sm"
+      title={picked.label}
+      description={missing.length === 1 ? 'One detail is needed before this is sent.' : 'A few details are needed before this is sent.'}
+      onSubmit={() => void submit()}
       data-testid="skill-inputs"
+      footer={
+        <div className="flex w-full justify-end gap-2">
+          <Button type="button" variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button type="submit">Send</Button>
+        </div>
+      }
     >
-      <div className="mb-3 flex items-center gap-2 text-sm font-medium">
-        <Sparkles className="size-4" />
-        <span className="truncate">{picked.label}</span>
-        {picked.version != null && <Badge variant="outline">v{picked.version}</Badge>}
-        <span className="ml-auto text-xs font-normal text-muted-foreground">Esc to cancel</span>
-      </div>
       <FieldGroup className="gap-3">
-        {picked.fields.map((f, i) => (
+        {shown.map((f, i) => (
           <Controller
             key={f.name}
             name={f.name}
@@ -177,13 +192,12 @@ export function SkillInputsForm({ picked, onDone, onBack }: { picked: PickedSkil
           />
         ))}
       </FieldGroup>
-      <div className="mt-4 flex justify-end gap-2">
-        <Button type="button" variant="outline" onClick={onBack}>
-          Back
+      {optional.length > 0 && !more && (
+        <Button type="button" variant="ghost" size="sm" className="mt-2" onClick={() => setMore(true)}>
+          More
         </Button>
-        <Button type="submit">Add to message</Button>
-      </div>
-    </form>
+      )}
+    </DialogShell>
   );
 }
 

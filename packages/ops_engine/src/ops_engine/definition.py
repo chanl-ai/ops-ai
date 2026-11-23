@@ -273,6 +273,37 @@ def _check(node: str | None, code: str, message: str, field: str | None = None) 
     return {"node": node, "level": "error", "code": code, "message": message, "field": field}
 
 
+# What a JSON type is called in a parameter check, for people who never read the schema.
+_TYPE_WORDS = {
+    "object": "a group of named values",
+    "array": "a list",
+    "string": "text",
+    "integer": "a whole number",
+    "number": "a number",
+    "boolean": "on or off",
+    "null": "empty",
+}
+
+
+def _plain(err: Any, field: str | None, ui: Mapping[str, JsonValue]) -> str:
+    """A schema error as the step's form names it: the field's label, then what it must be, in words. A nested value
+    keeps its path after the label; a rule with no plain wording keeps the validator's message."""
+    fields = ui.get("fields")
+    spec = fields.get(field) if field and isinstance(fields, dict) else None
+    label = str(spec["label"]) if isinstance(spec, dict) and spec.get("label") else field or "A setting"
+    inner = ".".join(str(p) for p in list(cast(list[object], err.path))[1:])
+    where = f"{label} ({inner})" if inner else label
+    rule, value = str(err.validator), cast(object, err.validator_value)
+    if rule == "required" and not err.path:
+        return f"{where} is required."
+    if rule == "type":
+        wanted = cast(list[object], value) if isinstance(value, list) else [value]
+        return f"{where} must be {' or '.join(_TYPE_WORDS.get(str(w), str(w)) for w in wanted)}."
+    if rule == "enum" and isinstance(value, list):
+        return f"{where} must be one of {', '.join(map(str, cast(list[object], value)))}."
+    return f"{where}: {err.message}"
+
+
 def _parameter(err: Any) -> str | None:
     """The top-level parameter a schema error is about, so an editor can show it under that field: the first path
     segment, or for a missing required property at the top the property's name."""
@@ -363,8 +394,8 @@ def validate(d: WorkflowDefinition, registry: TypeRegistry) -> list[Json]:
             key=lambda e: str(e.path),
         )
         for err in errors:
-            where = ".".join(str(p) for p in err.path) or "parameters"
-            checks.append(_check(n.id, "invalid_parameter", f"{where}: {err.message}", _parameter(err)))
+            field = _parameter(err)
+            checks.append(_check(n.id, "invalid_parameter", _plain(err, field, t.ui), field))
         for ref in named_nodes(n.parameters):
             if ref not in known:
                 checks.append(

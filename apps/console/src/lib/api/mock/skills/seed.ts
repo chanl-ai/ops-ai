@@ -1,5 +1,4 @@
-import type { EvalCheck } from '@/lib/types/evals';
-import type { SkillCitation, SkillEditClass, SkillLoading, SkillOrigin, SkillVersionState } from '@/lib/types/skills';
+import type { SkillCheck, SkillCitation, SkillContent, SkillEditClass, SkillLoading, SkillOrigin, SkillVersionState } from '@/lib/types/skills';
 
 /**
  * Eight Harbor & Pine Bank skills. Tools are named by operation and resolved to tool ids when the mock starts, so the
@@ -20,6 +19,7 @@ export interface VersionSeed {
   tools?: string[];
   knowledgeBases?: string[];
   guardrails?: string[];
+  steps?: SkillContent['steps'];
   /** Test run on this version: cases that fail by name. */
   run?: { daysAgo: number; failing?: string[] };
 }
@@ -27,7 +27,7 @@ export interface VersionSeed {
 export interface TestSeed {
   name: string;
   input: string;
-  checks: EvalCheck[];
+  checks: SkillCheck[];
   source: 'generated' | 'manual' | 'case' | 'document' | 'imported';
   sourceRef?: string;
 }
@@ -47,6 +47,8 @@ export interface SkillSeed {
   tools: string[];
   knowledgeBases: string[];
   guardrails: string[];
+  /** A skill with steps: what it follows in order, when to leave it alone, how it ends and what it hands back. */
+  program?: Pick<SkillContent, 'steps' | 'notWhen' | 'exit' | 'returns' | 'success'>;
   templates?: { name: string; body: string }[];
   /** Seeded resource files by name and size; stored through the files store when the mock starts. */
   files?: { name: string; sizeKb: number; description: string }[];
@@ -64,11 +66,11 @@ export interface SkillSeed {
 const md = (steps: string[], rules: string[], examples: string, output: string) =>
   [`## Steps`, ...steps.map((s, i) => `${i + 1}. ${s}`), '', `## Rules`, ...rules.map((r) => `- ${r}`), '', `## Examples`, examples, '', `## Output format`, output].join('\n');
 
-const calls = (tool: string): EvalCheck => ({ type: 'calls_tool', tool });
-const notCalls = (tool: string): EvalCheck => ({ type: 'not_calls_tool', tool });
-const cites = (source: string, section?: string): EvalCheck => ({ type: 'cites', source, section });
-const says = (text: string): EvalCheck => ({ type: 'reply_contains', text });
-const never = (text: string): EvalCheck => ({ type: 'reply_not_contains', text });
+const calls = (tool: string): SkillCheck => ({ type: 'calls_tool', tool });
+const notCalls = (tool: string): SkillCheck => ({ type: 'not_calls_tool', tool });
+const cites = (source: string, section?: string): SkillCheck => ({ type: 'cites', source, section });
+const says = (text: string): SkillCheck => ({ type: 'reply_contains', text });
+const never = (text: string): SkillCheck => ({ type: 'reply_not_contains', text });
 
 const HARDSHIP_V3 = md(
   [
@@ -169,6 +171,15 @@ const FEE_V2 = md(
   '> "Please refund the $45 overlimit fee."\n\nFirst overlimit fee in 12 months: recommend waive under guideline 2.1.',
   'Decision memo: recommendation, amount, guideline, facts considered.',
 );
+
+/** References are the ones the all-mock references list offers, so their chips show names. */
+const CARD_DISPUTE_STEPS: NonNullable<SkillContent['steps']> = [
+  { do: 'Ask which charge looks wrong and roughly when it happened.' },
+  { do: 'Confirm who {{customer.name}} is.', use: { kind: 'skill', id: 'verify_identity' } },
+  { do: 'Find the charge. It must be on this card.', use: { kind: 'tool', id: 'search_transactions' }, locked: true, check: { text: 'result.count >= 1', by: 'rule' }, ifNot: { action: 'retry', retries: 1 } },
+  { do: 'Open the dispute and read @knowledge:kb_card_disputes for what to tell the customer.', use: { kind: 'tool', id: 'open_dispute' }, check: { text: 'inputs.amount <= 500', by: 'rule' }, ifNot: { action: 'exit', exit: 'needs_review' } },
+  { do: 'Tell the customer the outcome and the case number.' },
+];
 
 export const SKILL_SEEDS: SkillSeed[] = [
   {
@@ -279,6 +290,39 @@ export const SKILL_SEEDS: SkillSeed[] = [
       { name: 'Recurring subscription', input: 'A gym keeps charging me $59 a month after I cancelled.', checks: [says('cancellation date')], source: 'manual' },
     ],
     pins: [{ agentId: 'ag_dispute', version: 3, loads7d: 188, share7d: 0.34, daysAgo: 50, by: 'Daniel Brooks' }],
+  },
+  {
+    id: 'sk_card_dispute',
+    name: 'Card dispute',
+    slug: 'card-dispute',
+    ownerTeam: 'Card Services',
+    origin: 'blank',
+    provenance: 'Written by Card Services',
+    citations: [],
+    useWhen: 'The customer disputes a card charge.',
+    instructions: 'Keep the customer informed at each step. Never say the merchant is at fault.',
+    tools: ['get_transactions'],
+    knowledgeBases: ['Cards & disputes'],
+    guardrails: [],
+    program: {
+      notWhen: 'The charge is on a business account, or the card was reported stolen.',
+      steps: CARD_DISPUTE_STEPS,
+      exit: { needs_review: 'The amount is over the limit, so a person decides.' },
+      returns: [{ name: 'case_number', type: 'text', required: true, description: 'The dispute case that was opened.' }],
+      success: ['The customer was told the outcome and the case number.'],
+    },
+    matchTerms: ['card dispute', 'wrong charge'],
+    versions: [
+      { version: 1, state: 'superseded', editClass: 're_approval', note: 'First version', changes: ['Created'], by: 'Daniel Brooks', daysAgo: 40, run: { daysAgo: 40 } },
+      { version: 2, state: 'published', editClass: 're_test', note: 'Check the amount before opening', changes: ['Step 4 checks the amount'], by: 'Daniel Brooks', daysAgo: 9, run: { daysAgo: 9 } },
+      // Step 4 names a tool the team no longer offers, so the draft cannot publish until the step is fixed.
+      { version: 3, state: 'draft', editClass: 're_test', note: 'Refund small amounts straight away', changes: ['Step 4 refunds instead of opening a dispute'], by: 'Daniel Brooks', daysAgo: 1, steps: CARD_DISPUTE_STEPS.map((s, i) => (i === 3 ? { ...s, use: { kind: 'tool', id: 'refund_card' } } : s)), run: { daysAgo: 1 } },
+    ],
+    tests: [{ name: 'Charge the customer does not recognise', input: 'There is a $42 charge from a shop I have never been to.', checks: [calls('get_transactions')], source: 'manual' }],
+    pins: [
+      { agentId: 'ag_dispute', version: 1, loads7d: 96, share7d: 0.17, daysAgo: 38, by: 'Daniel Brooks' },
+      { agentId: 'ag_fraud', version: 2, loads7d: 31, share7d: 0.03, daysAgo: 8, by: 'Daniel Brooks' },
+    ],
   },
   {
     id: 'sk_wire',

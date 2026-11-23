@@ -1,0 +1,6 @@
+services/agents-service/src/ops_agents/api/routers/publish_requests.py:_Op.name
+services/agents-service/src/ops_agents/api/routers/skills.py:SkillCreateInput.name
+services/agents-service/src/ops_agents/api/routers/skills.py:SkillDraftPatch.name
+services/agents-service/src/ops_agents/api/routers/skills.py:SkillPartInput.name
+services/kb-service/src/ops_kb/app.py:EventIn.name
+services/tools-service/src/ops_tools/modules/schemas.py:SchemaFieldIn.name

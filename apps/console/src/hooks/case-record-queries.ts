@@ -6,17 +6,18 @@ import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
 import { sdk } from '@/lib/api/ops-sdk';
 import type { CaseRecordFilters, CaseRecordPatch } from '@/lib/types/case-records';
+import type { ListParams } from '@/lib/types/query';
 import { useTeamQuery } from './team-query';
 
 const root = ['case-records'] as const;
 
-export const useCaseRecords = (p: { page: number; pageSize: number } & CaseRecordFilters) =>
+export const useCaseRecords = (p: { page: number; pageSize: number } & Pick<ListParams, 'sortBy' | 'sortOrder'> & CaseRecordFilters) =>
   usePagedQuery({
     queryKey: [...root, 'list', p],
     queryFn: () =>
       sdk((ops) =>
         ops.raw.agents.cases_list_cases({
-          query: { page: p.page, pageSize: p.pageSize, search: p.search, status: p.status, priority: p.priority, assignee: p.assignee, overdue: p.overdue },
+          query: { page: p.page, pageSize: p.pageSize, sortBy: p.sortBy, sortOrder: p.sortOrder, search: p.search, status: p.status, priority: p.priority, assignee: p.assignee, overdue: p.overdue },
         }),
       ),
   });

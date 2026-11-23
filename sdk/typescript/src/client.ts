@@ -10,6 +10,7 @@
  */
 import type { operations as AgentsOps } from './generated/agents.js';
 import { agentsOperations } from './generated/agents-operations.js';
+import { RunFailed } from './errors.js';
 import type { operations as DocumentsOps } from './generated/documents.js';
 import { documentsOperations } from './generated/documents-operations.js';
 import type { operations as FilesOps } from './generated/files.js';
@@ -21,7 +22,7 @@ import { platformOperations } from './generated/platform-operations.js';
 import type { operations as ToolsOps } from './generated/tools.js';
 import { toolsOperations } from './generated/tools-operations.js';
 import { type CallArgs, type Config, eachPage, type Operation, pageItems, result, type Service, Transport } from './transport.js';
-import { Agents } from './agents.js';
+import { Agents, based } from './agents.js';
 import { Chat } from './chat.js';
 import { savedOptions } from './profile.js';
 import { Templates } from './templates.js';
@@ -90,7 +91,7 @@ interface Noun {
 
 /** Which operation each verb of a resource calls; the Python SDK reads the same table (sdk/python/src/ops_ai/_client.py). */
 export const NOUNS = {
-  teams: { service: 'platform', list: 'teams_list_teams', paged: false },
+  teams: { service: 'platform', list: 'teams_list_teams' },
   agents: { service: 'agents', list: 'agents_list_agents', get: 'agents_get_agent', create: 'agents_create_agent' },
   workflows: { service: 'agents', list: 'workflows_list_workflows', get: 'workflows_get_workflow' },
   threads: { service: 'agents', list: 'threads_list_threads', get: 'threads_thread_state', create: 'threads_create_thread' },
@@ -103,7 +104,7 @@ export const NOUNS = {
   files: { service: 'files', list: 'files_list_files', get: 'files_get_file' },
   runs: { service: 'agents', list: 'workflows_list_engine_runs', get: 'workflows_get_engine_run' },
   tasks: { service: 'agents', list: 'reviews_list_reviews', get: 'reviews_get_review' },
-  skills: { service: 'agents', list: 'agents_list_skills', get: 'agents_get_skill' },
+  skills: { service: 'agents', list: 'agents_list_skills', get: 'agents_get_skill', create: 'agents_create_skill' },
   guardrails: { service: 'agents', list: 'agents_list_guardrails', get: 'agents_get_guardrail' },
   widgets: { service: 'agents', list: 'agents_list_widgets', get: 'agents_get_widget' },
   caseTypes: { service: 'agents', list: 'cases_list_case_types', get: 'cases_get_case_type' },
@@ -142,6 +143,37 @@ export class Resource {
   }
 }
 
+/** What a skill's draft holds, as `skills.saveDraft` names them. */
+export const SKILL_KEYS = [
+  'name', 'useWhen', 'loading', 'instructions', 'toolIds', 'knowledgeBases', 'guardrails', 'refusal', 'inputs', 'parts',
+  'notWhen', 'steps', 'exit', 'returns', 'success',
+] as const;
+
+export type ReferenceQuery = { kind?: string; cursor?: string; limit?: number; ids?: string[] };
+
+export class Skills extends Resource {
+  constructor(t: Transport, private readonly raw: Raw) {
+    super(t, NOUNS.skills);
+  }
+
+  /** Saves `fields` (any of SKILL_KEYS) as the skill's draft. `base` is the skill as last read, naming the copy the change was made on; left out, the skill is read first. A save from an older copy is refused with `stale_base`. */
+  async saveDraft(id: string, fields: Record<string, unknown>, { note = '', base }: { note?: string; base?: { version: number; digest?: string | null } } = {}) {
+    const read = base?.digest ? base : await this.get(id);
+    const body = Object.fromEntries(SKILL_KEYS.filter((k) => k in fields).map((k) => [k, fields[k]]));
+    return this.raw.agents.agents_save_skill_draft({ path: { skill_id: id }, body: based({ ...body, note }, read) as never });
+  }
+
+  /** Asks to publish the newest draft. A skill that cannot be published is refused with `cannot_request`, and the error's details name each problem and the step it is on. */
+  publish(id: string, note = '') {
+    return this.raw.agents.agents_request_skill_publish({ path: { skill_id: id }, body: { note } });
+  }
+
+  /** What the skill's steps can mention with @, grouped by kind. `ids` (`kind:id` each) answers the labels of what a saved text names. */
+  references(search: string, forSkill: string, query: ReferenceQuery = {}) {
+    return this.raw.agents.agents_references_search({ query: { ...query, forSkill, search: search || undefined } as never });
+  }
+}
+
 export class Threads extends Resource {
   constructor(t: Transport, noun: Noun, private readonly raw: Raw) {
     super(t, noun);
@@ -171,12 +203,14 @@ export class Runs extends Resource {
     return this.raw.agents.workflows_start_engine_run({ body: { workflowId, input: input ?? {}, ...fields } as never });
   }
 
-  /** The run once it has ended or stopped at a human task (then `taskId` names the task). */
-  async wait(runId: string, { timeoutMs = 600_000, intervalMs = 1000 } = {}): Promise<WaitedRun> {
+  /** The run once it has ended or stopped at a human task (then `taskId` names the task). `check: true` throws
+   * RunFailed for a failed run instead of returning it. */
+  async wait(runId: string, { timeoutMs = 600_000, intervalMs = 1000, check = false } = {}): Promise<WaitedRun> {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
       const run = await this.raw.agents.workflows_get_engine_run({ path: { run_id: runId } });
       if ((TERMINAL as readonly string[]).includes(run.status) || run.status === 'waiting') {
+        if (check && run.status === 'failed') throw new RunFailed(run as never);
         const task = (run.waiting?.payload as { review_id?: string } | undefined)?.review_id;
         return task ? { ...run, taskId: task } : run;
       }
@@ -198,6 +232,19 @@ export class Runs extends Resource {
   /** Queues a Stuck run again from its last recorded step; nothing it sent is sent again. */
   retry(runId: string) {
     return this.raw.agents.workflows_retry_engine_run({ path: { run_id: runId } });
+  }
+
+  /** Queues a Failed or Stuck run again from its failed step, on the version it started on. */
+  redrive(runId: string) {
+    return this.raw.agents.workflows_redrive_engine_run({ path: { run_id: runId } });
+  }
+
+  /** Redrives or cancels every run the filter matches; returns the runs changed and those skipped. */
+  bulk(
+    action: 'redrive' | 'cancel',
+    filter: { workflowId?: string; kind?: string; code?: string; createdFrom?: string; createdTo?: string } = {},
+  ) {
+    return this.raw.agents.workflows_bulk_engine_runs({ body: { action, filter } });
   }
 
   /** Starts the run of an email the mailbox listener set aside, under the email's own run key. */
@@ -298,7 +345,7 @@ export class OpsAI {
   readonly workflows: Workflows;
   readonly threads: Threads;
   readonly cases: Resource;
-  readonly skills: Resource;
+  readonly skills: Skills;
   readonly guardrails: Resource;
   readonly widgets: Resource;
   readonly caseTypes: Resource;
@@ -346,7 +393,7 @@ export class OpsAI {
     this.teams = new Resource(t, NOUNS.teams);
     this.threads = new Threads(t, NOUNS.threads, this.raw);
     this.cases = new Resource(t, NOUNS.cases);
-    this.skills = new Resource(t, NOUNS.skills);
+    this.skills = new Skills(t, this.raw);
     this.guardrails = new Resource(t, NOUNS.guardrails);
     this.widgets = new Resource(t, NOUNS.widgets);
     this.caseTypes = new Resource(t, NOUNS.caseTypes);

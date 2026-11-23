@@ -29,6 +29,7 @@ import { useListParams } from '@/hooks/use-list-params';
 import { relativeTime } from '@/lib/format';
 import { serverPagination } from '@/components/shared/server-pagination';
 import { TemplatesGallery } from '@/components/templates/templates-gallery';
+import { nameError } from '@/lib/validation/names';
 
 /** Where the newest version stands: a draft to publish, waiting in Reviews, or published. */
 function versionState(g: Guardrail): { label: string; variant: 'secondary' | 'outline' } {
@@ -131,7 +132,7 @@ function GuardrailDialog({ open, onOpenChange, onCreated }: { open: boolean; onO
     setErrors({});
   }, [open]);
   const submit = async () => {
-    const e = { name: name.trim() ? undefined : 'Name the guardrail.', ...guardrailErrors(draft) };
+    const e = { name: nameError(name, 'Name the guardrail.'), ...guardrailErrors(draft) };
     setErrors(e);
     if (e.name || e.topics || e.message) return;
     try {

@@ -24,6 +24,10 @@ ROOT = Path(__file__).resolve().parents[4]
 LOG_METHODS = {"debug", "info", "warning", "error", "exception", "critical"}
 # What every module names its `get_logger(__name__)`.
 LOGGER_NAMES = {"log", "logger"}
+# Request-model fields that hold a name a person types: they take `ops_service_kit.names.Name`, not a bare `str`.
+NAME_FIELDS = frozenset({"name", "title", "label", "display_name"})
+# `path:Class.field` of each one still on a bare `str`; the list only shrinks.
+NAME_BASELINE = ROOT / "packages/ops_service_kit/name-fields-baseline.txt"
 # Routes a caller reaches without signing in: the probes, the API documents and the loaders a page fetches.
 PUBLIC_ROUTES = frozenset(
     {
@@ -70,11 +74,13 @@ def check(
     names that can be searched) over every source file under `roots` (the workspace's by default)."""
     out: list[str] = []
     allowed = settings_path(settings_module)
+    baseline: set[str] = set(NAME_BASELINE.read_text().split()) if NAME_BASELINE.exists() else set()
     for src in roots if roots is not None else source_roots():
         for path in sorted(src.rglob("*.py")):
             tree = ast.parse(path.read_text(), filename=str(path))
             out += check_env(path, tree, allowed)
             out += check_logging(path, tree)
+            out += check_names(path, tree, baseline)
     if check_routes(app, set(authenticated), PUBLIC_ROUTES | set(public), out) == 0:
         out.append("rule 5: no authenticated routes were found to check")
     return out
@@ -105,6 +111,28 @@ def check_env(path: Path, tree: ast.AST, allowed: Path) -> list[str]:
             out.append(f"{_at(path)}:{node.lineno} rule 4: environment read outside {_at(allowed)}")
         if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("dotenv"):
             out.append(f"{_at(path)}:{node.lineno} rule 4: dotenv import")
+    return out
+
+
+def check_names(path: Path, tree: ast.AST, baseline: set[str]) -> list[str]:
+    """MD5 (docs/architecture/standards/api-and-models.md): a request model's name, title or label field is a `Name`:
+    trimmed, never blank, no control character, capped at its column. A bare `str` is refused unless it carries a
+    `pattern` or is in the baseline."""
+    at = _at(path)
+    out: list[str] = []
+    for cls in (n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)):
+        if not any(isinstance(b, ast.Name) and b.id == "In" for b in cls.bases):
+            continue
+        for node in cls.body:
+            if not (isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name)):
+                continue
+            if node.target.id not in NAME_FIELDS or ast.unparse(node.annotation) not in {"str", "str | None"}:
+                continue
+            if node.value is not None and "pattern" in ast.unparse(node.value):
+                continue
+            key = f"{at}:{cls.name}.{node.target.id}"
+            if key not in baseline:
+                out.append(f"{at}:{node.lineno} MD5 names: {cls.name}.{node.target.id} is a bare str; use names.Name")
     return out
 
 

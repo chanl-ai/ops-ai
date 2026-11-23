@@ -20,6 +20,8 @@ from ops_engine.store import metadata as engine_metadata
 from ops_service_kit.settings import Settings
 from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model
 
+from ..saves import save_agent
+
 
 @dataclass
 class Directory:
@@ -71,9 +73,7 @@ async def test_a_grant_no_longer_offered_is_listed_stale(setup: tuple[AsyncClien
 
 async def test_saving_drops_the_stale_grant_and_keeps_the_rest(setup: tuple[AsyncClient, Directory]) -> None:
     client, _ = setup
-    r = await client.patch(
-        "/v1/agents/ag_fraud", json={"toolIds": ["lookup_account", "place_wire_hold", "request_document"]}
-    )
+    r = await save_agent(client, "ag_fraud", {"toolIds": ["lookup_account", "place_wire_hold", "request_document"]})
     assert r.status_code == 200, r.text
     saved = r.json()["data"]
     assert saved["toolIds"] == ["place_wire_hold", "request_document"]
@@ -82,7 +82,7 @@ async def test_saving_drops_the_stale_grant_and_keeps_the_rest(setup: tuple[Asyn
 
 async def test_a_new_grant_the_directory_does_not_offer_is_still_refused(setup: tuple[AsyncClient, Directory]) -> None:
     client, _ = setup
-    r = await client.patch("/v1/agents/ag_branch", json={"toolIds": ["lookup_customer", "lookup_account"]})
+    r = await save_agent(client, "ag_branch", {"toolIds": ["lookup_customer", "lookup_account"]})
     assert r.status_code == 400 and r.json()["error"]["code"] == "unknown_tool", r.text
 
 

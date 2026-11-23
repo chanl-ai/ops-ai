@@ -3,14 +3,13 @@
 import * as React from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
-import { ChevronDown, Lock } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { z } from 'zod';
 
 import { SettingsPageLayout } from '@/components/settings/settings-page-layout';
-import { EmptyState } from '@/components/shared/empty-state';
 import { EntityPicker } from '@/components/shared/entity-picker';
-import { QueryError } from '@/components/shared/query-states';
+import { NoAccess, QueryError } from '@/components/shared/query-states';
 import { ChoiceCards } from '@/components/shared/setting/choice-cards';
 import { SettingCard } from '@/components/shared/setting/setting-card';
 import { Button } from '@/components/ui/button';
@@ -26,6 +25,7 @@ import { TOOL_KEY, usePolicyEditor, useSetWorkspacePolicy, useWorkspacePolicies 
 import { usePoliciesAreSample } from '@/hooks/use-preview';
 import { useTeam } from '@/hooks/use-team';
 import { ApiError } from '@/lib/api/contract';
+import { requesterMayDecideOf } from '@/lib/approval-rules';
 
 // The answer that asks someone other than the asker (an answer, not a role name).
 const BY_REVIEWER = 'reviewer';
@@ -68,13 +68,15 @@ export default function ApprovalsPage() {
   const changes = policies.data?.find((p) => p.key === 'appChanges');
   const byApp = policies.data?.find((p) => p.key === 'appChangesByApp');
   const saved = ofTeam(changes?.value, teamId);
-  const mayDecide = policies.data?.find((p) => p.key === 'requesterMayDecide');
+  const mayDecide = requesterMayDecideOf(policies.data?.find((p) => p.key === 'requesterMayDecide')?.value, teamId);
   const savedAll = React.useMemo(() => ofTeam(byApp?.value, teamId) as Record<string, Entry>, [byApp?.value, teamId]);
   // A key starting `tool:` is one tool's answer, set on that tool's own page; it is kept as it is when apps are saved.
   const savedByApp = React.useMemo(() => Object.fromEntries(Object.entries(savedAll).filter(([k]) => !k.startsWith(TOOL_KEY))), [savedAll]);
   const savedTools = React.useMemo(() => Object.fromEntries(Object.entries(savedAll).filter(([k]) => k.startsWith(TOOL_KEY))), [savedAll]);
-  // Both policies are changed under settings.manage; the cell is held in the Security team or the acting team.
-  const locked = useCan('settings', 'manage') !== true || sample;
+  // The team's approval rules (appChanges, appChangesByApp, requesterMayDecide) are changed under approvals.manage in
+  // the acting team, so a custom role holding it unlocks the page without settings.manage.
+  const mayRead = useCan('access', 'view');
+  const locked = useCan('approvals', 'manage') !== true || sample;
 
   const form = useForm<TeamForm>({
     resolver: zodResolver(teamSchema),
@@ -82,7 +84,7 @@ export default function ApprovalsPage() {
       ask: saved.ask === true,
       answer: saved.answer === BY_REVIEWER ? BY_REVIEWER : 'person',
       reviewerRole: (saved.reviewerRole as string | null) ?? null,
-      requesterMayDecide: mayDecide?.value === true,
+      requesterMayDecide: mayDecide,
       testAccountsNeverAsk: saved.testAccountsNeverAsk !== false,
       testRunsAsk: saved.testRunsAsk !== false,
       // Unset means a maker's ask-first holds; a new workspace stores false for the whole workspace.
@@ -102,7 +104,8 @@ export default function ApprovalsPage() {
   const saveTeam = form.handleSubmit(async (v) => {
     try {
       await set.mutateAsync({ key: 'appChanges', teamId, value: { ask: v.ask, answer: v.answer, reviewerRole: v.answer === BY_REVIEWER ? v.reviewerRole : null, testAccountsNeverAsk: saved.testAccountsNeverAsk !== false, testRunsAsk: saved.testRunsAsk !== false, ...(typeof saved.makersAsk === 'boolean' ? { makersAsk: saved.makersAsk } : {}) } });
-      if (v.requesterMayDecide !== (mayDecide?.value === true)) await set.mutateAsync({ key: 'requesterMayDecide', value: v.requesterMayDecide });
+      // Per team: the save replaces this team's part only.
+      if (v.requesterMayDecide !== mayDecide) await set.mutateAsync({ key: 'requesterMayDecide', teamId, value: v.requesterMayDecide });
       toast.success(`Saved: ${SWITCH}`, { description: 'New requests follow it. Open ones keep the rule they were made under.' });
     } catch (e) {
       toast.error('Couldn’t save the approval setting', { description: (e as Error).message });
@@ -148,12 +151,13 @@ export default function ApprovalsPage() {
 
   return (
     <SettingsPageLayout section="Approvals" description="Whether an agent asks before it changes something in an app. Off until you turn it on." sample={sample}>
-      {policies.isPending || editor.isPending ? (
+      {/* platform-service reads the policies to whoever holds access.view where the request acts. */}
+      {mayRead === false || (policies.error instanceof ApiError && policies.error.status === 403) ? (
+        <NoAccess what="the approval settings" />
+      ) : policies.isPending || editor.isPending ? (
         <div className="flex flex-col gap-4" aria-busy="true">
           <Skeleton className="h-44 w-full" />
         </div>
-      ) : policies.error instanceof ApiError && policies.error.status === 403 ? (
-        <EmptyState icon={Lock} title="You can’t see approvals" description={policies.error.message} testId="approvals-refused" />
       ) : policies.isError ? (
         <QueryError what="the approval settings" error={policies.error} onRetry={() => policies.refetch()} retrying={policies.isFetching} />
       ) : (
@@ -214,7 +218,7 @@ export default function ApprovalsPage() {
                           <Checkbox checked={field.value} onCheckedChange={(v) => field.onChange(v === true)} disabled={locked} aria-label={OWN_REQUESTS} className="mt-0.5" />
                           <span>
                             {OWN_REQUESTS}
-                            <span className="block text-xs text-muted-foreground">Off: someone else has to approve. Applies to every team in the workspace.</span>
+                            <span className="block text-xs text-muted-foreground">Off: someone else has to approve. Applies to this team.</span>
                           </span>
                         </label>
                       )}

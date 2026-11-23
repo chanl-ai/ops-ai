@@ -83,7 +83,8 @@ console's MCP page (`apps/console/src/app/channels/mcp/page.tsx`) reads `/connec
 | A platform operation (`list_templates`, `install_template`) is a gateway call: one `gateway_calls` row on the `mcp` channel, a rate window per tenant, and `install_template` is a write that waits for a person unless the caller is their own approver | Built (`T/gateway_calls.py` `call(operation=…)`, `T/mcp_tools.py` `resolved`) |
 | Running any tool, a platform operation included, needs `tools:run`; a member without it gets a tool error | Built (`T/mcp_server.py` `_call_tool`) |
 | A platform operation's service token carries only the cells the person holds in the team, and the owning service decides with its own `can` (no `skills:create`, no skill installed) | Built (`T/mcp_tools.py` `_headers`) |
-| A write a platform operation makes names the person as its maker, through an acting-for token platform-service signs | Built (`T/mcp_tools.py` `_acting_for`) |
+| A write a platform operation makes names the person as its maker, through an acting-for token platform-service signs for the service the write goes to (one token source per service) | Built (`T/mcp_tools.py` `_acting_for`) |
+| `draft_agent` and `invite_people` are the Workspace built-in app's tools, listed here as platform operations too; `draft_agent` makes a draft and runs, `invite_people` is a live change and waits as every MCP write does until held writes are built | Built (`T/mcp_tools.py` `WORKSPACE`) |
 | A skill saved from a chat is a draft that a builder publishes | Not built yet |
 | An outside server's tools are pinned by schema; a changed tool is refused until re-imported and reviewed | Built (`T/modules/service.py:456`) |
 | Every request to an outside server goes through the egress allow-list at a checked address | Built (`T/mcp.py:1-8`, `:100-107`) |

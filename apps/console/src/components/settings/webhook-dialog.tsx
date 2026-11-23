@@ -10,6 +10,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { SettingsLookups, WebhookInput } from '@/lib/types/settings';
+import { nameError } from '@/lib/validation/names';
 
 /** Adds a webhook for the current team. The signing secret is shown on the webhook after it is created. */
 export function WebhookDialog({
@@ -55,7 +56,8 @@ export function WebhookDialog({
             <LoadingButton
               isLoading={isPending}
               onClick={async () => {
-                if (!name.trim()) return setError({ field: 'name', message: 'Name the webhook.' });
+                const nameIssue = nameError(name, 'Name the webhook.');
+                if (nameIssue) return setError({ field: 'name', message: nameIssue });
                 if (!/^https:\/\//.test(url.trim())) return setError({ field: 'url', message: 'Use an https:// URL.' });
                 if (!picked.length) return setError({ field: 'events', message: 'Pick at least one event.' });
                 try {

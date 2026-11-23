@@ -660,6 +660,7 @@
             "anyOf": [
               {
                 "maxLength": 200,
+                "minLength": 1,
                 "type": "string"
               },
               {
@@ -1946,7 +1947,7 @@
           "copy": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ResourceCopy"
+                "$ref": "#/components/schemas/CopyRef"
               },
               {
                 "type": "null"
@@ -1960,7 +1961,7 @@
           "installed": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ResourceInstalled"
+                "$ref": "#/components/schemas/Installed"
               },
               {
                 "type": "null"
@@ -2552,10 +2553,14 @@
             "title": "Description"
           },
           "displayName": {
+            "maxLength": 200,
+            "minLength": 1,
             "title": "Displayname",
             "type": "string"
           },
           "name": {
+            "maxLength": 120,
+            "minLength": 1,
             "title": "Name",
             "type": "string"
           },
@@ -3867,6 +3872,68 @@
         "title": "ConnectorUse",
         "type": "object"
       },
+      "CopyRef": {
+        "additionalProperties": false,
+        "description": "A team's copy of a template: where it came from and the record it made.",
+        "properties": {
+          "detachedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detachedat"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "agent",
+              "skill",
+              "workflow",
+              "document_type",
+              "case_type",
+              "task_type",
+              "guardrail",
+              "knowledge_source"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "recordId": {
+            "title": "Recordid",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "templateId": {
+            "title": "Templateid",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "recordId",
+          "source",
+          "templateId",
+          "version",
+          "detachedAt"
+        ],
+        "title": "CopyRef",
+        "type": "object"
+      },
       "CredentialAccount": {
         "additionalProperties": false,
         "description": "An account signing in with an app credential, as its page lists it.",
@@ -4076,7 +4143,92 @@
         "title": "DecisionIn",
         "type": "object"
       },
-      "DiscoveredOperation": {
+      "DiscoverIn": {
+        "additionalProperties": false,
+        "description": "A source to read, and the module its operations are for (`moduleId`): none while a new module is drafted. A\nmodule the caller may not change is refused.",
+        "properties": {
+          "connectionId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connectionid"
+          },
+          "fileId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fileid"
+          },
+          "fileName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filename"
+          },
+          "kind": {
+            "enum": [
+              "mcp",
+              "openapi"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "moduleId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Moduleid"
+          },
+          "specUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Specurl"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "DiscoverIn",
+        "type": "object"
+      },
+      "DiscoveredName": {
         "additionalProperties": false,
         "properties": {
           "access": {
@@ -4086,6 +4238,160 @@
             ],
             "title": "Access",
             "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "access"
+        ],
+        "title": "DiscoveredName",
+        "type": "object"
+      },
+      "DiscoveredNames": {
+        "additionalProperties": false,
+        "description": "Every operation matching the search and filters that the module does not have yet, for select-all.",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/DiscoveredName"
+            },
+            "title": "Data",
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "DiscoveredNames",
+        "type": "object"
+      },
+      "DiscoveredOperationIn": {
+        "additionalProperties": false,
+        "description": "An operation picked from a source, by name with its confirmed access class. With a source, every other field is\nread from the source again, so a pick made by select-all (a name and access only) is enough.",
+        "properties": {
+          "access": {
+            "enum": [
+              "read",
+              "write"
+            ],
+            "title": "Access",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "group": {
+            "default": "",
+            "title": "Group",
+            "type": "string"
+          },
+          "input": {
+            "items": {
+              "$ref": "#/components/schemas/SchemaFieldIn"
+            },
+            "title": "Input",
+            "type": "array"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "enum": [
+                  "GET",
+                  "POST",
+                  "PUT",
+                  "PATCH",
+                  "DELETE"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          }
+        },
+        "required": [
+          "name",
+          "access"
+        ],
+        "title": "DiscoveredOperationIn",
+        "type": "object"
+      },
+      "DiscoveredOperationList": {
+        "additionalProperties": false,
+        "properties": {
+          "addedTotal": {
+            "title": "Addedtotal",
+            "type": "integer"
+          },
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/DiscoveredOperationRow"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "facets": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Facets",
+            "type": "object"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        },
+        "required": [
+          "data",
+          "pagination",
+          "facets",
+          "addedTotal"
+        ],
+        "title": "DiscoveredOperationList",
+        "type": "object"
+      },
+      "DiscoveredOperationRow": {
+        "additionalProperties": false,
+        "properties": {
+          "access": {
+            "enum": [
+              "read",
+              "write"
+            ],
+            "title": "Access",
+            "type": "string"
+          },
+          "added": {
+            "title": "Added",
+            "type": "boolean"
           },
           "description": {
             "title": "Description",
@@ -4141,86 +4447,22 @@
           "description",
           "access",
           "group",
-          "input"
+          "input",
+          "added"
         ],
-        "title": "DiscoveredOperation",
-        "type": "object"
-      },
-      "DiscoveredOperationIn": {
-        "additionalProperties": false,
-        "properties": {
-          "access": {
-            "enum": [
-              "read",
-              "write"
-            ],
-            "title": "Access",
-            "type": "string"
-          },
-          "description": {
-            "title": "Description",
-            "type": "string"
-          },
-          "group": {
-            "title": "Group",
-            "type": "string"
-          },
-          "input": {
-            "items": {
-              "$ref": "#/components/schemas/SchemaFieldIn"
-            },
-            "title": "Input",
-            "type": "array"
-          },
-          "method": {
-            "anyOf": [
-              {
-                "enum": [
-                  "GET",
-                  "POST",
-                  "PUT",
-                  "PATCH",
-                  "DELETE"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Method"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "path": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Path"
-          }
-        },
-        "required": [
-          "name",
-          "description",
-          "access",
-          "group",
-          "input"
-        ],
-        "title": "DiscoveredOperationIn",
+        "title": "DiscoveredOperationRow",
         "type": "object"
       },
       "DiscoveryResult": {
         "additionalProperties": false,
+        "description": "A source as discovery read it: its meta and how many operations it lists. The operations are stored for 24\nhours for the person who asked, and read a page at a time from GET /v1/tool-modules/discoveries/{id}/operations.",
         "properties": {
           "endpoint": {
             "title": "Endpoint",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
             "type": "string"
           },
           "noAuth": {
@@ -4228,12 +4470,9 @@
             "title": "Noauth",
             "type": "boolean"
           },
-          "operations": {
-            "items": {
-              "$ref": "#/components/schemas/DiscoveredOperation"
-            },
-            "title": "Operations",
-            "type": "array"
+          "operationTotal": {
+            "title": "Operationtotal",
+            "type": "integer"
           },
           "suggestedName": {
             "title": "Suggestedname",
@@ -4266,13 +4505,14 @@
           }
         },
         "required": [
+          "id",
           "type",
           "system",
           "suggestedName",
           "version",
           "endpoint",
-          "operations",
-          "warnings"
+          "warnings",
+          "operationTotal"
         ],
         "title": "DiscoveryResult",
         "type": "object"
@@ -4626,6 +4866,44 @@
           "data"
         ],
         "title": "Envelope[CredentialDeleted]",
+        "type": "object"
+      },
+      "Envelope_DiscoveredNames_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/DiscoveredNames"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[DiscoveredNames]",
+        "type": "object"
+      },
+      "Envelope_DiscoveredOperationList_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/DiscoveredOperationList"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[DiscoveredOperationList]",
         "type": "object"
       },
       "Envelope_DiscoveryResult_": {
@@ -5217,6 +5495,25 @@
         "title": "Envelope[ToolRunResult]",
         "type": "object"
       },
+      "Envelope_ToolTryResult_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ToolTryResult"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[ToolTryResult]",
+        "type": "object"
+      },
       "Envelope_Union_SendPolicyView__NoneType__": {
         "additionalProperties": false,
         "properties": {
@@ -5502,6 +5799,17 @@
           "details": {
             "title": "Details"
           },
+          "kind": {
+            "enum": [
+              "input",
+              "refused",
+              "upstream",
+              "timeout",
+              "internal"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
           "message": {
             "title": "Message",
             "type": "string"
@@ -5509,6 +5817,10 @@
           "requestId": {
             "title": "Requestid",
             "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
           },
           "status": {
             "title": "Status",
@@ -5519,7 +5831,9 @@
           "code",
           "message",
           "status",
-          "requestId"
+          "requestId",
+          "kind",
+          "retryable"
         ],
         "title": "ErrorBody",
         "type": "object"
@@ -6028,6 +6342,8 @@
             "type": "string"
           },
           "name": {
+            "maxLength": 120,
+            "minLength": 1,
             "title": "Name",
             "type": "string"
           },
@@ -6140,6 +6456,44 @@
           "changed"
         ],
         "title": "InputChanges",
+        "type": "object"
+      },
+      "Installed": {
+        "additionalProperties": false,
+        "description": "The live copies a team holds of one template. A copy never changes by itself.",
+        "properties": {
+          "changed": {
+            "default": false,
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "copies": {
+            "title": "Copies",
+            "type": "integer"
+          },
+          "newerAvailable": {
+            "title": "Neweravailable",
+            "type": "boolean"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "copies",
+          "version",
+          "newerAvailable",
+          "changed"
+        ],
+        "title": "Installed",
         "type": "object"
       },
       "InvalidField": {
@@ -7313,6 +7667,8 @@
           "displayName": {
             "anyOf": [
               {
+                "maxLength": 200,
+                "minLength": 1,
                 "type": "string"
               },
               {
@@ -7385,6 +7741,8 @@
             "title": "Connectionid"
           },
           "displayName": {
+            "maxLength": 200,
+            "minLength": 1,
             "title": "Displayname",
             "type": "string"
           },
@@ -7414,6 +7772,8 @@
             ]
           },
           "name": {
+            "maxLength": 120,
+            "minLength": 1,
             "title": "Name",
             "type": "string"
           },
@@ -10054,81 +10414,6 @@
         "title": "RenameIn",
         "type": "object"
       },
-      "ResourceCopy": {
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "kind": {
-            "title": "Kind",
-            "type": "string"
-          },
-          "recordId": {
-            "title": "Recordid",
-            "type": "string"
-          },
-          "source": {
-            "title": "Source",
-            "type": "string"
-          },
-          "templateId": {
-            "title": "Templateid",
-            "type": "string"
-          },
-          "version": {
-            "title": "Version",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "id",
-          "kind",
-          "recordId",
-          "source",
-          "templateId",
-          "version"
-        ],
-        "title": "ResourceCopy",
-        "type": "object"
-      },
-      "ResourceInstalled": {
-        "additionalProperties": false,
-        "properties": {
-          "changed": {
-            "default": false,
-            "title": "Changed",
-            "type": "boolean"
-          },
-          "copies": {
-            "title": "Copies",
-            "type": "integer"
-          },
-          "newerAvailable": {
-            "title": "Neweravailable",
-            "type": "boolean"
-          },
-          "version": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Version"
-          }
-        },
-        "required": [
-          "copies",
-          "version",
-          "newerAvailable"
-        ],
-        "title": "ResourceInstalled",
-        "type": "object"
-      },
       "ReviewDecisionIn": {
         "additionalProperties": false,
         "description": "A decision made in Reviews, sent by agents-service.",
@@ -12050,6 +12335,7 @@
       },
       "TemplateRequires": {
         "additionalProperties": false,
+        "description": "What a copy of a template needs before it can run.",
         "properties": {
           "bind": {
             "items": {
@@ -12078,7 +12364,8 @@
         },
         "required": [
           "tools",
-          "bind"
+          "bind",
+          "resources"
         ],
         "title": "TemplateRequires",
         "type": "object"
@@ -14029,6 +14316,181 @@
         "title": "ToolTeamStateChanged",
         "type": "object"
       },
+      "ToolTryIn": {
+        "additionalProperties": false,
+        "description": "One tool tried from a skill path or a workflow step: a read runs, a write comes back as a plan and is sent only\nwhen the same values come back with the plan's id.",
+        "properties": {
+          "accounts": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "maxProperties": 1,
+            "title": "Accounts",
+            "type": "object"
+          },
+          "input": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Input",
+            "type": "object"
+          },
+          "planId": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Planid"
+          },
+          "tool": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Tool",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool"
+        ],
+        "title": "ToolTryIn",
+        "type": "object"
+      },
+      "ToolTryResult": {
+        "additionalProperties": false,
+        "properties": {
+          "access": {
+            "enum": [
+              "read",
+              "write"
+            ],
+            "title": "Access",
+            "type": "string"
+          },
+          "account": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account"
+          },
+          "callId": {
+            "title": "Callid",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "ran",
+              "planned",
+              "sent",
+              "refused"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "live": {
+            "title": "Live",
+            "type": "boolean"
+          },
+          "log": {
+            "items": {
+              "$ref": "#/components/schemas/TestLogLine"
+            },
+            "title": "Log",
+            "type": "array"
+          },
+          "ok": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ok"
+          },
+          "output": {
+            "$ref": "#/components/schemas/JsonValue"
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TryPlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "planId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Planid"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "replayOf": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replayof"
+          },
+          "request": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TestRequestOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "required": [
+          "kind",
+          "access",
+          "callId",
+          "live"
+        ],
+        "title": "ToolTryResult",
+        "type": "object"
+      },
       "ToolUsedBy": {
         "additionalProperties": false,
         "properties": {
@@ -14090,6 +14552,97 @@
           "tools"
         ],
         "title": "ToolsAddIn",
+        "type": "object"
+      },
+      "TryPlan": {
+        "additionalProperties": false,
+        "description": "What a write would send: the tool, the values, the system and account, and an http operation's request.",
+        "properties": {
+          "access": {
+            "title": "Access",
+            "type": "string"
+          },
+          "connectionId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connectionid"
+          },
+          "input": {
+            "$ref": "#/components/schemas/JsonValue"
+          },
+          "request": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TryPlanRequest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "system": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System"
+          },
+          "testAccount": {
+            "default": false,
+            "title": "Testaccount",
+            "type": "boolean"
+          },
+          "tool": {
+            "title": "Tool",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool",
+          "access",
+          "input"
+        ],
+        "title": "TryPlan",
+        "type": "object"
+      },
+      "TryPlanRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "method": {
+            "title": "Method",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "method",
+          "url"
+        ],
+        "title": "TryPlanRequest",
         "type": "object"
       },
       "ValidationError": {
@@ -29954,7 +30507,7 @@
     },
     "/v1/tool-modules/discover": {
       "post": {
-        "description": "Off the request transaction: it fetches the source, so no connection is held while it answers.",
+        "description": "Reads the source and keeps what it lists for 24 hours, for the caller and the module named by `moduleId`\n(none for a new module), without the calls' headers. Answers the discovery's id, the source's meta and how\nmany operations it lists; GET /discoveries/{id}/operations pages them. Off the request transaction: it fetches\nthe source, so no connection is held while it answers.",
         "operationId": "tool_modules_discover",
         "parameters": [
           {
@@ -30026,7 +30579,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ModuleSourceIn"
+                "$ref": "#/components/schemas/DiscoverIn"
               }
             }
           },
@@ -30155,6 +30708,694 @@
           }
         },
         "summary": "Discover",
+        "tags": [
+          "tool-modules"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/tool-modules/discoveries/{discovery_id}/names": {
+      "get": {
+        "description": "Select-all for the picker: the name and access of every operation matching the same search and filters\nthat the module does not have yet, unpaged. It answers at most the discovery's own operations, which the\nsource's size bounds (`operationTotal` on the discovery), so the picker can send an import of all of them\nwithout loading every page.",
+        "operationId": "tool_modules_list_discovered_names",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "discovery_id",
+            "required": true,
+            "schema": {
+              "title": "Discovery Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The operations' resource groups",
+            "in": "query",
+            "name": "group",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The operations' resource groups",
+              "title": "Group"
+            }
+          },
+          {
+            "description": "read or write",
+            "in": "query",
+            "name": "access",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "read or write",
+              "title": "Access"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_DiscoveredNames_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not available on this service yet"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The source could not be reached"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "List Discovered Names",
+        "tags": [
+          "tool-modules"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/tool-modules/discoveries/{discovery_id}/operations": {
+      "get": {
+        "description": "One page of a discovery's operations in the source's order, searched on name, description and path, with\n`group` and `access` filters and facets. Each row says whether the module the discovery was made for already\nhas it (`added`), and `addedTotal` counts the matching ones it has. Only the person who made the discovery, in\nits team, reads it: anyone else, and anyone after 24 hours, gets 404. The filters are read from the shared\nlist query; they are named here for the document.",
+        "operationId": "tool_modules_list_discovered_operations",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "discovery_id",
+            "required": true,
+            "schema": {
+              "title": "Discovery Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The operations' resource groups",
+            "in": "query",
+            "name": "group",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The operations' resource groups",
+              "title": "Group"
+            }
+          },
+          {
+            "description": "read or write",
+            "in": "query",
+            "name": "access",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "read or write",
+              "title": "Access"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_DiscoveredOperationList_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not available on this service yet"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The source could not be reached"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "List Discovered Operations",
         "tags": [
           "tool-modules"
         ],
@@ -30460,6 +31701,215 @@
           }
         },
         "summary": "List Grants",
+        "tags": [
+          "tool-modules"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/tool-modules/tries": {
+      "post": {
+        "description": "Off the request transaction: one tool of a skill path or a workflow step, tried by a person. A read runs; a\nwrite answers its plan and is sent only when the same values come back with `planId`. Nothing is stored as a\nversion or a run.",
+        "operationId": "tool_modules_try_one_tool",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ToolTryIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ToolTryResult_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not available on this service yet"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The source could not be reached"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Try One Tool",
         "tags": [
           "tool-modules"
         ],

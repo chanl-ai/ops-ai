@@ -57,8 +57,8 @@ await withUiStack(
     const platform = `http://127.0.0.1:${PLATFORM_PORT}`;
     const signIn = await fetch(`${platform}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: LEAD, password: PASSWORD }) });
     const token = (await signIn.json()).data?.token;
-    const teamsRes = await fetch(`${platform}/v1/teams`, { headers: { Authorization: `Bearer ${token}` } });
-    const team = ((await teamsRes.json()).data ?? []).find((t) => t.name === TEAM);
+    const teamsRes = await fetch(`${platform}/v1/teams?search=${encodeURIComponent(TEAM)}`, { headers: { Authorization: `Bearer ${token}` } });
+    const team = ((await teamsRes.json()).data?.data ?? []).find((t) => t.name === TEAM);
     const H = { Authorization: `Bearer ${token}`, 'X-Team-Id': team?.id ?? '' };
     const read = async (path) => {
       const r = await fetch(`http://127.0.0.1:${AGENTS_PORT}${path}`, { headers: H });

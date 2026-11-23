@@ -57,6 +57,10 @@ SECURITY_PATHS: dict[tuple[str, ...], JsonValue] = {
     ("guardrailPins",): None,
     ("guardrails", "blockedTopics"): None,
     ("guardrails", "redactPii"): True,
+    # A never rule is what the agent may not say without a person, and leaving the brief for a prompt the builder
+    # wrote changes what carries those rules: both are reviewed whatever the team's policy.
+    ("brief", "never"): None,
+    ("promptMode",): None,
 }
 
 
@@ -87,6 +91,18 @@ def is_major(area: Area, old: Json | None, new: Json) -> bool:
         old, new = _unplaced(old), _unplaced(new)
     changed = {k for k in old.keys() | new.keys() if old.get(k) != new.get(k)}
     return bool(changed & ALWAYS_MAJOR) or bool(changed - MINOR_FIELDS[area])
+
+
+LAYOUT_FIELDS = frozenset({"layout", "positions", "position"})
+
+
+def is_layout_only(area: Area, old: Json | None, new: Json) -> bool:
+    """A workflow publish that only moves steps on the canvas: what runs is unchanged, so no policy reviews it."""
+    if area != "workflows" or old is None:
+        return False
+    old, new = _unplaced(old), _unplaced(new)
+    changed = {k for k in old.keys() | new.keys() if old.get(k) != new.get(k)}
+    return changed <= LAYOUT_FIELDS
 
 
 def _unplaced(doc: Json) -> Json:
@@ -166,6 +182,8 @@ async def decide(
         return Decision(True, "always", major, "policy_unread")
     found = publish_mode(document, team_id, area)
     mode: Mode = found if found in MODES else DEFAULT_MODE
+    if is_layout_only(area, old, new):
+        return Decision(False, mode, major, "minor_change")
     if mode == "always":
         return Decision(True, mode, major, "policy_always")
     if mode == "never":

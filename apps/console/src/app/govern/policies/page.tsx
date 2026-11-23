@@ -22,12 +22,11 @@ import { useSaveSendPolicy, useSendPolicy } from '@/hooks/systems-queries';
 import { usePoliciesAreSample } from '@/hooks/use-preview';
 import { useTeam } from '@/hooks/use-team';
 import { ApiError } from '@/lib/api/contract';
+import { listedOnPolicies } from '@/lib/approval-rules';
 import { relativeTime } from '@/lib/format';
 import type { PolicyKind, PolicyValue, WorkspacePolicy } from '@/lib/types/workspace-policies';
 import { toast } from 'sonner';
 
-// The approval policies are set on Approvals; the old keys are derived from it.
-const APPROVAL_KEYS = new Set(['appChanges', 'appChangesByApp', 'toolWritesNeedApproval', 'appWritesNeedApproval', 'appsChangeWithoutAsking', 'requesterMayDecide']);
 const FLOOR = [
   { value: 'none', title: 'None', description: '' },
   { value: '0.7', title: '70%', description: '' },
@@ -231,7 +230,7 @@ export default function PoliciesPage() {
       ) : (
         <div className="flex flex-col gap-4" data-testid="policy-cards">
           {/* The install's plugins are switched through the API; they have no editor on this page yet. */}
-          {policies.data.filter((p) => !APPROVAL_KEYS.has(p.key)).map((p) => (
+          {policies.data.filter((p) => listedOnPolicies(p.key)).map((p) => (
             <React.Fragment key={p.key}>
               <PolicyCard policy={p} cells={editor.data?.cells ?? {}} sample={sample} teamId={team?.id ?? ''} />
               {/* The words Check before sending reads, right after the switch that turns it on. */}

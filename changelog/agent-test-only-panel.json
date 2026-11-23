@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-21",
+  "title": "The agent side panel is the test chat",
+  "description": "The test chat uses the same message box as Chat (type / for a skill, attach files, pick connectors) and each reply has Show steps for what the agent did. Compare is a full-width page under Versions.",
+  "tag": "improved"
+}

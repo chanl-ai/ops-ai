@@ -13,6 +13,9 @@ export function createEngineMock(): EngineApi {
     publish: unavailable,
     deleteDefinition: unavailable,
     requestPublish: unavailable,
+    saveWorkingCopy: unavailable,
+    diff: unavailable,
+    publishPreview: unavailable,
     setPaused: unavailable,
     options: unavailable,
     startRun: unavailable,
@@ -20,6 +23,7 @@ export function createEngineMock(): EngineApi {
     run: unavailable,
     cancelRun: unavailable,
     retryRun: unavailable,
+    redriveRun: unavailable,
     runSetAsideEmail: unavailable,
   };
 }

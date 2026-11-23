@@ -22,7 +22,8 @@ tool calls, and a crash can lose the last step's checkpoint. Cost: one checkpoin
 | Acquire | One `INSERT … ON CONFLICT DO UPDATE … WHERE expires_at < now() RETURNING`: taking over an expired lease and refusing a live one are the same statement. Lease times use PostgreSQL's `now()` |
 | Refusal | 409 `run_active` with `{owner, runId, ageSeconds}`; two processes starting one thread at the same instant: exactly one runs |
 | Heartbeat | Every TTL/3 while the run lasts. A lost heartbeat stops the run at its next stream event (`lease_lost`) |
-| Sweeper | Every sweep interval, in every API process: takes over an expired lease with the same statement, marks the dead run `crashed` with its owner, running nodes and generation, and runs the graph with no input, so LangGraph continues from the last checkpoint. A run that died before its first checkpoint restarts from the input kept in `graph_runs.input` |
+| Chat turns | A chat reply is an `engine_work` row of kind `turn` (`api/chat_turns.py`). The route queues it and claims it, so the process the person is connected to runs and streams it, renewing the claim beside the lease; a team at its cap (`OPS_ENGINE_TEAM_CAP`) is refused with `team_at_capacity`. When that process dies, a workflow worker claims the lapsed row and continues the thread from its last checkpoint, keyed by the turn's id, so it pays for no model call and sends no write under a new key; a turn past `turn_deadline_seconds` from when it was queued is ended and its thread let go. Test: `services/agents-service/tests/engine/test_chat_turns.py` |
+| Sweeper | Every sweep interval, in every API process, for runs that are not chat turns (approval resumes, `/v1/threads/{id}/runs/stream`, the threads of agents and workflows a chat called): takes over an expired lease with the same statement, marks the dead run `crashed` with its owner, running nodes and generation, and runs the graph with no input, so LangGraph continues from the last checkpoint. A run that died before its first checkpoint restarts from the input kept in `graph_runs.input` |
 | Defaults | Lease TTL 15 s, sweep 3 s, timer poll 1 s (`OPS_LEASE_TTL_SECONDS`, `OPS_SWEEP_INTERVAL_SECONDS`, `OPS_TIMER_POLL_SECONDS`) |
 | Recovery time | With TTL 6 s and a 1 s sweep: kill to recovery start 5.4 to 5.5 s (bound: TTL minus time since the last heartbeat, plus up to one sweep); kill to the next pause 12.2 to 12.9 s, about 7 s of which is the recovery's own model calls |
 | TTL trade-off | Shorter recovers faster, costs more heartbeat writes, and lets a slow database or a GC pause expire a live lease, which fencing then has to catch |
@@ -36,8 +37,9 @@ deduplication lives where the call lands (tools-service), never in the process t
 
 | Call in a re-run node | What happens |
 |---|---|
-| Agent-kernel model call already completed, inside a graph run on PostgreSQL | Replayed from `model_call_records` (`api/model_ledger.py`), keyed by thread and a hash of the request without timestamps and run ids; a re-run resume node makes no second call |
-| Workflow model calls (classify, extract, draft, grade) | Repeat: 3 extra calls per crash in the dispute workflow's fan-out. The repeat may differ, though nothing downstream saw the first answer |
+| Agent-kernel model call already completed in a chat turn, on PostgreSQL or SQL Server | Replayed from `model_call_records` (`api/model_ledger.py`), keyed by thread, the LangGraph task and a hash of the request without timestamps, run ids and conversation ids; a re-run resume node makes no second call |
+| Workflow AI and agent step model calls (classify, summarise, extract from text, draft, agent) already completed | Replayed from the same records, keyed by run, the step's own id (run:node:iteration) and the request hash, so a re-run after a crash, a lost checkpoint or a step whose done mark never committed pays nothing twice; a changed input is a new request and calls the model. Test: `services/agents-service/tests/engine/test_model_replay.py` |
+| Chat-graph models outside the kernel (classify, extract, grade nodes, `MeteredModels`) | Repeat; they are metered, not recorded |
 | Model call in flight at the crash | Repeats; a response is recorded only after its stream is read to the end |
 | Tool write through tools-service | Runs once (dedupe below) |
 | Usage rows | Written as each call returns, outside the checkpoint and unfenced, so a crashed attempt's spend is still counted |
@@ -92,6 +94,12 @@ when the gateway never ran it (`POST /v1/calls/abandon`, `services/tools-service
 | write, idempotent | Add a case note with a key | Three, same key | Manual handling |
 | write, not idempotent | Send a reply | One attempt, then a reconciliation read | Manual handling if the read cannot tell |
 | money | Place a wire hold | One attempt, then a reconciliation read; approval token from two approvers | Manual handling |
+
+A write whose gateway claimed it and then died (the call lost, or still claimed past the step's deadline) goes by
+the class its operation declares (`WriteClass`, `packages/ops_engine/src/ops_engine/ports.py`): `idempotent` is sent
+again under the next attempt's key, `checkable` is settled by a read of the system and sent again only when the read
+says it never ran, and `unsafe` (the default) pauses the run as Stuck for a person. The gateway adapter reads the class
+from the operation's policy (`writeClass`); tools-service does not declare it yet, so every write is `unsafe` today.
 
 No run ends silently: a failed or stuck run, a recursion limit hit, or a timer past its retry cap lands in manual
 handling, shown in Reviews. A workflow on the engine retries by side-effect class (`RETRY_BY_EFFECTS`,

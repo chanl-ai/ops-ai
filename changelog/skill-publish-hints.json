@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-20",
+  "title": "Hints in a skill's text never stop it publishing",
+  "description": "A skill written as text publishes with its hints shown on their lines, including a new one on a tool that changes something on a path the agent decides. A team that wants that refused can turn on Strict skill publishing in Governance › Policies.",
+  "tag": "improved"
+}

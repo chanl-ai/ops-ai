@@ -7,6 +7,7 @@ import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { nameError } from '@/lib/validation/names';
 
 /** Name the workflow and say what starts it; the draft opens on the canvas with a request trigger and an end. */
 export function WorkflowDialog({
@@ -33,7 +34,7 @@ export function WorkflowDialog({
   }, [open]);
 
   const submit = async () => {
-    const e = { name: values.name.trim() ? undefined : 'Name the workflow.', trigger: values.trigger.trim() ? undefined : 'Say what starts a run.' };
+    const e = { name: nameError(values.name, 'Name the workflow.'), trigger: values.trigger.trim() ? undefined : 'Say what starts a run.' };
     setErrors(e);
     if (e.name || e.trigger) return;
     try {
@@ -57,7 +58,7 @@ export function WorkflowDialog({
             Cancel
           </Button>
           <LoadingButton onClick={submit} isLoading={isPending} loadingText="Creating…">
-            Create and open
+            Create
           </LoadingButton>
         </div>
       }

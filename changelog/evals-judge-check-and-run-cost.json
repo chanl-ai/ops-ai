@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-20",
+  "title": "Eval checks judged by a model, and what each run cost",
+  "description": "A test case can hold a check written in words, which a model reads the reply against and passes or fails with a one-line reason. Each run shows what its replies and judging cost, and says when a model has no price set.",
+  "tag": "new"
+}

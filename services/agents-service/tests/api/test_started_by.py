@@ -68,10 +68,11 @@ class Platform:
     def __init__(self) -> None:
         self.reads = 0
 
-    async def get(self, path: str) -> list[dict[str, str]]:
+    async def get(self, path: str, params: dict[str, list[str]]) -> list[dict[str, str]]:
         assert path == "/v1/people-names"
         self.reads += 1
-        return [{"email": "james@harborpine.example", "name": "James Richardson"}]
+        known = [{"email": "james@harborpine.example", "name": "James Richardson"}]
+        return [p for p in known if p["email"] in params["emails"]]
 
 
 async def test_a_person_who_started_a_run_is_named(stack: Stack) -> None:  # noqa: F811
@@ -82,7 +83,7 @@ async def test_a_person_who_started_a_run_is_named(stack: Stack) -> None:  # noq
     run = await started_run(c, BUILDER, "ops_check")
     assert (await started_by(stack, run))["name"] == "James Richardson"
     await started_by(stack, run)
-    assert platform.reads == 1, "the names are read once a minute, not per request"
+    assert platform.reads == 1, "an email is asked for once a minute, not per request"
 
 
 async def test_a_run_an_api_key_started_is_named_by_its_label(stack: Stack) -> None:  # noqa: F811

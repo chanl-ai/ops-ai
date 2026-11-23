@@ -4,7 +4,7 @@ import type { OpsAI } from '@chanl-ai/ops-ai';
 export type MemoryKind = 'fact' | 'preference' | 'episode';
 
 /** A memory as `GET /v1/me/memories` answers it. */
-export type Memory = Awaited<ReturnType<OpsAI['raw']['agents']['memory_list_memories']>>[number];
+export type Memory = Awaited<ReturnType<OpsAI['raw']['agents']['memory_list_memories']>>['data'][number];
 
 /** One forget, correction, export or retention deletion, as the server stored it. */
 export type MemoryAuditRow = Record<string, unknown> & { action: string; actor: string; at: string };

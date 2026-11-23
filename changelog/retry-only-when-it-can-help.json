@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-20",
+  "title": "Retry shows only when trying again can help",
+  "description": "A failed reply now offers Retry only when a second try can succeed, and says whether the request, a rule, an app or the platform stopped it. A fault in the platform itself no longer reads as an app failing.",
+  "tag": "improved"
+}

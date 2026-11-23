@@ -1,67 +1,100 @@
-# Releasing with gitflow
+# Releasing from the train
 
-Status: current. `develop` takes every merged change. A release is cut from it as `release/X.Y.Z`, tested on staging,
-merged into `main` with a merge commit, tagged `vX.Y.Z`, and merged back into `develop`. A fix to what is already on
-`main` is a `hotfix/X.Y.Z` cut from `main` that follows the same path. `git log --first-parent main` then lists only
-release and hotfix merge commits. The commands live in `scripts/release.py`; each make target only calls it, and every
-one prints what it would do unless `DRY=0`.
+Status: current (owner decision, 2026-11-22). One branch, `release/current`, collects every finished feature pull
+request and is never deleted. One pull request, `release: X.Y.Z into develop`, takes it through develop's merge queue,
+the develop merge commit is tagged `vX.Y.Z`, and `main` fast-forwards to that tag. `main` and `develop` then hold the
+same commits, so there is no pull request to `main` and no back-merge. The commands live in `scripts/release.py`,
+`scripts/release-tag.sh` and `scripts/release-main.sh`; each make target only calls one, and the ones that change
+something print what they would do unless `DRY=0`.
 
 ## The flow
 
-| Step | Who | Command or action |
+| Step | Who | What happens |
 |---|---|---|
-| 1. Cut | Maintainer | `make release-cut V=X.Y.Z` (preview), then `DRY=0`: pushes `release/X.Y.Z` from `origin/develop`. The push runs `ci.yml`, whose `staging` job deploys the branch with the click walk. The pre-push hook skips the console suite for it, since every commit is already on origin. A hotfix is `make hotfix-cut V=X.Y.Z`, from `origin/main` |
-| | | The version file is set at the cut: when `deploy/release/version` is not `X.Y.Z`, the cut pushes one commit on top that sets it. `release-proof` (`scripts/release.py check-version`) and `make release-pr` fail on a `release/X.Y.Z` or `hotfix/X.Y.Z` branch whose file says anything else |
-| 2. Test staging | Maintainer, owner | The click walk of that deploy, use cases against staging (`OPS_USECASE_BASE_URL=https://<staging host> make usecase-test UC=<id> LAYER=api`; only use cases marked safe run, see `docs/usecases/README.md`), and the owner's click-through. Only fixes go on the release branch; each push to it deploys again |
-| 3. Open the PR | Maintainer | `make release-pr V=X.Y.Z` (preview), then `DRY=0`: opens `release/X.Y.Z` into `main` titled `release: X.Y.Z (develop → main)` (`release: X.Y.Z (hotfix → main)` for a hotfix) |
-| 4. Merge | Owner | A merge commit. No squash and no rebase, so main's first-parent history holds one commit per release |
-| 5. Tag | Automatic | `release-tag.yml` tags the merge commit `vX.Y.Z`, the version in the merged branch's name, then starts the SDK publish and the image build for that tag |
-| 6. Back-merge | Maintainer | `make release-back-merge V=X.Y.Z` (preview), then `DRY=0`: opens `main` into `develop`, which the owner merges. It must be a real merge commit: the release's merge commit is then in develop's history, and the commit counts below (`rev-list --count origin/develop..origin/main`, the list of merged pull requests in the next release) compare against that history. A squash or rebase leaves main's commits looking unmerged |
-| 7. Clean up | Maintainer | Delete `release/X.Y.Z`. While any `release/*` or `hotfix/*` branch exists, a push to `develop` is not deployed to staging |
+| 1. Build | Builder | A feature pull request targets `release/current`. CI does not run on a pull request into it or a push to it (`ci.yml`), so a builder runs only the tests it touches |
+| 2. Take in | `ops-release` agent | Merges each finished pull request into the train with its own merge commit, merges `develop` in when it moves, fixes red tests on the train |
+| 3. Try on staging | Owner | After telling the owner, `make stg-deploy-ci REF=release/current` deploys the train by hand. A push to the train deploys nothing; the owner sets `STAGING_HOLD` while trying it. Only fixes go on the train |
+| 4. Version | Maintainer | `make release-version V=X.Y.Z` (preview), then `DRY=0`: one commit on the train that sets `deploy/release/version`. `release-pr` refuses when the file says anything else |
+| 5. Open the PR | Maintainer | In a checkout at the train's head, `make release-pr V=X.Y.Z` (preview), then `DRY=0`: runs `make ci-local`, then opens `release/current` into `develop` titled `release: X.Y.Z into develop` |
+| 6. Queue | Owner | Queues the pull request after approving it. A push to it while queued drops it from the queue, so the train stays frozen until it lands. The queue merges with a merge commit |
+| 7. Tag | Automatic | `release-tag.yml` runs on the push to `develop`. When the merge subject, or the first body line of the merge commit, is `release: X.Y.Z into develop`, it tags that commit `vX.Y.Z` |
+| 8. Move main | Automatic | The same job runs `scripts/release-main.sh`: `git push origin <sha>:main`, which git refuses unless it is a fast-forward. With the deploy key the push passes; without it the job stops red and prints the owner's one command (below) |
+| 9. Publish | Automatic | The same job starts `sdk-publish.yml` and `release-images.yml` on the tag, since a tag pushed with the workflow token starts no workflow itself |
+| 10. Next train | Maintainer | `make release-cut` (preview), then `DRY=0`: fast-forwards `release/current` to `origin/develop`, or creates it when missing. It refuses when the train holds commits develop lacks |
 
-While a release or hotfix branch exists, staging belongs to it: a develop push skips its deploy with a notice. A push to
-the release branch deploys, and so does a deploy started by hand (`make stg-deploy-ci REF=<ref>`). The repository
-variable `STAGING_HOLD` freezes staging the same way for any other reason.
+## Hotfix
 
-A rollback (`make stg-rollback`, also run by `deploy-staging.yml` when a check fails after the machine changed) only updates every machine of the staging app to the previous image (`fly machine update`) and waits until every process is up. It does not run migrations (the release command is part of `fly deploy`, which a rollback does not call, and an older image cannot find a newer schema revision), nor a schema dump, grants, OCR, plugin, sign-in or click-walk step: migrations only add, so the older image runs on the newer schema, and the grants for the older commit are already applied.
+| Step | Command or action |
+|---|---|
+| Cut | `make hotfix-cut V=X.Y.Z HOTFIX=<what>`, then `DRY=0`: pushes `hotfix/<what>` from the newest `vX.Y.Z` tag (`FROM=<tag>` names another) with one commit on top that sets the version file to the new version |
+| Fix | Commits on the hotfix branch. A push to `hotfix/**` still runs `ci.yml` in full and then deploys staging with the click walk, and staging is frozen for other merges while the branch exists |
+| Open the PR | `make release-pr V=X.Y.Z HOTFIX=<what>`: needs `ci.yml` and the staging deploy with its click walk green on the head (the checks below), and opens `hotfix/<what>` into `develop` titled `hotfix: X.Y.Z into develop` |
+| Ship | The same queue, tag and `main` fast-forward as a release. The train merges `develop` in afterwards |
 
 ## What `make release-pr` checks
 
-| Check | Source | Refusal |
-|---|---|---|
-| `ci.yml` succeeded on the branch head | `gh run list --workflow ci.yml --commit <sha>` | Names the conclusion, or "no ci.yml run" |
-| The staging deploy of that commit succeeded | The `staging / deploy` job of that `ci.yml` run, or the `deploy` job of a `deploy-staging.yml` run started by hand | Names the missing job or its conclusion |
-| The click walk ran and had no failures | The job's log line `click walk (N OK, N FAIL)` from `deploy/fly/stg_deploy.sh`; a skipped walk or a failure refuses | Names the line |
-| No PR from the branch is open | `gh pr list --base main --head <branch>` | Prints that PR and stops |
+| Check | Train | Hotfix | Refusal |
+|---|---|---|---|
+| `deploy/release/version` says `X.Y.Z` on the branch head | Yes | Yes | Names the file and the fix, `make release-version` |
+| `develop` is merged into the branch | Yes | No (cut from a tag, so develop is ahead) | Says to merge develop in |
+| The checkout is at `origin/<branch>` and clean | Yes | No | Names both commits, or says to commit |
+| `make ci-local` is green on the head | Yes | No | Says it is red; the logs are in `.run/ci-local/` |
+| `ci.yml` succeeded on the head | No | Yes | Names the conclusion, or "no ci.yml run" |
+| The staging deploy of that commit succeeded, with a click walk and no failures | No | Yes | Names the missing job, its conclusion or the log line |
+| No pull request from the branch is open | Yes | Yes | Prints that pull request and stops |
+| The branch has something `origin/develop` lacks | Yes | Yes | Says so |
 
-The install proof in `release-proof` runs before the tag, when the release's images are not on ghcr.io yet, so it builds them from the commit into a registry inside the runner and installs from there (`make install-proof BUILD=1`). The pull from ghcr.io is a check after the tag, below.
+The check on the train is `make ci-local`, not a staging deploy by hand. Pushes to `release/**` run no CI, so a check
+has to run somewhere, and `ci-local` runs the jobs the merge queue will run, on the same commit, in the maintainer's
+checkout. It needs no owner approval, no wait for staging, and does not touch the shared app. The staging deploy is
+still the owner's way to try the release by hand (step 3), but it is not recorded anywhere a script can read. A preview
+(`DRY=1`) does not run `ci-local`.
 
-CI on a `release/*` or `hotfix/*` push runs in full whatever changed (every service and package, `checks`, release-proof and both databases), because the impact plan once skipped a job there and a failure reached develop untested; develop and pull requests keep the impact plan.
+The PR body lists the pull requests merged since develop, breaking changes marked in commit messages (`!:` in a subject
+or `BREAKING CHANGE` in a body), whether `sdk/**` changed, and the Python and TypeScript SDK versions on develop and on
+the branch. The queue runs the full CI once for the release; a release-proof job checks the version file on a
+`release/X.Y.Z` branch.
 
-Upgrades from a release before 874530fa use the online path (migrations at start-up), not the offline SQL; `docs/deploy/database.md` explains why, and release-proof starts from 874530fa when the last tag is older.
+The install proof in `release-proof` runs before the tag, when the release's images are not on ghcr.io yet, so it builds
+them from the commit into a registry inside the runner (`make install-proof BUILD=1`). The pull from ghcr.io is a check
+after the tag, below. Upgrades from a release before 874530fa use the online path (migrations at start-up), not the
+offline SQL; `docs/deploy/database.md` explains why.
 
-The use cases and the owner's click-through are not recorded in the repository, so the script cannot check them. A
-branch is checked on every push (`ci.yml` lists `release/**` and `hotfix/**`), so each commit on it has a run; a
-branch's first push compares with `origin/main`, so the first run covers the whole release.
+## The deploy key that moves main
 
-The PR body lists the pull requests merged since main, breaking changes marked in commit messages (`!:` in a subject
-or `BREAKING CHANGE` in a body), whether `sdk/**` changed, and the Python and TypeScript SDK versions on main and on
-the branch.
+`main` is protected by ruleset 27865407: no deletion, no force push, a pull request required, `scan` and `ci-ok`
+required. GitHub does not accept the Actions app as a bypass actor, so the workflow token cannot push to `main`. A
+write deploy key can bypass the ruleset, and the workflow pushes over SSH with it. The owner sets it up once:
+
+| Step | Command |
+|---|---|
+| Make the key | `ssh-keygen -t ed25519 -N '' -f k` |
+| Register it with write access | `gh repo deploy-key add k.pub --allow-write -t release-main` |
+| Store the private half | `gh secret set RELEASE_MAIN_DEPLOY_KEY < k` |
+| Remove the files | `rm k k.pub` |
+
+The deploy key must be listed as a bypass actor in the `main` ruleset. The push is still plain, so git refuses
+anything that is not a fast-forward, and the script never forces.
+
+| Case | Result |
+|---|---|
+| The secret is set | The job pushes `<sha>:main` over SSH to `git@github.com:<repo>.git`, trusting GitHub's published host keys |
+| The secret is missing, or the key is not allowed to bypass | The push is refused, the job stops red and prints `git push origin <sha>:main`, the one command the owner runs. Re-running the job then skips the tag and `main` and starts the publish and the image build |
+| `main` is not an ancestor of the commit | Exit 1, nothing pushed |
 
 ## What each push or tag starts
 
 | Event | Workflow | What it does |
 |---|---|---|
-| Push to `develop` | `ci.yml`, then `deploy-staging.yml` | Checks, then deploys develop to staging unless a release or hotfix branch exists or `STAGING_HOLD` is set |
-| Push to `release/*` or `hotfix/*` | `ci.yml`, then `deploy-staging.yml` | Checks, then deploys that branch to staging with the click walk |
-| PR into `main` | `ci.yml`, `codeql.yml` | The same checks as any pull request. `scorecard.yml` runs only when the PR changes workflows, Dockerfiles or `sdk/check.sh` |
-| Merge into `main` | `release-tag.yml` | Runs `make release-tag`: tags the merge commit `vX.Y.Z` when its title names a `release/` or `hotfix/` branch (`scripts/release-tag.sh`), and pushes the tag. Any other push to main gets no tag. It then starts `sdk-publish.yml` and `release-images.yml` on the tag by `workflow_dispatch`, because a tag pushed with the workflow token starts no workflow itself |
-| Tag `vX.Y.Z` | `sdk-publish.yml` | Builds, signs and attests both packages, and publishes a package only when its version is not on PyPI or npm yet. A published version cannot be reused, so raise the versions in `sdk/python/pyproject.toml` and `sdk/typescript/package.json` on the release branch. Without the repository variable `SDK_PUBLISH=1` and the `NPM_TOKEN` and `PYPI_TOKEN` secrets, every run is a dry run. A publish also makes a draft GitHub release per SDK. No branch push publishes |
+| Pull request into `release/**`, push to `release/**` | None | `ci.yml` does not run |
+| Pull request into `develop` or `main`, merge queue entry | `ci.yml`, `codeql.yml` | The checks; the queue merges only on green. `scorecard.yml` runs only when the pull request changes workflows, Dockerfiles or `sdk/check.sh` |
+| Push to `develop` | `ci.yml`, then `deploy-staging.yml`; `release-tag.yml` | Checks, then a deploy to staging unless a numbered `release/X.Y.Z` or a `hotfix/*` branch exists or `STAGING_HOLD` is set. `release-tag.yml` tags a release merge and moves `main` |
+| Push to `hotfix/**` | `ci.yml`, then `deploy-staging.yml` | Checks in full whatever changed, then deploys that branch with the click walk |
+| Tag `vX.Y.Z` | `sdk-publish.yml` | Builds, signs and attests both packages, and publishes a package only when its version is not on PyPI or npm yet. A published version cannot be reused, so raise the versions in `sdk/python/pyproject.toml` and `sdk/typescript/package.json` on the train. Without the repository variable `SDK_PUBLISH=1` and the `NPM_TOKEN` and `PYPI_TOKEN` secrets, every run is a dry run |
 | Tag `vX.Y.Z` | `release-images.yml` | Builds every image for linux/amd64 and linux/arm64 and pushes it to `ghcr.io/chanl-ai/ops-ai/<image>` |
-| Merge into `main` | The docs site on Vercel (`docs/deploy/docs-site.md`) | Builds `apps/docs`. `ignoreCommand` in `apps/docs/vercel.json` skips a commit that changes none of `docs`, `services`, `apps/docs` and `pnpm-lock.yaml` |
-| Merge into `main`, and weekly | `codeql.yml`, `scorecard.yml` | Code scanning, and the OpenSSF Scorecard (published to api.scorecard.dev from main) |
+| `main` moves | The docs site on Vercel (`docs/deploy/docs-site.md`); `codeql.yml`, `scorecard.yml` | Builds `apps/docs`, skipped when none of `docs`, `services`, `apps/docs` and `pnpm-lock.yaml` changed; code scanning and the OpenSSF Scorecard |
 
-A merge to `main` does not touch staging.
+A move of `main` does not touch staging.
 
 ## Version tags
 
@@ -73,15 +106,16 @@ pick the newest release on the releases feed whichever scheme it uses (`scripts/
 
 | Check | Command |
 |---|---|
-| The version tag is on the merge commit | `git fetch --tags origin && git tag --points-at <merge commit>` shows `vX.Y.Z` |
-| main's history is release merges only | `git log --first-parent --format=%s origin/main -5` |
+| The version tag is on the develop merge commit | `git fetch --tags origin && git tag --points-at origin/develop` shows `vX.Y.Z` |
+| `main` equals the tag | `git rev-parse origin/main vX.Y.Z^{commit}` prints one commit twice |
+| `develop` holds `main` | `git rev-list --count origin/develop..origin/main` prints 0, and `origin/main..origin/develop` prints 0 |
 | The npm version, when `sdk/**` changed and publishing is on | `npm view @chanl-ai/ops-ai version` equals the version in `sdk/typescript/package.json` |
 | The PyPI version, same condition | `curl -sf https://pypi.org/pypi/ops-ai/<version>/json` answers; `<version>` is the one in `sdk/python/pyproject.toml` |
 | The `sdk-publish` run | `gh run list --workflow sdk-publish.yml --limit 1`: success; "dry run" in its log means nothing was published |
 | The images | `gh run list --workflow release-images.yml --limit 1`: success |
-| The published images install | Signed in to ghcr.io with a token that can read packages, `SIGNED_IN=1 make install-proof REF=vX.Y.Z` passes: a fresh clone of the tag installs on the images pulled from ghcr.io. The packages are private, so a pull without a login answers 403; a public pull needs the `ghcr.io/chanl-ai/ops-ai/*` packages made public, which is the owner's setting, and then `make install-proof REF=vX.Y.Z` proves it |
-| The docs site is updated | The Vercel deployment for the merge commit is ready, or the site shows the changed page. A skipped build is correct when the merge changed no docs |
-| Develop holds main | `git fetch origin && git rev-list --count origin/develop..origin/main` prints 0 after the back-merge; a count above 0 means the back-merge was squashed or not done |
+| The published images install | Signed in to ghcr.io with a token that can read packages, `SIGNED_IN=1 make install-proof REF=vX.Y.Z` passes. The packages are private, so a pull without a login answers 403; a public pull needs the `ghcr.io/chanl-ai/ops-ai/*` packages made public, which is the owner's setting |
+| The docs site is updated | The Vercel deployment for the new `main` commit is ready, or the site shows the changed page. A skipped build is correct when nothing in the docs changed |
+| The next train exists | `make release-cut` (preview) says `release/current` is already at `origin/develop` after `DRY=0` ran |
 
 ## Branch protection to set
 
@@ -89,16 +123,8 @@ For the owner to apply in the repository settings; nothing here changes them.
 
 | Rule | Setting |
 |---|---|
-| `main` ruleset, target | The default branch `main` |
-| Pull request required | On, one approving review, stale approvals dismissed on a new push |
-| Allowed merge methods | Merge commit only (squash and rebase off) |
-| Source branches | Only `release/*` and `hotfix/*` may open a PR into `main`, plus the back-merge PR's own head, `main`, into `develop` |
-| Required status checks | `ci-ok` |
-| Linear history | Off: it forbids merge commits |
-| Force pushes, deletion | Blocked |
+| `develop` ruleset (27847271) | Merge queue on, merge method merge commit. A release pull request needs no other rule |
+| `main` | Ruleset 27865407: no deletion, no force, pull request required, `scan` and `ci-ok` required, the `release-main` deploy key bypasses it (section above) |
 | Tags `v*` | Creation limited to maintainers; update and deletion blocked |
-| `develop` ruleset | Pull request required; merge commit allowed; the back-merge from `main` allowed |
-| Auto-delete head branches | On, so merged `release/*` and `hotfix/*` branches go; keep them until the back-merge is merged |
-
-GitHub rulesets have no source-branch condition. The source rule needs a status check that fails a PR into `main` whose
-head branch is not `release/*` or `hotfix/*`; until one exists, the rule holds by convention.
+| `release/current` and `release/1.1.0` | Ruleset 27865389 blocks deleting and force-pushing them: open pull requests would go back to `develop` if the train were deleted |
+| Auto-delete head branches | Today on, which deletes `release/current` when the release pull request merges and sends every open pull request into it back to `develop`. Turn it off, or protect `release/current`; `make release-cut` recreates a missing train but cannot retarget pull requests |

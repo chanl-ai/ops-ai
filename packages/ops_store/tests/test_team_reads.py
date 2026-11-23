@@ -31,6 +31,9 @@ NOT_YET_MARKED = {
     "service_events",
     # ops_engine: runs and definitions, scoped by the team passed in
     "engine_definitions",
+    # ops_engine: a workflow's working copy copies its workflow's nullable team, and a team's builder edits a shared
+    # (no-team) workflow; the team policy refuses a null team in a team transaction, so it moves with engine_definitions
+    "engine_working_copies",
     # tools-service: modules, held to their tenant by the database (tools_0086); a module with no team and one granted
     # to another team's workflow are read across teams, so the store's team_modules and granted name the team
     "tool_modules",

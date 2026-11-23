@@ -1,11 +1,22 @@
-"""The kernel's model wrapper: every model request of a graph run recorded once, replayed on a crashed node's re-run.
+"""The kernel's model wrapper: every model request of a graph run checked against its budget, recorded once, and
+replayed on a crashed node's re-run.
+
+Before a request that no record answers, the wrapper asks the ledger whether the budget the call counts against is
+spent: the thread's own, or for a specialist's thread the one its chain started on. A spent budget raises the kernel's
+`BudgetReachedError` in place of the call, and the kernel ends the reply. Only the thread the chain started on may
+make its one closing call; a specialist returns what it has to the agent that asked it. A replayed request is never
+refused: its call was paid for.
 
 The spec's agent activity keeps a step ledger in its heartbeat; on the LangGraph adapter a resume node that
 crashes after its turn runs again from its start, and without a ledger it calls the model again. `LedgerModel`
 wraps the kernel's model: inside a graph run (a LangGraph config with a thread) each response is recorded under the
-thread and a hash of the request, and the same request on the same thread is answered from the record. Outside a
-graph run (chat turns) it passes through. The request hash leaves out timestamps and run ids, which differ between
-the first run and the re-run while the conversation is the same.
+thread, a replay key and a hash of the request, and the same request under the same key is answered from the record.
+A workflow step's key is its own step id (run:node:iteration, `step_calls`), which every attempt and every re-run of
+the step after a crash or a Retry repeats, so none of them pays for the call again. A chat turn's key is the
+LangGraph task it ran in, which a crashed node's re-run keeps and a regenerate does not. Outside a graph run (the AI
+step route's test call) it passes through. The request hash leaves out timestamps and run ids, which differ between
+the first run and the re-run while the conversation is the same, and a changed request has a new hash, so it is
+never answered from an older record.
 """
 
 from __future__ import annotations
@@ -26,14 +37,16 @@ from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 from pydantic_ai.models.wrapper import WrapperModel
 from pydantic_ai.settings import ModelSettings
 
-from ops_agent_kernel.ports import ModelSource
+from ops_agent_kernel.ports import BudgetReachedError, ModelSource, is_finishing
 from ops_agents.graphs.common import emit
-from ops_agents.graphs.metering import CallSite, call_site
+from ops_agents.graphs.metering import STEP_KEY, CallSite, call_site, step_calls, turn_ids
 from ops_metering import Usage
 from ops_service_kit.http import Json
 from ops_store import isolation
 
-_VOLATILE = frozenset({"timestamp", "run_id", "provider_response_id", "provider_details"})
+# Fields that differ between a request and its re-run though the conversation is the same: pydantic-ai gives every
+# agent run its own conversation_id, so a hash that kept it would never match a re-run.
+_VOLATILE = frozenset({"timestamp", "run_id", "conversation_id", "provider_response_id", "provider_details"})
 
 
 def _stable(value: Any) -> Any:
@@ -57,11 +70,13 @@ class _Site:
 
 
 def _site() -> _Site | None:
-    """Where the request runs: the graph call site and the LangGraph task, which a crashed node's re-run keeps and a
-    new step does not. None outside a graph run."""
+    """Where the request runs: the graph call site and its replay key, a workflow step's id or else the LangGraph
+    task, which a crashed node's re-run keeps and a new step does not. None outside a graph run."""
     call = call_site()
     if call is None:
         return None
+    if (key := STEP_KEY.get()) is not None:
+        return _Site(call, key)
     cfg = get_config()
     task = (cfg.get("configurable") or {}).get("checkpoint_ns") or (cfg.get("metadata") or {}).get(
         "langgraph_checkpoint_ns"
@@ -73,6 +88,8 @@ class ModelCallRecorder(Protocol):
     """Where the wrapper records each request and finds a recorded one (store/usage.py's UsageLedger)."""
 
     async def recorded_response(self, thread_id: str, task: str, request_hash: str) -> Any: ...
+
+    async def spent_before_call(self, thread_id: str) -> str | None: ...
 
     async def record_model_call(
         self,
@@ -141,6 +158,14 @@ class LedgerModel(WrapperModel):
         raw = await self.recorder.recorded_response(site.call.thread_id, site.task, digest)
         return ModelMessagesTypeAdapter.validate_python([raw])[0] if raw else None  # type: ignore[return-value]
 
+    async def _check_budget(self, site: _Site) -> None:
+        """Refuses the call when the budget it counts against is spent, unless the kernel is finishing a reply
+        already under way (its closing answer, or the check of an answer already written)."""
+        if is_finishing():
+            return
+        if (root := await self.recorder.spent_before_call(site.call.thread_id)) is not None:
+            raise BudgetReachedError(closing=root == site.call.thread_id)
+
     async def _record(self, site: _Site, digest: str, response: ModelResponse, started: float) -> None:
         latency_ms = int((time.perf_counter() - started) * 1000)
         u = response.usage
@@ -179,6 +204,7 @@ class LedgerModel(WrapperModel):
         digest = request_hash(messages)
         if (recorded := await self._recorded(site, digest)) is not None:
             return recorded
+        await self._check_budget(site)
         started = time.perf_counter()
         response = await super().request(
             messages, self._with_call_headers(model_settings, site, digest), model_request_parameters
@@ -197,6 +223,8 @@ class LedgerModel(WrapperModel):
         site = _site()
         digest = request_hash(messages) if site else ""
         recorded = await self._recorded(site, digest) if site else None
+        if site and recorded is None:
+            await self._check_budget(site)
         source: Model = _replay(recorded) if recorded is not None else self.wrapped
         started = time.perf_counter()
         settings = self._with_call_headers(model_settings, site, digest)
@@ -220,3 +248,6 @@ class LedgerSource:
         if alias not in self.models:
             self.models[alias] = LedgerModel(self.source.model_for(alias), self.recorder, alias, call_headers=True)
         return self.models[alias]
+
+
+__all__ = ["LedgerModel", "LedgerSource", "request_hash", "step_calls", "turn_ids"]

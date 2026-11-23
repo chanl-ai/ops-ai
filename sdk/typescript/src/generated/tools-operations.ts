@@ -865,6 +865,46 @@ export const toolsOperations = {
     "query": [],
     "stream": false
   },
+  "tool_modules_list_discovered_names": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/tool-modules/discoveries/{discovery_id}/names",
+    "pathParams": [
+      "discovery_id"
+    ],
+    "query": [
+      "group",
+      "access",
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
+    ],
+    "stream": false
+  },
+  "tool_modules_list_discovered_operations": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/tool-modules/discoveries/{discovery_id}/operations",
+    "pathParams": [
+      "discovery_id"
+    ],
+    "query": [
+      "group",
+      "access",
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
+    ],
+    "stream": false
+  },
   "tool_modules_list_grants": {
     "body": null,
     "headers": [],
@@ -1020,6 +1060,15 @@ export const toolsOperations = {
     "pathParams": [
       "module_id"
     ],
+    "query": [],
+    "stream": false
+  },
+  "tool_modules_try_one_tool": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/tool-modules/tries",
+    "pathParams": [],
     "query": [],
     "stream": false
   },

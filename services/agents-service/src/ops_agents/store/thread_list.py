@@ -146,13 +146,14 @@ def thread_columns(reader: ThreadReader) -> sa.Select[Any]:
 
 async def threads_page(engine: Any, params: ListParams, reader: ThreadReader) -> ListPage:
     """The threads list on the shared contract: `graph` filters, sorted by `sortBy` (updatedAt, the newest first by
-    default), then by the key. `ids` names threads; `search` changes nothing."""
+    default), then by the key. `ids` names threads; `search` matches the id, the graph and the owner."""
     t = graph_threads
     async with tenant_tx(engine) as c:
         return await list_page(
             c,
             thread_columns(reader),
-            params.model_copy(update={"search": None}),
+            params,
+            search=[t.c.id, t.c.graph, t.c.owner],
             sortable={"updatedAt": t.c.updated_at},
             default_sort=t.c.updated_at.desc(),
             filters={"graph": t.c.graph},

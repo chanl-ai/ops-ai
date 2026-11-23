@@ -17,10 +17,10 @@ test('an admin sees four sections holding every row of every area exactly once',
   assert.equal(new Set(listed).size, listed.length);
 });
 
-// A person who only chats has no page in any section, so no empty heading is drawn above nothing.
+// A person who only chats sees My apps under Work and nothing else, so no empty heading is drawn above nothing.
 test('a section with no row the person may open is left out', () => {
   const chatOnly = (needs?: NavNeed) => needs?.area === 'chat';
-  assert.deepEqual(sidebarSections(chatOnly), []);
+  assert.deepEqual(sidebarSections(chatOnly).map((s) => [s.label, s.items.map((i) => i.title)]), [['Work', ['My apps']]]);
 });
 
 // One short link per page: a child page is a tab on its parent, so no sidebar row carries sub-rows.

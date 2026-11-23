@@ -45,8 +45,10 @@
     "body": {
       "error": {
         "code": "no_message",
+        "kind": "input",
         "message": "Write the message the person reads when the guardrail refuses.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -57,8 +59,10 @@
     "body": {
       "error": {
         "code": "no_topics",
+        "kind": "input",
         "message": "Name at least one blocked topic.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -78,8 +82,10 @@
             "msg": "Extra inputs are not permitted"
           }
         ],
+        "kind": "input",
         "message": "x: Extra inputs are not permitted",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -102,8 +108,10 @@
           ],
           "teamId": "team_ops"
         },
+        "kind": "refused",
         "message": "Your role cannot create a guardrail; a Builder or Admin can.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -114,8 +122,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Publish request GRP-missing was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -135,8 +145,10 @@
             "msg": "Input should be 'approved' or 'rejected'"
           }
         ],
+        "kind": "input",
         "message": "decision: Input should be 'approved' or 'rejected'",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -151,8 +163,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Guardrail <gr> was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -169,8 +183,10 @@
           "scope": "own",
           "teamId": "team_ops"
         },
+        "kind": "refused",
         "message": "Your role lets you delete only your own; No investment advice is someone else's.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -223,8 +239,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Guardrail <gr> was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -247,8 +265,10 @@
           ],
           "teamId": "team_ops"
         },
+        "kind": "refused",
         "message": "Your role cannot edit guardrail No investment advice; a Builder or Admin can.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -810,8 +830,10 @@
     "body": {
       "error": {
         "code": "not_newest_draft",
+        "kind": "input",
         "message": "v1 is not the newest draft (v1).",
         "requestId": "<req>",
+        "retryable": false,
         "status": 409
       },
       "success": false
@@ -822,8 +844,10 @@
     "body": {
       "error": {
         "code": "not_newest_draft",
+        "kind": "input",
         "message": "v2 is not the newest draft (v1).",
         "requestId": "<req>",
+        "retryable": false,
         "status": 409
       },
       "success": false
@@ -846,8 +870,10 @@
           ],
           "teamId": "team_ops"
         },
+        "kind": "refused",
         "message": "Your role cannot publish guardrail No investment advice; a Builder or Admin can.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -900,8 +926,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Guardrail <gr> was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -912,8 +940,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Guardrail gr_missing was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -924,8 +954,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Guardrail <gr> was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -990,8 +1022,10 @@
           ],
           "teamId": "team_ops"
         },
+        "kind": "refused",
         "message": "Your role cannot edit guardrail No investment advice; a Builder or Admin can.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false

@@ -1,6 +1,9 @@
 """The service event outbox: a service writes the event it reports in the same transaction as the change the
 event is about, and a relay delivers it to agents-service's POST /v1/events afterwards. Neither is lost when the other
-is down: the change and its event commit together, and the relay retries until delivery.
+is down: the change and its event commit together, and the relay retries with a jittered backoff. An event that
+failed MAX_ATTEMPTS times is a dead letter: never sent again, kept with its last error until someone sends it again
+(`redrive`). A send runs outside any row lock: the relay claims a batch and pushes it SEND_LEASE_S ahead, commits,
+then sends each event and marks it sent or failed in a transaction of its own.
 
 Delivery is at least once: a relay that stops after sending and before marking the row sent sends it again, and
 agents-service returns the run the first delivery started, by the event's key.
@@ -33,6 +36,7 @@ from ops_service_kit.http import Out
 
 from . import background, isolation
 from .dialect import claim
+from .retry import jittered
 from .schema import Marking, system
 
 # An outbox not yet held to its tenant by the database (tools-service's); a service that isolates its
@@ -61,6 +65,10 @@ Enrich = Callable[[dict[str, Any], str, Any], Awaitable[None]]
 
 # The longest wait between two tries of one event, so a long outage is retried within a minute of its end.
 MAX_BACKOFF_S = 60.0
+# Failures before an event is a dead letter: with the backoff above, about ten minutes of retries.
+MAX_ATTEMPTS = 15
+# How far ahead a claimed event is moved while it is sent: a relay that dies mid-send leaves it due again after this.
+SEND_LEASE_S = 60.0
 # How long a delivered event is kept, and one never to be sent (replaced before it was due) after it was written: a
 # week to answer whether an event went out, after which the table stops growing. The relay prunes once an hour.
 KEEP_S = 7 * 86400.0
@@ -322,46 +330,60 @@ class Relay:
 
     async def once(self) -> int:
         """Tries every due event once, oldest first; returns how many were delivered. A failure is recorded and the
-        event waits twice as long as before, up to a minute, so one bad event never holds the others back."""
+        event waits a jittered backoff that doubles up to a minute, so one bad event never holds the others back; its
+        MAX_ATTEMPTS-th failure makes it a dead letter."""
         t = self.table
         now = self.clock()
         due = sa.select(t).where(t.c.sent_at.is_(None), t.c.next_at <= now).order_by(t.c.created_at).limit(self.batch)
-        # Two relays never deliver the same batch at once; each takes the rows the other has not locked.
+        # Two relays never take the same batch; each takes the rows the other has not locked, then moves them ahead so
+        # the lock ends before any send begins.
         due = claim(due, t)
-        delivered = 0
         async with isolation.system_tx(self.engine, RELAY, role=self.role) as conn:
             rows = [dict(r) for r in (await conn.execute(due)).mappings()]
-            for row in rows:
-                try:
-                    # What the send records about the event (a read request's run) is written as its tenant and team.
-                    with isolation.scope(str(row["tenant_id"]), str(row["team_id"])):
-                        await self.send(wire(row))
-                except Exception as e:
-                    tries = int(row["attempts"]) + 1
-                    await conn.execute(
-                        t.update()
-                        .where(t.c.id == row["id"])
-                        .values(
-                            attempts=tries,
-                            next_at=now + min(MAX_BACKOFF_S, 2.0**tries),
-                            last_error=f"{type(e).__name__}: {e}"[:2000],
-                        )
-                    )
-                    continue
-                await conn.execute(
-                    t.update()
-                    .where(t.c.id == row["id"])
-                    .values(sent_at=now, next_at=None, attempts=int(row["attempts"]) + 1, last_error=None)
-                )
-                delivered += 1
+            if rows:
+                taken = t.update().where(t.c.id.in_([r["id"] for r in rows])).values(next_at=now + SEND_LEASE_S)
+                await conn.execute(taken)
+        delivered = 0
+        for row in rows:
+            mine = sa.and_(t.c.id == row["id"], t.c.sent_at.is_(None))
+            tries = int(row["attempts"]) + 1
+            try:
+                # What the send records about the event (a read request's run) is written as its tenant and team.
+                with isolation.scope(str(row["tenant_id"]), str(row["team_id"])):
+                    await self.send(wire(row))
+            except Exception as e:
+                # Null next_at after MAX_ATTEMPTS failures is a dead letter: never due again, kept by prune.
+                wait = None if tries >= MAX_ATTEMPTS else now + jittered(min(MAX_BACKOFF_S, 2.0**tries))
+                failed = {"attempts": tries, "next_at": wait, "last_error": f"{type(e).__name__}: {e}"[:2000]}
+                async with isolation.system_tx(self.engine, RELAY, role=self.role) as conn:
+                    await conn.execute(t.update().where(mine).values(**failed))
+                continue
+            async with isolation.system_tx(self.engine, RELAY, role=self.role) as conn:
+                sent = {"sent_at": now, "next_at": None, "attempts": tries, "last_error": None}
+                await conn.execute(t.update().where(mine).values(**sent))
+            delivered += 1
         return delivered
+
+    async def redrive(self, event_ids: list[str] | None = None) -> int:
+        """Sends dead letters again from now, their attempts counted from zero: the named ones, or every one. Returns
+        how many were queued."""
+        t = self.table
+        dead = sa.and_(t.c.sent_at.is_(None), t.c.next_at.is_(None), t.c.attempts >= MAX_ATTEMPTS)
+        if event_ids is not None:
+            dead = sa.and_(dead, t.c.id.in_(event_ids))
+        async with isolation.system_tx(self.engine, RELAY, role=self.role) as conn:
+            done = await conn.execute(t.update().where(dead).values(next_at=self.clock(), attempts=0))
+        return int(done.rowcount or 0)
 
     async def prune(self, *, keep_s: float = KEEP_S) -> int:
         """Deletes events delivered more than `keep_s` ago and events never to be sent (no `sent_at` and no `next_at`)
-        written that long ago; an event still being retried is kept however old. Returns how many were deleted."""
+        written that long ago; an event still being retried, and a dead letter (MAX_ATTEMPTS failures), is kept
+        however old. Returns how many were deleted."""
         t = self.table
         cutoff = self.clock() - keep_s
-        never = sa.and_(t.c.sent_at.is_(None), t.c.next_at.is_(None), t.c.created_at < cutoff)
+        never = sa.and_(
+            t.c.sent_at.is_(None), t.c.next_at.is_(None), t.c.attempts < MAX_ATTEMPTS, t.c.created_at < cutoff
+        )
         async with isolation.system_tx(self.engine, RELAY, role=self.role) as conn:
             gone = await conn.execute(t.delete().where(sa.or_(t.c.sent_at < cutoff, never)))
         return int(gone.rowcount or 0)

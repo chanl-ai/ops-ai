@@ -89,7 +89,7 @@ export const SITE = [
           { page: 'guide/integrations/overview.md', title: 'Integrations', icon: 'plug' },
           { page: 'guide/apps-setup.md', title: 'Set up an app', icon: 'settings' },
           { page: 'guide/integrations/salesforce.md', title: 'Salesforce', icon: 'cloud' },
-          { page: 'guide/integrations/github.md', title: 'GitHub', icon: 'github' },
+          { page: 'guide/integrations/github.md', title: 'GitHub', icon: 'git-branch' },
           { page: 'guide/integrations/sharepoint.md', title: 'SharePoint and OneDrive', icon: 'folder-open' },
           { page: 'guide/integrations/confluence.md', title: 'Confluence', icon: 'book-open-text' },
           { page: 'guide/integrations/website.md', title: 'Website', icon: 'globe' },
@@ -113,7 +113,7 @@ export const SITE = [
         entries: [
           { page: 'deploy-and-operate.md', title: 'Deploy and operate', icon: 'server' },
           { page: 'guide/deployment-options.md', icon: 'map' },
-          { page: 'guide/README.md', title: 'Client guide', icon: 'book-marked' },
+          { page: 'guide/README.md', title: 'Client guide', icon: 'book-open' },
         ],
       },
       {
@@ -167,7 +167,7 @@ export const SITE = [
         open: true,
         entries: [
           { page: 'security/README.md', title: 'Security', icon: 'shield' },
-          { page: 'security/tenancy-and-isolation.md', icon: 'building-2' },
+          { page: 'security/tenancy-and-isolation.md', icon: 'building' },
           { page: 'security/identity-and-sign-in.md', icon: 'key-round' },
           { page: 'security/access-approvals-and-audit.md', icon: 'user-check' },
           { page: 'security/data-handling-and-masking.md', icon: 'eye-off' },
@@ -204,17 +204,17 @@ export const SITE = [
         open: true,
         entries: [
           { page: 'sdk/python.md', title: 'Python', icon: 'file-code' },
-          { page: 'sdk/typescript.md', title: 'TypeScript', icon: 'file-code-2' },
+          { page: 'sdk/typescript.md', title: 'TypeScript', icon: 'file-code' },
           { page: 'sdk/upgrading.md', title: 'Upgrading to 1.0.0', icon: 'circle-arrow-up' },
         ],
       },
       {
         group: 'Changelog',
-        icon: 'history',
+        icon: 'clock',
         open: true,
         entries: [
           { page: 'guide/whats-new.md', icon: 'sparkles' },
-          { page: 'sdk/changelog.md', title: 'SDK 1.0.0 changelog', icon: 'history' },
+          { page: 'sdk/changelog.md', title: 'SDK 1.0.0 changelog', icon: 'clock' },
         ],
       },
     ],
@@ -333,7 +333,7 @@ export const SITE = [
         icon: 'pen-tool',
         entries: [
           'design/README.md',
-          { page: 'sdk/changelog-next-major.md', title: 'SDK 1.0.0 route-by-route record', icon: 'history' },
+          { page: 'sdk/changelog-next-major.md', title: 'SDK 1.0.0 route-by-route record', icon: 'clock' },
           { page: 'console/agents-and-workflows.md', title: 'Agents and workflows in the console', icon: 'monitor' },
           { rest: 'design' },
           { group: 'Console', icon: 'monitor', entries: [{ rest: 'console' }] },
@@ -346,6 +346,7 @@ export const SITE = [
         entries: [
           'deploy/release.md',
           { page: 'deploy/install-guide.md', title: 'Install guide, one page (generated)', icon: 'clipboard-list' },
+          { page: 'deploy/package-install.md', title: 'INSTALL.md inside the release package', icon: 'package' },
           'deploy/docs-site.md',
           {
             group: 'Team environments',

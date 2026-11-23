@@ -33,15 +33,16 @@ Each runs the make targets it names; the same steps are Claude Code skills of th
 | Prompt | Use it to |
 |---|---|
 | `/ops-commit` | Pass Ops AI's commit checks: console and docs checks, Python verify, a What's new entry, and a message saying what was wrong and how it was proven. Use before committing or when pre-commit fails. |
-| `/ops-database` | Point Ops AI at another database: our container, an existing PostgreSQL 15 to 17 (Azure Database for PostgreSQL among them), and later Azure SQL. Use when someone asks which database Ops AI needs or how to use their own. |
-| `/ops-debug` | Diagnose a failing Ops AI service: which one is down, its log, its port, a stale process, or a second stack in the way. Use when a page errors, a make target fails, or a service will not start. |
+| `/ops-database` | Point Ops AI at another database: our container, an existing PostgreSQL 15 to 17 (Azure Database for PostgreSQL among them), and later Azure SQL. Use to choose or bring a database. |
+| `/ops-debug` | Diagnose a failing Ops AI service: which one is down, its log, its port, a stale process, or a second stack in the way. Use when a page, target or service fails. |
 | `/ops-docs-edit` | Apply review findings to a docs page and tighten it. |
 | `/ops-docs-review` | Review a docs page as its five readers; changes nothing. |
 | `/ops-docs-write` | Write a public docs page to the user-docs pattern. |
+| `/ops-fix-the-class` | Before committing a fix, find every other place with the same fault, fix them all once in the layer that owns the job, add a check that stops it coming back, and state the sweep in a Siblings trailer. Use for every fix commit and whenever QA, a review or a walk reports a defect. |
 | `/ops-mirror` | Install Ops AI through a company package mirror (Nexus, Artifactory): set it, test it, find locked versions it lacks. Use when installs fail behind a proxy or without public internet. |
-| `/ops-run` | Run the Ops AI stack locally, in the devcontainer or on a shared VM workspace, on the fake model or OpenAI. Use when someone asks to start, stop or set up Ops AI, or which make target runs it. |
-| `/ops-sample-team` | Install the sample team (people, knowledge, agents, tools, workflows, mailbox) on a running stack and walk the email demo end to end. Use when someone wants demo data, a team to try the console with, or to check the stack works from chat to the second reply. |
-| `/ops-tool-module` | Add a tool module (OpenAPI, MCP, HTTP or a Python code tool) with its credential as a secret and its host on the egress list, then publish it through review. Use when someone wants an agent or workflow to call a new system. |
-| `/ops-workflow-step` | Add a new workflow step type (node kind) to the engine: its definition, ports, parameters and form, its executor, and its tests. Use when someone needs a step that no existing type can be configured to do. |
-| `/usecase` | List, add, update and run end-to-end use cases (docs/usecases) as plain user stories at the api, sdk or cli layer. Use when someone asks to prove a change end to end, says which stories work, or types /usecase list|add|update|run. |
-| `/wf-builder` | Draw a workflow from what a developer describes, check it with the engine, create it on the profile they name and start a test run. Use when someone asks to build, sketch or draft a workflow, or types /wf-builder. |
+| `/ops-run` | Run the Ops AI stack locally, in the devcontainer or on a shared VM workspace, on the fake model or OpenAI. Use to start, stop or set up Ops AI. |
+| `/ops-sample-team` | Install the sample team (people, knowledge, agents, tools, workflows, mailbox) on a running stack and walk the email demo. Use for demo data or to check the stack works from chat to the second reply. |
+| `/ops-tool-module` | Add a tool module (OpenAPI, MCP, HTTP or Python code tool) with its credential as a secret and its host on the egress list, then publish it through review. Use to let an agent call a new system. |
+| `/ops-workflow-step` | Add a new workflow step type (node kind) to the engine: its definition, ports, parameters and form, its executor, and its tests. Use for a step no existing type can do. |
+| `/usecase` | List, add, update and run end-to-end use cases (docs/usecases) as plain user stories at the api, sdk or cli layer. Use to prove a change end to end or when someone types /usecase. |
+| `/wf-builder` | Draw a workflow from what a developer describes, check it with the engine, create it on the profile they name and start a test run. Use to build or draft a workflow. |

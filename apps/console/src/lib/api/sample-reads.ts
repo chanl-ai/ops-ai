@@ -11,7 +11,8 @@ export const SAMPLE_READ_MARK = '[ops-ai sample data]';
 /**
  * Reads the app shell makes on every page (the sign-in policy the guard reads in app-shell.tsx, the sidebar's lookups),
  * kept under `*` rather than the page that happened to load first, so they do not mark every page as sample data.
- * They are still sample data on a platform stack; test-results/sample-data-pages.md lists them as their own row.
+ * On a platform stack the shell reads no sign-in policy (readShellSignInPolicy in index.ts), so `signInPolicy.get`
+ * here comes only from Settings > Sign-in's sample sections; test-results/sample-data-pages.md lists them.
  */
 const SHELL = new Set(['signInPolicy.get', 'lookups.get']);
 export const SHELL_PATH = '*';

@@ -12,17 +12,27 @@ from ops_agents.store.agent_registry import PublishRequestRow, registry_agents
 from ops_agents.store.review_sources import ReviewSources
 from ops_engine.store import DefinitionRow
 from ops_service_kit import narrow
-from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
+from ops_service_kit.errors import Conflict, NotFound, Unprocessable, ValidationFailed
+from ops_service_kit.http import JsonList
 from ops_store import isolation
 
-from . import deployment_reviews, egress_host_reviews, engine_lifecycle, tool_access_reviews, tool_module_reviews
+from . import (
+    deployment_reviews,
+    egress_host_reviews,
+    engine_lifecycle,
+    eval_gate,
+    service_events,
+    tool_access_reviews,
+    tool_module_reviews,
+)
 from .agent_registry import ReviewView, go_live, registry, review_view
-from .auth import Principal, require_not_own, require_reviews_decide, review_teams
+from .auth import Principal, require_asker, require_not_own, require_reviews_decide, review_teams
 from .deps import Runtime
 from .guardrails import guardrails
 from .guardrails import publish as publish_guardrail
 from .review_sla import sla_hours
 from .skills import publish as publish_skill
+from .skills import review_body as skill_review_body
 from .skills import skills
 from .widgets import publish as publish_widget
 from .widgets import widgets
@@ -32,6 +42,10 @@ from .workflow_registry import registry as workflow_registry
 ID_PREFIXES = ("AGP-", "WFP-", "GRP-", "SKP-", "WDP-", "DPR-", "TMP-", "TAR-", "EGH-")
 # Kinds whose request names who saved the change; that person never decides it.
 SAVED_KINDS = ("agent", "guardrail", "skill", "widget", deployment_reviews.KIND, tool_module_reviews.KIND)
+# Kinds whose requester may take a waiting request back. A tool module or new host is applied by tools-service on every
+# decision, so a withdraw here would leave tools-service holding a review nobody can decide.
+WITHDRAWABLE = ("agent", "guardrail", "skill", "widget", engine_lifecycle.KIND, "workflow")
+WITHDRAWN_EVENT = "publish_request.withdrawn"
 
 
 def is_request_id(review_id: str) -> bool:
@@ -83,9 +97,11 @@ async def view(
             {
                 **v,
                 "workflowId": "",
+                "kind": "skill_publish",
                 "actionTool": "publish_skill",
                 "policy": policy,
                 "reasoning": req.body["changes"],
+                "skillPublish": await skill_review_body(rt, req),
             },
         )
     if req.kind == "guardrail":
@@ -271,6 +287,8 @@ async def decide(
     reason = (reason or "").strip() or None
     if decision != "approved" and reason is None:
         raise ValidationFailed("A reason is required to reject or return.", code="reason_required")
+    if req.kind == "agent" and decision == "approved":
+        await _require_evals_pass(rt, req)
     if not await reg.decide_request(request_id, decision, approver.email, reason):
         raise Conflict(f"{request_id} was decided by someone else first.", code="already_decided")
     # The reviewer holds reviews.decide in the owning team, which need not be the team they act in: the publish reads
@@ -285,6 +303,20 @@ async def decide(
         elif decision == "approved":
             await _publish(rt, req, approver.email)
         return (await view(rt, await reg.request(request_id))).copy()
+
+
+async def _require_evals_pass(rt: Runtime, req: PublishRequestRow) -> None:
+    """A run that failed after the request opened stops the approval with the refusal the publish request gives:
+    422 `cannot_publish`, the same `PublishBlocker` list in `details.problems`, and the request stays pending. Read as
+    the agent's team, as the publish itself is."""
+    with isolation.scope(isolation.tenant(), await subject_team(rt, req) or isolation.team()):
+        row = await registry(rt).row(req.subject_id)
+        if found := await eval_gate.problems(rt, row, int(req.version)):
+            raise Unprocessable(
+                "This version cannot be approved yet: " + " ".join(str(p["message"]) for p in found),
+                code="cannot_publish",
+                details={"problems": cast(JsonList, found)},
+            )
 
 
 async def _publish(rt: Runtime, req: PublishRequestRow, by: str) -> None:
@@ -320,3 +352,47 @@ async def _publish(rt: Runtime, req: PublishRequestRow, by: str) -> None:
         by=by,
         review_id=req.id,
     )
+
+
+async def withdraw(rt: Runtime, me: Principal, request_id: str) -> ReviewView:
+    """The requester takes back a waiting request: it is marked withdrawn and leaves the reviewer's queue, the version
+    it named reads as a draft again (its state is read from the requests), and a `publish_request.withdrawn` event
+    records it in the activity log. Only the person who asked may withdraw; 409 once decided, whoever got there
+    first."""
+    reg = registry(rt)
+    async with isolation.request_transaction():
+        req = await reg.request(request_id)
+        if not await in_acting_team(rt, req, asked_from=True):
+            raise NotFound(f"Publish request {request_id}")
+    if req.kind not in WITHDRAWABLE:
+        raise Conflict(f"A {req.kind} review is decided in Reviews; it cannot be withdrawn.", code="not_withdrawable")
+    # The asker rule (E50): taking back one's own request is the requester's act, so no role grants it to another.
+    require_asker(me, req.requested_by, what=f"the withdraw of {request_id}")
+    if req.status != "pending":
+        raise Conflict(f"{request_id} was already {req.status}.", code="already_decided")
+    if not await reg.withdraw_request(request_id, me.email):
+        raise Conflict(f"{request_id} was decided before it could be withdrawn.", code="already_decided")
+    team = await subject_team(rt, req) or isolation.team() or ""
+    await service_events.emit(
+        rt,
+        name=WITHDRAWN_EVENT,
+        key=f"withdraw:{request_id}",
+        team_id=team,
+        source="agents",
+        actor=me.email,
+        payload={"reviewId": request_id, "kind": req.kind, "subjectId": req.subject_id, "version": req.version},
+    )
+    return await get(rt, request_id)
+
+
+async def follows(rt: Runtime, kind: str, subject_id: str, request_id: str | None) -> dict[str, str]:
+    """The `follows` a new request records when it sends again what an earlier, withdrawn request asked: the earlier
+    one must be the same subject's and withdrawn, so its comments are the ones the reviewer sees again."""
+    if request_id is None:
+        return {}
+    earlier = await registry(rt).request(request_id)
+    if earlier.kind != kind or str(earlier.subject_id) != subject_id or earlier.status != "withdrawn":
+        raise ValidationFailed(
+            f"{request_id} is not a withdrawn request for this {kind}.", code="follows_not_withdrawn"
+        )
+    return {"follows": request_id}

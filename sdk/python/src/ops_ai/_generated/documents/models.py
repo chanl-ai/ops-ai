@@ -46,7 +46,16 @@ class ClassifyIn(TypedDict, closed=True):
 class CopyRef(TypedDict, closed=True):
     detachedAt: str | None
     id: str
-    kind: Literal["document_type"]
+    kind: Literal[
+        "agent",
+        "skill",
+        "workflow",
+        "document_type",
+        "case_type",
+        "task_type",
+        "guardrail",
+        "knowledge_source",
+    ]
     recordId: str
     source: str
     templateId: str
@@ -112,8 +121,10 @@ class EnvelopeCopyRef(TypedDict, closed=True):
 class ErrorBody(TypedDict, closed=True):
     code: str
     details: NotRequired[Any]
+    kind: Literal["input", "refused", "upstream", "timeout", "internal"]
     message: str
     requestId: str
+    retryable: bool
     status: int
 
 

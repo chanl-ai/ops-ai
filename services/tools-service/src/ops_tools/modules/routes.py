@@ -26,6 +26,9 @@ from .schemas import (
     CodeOperationIn,
     ConnectionIn,
     DecisionIn,
+    DiscoveredNames,
+    DiscoveredOperationList,
+    DiscoverIn,
     DiscoveryResult,
     ExecutionList,
     HttpOperationIn,
@@ -36,7 +39,6 @@ from .schemas import (
     ModuleDetailsPatchIn,
     ModuleIn,
     ModuleList,
-    ModuleSourceIn,
     ModuleTestIn,
     ModuleTestResult,
     NoteIn,
@@ -48,8 +50,11 @@ from .schemas import (
     ToolModuleDetail,
     ToolRunIn,
     ToolRunResult,
+    ToolTryIn,
+    ToolTryResult,
 )
 from .service import Caller, ModuleService, TestRun, test_run
+from .tries import try_tool
 
 ERRORS = error_responses({501: "Not available on this service yet", 502: "The source could not be reached"})
 
@@ -144,10 +149,54 @@ def modules_router(service: ModuleService, directory: Directory) -> APIRouter:
 
     @r.post("/discover", response_model=Envelope[DiscoveryResult])
     async def discover(  # pyright: ignore[reportUnusedFunction]
-        body: ModuleSourceIn, who: Annotated[Caller, Depends(caller)]
+        body: DiscoverIn, who: Annotated[Caller, Depends(caller)]
     ) -> JSONResponse:
-        """Off the request transaction: it fetches the source, so no connection is held while it answers."""
+        """Reads the source and keeps what it lists for 24 hours, for the caller and the module named by `moduleId`
+        (none for a new module), without the calls' headers. Answers the discovery's id, the source's meta and how
+        many operations it lists; GET /discoveries/{id}/operations pages them. Off the request transaction: it fetches
+        the source, so no connection is held while it answers."""
         return ok(await service.discover(who, body))
+
+    @r.get(
+        "/discoveries/{discovery_id}/operations",
+        response_model=Envelope[DiscoveredOperationList],
+        dependencies=[Depends(reader_of("tools"))],
+    )
+    async def list_discovered_operations(  # pyright: ignore[reportUnusedFunction]
+        discovery_id: str,
+        who: Annotated[Caller, Depends(caller)],
+        q: ListQuery,
+        _: Tx,
+        group: Annotated[list[str] | None, Query(description="The operations' resource groups")] = None,
+        access: Annotated[list[str] | None, Query(description="read or write")] = None,
+    ) -> JSONResponse:
+        """One page of a discovery's operations in the source's order, searched on name, description and path, with
+        `group` and `access` filters and facets. Each row says whether the module the discovery was made for already
+        has it (`added`), and `addedTotal` counts the matching ones it has. Only the person who made the discovery, in
+        its team, reads it: anyone else, and anyone after 24 hours, gets 404. The filters are read from the shared
+        list query; they are named here for the document."""
+        del group, access
+        return ok(await service.discovered_operations(who, discovery_id, q))
+
+    @r.get(
+        "/discoveries/{discovery_id}/names",
+        response_model=Envelope[DiscoveredNames],
+        dependencies=[Depends(reader_of("tools"))],
+    )
+    async def list_discovered_names(  # pyright: ignore[reportUnusedFunction]
+        discovery_id: str,
+        who: Annotated[Caller, Depends(caller)],
+        q: ListQuery,
+        _: Tx,
+        group: Annotated[list[str] | None, Query(description="The operations' resource groups")] = None,
+        access: Annotated[list[str] | None, Query(description="read or write")] = None,
+    ) -> JSONResponse:
+        """Select-all for the picker: the name and access of every operation matching the same search and filters
+        that the module does not have yet, unpaged. It answers at most the discovery's own operations, which the
+        source's size bounds (`operationTotal` on the discovery), so the picker can send an import of all of them
+        without loading every page."""
+        del group, access
+        return ok(await service.discovered_names(who, discovery_id, q))
 
     @r.post("/blank", response_model=Envelope[ToolModuleDetail], status_code=201, responses=HELD)
     async def create_blank_module(body: BlankModuleIn, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
@@ -285,6 +334,13 @@ def modules_router(service: ModuleService, directory: Directory) -> APIRouter:
     ) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Off the request transaction: a real run calls the system, and a mock waits its delay."""
         return ok(await service.test(who, module_id, test_run(body)))
+
+    @r.post("/tries", response_model=Envelope[ToolTryResult])
+    async def try_one_tool(body: ToolTryIn, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """Off the request transaction: one tool of a skill path or a workflow step, tried by a person. A read runs; a
+        write answers its plan and is sent only when the same values come back with `planId`. Nothing is stored as a
+        version or a run."""
+        return ok(await try_tool(service, who, body))
 
     @r.post("/{module_id}/operations/{operation}/run", response_model=Envelope[ToolRunResult])
     async def run_tool(  # pyright: ignore[reportUnusedFunction]

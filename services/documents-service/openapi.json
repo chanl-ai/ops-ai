@@ -243,6 +243,7 @@
       },
       "CopyRef": {
         "additionalProperties": false,
+        "description": "A team's copy of a template: where it came from and the record it made.",
         "properties": {
           "detachedAt": {
             "anyOf": [
@@ -260,7 +261,16 @@
             "type": "string"
           },
           "kind": {
-            "const": "document_type",
+            "enum": [
+              "agent",
+              "skill",
+              "workflow",
+              "document_type",
+              "case_type",
+              "task_type",
+              "guardrail",
+              "knowledge_source"
+            ],
             "title": "Kind",
             "type": "string"
           },
@@ -1337,6 +1347,17 @@
           "details": {
             "title": "Details"
           },
+          "kind": {
+            "enum": [
+              "input",
+              "refused",
+              "upstream",
+              "timeout",
+              "internal"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
           "message": {
             "title": "Message",
             "type": "string"
@@ -1344,6 +1365,10 @@
           "requestId": {
             "title": "Requestid",
             "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
           },
           "status": {
             "title": "Status",
@@ -1354,7 +1379,9 @@
           "code",
           "message",
           "status",
-          "requestId"
+          "requestId",
+          "kind",
+          "retryable"
         ],
         "title": "ErrorBody",
         "type": "object"
@@ -2335,6 +2362,7 @@
       },
       "Installed": {
         "additionalProperties": false,
+        "description": "The live copies a team holds of one template. A copy never changes by itself.",
         "properties": {
           "changed": {
             "default": false,
@@ -3511,6 +3539,7 @@
       },
       "TemplateRequires": {
         "additionalProperties": false,
+        "description": "What a copy of a template needs before it can run.",
         "properties": {
           "bind": {
             "items": {

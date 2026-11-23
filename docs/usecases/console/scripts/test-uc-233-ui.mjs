@@ -60,7 +60,7 @@ await withUiStack(
       await page.getByRole('button', { name: /^Sign in/ }).first().click();
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
 
-      const dialog = page.getByRole('dialog', { name: /Start a run of/ });
+      const dialog = page.getByRole('dialog', { name: /Start a run/ });
       await step('1 Test run shows a Files field with upload and picker, a control per input kind, and a JSON tab', async () => {
         await page.goto(`${consoleUrl}/workflows/definitions/${WID}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await page.getByTestId('definition-start-run').click({ timeout: 120_000 });
@@ -113,7 +113,7 @@ await withUiStack(
         mkdirSync(SHOTS, { recursive: true });
         await page.screenshot({ path: join(SHOTS, 'run-with-files-1440.png') });
         await dialog.getByRole('radio', { name: /Test run/ }).click();
-        const started = page.waitForResponse((r) => r.request().method() === 'POST' && /\/v1\/runs$/.test(r.url()), { timeout: 60_000 });
+        const started = page.waitForResponse((r) => r.request().method() === 'POST' && /\/v1\/runs\/start$/.test(r.url()), { timeout: 60_000 });
         await dialog.getByTestId('definition-start-run-submit').click();
         const res = await started;
         const body = JSON.parse(res.request().postData() ?? '{}');
@@ -129,7 +129,7 @@ await withUiStack(
         const link = page.getByTestId('run-files').getByRole('link', { name: 'TEST012.pdf' });
         const linked = await link.waitFor({ timeout: 60_000 }).then(() => true, () => false);
         const href = linked ? await link.getAttribute('href') : null;
-        check('2b the run page links the file by its name', linked && href === `/files?file=${input.files?.[0]?.fileId}`, { linked, href });
+        check('2b the run page links the file by its name', linked && href === `/data/files?file=${input.files?.[0]?.fileId}`, { linked, href });
       });
       check('no page errors', errors.length === 0, errors.slice(0, 3));
     } finally {

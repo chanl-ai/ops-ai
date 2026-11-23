@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-21",
+  "title": "One list of the ways to reach an agent",
+  "description": "An agent's Channels tab lists Chat, API and SDK, MCP, Embed on a page, Email, Slack and Teams, each marked On, Off or Not set up. API and SDK shows the endpoint, the agent ID and a curl, Python, TypeScript and CLI example.",
+  "tag": "new"
+}

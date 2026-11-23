@@ -419,7 +419,7 @@ function ThreadView({
           <Composer
             draftKey={t.id}
             placeholder={`Message ${t.agentName}… Type / for a skill or @ to hand the chat to another agent.`}
-            mentions={agents.filter((a) => a.id !== t.agentId).map((a) => ({ id: a.id, name: a.name, role: a.role }))}
+            mentionExcept={t.agentId}
             onMention={(a) => handTo(a)}
             streaming={streaming}
             onStop={onStop}

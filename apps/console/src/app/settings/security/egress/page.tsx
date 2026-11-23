@@ -90,10 +90,13 @@ function actions<T>(onRemove: (row: T) => void): ColumnDef<T> {
 }
 
 
+/** The table's columns the server sorts by, each with its `sortBy` value. */
+const SORT_COLUMNS = { host: 'host', addedAt: 'addedAt' };
+
 export default function EgressPage() {
   const query = useEgress();
   // Hosts grow with every module and page on the server; private ranges stay few and come whole with the list.
-  const hostList = useListParams('host');
+  const hostList = useListParams('host', undefined, undefined, SORT_COLUMNS);
   const hostPage = useEgressHosts(hostList.params);
   const newHosts = useCreatedRows<ListedHost>();
   const newRanges = useCreatedRows<ListedRange>();
@@ -150,6 +153,7 @@ export default function EgressPage() {
                 searchPlaceholder="Search hosts or notes…"
                 onColumnFiltersChange={hostList.onColumnFiltersChange}
                 serverPagination={serverPagination(hostList, hostPage)}
+                serverSorting={hostList.serverSort}
                 filterResetKey={hostFilterResetKey}
                 hideViewSwitcher
                 emptyState={<ListEmpty icon={Globe} noun="hosts" filtered={hostList.isFiltered} onClear={() => setHostFilterResetKey((k) => k + 1)} createLabel={canEdit ? 'Add host' : undefined} onCreate={() => setAdding('host')} description="Until a host is listed, no tool call or discovery leaves the bank." />}

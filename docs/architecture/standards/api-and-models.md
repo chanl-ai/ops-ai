@@ -1,7 +1,7 @@
 # Standards: API contracts and models
 
 Status: target state. Part of the [engineering standards](../engineering-standards.md); ids `AP1` to `AP7` and `MD1` to
-`MD4` are frozen. The conventions are in [API](../api.md).
+`MD5` are frozen. The conventions are in [API](../api.md).
 
 Every route is typed, authenticated, idempotent on write, and described in the committed `openapi.json` that the SDKs
 are generated from. Every model that crosses a boundary is a Pydantic model that refuses what it does not know.
@@ -207,3 +207,26 @@ Check: `services/<x>/scripts/check_openapi.py` (untyped routes on the shrink-onl
 `uv run python scripts/check_typed_boundaries.py --strict`: `dict[str, Any]` per file, store functions returning a dict,
 and replies that are not an `Out` all the way down, each on a shrink-only `typed-boundaries-baseline.txt` per member.
 A row leaves a store through `ops_store.rows.rows()` or `one()`.
+
+### MD5 A name a person types is a `Name`
+
+Rule: a request model's `name`, `title`, `label` or `display_name` field is `ops_service_kit.names.Name` (or `Name80`,
+`Name120`, sized to the column that stores it; `FileName` for a file name), unless it carries a `pattern`. Code that checks a
+name by hand calls `names.name_problem`, so every route refuses with the same message. A slug made from a name comes from
+`names.slugify`, the one slug maker: Latin letters keep their base letter, and a name with letters that have no ASCII
+spelling gets an 8-character hash of the name appended, so names that differ only in Chinese, Arabic or Cyrillic letters
+get distinct slugs.
+Why: a bare `str` takes a blank name, a line break or a value wider than its column; the last answered 500 on PostgreSQL
+(`value too long for type character varying(120)`).
+
+Today: the fields listed in `packages/ops_service_kit/name-fields-baseline.txt`; none of them reaches a column narrower
+than the cap its model gives.
+
+Pattern (`services/agents-service/src/ops_agents/api/routers/agents.py`): `name: Name`.
+
+Check: `ops_service_kit.standards.check_names`, run by `services/agents-service/scripts/check_standards.py`; the baseline
+only shrinks. A name is NFKC-normalised and trimmed on save, and a tab or a run of spaces becomes one space. A line break
+answers 400 ("The name must be on one line; remove the line break."), so an old row holding one must be renamed before it
+re-saves; a name made only of invisible characters (a zero-width space, a bidi mark) answers 400 as blank; NUL and other
+control characters answer 400. The console checks the same rules in `apps/console/src/lib/validation/names.ts` before it
+sends.

@@ -19,11 +19,11 @@ import hashlib
 import time
 from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
-from ._agents import Agents, AsyncAgents
+from ._agents import Agents, AsyncAgents, based
 from ._chat import AsyncChat, Chat
 from ._config import Config, Session
 from ._generated.agents.operations import AsyncOperations as AsyncAgentsOps
@@ -63,7 +63,7 @@ from ._words import (
     Usage,
 )
 from ._workflows import AsyncWorkflows, Workflows
-from .errors import OpsError
+from .errors import OpsError, RunFailed
 from .templates import AsyncTemplates, Templates
 
 # A run is over in these states; `waiting` means it stopped at a step that waits on a person or another system.
@@ -82,7 +82,7 @@ class Noun:
 
 
 NOUNS: dict[str, Noun] = {
-    "teams": Noun("platform", list="teams_list_teams", paged=False),
+    "teams": Noun("platform", list="teams_list_teams"),
     "agents": Noun("agents", list="agents_list_agents", get="agents_get_agent", create="agents_create_agent"),
     "workflows": Noun("agents", list="workflows_list_workflows", get="workflows_get_workflow"),
     "threads": Noun("agents", list="threads_list_threads", get="threads_thread_state", create="threads_create_thread"),
@@ -97,7 +97,7 @@ NOUNS: dict[str, Noun] = {
     "files": Noun("files", list="files_list_files", get="files_get_file"),
     "runs": Noun("agents", list="workflows_list_engine_runs", get="workflows_get_engine_run"),
     "tasks": Noun("agents", list="reviews_list_reviews", get="reviews_get_review"),
-    "skills": Noun("agents", list="agents_list_skills", get="agents_get_skill"),
+    "skills": Noun("agents", list="agents_list_skills", get="agents_get_skill", create="agents_create_skill"),
     "guardrails": Noun("agents", list="agents_list_guardrails", get="agents_get_guardrail"),
     "widgets": Noun("agents", list="agents_list_widgets", get="agents_get_widget"),
     "case_types": Noun("agents", list="cases_list_case_types", get="cases_get_case_type"),
@@ -110,6 +110,12 @@ def _with_task(run: dict[str, Any]) -> dict[str, Any]:
     waiting = run.get("waiting") or {}
     task = (waiting.get("payload") or {}).get("review_id")
     return {**run, "taskId": task} if task else run
+
+
+def _ended(run: dict[str, Any], check: bool) -> dict[str, Any]:
+    if check and run["status"] == "failed":
+        raise RunFailed(run)
+    return _with_task(run)
 
 
 def _upload_meta(name: str, content: bytes, mime: str, purpose: str) -> tuple[dict[str, Any], str]:
@@ -194,18 +200,80 @@ class AsyncThreads(AsyncResource):
         return await self._raw.agents.threads_get_inbox(thread_id)
 
 
+# What a skill's draft holds, as `skills.save_draft` and a skill file name them.
+SKILL_KEYS = (
+    "name",
+    "useWhen",
+    "loading",
+    "instructions",
+    "toolIds",
+    "knowledgeBases",
+    "guardrails",
+    "refusal",
+    "inputs",
+    "parts",
+    "notWhen",
+    "steps",
+    "exit",
+    "returns",
+    "success",
+)
+
+
+def _reference_query(search: str, **query: Any) -> dict[str, Any]:
+    return {k: v for k, v in {"search": search or None, **query}.items() if v is not None}
+
+
+class Skills(Resource):
+    def save_draft(self, id: str, fields: dict[str, Any], *, note: str = "", base: dict[str, Any] | None = None) -> Any:
+        """Saves `fields` (any of SKILL_KEYS) as the skill's draft. `base` is the skill as last read, naming the copy
+        the change was made on; left out, the skill is read first. A save from an older copy is refused with
+        `stale_base`."""
+        read = base if base and base.get("digest") else self.get(id)
+        body = {k: fields[k] for k in SKILL_KEYS if k in fields}
+        return self._raw.agents.agents_save_skill_draft(id, based({**body, "note": note}, read))
+
+    def publish(self, id: str, *, note: str = "") -> Any:
+        """Asks to publish the newest draft. A skill that cannot be published is refused with `cannot_request`, and
+        the error's details name each problem and the step it is on."""
+        return self._raw.agents.agents_request_skill_publish(id, {"note": note})
+
+    def references(self, search: str = "", *, for_skill: str, **query: Any) -> Any:
+        """What the skill's steps can mention with @, grouped by kind. `ids` (`kind:id` each) answers the labels of
+        what a saved text names."""
+        return self._raw.agents.agents_references_search(for_skill=for_skill, **_reference_query(search, **query))
+
+
+class AsyncSkills(AsyncResource):
+    async def save_draft(
+        self, id: str, fields: dict[str, Any], *, note: str = "", base: dict[str, Any] | None = None
+    ) -> Any:
+        read = base if base and base.get("digest") else await self.get(id)
+        body = {k: fields[k] for k in SKILL_KEYS if k in fields}
+        return await self._raw.agents.agents_save_skill_draft(id, based({**body, "note": note}, read))
+
+    async def publish(self, id: str, *, note: str = "") -> Any:
+        return await self._raw.agents.agents_request_skill_publish(id, {"note": note})
+
+    async def references(self, search: str = "", *, for_skill: str, **query: Any) -> Any:
+        return await self._raw.agents.agents_references_search(for_skill=for_skill, **_reference_query(search, **query))
+
+
 class Runs(Resource):
     def start(self, workflow_id: str, *, input: dict[str, Any] | None = None, **fields: Any) -> Any:
         """Starts a run of the workflow's current version; `fields` takes `version`, `runKey` and `mode`."""
         return self._raw.agents.workflows_start_engine_run({"workflowId": workflow_id, "input": input or {}, **fields})
 
-    def wait(self, run_id: str, *, timeout: float = 600.0, interval: float = 1.0) -> dict[str, Any]:
-        """The run once it has ended or stopped at a human task (then `taskId` names the task)."""
+    def wait(
+        self, run_id: str, *, timeout: float = 600.0, interval: float = 1.0, check: bool = False
+    ) -> dict[str, Any]:
+        """The run once it has ended or stopped at a human task (then `taskId` names the task). `check=True` raises
+        RunFailed for a failed run instead of returning it."""
         deadline = time.monotonic() + timeout
         while True:
             run = self._raw.agents.workflows_get_engine_run(run_id)
             if run["status"] in TERMINAL or run["status"] == "waiting":
-                return _with_task(run)
+                return _ended(run, check)
             if time.monotonic() > deadline:
                 raise TimeoutError(f"run {run_id} is still {run['status']} after {timeout:.0f}s")
             time.sleep(interval)
@@ -221,6 +289,15 @@ class Runs(Resource):
         """Queues a Stuck run again from its last recorded step; nothing it sent is sent again."""
         return self._raw.agents.workflows_retry_engine_run(run_id)
 
+    def redrive(self, run_id: str) -> Any:
+        """Queues a Failed or Stuck run again from its failed step, on the version it started on."""
+        return self._raw.agents.workflows_redrive_engine_run(run_id)
+
+    def bulk(self, action: str, **filter: Any) -> Any:
+        """Redrives (`action="redrive"`) or cancels (`"cancel"`) every run the filter matches: workflowId, kind, code,
+        createdFrom, createdTo. Returns the runs changed and those skipped."""
+        return self._raw.agents.workflows_bulk_engine_runs(cast(Any, {"action": action, "filter": filter}))
+
     def run_set_aside_email(self, event_id: str) -> Any:
         """Starts the run of an email the mailbox listener set aside, under the email's own run key."""
         return self._raw.agents.workflows_run_set_aside_email(event_id)
@@ -231,12 +308,14 @@ class AsyncRuns(AsyncResource):
         body = {"workflowId": workflow_id, "input": input or {}, **fields}
         return await self._raw.agents.workflows_start_engine_run(body)
 
-    async def wait(self, run_id: str, *, timeout: float = 600.0, interval: float = 1.0) -> dict[str, Any]:
+    async def wait(
+        self, run_id: str, *, timeout: float = 600.0, interval: float = 1.0, check: bool = False
+    ) -> dict[str, Any]:
         deadline = time.monotonic() + timeout
         while True:
             run = await self._raw.agents.workflows_get_engine_run(run_id)
             if run["status"] in TERMINAL or run["status"] == "waiting":
-                return _with_task(run)
+                return _ended(run, check)
             if time.monotonic() > deadline:
                 raise TimeoutError(f"run {run_id} is still {run['status']} after {timeout:.0f}s")
             await asyncio.sleep(interval)
@@ -250,6 +329,15 @@ class AsyncRuns(AsyncResource):
     async def retry(self, run_id: str) -> Any:
         """Queues a Stuck run again from its last recorded step; nothing it sent is sent again."""
         return await self._raw.agents.workflows_retry_engine_run(run_id)
+
+    async def redrive(self, run_id: str) -> Any:
+        """Queues a Failed or Stuck run again from its failed step, on the version it started on."""
+        return await self._raw.agents.workflows_redrive_engine_run(run_id)
+
+    async def bulk(self, action: str, **filter: Any) -> Any:
+        """Redrives (`action="redrive"`) or cancels (`"cancel"`) every run the filter matches: workflowId, kind, code,
+        createdFrom, createdTo. Returns the runs changed and those skipped."""
+        return await self._raw.agents.workflows_bulk_engine_runs(cast(Any, {"action": action, "filter": filter}))
 
     async def run_set_aside_email(self, event_id: str) -> Any:
         """Starts the run of an email the mailbox listener set aside, under the email's own run key."""
@@ -379,8 +467,9 @@ class OpsAI:
         self.raw = Raw(self._t)
         self.teams, self.cases = (Resource(self.raw, NOUNS[n]) for n in ("teams", "cases"))
         self.threads = Threads(self.raw, NOUNS["threads"])
-        self.skills, self.guardrails, self.widgets, self.case_types, self.task_types = (
-            Resource(self.raw, NOUNS[n]) for n in ("skills", "guardrails", "widgets", "case_types", "task_types")
+        self.skills = Skills(self.raw, NOUNS["skills"])
+        self.guardrails, self.widgets, self.case_types, self.task_types = (
+            Resource(self.raw, NOUNS[n]) for n in ("guardrails", "widgets", "case_types", "task_types")
         )
         self.knowledge = Knowledge(self.raw, NOUNS["knowledge"])
         self.files = Files(self.raw, NOUNS["files"])
@@ -450,8 +539,9 @@ class AsyncOpsAI:
         self.raw = AsyncRaw(self._t)
         self.teams, self.cases = (AsyncResource(self.raw, NOUNS[n]) for n in ("teams", "cases"))
         self.threads = AsyncThreads(self.raw, NOUNS["threads"])
-        self.skills, self.guardrails, self.widgets, self.case_types, self.task_types = (
-            AsyncResource(self.raw, NOUNS[n]) for n in ("skills", "guardrails", "widgets", "case_types", "task_types")
+        self.skills = AsyncSkills(self.raw, NOUNS["skills"])
+        self.guardrails, self.widgets, self.case_types, self.task_types = (
+            AsyncResource(self.raw, NOUNS[n]) for n in ("guardrails", "widgets", "case_types", "task_types")
         )
         self.knowledge = AsyncKnowledge(self.raw, NOUNS["knowledge"])
         self.files = AsyncFiles(self.raw, NOUNS["files"])

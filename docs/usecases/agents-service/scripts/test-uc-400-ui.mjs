@@ -73,7 +73,7 @@ await withUiStack(
       const plainId = `uc400_plain_${TAG}`;
       const plain = await saveAndPublish(J, definition(plainId, PLAIN));
       await page.goto(`${consoleUrl}/workflows/${plainId}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await page.getByTestId('definition-checks-count').getByText(/warning/).waitFor({ timeout: 60_000 }).catch(() => undefined);
+      await page.getByTestId('definition-problems').getByText(/warning/).waitFor({ timeout: 60_000 }).catch(() => undefined);
       const marked = await page.locator('[data-node-id="meet"] [data-testid="node-warning"]').count();
       check('3 the fork meeting at a plain step saves, and the editor marks that step with a warning', plain.saved.status === 201 && marked === 1, { saved: plain.saved.status, marked, warnings: plain.saved.data?.warnings });
       check('no page errors', errors.length === 0, errors);

@@ -28,6 +28,7 @@ from usecase_harness import (
     finish,
     kb,
     models,
+    save_agent,
     sse,
     tools,
     until,
@@ -67,7 +68,7 @@ def ask(k: Any, kb_id: str, question: str) -> dict[str, Any]:
 
 def agent(api: Any, name: str, collections: list[str]) -> str:
     made = data(api.post("/v1/agents", json={"name": f"{name} {RUN}", "role": "Answers help questions"}, headers=OPS))
-    saved = data(api.patch(f"/v1/agents/{made['id']}", json={"collections": collections}, headers=OPS))
+    saved = data(save_agent(api, made["id"], {"collections": collections}, headers=OPS))
     api.post(
         f"/v1/agents/{made['id']}/publish-requests", json={"version": saved["version"], "note": "uc-675"}, headers=OPS
     )

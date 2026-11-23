@@ -7,6 +7,7 @@ import { AlertCircle, ArrowLeft, Bot, Check, Clock, Database, Loader2, Mail, Mes
 import { Button } from '@/components/ui/button';
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator, CommandShortcut } from '@/components/ui/command';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { type OptionSource, useOptionSearch } from '@/hooks/options-queries';
 import type { SearchGroup, SearchHit, SearchResults } from '@/lib/types/search';
 
 export interface PalettePage {
@@ -28,6 +29,8 @@ export interface PaletteAction {
   keywords?: string;
   /** `teams` opens the team list inside the palette instead of running. */
   opens?: 'teams';
+  /** The keys that run it without the menu, shown at the right. */
+  shortcut?: string;
   run?: () => void;
 }
 
@@ -76,7 +79,8 @@ export function CommandPalette({
   recents,
   onOpenHit,
   onNavigate,
-  teams,
+  teamSource,
+  currentTeamId,
   onSwitchTeam,
 }: {
   open: boolean;
@@ -92,10 +96,14 @@ export function CommandPalette({
   recents: SearchHit[];
   onOpenHit: (hit: SearchHit) => void;
   onNavigate: (href: string) => void;
-  teams: { id: string; name: string; current: boolean }[];
-  onSwitchTeam: (id: string) => void;
+  /** The teams to switch to, searched on the server with what is typed once the team list is open. */
+  teamSource: OptionSource;
+  currentTeamId: string;
+  onSwitchTeam: (id: string, name: string) => void;
 }) {
   const [sub, setSub] = React.useState<'teams' | null>(null);
+  const found = useOptionSearch(teamSource, query, open && sub === 'teams');
+  const teams = (found.data?.pages ?? []).flatMap((p) => p.data);
   React.useEffect(() => {
     if (!open) setSub(null);
   }, [open]);
@@ -120,13 +128,26 @@ export function CommandPalette({
             <CommandItem value="back" onSelect={() => setSub(null)}>
               <ArrowLeft /> Back
             </CommandItem>
+            {found.isPending && (
+              <div className="flex items-center gap-2 px-4 py-3 text-sm text-muted-foreground" role="status">
+                <Loader2 className="size-4 animate-spin" /> Searching…
+              </div>
+            )}
+            {found.isError && <p className="px-4 py-3 text-sm text-destructive-text" role="alert">Couldn’t load your teams. Try again.</p>}
+            {!found.isPending && !found.isError && !teams.length && <p className="px-4 py-3 text-sm text-muted-foreground">{typed ? `No team matches “${typed}”.` : 'No other team.'}</p>}
+            {/* The server searched; the typed words are in each value so cmdk's own filter keeps every row. */}
             {teams.map((t) => (
-              <CommandItem key={t.id} value={`team ${t.name}`} onSelect={() => onSwitchTeam(t.id)}>
+              <CommandItem key={t.id} value={`${typed} team ${t.label} ${t.id}`} onSelect={() => onSwitchTeam(t.id, t.label)}>
                 <Users />
-                <span className="flex-1">{t.name}</span>
-                {t.current && <Check className="size-4" aria-label="Current team" />}
+                <span className="flex-1">{t.label}</span>
+                {t.id === currentTeamId && <Check className="size-4" aria-label="Current team" />}
               </CommandItem>
             ))}
+            {found.hasNextPage && (
+              <CommandItem value={`${typed} more teams`} onSelect={() => void found.fetchNextPage()}>
+                {found.isFetchingNextPage ? <Loader2 className="animate-spin" /> : <Users />} Show more teams
+              </CommandItem>
+            )}
           </CommandGroup>
         ) : (
           <>
@@ -190,6 +211,7 @@ export function CommandPalette({
                   <a.icon />
                   <span className="flex-1">{a.label}</span>
                   {a.opens && <CommandShortcut>›</CommandShortcut>}
+                  {a.shortcut && <CommandShortcut>{a.shortcut}</CommandShortcut>}
                 </CommandItem>
               ))}
             </CommandGroup>

@@ -7,6 +7,7 @@ from typing import Any, ClassVar
 import sqlalchemy as sa
 
 from ops_store import Guarantee
+from ops_store.dialect import locked
 from ops_store.team_scope import team_visible
 
 from ..journal import RunCancelledError, StepRow, StepStatus
@@ -56,12 +57,11 @@ class SqlJournal:
         async with self.tx.tenant_tx() as c:
             await self.tx.check_fence(c, row.run_id, row.generation)
             # Read under the lock a cancel takes (RunStore.cancel), so an attempt either began before the cancel and
-            # is recorded when it ends, or does not begin.
+            # is recorded when it ends, or does not begin. The lock is exclusive: SQL Server has no shared lock that
+            # outlives the read under snapshot isolation, and one run's steps begin one at a time anyway.
             run = engine_runs
             status = (
-                await c.execute(
-                    sa.select(run.c.status).where(run.c.id == row.run_id, team_visible(run)).with_for_update(read=True)
-                )
+                await c.execute(locked(sa.select(run.c.status).where(run.c.id == row.run_id, team_visible(run)), run))
             ).scalar()
             if status == "cancelled":
                 raise RunCancelledError(f"run {row.run_id} was cancelled before {row.node_id} began")

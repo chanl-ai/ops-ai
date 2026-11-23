@@ -31,7 +31,7 @@ corrected.
 | [Configuration](standards/configuration.md) | `CF1` to `CF6` | One settings object; no literal hosts, ports or timeouts; fail at start; secrets; safe defaults |
 | [Tenant isolation and access](standards/tenancy-and-access.md) | `TN1` to `TN5`, `AC1` to `AC5` | Row-level security on every tenant table; `isolated_tx` on every transaction; `can()` as the only decision |
 | [Data access](standards/data-access.md) | `DA1` to `DA13` | One transaction per request; Core statements; paging and joins in SQL; indexes; migrations; retention |
-| [API contracts and models](standards/api-and-models.md) | `AP1` to `AP7`, `MD1` to `MD4` | Typed, authenticated, idempotent routes; one envelope; `extra="forbid"`; one model per contract |
+| [API contracts and models](standards/api-and-models.md) | `AP1` to `AP7`, `MD1` to `MD5` | Typed, authenticated, idempotent routes; one envelope; `extra="forbid"`; one model per contract |
 | [Events, the relay and workers](standards/events-and-workers.md) | `EV1` to `EV6` | Outbox in the same transaction; one relay; idempotent receivers; loop health; one tenant per item |
 | [Console, SDKs and CLI](standards/console-and-sdk.md) | `UI1` to `UI7` | No browser-side joins or `.reduce()`; hooks only; server paging; generated SDKs; CLI over the client |
 | [Errors, logging and observability](standards/observability.md) | `OB1` to `OB6` | Kit logging; one request line with ids; typed errors; up and ready; timeouts |
@@ -106,7 +106,7 @@ or runs only on a full CI plan or nightly. No: nothing fails today; the page say
 | `DA5` | Lists are paged and filtered in SQL | no |
 | `DA6` | Every route has a statement budget | no |
 | `DA7` | Foreign keys and filter columns are indexed | no |
-| `DA8` | One migration chain per service, one head | partial |
+| `DA8` | One migration chain per service, one head | yes |
 | `DA9` | Every migration downgrades and runs on both databases | yes |
 | `DA10` | A column is dropped one release after it stops being read | no |
 | `DA11` | Request paths are async end to end | no |
@@ -123,6 +123,7 @@ or runs only on a full CI plan or nightly. No: nothing fails today; the page say
 | `MD2` | One model per contract, generated everywhere else | yes |
 | `MD3` | Validation is never skipped on outside input | no |
 | `MD4` | A value that crosses a layer is a model | partial |
+| `MD5` | A name a person types is a `Name` | yes |
 | `EV1` | The event commits with the change | yes |
 | `EV2` | One relay, wired once | no |
 | `EV3` | A receiver tolerates a repeat | yes |

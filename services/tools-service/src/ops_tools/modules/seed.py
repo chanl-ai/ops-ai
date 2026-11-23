@@ -78,6 +78,8 @@ class ToolDeclaration(TypedDict):
     input_schema: Json
     timeout_ms: NotRequired[int]
     system: NotRequired[bool]
+    # The tool's own approval answer (none, person or reviewer), over its app's and team's.
+    approval_mode: NotRequired[str]
 
 
 class CatalogTool(TypedDict):
@@ -195,6 +197,49 @@ KNOWLEDGE_TOOLS: list[ToolDeclaration] = [
 KNOWLEDGE_TOOL_NAMES = tuple(str(t["name"]) for t in KNOWLEDGE_TOOLS)
 # The platform's own reads run in process: files, documents and knowledge.
 READ_TOOLS = [*FILE_TOOLS, *KNOWLEDGE_TOOLS]
+# The Workspace built-in app: jobs the team's assistant does in the workspace as the person asking, each calling the
+# route the console calls (mcp_tools.py WORKSPACE holds where each goes and the cells it may use). A draft runs at
+# once, since its publish review is its approval; a change that takes effect at once asks the person on a card.
+WORKSPACE_TOOLS: list[ToolDeclaration] = [
+    {
+        "name": "draft_agent",
+        "description": "Make a new agent in this team as a draft, as you: it is not live until its publish review. "
+        "Refused unless you may create agents.",
+        "access": "write",
+        "requires_approval": False,
+        "approval_mode": "none",
+        "input_schema": {
+            "type": "object",
+            "required": ["name", "role"],
+            "properties": {
+                "name": {"type": "string", "description": "The agent's name"},
+                "role": {"type": "string", "description": "What the agent does, in one sentence"},
+                "instructions": {"type": "string", "description": "Short instructions for the agent"},
+            },
+        },
+    },
+    {
+        "name": "invite_people",
+        "description": "Invite people to this team by email with one built-in role, as you; the person you are "
+        "talking with confirms on a card first. Refused unless you may invite people to the team.",
+        "access": "write",
+        "requires_approval": True,
+        "approval_mode": "person",
+        "input_schema": {
+            "type": "object",
+            "required": ["emails", "role"],
+            "properties": {
+                "emails": {"type": "array", "items": {"type": "string"}, "description": "The people's emails"},
+                "role": {
+                    "type": "string",
+                    "enum": ["admin", "builder", "reviewer", "viewer"],
+                    "description": "The role they get in the team",
+                },
+            },
+        },
+    },
+]
+WORKSPACE_TOOL_NAMES = tuple(str(t["name"]) for t in WORKSPACE_TOOLS)
 # What the Runtime sends for send_reply (ops_agents.activities.gateway); the gateway validates against it.
 SEND_REPLY_INPUT: list[InputField] = [
     {"name": "to", "type": "string", "required": True},
@@ -442,6 +487,16 @@ BUILT_IN: list[BuiltInApp] = [
         "description": "Reads a document's fields with one of the team's document types.",
         "href": "/files/document-types",
     },
+    {
+        "id": "workspace",
+        "name": "Workspace",
+        "module": "workspace",
+        "operations": list(WORKSPACE_TOOL_NAMES),
+        "titles": {"draft_agent": "Draft an agent", "invite_people": "Invite people"},
+        "description": "Builds and manages the team's workspace from chat, as the person asking: drafts wait for "
+        "their publish review, and live changes for the person's yes.",
+        "href": "/settings/members",
+    },
 ]
 
 
@@ -491,7 +546,7 @@ def waits_mode(declared: bool | None, access: str) -> str | None:
 def _local_fields(module_id: str, n: int, name: str) -> StoredOperation:
     """The fields the seed gives operation `name` of the platform's tools, run in process (`local`), at position n of
     a module, in the order a published copy of it holds them; `_local_op` fills the rest with the defaults."""
-    declared = {str(t["name"]): t for t in [*PLATFORM_TOOLS, *READ_TOOLS]}
+    declared = {str(t["name"]): t for t in [*PLATFORM_TOOLS, *READ_TOOLS, *WORKSPACE_TOOLS]}
     if name in SENDS:
         (description, approval), access, fields = SENDS[name], "write", SEND_REPLY_INPUT
     else:
@@ -526,6 +581,8 @@ def _local_fields(module_id: str, n: int, name: str) -> StoredOperation:
     declaration = declared.get(name)
     if declaration is not None and (timeout := declaration.get("timeout_ms")):
         out["timeout_ms"] = timeout
+    if declaration is not None and (mode := declaration.get("approval_mode")):
+        out["approval_mode"] = mode
     return out
 
 

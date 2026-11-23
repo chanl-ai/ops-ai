@@ -27,6 +27,7 @@ from tests.conftest import fixture_knowledge
 
 from ..conftest import SEED, FakeGraphModels, scripted_model, sse_events
 from ..contract import response_checker
+from ..saves import save_agent
 
 FRAUD = "ag_fraud"
 
@@ -100,7 +101,7 @@ async def test_seeded_agents_are_published_rows_and_still_serve_chat(client: Asy
 
 
 async def test_a_draft_edit_changes_nothing_live_until_published(client: AsyncClient) -> None:
-    r = await client.patch(f"/v1/agents/{FRAUD}", json={"instructions": "Answer only in French.", "note": "fr"})
+    r = await save_agent(client, FRAUD, {"instructions": "Answer only in French.", "note": "fr"})
     assert r.status_code == 200, r.text
     assert (r.json()["data"]["version"], r.json()["data"]["publishedVersion"]) == (8, 7)
     chat = {a["id"]: a for a in (await client.get("/chat/agents")).json()["data"]}
@@ -144,7 +145,7 @@ async def test_publish_refuses_an_old_version_and_a_second_open_request(tmp_path
         second = await _publish(client, a["id"], 1)
         assert second.status_code == 409 and second.json()["error"]["code"] == "review_open"
         # An edit while v1 is in review opens v2; v1 is then no longer the newest draft.
-        await client.patch(f"/v1/agents/{a['id']}", json={"role": "Checks payees twice"})
+        await save_agent(client, a["id"], {"role": "Checks payees twice"})
         r = await _publish(client, a["id"], 1)
         assert r.status_code == 422 and r.json()["error"]["code"] == "not_newest_draft", r.text
         states = [
@@ -169,7 +170,7 @@ async def test_pause_stops_new_threads_and_resume_serves_again(client: AsyncClie
 
 
 async def test_restore_copies_into_a_new_draft_and_delete_waits_for_its_workflows(client: AsyncClient) -> None:
-    await client.patch(f"/v1/agents/{FRAUD}", json={"instructions": "Changed."})
+    await save_agent(client, FRAUD, {"instructions": "Changed."})
     r = await client.post(f"/v1/agents/{FRAUD}/versions/7/restore")
     a = r.json()["data"]
     # The edit and the restore both land in the one draft after the published v7.
@@ -229,9 +230,9 @@ async def test_tool_ids_come_from_the_catalogue_listing(client: AsyncClient) -> 
     listed = await client.get("/v1/tools", params={"pageSize": 200})
     tools = {t["id"]: t for t in listed.json()["data"]["data"]}
     assert tools["place_wire_hold"]["access"] == "write" and tools["place_wire_hold"]["approval"]
-    r = await client.patch(f"/v1/agents/{FRAUD}", json={"toolIds": ["tl_1"]})
+    r = await save_agent(client, FRAUD, {"toolIds": ["tl_1"]})
     assert r.status_code == 400 and r.json()["error"]["code"] == "unknown_tool"
-    r = await client.patch(f"/v1/agents/{FRAUD}", json={"toolIds": ["lookup_account"]})
+    r = await save_agent(client, FRAUD, {"toolIds": ["lookup_account"]})
     assert r.status_code == 200 and r.json()["data"]["toolIds"] == ["lookup_account"]
 
 
@@ -251,6 +252,7 @@ async def test_an_agents_model_alias_is_checked_at_publish_and_used_by_its_turns
     engine = create_async_engine(url)
     async with engine.begin() as c:
         await c.run_sync(metadata.create_all)
+        await c.run_sync(engine_metadata.create_all)
     settings = Settings(database_url=url, seed_dir=SEED, models_url="http://models")
     app = create_app(
         settings,
@@ -270,12 +272,12 @@ async def test_an_agents_model_alias_is_checked_at_publish_and_used_by_its_turns
         assert turn["model"] == settings.model_alias, "an agent that names no alias runs on the runtime's"
 
         named = await _create(c, "Named Alias")
-        await c.patch(f"/v1/agents/{named['id']}", json={"model": "bank-embed"})
+        await save_agent(c, named["id"], {"model": "bank-embed"})
         # Edits rewrite the one draft, so it stays v1 until a version is published or put to review.
         refused = await _publish(c, named["id"], 1)
         assert refused.status_code == 422 and refused.json()["error"]["code"] == "unknown_model_alias", refused.text
 
-        await c.patch(f"/v1/agents/{named['id']}", json={"model": "bank-standard"})
+        await save_agent(c, named["id"], {"model": "bank-standard"})
         assert (await _publish(c, named["id"], 1)).status_code == 201
         turn = _ok(await c.post(f"/v1/agents/{named['id']}/test", json={"message": "hello"}))
         assert turn["model"] == "bank-standard", "the agent's own alias, not the runtime's"
@@ -289,6 +291,7 @@ async def test_the_alias_picker_lists_exactly_what_publish_accepts(client: Async
     engine = create_async_engine(url)
     async with engine.begin() as c:
         await c.run_sync(metadata.create_all)
+        await c.run_sync(engine_metadata.create_all)
     app = create_app(
         Settings(database_url=url, seed_dir=SEED, models_url="http://models"),
         model=scripted_model(),
@@ -306,7 +309,7 @@ async def test_the_alias_picker_lists_exactly_what_publish_accepts(client: Async
         assert offered == ["bank-standard"], "chat aliases only; bank-embed is an embedding alias"
         for name, published in (("bank-standard", 201), ("bank-embed", 422)):
             agent = await _create(c, f"Picker {name}")
-            await c.patch(f"/v1/agents/{agent['id']}", json={"model": name})
+            await save_agent(c, agent["id"], {"model": name})
             assert (await _publish(c, agent["id"], 1)).status_code == published
 
 

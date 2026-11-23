@@ -76,6 +76,9 @@ async def write_run(tx: Transactions, new: NewRun) -> tuple[RunRow, bool]:
                     available_at=db_now(c) + delay,
                     attempts=0,
                     created_at=at,
+                    # The run's team is the cap's key; without it every team's start shares one key.
+                    team_id=values["team_id"],
+                    priority=0,
                 )
             )
     except IntegrityError:

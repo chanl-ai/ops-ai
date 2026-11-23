@@ -8,6 +8,10 @@ person. The token is its own `kind`: ops_identity refuses it as a session, and a
 asked for. `act` names the service it was minted for (RFC 8693); tools-service requires it to equal the service token
 the call arrives with, so a token taken from one service's traffic cannot be replayed by another.
 
+The token also carries what the person may do in that one team (roles, role ids, grids, policies), read when it is
+minted, so a service that does not own membership (tools-service) decides a platform tool's cells as the person's own.
+A service that owns a right (platform-service for members) decides from its database again, never from the token.
+
 Membership is checked when the token is minted, so a person removed from the team can be acted for until it expires.
 """
 
@@ -20,13 +24,16 @@ from ops_policy import Ed25519Signer, mint
 from ops_service_kit.errors import NotFound
 from ops_service_kit.ids import new_id
 
+from .auth import access_claims
 from .store.identity import IdentityStore
+from .store.workspace import WorkspaceStore
 
 ACTING_FOR_KIND = "acting_for"
 ACTING_FOR_TTL_S = 60
-# The services that may ask, each with the one service its tokens are for: agents-service's tool calls go to
-# tools-service, and tools-service's MCP operations (install_template) go to agents-service.
-AUDIENCES = {"service:agents": "tools", "service:tools": "agents"}
+# The services that may ask, each with the services its tokens may be for, the first the default: agents-service's
+# tool calls go to tools-service; tools-service's platform tools (mcp_tools.py) go to agents-service, to
+# platform-service (members) and to kb-service (knowledge).
+AUDIENCES: dict[str, tuple[str, ...]] = {"service:agents": ("tools",), "service:tools": ("agents", "platform", "kb")}
 MINTERS = frozenset(AUDIENCES)
 
 
@@ -44,16 +51,27 @@ class ActingForIssued:
 
 
 class ActingFor:
-    def __init__(self, store: IdentityStore, signer: Ed25519Signer, *, ttl_s: int = ACTING_FOR_TTL_S) -> None:
+    def __init__(
+        self,
+        store: IdentityStore,
+        signer: Ed25519Signer,
+        *,
+        ttl_s: int = ACTING_FOR_TTL_S,
+        workspace: WorkspaceStore | None = None,
+    ) -> None:
         self.store = store
         self.signer = signer
         self.ttl_s = ttl_s
+        self.workspace = workspace
 
-    async def mint(self, *, service: str, tenant_id: str, email: str, team_id: str) -> ActingForIssued:
-        """A token naming the person with `email` in `team_id`, for `service`. 404 `not_a_member` when no active
-        person of the tenant has that email in that team, as another team's record answers, and
-        `acting_for_refused` for a service that may not ask, which acts for no one."""
-        if service not in MINTERS:
+    async def mint(
+        self, *, service: str, tenant_id: str, email: str, team_id: str, audience: str | None = None
+    ) -> ActingForIssued:
+        """A token naming the person with `email` in `team_id`, for `service`, to be sent to `audience` (one of the
+        service's AUDIENCES; its first when unset). 404 `not_a_member` when no active person of the tenant has that
+        email in that team, as another team's record answers, and `acting_for_refused` for a service that may not
+        ask, or an audience it may not send to."""
+        if service not in MINTERS or (audience is not None and audience not in AUDIENCES[service]):
             raise not_found("Acting-for tokens for this service", "acting_for_refused")
         now = datetime.now(UTC)
         at = now.isoformat(timespec="milliseconds").replace("+00:00", "Z")
@@ -71,7 +89,8 @@ class ActingFor:
             "kind": ACTING_FOR_KIND,
             "act": {"sub": service},
             "jti": new_id("tok"),
-            "aud": AUDIENCES[service],
+            "aud": audience or AUDIENCES[service][0],
+            **await access_claims(self.store, self.workspace, user, now, team=team_id),
         }
         token = mint(claims, self.signer, ttl_s=self.ttl_s, now=now.timestamp())
         expires = (now + timedelta(seconds=self.ttl_s)).isoformat(timespec="milliseconds").replace("+00:00", "Z")

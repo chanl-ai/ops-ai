@@ -138,12 +138,12 @@ export function AgentSkillsSection({
                     {p.upgradeAvailable && (
                       <DisabledReason reason={blockedReason ?? p.upgradeBlocked}>
                         <Button variant="outline" size="sm" disabled={!!blockedReason || !!p.upgradeBlocked || busy} onClick={() => onAttach(p.skillId, p.latestPublished!, p.name, true)} data-testid="agent-skill-upgrade">
-                          <ArrowUpCircle className="size-3.5" /> Move to v{p.latestPublished}
+                          <ArrowUpCircle className="size-3.5" /> Update
                         </Button>
                       </DisabledReason>
                     )}
                     <DisabledReason reason={blockedReason}>
-                      <Button variant="ghost" size="icon" className="size-7" disabled={!!blockedReason || busy} aria-label={`Detach ${p.name}`} onClick={() => setDetaching(p)}>
+                      <Button variant="ghost" size="icon" disabled={!!blockedReason || busy} aria-label={`Detach ${p.name}`} onClick={() => setDetaching(p)}>
                         <X className="size-3.5" />
                       </Button>
                     </DisabledReason>

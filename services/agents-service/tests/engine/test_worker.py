@@ -223,6 +223,9 @@ async def test_a_status_write_under_a_superseded_generation_is_refused(engine: A
         await runs.update(run_id, generation=old, status="succeeded")
     with tenant_scope(tenant), pytest.raises(LeaseSupersededError):
         await EventLog(engine).append(thread_id=run_id, team_id="t", run_id=run_id, type_="finished", generation=old)
+    # Its start row would wait behind the lease held here and be the next test's first claim.
+    with tenant_scope(tenant):
+        await runs.cancel(run_id, reason="test over")
 
 
 async def test_a_dead_workers_claim_lapses_and_another_worker_finishes_the_run(engine: AsyncEngine) -> None:
@@ -348,11 +351,15 @@ class BlippingTools(CountingTools):
     """The tools service does not answer the access lookup: an error outside the step's own call."""
 
     async def access(self, operation: str) -> Access:
-        raise RuntimeError("tools-service restarting")
+        raise ConnectionError("tools-service restarting")
 
 
-async def test_a_pass_that_fails_on_an_outage_is_tried_again_after_five_seconds_not_one(engine: AsyncEngine) -> None:
+async def test_a_pass_that_fails_on_an_outage_is_tried_again_after_five_seconds_not_one(
+    engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
     import time  # noqa: PLC0415
+
+    monkeypatch.setattr("ops_store.retry.jitter", lambda: 1.0)  # the wait at the whole of its span
 
     tenant, tools = f"t-{uuid4().hex[:8]}", BlippingTools()
     run_id = await start(engine, tenant, {"customerId": "C-1", "amount": 250})
@@ -368,6 +375,8 @@ async def test_a_pass_that_fails_on_an_outage_is_tried_again_after_five_seconds_
     with tenant_scope(tenant):
         run = await RunStore(EngineTransactions(engine)).get(run_id) or {}
         (work,) = await RunStore(EngineTransactions(engine)).work(run_id)
+        # Its row comes due in 5 s and would be the next test's first claim.
+        await RunStore(EngineTransactions(engine)).cancel(run_id, reason="test over")
     # The database's clock (epoch seconds) on this machine.
     assert run["status"] == "queued", run
     assert 4.0 <= float(work["available_at"]) - before <= 8.0, (work["available_at"], before)

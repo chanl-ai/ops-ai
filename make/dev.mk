@@ -1,6 +1,6 @@
 # The local stack: compose (PostgreSQL, OPA), migrations, then the agents service, tools service and console in the
 # background. scripts/stack.sh is the process manager: logs in .logs/<svc>.log, pids in .run/<svc>.pid.
-.PHONY: up down restart reset-db health logs ports demo-model sample-team sample-library sample-teams demo-walk demo demo-salesforce demo-salesforce-templates demo-salesforce-walk
+.PHONY: offset-guard port-list up down restart reset-db health logs ports demo-model sample-team sample-library sample-teams demo-walk demo demo-salesforce demo-salesforce-templates demo-salesforce-walk
 
 ##@ Stack (one per machine)
 
@@ -14,7 +14,7 @@ DEMO_MODEL ?= $(if $(OPENAI_API_KEY),gpt-5-mini,fake)
 DEMO_FAST_MODEL ?= $(if $(filter fake,$(DEMO_MODEL)),fake,gpt-4.1-mini)
 DEMO_CHAT_MODEL ?= $(if $(filter fake,$(DEMO_MODEL)),fake,gpt-5-nano)
 
-up: db-up ## Compose, migrate every chain in place, then the services, the worker, models-service and the demo fakes; AUTH=platform signs in through platform-service; RESET=1 wipes the database first (as make reset-db); a new database gets the sample team (SAMPLE=0 skips); OPS_INFRA=external uses side containers and skips db-up/db-down
+up: offset-guard db-up ## Compose, migrate every chain in place, then the services, the worker, models-service and the demo fakes; AUTH=platform signs in through platform-service; RESET=1 wipes the database first (as make reset-db); a new database gets the sample team (SAMPLE=0 skips); OPS_INFRA=external uses side containers and skips db-up/db-down
 	@# Services started before their code last changed run old code: stopped here, started again after the schema step.
 	@$(STACK) stop-stale
 	@# Always migrate, never drop data on its own. A chain the database holds ahead of this checkout
@@ -42,6 +42,9 @@ up: db-up ## Compose, migrate every chain in place, then the services, the worke
 		ALIAS=memory-extract MODEL=$(DEMO_FAST_MODEL) uv run --quiet --project $(ROOT) python $(ROOT)/scripts/demo_model.py && \
 		ALIAS=extract MODEL=$(DEMO_MODEL) uv run --quiet --project $(ROOT) python $(ROOT)/scripts/demo_model.py; }
 	@$(STACK) health
+	@# Every member role has an account that signs in, so a walk or a use case as any role never needs a manual seed.
+	@# A warning, not a stop: a stack started with its own seed file or everyone as admin holds other roles by design.
+	@$(MAKE) -s seed-roles ENV=local || echo "make up: a member role cannot sign in with its seeded account (lines above); walks as that role will fail"
 	@# A new database gets the sample team once, so a fresh clone has people, knowledge and agents to try; the marker
 	@# goes with the database (make reset-db removes it). SAMPLE=0 skips it.
 	@if [ "$(SAMPLE)" != "0" ] && [ ! -f "$(OPS_RUN_DIR)/sample-team.installed" ]; then \
@@ -125,6 +128,12 @@ ports: ## Print the ports this stack uses
 	@printf '  console %s (runtime %s), agents %s, tools %s, opa %s, postgres %s\n' $(OPS_CONSOLE_PORT) \
 		$(OPS_CONSOLE_RUNTIME_PORT) $(OPS_AGENTS_PORT) $(OPS_TOOLS_PORT) $(OPS_OPA_PORT) $(OPS_PG_PORT)
 
+port-list: ## Print NAME=port for every port this stack binds at OPS_PORT_OFFSET (what the preview picker and the offset guard read)
+	@$(foreach v,$(sort $(filter OPS_%_PORT,$(.VARIABLES))),printf '%s=%s\n' $(v) '$($(v))';)
+
+offset-guard:
+	@[ "$(OPS_PORT_OFFSET)" = 0 ] || python3 $(ROOT)/scripts/preview.py check-offset --offset $(OPS_PORT_OFFSET) --root $(ROOT) --run-root $(STACK_HOME)/.run --data-root $(STACK_HOME)/.data
+
 ##@ Call an API as a dev user
 
 # `make api GET /v1/me AS=viewer`: the method and path are the words after `api`, so they become goals that do nothing.
@@ -140,7 +149,26 @@ AS := admin
 endif
 ENV ?= local
 
-.PHONY: api sdk-call
+.PHONY: api sdk-call seed-roles roles-check
+# One account per member role (admin, builder, approver, viewer, chat_user) on the install ENV names. A local or preview
+# stack runs in dev mode, where platform-service seeds them at boot, so there the seed has nothing to make and both
+# targets prove each signs in. On staging the accounts are real ones kept in ~/.config/ops-ai/staging-roles.env.
+ROLE_ACCOUNTS := $(ROOT)/deploy/fly/role_accounts.py
+seed-roles: ## make seed-roles [ENV=staging]: make the role accounts the install lacks, then sign in as each; safe to run again; make up and stg-deploy run it
+ifeq ($(ENV),staging)
+	@. $(ROOT)/deploy/fly/stg_env.sh; uv run --quiet --project $(ROOT) python $(ROLE_ACCOUNTS) seed --generate \
+	  --platform "https://$$STG_APP.fly.dev/api/platform" --admin-env "$$stg_conf/staging-admin.env"
+else
+	@python3 $(ROLE_ACCOUNTS) seed --dev --platform "$(OPS_PLATFORM_URL)"
+endif
+
+roles-check: ## make roles-check [ENV=staging]: sign in as each member role and check the role it holds; reads only
+ifeq ($(ENV),staging)
+	@. $(ROOT)/deploy/fly/stg_env.sh; python3 $(ROLE_ACCOUNTS) check --platform "https://$$STG_APP.fly.dev/api/platform"
+else
+	@python3 $(ROLE_ACCOUNTS) check --dev --platform "$(OPS_PLATFORM_URL)"
+endif
+
 api: ## make api GET /v1/me AS=<role>|james|<email> [Q='pageSize=5'] [BODY='{}'] [TEAM=] [SVC=] [ENV=staging]: signs in for real, prints the answer
 	@[ -n "$(word 2,$(API_WORDS))" ] || { echo "make api: name the method and path, e.g. make api GET /v1/me AS=viewer" >&2; exit 2; }
 	@uv run --quiet python scripts/api_as.py api $(word 1,$(API_WORDS)) '$(word 2,$(API_WORDS))$(if $(Q),?$(Q))' --as '$(AS)' --env $(ENV) \

@@ -41,14 +41,15 @@ import { createCaseRecordsHttp } from './case-records-http';
 import { createWidgetsHttp } from './widgets-http';
 import { createAssuranceHttp } from './assurance-http';
 import { createMcpLinksHttp } from './mcp-links-http';
+import { createReferencesHttp } from './references-http';
 import { createWikiHttp } from './wiki-http';
 import { fetchWithIdentity } from './request-identity';
+import { addSort } from './sort-query';
 
 function qs(params: ListParams & { view?: string; group?: string }) {
   const q = new URLSearchParams({ page: String(params.page), pageSize: String(params.pageSize) });
   if (params.search) q.set('search', params.search);
-  if (params.sortBy) q.set('sortBy', params.sortBy);
-  if (params.sortOrder) q.set('sortOrder', params.sortOrder);
+  addSort(q, params);
   for (const id of params.ids ?? []) q.append('ids', id);
   if (params.view) q.set('view', params.view);
   if (params.group) q.set('group', params.group);
@@ -94,6 +95,7 @@ function createReviewsHttp(get: Get, send: Send): OpsApi['reviews'] {
     place: (id, opts) => get(`/reviews/${encodeURIComponent(id)}/place${opts ? `?${new URLSearchParams(Object.entries(opts).filter(([, v]) => v) as [string, string][]).toString()}` : ''}`),
     decide: (id, i) => send('POST', `/reviews/${encodeURIComponent(id)}/decision`, i),
     assign: (ids, assignee) => send('POST', '/reviews/assign', { ids, assignee }),
+    withdraw: (id) => send('POST', `/publish-requests/${encodeURIComponent(id)}/withdraw`),
     bulkDecide: (ids, decision, reason, opts) => send('POST', '/reviews/bulk-decision', { ids, decision, reason, stepUpToken: opts?.stepUpToken }),
   };
 }
@@ -178,8 +180,8 @@ export function createRegistryToolsDirectory(baseUrl: string): Pick<OpsApi['tool
   };
 }
 
-export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' | 'workflows' | 'engine' | 'channels' | 'skills' | 'widgets' | 'widgetDeployments' | 'batches' | 'caseRecords' | 'activity' | 'overview' | 'assurance'> {
-  const { agents, workflows, engine, channels, skills, widgets, widgetDeployments, batches, caseRecords, activity, overview, assurance } = createHttpApi(`${baseUrl}/v1`);
+export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' | 'workflows' | 'engine' | 'channels' | 'skills' | 'references' | 'widgets' | 'widgetDeployments' | 'batches' | 'caseRecords' | 'activity' | 'overview' | 'assurance' | 'evals'> {
+  const { agents, workflows, engine, channels, skills, references, widgets, widgetDeployments, batches, caseRecords, activity, overview, assurance, evals } = createHttpApi(`${baseUrl}/v1`);
   const { bulkUpdate: _au, bulkRemove: _ar, ...agentCalls } = agents;
   const { bulkUpdate: _wu, ...workflowCalls } = workflows;
   const notServed = (what: string) => () => Promise.reject(new ApiError(`${what} is not available on this backend yet.`, 501));
@@ -188,6 +190,7 @@ export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' |
     workflows: workflowCalls,
     engine,
     channels,
+    references,
     widgets,
     widgetDeployments,
     batches,
@@ -195,6 +198,8 @@ export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' |
     activity,
     // Suites, runs and publish checks are joined and counted on agents-service; sealed evidence and judges are not served.
     assurance,
+    // The agent's saved cases and kept runs (`/v1/agents/{id}/eval-cases`, `/eval-runs`).
+    evals,
     // Counted on the server from the same review list Human Tasks reads and the team's cases.
     overview,
     skills: {
@@ -254,8 +259,11 @@ export function createHttpApi(baseUrl: string): OpsApi {
       versions: (id) => get(`/agents/${id}/versions`),
       runs: (id) => get(`/agents/${id}/runs`),
       restore: (id, version) => send('POST', `/agents/${id}/versions/${version}/restore`),
-      requestPublish: (id, version, note) => send('POST', `/agents/${id}/publish-requests`, { version, note }),
+      requestPublish: (id, version, note, follows) => send('POST', `/agents/${id}/publish-requests`, { version, note, follows }),
       publishPreview: (id, version) => get(`/agents/${id}/publish-preview?version=${version}`),
+      publishCheck: (id, version) => get(`/agents/${id}/publish-check?version=${version}`),
+      promptView: (id, version) => get(`/agents/${id}/prompt${version === undefined ? '' : `?version=${version}`}`),
+      draftBrief: (id, description) => send('POST', `/agents/${id}/brief-draft`, { description }),
       setPaused: (id, paused) => send('POST', `/agents/${id}/paused`, { paused }),
       // GET /tools answers one page of the Tools page's rows (each a grantable tool with its app and users): the agent
       // page reads the largest page the route serves.
@@ -318,7 +326,7 @@ export function createHttpApi(baseUrl: string): OpsApi {
     engine: createEngineHttp(get, send),
     channels: createChannelsHttp(get, send),
     templates: createTemplatesHttp(get, send, qs),
-    prompts: createPromptsHttp(get, send, qs, baseUrl),
+    prompts: createPromptsHttp(get),
     skills: createSkillsHttp(get, send, qs, baseUrl),
     widgets: createWidgetsHttp(get, send, qs),
     widgetDeployments: createWidgetDeploymentsHttp(get, send, baseUrl),
@@ -327,6 +335,7 @@ export function createHttpApi(baseUrl: string): OpsApi {
     activity: createActivityHttp(get),
     assurance: createAssuranceHttp(get, send, qs),
     mcpLinks: createMcpLinksHttp(get, send),
+    references: createReferencesHttp(get, send),
     wiki: createWikiHttp(get, send, qs),
     tools: {
       list: (p) => get(`/tools?${qs(p)}`),
@@ -357,6 +366,6 @@ export function createHttpApi(baseUrl: string): OpsApi {
       remove: (id) => send('DELETE', `/tests/${id}`),
     },
     lookups: { get: () => get('/lookups') },
-    teams: { list: () => get('/teams'), create: (i) => send('POST', '/teams', i) },
+    teams: { list: (p) => get(`/teams?${qs(p)}`), create: (i) => send('POST', '/teams', i) },
   };
 }
