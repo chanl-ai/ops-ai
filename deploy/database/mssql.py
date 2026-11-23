@@ -212,6 +212,8 @@ RUNTIME_GRANTS: dict[str, Grants] = {
         # A trigger event is settled in place (agents 0089, 0091); what fired it is never rewritten.
         "trigger_events": (_SI, ("detail", "item", "outcome", "run_id")),
         "widget_deployments": (_SIU, ()),
+        # Clearing a schedule and deleting its workflow remove the row (agents 20261123_1900).
+        "workflow_schedules": ((*_SIU, "DELETE"), ()),
         "widget_mint_key_audit": (_SI, ()),
         "widget_mint_keys": (_SIU, ()),
     },
