@@ -45,7 +45,7 @@ import { useSession, useSignOut } from "@/hooks/auth-queries"
 import { clearChatDrafts } from "@/components/chat/composer"
 import { noteChosenSignOut } from "@/components/shell/session-end"
 import { initials } from "@/lib/format"
-import { MY_CONNECTORS } from '@/lib/nav';
+import { MY_APPS } from '@/lib/nav';
 
 export function NavUser({
   user: fallback,
@@ -123,9 +123,9 @@ export function NavUser({
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Link href="/settings/account/connectors" data-testid="nav-connections">
+                <Link href="/work/apps" data-testid="nav-connections">
                   <IconPlug />
-                  {MY_CONNECTORS}
+                  {MY_APPS}
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>

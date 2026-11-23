@@ -317,7 +317,9 @@ export const toolsOperations = {
     "method": "GET",
     "path": "/v1/me/connections",
     "pathParams": [],
-    "query": [],
+    "query": [
+      "app"
+    ],
     "stream": false
   },
   "apps_open_connect_link": {

@@ -398,3 +398,4 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-766 | console | A role given to a group, and the approvals cell on the role's page | ui | draft |
 | uc-767 | console | A person who only chats sees My apps in the sidebar and can chat | ui | draft |
 | uc-768 | console | One create form holds a name to the same rule the server keeps | ui | draft |
+| uc-769 | console | My apps is a page of its own, the same for an admin and a member | ui | draft |

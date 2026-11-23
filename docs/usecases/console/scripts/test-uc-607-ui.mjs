@@ -391,7 +391,7 @@ try {
         const james = await signedIn(browser, consoleUrl, 'j.richardson@harborpine.example', errors);
         await step('6 James presses Connect on My accounts, allows access as himself, and his account reads james.person, Connected', async () => {
           // A person's own account is connected on My accounts, one row per account they may sign in to themselves.
-          await james.goto(`${consoleUrl}/settings/account/connectors`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await james.goto(`${consoleUrl}/work/apps`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           const button = james.getByTestId(`connector-action-${APP}`);
           await button.waitFor({ timeout: 90_000 });
           await shoot(james, 'app-connect-my-account');
@@ -500,7 +500,7 @@ try {
           await shoot(james, 'catalog-available');
           await james.getByTestId('view-tab-all').click();
           await james.goto(`${consoleUrl}/settings/account/connections`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-          await james.waitForURL((u) => u.pathname === '/settings/account/connectors', { timeout: 60_000 });
+          await james.waitForURL((u) => u.pathname === '/work/apps', { timeout: 60_000 });
           await james.getByTestId('connectors').waitFor({ timeout: 60_000 });
           const mine = ((await james.locator('main').innerText()) ?? '').replace(/\s+/g, ' ');
           await shoot(james, 'mine');
@@ -545,7 +545,7 @@ try {
         // My connectors reads tools-service, but /settings is still an unserved area in isPreviewPath, so the page wears the
         // Preview badge and says its data is sample. Open step: the check stays red until the page stops saying so.
         await step('7b My connectors reads real data and carries no Preview badge or sample-data note', async () => {
-          await james.goto(`${consoleUrl}/settings/account/connectors`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await james.goto(`${consoleUrl}/work/apps`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await james.getByTestId('connectors').waitFor({ timeout: 60_000 });
           const reason = await james.getByTestId('preview-reason').count();
           check('7b My connectors reads real data and carries no Preview badge or sample-data note', reason === 0, { previewNote: reason });
@@ -745,7 +745,7 @@ try {
 
         await step('13 James connects his own EU desk account; his chat asks which, his pick becomes his default and the next call does not ask, and Make my default puts it back on Person desk', async () => {
           // A second account of his own is added from the card's menu on My connectors, under a name he picks.
-          await james.goto(`${consoleUrl}/settings/account/connectors`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await james.goto(`${consoleUrl}/work/apps`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await james.getByTestId(`connector-menu-${APP}`).click();
           await james.getByTestId(`connector-another-${APP}`).click();
           await james.getByTestId('another-account-name').fill('EU desk');

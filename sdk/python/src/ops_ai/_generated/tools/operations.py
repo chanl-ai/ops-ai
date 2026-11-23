@@ -273,7 +273,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/me/connections",
         "pathParams": [],
-        "query": [],
+        "query": ["app"],
         "stream": False,
     },
     "apps_open_connect_link": {
@@ -1285,9 +1285,9 @@ class Operations:
         "Give Own Credentials"
         return self._t.call(SERVICE, OPERATIONS["apps_give_own_credentials"], {"account_id": account_id}, {}, {}, body)  # type: ignore[no-any-return]
 
-    def apps_my_connections(self) -> list[MyConnector]:
+    def apps_my_connections(self, *, app: str | None = None) -> list[MyConnector]:
         "My Connections"
-        return self._t.call(SERVICE, OPERATIONS["apps_my_connections"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(SERVICE, OPERATIONS["apps_my_connections"], {}, {"app": app}, {}, None)  # type: ignore[no-any-return]
 
     def plugins_list_plugin_templates(self, *, kind: str | None = None) -> list[PluginTemplate]:
         "List Plugin Templates"
@@ -2051,9 +2051,9 @@ class AsyncOperations:
             SERVICE, OPERATIONS["apps_give_own_credentials"], {"account_id": account_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    async def apps_my_connections(self) -> list[MyConnector]:
+    async def apps_my_connections(self, *, app: str | None = None) -> list[MyConnector]:
         "My Connections"
-        return await self._t.call(SERVICE, OPERATIONS["apps_my_connections"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(SERVICE, OPERATIONS["apps_my_connections"], {}, {"app": app}, {}, None)  # type: ignore[no-any-return]
 
     async def plugins_list_plugin_templates(self, *, kind: str | None = None) -> list[PluginTemplate]:
         "List Plugin Templates"

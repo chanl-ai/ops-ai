@@ -231,7 +231,7 @@ try {
 
         await step('16 Disconnect removes his sign-in, and the system is asked to end it', async () => {
           // The card stays and offers Connect again, as the app still lets him connect his own.
-          await page.goto(`${consoleUrl}/settings/account/connectors`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await page.goto(`${consoleUrl}/work/apps`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await page.getByTestId(`connector-menu-${conn.appId}`).click();
           await page.getByTestId(`connector-disconnect-${conn.appId}`).click();
           await page.getByTestId('delete-my-connection-confirm-btn').click();
@@ -265,7 +265,7 @@ try {
         }, admin);
 
         await step('18 she connects her own account from My connectors', async () => {
-          await admin.goto(`${consoleUrl}/settings/account/connectors`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await admin.goto(`${consoleUrl}/work/apps`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           const button = admin.getByTestId(`connector-action-${conn.appId}`);
           await button.waitFor({ timeout: 30_000 });
           const [popup] = await Promise.all([admin.waitForEvent('popup', { timeout: 60_000 }), button.click()]);

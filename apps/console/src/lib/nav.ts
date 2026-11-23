@@ -32,7 +32,7 @@ export interface NavItem {
   foldedAtStart?: boolean;
   /** The icon of the parent's own sub-row, when the parent shows one beside a lone child. */
   tabIcon?: Icon;
-  /** No sidebar row: the entry gives its routes an area, a trail and a place in search (My connectors is in the user menu). */
+  /** No sidebar row: the entry gives its routes an area, a trail and a place in search (a settings page's own area). */
   hidden?: boolean;
   /** Other routes that belong to this entry's area and trail without a row of their own (a page reached from a record or a link). */
   also?: string[];
@@ -40,11 +40,6 @@ export interface NavItem {
   or?: NavNeed[];
   /** What the parent page itself needs; a person who may open neither it nor any child is not offered the row. */
   needs?: NavNeed;
-  /**
-   * Two views of one thing reached from different sidebar rows (Connectors: Mine and Team setup): the title switcher
-   * moves between them and the trail names the view, but neither is drawn as a sub-row.
-   */
-  views?: NavChild[];
 }
 
 /** platform-service reads the audit log for whoever holds audit.view in the team (GET /v1/audit). */
@@ -56,18 +51,10 @@ export const ACTIVITY: NavNeed = { area: 'activity', action: 'view' };
 /** agents-service answers GET /v1/background only for an account admin: access.manage in every team. */
 export const BACKGROUND: NavNeed = { area: 'access', action: 'manage', everyTeam: true };
 
-/**
- * Connectors (owner, 8 November): one word for an app that acts for the team or the person, in two views. Mine is each
- * person's own sign-ins, the user menu's "My apps"; Team setup is where an admin turns apps on, the Data
- * row "Apps".
- */
+/** The team's apps, where an admin turns them on (Data). */
 export const CONNECTORS = 'Apps';
-/** Mine's one name, on the sidebar row, its page title and the avatar menu. */
-export const MY_CONNECTORS = 'My apps';
-export const CONNECTOR_VIEWS: NavChild[] = [
-  { title: 'Mine', url: '/settings/account/connectors', icon: IconUserCheck },
-  { title: 'Team setup', url: '/data/connectors', icon: IconPlugConnected },
-];
+/** Each person's own sign-ins: a page of its own in Work, never a view of the team's Apps (owner, 22 November). */
+export const MY_APPS = 'My apps';
 
 /** The four areas the sidebar shows one at a time, in the order the header offers them and ⌘1 to ⌘4 reach them. */
 export const AREAS = ['Work', 'Build', 'Data', 'Govern'] as const;
@@ -90,13 +77,13 @@ export const NAV: NavGroup[] = [
   {
     label: 'Work',
     items: [
+      // A person's own app sign-ins, for everyone who can chat: first, under New chat, the sidebar's lead row.
+      { title: MY_APPS, url: '/work/apps', icon: IconPlugConnected, needs: cell('chat', 'run') },
       { title: 'Overview', url: '/overview', icon: IconHome, needs: OVERVIEW_NEEDS[0], or: OVERVIEW_NEEDS.slice(1) },
       // The team's customer issues, with their deadlines and timelines; workflow runs are under Workflows.
       { title: 'Cases', url: '/work/cases', icon: IconMail, needs: cell('cases', 'view') },
       // Reviews is daily work for reviewers, so it sits with Cases and Chat rather than with configuration.
       { title: 'Human Tasks', url: '/work/tasks', icon: IconUserCheck, needs: cell('reviews', 'view') },
-      // A person's own app sign-ins, for everyone who can chat (owner, 20 November): a sidebar row, not only the user menu.
-      { title: MY_CONNECTORS, url: '/settings/account/connectors', icon: IconPlugConnected, needs: cell('chat', 'run'), views: CONNECTOR_VIEWS },
       // The sidebar draws this as New chat and the Chats group; All chats lists every conversation the person has had.
       { title: 'Chat', url: '/chat', icon: IconMessages, tabIcon: IconMessage, hidden: true, needs: cell('chat', 'run'), children: [{ title: 'All chats', url: '/chat/conversations', icon: IconHistory }] },
     ],
@@ -119,7 +106,7 @@ export const NAV: NavGroup[] = [
       // Knowledge bases decide what an agent searches and how; each KB page has its own tabs, so the row is flat.
       { title: 'Knowledge bases', url: '/data/knowledge', icon: IconDatabase, needs: cell('knowledge', 'view'), also: ['/sources', '/data/wiki'] },
       // Connectors, Team setup (the catalog); an app's auth configs are on its own page.
-      { title: CONNECTORS, url: '/data/connectors', icon: IconPlugConnected, needs: cell('connections', 'view'), views: CONNECTOR_VIEWS, also: ['/data/tools/connections'] },
+      { title: CONNECTORS, url: '/data/connectors', icon: IconPlugConnected, needs: cell('connections', 'view'), also: ['/data/tools/connections'] },
       // Every tool the team can use (owner, 12 November: tools sit with the data and apps they reach).
       { title: 'Tools', url: '/data/tools', icon: IconTool, needs: cell('tools', 'view') },
       { title: 'Secrets', url: '/data/secrets', icon: IconKey, needs: cell('secrets_egress', 'view') },
@@ -260,26 +247,18 @@ export function crumbsFor(pathname: string): Crumb[] {
   if (!best) return [];
   // Work's pages are the everyday ones, so their trail names no area.
   const group: Crumb[] = best.group === NAV[0] ? [] : [{ label: AREA_LABEL[best.group.label] }];
-  // My connectors already names its view, so only the Data row's trail adds it (Team setup).
-  const view = best.item.views && best.group !== NAV[0] && viewFor(best.item.views, pathname);
   const crumbs: Crumb[] = [
     ...group,
     link(best.item.title, best.item.url),
-    ...(best.child ? [link(best.child.title, best.child.url)] : view ? [link(view.title, view.url)] : []),
+    ...(best.child ? [link(best.child.title, best.child.url)] : []),
   ];
   // A group and its item can share a name (Agents › Agents); the trail names it once, keeping the item's link.
   return crumbs.filter((c, i) => c.label !== crumbs[i + 1]?.label);
 }
 
-/** The view a path is in: the longest matching url, so Mine (/integrations/my-accounts) is not also Team setup. */
-function viewFor(views: NavChild[], pathname: string): NavChild | undefined {
-  return [...views].sort((a, b) => b.url.length - a.url.length).find((v) => covers(v.url, pathname));
-}
-
 /** The pages grouped under one sidebar item, for the title switcher: the item's name, then the parent page and its children. Null when the item has no children. */
 export function sectionFor(pathname: string): { label: string; pages: { href: string; label: string; icon?: Icon; needs?: NavNeed }[] } | null {
   const best = navMatch(pathname);
-  if (best?.item.views) return { label: CONNECTORS, pages: best.item.views.map((v) => ({ href: v.url, label: v.title, icon: v.icon, needs: v.needs })) };
   if (!best?.item.children?.length) return null;
   return { label: best.item.title, pages: [{ href: best.item.url, label: best.item.tabTitle ?? best.item.title, icon: best.item.tabIcon, needs: best.item.needs }, ...best.item.children.map((c) => ({ href: c.url, label: c.title, icon: c.icon, needs: c.needs }))] };
 }

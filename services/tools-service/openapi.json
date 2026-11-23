@@ -27031,9 +27031,26 @@
     },
     "/v1/me/connections": {
       "get": {
-        "description": "The caller's connectors, Connectors (Mine): one row per app that acts as them, with what it can do, who it\nsigns in as, its appState and appGroup, and where it is used; an app the team has off is listed when each\nperson signs in to it. No request transaction: the team's write approval policies and who uses each tool are\nasked of the platform and agents-service.",
+        "description": "The caller's connectors, My apps: one row per app that acts as them, with what it can do, who it\nsigns in as, its appState and appGroup, and where it is used; an app the team has off is listed when each\nperson signs in to it. `app` keeps that one app, for its page. No request transaction: the team's write\napproval policies and who uses each tool are asked of the platform and agents-service.",
         "operationId": "apps_my_connections",
         "parameters": [
+          {
+            "in": "query",
+            "name": "app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "App"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",
