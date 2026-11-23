@@ -103,6 +103,16 @@ Every surface that shows data has all four, reviewed with `?mock=slow`, `?mock=e
 | Error | `QueryError` with Try again | Keep whatever the person typed: a failed save leaves the dialog open with its fields and shows the error inline |
 | Partial | The page's own rows | A list that loaded keeps showing while a refetch fails; the error appears as a toast, not a blank page |
 
+## Step sheet sections
+
+The workflow step sheet (`components/workflows/definition-editor/step-sheet.tsx`) reads top to bottom: name and the
+type's plain summary with How this step works, Problems with Fix, How it starts (trigger steps only), What it receives,
+Settings, When it fails, What it gives, Try step. A trigger type's own panel goes in the How it starts slot as one entry
+of `TRIGGER_PANELS` in `trigger-panels.tsx` (props `node`, `workflowId`, `readOnly`, `onChange(parameters)`); the sheet
+never names a trigger type. A panel that saves on its own keeps its own Save button and says so. A value from an earlier
+step is picked with the field picker (`field-picker.tsx`), which reads the sample route once per sheet; nothing types a
+path except All settings.
+
 ## Responsive
 
 The console works from a 375 px phone to a wide monitor with no horizontal page scroll.

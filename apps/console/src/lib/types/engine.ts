@@ -50,6 +50,10 @@ export interface EngineNodeType {
   group: string;
   label: string;
   description: string;
+  /** One plain sentence a builder reads under the step's name. */
+  summary?: string;
+  /** A few plain sentences behind "How this step works". */
+  how?: string;
   inputs: EnginePort[];
   outputs: EnginePort[];
   /** A list parameter whose entries become the out ports (a review's options); `outputs` is its default. */
@@ -417,4 +421,33 @@ export interface RunStory {
   childrenMore: number;
   /** What the run did, oldest first. */
   lines: StoryLine[];
+}
+
+/** One field an earlier step gives, with the value the acting team's newest finished run gave it (masked, cut). */
+export interface SampleField {
+  name: string;
+  label: string;
+  /** What a mapping stores: `$.input.<field>` for the trigger, `$.nodes.<step>.out.<field>` otherwise. */
+  path: string;
+  sample: string | null;
+}
+
+export interface SampleStep {
+  id: string;
+  name: string;
+  kind: string | null;
+  installed: boolean;
+  fields: SampleField[];
+}
+
+/** What a step receives (`GET …/definitions/{id}/sample`): earlier steps' fields and last run values, joined on the server. */
+export interface DefinitionSample {
+  workflowId: string;
+  step: string | null;
+  /** False when the saved working copy does not hold the step yet. */
+  saved: boolean;
+  run: { id: string; version: number; createdAt: string } | null;
+  steps: SampleStep[];
+  /** The step's own fields: what it gives the steps after it. */
+  given?: SampleStep | null;
 }

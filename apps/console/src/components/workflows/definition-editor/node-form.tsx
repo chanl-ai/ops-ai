@@ -13,6 +13,8 @@ import { useEngineOptions } from '@/hooks/engine-queries';
 import { AccountSelect } from '@/components/connections/account-select';
 import { JsonInput } from '@/components/shared/json-input';
 
+import { FieldChip, FieldPicker, FieldSourceContext } from './field-picker';
+
 import type { EngineOption, NodeForm, NodeFormField, OptionSource } from '@/lib/types/engine';
 
 type Params = Record<string, unknown>;
@@ -177,27 +179,29 @@ function SourceSelect({ id, source, value, steps, onChange }: { id: string; sour
   );
 }
 
-type Kind = 'path' | 'text' | 'number' | 'boolean';
-const KIND_LABEL: Record<Kind, string> = { path: 'Step output', text: 'Text', number: 'Number', boolean: 'Yes or no' };
-const kindOf = (v: unknown): Kind => (typeof v === 'number' ? 'number' : typeof v === 'boolean' ? 'boolean' : typeof v === 'string' && v.startsWith('$.') ? 'path' : 'text');
+type Kind = 'text' | 'number' | 'boolean';
+const KIND_LABEL: Record<Kind, string> = { text: 'Text', number: 'Number', boolean: 'Yes or no' };
+const isPath = (v: unknown): v is string => typeof v === 'string' && v.startsWith('$.');
+const kindOf = (v: unknown): Kind => (typeof v === 'number' ? 'number' : typeof v === 'boolean' ? 'boolean' : 'text');
 
 /**
- * One mapped value: a path into the run (`$.input…` or `$.nodes.<step>.out…`), text, a number or yes/no. The kind is
- * stored in the value's own type, and a path is a lookup the runner resolves; no field evaluates code.
+ * One mapped value: a field of an earlier step, picked by name and stored as the path the runner resolves
+ * (`$.input…` or `$.nodes.<step>.out…`), or a value typed here: text, a number or yes/no. The kind is stored in the
+ * value's own type; no field evaluates code. A path typed under All settings shows as its chip.
  */
-export function MappingInput({ id, value, steps, onChange }: { id: string; value: unknown; steps: StepRefs; onChange: (v: unknown) => void }) {
+export function MappingInput({ id, value, onChange }: { id: string; value: unknown; steps?: StepRefs; onChange: (v: unknown) => void }) {
+  const source = React.useContext(FieldSourceContext);
   const [kind, setKind] = React.useState<Kind>(() => kindOf(value));
   React.useEffect(() => {
-    if (value !== undefined && value !== '') setKind(kindOf(value));
+    if (value !== undefined && value !== '' && !isPath(value)) setKind(kindOf(value));
   }, [value]);
-  const roots = [{ value: '$.input', label: 'Run input' }, ...steps.earlier.map((s) => ({ value: `$.nodes.${s.id}.out`, label: s.label }))];
+  if (isPath(value)) return <div data-mapping={id}><FieldChip path={value} readOnly={source.readOnly} onClear={() => onChange(undefined)} /></div>;
   const text = value === undefined || value === null ? '' : String(value);
   const switchKind = (k: Kind) => {
     setKind(k);
     if (k === 'boolean') onChange(true);
     else if (k === 'number') onChange(Number.isFinite(Number(text)) && text !== '' ? Number(text) : undefined);
-    else if (k === 'path') onChange(text.startsWith('$.') ? text : undefined);
-    else onChange(text.startsWith('$.') ? undefined : text || undefined);
+    else onChange(text || undefined);
   };
   return (
     <div className="flex min-w-0 flex-col gap-1.5" data-mapping={id}>
@@ -222,10 +226,10 @@ export function MappingInput({ id, value, steps, onChange }: { id: string; value
         ) : (
           <Input
             id={id}
-            className="min-w-0 flex-1 font-mono"
+            className="min-w-0 flex-1"
             inputMode={kind === 'number' ? 'decimal' : undefined}
             value={text}
-            placeholder={kind === 'path' ? 'e.g. $.input.amount' : kind === 'number' ? 'e.g. 100' : 'e.g. Refund over limit'}
+            placeholder={kind === 'number' ? 'e.g. 100' : 'e.g. Refund over limit'}
             onChange={(e) => {
               const v = e.target.value;
               if (kind === 'number') onChange(v === '' ? undefined : Number.isFinite(Number(v)) ? Number(v) : v);
@@ -235,22 +239,10 @@ export function MappingInput({ id, value, steps, onChange }: { id: string; value
           />
         )}
       </div>
-      {kind === 'path' && (
-        <Select value={NONE} onValueChange={(v) => v !== NONE && onChange(v)}>
-          <SelectTrigger className="w-full" aria-label="Insert a step output">
-            <SelectValue placeholder="Insert a step output" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={NONE} disabled>
-              Insert a step output
-            </SelectItem>
-            {roots.map((r) => (
-              <SelectItem key={r.value} value={r.value}>
-                {r.label} <span className="ml-2 font-mono text-xs text-muted-foreground">{r.value}</span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      {!source.readOnly && (
+        <div>
+          <FieldPicker onPick={onChange} />
+        </div>
       )}
     </div>
   );

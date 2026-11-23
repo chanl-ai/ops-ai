@@ -78,11 +78,10 @@ await withUiStack(
       await page.locator('[data-testid="definition-node"][data-node-id="done"]').dblclick();
       await page.locator('[data-field="node-done-outcome"]').fill('refunded');
       const output = page.locator('[data-mapping="node-done-output"]');
-      await output.getByRole('combobox', { name: 'Value kind' }).click();
-      await page.getByRole('option', { name: 'Step output' }).click();
-      await output.getByRole('combobox', { name: 'Insert a step output' }).click();
-      await page.getByRole('option', { name: /Run input/ }).click();
-      await page.locator('[data-field="node-done-output"]').fill('$.input.amount');
+      // The run input's amount, picked by name from the field picker; the form stores the path the runner reads.
+      await output.getByTestId('field-picker-open').click();
+      await page.getByTestId('field-picker').getByPlaceholder('Search fields…').fill('amount');
+      await page.getByTestId('field-picker').getByRole('option', { name: /Amount/ }).first().click();
       await page.getByTestId('definition-problems').getByText(/No problems/).waitFor({ timeout: 30_000 }).catch(() => undefined);
       const v2 = await versionFromEditor(page, id, { Authorization: `Bearer ${await tokenFor(JAMES)}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' });
       const stored = (await (await api(`/v1/workflows/definitions/${id}`)).json()).data;

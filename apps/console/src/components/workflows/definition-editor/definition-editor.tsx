@@ -69,6 +69,8 @@ export interface DefinitionEditorProps {
   startByHand?: (values: Record<string, unknown>, mode: RunMode) => Promise<void>;
   /** Where the saved versions stand: the latest one's stage, the live version, an open publish request. */
   lifecycle: Lifecycle;
+  /** The digest of the working copy as last saved, so the step sheet reads its fields again after each save. */
+  savedDigest?: string;
   /** Makes a version from the working copy and sends it to Reviews (goes live at once where no review is needed). */
   requestPublish: (note: string) => Promise<{ status: string }>;
   setPaused: (paused: boolean) => Promise<unknown>;
@@ -148,7 +150,7 @@ function EditorInner(props: DefinitionEditorProps) {
   return <EditorBody {...props} definition={placed} />;
 }
 
-function EditorBody({ definition: initial, types, validation, validateError = null, onChange, saveState, save, changed = false, saving = false, startRun, startByHand, lifecycle, requestPublish, setPaused, pausing, readOnly = false, readOnlyNote, canPublish, frame }: DefinitionEditorProps) {
+function EditorBody({ definition: initial, types, validation, validateError = null, onChange, saveState, save, changed = false, saving = false, startRun, startByHand, lifecycle, requestPublish, setPaused, pausing, readOnly = false, readOnlyNote, canPublish, frame, savedDigest }: DefinitionEditorProps) {
   const [def, setDef] = React.useState<EngineDefinition>(initial);
   const [dirty, setDirty] = React.useState(false);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
@@ -519,6 +521,7 @@ function EditorBody({ definition: initial, types, validation, validateError = nu
         checks={(validation?.checks ?? []).filter((c) => c.node === opened?.id)}
         order={runOrder}
         readOnly={readOnly}
+        savedDigest={savedDigest}
         onClose={() => setSheetId(null)}
         onMove={selectNode}
         onChange={(patch) => opened && change((d) => patchNode(d, opened.id, patch, typeOf(opened)))}
