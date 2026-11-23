@@ -40,6 +40,9 @@ export interface AppStateShown {
   member: AppAction;
 }
 
+/** The reason GET /v1/me/connections gives on an app whose sign-in an admin ended from Apps › People. */
+export const ENDED_BY_AN_ADMIN = 'Ended by an admin';
+
 export const APP_STATES: Record<AppStateId, AppStateShown> = {
   connected: { label: 'Connected', tone: 'success', on: true, admin: 'connect', member: 'none' },
   test_failed: { label: 'Signed in, test failed', tone: 'warning', on: true, admin: 'reconnect', member: 'none' },

@@ -1707,6 +1707,8 @@ class ConnectionService:
         mine = own_key(who)
         values = {f: given[f] for f in kind.person_fields}
         await self.tokens.store_own(who.tenant_id, str(conn.id), mine, values)
+        # Named as a sign-in names its row, so Apps > People and the account's people list show who it is.
+        await self.store.name_person(who.tenant_id, str(conn.id), mine, who.name)
         detail = {"own": True, "method": kind.id}
         event = self._event(who, "signed_in", detail)
         await self.store.note(who.tenant_id, str(conn.id), event, report=connected_event(conn, mine))
