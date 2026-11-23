@@ -14,38 +14,42 @@ Python and TypeScript SDKs. Each step links to an example folder you can run and
 | The command line | [Install the CLI](install-cli.md), then `opsai login` |
 | The Builder role in a team | Builders create agents, workflows and knowledge bases |
 
+## Ask once
+
+Send one message to a published agent and read the reply.
+([`examples/chat/01-ask-once/`](../../examples/chat/01-ask-once/))
+
+```python
+from ops_ai import OpsAI
+
+ops = OpsAI()
+agent = next(a for a in ops.agents.list() if a.get("status") == "published")
+print(ops.agents.chat(agent["id"], "What documents open a business account?")["reply"])
+```
+
+```bash
+AGENT=$(opsai agents list --json | jq -r '.[] | select(.status=="published") | .id' | head -1)
+opsai agents chat "$AGENT" --message "What documents open a business account?"
+```
+
 ## The ladder
 
 <!-- site: steps -->
-1. **Chat**: send one message and read the reply.
-   `opsai chat say -m "What can you help me with?"`
-   ([example](../../examples/chat/01-ask-once/README.md))
-2. **Knowledge**: add one page to a knowledge base and search it.
-   `opsai kb add-text kb_... --title "ATM limits" --text "The daily limit is 500 dollars."`, then
-   `opsai kb search kb_... "What is the daily limit?"`
-   ([example](../../examples/knowledge/01-search-a-page/README.md))
-3. **Tool**: run one read operation in Mock, then for real.
-   `opsai tools run <app> <tool> --input id=42`, then the same with `--real`
-   ([example](../../examples/tools/01-find-a-customer/README.md))
-4. **Agent**: apply an agent from a file, publish it, and ask it one question.
-   `opsai agents apply agent.yaml`, `opsai agents publish <id>`, `opsai agents chat <id> --message "..."`
-   ([example](../../examples/agents/01-answer-from-instructions/README.md))
-5. **Workflow**: validate, apply and test-run a three-step workflow.
-   `opsai workflows validate workflow.yaml`, `opsai workflows apply workflow.yaml`,
-   `opsai workflows run <id> --input request.json`
-   ([example](../../examples/workflows/01-normalize-a-request/README.md))
-6. **A workflow asks an agent**: an Agent step calls a published agent and keeps its cited answer
-   ([example](../../examples/compositions/01-workflow-asks-agent/README.md)).
-7. **An agent starts a workflow**: a chat calls a published workflow as a tool
-   ([example](../../examples/compositions/02-agent-starts-workflow/README.md)).
+1. **Chat**: ask once (above).
+2. **Knowledge**: add one page and search it
+   ([`examples/knowledge/01-search-a-page/`](../../examples/knowledge/01-search-a-page/)).
+3. **Tool**: run one read operation
+   ([`examples/tools/01-find-a-customer/`](../../examples/tools/01-find-a-customer/)).
+4. **Agent**: apply, publish, and chat
+   ([`examples/agents/01-answer-from-instructions/`](../../examples/agents/01-answer-from-instructions/)).
+5. **Workflow**: validate, apply, and run
+   ([`examples/workflows/01-normalize-a-request/`](../../examples/workflows/01-normalize-a-request/)).
+6. **A workflow asks an agent**
+   ([`examples/compositions/01-workflow-asks-agent/`](../../examples/compositions/01-workflow-asks-agent/)).
+7. **An agent starts a workflow**
+   ([`examples/compositions/02-agent-starts-workflow/`](../../examples/compositions/02-agent-starts-workflow/)).
 
-Capability ids for the polished rungs (deep links for opsai.chanl.ai) live in
-[`examples/capabilities.yaml`](../../examples/capabilities.yaml); the machine join is
-[`examples/registry.json`](../../examples/registry.json). Chat is `chat.ask-once`; the skills path is
-`skill.publish-and-pick` in [Examples for builders](examples/skills.md).
-
-Expected at each step: the command prints the record it made or the answer it got. A refused step prints why, such as
-a workflow input missing a required field, naming the field.
+Expected at each step: the command prints the record it made or the answer it got. A refused step prints why.
 
 The [workflows](workflows.md) and [agents](agents.md) pages list every further example: approvals, checklists,
 delegation, evaluations.

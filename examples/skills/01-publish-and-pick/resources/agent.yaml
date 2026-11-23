@@ -1,4 +1,4 @@
-name: Example returns helper
+name: Returns helper
 role: Answer questions about returns
 instructions: Help with returns. Keep answers short. Follow attached skills.
 memory:

@@ -74,7 +74,10 @@ for (const file of files) {
   if (name === 'README.md') {
     const text = readFileSync(file, 'utf8');
     const lines = text.split('\n').length;
-    if (lines > BRIEF_MAX_LINES) fail(file, `${lines} lines; a folder README is a brief (max ${BRIEF_MAX_LINES}) that links to docs/`);
+    // examples/**/README.md is the copy-paste SDK surface (complete Py/TS/CLI), not a folder brief.
+    if (!file.startsWith('examples/') && lines > BRIEF_MAX_LINES) {
+      fail(file, `${lines} lines; a folder README is a brief (max ${BRIEF_MAX_LINES}) that links to docs/`);
+    }
     if (!/docs\//.test(text)) fail(file, 'does not link to its fuller docs under docs/');
   }
 }
