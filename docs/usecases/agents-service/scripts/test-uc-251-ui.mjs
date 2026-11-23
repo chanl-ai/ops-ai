@@ -76,7 +76,7 @@ await withUiStack(
     await stack.startWorker();
     const J = await as(JAMES);
     const made = await saveAndPublish(J, DEFINITION);
-    if (!made.live) throw new Error(`setup: the fee dispute workflow did not go live: ${made.saved.status} ${JSON.stringify(made.saved.data).slice(0, 300)}`);
+    if (!made.live) throw new Error(`setup: the fee dispute workflow did not go live: ${made.saved.status} ${JSON.stringify(made.saved.data).slice(0, 300)}; asked ${made.asked.status} ${JSON.stringify(made.asked.data ?? made.asked.error ?? null).slice(0, 600)}`);
     const runId = await start(J, ID, DISPUTE);
     const waiting = await until(async () => {
       const r = (await (await fetch(`${agents}/v1/runs/${runId}`, { headers: J })).json()).data;
