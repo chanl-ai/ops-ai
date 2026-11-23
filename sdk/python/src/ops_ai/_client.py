@@ -19,13 +19,14 @@ import hashlib
 import time
 from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any, Generic, TypeVar, cast
 
 import httpx
 
 from ._agents import Agents, AsyncAgents, based
 from ._chat import AsyncChat, Chat
 from ._config import Config, Session
+from ._generated.agents.models import EngineRunInput
 from ._generated.agents.operations import AsyncOperations as AsyncAgentsOps
 from ._generated.agents.operations import Operations as AgentsOps
 from ._generated.documents.operations import AsyncOperations as AsyncDocumentsOps
@@ -40,6 +41,36 @@ from ._generated.tools.operations import AsyncOperations as AsyncToolsOps
 from ._generated.tools.operations import Operations as ToolsOps
 from ._models import AsyncModels, Models
 from ._transport import AsyncTransport, Transport, _headers, _result, iter_pages, iter_pages_async, page_items
+from ._types import (
+    CasePage,
+    CaseRow,
+    CaseTypeDetail,
+    CaseTypeView,
+    CaseView,
+    FileDetail,
+    FileRow,
+    Guardrail,
+    InboxItem,
+    KnowledgeBase,
+    KnowledgeBaseDetail,
+    KnowledgeBaseRow,
+    RunDetail,
+    RunRow,
+    RunStarted,
+    SearchOut,
+    Skill,
+    SkillCreateInput,
+    SkillDetail,
+    TaskItem,
+    TaskTypeDetail,
+    TaskTypeView,
+    TeamOut,
+    ThreadCreated,
+    ThreadState,
+    ThreadView,
+    WaitedRun,
+    WidgetTemplateOut,
+)
 from ._words import (
     Accounts,
     Apps,
@@ -107,14 +138,14 @@ NOUNS: dict[str, Noun] = {
 }
 
 
-def _with_task(run: dict[str, Any]) -> dict[str, Any]:
+def _with_task(run: RunDetail | dict[str, Any]) -> WaitedRun:
     """A waiting run's human task, as `taskId`, so the next call is `tasks.decide`."""
     waiting = run.get("waiting") or {}
     task = (waiting.get("payload") or {}).get("review_id")
-    return {**run, "taskId": task} if task else run
+    return cast(WaitedRun, {**run, "taskId": task} if task else run)
 
 
-def _ended(run: dict[str, Any], check: bool) -> dict[str, Any]:
+def _ended(run: RunDetail | dict[str, Any], check: bool) -> WaitedRun:
     if check and run["status"] == "failed":
         raise RunFailed(run)
     return _with_task(run)
@@ -143,7 +174,11 @@ class AsyncRaw:
         self.kb, self.files, self.documents = AsyncKbOps(t), AsyncFilesOps(t), AsyncDocumentsOps(t)
 
 
-class Resource:
+TRow = TypeVar("TRow")
+TDetail = TypeVar("TDetail")
+
+
+class Resource(Generic[TRow, TDetail]):  # noqa: UP046  # PEP 695 needs 3.12; SDK supports 3.11
     def __init__(self, raw: Raw, noun: Noun) -> None:
         self._raw, self._noun = raw, noun
 
@@ -153,13 +188,14 @@ class Resource:
             raise AttributeError(f"{verb} is not offered here; use ops.raw.{self._noun.service}")
         return getattr(getattr(self._raw, self._noun.service), op_id)
 
-    def list(self, **query: Any) -> Iterator[Any]:
+    def list(self, **query: Any) -> Iterator[TRow]:
         """Every item, page after page, whichever paging the route uses."""
         call = self._op("list")
-        return iter_pages(call, **query) if self._noun.paged else iter(page_items(call(**query))[0])
+        rows = iter_pages(call, **query) if self._noun.paged else iter(page_items(call(**query))[0])
+        return cast(Iterator[TRow], rows)
 
-    def get(self, id: str) -> Any:
-        return self._op("get")(id)
+    def get(self, id: str) -> TDetail:
+        return cast(TDetail, self._op("get")(id))
 
     def create(self, body: Any) -> Any:
         return self._op("create")(body)
@@ -170,13 +206,22 @@ async def _once(call: Any, query: dict[str, Any]) -> AsyncIterator[Any]:
         yield item
 
 
-class Threads(Resource):
-    def inbox(self, thread_id: str) -> Any:
+class Threads(Resource[ThreadView, ThreadState]):
+    def list(self, **query: Any) -> Iterator[ThreadView]:
+        return super().list(**query)
+
+    def get(self, id: str) -> ThreadState:
+        return super().get(id)
+
+    def create(self, body: Any) -> ThreadCreated:
+        return cast(ThreadCreated, super().create(body))
+
+    def inbox(self, thread_id: str) -> list[InboxItem]:
         """A thread's channel messages. A person who cannot read the thread gets NotFound, as for another team's."""
         return self._raw.agents.threads_get_inbox(thread_id)
 
 
-class AsyncResource:
+class AsyncResource(Generic[TRow, TDetail]):  # noqa: UP046  # PEP 695 needs 3.12; SDK supports 3.11
     def __init__(self, raw: AsyncRaw, noun: Noun) -> None:
         self._raw, self._noun = raw, noun
 
@@ -186,20 +231,52 @@ class AsyncResource:
             raise AttributeError(f"{verb} is not offered here; use ops.raw.{self._noun.service}")
         return getattr(getattr(self._raw, self._noun.service), op_id)
 
-    def list(self, **query: Any) -> AsyncIterator[Any]:
+    def list(self, **query: Any) -> AsyncIterator[TRow]:
         call = self._op("list")
-        return iter_pages_async(call, **query) if self._noun.paged else _once(call, query)
+        rows = iter_pages_async(call, **query) if self._noun.paged else _once(call, query)
+        return cast(AsyncIterator[TRow], rows)
 
-    async def get(self, id: str) -> Any:
-        return await self._op("get")(id)
+    async def get(self, id: str) -> TDetail:
+        return cast(TDetail, await self._op("get")(id))
 
     async def create(self, body: Any) -> Any:
         return await self._op("create")(body)
 
 
-class AsyncThreads(AsyncResource):
-    async def inbox(self, thread_id: str) -> Any:
+class AsyncThreads(AsyncResource[ThreadView, ThreadState]):
+    def list(self, **query: Any) -> AsyncIterator[ThreadView]:
+        return super().list(**query)
+
+    async def get(self, id: str) -> ThreadState:
+        return await super().get(id)
+
+    async def create(self, body: Any) -> ThreadCreated:
+        return cast(ThreadCreated, await super().create(body))
+
+    async def inbox(self, thread_id: str) -> list[InboxItem]:
         return await self._raw.agents.threads_get_inbox(thread_id)
+
+
+class Cases(Resource[CaseRow, CasePage]):
+    def list(self, **query: Any) -> Iterator[CaseRow]:
+        return super().list(**query)
+
+    def get(self, id: str) -> CasePage:
+        return super().get(id)
+
+    def create(self, body: Any) -> CaseView:
+        return cast(CaseView, super().create(body))
+
+
+class AsyncCases(AsyncResource[CaseRow, CasePage]):
+    def list(self, **query: Any) -> AsyncIterator[CaseRow]:
+        return super().list(**query)
+
+    async def get(self, id: str) -> CasePage:
+        return await super().get(id)
+
+    async def create(self, body: Any) -> CaseView:
+        return cast(CaseView, await super().create(body))
 
 
 # What a skill's draft holds, as `skills.save_draft` and a skill file name them.
@@ -226,16 +303,27 @@ def _reference_query(search: str, **query: Any) -> dict[str, Any]:
     return {k: v for k, v in {"search": search or None, **query}.items() if v is not None}
 
 
-class Skills(Resource):
-    def save_draft(self, id: str, fields: dict[str, Any], *, note: str = "", base: dict[str, Any] | None = None) -> Any:
+class Skills(Resource[Skill, SkillDetail]):
+    def list(self, **query: Any) -> Iterator[Skill]:
+        return super().list(**query)
+
+    def get(self, id: str) -> SkillDetail:
+        return super().get(id)
+
+    def create(self, body: SkillCreateInput | dict[str, Any]) -> SkillDetail:
+        return super().create(body)
+
+    def save_draft(
+        self, id: str, fields: dict[str, Any], *, note: str = "", base: dict[str, Any] | None = None
+    ) -> SkillDetail:
         """Saves `fields` (any of SKILL_KEYS) as the skill's draft. `base` is the skill as last read, naming the copy
         the change was made on; left out, the skill is read first. A save from an older copy is refused with
         `stale_base`."""
         read = base if base and base.get("digest") else self.get(id)
         body = {k: fields[k] for k in SKILL_KEYS if k in fields}
-        return self._raw.agents.agents_save_skill_draft(id, based({**body, "note": note}, read))
+        return self._raw.agents.agents_save_skill_draft(id, cast(Any, based({**body, "note": note}, read)))
 
-    def publish(self, id: str, *, note: str = "") -> Any:
+    def publish(self, id: str, *, note: str = "") -> SkillDetail:
         """Asks to publish the newest draft. A skill that cannot be published is refused with `cannot_request`, and
         the error's details name each problem and the step it is on."""
         return self._raw.agents.agents_request_skill_publish(id, {"note": note})
@@ -246,29 +334,43 @@ class Skills(Resource):
         return self._raw.agents.agents_references_search(for_skill=for_skill, **_reference_query(search, **query))
 
 
-class AsyncSkills(AsyncResource):
+class AsyncSkills(AsyncResource[Skill, SkillDetail]):
+    def list(self, **query: Any) -> AsyncIterator[Skill]:
+        return super().list(**query)
+
+    async def get(self, id: str) -> SkillDetail:
+        return await super().get(id)
+
+    async def create(self, body: SkillCreateInput | dict[str, Any]) -> SkillDetail:
+        return await super().create(body)
+
     async def save_draft(
         self, id: str, fields: dict[str, Any], *, note: str = "", base: dict[str, Any] | None = None
-    ) -> Any:
+    ) -> SkillDetail:
         read = base if base and base.get("digest") else await self.get(id)
         body = {k: fields[k] for k in SKILL_KEYS if k in fields}
-        return await self._raw.agents.agents_save_skill_draft(id, based({**body, "note": note}, read))
+        return await self._raw.agents.agents_save_skill_draft(id, cast(Any, based({**body, "note": note}, read)))
 
-    async def publish(self, id: str, *, note: str = "") -> Any:
+    async def publish(self, id: str, *, note: str = "") -> SkillDetail:
         return await self._raw.agents.agents_request_skill_publish(id, {"note": note})
 
     async def references(self, search: str = "", *, for_skill: str, **query: Any) -> Any:
         return await self._raw.agents.agents_references_search(for_skill=for_skill, **_reference_query(search, **query))
 
 
-class Runs(Resource):
-    def start(self, workflow_id: str, *, input: dict[str, Any] | None = None, **fields: Any) -> Any:
-        """Starts a run of the workflow's current version; `fields` takes `version`, `runKey` and `mode`."""
-        return self._raw.agents.workflows_start_engine_run({"workflowId": workflow_id, "input": input or {}, **fields})
+class Runs(Resource[RunRow, RunDetail]):
+    def list(self, **query: Any) -> Iterator[RunRow]:
+        return super().list(**query)
 
-    def wait(
-        self, run_id: str, *, timeout: float = 600.0, interval: float = 1.0, check: bool = False
-    ) -> dict[str, Any]:
+    def get(self, id: str) -> RunDetail:
+        return super().get(id)
+
+    def start(self, workflow_id: str, *, input: dict[str, Any] | None = None, **fields: Any) -> RunStarted:
+        """Starts a run of the workflow's current version; `fields` takes `version`, `runKey` and `mode`."""
+        body = cast(EngineRunInput, {"workflowId": workflow_id, "input": input or {}, **fields})
+        return self._raw.agents.workflows_start_engine_run(body)
+
+    def wait(self, run_id: str, *, timeout: float = 600.0, interval: float = 1.0, check: bool = False) -> WaitedRun:
         """The run once it has ended or stopped at a human task (then `taskId` names the task). `check=True` raises
         RunFailed for a failed run instead of returning it."""
         deadline = time.monotonic() + timeout
@@ -282,16 +384,17 @@ class Runs(Resource):
 
     def stream(self, run_id: str, *, after: str | None = None) -> Iterator[dict[str, Any]]:
         """The run's events as they happen, until it ends or waits."""
-        return self._raw.agents.workflows_engine_run_events(run_id, after=after, follow=True)
+        events = self._raw.agents.workflows_engine_run_events(run_id, after=after, follow=True)
+        return cast(Iterator[dict[str, Any]], events)
 
-    def cancel(self, run_id: str) -> Any:
+    def cancel(self, run_id: str) -> RunRow:
         return self._raw.agents.workflows_cancel_engine_run(run_id)
 
-    def retry(self, run_id: str) -> Any:
+    def retry(self, run_id: str) -> RunRow:
         """Queues a Stuck run again from its last recorded step; nothing it sent is sent again."""
         return self._raw.agents.workflows_retry_engine_run(run_id)
 
-    def redrive(self, run_id: str) -> Any:
+    def redrive(self, run_id: str) -> RunRow:
         """Queues a Failed or Stuck run again from its failed step, on the version it started on."""
         return self._raw.agents.workflows_redrive_engine_run(run_id)
 
@@ -305,14 +408,20 @@ class Runs(Resource):
         return self._raw.agents.workflows_run_set_aside_email(event_id)
 
 
-class AsyncRuns(AsyncResource):
-    async def start(self, workflow_id: str, *, input: dict[str, Any] | None = None, **fields: Any) -> Any:
-        body = {"workflowId": workflow_id, "input": input or {}, **fields}
+class AsyncRuns(AsyncResource[RunRow, RunDetail]):
+    def list(self, **query: Any) -> AsyncIterator[RunRow]:
+        return super().list(**query)
+
+    async def get(self, id: str) -> RunDetail:
+        return await super().get(id)
+
+    async def start(self, workflow_id: str, *, input: dict[str, Any] | None = None, **fields: Any) -> RunStarted:
+        body = cast(EngineRunInput, {"workflowId": workflow_id, "input": input or {}, **fields})
         return await self._raw.agents.workflows_start_engine_run(body)
 
     async def wait(
         self, run_id: str, *, timeout: float = 600.0, interval: float = 1.0, check: bool = False
-    ) -> dict[str, Any]:
+    ) -> WaitedRun:
         deadline = time.monotonic() + timeout
         while True:
             run = await self._raw.agents.workflows_get_engine_run(run_id)
@@ -323,16 +432,19 @@ class AsyncRuns(AsyncResource):
             await asyncio.sleep(interval)
 
     async def stream(self, run_id: str, *, after: str | None = None) -> AsyncIterator[dict[str, Any]]:
-        return await self._raw.agents.workflows_engine_run_events(run_id, after=after, follow=True)
+        return cast(
+            AsyncIterator[dict[str, Any]],
+            await self._raw.agents.workflows_engine_run_events(run_id, after=after, follow=True),
+        )
 
-    async def cancel(self, run_id: str) -> Any:
+    async def cancel(self, run_id: str) -> RunRow:
         return await self._raw.agents.workflows_cancel_engine_run(run_id)
 
-    async def retry(self, run_id: str) -> Any:
+    async def retry(self, run_id: str) -> RunRow:
         """Queues a Stuck run again from its last recorded step; nothing it sent is sent again."""
         return await self._raw.agents.workflows_retry_engine_run(run_id)
 
-    async def redrive(self, run_id: str) -> Any:
+    async def redrive(self, run_id: str) -> RunRow:
         """Queues a Failed or Stuck run again from its failed step, on the version it started on."""
         return await self._raw.agents.workflows_redrive_engine_run(run_id)
 
@@ -346,18 +458,24 @@ class AsyncRuns(AsyncResource):
         return await self._raw.agents.workflows_run_set_aside_email(event_id)
 
 
-class Tasks(Resource):
+class Tasks(Resource[TaskItem, TaskItem]):
     """Human tasks. The API calls them reviews (`reviews_*`); the console and this SDK say task."""
 
-    def decide(self, task_id: str, decision: str, *, reason: str | None = None, **fields: Any) -> Any:
+    def list(self, **query: Any) -> Iterator[TaskItem]:
+        return super().list(**query)
+
+    def get(self, id: str) -> TaskItem:
+        return super().get(id)
+
+    def decide(self, task_id: str, decision: str, *, reason: str | None = None, **fields: Any) -> TaskItem:
         """Sends one of the actions the task offers. The approval token is the server's to issue; nothing here makes
         one."""
         body = {"decision": decision, **({"reason": reason} if reason else {}), **fields}
-        return self._raw.agents.reviews_decide(task_id, body)
+        return self._raw.agents.reviews_decide(task_id, cast(Any, body))
 
     def approve(
         self, task_id: str, *, decision: str = "approved", password: str | None = None, reason: str | None = None
-    ) -> Any:
+    ) -> TaskItem:
         """Approves a task, such as a write an agent's chat held (`decision` is the action the task offers; a task that
         declares none is approved with "approved"). A write asks the approver to confirm it is them
         first; given the approver's `password`, the step-up is made and the approval retried."""
@@ -370,14 +488,20 @@ class Tasks(Resource):
         return self.decide(task_id, decision, reason=reason, stepUpToken=str(minted.get("token") or ""))
 
 
-class AsyncTasks(AsyncResource):
-    async def decide(self, task_id: str, decision: str, *, reason: str | None = None, **fields: Any) -> Any:
+class AsyncTasks(AsyncResource[TaskItem, TaskItem]):
+    def list(self, **query: Any) -> AsyncIterator[TaskItem]:
+        return super().list(**query)
+
+    async def get(self, id: str) -> TaskItem:
+        return await super().get(id)
+
+    async def decide(self, task_id: str, decision: str, *, reason: str | None = None, **fields: Any) -> TaskItem:
         body = {"decision": decision, **({"reason": reason} if reason else {}), **fields}
-        return await self._raw.agents.reviews_decide(task_id, body)
+        return await self._raw.agents.reviews_decide(task_id, cast(Any, body))
 
     async def approve(
         self, task_id: str, *, decision: str = "approved", password: str | None = None, reason: str | None = None
-    ) -> Any:
+    ) -> TaskItem:
         try:
             return await self.decide(task_id, decision, reason=reason)
         except OpsError as exc:
@@ -387,100 +511,156 @@ class AsyncTasks(AsyncResource):
         return await self.decide(task_id, decision, reason=reason, stepUpToken=str(minted.get("token") or ""))
 
 
-class Files(Resource):
+class Files(Resource[FileRow, FileDetail]):
     def __init__(self, raw: Raw, noun: Noun) -> None:
         super().__init__(raw, noun)
         self.watches = Watches(raw)
 
-    def upload(self, name: str, content: bytes, *, mime: str, purpose: str, transport: Transport) -> Any:
+    def list(self, **query: Any) -> Iterator[FileRow]:
+        return super().list(**query)
+
+    def get(self, id: str) -> FileDetail:
+        return super().get(id)
+
+    def upload(self, name: str, content: bytes, *, mime: str, purpose: str, transport: Transport) -> FileDetail:
         """Uploads bytes the way the console does: a ticket, the bytes, then complete. The same bytes again answer
         the file already stored."""
         meta, key = _upload_meta(name, content, mime, purpose)
-        ticket = self._raw.files.files_create_upload(meta, idempotency_key=key)
+        ticket = self._raw.files.files_create_upload(cast(Any, meta), idempotency_key=key)
         if ticket.get("uploadUrl"):
             headers = {**_headers(transport.config, {}), **(ticket.get("headers") or {})}
             put = transport.http.put(ticket["uploadUrl"], headers=headers, content=content)
             if put.status_code != 409:  # 409: an earlier call stored these bytes under the same key
                 _result(put)
         done = self._raw.files.files_complete_upload(ticket["fileId"])
-        return done.get("file") or done
+        return done["file"]
 
 
-class AsyncFiles(AsyncResource):
+class AsyncFiles(AsyncResource[FileRow, FileDetail]):
     def __init__(self, raw: AsyncRaw, noun: Noun) -> None:
         super().__init__(raw, noun)
         self.watches = AsyncWatches(raw)
 
-    async def upload(self, name: str, content: bytes, *, mime: str, purpose: str, transport: AsyncTransport) -> Any:
+    def list(self, **query: Any) -> AsyncIterator[FileRow]:
+        return super().list(**query)
+
+    async def get(self, id: str) -> FileDetail:
+        return await super().get(id)
+
+    async def upload(
+        self, name: str, content: bytes, *, mime: str, purpose: str, transport: AsyncTransport
+    ) -> FileDetail:
         meta, key = _upload_meta(name, content, mime, purpose)
-        ticket = await self._raw.files.files_create_upload(meta, idempotency_key=key)
+        ticket = await self._raw.files.files_create_upload(cast(Any, meta), idempotency_key=key)
         if ticket.get("uploadUrl"):
             headers = {**_headers(transport.config, {}), **(ticket.get("headers") or {})}
             put = await transport.http.put(ticket["uploadUrl"], headers=headers, content=content)
             if put.status_code != 409:
                 _result(put)
         done = await self._raw.files.files_complete_upload(ticket["fileId"])
-        return done.get("file") or done
+        return done["file"]
 
 
 def _without_none(body: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in body.items() if v is not None}
 
 
-class Knowledge(Resource):
-    def search(self, body: dict[str, Any]) -> Any:
-        return self._raw.kb.knowledge_bases_search_knowledge(body)
+class Knowledge(Resource[KnowledgeBaseRow, KnowledgeBaseDetail]):
+    def list(self, **query: Any) -> Iterator[KnowledgeBaseRow]:
+        return super().list(**query)
 
-    def add_base(self, name: str, *, owner: str | None = None, **fields: Any) -> Any:
+    def get(self, id: str) -> KnowledgeBaseDetail:
+        return super().get(id)
+
+    def create(self, body: Any) -> KnowledgeBaseDetail:
+        return cast(KnowledgeBaseDetail, super().create(body))
+
+    def search(self, body: dict[str, Any]) -> SearchOut:
+        return self._raw.kb.knowledge_bases_search_knowledge(cast(Any, body))
+
+    def add_base(self, name: str, *, owner: str | None = None, **fields: Any) -> KnowledgeBase:
         """A knowledge base, as Knowledge > New knowledge base makes one."""
         body = _without_none({"name": name, "owner": owner, **fields})
-        return self._raw.kb.knowledge_bases_create_knowledge_base(body)
+        return self._raw.kb.knowledge_bases_create_knowledge_base(cast(Any, body))
 
     def add_source(self, name: str, kb_ids: list[str], *, type: str = "push", **fields: Any) -> Any:
         """A source feeding the given knowledge bases. A `push` source takes items through `push`."""
-        return self._raw.kb.sources_create_source({"type": type, "name": name, "kbIds": kb_ids, **fields})
+        return self._raw.kb.sources_create_source(cast(Any, {"type": type, "name": name, "kbIds": kb_ids, **fields}))
 
     def add_page(self, kb_id: str, title: str, text: str) -> Any:
         """A written page; the same title saves a new version."""
-        return self._raw.kb.knowledge_bases_add_page(kb_id, {"title": title, "text": text})
+        return self._raw.kb.knowledge_bases_add_page(kb_id, cast(Any, {"title": title, "text": text}))
 
     def push(self, source_id: str, name: str, *, title: str, text: str, **fields: Any) -> Any:
         """Puts one item into a push source. The same name and text again answers `unchanged`."""
-        return self._raw.kb.sources_put_item(source_id, {"name": name, "title": title, "text": text, **fields})
+        return self._raw.kb.sources_put_item(
+            source_id, cast(Any, {"name": name, "title": title, "text": text, **fields})
+        )
 
 
-class AsyncKnowledge(AsyncResource):
-    async def search(self, body: dict[str, Any]) -> Any:
-        return await self._raw.kb.knowledge_bases_search_knowledge(body)
+class AsyncKnowledge(AsyncResource[KnowledgeBaseRow, KnowledgeBaseDetail]):
+    def list(self, **query: Any) -> AsyncIterator[KnowledgeBaseRow]:
+        return super().list(**query)
 
-    async def add_base(self, name: str, *, owner: str | None = None, **fields: Any) -> Any:
+    async def get(self, id: str) -> KnowledgeBaseDetail:
+        return await super().get(id)
+
+    async def create(self, body: Any) -> KnowledgeBaseDetail:
+        return cast(KnowledgeBaseDetail, await super().create(body))
+
+    async def search(self, body: dict[str, Any]) -> SearchOut:
+        return await self._raw.kb.knowledge_bases_search_knowledge(cast(Any, body))
+
+    async def add_base(self, name: str, *, owner: str | None = None, **fields: Any) -> KnowledgeBase:
         return await self._raw.kb.knowledge_bases_create_knowledge_base(
-            _without_none({"name": name, "owner": owner, **fields})
+            cast(Any, _without_none({"name": name, "owner": owner, **fields}))
         )
 
     async def add_source(self, name: str, kb_ids: list[str], *, type: str = "push", **fields: Any) -> Any:
-        return await self._raw.kb.sources_create_source({"type": type, "name": name, "kbIds": kb_ids, **fields})
+        return await self._raw.kb.sources_create_source(
+            cast(Any, {"type": type, "name": name, "kbIds": kb_ids, **fields})
+        )
 
     async def add_page(self, kb_id: str, title: str, text: str) -> Any:
-        return await self._raw.kb.knowledge_bases_add_page(kb_id, {"title": title, "text": text})
+        return await self._raw.kb.knowledge_bases_add_page(kb_id, cast(Any, {"title": title, "text": text}))
 
     async def push(self, source_id: str, name: str, *, title: str, text: str, **fields: Any) -> Any:
-        return await self._raw.kb.sources_put_item(source_id, {"name": name, "title": title, "text": text, **fields})
+        return await self._raw.kb.sources_put_item(
+            source_id, cast(Any, {"name": name, "title": title, "text": text, **fields})
+        )
 
 
 class OpsAI:
     """The synchronous client. Arguments win over OPS_* environment variables, which win over the CLI's profile."""
 
+    teams: Resource[TeamOut, TeamOut]
+    cases: Cases
+    threads: Threads
+    skills: Skills
+    guardrails: Resource[Guardrail, Guardrail]
+    widgets: Resource[WidgetTemplateOut, WidgetTemplateOut]
+    case_types: Resource[CaseTypeView, CaseTypeDetail]
+    task_types: Resource[TaskTypeView, TaskTypeDetail]
+    knowledge: Knowledge
+    files: Files
+    runs: Runs
+    tasks: Tasks
+    agents: Agents
+    workflows: Workflows
+    chat: Chat
+
     def __init__(self, *, http: httpx.Client | None = None, **config: Any) -> None:
         self.config = Config.resolve(**config)
         self._t = Transport(self.config, http)
         self.raw = Raw(self._t)
-        self.teams, self.cases = (Resource(self.raw, NOUNS[n]) for n in ("teams", "cases"))
+        self.teams = Resource(self.raw, NOUNS["teams"])
+        self.cases = Cases(self.raw, NOUNS["cases"])
         self.threads = Threads(self.raw, NOUNS["threads"])
         self.skills = Skills(self.raw, NOUNS["skills"])
-        self.guardrails, self.widgets, self.case_types, self.task_types = (
-            Resource(self.raw, NOUNS[n]) for n in ("guardrails", "widgets", "case_types", "task_types")
-        )
+        self.guardrails = Resource(self.raw, NOUNS["guardrails"])
+        self.widgets = Resource(self.raw, NOUNS["widgets"])
+        self.case_types = Resource(self.raw, NOUNS["case_types"])
+        self.task_types = Resource(self.raw, NOUNS["task_types"])
         self.knowledge = Knowledge(self.raw, NOUNS["knowledge"])
         self.files = Files(self.raw, NOUNS["files"])
         self.runs = Runs(self.raw, NOUNS["runs"])
@@ -513,7 +693,7 @@ class OpsAI:
         tokens = Session(session["token"], session["refreshToken"])
         return cls(**{**config, "access_token": session["token"], "team": config.get("team") or "", "session": tokens})
 
-    def upload(self, name: str, content: bytes, *, mime: str, purpose: str) -> Any:
+    def upload(self, name: str, content: bytes, *, mime: str, purpose: str) -> FileDetail:
         return self.files.upload(name, content, mime=mime, purpose=purpose, transport=self._t)
 
     def with_team(self, team: str) -> OpsAI:
@@ -543,16 +723,34 @@ class OpsAI:
 class AsyncOpsAI:
     """The asynchronous client, the same surface as `OpsAI` with every call awaited."""
 
+    teams: AsyncResource[TeamOut, TeamOut]
+    cases: AsyncCases
+    threads: AsyncThreads
+    skills: AsyncSkills
+    guardrails: AsyncResource[Guardrail, Guardrail]
+    widgets: AsyncResource[WidgetTemplateOut, WidgetTemplateOut]
+    case_types: AsyncResource[CaseTypeView, CaseTypeDetail]
+    task_types: AsyncResource[TaskTypeView, TaskTypeDetail]
+    knowledge: AsyncKnowledge
+    files: AsyncFiles
+    runs: AsyncRuns
+    tasks: AsyncTasks
+    agents: AsyncAgents
+    workflows: AsyncWorkflows
+    chat: AsyncChat
+
     def __init__(self, *, http: httpx.AsyncClient | None = None, **config: Any) -> None:
         self.config = Config.resolve(**config)
         self._t = AsyncTransport(self.config, http)
         self.raw = AsyncRaw(self._t)
-        self.teams, self.cases = (AsyncResource(self.raw, NOUNS[n]) for n in ("teams", "cases"))
+        self.teams = AsyncResource(self.raw, NOUNS["teams"])
+        self.cases = AsyncCases(self.raw, NOUNS["cases"])
         self.threads = AsyncThreads(self.raw, NOUNS["threads"])
         self.skills = AsyncSkills(self.raw, NOUNS["skills"])
-        self.guardrails, self.widgets, self.case_types, self.task_types = (
-            AsyncResource(self.raw, NOUNS[n]) for n in ("guardrails", "widgets", "case_types", "task_types")
-        )
+        self.guardrails = AsyncResource(self.raw, NOUNS["guardrails"])
+        self.widgets = AsyncResource(self.raw, NOUNS["widgets"])
+        self.case_types = AsyncResource(self.raw, NOUNS["case_types"])
+        self.task_types = AsyncResource(self.raw, NOUNS["task_types"])
         self.knowledge = AsyncKnowledge(self.raw, NOUNS["knowledge"])
         self.files = AsyncFiles(self.raw, NOUNS["files"])
         self.runs = AsyncRuns(self.raw, NOUNS["runs"])
@@ -581,7 +779,7 @@ class AsyncOpsAI:
         tokens = Session(session["token"], session["refreshToken"])
         return cls(**{**config, "access_token": session["token"], "session": tokens})
 
-    async def upload(self, name: str, content: bytes, *, mime: str, purpose: str) -> Any:
+    async def upload(self, name: str, content: bytes, *, mime: str, purpose: str) -> FileDetail:
         return await self.files.upload(name, content, mime=mime, purpose=purpose, transport=self._t)
 
     def with_team(self, team: str) -> AsyncOpsAI:
