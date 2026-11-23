@@ -1,6 +1,6 @@
 # The release package a client team installs from (docs/deploy/release-package.md): images for linux/amd64 saved as one
 # bundle, compose files, the env template, PostgreSQL and Azure SQL scripts and the install guide, from `git archive TAG`.
-.PHONY: release-package release-proof install-proof release-tag release-main release-cut release-pr release-version hotfix-cut
+.PHONY: release-package release-proof install-proof release-tag release-main release-cut release-pr release-version hotfix-cut release-intake
 
 ##@ Release
 
@@ -14,6 +14,9 @@ release-proof: ## Install a package from its tarball alone and walk it (PACKAGE=
 
 release-tag: ## Tag the develop commit of a merged `release: X.Y.Z into develop` (or hotfix) PR vX.Y.Z and push it (REF, REMOTE=origin, VERSION; DRY=1 prints the name)
 	sh $(ROOT)/scripts/release-tag.sh
+
+release-intake: ## Take every open feature PR into the train and run ci-local (TRAIN=release/1.1.0, PRS=1,2 to pick and order, REPORT=<file>.json, RESUME=1 or RERUN=<report> to finish a left worktree; DRY=1 prints the plan, DRY=0 acts); exit 0 green, 1 red, 2 a conflict for a person
+	DRY=$(or $(DRY),1) python3 $(ROOT)/scripts/release.py intake
 
 release-cut: ## After a release landed: fast-forward release/current to origin/develop, or create it (DRY=1 is the default, DRY=0 pushes)
 	DRY=$(or $(DRY),1) python3 $(ROOT)/scripts/release.py cut
