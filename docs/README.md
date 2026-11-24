@@ -380,7 +380,7 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `usecases/console/import-presets-access.md` | uc-054: import presets Read for GET and Write otherwise, warns when a spec has no auth, and asks for no connection |
 | `usecases/console/workflow-access-approved-by-another-person.md` | uc-053: Approve compares the signed-in person with the requester; James requests, Priya approves |
 | `usecases/console/access-is-read-or-write.md` | uc-052: no console control or badge offers a "Moves money" class; access is Read or Write |
-| `usecases/console/sub-pages-in-the-sidebar.md` | uc-047: every sidebar parent lists its sub-pages as rows, the active one lit, closed parents remembered |
+| `usecases/console/sub-pages-in-the-sidebar.md` | uc-047, retired: sidebar sub-pages as rows, removed from the console on 2026-11-12 |
 | `usecases/console/console-areas.md` | uc-723: the sidebar lists every area as an open section; area tabs only with the area_tabs flag |
 | `usecases/console/console-areas-server-facts.md` | uc-722: the seeded people hold the cells the areas are built from, and the tool-call list shows one call by its id |
 | `usecases/console/tool-workbench.md` | uc-101: an operation on its full-width workbench; draft mock and transform, a secret typed for one run, the request sent masked, the mock staged for review |

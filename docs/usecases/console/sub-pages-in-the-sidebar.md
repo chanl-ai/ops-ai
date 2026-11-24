@@ -1,6 +1,6 @@
 # Sub-pages show as rows in the sidebar
 
-Status: current. Id: `uc-047`. Service: `console`. Layers: ui.
+Status: retired 2026-11-24: the sidebar stopped listing sub-pages as rows on 2026-11-12 (one link per page; sibling pages are tabs under the page title), so the behaviour this case describes no longer exists. Kept as the record of what the sidebar did. Id: `uc-047`. Service: `console`. Layers: ui.
 
 ## Preconditions
 
@@ -28,7 +28,7 @@ parent is open.
 
 | Layer | Script | State |
 |---|---|---|
-| ui | `console/scripts/test-uc-047-ui.mjs` | failing |
+| ui | none | retired 2026-11-24: the sidebar sub-rows were removed on 2026-11-12 |
 
 ## Non-vacuous check
 

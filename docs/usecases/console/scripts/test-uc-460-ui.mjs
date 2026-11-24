@@ -117,7 +117,7 @@ await withUiStack(
         const shown = await page.evaluate((want) => [...document.querySelectorAll('[data-testid^=queue-item-]')].map((e) => e.dataset.testid.replace('queue-item-', '')).filter((i) => want.includes(i)), Object.values(ids));
         const header = await page.getByTestId(`queue-case-${caseA}`).innerText();
         await shot('queue');
-        check('1 the queue lists the tasks under their cases, Marcus before Tom before Priya, with the open task beside it', shown.join() === [ids.marcus, ids.tom, ids.priya].join() && header.trim().length > 4 && header.trim() !== 'Case' && (await sidebar()) === 'collapsed', { shown, header, sidebar: await sidebar() });
+        check('1 the queue lists the tasks under their cases, Marcus before Tom before Priya, with the open task beside it', shown.join() === [ids.marcus, ids.tom, ids.priya].join() && header.trim().length > 4 && header.trim() !== 'Case', { shown, header });
         // A seeded publish request reads as asked by Setup, never by an internal "seed".
         const queueText = await page.getByTestId('queue-list').innerText();
         check('1b no task in the queue says it was requested by seed', !/Requested by (the tools-service )?seed/.test(queueText), queueText.match(/Requested by [^\n]*/g));
@@ -194,10 +194,16 @@ await withUiStack(
         check('7 All tasks keeps the table with its views', (await page.getByRole('tab', { name: /Resolved/ }).count()) > 0);
       });
 
-      await step('8 leaving Human Tasks puts the sidebar back', async () => {
+      // The sidebar starts folded (the console opens on Chat) and keeps the person's own choice from page to page.
+      await step('8 a sidebar opened on Human Tasks stays open on the next page', async () => {
+        await page.goto(`${consoleUrl}/work/tasks`, { waitUntil: 'domcontentloaded' });
+        await page.getByRole('button', { name: 'Toggle Sidebar' }).first().click({ timeout: 60_000 });
+        await page.waitForTimeout(500);
+        const opened = await sidebar();
         await page.goto(`${consoleUrl}/cases`, { waitUntil: 'domcontentloaded' });
         await page.waitForTimeout(1500);
-        check('8 leaving Human Tasks puts the sidebar back', (await sidebar()) === 'expanded');
+        const state = await sidebar();
+        check('8 a sidebar opened on Human Tasks stays open on the next page', opened === 'expanded' && state === 'expanded', { opened, state, url: page.url() });
       });
       check('9 no page errors and no sideways scroll at 375 px', errors.length === 0, errors.slice(0, 3));
     } finally {

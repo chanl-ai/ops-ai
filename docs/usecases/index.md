@@ -33,7 +33,7 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-040 | tools-service | Security decides a tool module review | api, ui | `tools-service/security-decides-a-module-review.md` |
 | uc-041 | tools-service | Workflow approvals use agents-service workflows | api | `tools-service/workflow-approvals-use-agents-service-workflows.md` |
 | uc-042 | tools-service | A module's call counts and activity come from real calls | api | `tools-service/module-traffic-from-real-calls.md` |
-| uc-047 | console | Sub-pages show as rows in the sidebar, in the area they belong to | ui | `console/sub-pages-in-the-sidebar.md` |
+| uc-047 | console | Sub-pages show as rows in the sidebar, in the area they belong to (retired) | ui | `console/sub-pages-in-the-sidebar.md` |
 | uc-048 | agents-service | An agent is granted and calls a published tools-service operation | api | `agents-service/agent-calls-registry-operations.md` |
 | uc-049 | agents-service | A write runs only after as many people as its policy names approve it | api, ui | `agents-service/write-approval-policy.md` |
 | uc-052 | console | Access is Read or Write in the console | ui | `console/access-is-read-or-write.md` |

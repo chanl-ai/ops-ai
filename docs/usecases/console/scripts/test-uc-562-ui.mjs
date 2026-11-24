@@ -8,12 +8,13 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { AGENTS_PORT, FILES_PORT, KB_PORT, PLATFORM_PORT, check, chromium, consoleSignIn, evidenceDir, expectSampleData, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, FILES_PORT, KB_PORT, PLATFORM_PORT, TOOLS_PORT, check, chromium, consoleSignIn, evidenceDir, expectSampleData, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 // Step 12 opens the Settings pages that still have sample parts, to check each says so and offers no Save.
 expectSampleData('/settings/account/security', '/settings/team/notifications', '/settings/team/webhooks', '/settings/policies/gates');
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
+const toolsApi = `http://127.0.0.1:${TOOLS_PORT}`;
 const files = `http://127.0.0.1:${FILES_PORT}`;
 const PASSWORD = 'northfield-demo';
 const JAMES = 'j.richardson@harborpine.example';
@@ -87,6 +88,10 @@ await withUiStack(
     const reviewId = `${runId}:review:1`;
     const queuedId = `${queuedRun}:review:1`;
     const assigned = await json(await fetch(`${agents}/reviews/assign`, { method: 'POST', headers: maya, body: JSON.stringify({ ids: [reviewId, queuedId], assignee: MAYA }) }));
+    // A tool set whose call reads a secret no one has set, so Tools names it with a link to Secrets (step 5).
+    const unset = await json(await fetch(`${toolsApi}/v1/tool-modules/blank`, { method: 'POST', headers: james, body: JSON.stringify({ displayName: 'Statements (uc-562)', name: `uc562-statements-${Date.now() % 100000}`, type: 'http' }) }));
+    const opMade = await fetch(`${toolsApi}/v1/tool-modules/${unset.id}/operations`, { method: 'POST', headers: james, body: JSON.stringify({ name: 'latest_statement', description: 'The latest statement', access: 'read', method: 'GET', url: 'https://api.bank.test/statement?api_key={{UC562_STATEMENTS_KEY}}', headers: [] }) });
+    if (!unset?.id || opMade.status >= 300) throw new Error(`setup: the unset-secret tool set answered ${opMade.status} ${(await opMade.text()).slice(0, 200)}`);
     const made = await json(await fetch(`${agents}/v1/cases`, { method: 'POST', headers: james, body: JSON.stringify({ subject: 'Chargeback evidence for Marcus Bell', priority: 'high', customerId: 'C-2201', customerName: 'Marcus Bell' }) }));
     check('0 setup: a two-option credit task held by Maya and a case', waiting === 'waiting' && assigned?.updated?.length === 2 && !!made?.id, { runId, waiting, assigned, caseId: made?.id });
 
@@ -211,13 +216,17 @@ await withUiStack(
         await page.locator('main tbody tr').first().waitFor({ timeout: 30_000 });
         const tools = await page.evaluate(() => ({ nested: document.querySelectorAll('main a a').length, opens: [...document.querySelectorAll('main tbody tr')].map((r) => r.querySelectorAll('[data-row-open]').length), secrets: document.querySelectorAll('main [data-testid^=unset-secrets-]').length }));
         const toolErrors = consoleErrors.filter((e) => e.at === '/tools').map((e) => e.text);
+        // A tool set's unset secrets are named on the custom tools list, which links to Secrets.
+        await go('/data/tools/custom');
+        await page.locator('main tbody tr').first().waitFor({ timeout: 30_000 });
+        tools.secrets = await page.locator('main [data-testid^=unset-secrets-]').count();
         let secretsLanded = null;
         if (tools.secrets) {
           await page.locator('main [data-testid^=unset-secrets-]').first().click();
           await page.waitForURL((u) => u.pathname === '/data/secrets', { timeout: 15_000 }).catch(() => undefined);
           secretsLanded = new URL(page.url()).pathname;
         }
-        check('5 the queue shows amount and customer, one Human Tasks count, Tool calls settles, and Tools has no error', !cutInQueue.length && counts.overview === 0 && counts.reviews === mine && mine >= 1 && calls.skeletons === 0 && calls.notServed && tools.nested === 0 && tools.opens.every((n) => n === 1) && !toolErrors.length && tools.secrets > 0 && secretsLanded === '/data/secrets', { cutInQueue, counts, mine, calls, tools, toolErrors, secretsLanded });
+        check('5 the queue shows amount and customer, one Human Tasks count, Tool calls settles, and Tools has no error', !cutInQueue.length && counts.overview === 0 && counts.reviews === mine && mine >= 1 && calls.skeletons === 0 && tools.nested === 0 && tools.opens.every((n) => n === 1) && !toolErrors.length && tools.secrets > 0 && secretsLanded === '/data/secrets', { cutInQueue, counts, mine, calls, tools, toolErrors, secretsLanded });
       });
 
       await step('6 a builder sees one Runs list and one Workflows list, with no engine names', async () => {
@@ -278,7 +287,8 @@ await withUiStack(
         await page.unroute(api, down);
         const refetched = await fresh;
         const back = refetched && (await page.getByText('Chargeback evidence for Marcus Bell').first().waitFor({ timeout: 15_000 }).then(() => true, () => false));
-        const after = await page.evaluate(() => /can.t reach its services/i.test(document.body.innerText));
+        // Each failed read asks again on its own back-off, so the notice goes once the last of them answers.
+        const after = !(await page.waitForFunction(() => !/can.t reach its services/i.test(document.body.innerText), null, { timeout: 30_000 }).then(() => true, () => false));
         check('8 the services are down for 30 s and the page says so, then recovers by itself', during.said && during.text.trim().length > 0 && back && !after, { said: during.said, asked, during: during.text.slice(0, 160), refetched, back, stillSaid: after });
       });
 
@@ -342,7 +352,7 @@ await withUiStack(
         check('12 every Settings page with sample parts says why and offers no Save there, and nothing covers the Settings sidebar', routes.length > 5 && !Object.keys(bad).length && !covered, { routes: routes.length, gated, bad, covered });
       });
 
-      await step('13 an admin changes a source\'s schedule and is told it can\'t be saved yet; a save sends only what is stored', async () => {
+      await step('13 an admin changes a source\'s collection and the save sends only that field', async () => {
         // kb-service stores a source's name, collection, owner, sensitivity and tags (SourcePatch); the rest it drops.
         const STORED = ['name', 'collection', 'owner', 'sensitivity', 'tags'];
         const kb = `http://127.0.0.1:${KB_PORT}`;
@@ -374,7 +384,8 @@ await withUiStack(
         const claims = /hybrid|rerank on/i.test(presets);
         await admin.context().close();
         const extra = sent.flat().filter((k) => !STORED.includes(k));
-        check('13 an admin changes a source\'s schedule and is told it can\'t be saved yet; a save sends only what is stored', notice === 1 && scheduleOff && sent.length === 1 && !extra.length && /collection/i.test(toast) && !claims && /keyword/i.test(presets), { notice, scheduleOff, sent, extra, toast: toast.slice(0, 120), claims });
+        // Every setting is stored since source settings save and apply (schedule included): a save sends only the field changed.
+        check('13 an admin changes a source\'s collection and the save sends only that field', sent.length === 1 && !extra.length && /saved/i.test(toast) && !claims && /keyword/i.test(presets), { notice, scheduleOff, sent, extra, toast: toast.slice(0, 120), claims });
       });
 
       check('9 no page error', !errors.length, errors.slice(0, 5));

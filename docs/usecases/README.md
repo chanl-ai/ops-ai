@@ -121,7 +121,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-040 | tools-service | Security decides a tool module review | api, ui | passing |
 | uc-041 | tools-service | Workflow approvals use agents-service workflows | api | passing |
 | uc-042 | tools-service | A module's call counts and activity come from real calls | api | passing |
-| uc-047 | console | Sub-pages show as rows in the sidebar, in the area they belong to | ui | failing |
+| uc-047 | console | Sub-pages show as rows in the sidebar, in the area they belong to | ui | retired |
 | uc-048 | agents-service | An agent is granted and calls a published tools-service operation | api | passing |
 | uc-049 | agents-service | A write runs only after as many people as its policy names approve it | api, ui | passing |
 | uc-052 | console | Access is Read or Write in the console | ui | passing |

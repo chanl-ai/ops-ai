@@ -145,12 +145,16 @@ await withUiStack(
         const decided = await fetch(`${agents}/reviews/${encodeURIComponent(`${disputeRun}:${r.waiting.node}:${r.waiting.iteration}`)}/decision`, { method: 'POST', headers: maya, body: JSON.stringify({ decision: 'rejected', reason: 'The fare matches the booking class bought.' }) });
         if (decided.status >= 300) throw new Error(`deciding answered ${decided.status} ${(await decided.text()).slice(0, 200)}`);
         await until(async () => ['succeeded', 'failed'].includes((await run(disputeRun))?.status));
-        const seen = await read(disputeCase);
+        let seen = await read(disputeCase);
+        // The page may first draw the case as this browser last read it, then the fresh read replaces it.
+        await page.getByTestId('case-whats-left').filter({ hasText: /Nothing is left/ }).waitFor({ timeout: 30_000 }).catch(() => undefined);
+        const text = async (id) => ((await page.getByTestId(id).innerText().catch(() => '')) ?? '').replace(/\s+/g, ' ');
+        seen = { ...seen, left: await text('case-whats-left'), lines: (await page.getByTestId('case-feed-line').allInnerTexts()).map((t) => t.trim()) };
         const resolvable = await page.getByTestId('case-resolve').isVisible().catch(() => false);
         await shot('dispute-nothing-left');
         if (resolvable) await page.getByTestId('case-resolve').click();
         const status = await until(async () => /Resolved/.test(await page.getByTestId('case-status-badge').innerText()), 30_000);
-        check('4 once Maya decides and the run ends, nothing is left and Resolve resolves the case', /Nothing is left/.test(seen.left) && resolvable && !!status && seen.lines.some((l) => /^Maya Okafor rejected: /.test(l)), { seen, resolvable, status });
+        check('4 once Maya decides and the run ends, nothing is left and Resolve resolves the case', /Nothing is left/.test(seen.left) && resolvable && !!status && seen.lines.some((l) => /^Maya Okafor rejected: /.test(l)), { seen, resolvable, status, run: await run(disputeRun).then((x) => ({ status: x?.status, outcome: x?.outcome, waiting: x?.waiting, error: x?.error })) });
       });
 
       let noticeCase = null;

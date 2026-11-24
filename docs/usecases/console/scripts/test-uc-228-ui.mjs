@@ -52,7 +52,7 @@ await withUiStack(
       const page = await signIn(1280);
 
       await step('1 Start run on Workflows offers every workflow and no agent, searched on the server, then opens the chosen workflow\'s own form', async () => {
-        const total = (await json(await fetch(`${agents}/v1/workflows?page=1&pageSize=1`, { headers: J }))).pagination.total;
+        const total = (await json(await fetch(`${agents}/v1/workflows?page=1&pageSize=1&startable=true&engine=current`, { headers: J }))).pagination.total;
         await page.goto(`${consoleUrl}/workflows`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await page.getByRole('button', { name: 'Start run' }).first().click({ timeout: 120_000 });
         const dialog = page.getByRole('dialog', { name: 'Start a run' });
@@ -79,7 +79,7 @@ await withUiStack(
         await search.fill('Card dispute intake');
         await page.getByRole('option', { name: /Card dispute intake/ }).click();
         // Choosing a workflow opens its own form; the picker has no Next step.
-        const form = await page.getByRole('dialog', { name: /Start a run of Card dispute intake/ }).waitFor({ timeout: 30_000 }).then(() => true, () => false);
+        const form = await page.getByRole('dialog', { name: /(Start a run of |: )Card dispute intake$/ }).waitFor({ timeout: 30_000 }).then(() => true, () => false);
         check(
           '1 Start run on Workflows offers every workflow and no agent, searched on the server, then opens the chosen workflow\'s own form',
           total > 0 && offered === total && found && agentsOffered === 0 && form,
@@ -91,7 +91,7 @@ await withUiStack(
       await step('2 Test run in the editor names the workflow and offers a test run', async () => {
         await page.goto(`${consoleUrl}/workflows/definitions/${wid}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await page.getByTestId('definition-start-run').click({ timeout: 120_000 });
-        const dialog = page.getByRole('dialog', { name: /Start a run of Card dispute intake/ });
+        const dialog = page.getByRole('dialog', { name: /(Start a run of |: )Card dispute intake$/ });
         await dialog.waitFor();
         await page.waitForTimeout(500);
         const test = await dialog.getByRole('radio', { name: /Test run/ }).isChecked();
@@ -109,10 +109,11 @@ await withUiStack(
         await shot(page, 'run-1280');
         // The rail is narrow: a long id reads in full on hover and copies in one click.
         const rail = page.getByTestId('run-attributes');
-        const defTitle = await rail.getByRole('link', { name: /uc228_card_dispute/ }).getAttribute('title');
+        const defTitle = await rail.locator('a[href="/build/workflows/definitions/uc228_card_dispute"]').getAttribute('title');
         const copies = await rail.getByRole('button', { name: /^Copy (workflow id|digest)/ }).count();
         check('3b the run rail shows long values in full on hover and copies the ids', defTitle === 'uc228_card_dispute v1' && copies === 2, { defTitle, copies });
-        check('3 the run page shows the workflow, the run and its status', body.includes('Card dispute intake') && body.includes(started.runId) && /Queued|Running|Succeeded|Completed|Failed/.test(body), { body: body.slice(0, 300) });
+        check('3 the run page shows the workflow, the run and its status', // The page names the run by its workflow and start time; its id is the page's address.
+          body.includes('Card dispute intake') && page.url().includes(started.runId) && /Queued|Running|Succeeded|Completed|Failed/.test(body), { body: body.slice(0, 300) });
       });
 
       await step('4 the case page shows its subject and customer', async () => {
@@ -160,14 +161,15 @@ await withUiStack(
         }
         if (!caseId) throw new Error(`the workflow opened no case: ${JSON.stringify({ status: last?.status, error: last?.error, steps: last?.steps }).slice(0, 600)}`);
         await page.goto(`${consoleUrl}/cases/${caseId}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-        const card = page.getByTestId('case-fields');
+        // A case with no case type shows the fields it was given under About this case, as a typed case does.
+        const card = page.getByTestId('case-typed-fields');
         await card.waitFor({ timeout: 60_000 });
         const amount = await card.getByTestId('case-field-amountDue').innerText();
         const due = await card.getByTestId('case-field-respondBy').innerText();
         const document = await card.getByTestId('case-field-document').innerText();
-        const fileLink = await card.getByTestId('case-field-documentFileId').getByRole('link').getAttribute('href');
+        const fileLink = await card.locator('a[href="/data/files/fil_uc228doc"]').first().getAttribute('href').catch(() => null);
         await shot(page, 'case-fields-1280');
-        check('6 a case a workflow opened shows the fields it gave the case, dates formatted and numbers grouped', /1,250\.5/.test(amount) && !/2026-11-02/.test(due) && /Nov/.test(due) && /TEST012\.pdf/.test(document) && fileLink === '/files/fil_uc228doc', { amount, due, document, fileLink });
+        check('6 a case a workflow opened shows the fields it gave the case, dates formatted and numbers grouped', /1,250\.5/.test(amount) && !/2026-11-02/.test(due) && /Nov/.test(due) && /TEST012\.pdf/.test(document) && fileLink === '/data/files/fil_uc228doc', { amount, due, document, fileLink });
       });
 
       await step('7 the runs list says how each run ended', async () => {
