@@ -1738,6 +1738,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "workflows_list_watch_uses": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/watch-uses",
+        "pathParams": [],
+        "query": ["watchIds"],
+        "stream": False,
+    },
     "workflows_list_workflows": {
         "body": None,
         "headers": [],
@@ -3325,6 +3334,10 @@ class Operations:
             {},
             None,
         )  # type: ignore[no-any-return]
+
+    def workflows_list_watch_uses(self, *, watch_ids: list[str] | None = None) -> Any:
+        "List Watch Uses"
+        return self._t.call(SERVICE, OPERATIONS["workflows_list_watch_uses"], {}, {"watchIds": watch_ids}, {}, None)  # type: ignore[no-any-return]
 
     def agents_list_widgets(
         self,
@@ -5059,6 +5072,12 @@ class AsyncOperations:
             {"skill": skill, "workflow": workflow, "step": step},
             {},
             None,
+        )  # type: ignore[no-any-return]
+
+    async def workflows_list_watch_uses(self, *, watch_ids: list[str] | None = None) -> Any:
+        "List Watch Uses"
+        return await self._t.call(
+            SERVICE, OPERATIONS["workflows_list_watch_uses"], {}, {"watchIds": watch_ids}, {}, None
         )  # type: ignore[no-any-return]
 
     async def agents_list_widgets(

@@ -87,3 +87,22 @@ async def test_a_workflow_whose_step_reads_a_document_type_is_named_and_another_
     found = r.json()["data"]
     assert {"kind": "workflow", "id": "levy_intake", "name": intake["name"]} in found["legal_notice"], found
     assert found["nothing_reads_this"] == []
+
+
+def _files_service(team: str | None) -> dict[str, str]:
+    token = mint_service_token(
+        dev_service_signer(), service="files", audience="agents", tenant_id="local", scopes=["workflows:view"],
+        team_id=team,
+    )  # fmt: skip
+    return {"Authorization": f"Bearer {token}"}
+
+
+async def test_files_service_asks_which_workflows_use_a_watch_and_a_person_is_refused(client: AsyncClient) -> None:
+    """Files refuses Stop watching unless this answers. A workflow naming a watch is listed once the Files changed
+    step type exists (it waits on the schedule clock); until then every watch answers no workflow."""
+    params = {"watchIds": ["wat_invoices", "wat_unused"]}
+    r = await client.get("/v1/watch-uses", params=params, headers=_files_service(SEED_TEAM))
+    person = await client.get("/v1/watch-uses", params=params, headers={"X-Team-Id": SEED_TEAM})
+    assert r.status_code == 200, r.text
+    assert r.json()["data"] == {"wat_invoices": [], "wat_unused": []}
+    assert person.status_code == 403, person.text

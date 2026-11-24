@@ -2229,6 +2229,17 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "workflows_list_watch_uses": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/watch-uses",
+    "pathParams": [],
+    "query": [
+      "watchIds"
+    ],
+    "stream": false
+  },
   "workflows_list_workflows": {
     "body": null,
     "headers": [],

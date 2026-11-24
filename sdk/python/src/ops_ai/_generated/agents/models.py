@@ -2473,6 +2473,12 @@ class WaitingTask(TypedDict, closed=True):
     title: str
 
 
+class WatchUser(TypedDict, closed=True):
+    live: bool
+    name: str
+    workflowId: str
+
+
 class WhatsLeft(TypedDict, closed=True):
     items: list[LeftItem]
     resolvable: bool
@@ -3329,6 +3335,11 @@ class EnvelopeWorkflowTestRun(TypedDict, closed=True):
 
 class EnvelopeDictStrListToolUser(TypedDict, closed=True):
     data: dict[str, list[ToolUser]]
+    success: Literal[True]
+
+
+class EnvelopeDictStrListWatchUser(TypedDict, closed=True):
+    data: dict[str, list[WatchUser]]
     success: Literal[True]
 
 

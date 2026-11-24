@@ -19,20 +19,24 @@ from ops_access import can
 from ops_identity import CurrentTenantCaller
 from ops_identity.fastapi import Tx
 from ops_service_kit import narrow
-from ops_service_kit.http import Envelope, Json, Out
+from ops_service_kit.errors import Forbidden
+from ops_service_kit.http import Envelope, Json, JsonValue, Out
 
 from ...store.pin_users import PinUsers
 from ..account_names import account_uses_in
-from ..child_runs import team_workflows
+from ..child_runs import engine_workflow, team_workflows
 from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..workflow_registry import registry as workflow_registry
 from .agents import used_in_all
 
 router = APIRouter(prefix="/v1/tool-uses")
-# Which of a team's workflows read each document type, for documents-service's delete of one.
-document_type_router = APIRouter(prefix="/v1/document-type-uses")
+# Which of a team's workflows read each document type (documents-service's delete of one) or start from each watched
+# folder (Files' list and Stop watching): workflow questions other services ask, mounted under the Workflows tag.
+document_type_router = APIRouter()
 account_router = APIRouter(prefix="/v1/account-uses")
+FILES_TRIGGER = "ops.trigger.files"
+MAX_WATCHES = 100
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 MAX_TOOLS = 200
 
@@ -123,7 +127,7 @@ async def document_type_uses(rt: Runtime, types: list[str]) -> dict[str, list[di
     return out
 
 
-@document_type_router.get("", response_model=Envelope[dict[str, list[ToolUser]]])
+@document_type_router.get("/v1/document-type-uses", response_model=Envelope[dict[str, list[ToolUser]]])
 async def list_document_type_uses(
     rt: Rt, caller: CurrentTenantCaller, _: Tx, types: Annotated[str, Query(min_length=1, max_length=8000)]
 ) -> JSONResponse:
@@ -158,3 +162,53 @@ async def list_account_uses(
     can(caller, "agents", "view", team=team, what="who names an account")
     found = await account_uses_in(rt, str(caller.team_id), app, name)
     return ok(AccountUsers(**found).model_dump(by_alias=True))
+
+
+class WatchUser(Out):
+    workflow_id: str
+    name: str
+    # The live version's trigger names the watch; false for a draft only.
+    live: bool
+
+
+def _watch_of(definition: Json) -> str:
+    for node in cast(list[Json], definition.get("nodes") or []):
+        if node.get("type") == FILES_TRIGGER:
+            watch = dict(cast(Json, node.get("parameters") or {})).get("watch")
+            return watch if isinstance(watch, str) else ""
+    return ""
+
+
+async def watch_uses(rt: Runtime, watches: list[str]) -> dict[str, list[dict[str, JsonValue]]]:
+    """For each watch id, the acting team's workflows whose newest or live version has a Files changed trigger on
+    it, each once with whether the live version does."""
+    out: dict[str, list[dict[str, JsonValue]]] = {w: [] for w in watches}
+    for d in await team_workflows(rt):
+        if d.get("archived_at"):
+            continue
+        workflow, name = str(d["workflow_id"]), str(d["name"])
+        newest = _watch_of(dict(d.get("definition") or {}))
+        if d.get("stage") == "live":
+            live = newest
+        else:
+            served = await engine_workflow(rt, workflow)
+            live = _watch_of(dict(served.definition)) if served is not None else ""
+        for watch in {newest, live} - {""}:
+            if watch in out:
+                out[watch].append({"workflowId": workflow, "name": name, "live": watch == live})
+    return out
+
+
+@document_type_router.get("/v1/watch-uses", response_model=Envelope[dict[str, list[WatchUser]]])
+async def list_watch_uses(
+    rt: Rt,
+    caller: CurrentTenantCaller,
+    _: Tx,
+    watch_ids: Annotated[list[str], Query(alias="watchIds", min_length=1, max_length=MAX_WATCHES)],
+) -> JSONResponse:
+    """Files' question before it lists or stops watching folders: a service holding `workflows:view` for the team
+    its token names. A person reads a workflow's trigger on the workflow itself."""
+    if caller.kind != "service":
+        raise Forbidden("Only files-service asks which workflows use a watched folder.", code="scope_required")
+    can(caller, "workflows", "view", team=None, what="which workflows use a watched folder")
+    return ok(await watch_uses(rt, list(dict.fromkeys(watch_ids))))

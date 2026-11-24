@@ -3101,6 +3101,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/watch-uses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Watch Uses
+         * @description Files' question before it lists or stops watching folders: a service holding `workflows:view` for the team
+         *     its token names. A person reads a workflow's trigger on the workflow itself.
+         */
+        get: operations["workflows_list_watch_uses"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/widgets": {
         parameters: {
             query?: never;
@@ -7318,6 +7339,18 @@ export interface components {
             /** Data */
             data: {
                 [key: string]: components["schemas"]["ToolUser"][];
+            };
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[dict[str, list[WatchUser]]] */
+        Envelope_dict_str__list_WatchUser___: {
+            /** Data */
+            data: {
+                [key: string]: components["schemas"]["WatchUser"][];
             };
             /**
              * Success
@@ -12722,6 +12755,15 @@ export interface components {
             taskId: string;
             /** Title */
             title: string;
+        };
+        /** WatchUser */
+        WatchUser: {
+            /** Live */
+            live: boolean;
+            /** Name */
+            name: string;
+            /** Workflowid */
+            workflowId: string;
         };
         /** WhatsLeft */
         WhatsLeft: {
@@ -31324,6 +31366,109 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_TryTargets_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    workflows_list_watch_uses: {
+        parameters: {
+            query: {
+                watchIds: string[];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_dict_str__list_WatchUser___"];
                 };
             };
             /** @description Invalid request */
