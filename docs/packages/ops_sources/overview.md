@@ -32,5 +32,5 @@ the knowledge source's `config`, and the held items are the source's knowledge i
 | Failure mode | Test |
 |---|---|
 | A reader with its own state loses its place between pages, or fetches a file whose marker did not move | `packages/ops_sources/tests/test_reading.py` |
-| A plugin breaks a role the loop reads it by (places, every page of changes, a version and its tag, the access list, a delete) | `ops_plugin_sdk.testing.knowledge_contract`, run on SharePoint in `services/kb-service/tests/test_connector_plugins.py` (needs the plugins checkout, `OPS_PLUGINS_REPO`) |
+| A plugin breaks a role the loop reads it by (places, every page of changes, a version and its tag, the access list, a delete) | `ops_plugin_sdk.testing.knowledge_contract` (its own cases in `packages/ops_plugin_sdk/tests/test_knowledge_contract.py`), run by each plugin's own tests in the plugins repository (SharePoint, Confluence, Website) |
 | Knowledge syncs differently through the package | kb-service's sync suite: `tests/test_tool_sources.py`, `test_source_contract.py`, `test_connector_plugins.py`, `test_web_source.py`, `test_schedule_health.py` |
