@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-24",
+  "title": "A file moved or renamed at the source says where it was",
+  "description": "When a watched folder's check finds one removed file and one new file with the same bytes, the new file's page shows Was with its old path. Two copies of the same bytes are not linked, since which one moved cannot be told.",
+  "tag": "improved"
+}

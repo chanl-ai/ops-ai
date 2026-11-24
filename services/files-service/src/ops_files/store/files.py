@@ -496,6 +496,8 @@ class FileRow(Out):
     hold: HoldRow | None
     # The name of the watch that brought the file in; None for uploads and once the watch is deleted.
     watch_name: str | None = None
+    # Where the file was before it moved or was renamed at the source, when its watch linked it to a removed entry.
+    was_path: str | None = None
 
 
 VIEWS = ("all", "quarantined", "legal_hold", "unreferenced", "expiring")
@@ -548,12 +550,25 @@ class FilesStore(Store):
             w = metadata.tables["file_watches"]
             q = sa.select(w.c.name).where(w.c.tenant_id == tenant, w.c.id == found.watch_id, team_visible(w))
             watch_name = (await c.execute(q)).scalar_one_or_none()
+            e = metadata.tables["file_watch_events"]
+            old = files.alias("old")
+            linked = sa.and_(old.c.tenant_id == tenant, old.c.id == e.c.linked_file_id)
+            q = (
+                sa.select(old.c.source_path)
+                .select_from(e.join(old, linked))
+                .where(e.c.tenant_id == tenant, e.c.file_id == file_id, e.c.kind == "new", team_visible(e))
+                .limit(1)
+            )
+            was_path = (await c.execute(q)).scalar_one_or_none()
+        else:
+            was_path = None
         return FileRow(
             file=found,
             versions=await rows(c, versions.order_by(v.c.version), VersionOut),
             references=await rows(c, references.order_by(r.c.added_at), ReferenceOut),
             hold=next(iter(await rows(c, hold.limit(1), HoldRow)), None),
             watch_name=watch_name,
+            was_path=was_path,
         )
 
     async def options(
@@ -929,6 +944,16 @@ class FilesStore(Store):
             await c.execute(
                 sa.update(files).where(files.c.tenant_id == isolation.tenant(), files.c.id == file_id).values(**given)
             )
+
+    async def digests(self, file_ids: Sequence[str]) -> dict[str, str]:
+        """The newest bytes' digest of each of `file_ids` that has one."""
+        if not file_ids:
+            return {}
+        q = sa.select(files.c.id, files.c.digest).where(
+            files.c.tenant_id == isolation.tenant(), files.c.id.in_(list(file_ids)), files.c.digest.is_not(None)
+        )
+        async with self.tx() as c:
+            return {str(r[0]): str(r[1]) for r in await c.execute(q)}
 
     async def remove_sources(
         self, file_ids: Sequence[str], at: datetime, *, then: Callable[[AsyncConnection], Awaitable[None]] | None = None

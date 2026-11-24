@@ -139,6 +139,9 @@ class WatchEventView(Out):
     size: int | None
     path: str | None
     at: datetime
+    # A new file that is a removed one moved or renamed at the source: that entry and where it was.
+    linked_file_id: str | None = None
+    linked_path: str | None = None
 
 
 class WatchEvents(Out):

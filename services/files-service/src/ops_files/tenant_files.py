@@ -1045,6 +1045,7 @@ def _source(row: FileRow) -> FileSource | None:
         removed_at=f.removed_at,
         access_list=f.access_list,
         access_read_at=f.access_read_at,
+        was_path=row.was_path,
     )
 
 

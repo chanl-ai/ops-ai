@@ -39,7 +39,17 @@ export function FileSource({ file }: { file: FileDetail }) {
         <span className="text-muted-foreground">A watch that was deleted</span>
       ),
     ],
-    ['Path', <span key="p" className="break-all">{(s.path ?? '—').split('/').join(' › ')}</span>],
+    [
+      'Path',
+      <span key="p" className="break-all">
+        {(s.path ?? '—').split('/').join(' › ')}
+        {s.wasPath ? (
+          <span className="block text-muted-foreground" data-testid="file-source-was">
+            Was {s.wasPath.split('/').join(' › ')}
+          </span>
+        ) : null}
+      </span>,
+    ],
     ['Changed at the source', s.changedAt ? `${dateTime(s.changedAt)}${version ? ` · ${version}` : ''}` : `Not said by the source${version ? ` · ${version}` : ''}`],
     ['Who may see it at the source', <span key="a" data-testid="file-source-access">{access(s)}</span>],
   ];

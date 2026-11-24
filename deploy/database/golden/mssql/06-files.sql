@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- files-service, stamped at 20261125_0900_watch_event_codes
+-- files-service, stamped at 20261126_0900_watch_event_links
 CREATE TABLE files (
 	id VARCHAR(64) NOT NULL, 
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -244,6 +244,7 @@ CREATE TABLE file_watch_events (
 	size BIGINT NULL, 
 	path VARCHAR(1024) NULL, 
 	at DATETIMEOFFSET NOT NULL, 
+	linked_file_id VARCHAR(64) NULL, 
 	CONSTRAINT file_watch_events_pkey PRIMARY KEY (tenant_id, watch_id, number)
 );
 GO
@@ -350,5 +351,5 @@ CREATE TABLE alembic_version_files (
     CONSTRAINT alembic_version_files_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_files (version_num) VALUES ('20261125_0900_watch_event_codes');
+INSERT INTO alembic_version_files (version_num) VALUES ('20261126_0900_watch_event_links');
 GO

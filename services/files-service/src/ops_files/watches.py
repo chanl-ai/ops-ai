@@ -28,7 +28,7 @@ from typing import cast
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_files.store import FilesStore, HeldSource, WatchesStore, WatchEvent, WatchRow
-from ops_files.store.watches import LeaseLost, write_events
+from ops_files.store.watches import LeaseLost, link_new_events, write_events
 from ops_files.tenant_files import TenantFiles
 from ops_identity import ServiceCallError, ServiceUnreachable
 from ops_service_kit.errors import Conflict
@@ -246,6 +246,8 @@ class WatchChecks:
         failed: list[WatchEvent] = []
         now = self.clock()
         by_row = {str(r["id"]): r for r in listing.changed}
+        # The new entries of this check by their bytes, to tell a file moved or renamed at the source from a new one.
+        new_by_digest: dict[str, list[str]] = {}
 
         async def on_item(r: Json, item: Json) -> None:
             source_id = str(r["id"])
@@ -259,6 +261,8 @@ class WatchChecks:
                 # The version and its event commit together, and only while this check holds the lease.
                 if version is not None:
                     kind = "new" if version == 1 else "changed"
+                    if version == 1:
+                        new_by_digest.setdefault(hashlib.sha256(content).hexdigest(), []).append(file_id)
                     events = [_event(file_id, version, kind, None, len(content), full_path, now)]
                 elif before is not None and before.name != name:
                     events = [_event(file_id, None, "renamed", None, len(content), full_path, now)]
@@ -380,9 +384,14 @@ class WatchChecks:
             removed |= {i for i in state.by_id if i not in listing.seen and i not in skipped_ids}
         gone = [state.by_id[i] for i in removed if i in state.by_id and not state.by_id[i].removed]
 
+        links = _links(
+            await self.store.digests([h.file_id for h in gone]) if gone and new_by_digest else {}, new_by_digest
+        )
+
         async def removals(c: AsyncConnection) -> None:
             events = [_event(h.file_id, None, "removed", None, None, h.name, now) for h in gone]
             await write_events(c, watch.id, owner=owner, events=events)
+            await link_new_events(c, watch.id, links)
 
         await self.store.remove_sources([h.file_id for h in gone], now, then=removals)
         outcome.removed = len(gone)
@@ -448,6 +457,19 @@ def _said(refused: dict[str, str], source_id: str, seen: str | None) -> bool:
         return False
     refused[source_id] = seen or ""
     return True
+
+
+def _links(removed: dict[str, str], new_by_digest: dict[str, list[str]]) -> dict[str, str]:
+    """{new file id: removed file id} for each digest held by exactly one removed entry and exactly one new entry; two
+    copies of the same bytes, on either side, link nothing, since which one moved cannot be told."""
+    old_by_digest: dict[str, list[str]] = {}
+    for file_id, digest in removed.items():
+        old_by_digest.setdefault(digest, []).append(file_id)
+    return {
+        new[0]: old[0]
+        for digest, old in old_by_digest.items()
+        if len(old) == 1 and len(new := new_by_digest.get(digest, [])) == 1
+    }
 
 
 def _event(  # noqa: PLR0917 - one event row, every column given

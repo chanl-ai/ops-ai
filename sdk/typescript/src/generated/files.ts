@@ -1134,6 +1134,8 @@ export interface components {
             path: string | null;
             /** Removedat */
             removedAt: string | null;
+            /** Waspath */
+            wasPath?: string | null;
             /** Watchid */
             watchId: string | null;
             /** Watchname */
@@ -1690,6 +1692,10 @@ export interface components {
             fileId: string | null;
             /** Kind */
             kind: string;
+            /** Linkedfileid */
+            linkedFileId?: string | null;
+            /** Linkedpath */
+            linkedPath?: string | null;
             /** Number */
             number: number;
             /** Path */
