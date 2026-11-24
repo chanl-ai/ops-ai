@@ -14,6 +14,7 @@ says otherwise.
 - People see personal data masked by default; the model sees real values, and only models cleared for the data serve.
 - Every model call goes through one AI gateway in the install, with a key, a budget and no prompt text in its log.
 - Tools reach only HTTPS hosts a Security admin allows; agents hold no credentials.
+- A crash never sends a write twice: a replacement process continues from the last recorded step.
 - Nothing in the platform calls home.
 
 ## Topics
@@ -27,6 +28,7 @@ says otherwise.
 | [Data handling and masking](data-handling-and-masking.md) | What people see masked, where data is stored and how long it is kept |
 | [Model calls](model-calls.md) | Which model sees what, under which key, budget and clearance |
 | [Egress and connections](egress-and-connections.md) | Where a tool call may go, and how it signs in to your systems |
+| [Recovery and redrive](recovery-and-redrive.md) | What a crash repeats and what it never does, and who may send a stopped run on |
 
 ## Next
 

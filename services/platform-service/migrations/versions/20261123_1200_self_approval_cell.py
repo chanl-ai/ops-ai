@@ -8,7 +8,7 @@ from every role but Admin's, built-in or custom, writes one `role.self_approval`
 second run finds nothing and writes nothing. The downgrade puts each cleared cell back from its audit entry.
 
 Revision ID: 20261123_1200_self_approval_cell
-Revises: 20261122_2022_list_sort_indexes
+Revises: 20261124_0100_close_invites
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from alembic import op
 from ops_service_kit.ids import new_id, now_iso
 
 revision = "20261123_1200_self_approval_cell"
-down_revision = "20261122_2022_list_sort_indexes"
+down_revision = "20261124_0100_close_invites"
 branch_labels = None
 depends_on = None
 

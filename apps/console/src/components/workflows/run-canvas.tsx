@@ -20,7 +20,7 @@ export function runMark(step: EngineRunStep | undefined, runStatus: string): Run
   if (!step) return TERMINAL.includes(runStatus) ? 'skipped' : 'not_reached';
   if (step.status === 'ok' || step.status === 'pinned') return 'passed';
   if (step.status === 'error') return 'failed';
-  if (step.status === 'abandoned') return 'stopped';
+  if (step.status === 'abandoned' || step.status === 'redriven') return 'stopped';
   return step.status === 'waiting' ? 'waiting' : 'running';
 }
 

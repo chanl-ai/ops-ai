@@ -42,7 +42,18 @@ from ops_store.listing import ListPage, list_page
 from ops_store.rows import one, rows
 
 from .audit import record
-from .tables import group_members, groups, members, role_assignments, role_permissions, roles, teams, tenants, users
+from .tables import (
+    group_members,
+    groups,
+    members,
+    role_assignments,
+    role_permissions,
+    roles,
+    signin_break_glass,
+    teams,
+    tenants,
+    users,
+)
 from .tenancy import TenantDb
 
 MEMBERSHIP = "membership"
@@ -1010,3 +1021,15 @@ async def mirror_membership(
             )
         )
     await bump_version(c, tenant_id)
+
+
+async def holds_admin(c: AsyncConnection, tenant_id: str, user_id: str) -> bool:
+    """Whether the person may manage access in any team they hold a role in, or in every team, or is on the break-glass
+    list: none of them is ever linked to a provider by the email it asserts. Decided by the cell through `can`, so a
+    custom role holding `access.manage` counts as Admin does."""
+    listed = sa.select(signin_break_glass.c.user_id).where(signin_break_glass.c.user_id == user_id)
+    if (await c.execute(listed)).first() is not None:
+        return True
+    p, access = await live_in(c, tenant_id, user_id)
+    held = {*p.team_ids, *p.access}
+    return any(access.may(p, "access", "manage", team=t, from_any_team=True) for t in held)
