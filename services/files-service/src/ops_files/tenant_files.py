@@ -80,6 +80,7 @@ from ops_files.service import (
 from ops_files.sniffing import SNIFF_BYTES, prove
 from ops_files.store import (
     AsyncEngine,
+    FileChange,
     FileDeletedPayload,
     FileRow,
     FilesStore,
@@ -92,6 +93,8 @@ from ops_files.store import (
     ReadRequestedPayload,
     ReadRequestRow,
     ReadRequestsStore,
+    SourceFile,
+    SourceVersion,
     UploadClaim,
     UploadCompleted,
 )
@@ -166,6 +169,10 @@ def _read_request(row: ReadRequestRow) -> ReadRequest:
         requested_by=row.requested_by,
         requested_at=row.requested_at,
     )
+
+
+# The purpose of a file a watched folder brought in.
+SOURCE_PURPOSE = "source_file"
 
 
 def _utcnow() -> datetime:
@@ -713,12 +720,26 @@ class TenantFiles:
             )
         return DownloadLink(url=url, expires_at=self._clock() + timedelta(seconds=ttl), ttl_seconds=ttl)
 
-    async def open_content(self, who: Who, file_id: str) -> tuple[FileDetail, AsyncIterator[bytes]]:
-        """A clean file's detail and its bytes as a stream, for the proxy download and service reads."""
+    async def open_content(
+        self, who: Who, file_id: str, *, version: int | None = None
+    ) -> tuple[FileDetail, AsyncIterator[bytes]]:
+        """A clean file's detail and its bytes as a stream, for the proxy download and service reads. `version` reads
+        an earlier version, which downloads once its own scan is clean whatever the newest version's state."""
         row = await self._owned(who, file_id)
-        self._readable(row)
+        key = row.file.storage_key
+        if version is None:
+            self._readable(row)
+        else:
+            held = next((v for v in row.versions if v.version == version), None)
+            if held is None:
+                raise FileMissingError(f"{file_id} version {version}")
+            if row.file.status != "available":
+                raise UploadStateError(f"{file_id} is {row.file.status}")
+            if held.scan_status != "clean":
+                raise NotScannedError(f"{file_id} version {version} scan is {held.scan_status}")
+            key = held.storage_key
         store, _ = await self._placement(row)
-        return self._detail(row, who), store.open_read(row.file.storage_key)
+        return self._detail(row, who), store.open_read(key)
 
     # ── delete ──
 
@@ -827,6 +848,63 @@ class TenantFiles:
             done.append(file_id)
         return BulkResult(updated=done, skipped=skipped)
 
+    # ── watched folders ──
+
+    async def put_source(
+        self, tenant: str, team: str, found: SourceFile, content: bytes, *, actor: str
+    ) -> tuple[str, int | None]:
+        """What a check fetched for one source file, written as that file's next version: found by its source key
+        only, never by its bytes. The same bytes as the newest version write nothing and answer (file id, None). A new
+        version is scanned on its own and answers 423 until it is clean, while older versions still download."""
+        file_id = self._new_id()
+        store, _ = await self._upload_placement(tenant, SOURCE_PURPOSE)
+        digest = hashlib.sha256(content).hexdigest()
+        key = f"{tenant}/{team}/{SOURCE_PURPOSE}/{file_id}-{digest[:12]}"
+        proven = prove(found["mime"], found["name"], content[:SNIFF_BYTES])
+        now = self._clock()
+
+        async def once() -> AsyncIterator[bytes]:
+            yield content
+
+        with contextlib.suppress(ObjectExistsError):
+            await store.put_stream(key, once(), content_type=proven.mime)
+        new_file: NewUpload = {
+            "id": file_id, "tenant_id": tenant, "team": team, "name": found["name"], "mime": proven.mime,
+            "size": len(content), "purpose": SOURCE_PURPOSE, "status": "available", "scan_status": "pending",
+            "sensitivity": "internal", "sensitivity_suggested": True,
+            "retention_class_id": self._config.default_retention_class, "immutable": False,
+            "storage_backend": store.backend, "storage_container": store.container, "storage_key": key,
+            "declared_size": len(content), "uploaded_by": actor, "uploaded_at": now, "version_count": 0,
+        }  # fmt: skip
+        version: SourceVersion = {"digest": digest, "size": len(content), "storage_key": key,
+                                  "source_tag": found.get("marker"), "at": now}  # fmt: skip
+        entry, number = await self._files.put_source_version(team, new_file, {**found, "mime": proven.mime}, version)
+        if number is None:
+            # The newest version already holds these bytes: the object just written is nobody's.
+            await asyncio.to_thread(store.delete, key)
+            return entry, None
+        if self._scanning == "off":
+            status, engine, detail = "clean", "off", "scanning is off"
+        elif self._scanning == "inline":
+            assert self._scanner is not None
+            result = await asyncio.to_thread(self._scanner.scan, store.iter_bytes(key))
+            status, engine, detail = result.status, result.engine, result.detail
+        else:
+            status, engine, detail = "pending", None, None
+        await self._scanned(entry, number, status, engine, detail)
+        return entry, number
+
+    async def _scanned(self, file_id: str, version: int, status: str, engine: str | None, detail: str | None) -> None:
+        """One version's scan; the file's own status follows its newest version, which is what a download gets."""
+        now = self._clock()
+        await self._files.set_version_scan(file_id, version, status, now)
+        change: FileChange = {"scan_status": status, "scan_at": now}
+        if engine is not None:
+            change["scan_engine"] = engine
+            change["scan_detail"] = detail
+        await self._files.update(file_id, change)
+        await self._files.set_blocked(file_id, f"Quarantined: {detail}" if status == "infected" else None)
+
     # ── for other services ──
 
     async def write(
@@ -894,6 +972,11 @@ class TenantFiles:
         row = await self._files.get(file_id)
         if row is None:
             raise FileMissingError(file_id)
+        if row.versions:
+            # The hook scans the newest version, the one a download gets.
+            await self._files.set_version_scan(
+                file_id, max(v.version for v in row.versions), result.status, self._clock()
+            )
         await self._files.update(
             file_id,
             {

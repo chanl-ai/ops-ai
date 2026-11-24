@@ -472,13 +472,15 @@ def create_files_app(
         return ok(link.model_dump(mode="json", by_alias=True))
 
     @public.get("/{file_id}/content", response_class=StreamingResponse, dependencies=[service_scope("view")])
-    async def get_content(file_id: str, who: Caller) -> StreamingResponse:  # pyright: ignore[reportUnusedFunction]
+    async def get_content(  # pyright: ignore[reportUnusedFunction]
+        file_id: str, who: Caller, version: Annotated[int | None, Query(ge=1)] = None
+    ) -> StreamingResponse:
         """A clean file's bytes: the proxy download for people, and the read agent runs, knowledge ingest and tool
-        fixtures use with a service token."""
+        fixtures use with a service token. `version` reads an earlier version once its own scan is clean."""
         # Not on Tx: the file's rows are read in the request's one transaction, closed before the first byte is read
         # from storage, so a slow download holds no connection (tests/test_request_transactions.py).
         async with isolation.request_transaction():
-            detail, chunks = await files.open_content(who, file_id)
+            detail, chunks = await files.open_content(who, file_id, version=version)
         return await _stream(detail, chunks)
 
     @public.delete("/{file_id}", status_code=204, response_class=Response)
