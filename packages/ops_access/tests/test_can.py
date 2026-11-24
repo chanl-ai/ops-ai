@@ -114,6 +114,9 @@ async def test_a_reviewers_own_request_is_refused_only_while_the_teams_two_perso
     assert ACCESS.can(strict, "reviews", "decide", team="team_a", requested_by=["b@bank.test"]) == "all"
     refused("own_request", ACCESS.can, strict, "reviews", "decide", team="team_a", requested_by=["a@bank.test"])
     refused("own_request", ACCESS.can, strict, "reviews", "decide", team="team_a", requested_by=[None, "usr_1"])
+    # A caller with neither email nor subject is recorded under its name (the services' `actor`), and is the requester.
+    nameless = await person(access={"team_a": ["reviewer"]}, policies={"requesterMayDecide": False}, email="", sub="")
+    refused("own_request", ACCESS.can, nameless, "reviews", "decide", team="team_a", requested_by=["Ana"])
     dev = Principal(
         kind="person",
         sub="usr_dev",

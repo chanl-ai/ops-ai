@@ -70,7 +70,7 @@ with bank_stack() as s:
         and agent["instructions"].startswith(f"# Who you are\nYou are {name}.")
         and [p["id"] for p in before["problems"]] == [f"tool:{read}"]
         and len(added["added"]) == 3
-        and after == {"canRequest": True, "problems": []}
+        and after["canRequest"] is True and after["problems"] == [] and after["blockers"] == []
         and live["publishedVersion"] == live["version"],
         (agent.get("promptMode"), before, added, after, live.get("publishedVersion"), live.get("version")),
     )

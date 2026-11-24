@@ -1746,6 +1746,27 @@ class RunsFilter(TypedDict, closed=True):
     workflowId: NotRequired[str | None]
 
 
+class SampleField(TypedDict, closed=True):
+    label: str
+    name: str
+    path: str
+    sample: NotRequired[str | None]
+
+
+class SampleRun(TypedDict, closed=True):
+    createdAt: str
+    id: str
+    version: int
+
+
+class SampleStep(TypedDict, closed=True):
+    fields: list[SampleField]
+    id: str
+    installed: bool
+    kind: NotRequired[str | None]
+    name: str
+
+
 class SaveBase(TypedDict, closed=True):
     digest: str
     version: int
@@ -3055,6 +3076,15 @@ class DefinitionPublished(TypedDict, closed=True):
     workflowId: str
 
 
+class DefinitionSample(TypedDict, closed=True):
+    given: NotRequired[SampleStep | None]
+    run: NotRequired[SampleRun | None]
+    saved: bool
+    step: NotRequired[str | None]
+    steps: list[SampleStep]
+    workflowId: str
+
+
 class DefinitionShapes(TypedDict, closed=True):
     steps: dict[str, dict[str, dict[str, JsonValue]]]
     version: int
@@ -3149,6 +3179,11 @@ class EnvelopeChannelRow(TypedDict, closed=True):
 
 class EnvelopeDefinitionPublished(TypedDict, closed=True):
     data: DefinitionPublished
+    success: Literal[True]
+
+
+class EnvelopeDefinitionSample(TypedDict, closed=True):
+    data: DefinitionSample
     success: Literal[True]
 
 
@@ -3619,17 +3654,22 @@ class NodeTypeView(TypedDict, closed=True):
     effects: str
     executor: str
     extraOutputs: NotRequired[list[str]]
+    fails: str
     group: str
+    how: str
     id: str
     inputs: list[PortView]
     label: str
+    limit: NotRequired[str]
     optionalOutputs: list[OptionalPortView]
     outputs: list[PortView]
     outputsFrom: str | None
     outputsUnless: NotRequired[list[OptionalPortView]]
     parameters: dict[str, JsonValue]
     retry: RetryView
+    summary: str
     timeoutSeconds: float
+    tries: NotRequired[str]
     ui: dict[str, JsonValue]
     unavailable: NotRequired[str | None]
     version: int

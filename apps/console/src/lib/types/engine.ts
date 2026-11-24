@@ -15,11 +15,13 @@ export interface EnginePort {
 /** A field of a node type's generated form. `item` is the form of each object in a `list`. */
 export interface NodeFormField {
   label: string;
-  widget: 'text' | 'textarea' | 'number' | 'date' | 'select' | 'switch' | 'mapping' | 'mappings' | 'list' | 'options' | 'source' | 'json' | 'account';
+  widget: 'text' | 'textarea' | 'number' | 'date' | 'select' | 'switch' | 'mapping' | 'mappings' | 'list' | 'options' | 'categories' | 'source' | 'json' | 'account';
   help?: string;
   placeholder?: string;
   /** Where a `source` field's choices come from: GET /v1/workflows/option-sources, or the definition's own steps. */
   source?: OptionSource;
+  /** For a `steps` source: the one step type the list offers (a review's Approves lists app steps only). */
+  stepType?: string;
   item?: NodeForm;
 }
 
@@ -50,6 +52,15 @@ export interface EngineNodeType {
   group: string;
   label: string;
   description: string;
+  /** One plain sentence a builder reads under the step's name. */
+  summary?: string;
+  /** A few plain sentences behind "How this step works". */
+  how?: string;
+  /** What "When it fails" says about retries and the time limit for a step that waits; empty when the sheet words the retry policy. */
+  tries?: string;
+  limit?: string;
+  /** What a failure does once the retries are used, in the engine's words: the Error path or a Failed run. */
+  fails?: string;
   inputs: EnginePort[];
   outputs: EnginePort[];
   /** A list parameter whose entries become the out ports (a review's options); `outputs` is its default. */
@@ -417,4 +428,33 @@ export interface RunStory {
   childrenMore: number;
   /** What the run did, oldest first. */
   lines: StoryLine[];
+}
+
+/** One field an earlier step gives, with the value the acting team's newest finished run gave it (masked, cut). */
+export interface SampleField {
+  name: string;
+  label: string;
+  /** What a mapping stores: `$.input.<field>` for the trigger, `$.nodes.<step>.out.<field>` otherwise. */
+  path: string;
+  sample: string | null;
+}
+
+export interface SampleStep {
+  id: string;
+  name: string;
+  kind: string | null;
+  installed: boolean;
+  fields: SampleField[];
+}
+
+/** What a step receives (`GET …/definitions/{id}/sample`): earlier steps' fields and last run values, joined on the server. */
+export interface DefinitionSample {
+  workflowId: string;
+  step: string | null;
+  /** False when the saved working copy does not hold the step yet. */
+  saved: boolean;
+  run: { id: string; version: number; createdAt: string } | null;
+  steps: SampleStep[];
+  /** The step's own fields: what it gives the steps after it. */
+  given?: SampleStep | null;
 }

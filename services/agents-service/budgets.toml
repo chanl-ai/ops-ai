@@ -390,6 +390,12 @@ queries = 5
 transactions = 5
 connections = 5
 
+["GET /v1/workflows/definitions/{workflow_id}/sample"]
+# A fixed number of store reads, each in its own transaction: none of them repeats per step.
+queries = 3
+transactions = 3
+connections = 3
+
 ["GET /v1/workflows/definitions/{workflow_id}/versions/{version}/shapes"]
 queries = 1
 

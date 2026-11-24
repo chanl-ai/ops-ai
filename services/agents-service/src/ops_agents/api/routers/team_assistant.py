@@ -119,20 +119,20 @@ async def give_app_tools(rt: Runtime, me: Principal, module_ids: list[str]) -> A
     for skill_id, name, version, renewed in await _skill_copies(rt, me, team, shipped):
         if skill_id in holds and not renewed:
             continue
-        pins = await pin(rt, cast(AgentSpec, spec), skill_id, version, by=me.email, at=now_iso())
+        pins = await pin(rt, cast(AgentSpec, spec), skill_id, version, by=me.actor, at=now_iso())
         spec["skillPins"] = cast(JsonList, [*pins])
         pinned.append(name)
     note = f"Given the read tools of {', '.join(module_ids)} when the app was turned on"
-    n = await reg.save(agent.id, spec, by=me.email, note=note)
+    n = await reg.save(agent.id, spec, by=me.actor, note=note)
     decision = await decide(rt, area="agents", team_id=team, old=live, new=spec)
     if not decision.review_required:
-        await reg.publish(agent.id, n, by=me.email, review_id="app_turn_on")
+        await reg.publish(agent.id, n, by=me.actor, review_id="app_turn_on")
         if not row.paused:
             go_live(rt, agent.id, n, spec)
         return answer("given")
     v = await reg.version(agent.id, n)
-    body = {**agent_review_body(agent.id, spec, row, v, note=note, by=me.email), **decision.record()}
-    await reg.open_request("agent", agent.id, n, note=note, by=me.email, body=body, approved=False)
+    body = {**agent_review_body(agent.id, spec, row, v, note=note, by=me.actor), **decision.record()}
+    await reg.open_request("agent", agent.id, n, note=note, by=me.actor, body=body, approved=False)
     return answer("in_review")
 
 
@@ -191,7 +191,8 @@ async def _skill_copies(
         if held is not None:
             sid = held.record_id
             row = await skills(rt).row(sid)
-            now = (await skills(rt).versions(sid))[0].content
+            newest = (await skills(rt).versions(sid))[0]
+            now = newest.content
             # A skill row holds no name of its own; the newest version's content names it.
             name = str(now.get("name") or tid)
             if not await _stale(rt, held, t):
@@ -200,8 +201,8 @@ async def _skill_copies(
             kbs = [str(k) for k in narrow.a_list(now.get("knowledgeBases") or [], "knowledgeBases")]
             content = await _skill_content(rt, team, t, name, kbs)
             note = f"Update from {cast(Json, t.get('plugin') or {}).get('title') or source}"
-            n = await skills(rt).save_draft(sid, content, by=me.email, note=note)
-            await skills(rt).publish(sid, n, by=me.email, review_id="app_turn_on")
+            n = await skills(rt).save_draft(sid, content, by=me.actor, note=note, base=(newest.version, newest.digest))
+            await skills(rt).publish(sid, n, by=me.actor, review_id="app_turn_on")
             await copies.updated(
                 held.id, version=version, digest=t.get("digest"),
                 record_digest=(await _newest_digest(rt, sid))[1], base=template_routes.copy_base("skill", content),
@@ -214,7 +215,7 @@ async def _skill_copies(
             content = await _skill_content(rt, team, t, name, [])
             try:
                 sid = await skills(rt).create(
-                    content, owner_team=team, team_id=team, origin="imported", by=me.email, published=True
+                    content, owner_team=team, team_id=team, origin="imported", by=me.actor, published=True
                 )
             except Conflict as e:
                 if e.code == "name_taken":
@@ -227,7 +228,7 @@ async def _skill_copies(
                 source=source,
                 template_id=tid,
                 version=version,
-                by=me.email,
+                by=me.actor,
                 digest=t.get("digest"),
                 record_digest=(await _newest_digest(rt, sid))[1],
                 base=template_routes.copy_base("skill", content),

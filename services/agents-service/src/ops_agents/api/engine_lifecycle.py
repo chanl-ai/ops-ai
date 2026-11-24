@@ -209,7 +209,8 @@ async def blockers(
         d = parse(definition)
     except InvalidDefinitionError as e:
         check: Json = {"node": None, "level": "error", "code": "invalid_definition", "message": str(e)}
-        return [Blocker(check, Unprocessable(str(e), code="definition_checks", details={"checks": [check]}))]
+        # The blockers found so far stay: an open review is still the first thing in the way.
+        return [*out, Blocker(check, Unprocessable(str(e), code="definition_checks", details={"checks": [check]}))]
     if checks := validate(d, REGISTRY):
         failing = Unprocessable(
             f"The workflow has {len(checks)} failing checks.",
@@ -288,7 +289,7 @@ async def request_publish(
     team = current_team() or (row.team_id or "")
     if reads is None:
         reads = await policy_reads(rt)
-    req = await open_publish(rt, workflow_id, row, current, by=me.email, team=team, note=note, document=reads.document)
+    req = await open_publish(rt, workflow_id, row, current, by=me.actor, team=team, note=note, document=reads.document)
     return review_view(req, name=row.name, slug="", sla_hours=reads.sla_hours)
 
 

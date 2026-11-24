@@ -1,34 +1,33 @@
 'use client';
 
 import * as React from 'react';
-import Link from 'next/link';
-import { AlertTriangle, ChevronDown, FlaskConical, Plus, Trash2 } from 'lucide-react';
+import { AlertTriangle, ChevronDown, FlaskConical, Trash2 } from 'lucide-react';
 
 import { TryPanel } from '@/components/agents/try-panel';
-import { ConnectMailbox } from '@/components/channels/connect-mailbox';
-import { MailboxStatusDot } from '@/components/channels/mailbox-panels';
 import { DetailSheet } from '@/components/shared/detail-sheet';
 import { FormField } from '@/components/shared/form-field';
+import { QueryError } from '@/components/shared/query-states';
 import { KeyValues, Section } from '@/components/shared/surface';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
-import { useMailboxes } from '@/hooks/channels-queries';
-import type { DefinitionCheck, EngineNode, EngineNodeType } from '@/lib/types/engine';
+import { useStepSample } from '@/hooks/engine-queries';
+import type { DefinitionCheck, EngineNode, EngineNodeType, SampleStep } from '@/lib/types/engine';
 
 import { groupLook } from './definition-node';
+import { type FieldSource, FieldSourceContext, SAVE_FIRST } from './field-picker';
 import { NodeSettingsForm, type StepRefs } from './node-form';
-import { ShareAsForm } from './share-as-form';
+import { HowItStarts } from './trigger-panels';
 
 const EXTRACT = 'ops.ai.extract';
-const REQUEST_TRIGGER = 'ops.trigger.request';
-const KIND: Record<string, string> = { trigger: 'Trigger', data: 'Data', flow: 'Flow', action: 'Action', ai: 'AI', human: 'Person' };
+const TOOL_STEP = 'ops.action.tool';
+/** The kind of step in a builder's words, by the type's group. */
+const KIND: Record<string, string> = { trigger: 'Starts the workflow', data: 'Works with data', flow: 'Controls the flow', action: 'Does something in an app', ai: 'Uses AI', human: 'Asks a person' };
 const pretty = (p: Record<string, unknown> | undefined) => JSON.stringify(p ?? {}, null, 2);
-
-type InputSchema = { properties?: Record<string, { type?: string; description?: string }>; required?: string[] };
 
 export interface StepSheetProps {
   node: EngineNode | null;
@@ -40,23 +39,53 @@ export interface StepSheetProps {
   /** Steps in the order they run; previous and next walk it. */
   order: string[];
   readOnly: boolean;
+  /** The digest of the working copy as last saved: What it receives is read again once a save lands. */
+  savedDigest?: string;
   onClose: () => void;
   onMove: (id: string) => void;
   onChange: (patch: Partial<Pick<EngineNode, 'name' | 'parameters'>>) => void;
   onDelete: () => void;
 }
 
+/** Brings the field a problem names into view and focuses it. */
+function fixField(nodeId: string, field: string) {
+  const id = `node-${nodeId}-${field}`;
+  const holder = document.getElementById(id) ?? document.querySelector<HTMLElement>(`[data-field="${id}"], [data-mapping="${id}"], [data-testid="${id}-rows"]`);
+  // A list or a picked value has no control of its own with that id: its first control takes the focus.
+  const el = holder?.matches('input, textarea, select, button, [role="combobox"]') ? holder : (holder?.querySelector<HTMLElement>('input, textarea, button, [role="combobox"]') ?? holder);
+  // A setting the form does not show (found only under All settings) brings the Settings section into view instead.
+  (el ?? document.querySelector<HTMLElement>('[data-testid="step-settings"]'))?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  el?.focus({ preventScroll: true });
+}
+
 /**
- * A step's settings in a sheet beside the canvas: its name, the form its type generates and the same settings as JSON.
- * The sheet is not modal, so the canvas stays usable and clicking another step moves the sheet to it. Edits change the
- * editor's draft as they are made; the page's Save version saves them.
+ * A step's settings in a sheet beside the canvas, top to bottom: its name and what it does in plain words, Problems
+ * with Fix, How it starts (trigger steps only; see trigger-panels.tsx), What it receives, Settings, When it fails,
+ * What it gives, and Try step for a tool step. The sheet is not modal, so the canvas stays usable and clicking another
+ * step moves the sheet to it. Edits change the editor's draft as they are made; the working copy saves itself.
  */
-export function StepSheet({ node, type, workflowId, steps, checks, order, readOnly, onClose, onMove, onChange, onDelete }: StepSheetProps) {
+export function StepSheet({ node, type, workflowId, steps, checks, order, readOnly, savedDigest = '', onClose, onMove, onChange, onDelete }: StepSheetProps) {
   const index = node ? order.indexOf(node.id) : -1;
   const errors = checks.filter((c) => c.level === 'error');
-  const byField = Object.fromEntries(errors.filter((c) => c.field).map((c) => [c.field as string, c.message]));
+  // Under its own field a problem drops the step's name that opens it in the lists of problems.
+  const stepName = `${node?.name || type?.label || ''}: `;
+  const byField = Object.fromEntries(errors.filter((c) => c.field).map((c) => [c.field as string, c.message.startsWith(stepName) ? c.message.slice(stepName.length) : c.message]));
   const look = groupLook(type?.group, node?.type);
   const trigger = type?.group === 'trigger';
+  const installed = !!type;
+  const locked = readOnly || !installed;
+  const sample = useStepSample(workflowId, node?.id, savedDigest);
+  const names = React.useMemo(() => Object.fromEntries(steps.all.map((s) => [s.id, s.label])), [steps.all]);
+  const source: FieldSource = {
+    steps: sample.data?.steps ?? [],
+    loading: sample.isLoading,
+    error: sample.isError ? sample.error : undefined,
+    retry: () => void sample.refetch(),
+    retrying: sample.isFetching,
+    unsaved: sample.data ? !sample.data.saved : false,
+    names: node ? { ...names, [node.id]: node.name || type?.label || '' } : names,
+    readOnly: locked,
+  };
   return (
     <DetailSheet
       open={!!node}
@@ -66,16 +95,15 @@ export function StepSheet({ node, type, workflowId, steps, checks, order, readOn
       widthClass="sm:max-w-xl sm:top-[var(--step-sheet-top,0px)] sm:h-[calc(100dvh-var(--step-sheet-top,0px))]"
       testId="step-sheet"
       scrollKey={node?.id}
-      title={node ? node.name || type?.label || node.id : ''}
-      description={type ? `${type.label} · ${type.description}` : node ? `${node.type} version ${node.typeVersion} · unknown type` : undefined}
+      title={node ? node.name || type?.label || 'Step' : ''}
+      description={type ? type.summary || type.description : node ? "This step's type is not installed." : undefined}
       tags={
         node && (
           <>
             <Badge variant="outline" className={look.tile}>
-              {KIND[type?.group ?? ''] ?? type?.group ?? 'Unknown'}
+              {type ? `${type.label} · ${KIND[type.group] ?? type.group}` : 'Not installed'}
             </Badge>
-            {type && type.effects !== 'none' && <Badge variant="outline">Effects: {type.effects}</Badge>}
-            {errors.length > 0 && <Badge variant="destructive">{errors.length === 1 ? '1 error' : `${errors.length} errors`}</Badge>}
+            {errors.length > 0 && <Badge variant="destructive">{errors.length === 1 ? '1 problem' : `${errors.length} problems`}</Badge>}
           </>
         )
       }
@@ -99,33 +127,154 @@ export function StepSheet({ node, type, workflowId, steps, checks, order, readOn
       }
     >
       {node && (
-        <fieldset disabled={readOnly} className="flex min-w-0 flex-col gap-5" data-testid="step-sheet-body">
-          {errors.length > 0 && (
-            <Alert variant="destructive" data-testid="step-sheet-errors">
-              <AlertTriangle />
-              <AlertTitle>This step stops the workflow from saving</AlertTitle>
-              <AlertDescription>
-                {errors.map((c, i) => (
-                  <p key={`${c.code}-${i}`}>{c.message}</p>
-                ))}
-              </AlertDescription>
-            </Alert>
-          )}
-          {trigger && node.type === EMAIL_TRIGGER && <EmailTriggerDetails parameters={node.parameters ?? {}} readOnly={readOnly} onConnected={(address) => onChange({ parameters: { ...(node.parameters ?? {}), mailbox: address } })} />}
-          {trigger && node.type !== EMAIL_TRIGGER && <TriggerDetails workflowId={workflowId} schema={(node.parameters?.inputSchema ?? {}) as InputSchema} />}
-          {node.type === REQUEST_TRIGGER && <ShareAsForm workflowId={workflowId} schema={(node.parameters?.inputSchema ?? {}) as Record<string, unknown>} readOnly={readOnly} />}
-          {/* Keyed by node id so moving to another step resets the field drafts. */}
-          <StepFields key={node.id} node={node} type={type} steps={steps} errors={byField} onChange={onChange} />
-        </fieldset>
+        <FieldSourceContext.Provider value={source}>
+          <div className="flex min-w-0 flex-col gap-6" data-testid="step-sheet-body">
+            {type?.how && <HowThisStepWorks text={type.how} />}
+            {!installed && (
+              <Alert data-testid="step-not-installed">
+                <AlertTriangle />
+                <AlertTitle>This step&apos;s type is not installed</AlertTitle>
+                <AlertDescription>Its settings are shown read-only. Install the plugin that adds it, or delete the step.</AlertDescription>
+              </Alert>
+            )}
+            {errors.length > 0 && (
+              <Alert variant="destructive" data-testid="step-sheet-errors">
+                <AlertTriangle />
+                <AlertTitle>Fix before you publish</AlertTitle>
+                <AlertDescription>
+                  <ul className="flex w-full flex-col gap-2">
+                    {errors.map((c, i) => (
+                      <li key={`${c.code}-${i}`} className="flex min-w-0 items-start justify-between gap-2">
+                        <span className="min-w-0">{c.message}</span>
+                        {/* A problem about how steps connect names no setting here; it is fixed on the canvas. */}
+                        {!locked && c.field && (
+                          <Button type="button" variant="outline" size="sm" onClick={() => fixField(node.id, c.field as string)} data-testid="step-problem-fix">
+                            Fix
+                          </Button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </AlertDescription>
+              </Alert>
+            )}
+            {trigger && (
+              <fieldset disabled={locked} className="min-w-0">
+                <HowItStarts node={node} workflowId={workflowId} readOnly={locked} onChange={(parameters) => onChange({ parameters })} />
+              </fieldset>
+            )}
+            {!trigger && <WhatItReceives sample={sample} />}
+            <div data-testid="step-settings">
+              <Section title="Settings">
+                {/* Keyed by node id so moving to another step resets the field drafts. */}
+                <fieldset disabled={locked} className="flex min-w-0 flex-col gap-4">
+                  <StepFields key={node.id} node={node} type={type} steps={steps} errors={byField} onChange={onChange} />
+                </fieldset>
+              </Section>
+            </div>
+            {type && <WhenItFails type={type} parameters={node.parameters ?? {}} />}
+            <WhatItGives given={sample.data?.given ?? null} source={source} />
+          </div>
+        </FieldSourceContext.Provider>
       )}
       {node && node.type === TOOL_STEP && !readOnly && <TryThisStep key={node.id} workflowId={workflowId} nodeId={node.id} />}
-
     </DetailSheet>
   );
 }
 
-const EMAIL_TRIGGER = 'ops.trigger.email';
-const TOOL_STEP = 'ops.action.tool';
+function HowThisStepWorks({ text }: { text: string }) {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} data-testid="step-how-it-works">
+      <CollapsibleTrigger asChild>
+        <Button type="button" variant="ghost" size="sm" className="-ml-2" aria-label="Learn more: how this step works" data-testid="step-how-it-works-open">
+          <ChevronDown className={open ? '' : '-rotate-90'} /> Learn more
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="pt-2 text-sm text-muted-foreground">{text}</CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+function SampleRows({ step }: { step: SampleStep }) {
+  if (step.fields.length === 0) return <p className="text-sm text-muted-foreground">Gives no named fields.</p>;
+  return <KeyValues rows={step.fields.map((f) => [f.label, f.sample === null ? <span className="text-muted-foreground">No value</span> : <span className="break-words">{f.sample}</span>])} />;
+}
+
+function SampleSkeleton({ testId }: { testId: string }) {
+  return (
+    <div className="flex flex-col gap-2" data-testid={testId}>
+      <Skeleton className="h-4 w-1/2" />
+      <Skeleton className="h-4 w-2/3" />
+      <Skeleton className="h-4 w-1/3" />
+    </div>
+  );
+}
+
+/** Each earlier step's fields with the last run's values, as the server joined them; fails or loads on its own. */
+function WhatItReceives({ sample }: { sample: ReturnType<typeof useStepSample> }) {
+  const data = sample.data;
+  let body: React.ReactNode;
+  if (sample.isLoading) body = <SampleSkeleton testId="step-receives-loading" />;
+  else if (sample.isError) body = <QueryError what="what this step receives" error={sample.error} onRetry={() => void sample.refetch()} retrying={sample.isFetching} testId="step-receives-error" />;
+  else if (data && !data.saved) body = <p className="text-sm text-muted-foreground">{SAVE_FIRST}</p>;
+  else if (data && data.steps.length === 0) body = <p className="text-sm text-muted-foreground">This is the first step. Nothing runs before it.</p>;
+  else if (data)
+    body = (
+      <div className="flex min-w-0 flex-col gap-4">
+        {!data.run && <p className="text-sm text-muted-foreground" data-testid="step-receives-no-run">No run yet. Values show after the workflow runs once.</p>}
+        {data.steps.map((s) => (
+          <div key={s.id} className="flex min-w-0 flex-col gap-1">
+            <span className="text-xs font-medium text-muted-foreground">{s.name}</span>
+            <SampleRows step={s} />
+          </div>
+        ))}
+      </div>
+    );
+  return (
+    <div data-testid="step-receives">
+      <Section title="What it receives" description="Fields from earlier steps, with your team's last run values.">
+        {body}
+      </Section>
+    </div>
+  );
+}
+
+const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
+
+/** Retries and the time limit in words, then what a failure does as the engine says it (its Error path or the run). */
+function WhenItFails({ type, parameters }: { type: EngineNodeType; parameters: Record<string, unknown> }) {
+  const again = Math.max(0, (type.retry?.attempts ?? 1) - 1);
+  const timeout = typeof parameters.timeoutSeconds === 'number' ? parameters.timeoutSeconds : type.timeoutSeconds;
+  return (
+    <div data-testid="step-when-it-fails">
+      <Section title="When it fails">
+        <KeyValues
+          rows={[
+            ['Tries again', type.tries || (again === 0 ? 'No. It tries once.' : `Up to ${plural(again, 'more time')}, waiting a little longer each time.`)],
+            ['If it still fails', type.fails || 'The run stops as Failed and your team sees it in Runs.'],
+            type.limit ? ['How long it waits', type.limit] : ['Gives up after', `${plural(Math.round(timeout), 'second')} for each try.`],
+          ]}
+        />
+      </Section>
+    </div>
+  );
+}
+
+function WhatItGives({ given, source }: { given: SampleStep | null; source: FieldSource }) {
+  let body: React.ReactNode;
+  if (source.loading) body = <SampleSkeleton testId="step-gives-loading" />;
+  else if (source.error) body = <QueryError what="what this step gives" error={source.error} onRetry={() => source.retry?.()} retrying={source.retrying} testId="step-gives-error" />;
+  else if (source.unsaved || !given) body = <p className="text-sm text-muted-foreground">{SAVE_FIRST}</p>;
+  else body = <SampleRows step={given} />;
+  return (
+    <div data-testid="step-what-it-gives">
+      <Section title="What it gives" description="What later steps can pick from this step.">
+        {body}
+      </Section>
+    </div>
+  );
+}
 
 /** Try this one step on the saved working copy, folded until asked for so opening a step reads nothing more. */
 function TryThisStep({ workflowId, nodeId }: { workflowId: string; nodeId: string }) {
@@ -142,128 +291,6 @@ function TryThisStep({ workflowId, nodeId }: { workflowId: string; nodeId: strin
         {open && <TryPanel target={{ kind: 'workflow_step', workflowId, step: nodeId }} canTry />}
       </CollapsibleContent>
     </Collapsible>
-  );
-}
-
-/** The run input an Email received trigger gives every run: the email, with each attachment already in Files. */
-const EMAIL_INPUT: [string, string][] = [
-  ['from', "The sender's address"],
-  ['subject', 'The subject line'],
-  ['body', 'The message text'],
-  ['receivedAt', 'When the mailbox received it'],
-  ['messageId', 'The Message-ID; a second delivery of the same message starts no run'],
-  ['attachments', 'Each attachment as a Files id, name, type and size'],
-];
-
-/** How an Email received trigger starts runs, and the input each run gets. */
-function EmailTriggerDetails({ parameters, readOnly, onConnected }: { parameters: Record<string, unknown>; readOnly: boolean; /** A mailbox connected from here becomes the trigger's mailbox. */ onConnected: (address: string) => void }) {
-  const [connecting, setConnecting] = React.useState(false);
-  const mailbox = typeof parameters.mailbox === 'string' && parameters.mailbox ? parameters.mailbox : 'the mailbox you choose below';
-  const folder = typeof parameters.folder === 'string' && parameters.folder ? parameters.folder : 'inbox';
-  // The picked mailbox as Channels shows it: its state and a way to open it, and a warning when it reads no mail.
-  const mailboxes = useMailboxes();
-  const picked = typeof parameters.mailbox === 'string' ? mailboxes.data?.find((m) => m.address === parameters.mailbox) : undefined;
-  return (
-    <>
-      {picked && (
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 rounded-md border px-3 py-2 text-sm" data-testid="trigger-picked-mailbox">
-          <span className="min-w-0 truncate font-medium">{picked.name || picked.address}</span>
-          <MailboxStatusDot mailbox={picked} />
-          <span className="text-muted-foreground">Reads {picked.folder}</span>
-          <Link href={`/build/channels/email/${picked.id}`} className="ml-auto underline underline-offset-2">
-            Open
-          </Link>
-        </div>
-      )}
-      {picked?.paused && (
-        <Alert data-testid="trigger-mailbox-paused">
-          <AlertTriangle />
-          <AlertTitle>This mailbox is paused</AlertTitle>
-          <AlertDescription>No mail is read and no run starts until it is resumed on its Channels page.</AlertDescription>
-        </Alert>
-      )}
-      <div data-testid="trigger-how-it-starts">
-        <Section title="How it starts" description="Every run of this workflow begins here.">
-          <KeyValues
-            rows={[
-              [
-                'From a mailbox',
-                <span>
-                  A new email in <span className="font-medium">{mailbox}</span>, folder <span className="font-medium">{folder}</span>, that
-                  matches the filters below. Mail already there when the workflow goes live starts nothing.
-                </span>,
-              ],
-              ['When it goes live', 'Publishing puts the workflow on the mailbox; it needs the right to add deployments in this team'],
-              ['From here', 'Test run, with an email you type as JSON'],
-            ]}
-          />
-        </Section>
-      </div>
-      {!readOnly && (
-        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-          <span>The mailbox isn’t listed?</span>
-          <Button type="button" variant="outline" size="sm" onClick={() => setConnecting(true)} data-testid="trigger-connect-mailbox">
-            <Plus className="size-4" /> Connect
-          </Button>
-          <ConnectMailbox shell="dialog" open={connecting} onOpenChange={setConnecting} onConnected={(m) => onConnected(m.address)} />
-        </div>
-      )}
-      <div data-testid="trigger-run-input">
-        <Section title="Run input" description="What every run receives from the email.">
-          <KeyValues rows={EMAIL_INPUT.map(([name, what]) => [name, <span className="text-muted-foreground">{what}</span>])} />
-        </Section>
-      </div>
-    </>
-  );
-}
-
-/** How a run of this workflow starts, and the input it must send. */
-function TriggerDetails({ workflowId, schema }: { workflowId: string; schema: InputSchema }) {
-  const fields = Object.entries(schema.properties ?? {});
-  return (
-    <>
-      <div data-testid="trigger-how-it-starts">
-      <Section title="How it starts" description="Every run of this workflow begins here.">
-        <KeyValues
-          rows={[
-            [
-              'From an app',
-              <span>
-                An authenticated call that starts a run, <code className="font-mono text-xs">POST /v1/runs</code>
-              </span>,
-            ],
-            [
-              'From an agent',
-              <span>
-                An agent that has this workflow as a tool, <code className="font-mono text-xs break-all">workflow__{workflowId}</code>
-              </span>,
-            ],
-            ['From here', 'Test run, with an input you type'],
-          ]}
-        />
-      </Section>
-      </div>
-      <div data-testid="trigger-run-input">
-      <Section title="Run input" description="What a run must send; checked against the input schema before the first step.">
-        {fields.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Any object: the input schema below names no fields.</p>
-        ) : (
-          <KeyValues
-            rows={fields.map(([name, p]) => [
-              name,
-              <span className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline" className="font-mono">
-                  {p.type ?? 'any'}
-                </Badge>
-                {schema.required?.includes(name) && <Badge variant="secondary">required</Badge>}
-                {p.description && <span className="text-muted-foreground">{p.description}</span>}
-              </span>,
-            ])}
-          />
-        )}
-      </Section>
-      </div>
-    </>
   );
 }
 

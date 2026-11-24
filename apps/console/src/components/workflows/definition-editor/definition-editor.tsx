@@ -69,6 +69,8 @@ export interface DefinitionEditorProps {
   startByHand?: (values: Record<string, unknown>, mode: RunMode) => Promise<void>;
   /** Where the saved versions stand: the latest one's stage, the live version, an open publish request. */
   lifecycle: Lifecycle;
+  /** The digest of the working copy as last saved, so the step sheet reads its fields again after each save. */
+  savedDigest?: string;
   /** Makes a version from the working copy and sends it to Reviews (goes live at once where no review is needed). */
   requestPublish: (note: string) => Promise<{ status: string }>;
   setPaused: (paused: boolean) => Promise<unknown>;
@@ -148,7 +150,7 @@ function EditorInner(props: DefinitionEditorProps) {
   return <EditorBody {...props} definition={placed} />;
 }
 
-function EditorBody({ definition: initial, types, validation, validateError = null, onChange, saveState, save, changed = false, saving = false, startRun, startByHand, lifecycle, requestPublish, setPaused, pausing, readOnly = false, readOnlyNote, canPublish, frame }: DefinitionEditorProps) {
+function EditorBody({ definition: initial, types, validation, validateError = null, onChange, saveState, save, changed = false, saving = false, startRun, startByHand, lifecycle, requestPublish, setPaused, pausing, readOnly = false, readOnlyNote, canPublish, frame, savedDigest }: DefinitionEditorProps) {
   const [def, setDef] = React.useState<EngineDefinition>(initial);
   const [dirty, setDirty] = React.useState(false);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
@@ -281,14 +283,21 @@ function EditorBody({ definition: initial, types, validation, validateError = nu
   const opened = def.nodes.find((n) => n.id === sheetId) ?? null;
   const steps: StepRefs = React.useMemo(() => {
     if (!opened) return { all: [], earlier: [] };
-    const ref = (n: EngineNode): StepRef => ({ id: n.id, label: n.name || typeOf(n)?.label || n.id, type: n.type });
+    const ref = (n: EngineNode): StepRef => ({ id: n.id, label: n.name || typeOf(n)?.label || n.id, type: n.type, typeLabel: typeOf(n)?.label ?? 'Step' });
     const before = upstream(def, opened.id);
     const others = def.nodes.filter((n) => n.id !== opened.id);
     return { all: others.map(ref), earlier: others.filter((n) => before.has(n.id)).map(ref) };
   }, [def, opened, typeOf]);
   // Steps in the order they run, left to right then top to bottom; the sheet's previous and next follow it.
   const runOrder = React.useMemo(() => [...def.nodes].sort((a, b) => (a.position?.x ?? 0) - (b.position?.x ?? 0) || (a.position?.y ?? 0) - (b.position?.y ?? 0)).map((n) => n.id), [def.nodes]);
-  const nodeName = React.useCallback((id: string) => def.nodes.find((n) => n.id === id)?.name || id, [def.nodes]);
+  // A step as the problems list names it: its own name, else its type's, never its id.
+  const nodeName = React.useCallback(
+    (id: string) => {
+      const n = def.nodes.find((x) => x.id === id);
+      return n?.name || (n ? typeOf(n)?.label : undefined) || id;
+    },
+    [def.nodes, typeOf],
+  );
 
   const selectNode = (id: string) => {
     setSelectedId(id);
@@ -433,6 +442,8 @@ function EditorBody({ definition: initial, types, validation, validateError = nu
           setSelectedId(n.id);
           setSheetId(n.id);
         }}
+        // A second click on a step opens it too; the canvas must not zoom in on it as well.
+        zoomOnDoubleClick={false}
         onPaneClick={() => setSelectedId(null)}
         defaultEdgeOptions={{ type: 'routed', style: { stroke: 'var(--muted-foreground)', strokeWidth: 1.5 } }}
         minZoom={MIN_ZOOM}
@@ -519,6 +530,7 @@ function EditorBody({ definition: initial, types, validation, validateError = nu
         checks={(validation?.checks ?? []).filter((c) => c.node === opened?.id)}
         order={runOrder}
         readOnly={readOnly}
+        savedDigest={savedDigest}
         onClose={() => setSheetId(null)}
         onMove={selectNode}
         onChange={(patch) => opened && change((d) => patchNode(d, opened.id, patch, typeOf(opened)))}

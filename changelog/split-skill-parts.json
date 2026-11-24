@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-24",
+  "title": "Split a skill's parts into skills",
+  "description": "A skill with parts now has a Split skills button that makes one skill of each part, ready to edit and publish on its own. Cards with a hand-built look are also held to the one Section shape by a check."
+  ,"tag": "new"
+}
